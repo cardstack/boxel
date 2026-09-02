@@ -1,6 +1,6 @@
 import type { TOC } from '@ember/component/template-only';
 import type Owner from '@ember/owner';
-import { click, triggerEvent } from '@ember/test-helpers';
+import { click, settled, triggerEvent } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -28,7 +28,7 @@ import {
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
-import { FrameSettingsField, PosterBoard } from './poster-board';
+import { BoardTile, PosterBoard } from './poster-board';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 
@@ -45,8 +45,8 @@ function loaderService(): { loader: Loader } {
 // The board renders its tiles through `@context.searchResultsComponent`, which
 // only the host app provides (operator mode / index / prerender routes). The
 // stub below stands in for it: it captures each query the board issues and
-// yields a test-controlled entry set, so tile mapping and fallbacks are
-// exercised deterministically without a live prerender index.
+// yields a test-controlled entry set, so tile mapping and the missing-entry
+// fallback are exercised deterministically without a live prerender index.
 let stubEntries: RenderableSearchEntryLike[] = [];
 let capturedQueries: (SearchEntryWireQuery | undefined)[] = [];
 
@@ -212,9 +212,11 @@ export function runTests() {
       stubEntries = [stubEntry(note2.id), stubEntry(note1.id)];
 
       let board = new PosterBoard({
-        cards: [note1, note2],
-        frameSettings: [
-          new FrameSettingsField({ cardIndex: 1, x: 500, y: 120 }),
+        tiles: [
+          // Unplaced tiles serialize with null coordinates, which must fall
+          // back to the grid rather than coerce to (0, 0)
+          new BoardTile({ card: note1, x: null, y: null }),
+          new BoardTile({ card: note2, x: 500, y: 120 }),
         ],
       });
       await renderPosterBoard(board);
@@ -226,13 +228,13 @@ export function runTests() {
         .dom('[data-test-poster-board-tile="0"]')
         .hasStyle(
           { left: '10px', top: '10px' },
-          'card without settings lands at its padded grid-default slot',
+          'tile without a position lands at its padded grid-default slot',
         );
       assert
         .dom('[data-test-poster-board-tile="1"]')
         .hasStyle(
           { left: '500px', top: '120px' },
-          'card with frame settings renders at its persisted position',
+          'tile with a position renders there',
         );
       assert
         .dom(
@@ -264,6 +266,65 @@ export function runTests() {
         );
     });
 
+    test('poster-board keeps a persisted position with its tile when an earlier tile is removed', async function (assert) {
+      let { note1, note2 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
+
+      let board = new PosterBoard({
+        tiles: [
+          new BoardTile({ card: note1 }),
+          new BoardTile({ card: note2, x: 500, y: 120 }),
+        ],
+      });
+      await renderPosterBoard(board);
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .hasStyle({ left: '500px', top: '120px' }, 'position starts on note2');
+
+      // Removing the first tile shifts note2 into slot 0; its position moves
+      // with the tile
+      board.tiles = [board.tiles[1]];
+      await settled();
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 1 }, 'one tile remains');
+      assert
+        .dom('[data-test-poster-board-tile="0"]')
+        .hasStyle(
+          { left: '500px', top: '120px' },
+          'note2 keeps its persisted position in its new slot',
+        );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="0"] [data-test-stub-entry="${note2.id}"]`,
+        )
+        .exists('the remaining tile shows note2');
+    });
+
+    test('poster-board falls back to a not-found placeholder when a linked card has no index entry', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+
+      // stubEntries stays empty with isLoading false: the settled result set
+      // simply omits the linked card, as when its index row is gone
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .exists('the entry-less tile renders the broken-link placeholder');
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .hasAttribute(
+          'data-test-broken-link-state',
+          'not-found',
+          'the placeholder reports the not-found state',
+        );
+      assert
+        .dom('[data-test-stub-entry]')
+        .doesNotExist('no card content renders for the missing entry');
+    });
+
     test("poster-board queries prerendered fitted html by the linked cards' URLs", async function (assert) {
       await renderPosterBoard();
       assert.deepEqual(
@@ -275,7 +336,14 @@ export function runTests() {
       let { note1, note2 } = await makeSavedNotes();
       capturedQueries = [];
       stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
-      await renderPosterBoard(new PosterBoard({ cards: [note1, note2] }));
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: note2 }),
+          ],
+        }),
+      );
 
       let query = capturedQueries[capturedQueries.length - 1];
       assert.deepEqual(

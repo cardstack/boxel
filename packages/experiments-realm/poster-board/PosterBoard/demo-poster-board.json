@@ -8,7 +8,48 @@
         "cardThumbnailURL": null,
         "notes": null
       },
-      "frameSettings": []
+      "tiles": [
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        }
+      ]
     },
     "meta": {
       "adoptsFrom": {
@@ -17,44 +58,54 @@
       }
     },
     "relationships": {
-      "cards.0": {
+      "tiles.0.card": {
         "links": {
           "self": "../../Author/jane-doe"
         }
       },
-      "cards.1": {
+      "tiles.1.card": {
         "links": {
           "self": "../../Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7"
         }
       },
-      "cards.2": {
+      "tiles.2.card": {
         "links": {
           "self": "../../Contact/a01fc5c9-d70d-4b9c-aae4-384cf2b79b25"
         }
       },
-      "cards.3": {
+      "tiles.3.card": {
         "links": {
           "self": "../../llm-model-environment/Model/bd5a43c0-0681-476d-af80-be4ad46d908c"
         }
       },
-      "cards.4": {
+      "tiles.4.card": {
         "links": {
           "self": "../../Country/argentina"
         }
       },
-      "cards.5": {
+      "tiles.5.card": {
         "links": {
           "self": "../../llm-model-environment/Environment/3f6cde92-99b2-4bb5-a471-20d907cb682b"
         }
       },
-      "cards.6": {
+      "tiles.6.card": {
         "links": {
           "self": "../../carving-turn-entry"
         }
       },
-      "cards.7": {
+      "tiles.7.card": {
         "links": {
           "self": "../../DetailedStyleReference/8af54c49-13b5-4bd4-9b2d-95dd569c1f44"
+        }
+      },
+      "tiles.8.card": {
+        "links": {
+          "self": "../../Chess/c09f9bb3-df3f-4337-a6bd-cc4c96a5caa3"
+        }
+      },
+      "tiles.9.card": {
+        "links": {
+          "self": "../../index"
         }
       }
     }

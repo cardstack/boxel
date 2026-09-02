@@ -6,7 +6,8 @@ import {
   contains,
   containsMany,
   getRelationshipMembershipState,
-  linksToMany,
+  linksTo,
+  resolveRef,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import { tracked } from '@glimmer/tracking';
@@ -54,12 +55,34 @@ function defaultPlacement(index: number): TilePlacement {
   };
 }
 
-export class FrameSettingsField extends FieldDef {
-  static displayName = 'Frame Settings';
+// A persisted coordinate, or undefined when the tile has never been placed.
+// Unset number fields serialize as null, and Number(null) is 0 — so null and
+// non-numeric values from hand-edited JSON both count as "not placed".
+function coordinate(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  let n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
 
-  @field cardIndex = contains(NumberField);
+// One tile on the board: the card it shows and where it sits. Keeping the
+// link and its position on the same element means a position can never drift
+// from its card when tiles are added, removed, or reordered.
+export class BoardTile extends FieldDef {
+  static displayName = 'Board Tile';
+
+  @field card = linksTo(() => CardDef);
   @field x = contains(NumberField);
   @field y = contains(NumberField);
+}
+
+// A tile's link state, read from the relationship membership state — a pure
+// read that never triggers the lazy link load, so the board renders tiles
+// without ever fetching the linked instances.
+function tileLinkState(tile: BoardTile) {
+  return getRelationshipMembershipState(tile as unknown as CardDef, 'card')
+    .membership?.[0];
 }
 
 interface OnInsertSignature {
@@ -101,27 +124,27 @@ class Isolated extends Component<typeof PosterBoard> {
 
   // ── Tile placement ─────────────────────────────────────
 
-  // The linked cards' reference URLs, read from the relationship membership
-  // state — a pure read that never triggers the lazy link load, so the board
-  // renders tiles without ever fetching the linked instances. Index-aligned
-  // with the cards slots; only a `not-set` slot lacks a reference.
-  get linkedRefs(): (string | undefined)[] {
+  get tiles(): BoardTile[] {
     let owner = this.args.model as unknown as PosterBoard | undefined;
-    if (!owner) {
-      return [];
-    }
-    let { membership } = getRelationshipMembershipState(owner, 'cards');
-    return (membership ?? []).map((slot) => slot.reference);
+    return owner?.tiles ?? [];
+  }
+
+  // The tiles' card reference URLs, index-aligned with `tiles`; only a
+  // `not-set` link lacks a reference. Relative wire references are resolved
+  // against the board's URL so they address the index like absolute ones.
+  get linkedRefs(): (string | undefined)[] {
+    let relativeTo = this.args.model?.id;
+    return this.tiles.map((tile) => {
+      let ref = tileLinkState(tile)?.reference;
+      return ref === undefined ? undefined : resolveRef(ref, relativeTo);
+    });
   }
 
   get tilePlacements(): TilePlacement[] {
-    let settings = this.args.model?.frameSettings ?? [];
-    return this.linkedRefs.map((_ref, index) => {
-      let setting = settings.find((s) => Number(s.cardIndex) === index);
-      // Number() guards against non-numeric values in hand-edited JSON
-      let x = Number(setting?.x);
-      let y = Number(setting?.y);
-      if (setting && Number.isFinite(x) && Number.isFinite(y)) {
+    return this.tiles.map((tile, index) => {
+      let x = coordinate(tile.x);
+      let y = coordinate(tile.y);
+      if (x !== undefined && y !== undefined) {
         return { index, x, y };
       }
       return defaultPlacement(index);
@@ -136,7 +159,7 @@ class Isolated extends Component<typeof PosterBoard> {
   // URLs. `fitted` is bound through `htmlQuery` — a bare `eq.format` would be
   // read as an `item.` field path and rejected. Instance index rows key on
   // the `.json` file URL, and `scope: 'cards'` drops each card's dual-indexed
-  // file row. Undefined (no linked cards) leaves the search idle.
+  // file row. Undefined (no tiles with a card) leaves the search idle.
   get tilesQuery(): SearchEntryWireQuery | undefined {
     let refs = this.linkedRefs.filter(
       (ref): ref is string => ref !== undefined,
@@ -162,23 +185,19 @@ class Isolated extends Component<typeof PosterBoard> {
   };
 
   // Empty string (a `not-set` slot) is falsy, so the template's `{{#if ref}}`
-  // guard skips the placeholder for slots with nothing to point at — glint
+  // guard skips the placeholder for tiles with nothing to point at — glint
   // doesn't narrow in templates, so the fallback keeps the type `string`.
   refAt = (index: number): string => this.linkedRefs[index] ?? '';
 
-  // Terminal failures (error / not-found) per cards slot, index-aligned with
+  // Terminal failures (error / not-found) per tile, index-aligned with
   // tilePlacements. Since the board never loads its links, membership
   // normally reports `not-loaded`; broken kinds surface here when the links
   // were loaded elsewhere (e.g. the edit format), bringing the real errorDoc
-  // with them. Slots whose entry never arrives fall back to the synthesized
+  // with them. Tiles whose entry never arrives fall back to the synthesized
   // not-found placeholder below.
   brokenSlotAt = (index: number) => {
-    let owner = this.args.model as unknown as PosterBoard | undefined;
-    if (!owner) {
-      return undefined;
-    }
-    let { membership } = getRelationshipMembershipState(owner, 'cards');
-    let rel = (membership ?? [])[index];
+    let tile = this.tiles[index];
+    let rel = tile ? tileLinkState(tile) : undefined;
     return rel && (rel.kind === 'error' || rel.kind === 'not-found')
       ? rel
       : undefined;
@@ -588,8 +607,7 @@ export class PosterBoard extends CardDef {
   static icon = LayoutDashboardIcon;
   static prefersWideFormat = true;
 
-  @field cards = linksToMany(() => CardDef);
-  @field frameSettings = containsMany(FrameSettingsField);
+  @field tiles = containsMany(BoardTile);
 
   static isolated = Isolated;
 }
