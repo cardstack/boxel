@@ -444,7 +444,7 @@ class Isolated extends Component<typeof PosterBoard> {
       {{on 'pointerup' this.handlePointerUp}}
       {{on 'pointercancel' this.handlePointerUp}}
       {{on 'keydown' this.handleKeyDown}}
-      role='application'
+      role='region'
       aria-label='Poster board canvas'
       tabindex='0'
       data-test-poster-board
