@@ -159,8 +159,8 @@ async function settleBoot(): Promise<void> {
   try {
     await Promise.race([
       // A rejected boot has already been reported to the hook that started
-      // it; teardown only needs to know the boot is no longer writing to the
-      // module state it is about to tear down.
+      // it; teardown only needs the boot settled, so that nothing is still
+      // writing to the module state it is about to tear down.
       boot.catch(() => {}),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, BOOT_SETTLE_TIMEOUT_MS);
@@ -235,8 +235,9 @@ export async function startTestRealmServer(
   try {
     return await boot;
   } finally {
-    // The caller has the boot's outcome, so teardown no longer needs to wait
-    // for it. Only a boot whose caller never got here leaves this set.
+    // Clearing the handle is what tells teardown it has nothing to wait for:
+    // the caller has the boot's outcome. Only a boot whose caller never
+    // reaches here leaves it set.
     if (pendingBoot === boot) {
       pendingBoot = undefined;
       reportSlowFixture();
@@ -263,10 +264,10 @@ function reportSlowFixture(): void {
 }
 
 /**
- * Fail before booting when the fixture port is still held, and name the boot
- * that is holding it. Without this a contaminated run reports a bare `listen
- * EADDRINUSE`, which names neither the phase the leaked boot was in nor the
- * fact that the boot is what is holding the port.
+ * Fail before booting when something already holds the fixture port, and say
+ * what that means. A bare `listen EADDRINUSE` from inside the realm server's
+ * boot names a port and nothing else; the failure a reader needs to recognise
+ * is that this file never had the port to begin with.
  */
 async function assertFixturePortFree(): Promise<void> {
   if (
@@ -275,9 +276,10 @@ async function assertFixturePortFree(): Promise<void> {
     return;
   }
   throw new Error(
-    `fixture port ${TEST_REALM_SERVER_URL} is still held when starting a new ` +
-      `test realm server. A prior boot outlived its teardown; its phase ` +
-      `timings were: ${formatFixturePhases()}`,
+    `fixture port ${TEST_REALM_SERVER_URL} is already accepting connections, ` +
+      `so a test realm server cannot bind it. The usual cause is a fixture ` +
+      `boot that outlived the teardown of the file that started it — look ` +
+      `for a hook timeout in the file that ran before this one.`,
   );
 }
 
@@ -325,17 +327,21 @@ async function bootTestRealmServer(
     },
   ];
 
+  // Bound outside the timing closure: the pieces above live in module state so
+  // teardown can reach them, and a closure over module state reads them as
+  // possibly-undefined.
+  let bootArgs = {
+    realmsRootPath: path.join(realmsRootDir, 'realm_server_1'),
+    realms,
+    virtualNetwork,
+    publisher,
+    runner,
+    dbAdapter,
+    matrixURL,
+    prerenderer: options.prerenderer ?? noopPrerenderer,
+  };
   let result = await timePhase('boot-realm-server', () =>
-    runTestRealmServerWithRealms({
-      realmsRootPath: path.join(realmsRootDir!, 'realm_server_1'),
-      realms,
-      virtualNetwork,
-      publisher: publisher!,
-      runner: runner!,
-      dbAdapter: dbAdapter!,
-      matrixURL,
-      prerenderer: options.prerenderer ?? noopPrerenderer,
-    }),
+    runTestRealmServerWithRealms(bootArgs),
   );
 
   testRealmHttpServer = result.testRealmHttpServer;
