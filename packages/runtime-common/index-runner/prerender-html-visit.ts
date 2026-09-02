@@ -13,6 +13,7 @@ import {
   query,
   modulesConsumedInMeta,
   RealmPaths,
+  renderScopeFor,
   type Batch,
   type DeclaredScreenshotError,
   type DeclaredScreenshotVisitArgs,
@@ -67,15 +68,18 @@ export interface PrerenderHtmlPassArgs {
   // every row this pass writes; the monotonic swap guard uses it to reject
   // out-of-order zombie writes.
   generation: number;
+  // The queue job of the index pass that spawned this one. Serves two
+  // mechanisms: both halves of that pass present a prerender tab with the
+  // same render scope, so a tab serving them does not discard what it loaded
+  // when they alternate; and the spawning-generation gate waits for that
+  // pass's commit only while the job is still running. Null for a job
+  // enqueued without a spawning pass — its render scope keys off this job's
+  // own id and the gate's watermark check answers on its first probe.
+  spawningJobId: number | null;
   // The realm's loader epoch the spawning pass renders under. Threaded on
   // every visit so each prerender tab this pass touches resets its loader
   // exactly once when the realm's module surface changed.
   loaderEpoch: string;
-  // The queue id of the index pass that spawned this job, when one did. The
-  // spawning-generation gate waits for that pass's commit only while this
-  // job is still running; null means the job spawns from committed state and
-  // the gate's watermark check answers on its first probe.
-  spawningJobId?: number | null;
   // True when a from-scratch index pass spawned this job: run the realm-wide
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
@@ -129,8 +133,8 @@ export async function runPrerenderHtmlPass({
   realmURL,
   changes,
   generation,
-  loaderEpoch,
   spawningJobId,
+  loaderEpoch,
   preWarm,
   indexWriter,
   definitionLookup,
@@ -386,6 +390,7 @@ export async function runPrerenderHtmlPass({
           await visitForPrerenderedHtml({
             url: new URL(href),
             realmURL,
+            spawningJobId,
             realmPaths,
             reader,
             batch,
@@ -581,6 +586,7 @@ export async function persistDeclaredScreenshots({
 async function visitForPrerenderedHtml({
   url,
   realmURL,
+  spawningJobId,
   realmPaths,
   reader,
   batch,
@@ -598,6 +604,7 @@ async function visitForPrerenderedHtml({
 }: {
   url: URL;
   realmURL: URL;
+  spawningJobId: number | null;
   realmPaths: RealmPaths;
   reader: Reader;
   batch: Batch;
@@ -669,11 +676,6 @@ async function visitForPrerenderedHtml({
     // boxel_index read.
     fileExtract: true,
     loaderEpoch,
-    // One store reset per tab per batch: a warm tab's store may hold linked
-    // cards a prior batch's renders loaded lazily, and an instance-only
-    // invalidation keeps the loader epoch, so without this a re-rendered
-    // consumer repaints (and re-captures) superseded linked data.
-    instanceEpoch: batchId,
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),
@@ -703,6 +705,20 @@ async function visitForPrerenderedHtml({
     url: fileURL,
     auth,
     batchId,
+    // The job of the index pass that spawned this one, so both halves of that
+    // pass present a tab with one scope. A job enqueued without a spawning
+    // pass keys on its own — except when it has no real job either, where the
+    // caller's `-1` placeholder would make one bucket shared by every such
+    // pass; carry no scope there and let the page fall back to the job id,
+    // which is narrower and so never unsound. Same rule as `visit-file.ts`.
+    ...((spawningJobId ?? jobInfo.jobId) >= 0
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            spawningJobId ?? jobInfo.jobId,
+          ),
+        }
+      : {}),
     visitType: 'prerender-html',
     renderOptions,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),

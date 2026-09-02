@@ -9,15 +9,6 @@ export interface RenderRouteOptions {
   // loader + store when this differs from the epoch the tab last cleared
   // for, then records it — one reset per tab per module change.
   loaderEpoch?: string;
-  // The instance-data snapshot this render must be pure over — the
-  // prerender-html pass sends its batch id. The render route resets its
-  // store (loader untouched) when this differs from the epoch the tab last
-  // reset for, then records it: one reset per tab per batch, so instances
-  // stay warm across one batch's visits but a later batch never reads a
-  // linked card the store loaded under an earlier generation. The loader
-  // epoch alone cannot cover this — an instance-only invalidation keeps it
-  // by design.
-  instanceEpoch?: string;
   cardRender?: true;
   fileExtract?: true;
   fileRender?: true;
@@ -40,9 +31,6 @@ export function parseRenderRouteOptions(
     }
     if (typeof parsed.loaderEpoch === 'string') {
       options.loaderEpoch = parsed.loaderEpoch;
-    }
-    if (typeof parsed.instanceEpoch === 'string') {
-      options.instanceEpoch = parsed.instanceEpoch;
     }
     if (parsed.cardRender) {
       options.cardRender = true;
@@ -80,9 +68,6 @@ export function serializeRenderRouteOptions(
   }
   if (options.loaderEpoch !== undefined) {
     serialized.loaderEpoch = options.loaderEpoch;
-  }
-  if (options.instanceEpoch !== undefined) {
-    serialized.instanceEpoch = options.instanceEpoch;
   }
   if (options.cardRender) {
     serialized.cardRender = true;

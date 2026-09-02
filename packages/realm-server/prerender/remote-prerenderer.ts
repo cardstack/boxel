@@ -240,6 +240,7 @@ export function createRemotePrerenderer(
       priority,
       jobId,
       screenshots,
+      renderScope,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -259,6 +260,7 @@ export function createRemotePrerenderer(
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
+          ...(renderScope ? { renderScope } : {}),
         },
       );
     },

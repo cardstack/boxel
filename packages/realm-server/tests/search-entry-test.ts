@@ -20,6 +20,7 @@ import {
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
   resolveHtmlQuery,
+  searchEntryRealms,
   searchEntryWireQueryFromQuery,
   wireFilterHasMatches,
   SearchRequestError,
@@ -1007,6 +1008,99 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sparse.meta.lastModified, 5);
       assert.true(isSparseItemResource(sparse));
       assert.false(isSparseItemResource(full));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The federated merge. `page.total` on a fan-out is a sum over the realms
+  // that answered, so it is only the match count when every realm did. These
+  // pin the `incomplete` flag that says when it isn't — the one signal a
+  // consumer has that a confident-looking number is really a floor.
+  // -------------------------------------------------------------------------
+  module('federated merge completeness', function () {
+    // A realm whose search answers with `total` matches and no rows. The rows
+    // are beside the point here: what is under test is the tally that decides
+    // whether the summed total covers every realm asked for.
+    function answering(url: string, total: number) {
+      return {
+        url,
+        searchEntries: async () => ({
+          data: [],
+          meta: { page: { total } },
+        }),
+      };
+    }
+
+    // A realm that resolved to an instance but whose search rejects — the peer
+    // returned a 500, the connection dropped mid-request.
+    function failing(url: string) {
+      return {
+        url,
+        searchEntries: async () => {
+          throw new Error(`${url} is unreachable`);
+        },
+      };
+    }
+
+    const entryQuery = parseSearchEntryQueryFromPayload({
+      realms: [realmURL],
+    });
+
+    test('every realm answering leaves the summed total unqualified', async function (assert) {
+      let combined = await searchEntryRealms(
+        [answering('http://a/', 3), answering('http://b/', 4)],
+        entryQuery,
+      );
+      assert.strictEqual(combined.meta.page.total, 7);
+      assert.strictEqual(
+        combined.meta.incomplete,
+        undefined,
+        'nothing was withheld, so the sum is the match count',
+      );
+    });
+
+    test('a realm whose search rejects makes the sum a floor', async function (assert) {
+      let combined = await searchEntryRealms(
+        [answering('http://a/', 3), failing('http://b/')],
+        entryQuery,
+      );
+      assert.strictEqual(
+        combined.meta.page.total,
+        3,
+        'the realms that answered still contribute their rows and counts',
+      );
+      assert.true(
+        combined.meta.incomplete,
+        'the total covers one realm of the two asked for',
+      );
+    });
+
+    test('a realm that never resolved to an instance counts as asked for', async function (assert) {
+      // The commoner failure: a peer that is down never becomes a realm to
+      // search, so it arrives as a hole in the list rather than as a rejection.
+      // Tallying only the realms that resolved would let the remaining realm's
+      // count stand as the whole answer.
+      let combined = await searchEntryRealms(
+        [answering('http://a/', 3), undefined],
+        entryQuery,
+      );
+      assert.strictEqual(combined.meta.page.total, 3);
+      assert.true(
+        combined.meta.incomplete,
+        'a realm that could not be mounted is still a realm that did not answer',
+      );
+    });
+
+    test('every realm failing reports zero as incomplete rather than as a count', async function (assert) {
+      let combined = await searchEntryRealms(
+        [failing('http://a/'), undefined],
+        entryQuery,
+      );
+      assert.strictEqual(combined.meta.page.total, 0);
+      assert.true(
+        combined.meta.incomplete,
+        'no realm answered, so zero is what is known — not what matched',
+      );
     });
   });
 });

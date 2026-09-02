@@ -6650,8 +6650,9 @@ export class Realm {
       // concurrency caps stay on the card `@context` surface.
       let itemLegBounded =
         isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
-      // Reject an over-ceiling explicit page (400, caught below); clamp an
-      // absent page so the query carries a LIMIT.
+      // Clamp an absent page to the default so the query carries a LIMIT, and
+      // an over-maximum explicit one to the maximum (logged, so a short page
+      // has an explanation somewhere).
       if (itemLegBounded) {
         searchEntryQuery.itemQuery = applyServerSearchPageBound(
           searchEntryQuery.itemQuery,

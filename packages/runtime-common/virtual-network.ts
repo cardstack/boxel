@@ -1,3 +1,8 @@
+import {
+  claimsHostPackageName,
+  hostPackageNameOf,
+} from './host-package-names.ts';
+import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import type {
@@ -166,7 +171,62 @@ export class VirtualNetwork {
    * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
-    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    // A realm's content is authored, and `@cardstack/<name>/` is the npm scope
+    // as well as the realm-alias namespace. A realm registered under a Host
+    // package's name would therefore have its authored content classified as
+    // Host-provided and run uncaged — the caging boundary failing open, from
+    // configuration alone. `base` is the one name that is legitimately both.
+    if (claimsHostPackageName(realmIdentifier)) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: ` +
+          `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
+          `realm registered under it would have its authored content trusted as ` +
+          `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
+      );
+    }
+    // Within the `@cardstack` scope a realm must be one the declaration names.
+    // The launch-script scan cannot see a prefix that never appears literally
+    // in a scanned file — `RESOLVED_SOFTWARE_FACTORY_REALM_URL=https://cardstack.com/software-factory/`
+    // reaches `main.ts`'s alias branch and registers `@cardstack/software-factory/`
+    // with nothing to notice — so the set is checked here, where the value is
+    // known however it arrived.
+    //
+    // Only that scope: `@cardstack/` is the namespace the Host and the
+    // declaration share, and a realm outside it collides with neither. Tests
+    // and third parties register their own prefixes freely.
+    if (
+      realmIdentifier.startsWith('@cardstack/') &&
+      !PREFIX_REALM_PREFIXES.includes(ensureTrailingSlash(realmIdentifier))
+    ) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: the @cardstack scope is ` +
+          `reserved for the realms PREFIX_REALMS declares, and this is not one ` +
+          `of them (${PREFIX_REALM_PREFIXES.join(', ')}). Declare it there, or ` +
+          `use a prefix outside the @cardstack scope.`,
+      );
+    }
+    this.addPrefixMapping(realmIdentifier, targetURL);
+  }
+
+  /**
+   * Map a `@scope/name/` prefix onto the origin serving a shimmed Host package,
+   * rather than onto a realm.
+   *
+   * Resolution is identical to a realm mapping — the prefix has to resolve for
+   * `CodeRef.moduleHref` to work on a specifier like
+   * `@cardstack/boxel-ui/components` — but the content behind it is Host-owned,
+   * so it is *supposed* to carry a Host package's name and running uncaged is
+   * correct. That is the whole difference from `addRealmMapping`, which refuses
+   * those names, and the reason the two are separate entry points rather than a
+   * flag: nothing downstream can tell a realm from a package namespace by
+   * looking at the mapping, so the caller has to say which it registered.
+   */
+  addPackageMapping(packageNamespace: string, targetURL: string): void {
+    this.addPrefixMapping(packageNamespace, targetURL);
+  }
+
+  private addPrefixMapping(prefix: string, targetURL: string): void {
+    let normalizedId = ensureTrailingSlash(prefix);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();

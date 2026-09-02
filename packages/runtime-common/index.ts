@@ -903,6 +903,14 @@ export type PrerenderVisitArgs = {
   // prerender-html indexing pass sends this when it has a MediaCache to
   // persist into. Only honored by 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
+  // The realm view this visit renders against — one realm at one generation.
+  // An index pass and the `prerender_html` job it spawns are separate queue
+  // jobs that read the same files, so they carry the same scope, while the
+  // next pass over the realm carries a different one. A prerender tab keys
+  // what it may reuse across visits on this rather than on `jobId`: the two
+  // jobs interleave on a shared tab, and scoping on the job would tear that
+  // tab's state down on every alternation while still holding one view.
+  renderScope?: string;
 };
 
 // Inputs the declared-screenshot capture step needs from the indexing side:
@@ -943,6 +951,25 @@ export interface DeclaredScreenshotVisitResult {
   // Per-slot capture failures — the broken-links model: they never fail the
   // visit, the manifest just omits the name.
   errors?: DeclaredScreenshotError[];
+}
+
+// The scope string both halves of a pass compute independently, from the queue
+// job of the index pass — its own for the index visit, the spawning pass's for
+// the prerender-html job that pass enqueued.
+//
+// The pass's *generation* would read more naturally and is not sound: it is
+// `current_generation + 1` computed at batch start and only committed by
+// `done()`, so a pass that dies before finalizing leaves the row untouched and
+// the next pass computes the same number — the same scope, for a realm whose
+// files may have moved in between. A queue job id advances whatever happens.
+//
+// The residual is a retry of one job, which keeps its id across attempts: a
+// write landing between a failed attempt and its retry can be reduced over from
+// the earlier attempt's copies. That write enqueues its own pass, whose
+// invalidation set covers the same rows under a scope of its own, so the window
+// closes on the next pass rather than persisting.
+export function renderScopeFor(realmURL: string, passJobId: number): string {
+  return `${realmURL}@${passJobId}`;
 }
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
@@ -1224,6 +1251,7 @@ export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
+export * from './realm-prefixes.ts';
 export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';

@@ -66,6 +66,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
+import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
@@ -95,6 +96,12 @@ const SETTLE_LOG_PRECISION = 1;
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
+  // The interactive store also serves renders: `getCard` / `getCards` are
+  // handed to every rendered card through `@context`, and those resources
+  // inject this one rather than the render store. It therefore holds
+  // instances across a scope boundary the same way, and has to be told about
+  // it the same way.
+  @service('store') declare private cardContextStore: StoreService;
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
@@ -393,6 +400,17 @@ export default class RenderRoute extends Route<Model> {
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__boxelRenderRefreshCapturedDeps = undefined;
+    // Bind the stores to this visit's render scope before anything is fetched
+    // or hydrated. A tab serves visits from many scopes and holds the
+    // instances they loaded, and a resident link target is handed to
+    // deserialization without a freshness check — so a render whose targets
+    // are all resident performs no load at all, and a load is the only other
+    // place a store learns the scope moved on. Observing here is what keeps an
+    // owner in this scope from reducing over a copy the last one left behind,
+    // and doing it first means no straggler from an abandoned render can drop
+    // residency midway through the render that follows it.
+    this.store.observeIndexingJob();
+    this.cardContextStore.observeIndexingJob();
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs
@@ -412,22 +430,6 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-      }
-    }
-    // Instance-epoch synchronization: the store outlives visits on a warm
-    // tab, and an instance-only invalidation keeps the loader epoch — so
-    // without this, a linked card loaded lazily by an earlier visit (a
-    // capture-only screenshot component is the canonical reader) satisfies
-    // `lazilyLoadLink` from the identity map and the re-render repaints the
-    // superseded data. Resetting the store when the epoch differs — once
-    // per tab per batch — keeps instances warm across one batch's visits
-    // while making each batch's renders a pure function of its generation.
-    // The loader stays warm; modules are the loader epoch's jurisdiction.
-    if (parsedOptions.instanceEpoch !== undefined) {
-      let held = (globalThis as any).__boxelInstanceEpoch as string | undefined;
-      if (held !== parsedOptions.instanceEpoch) {
-        this.store.resetCache();
-        (globalThis as any).__boxelInstanceEpoch = parsedOptions.instanceEpoch;
       }
     }
     if (parsedOptions.clearCache) {

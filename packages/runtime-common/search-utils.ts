@@ -161,10 +161,14 @@ export function emitSearchTiming(line: string): void {
 // Shared fan-out for the federated search runners. Filters out dead realms,
 // runs each surviving realm's search concurrently, logs (never throws on) a
 // per-realm failure so one realm can't sink the whole federation, and returns
-// the fulfilled docs in input order for the caller to merge. The two public
-// runners differ only in which per-realm method they call, how they label a
-// failure, and which merge they apply — the settle semantics, input ordering,
-// and per-realm error isolation are identical and live here.
+// the fulfilled docs in input order for the caller to merge. A runner supplies
+// which per-realm method to call, how to label a failure, and which merge to
+// apply; the settle semantics, input ordering, and per-realm error isolation
+// are identical across runners and live here.
+//
+// A caller that reports a count must compare the docs returned against the
+// realms it asked for: a realm that fails is dropped from this result rather
+// than raised, so the shortfall is visible only in the arithmetic.
 export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
   realms: Array<R | null | undefined>,
   query: Query,

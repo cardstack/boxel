@@ -6,6 +6,7 @@ import {
   isCardResource,
   isIgnored,
   jobIdentity,
+  renderScopeFor,
   unixTime,
   type Batch,
   type Diagnostics,
@@ -240,6 +241,9 @@ export async function renderFileForIndexing({
     url: fileURL,
     auth,
     batchId,
+    ...(jobInfo
+      ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
+      : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };

@@ -731,6 +731,7 @@ export class Prerenderer {
       priority,
       jobId,
       screenshots,
+      renderScope,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
@@ -792,6 +793,7 @@ export class Prerenderer {
             priority,
             jobId,
             screenshots,
+            renderScope,
             signal,
             onTabAcquired,
           });
@@ -828,6 +830,7 @@ export class Prerenderer {
               priority,
               jobId,
               screenshots,
+              renderScope,
               signal,
               onTabAcquired,
             });
