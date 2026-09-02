@@ -204,19 +204,34 @@ boxel_pg_repair_max_connections() {
   while ! mkdir "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null; do
     # Another caller is repairing; leave as soon as its restart lands.
     boxel_pg_max_connections_ok && return 0
+
+    # The holder stamps its pid, so a lock left behind by one that was killed
+    # mid-repair — Ctrl-C during `pnpm start` is the ordinary way that happens —
+    # is recognized at once. Waiting the whole window out instead would stall
+    # every later caller on the stack-boot path, and only on the machines that
+    # need the repair in the first place.
+    _bpg_holder=$(cat "$BOXEL_PG_REPAIR_LOCK/pid" 2>/dev/null)
+    if [ -n "$_bpg_holder" ] && ! kill -0 "$_bpg_holder" 2>/dev/null; then
+      rm -rf "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
+      [ -d "$BOXEL_PG_REPAIR_LOCK" ] || continue
+    fi
+
     _bpg_waited=$((_bpg_waited + 1))
+    # Say so once the wait stops being momentary, so a stall is attributable.
+    [ "$_bpg_waited" = 3 ] && echo "Waiting for pid ${_bpg_holder:-?} to finish raising boxel-pg's max_connections…"
     if [ "$_bpg_waited" -ge 120 ]; then
-      # A killed holder leaves the directory behind. Clear it so the next stack
-      # start gets a turn instead of being blocked for good.
+      echo "Gave up waiting for pid ${_bpg_holder:-?} to raise boxel-pg's max_connections; clearing its lock for the next run." >&2
       rm -rf "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
       return 1
     fi
     sleep 1
   done
+  echo $$ >"$BOXEL_PG_REPAIR_LOCK/pid" 2>/dev/null || true
 
   _bpg_status=0
   _boxel_pg_apply_max_connections || _bpg_status=1
-  rmdir "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
+  # rm -rf, not rmdir: the lock directory holds the holder's pid file.
+  rm -rf "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
   return "$_bpg_status"
 }
 
