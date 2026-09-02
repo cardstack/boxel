@@ -31,6 +31,13 @@ import { MatrixConcept } from './matrix-concept';
 import { ProgressReport } from './progress-report';
 import { Blocker } from './blocker';
 import {
+  OffMatrixInventory,
+  parseEntries,
+  groupByApp,
+  gapLabels,
+  type OffMatrixEntry,
+} from './off-matrix-inventory';
+import {
   qualityBucket,
   qualityChecks,
   qualityScore,
@@ -96,11 +103,13 @@ export class MatrixTracker extends CardDef {
     @tracked layerFilter = ALL;
     @tracked laneFilter = ALL;
     @tracked tierFilter = ALL;
+    @tracked offAppFilter = ALL;
     @tracked query = '';
 
     private conceptPages: (ReturnType<getCards> | undefined)[] = [];
     private reportList: ReturnType<getCards> | undefined;
     private blockerList: ReturnType<getCards> | undefined;
+    private inventoryList: ReturnType<getCards> | undefined;
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -143,6 +152,20 @@ export class MatrixTracker extends CardDef {
         () => {
           let ref = identifyCard(Blocker);
           return ref ? { filter: { type: ref } } : undefined;
+        },
+        () => this.realms,
+        { isLive: true },
+      );
+      this.inventoryList = ctx?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(OffMatrixInventory);
+          return ref
+            ? {
+                filter: { type: ref },
+                sort: [{ by: 'roundDate', on: ref, direction: 'desc' }],
+              }
+            : undefined;
         },
         () => this.realms,
         { isLive: true },
@@ -227,6 +250,51 @@ export class MatrixTracker extends CardDef {
       return ((this.reportList?.instances ?? []) as ProgressReport[]).filter(
         Boolean,
       )[0];
+    }
+
+    // Shipped code the taxonomy never named. The crawl writes one inventory
+    // card per round; only the newest is read.
+    get latestInventory(): OffMatrixInventory | undefined {
+      return (
+        (this.inventoryList?.instances ?? []) as OffMatrixInventory[]
+      ).filter(Boolean)[0];
+    }
+    get offMatrixEntries(): OffMatrixEntry[] {
+      return parseEntries(this.latestInventory?.blocks);
+    }
+    get hasOffMatrix() {
+      return this.offMatrixEntries.length > 0;
+    }
+    get offAppChips() {
+      return [
+        { value: ALL, label: `All apps (${this.offMatrixEntries.length})` },
+        ...groupByApp(this.offMatrixEntries).map((g) => ({
+          value: g.app,
+          label: `${g.app} (${g.count})`,
+        })),
+      ];
+    }
+    get offMatrixRows() {
+      let rows =
+        this.offAppFilter === ALL
+          ? this.offMatrixEntries
+          : this.offMatrixEntries.filter((e) =>
+              this.offAppFilter === 'No app imports it'
+                ? e.apps.length === 0
+                : e.apps.includes(this.offAppFilter),
+            );
+      return rows.map((e) => ({
+        ...e,
+        appLabel: e.apps.length ? e.apps.join(', ') : 'No app imports it',
+        gapLabel: gapLabels(e.gaps),
+        hasGap: e.gaps.length > 0,
+      }));
+    }
+    get offMatrixReused() {
+      return this.offMatrixEntries.filter((e) => e.consumers >= 2).length;
+    }
+    get offMatrixGapCount() {
+      return this.offMatrixEntries.filter((e) => e.gaps.length).length;
     }
 
     get openBlockers(): Blocker[] {
@@ -561,6 +629,10 @@ export class MatrixTracker extends CardDef {
     @action setBucket(value: string) {
       this.bucketFilter = value;
     }
+    @action setOffApp(value: string) {
+      this.offAppFilter = value;
+    }
+
     @action setQuery(value: string) {
       this.query = value;
     }
@@ -887,6 +959,57 @@ export class MatrixTracker extends CardDef {
                 the readMe for a command.</p>
             </div>
           </section>
+
+          {{#if this.hasOffMatrix}}
+            <section class='panel offmatrix-panel'>
+              <div class='table-head'>
+                <h2>Shipped outside the matrix</h2>
+                <span class='count'>{{this.offMatrixEntries.length}}
+                  blocks ·
+                  {{this.offMatrixReused}}
+                  reused ·
+                  {{this.offMatrixGapCount}}
+                  with a gap</span>
+              </div>
+              <p class='tier-note'>Every row is a Spec in this realm describing
+                working code that no matrix concept claims — blocks an app
+                needed before the taxonomy had a name for them. Apps come from
+                import-graph reachability, so a block listed under two apps is
+                wired into both. Adding rows for these is a planning decision,
+                not a fix.</p>
+              <FilterChips
+                @options={{this.offAppChips}}
+                @value={{this.offAppFilter}}
+                @onValueChange={{this.setOffApp}}
+              />
+              <div class='off-table-wrap'>
+                <table class='off-table'>
+                  <thead>
+                    <tr>
+                      <th>Block</th>
+                      <th>Kind</th>
+                      <th>Wired into</th>
+                      <th class='num'>Consumers</th>
+                      <th>Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{#each this.offMatrixRows as |row|}}
+                      <tr>
+                        <td class='off-name'>{{row.name}}</td>
+                        <td><span class='off-kind'>{{row.kind}}</span></td>
+                        <td class='off-apps'>{{row.appLabel}}</td>
+                        <td class='num'>{{row.consumers}}</td>
+                        <td
+                          class='off-gap {{if row.hasGap "has-gap"}}'
+                        >{{row.gapLabel}}</td>
+                      </tr>
+                    {{/each}}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          {{/if}}
 
         {{/if}}
 
@@ -1321,6 +1444,68 @@ export class MatrixTracker extends CardDef {
           flex-direction: column;
           gap: 0.75rem;
           scroll-margin-top: 1rem;
+        }
+        .offmatrix-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 0.625rem;
+        }
+        .off-table-wrap {
+          overflow-x: auto;
+          max-height: 32rem;
+          overflow-y: auto;
+        }
+        .off-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.8125rem;
+        }
+        .off-table th {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          text-align: left;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, #6b7280);
+          background: var(--card, #ffffff);
+          padding: 0.3125rem 0.75rem 0.3125rem 0;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+        }
+        .off-table td {
+          padding: 0.3125rem 0.75rem 0.3125rem 0;
+          border-bottom: 1px solid var(--border-subtle, #f3f4f6);
+          vertical-align: baseline;
+        }
+        .off-table .num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          padding-right: 1.25rem;
+        }
+        .off-name {
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .off-kind {
+          font-size: 0.6875rem;
+          padding: 0.0625rem 0.375rem;
+          border-radius: 0.25rem;
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
+        }
+        .off-apps {
+          color: var(--muted-foreground, #6b7280);
+          min-width: 12rem;
+        }
+        .off-gap {
+          font-size: 0.75rem;
+          white-space: nowrap;
+          color: var(--muted-foreground, #9ca3af);
+        }
+        .off-gap.has-gap {
+          color: var(--state-next-fg, #92400e);
         }
         .table-head {
           display: flex;
