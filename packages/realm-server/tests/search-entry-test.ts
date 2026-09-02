@@ -1076,11 +1076,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a realm that never resolved to an instance counts as asked for', async function (assert) {
-      // The commoner failure, and the one that used to escape: a peer that is
-      // down never becomes a realm to search, so it arrives here as a hole in
-      // the list rather than as a rejection. Tallying only the realms that
-      // resolved would have made the remaining realm's count look like the
-      // whole answer.
+      // The commoner failure: a peer that is down never becomes a realm to
+      // search, so it arrives as a hole in the list rather than as a rejection.
+      // Tallying only the realms that resolved would let the remaining realm's
+      // count stand as the whole answer.
       let combined = await searchEntryRealms(
         [answering('http://a/', 3), undefined],
         entryQuery,

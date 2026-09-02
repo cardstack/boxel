@@ -225,17 +225,22 @@ export function applyServerSearchPageBound(query: Query): Query {
 }
 
 // The ceiling for a query-backed relationship's own expansion pass, which the
-// indexer runs in-process rather than over HTTP. Neither endpoint bound reaches
-// that pass, so it took the same page ceiling as everything else here — the
-// same number the field's cross-realm leg already came back clamped to, so one
-// ceiling now holds wherever the field resolves.
+// indexer runs in-process rather than over HTTP, so neither endpoint bound
+// reaches it. It is the same number the field's cross-realm leg is clamped to,
+// which is what makes the two server legs resolve the field to the same page.
 //
-// It clamps where the endpoint bounds reject. A field's `page.size` is authored
-// once and read on every index of every instance of that card, so rejecting an
-// over-ceiling one would turn the whole card into an index error rather than
-// answer the request that asked for too much. Clamping is safe here because
-// the truncation is reported: the true match count rides `meta.total` on the
-// relationship, and `getRelationshipMembershipState` reads it back as
+// The client leg is bounded but not clamped: an authored `page.size` over the
+// ceiling reaches `_search`, which rejects it. So a field declaring one indexes
+// to a clamped page and then fails its first live refresh — an inconsistency
+// that belongs to the endpoint's reject-vs-clamp split rather than to this
+// bound.
+//
+// This one clamps where the endpoint bounds reject. A field's `page.size` is
+// authored once and read on every index of every instance of that card, so
+// rejecting an over-ceiling one would turn the whole card into an index error
+// rather than answer the request that asked for too much. Clamping is safe
+// because the truncation is reported: the true match count rides `meta.total`
+// on the relationship, and `getRelationshipMembershipState` reads it back as
 // `isPartial`.
 export function applyQueryFieldPageBound(query: Query): Query {
   let page = query.page;

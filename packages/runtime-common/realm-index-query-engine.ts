@@ -1036,10 +1036,10 @@ export class RealmIndexQueryEngine {
     let { realms } = normalized;
     // Bound what this expansion assembles into the card's document. The pass
     // runs in-process, so neither the `_search` endpoint's ceiling nor the card
-    // `@context` cap reaches it, and a same-realm field ran to every matching
-    // row while the same field's cross-realm leg came back clamped by the peer
-    // realm's endpoint. One ceiling now holds on both, and `total` below
-    // carries what the page left out.
+    // `@context` cap reaches it; without a bound here a same-realm field would
+    // assemble every matching row while the same field's cross-realm leg came
+    // back clamped by the peer realm's endpoint. This applies the same ceiling
+    // to both, and `total` below carries what the page left out.
     let query = applyQueryFieldPageBound(normalized.query);
     // The seed URL advertises the query as authored, not the bounded one. It is
     // the client's copy of this field's query, and the client rebuilds the same
@@ -1054,8 +1054,13 @@ export class RealmIndexQueryEngine {
     // Summed across realms, and left `undefined` until a realm reports one so a
     // field whose every realm errored doesn't claim a total of zero.
     let total: number | undefined;
+    // Set when a realm is asked for a count and doesn't supply a usable one.
+    // Its share is then missing from the sum exactly as a failed realm's is, so
+    // what the sum describes is the realms that answered rather than the query.
+    let countMissingFromSum = false;
     let addToTotal = (realmTotal: number | undefined) => {
       if (typeof realmTotal !== 'number' || !Number.isFinite(realmTotal)) {
+        countMissingFromSum = true;
         return;
       }
       total = (total ?? 0) + realmTotal;
@@ -1137,23 +1142,22 @@ export class RealmIndexQueryEngine {
       results: aggregated,
       errors,
       searchURL,
-      // A realm that failed reported no count, and how many instances it holds
-      // is exactly what the failure withheld — so the realms that did answer
-      // sum to a number that is not the match count and cannot be known to be
-      // one. Publishing it would hand a rollup a confident figure over an
-      // incomplete set, which is the failure this total exists to prevent
-      // rather than a smaller version of it. Unknown is the honest answer, and
-      // a consumer tells it from a real count because it is absent, not zero.
+      // The match count, published only when every targeted realm contributed
+      // its share of it. A realm that failed, and a realm that answered without
+      // a count, each withhold precisely the quantity needed to make the sum a
+      // count — so what is left is a floor, and publishing it would hand a
+      // rollup a confident figure over an incomplete set. That is the failure
+      // this total exists to report rather than a smaller version of it.
+      // Unknown is the honest answer, and a consumer tells it from a real count
+      // because it is absent rather than zero.
       //
-      // Where every realm answered, the only remaining gap is cross-realm
-      // dedup: an id two realms both reported is counted twice and kept once,
-      // which can put the sum below the rows that survived. A total under the
-      // row count would read as "fewer matches than you were handed", so the
-      // rows the field actually holds are the floor.
+      // The sum is never short of the rows for any other reason: cross-realm
+      // dedup counts an id both realms report twice and keeps it once, which
+      // can only put the sum above what survived, never below.
       total:
-        errors.length > 0 || total == null
+        errors.length > 0 || countMissingFromSum || total == null
           ? undefined
-          : Math.max(total, aggregated.length),
+          : total,
     };
   }
 
@@ -1395,11 +1399,32 @@ export class RealmIndexQueryEngine {
           cards.push(item);
         }
       }
-      // The peer clamps this query to its own page ceiling, so `data` can be a
-      // prefix of what it matched. Its `meta.page.total` is the only report of
-      // the rest.
-      let remoteTotal = (json as { meta?: { page?: { total?: unknown } } }).meta
-        ?.page?.total;
+      // The peer fanned this query out itself, and says so when its own merge
+      // came back short a realm. Its total is then a sum over the realms that
+      // answered it — a floor wearing the shape of a count — and the rows are
+      // short by however many the missing realm holds. A 200 carries that as a
+      // flag rather than a status, so reading only `ok` would publish the floor
+      // as exact. Report it as this realm having failed to answer in full,
+      // which puts it under the same withhold-on-error rule a realm that
+      // errored outright falls under.
+      let remoteMeta = (
+        json as { meta?: { page?: { total?: unknown }; incomplete?: unknown } }
+      ).meta;
+      if (remoteMeta?.incomplete) {
+        return {
+          cards,
+          error: {
+            realm: realmHref,
+            type: 'unknown',
+            message:
+              'remote realm reported an incomplete result set: its own search omitted a realm, so neither its rows nor its count cover the query',
+          },
+        };
+      }
+      // Absent that, the peer clamps this query to its own page ceiling, so
+      // `data` can be a prefix of what it matched. Its `meta.page.total` is the
+      // only report of the rest.
+      let remoteTotal = remoteMeta?.page?.total;
       return {
         cards,
         ...(typeof remoteTotal === 'number' && Number.isFinite(remoteTotal)
