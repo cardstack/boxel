@@ -76,6 +76,22 @@ function isRunning(pid: number): boolean {
   }
 }
 
+/**
+ * Wait for `pid` to stop running. A signal is delivered asynchronously and the
+ * kernel still has to schedule the target's teardown, so a process that has
+ * been killed is briefly still running — sampling once races that window and
+ * gets whichever answer the machine's load happens to produce.
+ */
+async function waitUntilNotRunning(pid: number, timeoutMs = 15_000) {
+  let deadline = Date.now() + timeoutMs;
+  while (isRunning(pid)) {
+    if (Date.now() > deadline) {
+      throw new Error(`pid ${pid} still running after ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
 beforeAll(() => {
   scriptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-cli-deadline-'));
   stubBin = path.join(scriptDir, 'stub-cli.js');
@@ -134,8 +150,10 @@ describe('runBoxel deadline', () => {
     let orphanPid = Number(/orphan-pid=(\d+)/.exec(res.stdout)?.[1]);
     expect(Number.isInteger(orphanPid)).toBe(true);
     // Killing the group, not just the command, is what stops that child from
-    // running on into the tests that follow it in this process.
-    expect(isRunning(orphanPid)).toBe(false);
+    // running on into the tests that follow it in this process. It would
+    // otherwise be alive for ten minutes, so a bounded wait tells the two
+    // apart without depending on how promptly the kill is scheduled.
+    await expect(waitUntilNotRunning(orphanPid)).resolves.toBeUndefined();
   });
 
   it('refuses a deadline that would pre-empt the command own deadline', async () => {
