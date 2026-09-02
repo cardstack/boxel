@@ -660,7 +660,10 @@ const BEATS: Beat[] = [
     cam: { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
     ch: 2,
     /* out of the edict's night into the building morning — swept, not
-       cut: the night lifts across the flight (Beat.lead) */
+       cut: the night lifts across the flight (Beat.lead). The standing
+       keep is then WIPED off the field, because the next four minutes
+       are about putting one up and it cannot already be there. */
+    join: 'wipe',
     lead: 2,
     gloss: 'the stone base',
     haze: 0.42,
@@ -2528,6 +2531,17 @@ export default class TowerFilm extends Component<{
     if (Array.isArray(beat.build)) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
     }
+    /* THE CHAPTER'S NUMERAL LEAVES WITH THE CHAPTER. It is furniture
+       for the passage, not for the beat, so it holds across the shots
+       inside a chapter and fades out over the tail of the last one —
+       an 02 still sitting in the corner while 03 arrives is the film
+       forgetting which chapter it is in. */
+    const here = this.absoluteIndex;
+    const tail = (BEATS[here + 1]?.ch ?? -1) !== beat.ch;
+    this.pageEl?.style.setProperty(
+      '--tf-ghost-a',
+      tail ? (1 - smooth(Math.max(0, (local - 0.72) / 0.22))).toFixed(3) : '1'
+    );
     if (beat.dissolve) {
       /* the building goes, the frame stays */
       film.modelFade(1 - smooth(Math.max(0, (local - 0.12) / 0.72)));
@@ -2954,7 +2968,10 @@ export default class TowerFilm extends Component<{
          * if the orbit carries it out of frame (below).
          */
         x: Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
-        y: this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 21,
+        /* a short climb, not a launch: the word should read as drifting
+           up out of the structure over its whole life, not crossing the
+           frame — same time on screen, a third of the distance */
+        y: this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 7,
         z: Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff,
       }
     );
@@ -2973,7 +2990,7 @@ export default class TowerFilm extends Component<{
      */
     const seen = film.project(
       Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
-      this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 21,
+      this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 7,
       Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff
     );
     const lit =
@@ -3087,7 +3104,15 @@ export default class TowerFilm extends Component<{
       );
       film.trace(`t${i}`, { pts: spec.pts, r });
     });
-    if (beat.cut) {
+    /**
+     * A JOIN WITHOUT A CUT. Most seams are cuts, but not all of them:
+     * the construction chapter FLIES in and then has to clear the
+     * standing building off the ground before it can build one, and a
+     * tower blinking out of existence mid-sweep is a glitch. So a beat
+     * may name a join without being a cut — the overlay plays over the
+     * arriving shot and the camera is left alone.
+     */
+    if (beat.cut || beat.join) {
       const join = beat.join ?? 'wipe';
       if (join === 'whip') {
         this.whipUntil = performance.now() + 360;
@@ -3107,7 +3132,9 @@ export default class TowerFilm extends Component<{
           const shot = film.snapshot();
           this.freeze = shot.length > 64 ? shot : '';
         }
-        this.snap(beat.cam, this.tailFor(this.beatIndex), beat.ticks * TICK);
+        if (beat.cut) {
+          this.snap(beat.cam, this.tailFor(this.beatIndex), beat.ticks * TICK);
+        }
         if (join === 'dip') {
           this.dipColor = beat.dipTo ?? '#0d0905';
           this.dipStamp += 1;
@@ -5609,7 +5636,7 @@ export default class TowerFilm extends Component<{
         line-height: 0.8;
         letter-spacing: -0.04em;
         color: var(--tf-ink);
-        opacity: 0.07;
+        opacity: calc(0.07 * var(--tf-ghost-a, 1));
         pointer-events: none;
         z-index: -1;
       }
