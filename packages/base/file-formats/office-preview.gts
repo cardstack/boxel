@@ -142,7 +142,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   <template>
-    {{#if (eq @mode 'fitted')}}
+    {{#if (eq @format 'fitted')}}
       <div class='off-fitted' data-kind={{this.kind}} data-test-office-fitted>
         <div class='paper paper-{{this.kind}}'>
           <span class='badge'>{{this.badge}}</span>
@@ -155,7 +155,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
       <div
         class='off'
         data-kind={{this.kind}}
-        data-mode={{@mode}}
+        data-mode={{@format}}
         data-test-office-preview={{this.kind}}
       >
         <header class='off-head'>

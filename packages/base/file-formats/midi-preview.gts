@@ -181,7 +181,7 @@ export class MidiPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   <template>
-    {{#if (eq @mode 'fitted')}}
+    {{#if (eq @format 'fitted')}}
       <div class='midi-fitted' data-test-midi-fitted>
         <KeyboardMusicIcon class='midi-glyph' width='30' height='30' />
         <div class='midi-fit-facts'>
@@ -197,7 +197,7 @@ export class MidiPreview extends GlimmerComponent<FilePreviewSignature> {
         </div>
       </div>
     {{else}}
-      <div class='midi' data-mode={{@mode}} data-test-midi-preview>
+      <div class='midi' data-mode={{@format}} data-test-midi-preview>
         <div class='midi-head'>
           <KeyboardMusicIcon
             class='midi-head-glyph'

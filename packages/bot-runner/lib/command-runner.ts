@@ -51,6 +51,7 @@ export function makeEnqueueRunCommand(
         runAs,
         command,
         commandInput,
+        dedupeKey: null,
       },
       queuePublisher,
       dbAdapter,

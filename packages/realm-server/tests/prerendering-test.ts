@@ -760,6 +760,36 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // A card with hand-authored data-card-field markers at fixed sizes,
+            // so a `target` capture's crop dimensions are layout-independent and
+            // predictable. Authored data-* survives into the rendered HTML, so a
+            // target selector addresses a known element without depending on the
+            // base realm's own field-boundary stamping.
+            'disco.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Disco extends CardDef {
+                static displayName = "Disco";
+                @field title = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div data-card-field="title" style="box-sizing: border-box; width: 200px; height: 50px;">{{@model.title}}</div>
+                    <div data-card-field="tag" style="box-sizing: border-box; width: 120px; height: 40px;">one</div>
+                    <div data-card-field="tag" style="box-sizing: border-box; width: 120px; height: 40px;">two</div>
+                  </template>
+                }
+              }
+            `,
+            // Named `disco-card`, not `disco`: an instance sharing its
+            // extensionless alias with `disco.gts` would make the render
+            // route's card id ambiguous (see the `tall`/`long` note above).
+            'disco-card.json': {
+              data: {
+                attributes: { title: 'Discoverable' },
+                meta: {
+                  adoptsFrom: { module: rri('./disco'), name: 'Disco' },
+                },
+              },
+            },
             // Named `tall`, not `long`: an instance sharing its extensionless
             // alias with `long.gts` would make the render route's
             // extensionless card id ambiguous — the module source wins the
@@ -1050,6 +1080,56 @@ module(basename(import.meta.filename), function () {
         singular.response.contentType,
         'image/png',
         'contentType preserved',
+      );
+    });
+
+    test('a target capture crops to the addressed element', async function (assert) {
+      // A `target` selector crops the shot to that element's box. The fixture's
+      // `title` field is a fixed 200×50, so the crop dimensions are predictable.
+      // Pixel-exact crop equivalence is the acceptance sweep's job; this pins
+      // the dimensional contract.
+      let { response } = await screenshot(`${realmURL}disco-card`, {
+        target: '[data-card-field="title"]',
+      });
+      assert.strictEqual(response.status, 'ready', 'target capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'target capture is a PNG');
+      assert.strictEqual(
+        png.width,
+        200,
+        'target PNG width equals the element box width',
+      );
+      assert.strictEqual(
+        png.height,
+        50,
+        'target PNG height equals the element box height',
+      );
+      assert.strictEqual(response.width, 200, 'reports the element CSS width');
+      assert.strictEqual(response.height, 50, 'reports the element CSS height');
+    });
+
+    test('a target matching no element is a named capture error', async function (assert) {
+      let { response } = await screenshot(`${realmURL}disco-card`, {
+        target: '[data-card-field="does-not-exist"]',
+      });
+      assert.strictEqual(response.status, 'error', 'a missing target errors');
+      assert.ok(
+        response.error?.includes('[data-card-field="does-not-exist"]'),
+        `the error names the selector (got: ${response.error})`,
+      );
+    });
+
+    test('an XPath-shaped target is a named capture error, not a wrong crop', async function (assert) {
+      // The parse does not special-case XPath; the capture path resolves the
+      // selector with `document.querySelector`, which cannot execute XPath, so
+      // an XPath-shaped string dead-ends as a named "invalid selector" error.
+      let { response } = await screenshot(`${realmURL}disco-card`, {
+        target: '//div[@data-card-field]',
+      });
+      assert.strictEqual(response.status, 'error', 'an XPath target errors');
+      assert.ok(
+        response.error?.includes('//div[@data-card-field]'),
+        `the error names the selector (got: ${response.error})`,
       );
     });
 
@@ -7436,6 +7516,193 @@ module(basename(import.meta.filename), function () {
           'ready',
           'successful response returned after retry',
         );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
+  module('prerender - render scope', function () {
+    // The prerenderer is the last hop before the page: `visit-file.ts`
+    // computes the scope, it rides the request body through
+    // `remote-prerenderer.ts` and `prerender-app.ts`, and this class hands it
+    // to the render runner, which stamps it on the page. Every hop
+    // destructures it by name, so a hop that drops it is silent — the render
+    // still returns HTML, built from whatever instances the tab already held
+    // from another job. The retry is covered because that is when a tab is
+    // being reused; it re-enters the same lexical call site, so what this
+    // pins is that nothing between the attempts strips the scope. The
+    // post-`#restartBrowser` attempt is the genuinely separate literal and is
+    // not exercised here.
+    test('the scope reaches every visit attempt, retry included', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let scopes: Array<string | undefined> = [];
+      let retryRealm = 'https://scope-retry.example/';
+      let cardURL = `${retryRealm}card`;
+      let scope = `${retryRealm}@815`;
+
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          let { affinityType, affinityValue, url: attemptUrl } = args;
+          scopes.push((args as { renderScope?: string }).renderScope);
+          attemptCount++;
+          let baseResponse: RenderResponse = {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            iconHTML: null,
+            isolatedHTML: `${attemptUrl}-render-${attemptCount}`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            markdown: null,
+          };
+          // First attempt fails with the signature the prerenderer retries on,
+          // so the second call site is exercised too.
+          let card: RenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  error: {
+                    type: 'instance-error',
+                    error: {
+                      message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                      status: 500,
+                      title: 'boom',
+                      additionalErrors: null,
+                      stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                    },
+                  },
+                }
+              : baseResponse;
+
+          return {
+            response: { card },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: `page-${attemptCount}`,
+              affinityType,
+              affinityValue,
+              reused: attemptCount > 1,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: retryRealm,
+          realm: retryRealm,
+          url: cardURL,
+          auth: 'test-auth',
+          renderOptions: { cardRender: true },
+          renderScope: scope,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [scope, scope],
+          'both the initial attempt and the retry carry the scope',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('a visit with no scope forwards none', async function (assert) {
+      // An interactive render has no indexing job behind it. The page keys on
+      // the job id in that case, which is narrower and so never unsound; a
+      // forwarded empty string would instead pool every such visit together.
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let scopes: Array<string | undefined> = [];
+      let realm = 'https://scope-absent.example/';
+
+      try {
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          let { affinityType, affinityValue, url: attemptUrl } = args;
+          scopes.push((args as { renderScope?: string }).renderScope);
+          return {
+            response: {
+              card: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: null,
+                types: null,
+                iconHTML: null,
+                isolatedHTML: `${attemptUrl}-render`,
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                markdown: null,
+              } as RenderResponse,
+            },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: 'page-1',
+              affinityType,
+              affinityValue,
+              reused: false,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: `${realm}card`,
+          auth: 'test-auth',
+          renderOptions: { cardRender: true },
+        });
+
+        assert.deepEqual(scopes, [undefined], 'no scope is invented');
       } finally {
         RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
         await prerenderer?.stop();

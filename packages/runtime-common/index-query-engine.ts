@@ -5,7 +5,7 @@ import {
   type CardResource,
   type CodeRef,
   baseCardRef,
-  internalKeysFor,
+  internalKeyFor,
   isResolvedCodeRef,
   baseRealmRRI,
   getSerializer,
@@ -263,6 +263,15 @@ export interface QueryResultsMeta {
   page: {
     total: number;
   };
+  // The result set omits rows nobody counted, so `page.total` covers less than
+  // the query asked about and is a floor rather than the match count. Two
+  // things leave a result set that way: a realm the query fanned out to did not
+  // answer, so the total sums only the realms that did; or the search failed as
+  // a unit, so nothing was counted and the total describes an empty result set
+  // rather than an empty match set. A consumer that reports a count must treat
+  // the total as unknown while this is set — publishing it claims a number over
+  // the very rows whose absence made it unknowable.
+  incomplete?: boolean;
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
@@ -1196,34 +1205,33 @@ export class IndexQueryEngine {
 
   // Every `types` membership key a ref can legitimately match:
   //
-  // - all equivalent spellings of the ref itself (RRI / real-URL /
-  //   virtual-alias), so rows indexed before references were canonicalized to
-  //   RRI still satisfy the filter without a reindex or DB migration;
-  // - the same spellings of the ref's canonical (defining-module) codeRef.
-  //   Rows stamp `types` via `identifyCard`, which names the module a class is
-  //   defined in — so a ref that names the type through a re-exporting module
-  //   (e.g. file-api's FileDef, re-exported from card-api) only matches
-  //   through its definition's canonical ref. The host's search resource
-  //   applies the same canonicalization (via the loader) before its
-  //   client-side matching, keeping the two evaluations in agreement.
+  // - the ref's own key. `internalKeyFor` resolves any spelling to a real URL
+  //   and unresolves it to the registered prefix, so a filter naming a module
+  //   by prefix, real URL or virtual alias yields one key — the same form the
+  //   indexer writes.
+  // - the key of the ref's canonical (defining-module) codeRef. Rows stamp
+  //   `types` via `identifyCard`, which names the module a class is defined
+  //   in — so a ref that names the type through a re-exporting module (e.g.
+  //   file-api's FileDef, re-exported from card-api) only matches through its
+  //   definition's canonical ref. The host's search resource applies the same
+  //   canonicalization (via the loader) before its client-side matching,
+  //   keeping the two evaluations in agreement.
   //
-  // A ref whose definition doesn't resolve keeps only its spelling-based keys
-  // and matches nothing (unless rows were stamped under that spelling),
-  // exactly as before.
+  // A ref whose definition doesn't resolve keeps only its own key and matches
+  // nothing (unless rows were stamped under that spelling).
   private async typeKeysFor(ref: CodeRef): Promise<string[]> {
-    let keys = internalKeysFor(ref, undefined, this.#virtualNetwork);
+    let keys = [internalKeyFor(ref, undefined, this.#virtualNetwork)];
     if (isResolvedCodeRef(ref)) {
       try {
         let definition = await this.#definitionLookup.lookupDefinition(ref);
         if (isResolvedCodeRef(definition.codeRef)) {
-          for (let key of internalKeysFor(
+          let key = internalKeyFor(
             definition.codeRef,
             undefined,
             this.#virtualNetwork,
-          )) {
-            if (!keys.includes(key)) {
-              keys.push(key);
-            }
+          );
+          if (!keys.includes(key)) {
+            keys.push(key);
           }
         }
       } catch (error) {
@@ -1245,9 +1253,10 @@ export class IndexQueryEngine {
   // query may now arrive with a canonical-RRI (prefix) value. For filter paths
   // whose leaf is `id`/`url`, a prefix-form value additionally matches its
   // equivalent spellings — real-URL, RRI-prefix, and any virtual-alias — via
-  // the realm's VirtualNetwork. This mirrors how the `types` column tolerates
-  // mixed spellings (`internalKeysFor` / `equivalentURLForms`), so a reference
-  // filter matches the URL-indexed value without a reindex or DB migration.
+  // the realm's VirtualNetwork, so a reference filter matches the URL-indexed
+  // value without a reindex or DB migration. Unlike `types`, which is written
+  // and read in one canonical form, `id`/`url` are still indexed in URL form,
+  // so the expansion here is load-bearing.
   //
   // Only a *prefix-form* value (one that starts with a registered realm prefix)
   // is expanded. These leaf names also occur on ordinary user-data fields (a
@@ -1276,9 +1285,8 @@ export class IndexQueryEngine {
       if (this.#virtualNetwork.isRegisteredPrefix(value)) {
         try {
           // A prefix-form RRI: resolve to its real URL (the server's VN owns
-          // the realm mappings), then enumerate equivalent spellings — same
-          // composition `internalKeysFor` uses for type keys — so it matches
-          // the URL-form indexed reference.
+          // the realm mappings), then enumerate equivalent spellings so it
+          // matches the URL-form indexed reference.
           forms.push(
             ...this.#virtualNetwork.equivalentURLForms(
               this.#virtualNetwork.toURL(value).href,

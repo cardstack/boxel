@@ -982,6 +982,106 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="number"]').containsText('10');
     });
 
+    // The capture/discovery contract: a rendered field boundary — a card
+    // rendered as a field, a compound field's wrapper, and the plural wrappers
+    // in both their view and edit forms — carries data-card-field=<fieldName>,
+    // so selector-based screenshot capture and region discovery can address
+    // fields in templates that never opted in. The card root itself carries no
+    // field context, so it must not carry the attribute.
+    test('rendered field boundaries carry data-card-field', async function (assert) {
+      class Guest extends FieldDef {
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span><@fields.name /></span>
+          </template>
+        };
+      }
+
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span><@fields.name /></span>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        @field guest = contains(Guest);
+        @field nicknames = containsMany(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <@fields.guest />
+            <@fields.nicknames />
+            <@fields.pet />
+            <@fields.pets />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ name: 'Mango' });
+      let vanGogh = new Pet({ name: 'Van Gogh' });
+      let person = new Person({
+        guest: new Guest({ name: 'Hassan' }),
+        nicknames: ['Art', 'Arty'],
+        pet: mango,
+        pets: [mango, vanGogh],
+      });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      await saveCard(vanGogh, `${testRealmURL}Pet/van-gogh`, loader);
+      await saveCard(person, `${testRealmURL}Person/arthur`, loader);
+
+      await renderCard(loader, person, 'isolated');
+
+      assert
+        .dom('[data-test-compound-field-component][data-card-field="guest"]')
+        .exists('a compound field wrapper carries its field name');
+      assert
+        .dom(
+          '[data-test-plural-view-field="nicknames"][data-card-field="nicknames"]',
+        )
+        .exists('a containsMany plural wrapper carries its field name');
+      assert
+        .dom(
+          `[data-card-field="pet"][data-test-card="${testRealmURL}Pet/mango"]`,
+        )
+        .exists('a linksTo card boundary carries its field name');
+      assert
+        .dom('[data-test-plural-view-field="pets"][data-card-field="pets"]')
+        .exists('a linksToMany plural wrapper carries its field name');
+      assert
+        .dom(
+          '[data-card-field="pets"] [data-card-field="pets"][data-test-field-component-card]',
+        )
+        .exists(
+          { count: 2 },
+          'each linksToMany item boundary carries the plural field name',
+        );
+      assert
+        .dom(`[data-test-card="${testRealmURL}Person/arthur"]`)
+        .doesNotHaveAttribute(
+          'data-card-field',
+          'the card root has no field context, so no data-card-field',
+        );
+
+      // Edit format renders plural fields through their own editor wrappers,
+      // distinct elements from the view-format plural wrappers above. A
+      // containsMany of primitives has no per-item boundary, so the editor
+      // wrapper is the only element that can name the field for discovery.
+      await renderCard(loader, person, 'edit');
+      assert
+        .dom('.contains-many-editor[data-card-field="nicknames"]')
+        .exists('a containsMany editor wrapper carries its field name');
+      assert
+        .dom('.links-to-many-editor[data-card-field="pets"]')
+        .exists('a linksToMany editor wrapper carries its field name');
+    });
+
     test('render a field in atom format', async function (assert) {
       class EmphasizedString extends FieldDef {
         static [primitive]: string;
@@ -3365,6 +3465,119 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-polymorphic="special-string-a"]').hasText('Mango');
       await click('[data-test-set-subclass]');
       assert.dom('[data-test-polymorphic="special-string-b"]').hasText('Mango');
+    });
+
+    test('narrowing a field to a subtype changes only which card it resolves to', async function (assert) {
+      class SpecialString extends StringField {
+        static displayName = 'SpecialString';
+      }
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+      }
+      class Puppy extends Pet {
+        static displayName = 'Puppy';
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(StringField, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Mango'] } }),
+        });
+        // The link arity carries options the `contains` one has no slot for —
+        // `queryDefinition`, `eager`, and the `declaredCardThunk` that keeps
+        // resolving the declared type — and it is the arity a narrowing
+        // actually reaches, since a resolved link installs an override for
+        // its target's concrete type.
+        @field pets = linksToMany(() => Pet, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Van Gogh'] } }),
+          query: { filter: { eq: { title: 'Van Gogh' } } },
+          eager: false,
+        });
+      }
+
+      // Comparing the whole property set, rather than the options this test
+      // thought to name, is the point: a declared option that narrowing fails
+      // to carry surfaces here rather than in whichever consumer happens to
+      // read it instance-scoped.
+      function assertOnlyTheNarrowingChanged(
+        fieldName: string,
+        override: typeof CardDef | typeof StringField,
+        expectedOptions: string[],
+      ) {
+        let declared = getField(new TestCard(), fieldName)!;
+        let narrowed = getField(
+          new TestCard({ [fields]: { [fieldName]: override } }),
+          fieldName,
+        )!;
+
+        assert.strictEqual(
+          narrowed.card,
+          override,
+          `${fieldName} resolves to the subtype the override names`,
+        );
+        assert.true(
+          narrowed.isPolymorphic,
+          `${fieldName} reports the resolution as polymorphic`,
+        );
+
+        let carried = Object.keys(declared).filter(
+          (key) => key !== 'cardThunk' && key !== 'isPolymorphic',
+        );
+        assert.deepEqual(
+          carried.filter((key) => expectedOptions.includes(key)).sort(),
+          [...expectedOptions].sort(),
+          `${fieldName} carries the options this compares over`,
+        );
+        assert.deepEqual(
+          carried.filter(
+            (key) => (narrowed as any)[key] !== (declared as any)[key],
+          ),
+          [],
+          `narrowing ${fieldName} moved nothing else`,
+        );
+      }
+
+      assertOnlyTheNarrowingChanged('specialField', SpecialString, [
+        'configuration',
+        'searchable',
+      ]);
+      assertOnlyTheNarrowingChanged('pets', Puppy, [
+        'configuration',
+        'searchable',
+        'queryDefinition',
+        'eager',
+        'declaredCardThunk',
+      ]);
+
+      // Replacing an override has to produce a field resolving to the new
+      // subtype, and one owner's override must not answer another's. Asserted
+      // against `getField` directly rather than through a re-render, so a
+      // failure reads as the wrong field rather than as a component rendering
+      // the previous subtype.
+      class Kitten extends Pet {
+        static displayName = 'Kitten';
+      }
+      let card = new TestCard({ [fields]: { pets: Puppy } });
+      assert.strictEqual(getField(card, 'pets')!.card, Puppy);
+      card[fields] = { pets: Kitten };
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'replacing the override resolves to the new subtype',
+      );
+
+      let otherCard = new TestCard({ [fields]: { pets: Puppy } });
+      assert.strictEqual(
+        getField(otherCard, 'pets')!.card,
+        Puppy,
+        'a second instance resolves to its own override',
+      );
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'and leaves the first instance resolving to its own',
+      );
     });
 
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {

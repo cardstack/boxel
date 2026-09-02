@@ -67,8 +67,11 @@ type Registry = {
   lastAccessByAffinity: Map<string, number>;
   // Latest host-shell token reported by a realm server (POST /host-shell).
   // Echoed to prerender servers on every heartbeat response so they recycle
-  // when it changes (host redeployed). Undefined until first reported; reset
-  // on manager restart, re-learned from the next realm-server boot report.
+  // when it differs from the shell they warmed against. Undefined until first
+  // reported; reset on manager restart, re-learned from the next realm-server
+  // boot report. The reset is not load-bearing: a prerender server compares
+  // the echoed token against its own baseline, and a token it has not warmed
+  // against is a recycle whether or not this manager saw an earlier one.
   hostShellHash?: string;
 };
 
@@ -564,8 +567,17 @@ export function buildPrerenderManagerApp(options?: {
         return;
       }
       if (registry.hostShellHash !== hash) {
+        // Two distinct events, kept distinct in the log. A manager holding no
+        // token has usually just restarted in the same deploy train as the
+        // realm server reporting to it, so it cannot tell a new host bundle
+        // from the one already deployed — and it is the prerender servers,
+        // comparing against their own baselines, that decide to recycle. Only
+        // a token succeeding a different token is evidence of a host change
+        // this manager actually observed.
         log.info(
-          `host shell token changed (${registry.hostShellHash ?? 'none'} -> ${hash}); prerender servers will recycle on next heartbeat`,
+          registry.hostShellHash === undefined
+            ? `host shell token learned (${hash}); no earlier token on this manager, so prerender servers reconcile it against their own baselines`
+            : `host shell token changed (${registry.hostShellHash} -> ${hash}); prerender servers will recycle on next heartbeat`,
         );
         registry.hostShellHash = hash;
       }

@@ -9,7 +9,11 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { ScreenshotFormat } from './capture-spec.ts';
+import type {
+  ScreenshotFormat,
+  ScreenshotImageType,
+  ScreenshotManifest,
+} from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -237,6 +241,12 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Declared-screenshot slots whose capture failed during the
+  // prerender-html visit. The row publishes normally — a failed capture is
+  // an absent screenshot, not an errored card (the brokenLinks model) — and
+  // the manifest simply omits the name, so this is the only indexed signal
+  // that a declared capture is missing. Omitted when every slot captured.
+  screenshotErrors?: DeclaredScreenshotError[];
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -709,6 +719,18 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Host-shell token the prerender server had been told was current when this
+  // render started, and again when its response was assembled. Two different
+  // values mean the render straddled a host redeploy: the page resolved
+  // modules against a bundle the realm server may already have stopped
+  // serving. Unremarkable for a render that succeeded, and decisive for one
+  // that failed to resolve a module — that failure then describes the
+  // environment rather than the card, which is what an operator reading the
+  // error row needs to know. Lives here rather than on the response meta
+  // because `flattenPrerenderMeta` carries `diagnostics` onto the persisted
+  // row and drops every other meta key.
+  hostShellHash?: string;
+  hostShellHashAtCompletion?: string;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -876,7 +898,79 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
+  // Present when the caller wants the visit to capture the card's declared
+  // screenshots (`static screenshots`) on the same warm tab — the
+  // prerender-html indexing pass sends this when it has a MediaCache to
+  // persist into. Only honored by 'prerender-html' visits.
+  screenshots?: DeclaredScreenshotVisitArgs;
+  // The realm view this visit renders against — one realm at one generation.
+  // An index pass and the `prerender_html` job it spawns are separate queue
+  // jobs that read the same files, so they carry the same scope, while the
+  // next pass over the realm carries a different one. A prerender tab keys
+  // what it may reuse across visits on this rather than on `jobId`: the two
+  // jobs interleave on a shared tab, and scoping on the job would tear that
+  // tab's state down on every alternation while still holding one view.
+  renderScope?: string;
 };
+
+// Inputs the declared-screenshot capture step needs from the indexing side:
+// what the previous pass captured (so unchanged file-content-keyed slots can
+// carry forward without re-rendering) and the source file's current
+// realm_file_meta content hash to compare against.
+export type DeclaredScreenshotVisitArgs = {
+  priorManifest?: ScreenshotManifest | null;
+  contentHash?: string | null;
+};
+
+export type DeclaredScreenshotError = {
+  name: string;
+  message: string;
+};
+
+// One declared slot's outcome from the visit's capture step. A fresh capture
+// carries `base64`; a carry-forward (`carriedForward: true`, file-content-
+// keyed slot whose source bytes are unchanged) carries no bytes — the caller
+// copies the prior manifest entry instead of persisting anything.
+export type DeclaredScreenshotCaptureResult = {
+  name: string;
+  specHash: string;
+  // CSS px of the capture box; physical pixels are these × deviceScaleFactor.
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  contentType: string;
+  imageType: ScreenshotImageType;
+  keyBy: 'generation' | 'file-content';
+  useAsThumbnail?: boolean;
+  base64?: string;
+  carriedForward?: boolean;
+};
+
+export interface DeclaredScreenshotVisitResult {
+  entries: DeclaredScreenshotCaptureResult[];
+  // Per-slot capture failures — the broken-links model: they never fail the
+  // visit, the manifest just omits the name.
+  errors?: DeclaredScreenshotError[];
+}
+
+// The scope string both halves of a pass compute independently, from the queue
+// job of the index pass — its own for the index visit, the spawning pass's for
+// the prerender-html job that pass enqueued.
+//
+// The pass's *generation* would read more naturally and is not sound: it is
+// `current_generation + 1` computed at batch start and only committed by
+// `done()`, so a pass that dies before finalizing leaves the row untouched and
+// the next pass computes the same number — the same scope, for a realm whose
+// files may have moved in between. A queue job id advances whatever happens.
+//
+// The residual is a retry of one job, which keeps its id across attempts: a
+// write landing between a failed attempt and its retry can be reduced over from
+// the earlier attempt's copies. That write enqueues its own pass, whose
+// invalidation set covers the same rows under a scope of its own, so the window
+// closes on the next pass rather than persisting.
+export function renderScopeFor(realmURL: string, passJobId: number): string {
+  return `${realmURL}@${passJobId}`;
+}
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
 // called from `IndexRunner`'s `finally` blocks after a run completes.
@@ -899,6 +993,11 @@ export interface RenderVisitResponse {
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
+  // Declared-screenshot captures, present when the visit args requested them
+  // (see PrerenderVisitArgs.screenshots) and the card pass reached the
+  // capture step. Absent entirely on prerenderers that don't support
+  // capture (the in-browser twin) — the caller writes no manifest then.
+  screenshots?: DeclaredScreenshotVisitResult;
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
@@ -948,6 +1047,15 @@ export type ScreenshotCaptureOverrides = {
   // only "back to no clip" spelling an object-valued field has); it elides
   // away after the merge, so a normalized spec never carries null.
   clip?: { x: number; y: number; width: number; height: number } | null;
+  // CSS selector for a single element to capture — an element-handle
+  // screenshot of the first match, tightly cropped to its box. Mutually
+  // exclusive with `clip` and `fullPage` (an element screenshot honors
+  // neither). The selector is bounded in length; the capture path resolves it
+  // with `document.querySelector`, so a non-CSS (e.g. XPath-shaped) string is a
+  // named capture error rather than a wrong crop. A batch entry may set
+  // `target: null` to drop a batch-wide target default, the same "back to no
+  // target" spelling `clip` has; it elides away after the merge.
+  target?: string | null;
   // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
   // parent-owned box rather than the viewport, so it needs this to lay out
   // and fire its `@container fitted-card` queries. Required for fitted
@@ -1130,6 +1238,7 @@ import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './http-range.ts';
 export * from './paths.ts';
+export * from './directory-view-refresher.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';
 export * from './published-realm-url.ts';
@@ -1142,6 +1251,7 @@ export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
+export * from './realm-prefixes.ts';
 export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
@@ -1637,15 +1747,17 @@ export function hasCardExtension(path: string): boolean {
   return false;
 }
 
+// Trimming preserves the form of what it is given: an identifier stays an
+// identifier, and a plain string — a URL href, say — stays a plain string
+// rather than acquiring a brand it does not warrant.
 export function trimExecutableExtension(
   input: RealmResourceIdentifier,
-): RealmResourceIdentifier {
+): RealmResourceIdentifier;
+export function trimExecutableExtension(input: string): string;
+export function trimExecutableExtension(input: string): string {
   for (let extension of executableExtensions) {
     if (input.endsWith(extension)) {
-      return input.replace(
-        new RegExp(`\\${extension}$`),
-        '',
-      ) as RealmResourceIdentifier;
+      return input.replace(new RegExp(`\\${extension}$`), '');
     }
   }
   return input;
@@ -1669,36 +1781,6 @@ export function internalKeyFor(
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/ancestor`;
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/fields/${ref.field}`;
-  }
-}
-
-// Like `internalKeyFor`, but returns every equivalent spelling of the key —
-// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
-// a single stored `types` value against a key; index rows written before
-// references were canonicalized to RRI may hold the alias or real-URL form,
-// so matching all spellings keeps base-typed cards/files findable until the
-// persisted data is migrated or reindexed.
-export function internalKeysFor(
-  ref: CodeRef,
-  relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
-): string[] {
-  if (!('type' in ref)) {
-    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
-    let module: string = trimExecutableExtension(rri(resolved));
-    return virtualNetwork
-      .equivalentURLForms(module)
-      .map((form) => `${form}/${ref.name}`);
-  }
-  switch (ref.type) {
-    case 'ancestorOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/ancestor`,
-      );
-    case 'fieldOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/fields/${ref.field}`,
-      );
   }
 }
 

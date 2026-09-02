@@ -77,6 +77,7 @@ import {
 import {
   systemError,
   notFound,
+  notIndexedYet,
   notAcceptable,
   methodNotAllowed,
   badRequest,
@@ -132,6 +133,7 @@ import {
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isSingleCardDocument,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
   fileMetaTimestamps,
@@ -169,6 +171,7 @@ import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import {
   captureSpecHash,
+  captureSpecOverrides,
   parseCaptureSpecParams,
   type CaptureSpec,
 } from './capture-spec.ts';
@@ -214,6 +217,7 @@ import type {
 
 import { RealmAuthDataSource } from './realm-auth-data-source.ts';
 import { AliasCache } from './cache/alias-cache.ts';
+import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
@@ -913,6 +917,11 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
+  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
+    for await (let _entry of this.#adapter.readdir(directory)) {
+      // draining the listing is the whole effect; the entries are not used
+    }
+  });
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -1986,6 +1995,14 @@ export class Realm {
     if (hasExecutableExtension(path)) {
       this.#dropTranspiledModuleEntry(path);
     }
+  }
+
+  // Refresh this instance's filesystem view of the directories that hold
+  // `path`, after a peer instance wrote or deleted that path. See
+  // DirectoryViewRefresher for why a shared-filesystem peer needs this and how
+  // repeated requests for one directory are coalesced.
+  refreshDirectoryView(path: LocalPath): Promise<void> {
+    return this.#directoryViewRefresher.refresh(path);
   }
 
   // CS-11028: shared drop helper for any in-process site that invalidates a
@@ -4209,11 +4226,17 @@ export class Realm {
   }
 
   // The miss path: a capture no ledger entry satisfies. Full captureSpec
-  // power on an unauthenticated-reachable GET is an unbounded spec space, so
-  // new captures are per-realm opt-in (`allowArbitraryScreenshots` on the
-  // realm's config card — the gate blocks Chrome work, never serving), and
-  // an open realm's captures run through the same per-realm serialized
-  // screenshot queue as the POST endpoint, bounded by a sync-wait budget:
+  // power on an unauthenticated-reachable GET is an unbounded spec space —
+  // on an open realm every distinct viewport/dsf/fullPage/clip combination
+  // is its own render and its own ledger entry — so new captures are
+  // per-realm opt-in (`allowArbitraryScreenshots` on the realm's config
+  // card — the gate blocks Chrome work, never serving). That opt-in is the
+  // deliberate cost boundary: no per-instance spec-cardinality cap beyond
+  // it, since the parse bounds each capture's pixel cost, the serialized
+  // lane bounds concurrency, and the on-demand lane's idle TTL reclaims
+  // entries nothing requests. An open realm's captures run through the same
+  // per-realm serialized screenshot queue as the POST endpoint, bounded by
+  // a sync-wait budget:
   //   - lane already too deep for the budget → immediate 503 + Retry-After
   //     (fail fast instead of holding a doomed connection);
   //   - otherwise enqueue and wait up to the budget; the job persists its
@@ -4291,10 +4314,11 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
-        // The GET DSL's spec is canonical by construction (viewport / scale /
-        // clip params are reserved), so there are never capture overrides on
-        // this lane.
-        captureSpec: null,
+        // The spec's geometry overrides (viewport / dsf / fullPage / clip)
+        // ride to the capture engine; the entry key's `captureSpecHash`
+        // already covers them, so the persisted capture serves only on this
+        // exact spec's URL.
+        captureSpec: captureSpecOverrides(spec),
         persist: { ...entryKey, lane: 'on-demand' },
         surface: 'get-dsl',
         loggingCorrelationId: perf.correlationId,
@@ -4366,13 +4390,27 @@ export class Realm {
           ...stagePerf,
           jobWaitMs,
         });
-        return systemError({
+        let response = systemError({
           requestContext,
           message: `screenshot capture failed for ${entryKey.sourceURL}`,
           additionalError: outcome.error
             ? new Error(String(outcome.error))
             : undefined,
         });
+        // A failed capture persists nothing, so no ledger entry will
+        // short-circuit the repeat: without explicit freshness every `<img>`
+        // load of this URL is a fresh Chrome render. Some failures are
+        // durable properties of the request — a fullPage capture whose
+        // document extent exceeds the physical-pixel cap fails every time,
+        // and only the capture engine can discover that. Carry the same
+        // short window the miss and gate responses use, so a capture that
+        // keeps failing costs one render per window rather than one per
+        // image load.
+        response.headers.set(
+          'cache-control',
+          `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        );
+        return response;
       }
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({
@@ -5166,6 +5204,47 @@ export class Realm {
       return false;
     }
     return await this.#adapter.exists(localPath);
+  }
+
+  // The index has no row for `localPath`, so there is no card document to
+  // serve. Which 404 that is depends on the source file: a write lands on the
+  // realm's file system first and is indexed after, so a card whose `.json` is
+  // already on disk is one this realm has not caught up with rather than one
+  // that does not exist. `notIndexedYet` says so, letting a caller hold a
+  // placeholder until the realm broadcasts the index event for it. A read
+  // served by the replica that took the write rarely gets here — that path
+  // drains its own in-flight indexing first — but a read served by any other
+  // replica has no such handle on the write.
+  private async missingInstanceResponse(
+    request: Request,
+    requestContext: RequestContext,
+    localPath: LocalPath,
+  ): Promise<Response> {
+    let sourcePath = `${localPath}.json` as LocalPath;
+    if (await this.isIgnored(this.paths.fileURL(sourcePath))) {
+      // An ignored path is never visited, so no amount of waiting produces an
+      // index row for it.
+      return notFound(request, requestContext);
+    }
+    let source = await this.readFileAsText(sourcePath);
+    if (!source) {
+      return notFound(request, requestContext);
+    }
+    // The marker promises an index row is coming, so it has to match what the
+    // indexer will actually make one for: a `.json` whose `data` is a single
+    // card resource. A collection document (which `isCardDocumentString` also
+    // accepts) never becomes an instance row, and neither does anything else
+    // — those are genuinely not cards, not cards in waiting.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.content);
+    } catch {
+      return notFound(request, requestContext);
+    }
+    if (!isSingleCardDocument(parsed)) {
+      return notFound(request, requestContext);
+    }
+    return notIndexedYet(request, requestContext);
   }
 
   private async fileMetaDocument(
@@ -6013,7 +6092,11 @@ export class Realm {
             );
             return fileMeta ?? notFound(request, requestContext);
           } else {
-            return notFound(request, requestContext);
+            return await this.missingInstanceResponse(
+              request,
+              requestContext,
+              localPath,
+            );
           }
         }
         if (
@@ -6063,7 +6146,11 @@ export class Realm {
           );
           return fileMeta ?? notFound(request, requestContext);
         } else {
-          return notFound(request, requestContext);
+          return await this.missingInstanceResponse(
+            request,
+            requestContext,
+            localPath,
+          );
         }
       }
       if (maybeError.type === 'error') {
@@ -6563,8 +6650,9 @@ export class Realm {
       // concurrency caps stay on the card `@context` surface.
       let itemLegBounded =
         isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
-      // Reject an over-ceiling explicit page (400, caught below); clamp an
-      // absent page so the query carries a LIMIT.
+      // Clamp an absent page to the default so the query carries a LIMIT, and
+      // an over-maximum explicit one to the maximum (logged, so a short page
+      // has an explanation somewhere).
       if (itemLegBounded) {
         searchEntryQuery.itemQuery = applyServerSearchPageBound(
           searchEntryQuery.itemQuery,

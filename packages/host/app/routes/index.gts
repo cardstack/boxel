@@ -16,6 +16,7 @@ import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
@@ -23,6 +24,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -59,6 +61,7 @@ export default class Card extends Route {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
+  @service declare private network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
@@ -292,9 +295,18 @@ export default class Card extends Route {
     let cardUrl;
     if (hostsOwnAssets) {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmIdentifiers.find(
-        (realmUrl) => {
-          let realmPathParts = new URL(realmUrl).pathname
+      // The question here is which realm *serves* this card path, so the
+      // comparison is against each realm's mounted URL path. A registered
+      // prefix does not carry one: `@cardstack/base/` names two namespace
+      // segments while the realm it maps to is mounted at `/base/`, so
+      // comparing the prefix directly matches nothing. Resolve first, then
+      // match — and the match doubles as the base below, which `new URL`
+      // accepts only in URL form.
+      let vn = this.network.virtualNetwork;
+      let realmUrl = this.realmServer.availableRealmIdentifiers
+        .map((identifier) => resolvedRealmURLHref(vn, identifier))
+        .find((resolvedRealmUrl) => {
+          let realmPathParts = new URL(resolvedRealmUrl).pathname
             .split('/')
             .filter((part) => part !== '');
           let cardPathParts = cardPath!
@@ -310,11 +322,15 @@ export default class Card extends Route {
             }
           }
           return isMatch;
-        },
-      );
+        });
+      // The fallback is a realm identifier as well: `defaultReadableRealm.path`
+      // is a key of `realm.realms`, which is keyed by whatever spelling created
+      // each resource, or else the configured base realm URL. So it gets the
+      // same resolution as the entries above rather than being assumed a URL.
       cardUrl = new URL(
         `/${cardPath}`,
-        realmUrl ?? this.realm.defaultReadableRealm.path,
+        realmUrl ??
+          resolvedRealmURLHref(vn, this.realm.defaultReadableRealm.path),
       ).href;
     } else {
       cardUrl = new URL(cardPath, window.location.origin).href;

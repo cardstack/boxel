@@ -14,7 +14,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
-import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
+import {
+  rejectedPrerenderHtmlJobIds,
+  settlePrerenderHtmlJobs,
+} from '../helpers/indexing.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -29,6 +32,94 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
+// A single readiness request holds for as long as its own gates take:
+// READINESS_REQUEST_BUDGET_MS across startup / in-flight index / index-lane
+// settle, then `awaitPublishedHtmlReady`'s own budget on top. Roughly 70s
+// today. `waitUntil` tests its deadline between attempts and never abandons
+// one in flight, so a poll can overshoot its budget by a whole request.
+const READINESS_POLL_TIMEOUT_MS = 90_000;
+
+// Budget for a publish setup hook: realm boot, the fixture writes, the
+// from-scratch index of the published copy, its render, and the settle that
+// follows. Sized against the worst case those add up to — the readiness poll
+// plus one request's overshoot, plus the settle, plus the write traffic
+// before either — so a stalled stage is reported by the wait that owns it
+// rather than by QUnit's stageless timeout.
+const PUBLISHED_REALM_SETUP_TIMEOUT_MS = 300_000;
+
+// Wait for a freshly published realm to be both indexed and rendered.
+//
+// `awaitPrerenderHtml=true` is the gate every publish consumer uses
+// (boxel-cli's publish command, the host app, the publish handler's own
+// Location header): a published realm's deliverable is its HTML, and the
+// index pass spawns the prerender_html job fire-and-forget, so index-only
+// readiness answers ready while the render is still running. Holding here is
+// what keeps the render's duration off whatever budget the caller's next wait
+// carries — a from-scratch published-realm render runs the module pre-warm
+// sweep and takes as long as the realm is large and the runner is loaded.
+//
+// Poll rather than asking once: readiness bounds how long it holds a single
+// request and answers 503 with `Retry-After` once that budget is spent, so a
+// pass longer than the budget takes more than one request to observe.
+// `X-Boxel-Not-Ready` names the stage still outstanding, which is the whole
+// diagnosis when this times out — index vs prerender-html are different
+// failures with different causes.
+//
+// 503 is the only status worth another attempt. Anything else — the realm
+// never mounted, an auth misconfiguration, a throw out of the handler — is
+// settled, and retrying it to the end of the budget only converts a specific
+// error into a slow generic one.
+//
+// A rejected render is settled too, and invisible to readiness: the job never
+// reaches its batch swap, so no HTML lands and the readiness predicate stays
+// false for good. Reading the channel each attempt keeps that failure
+// reported as the job that failed rather than as a wait that ran out.
+async function waitForPublishedRealmReady(
+  request: SuperTest<Test>,
+  dbAdapter: DBAdapter,
+  publishedRealmURL: string,
+  publishedRealmPath: string,
+  publishedRealmHost: string,
+): Promise<void> {
+  let lastStatus = 'no response';
+  await waitUntil(
+    async () => {
+      let rejected = await rejectedPrerenderHtmlJobIds(
+        dbAdapter,
+        publishedRealmURL,
+      );
+      if (rejected.length > 0) {
+        throw new Error(
+          `prerender_html job(s) rejected while awaiting readiness for ${publishedRealmURL}: ${rejected.join(', ')}`,
+        );
+      }
+      let response = await request
+        .get(`${publishedRealmPath}_readiness-check?awaitPrerenderHtml=true`)
+        .set('Host', publishedRealmHost)
+        .set('Accept', 'application/vnd.api+json');
+      if (response.status === 200) {
+        return true;
+      }
+      let stage = response.headers['x-boxel-not-ready'];
+      lastStatus = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}${
+        response.text ? ` ${response.text.slice(0, 300)}` : ''
+      }`;
+      if (response.status !== 503) {
+        throw new Error(
+          `published realm ${publishedRealmHost}${publishedRealmPath} answered a settled failure to its readiness check: ${lastStatus}`,
+        );
+      }
+      return false;
+    },
+    {
+      timeout: READINESS_POLL_TIMEOUT_MS,
+      interval: 1000,
+      timeoutMessage: () =>
+        `published realm ${publishedRealmHost}${publishedRealmPath} never passed its readiness check; last response: ${lastStatus}`,
+    },
+  );
+}
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
@@ -480,6 +571,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+        // Base-realm modules are recorded in deps as prefix-form RRIs rather
+        // than absolute URLs, so this exercises the prefix-form decode path.
+        assert.ok(
+          response.text.includes('.css-field-container'),
+          'scoped CSS from base-realm (prefix-form) deps is included in the HTML response',
         );
       });
 
@@ -1452,7 +1549,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let publishedRealmPath: string;
       let ownerUserId = '@mango:localhost';
 
-      hooks.beforeEach(function () {
+      hooks.beforeEach(function (assert) {
+        // QUnit arms one timeout per hook promise, so the whole publish setup
+        // below — realm boot, the writes, the from-scratch index, and the
+        // render — shares a single window, and the suite-wide
+        // `QUnit.config.testTimeout` is too small to hold it. Raise it past
+        // the waits inside that hook so their timeout messages, which name the
+        // stage that stalled, are what a failure reports rather than QUnit's
+        // stageless "test timed out".
+        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
         dir = dirSync();
       });
       setupDB(hooks, {
@@ -1615,31 +1720,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           }
 
           // `_publish-realm` returns 202 before indexing finishes. Drive a
-          // reconcile pass to mount the published realm, then poll its
-          // readiness check until it reports ready, so the assertions below
-          // query indexed content. Poll rather than asking once: readiness
-          // bounds how long it will hold a single request and answers 503 with
-          // `Retry-After` once that budget is spent, so a from-scratch index
-          // longer than the budget takes more than one request to observe.
+          // reconcile pass to mount the published realm, then wait for it to
+          // report ready, so the assertions below query indexed, rendered
+          // content.
           await testRealmServer.testingOnlyReconcile();
-          await waitUntil(
-            async () =>
-              (
-                await request
-                  .get(`${publishedRealmPath}_readiness-check`)
-                  .set('Host', publishedRealmHost)
-                  .set('Accept', 'application/vnd.api+json')
-              ).status === 200,
-            {
-              timeout: 120_000,
-              interval: 1000,
-              timeoutMessage:
-                'published realm never passed its readiness check',
-            },
+          await waitForPublishedRealmReady(
+            request,
+            dbAdapter,
+            publishedRealmURLString,
+            publishedRealmPath,
+            publishedRealmHost,
           );
-          // Readiness drains the index channel only; head HTML lands via the
-          // realm's prerender_html job, so settle that channel before the
-          // assertions read it.
+          // Readiness clears once every row's HTML is live for its generation;
+          // the job that wrote it finalizes a moment later. Settle the channel
+          // so the assertions never race that tail, and so a render that
+          // rejected fails here instead of surfacing as a missing-markup
+          // assertion.
           await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
@@ -1726,7 +1822,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let publishedRealmPath: string;
       let ownerUserId = '@mango:localhost';
 
-      hooks.beforeEach(function () {
+      hooks.beforeEach(function (assert) {
+        // Same single-window-per-hook reasoning as the theme module above.
+        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
         dir = dirSync();
       });
       setupDB(hooks, {
@@ -1905,15 +2003,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           }
 
           await testRealmServer.testingOnlyReconcile();
-          let readinessResponse = await request
-            .get(`${publishedRealmPath}_readiness-check`)
-            .set('Host', publishedRealmHost)
-            .set('Accept', 'application/vnd.api+json');
-          if (readinessResponse.status !== 200) {
-            throw new Error(
-              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
-            );
-          }
+          await waitForPublishedRealmReady(
+            request,
+            dbAdapter,
+            publishedRealmURLString,
+            publishedRealmPath,
+            publishedRealmHost,
+          );
+          // Readiness clears once every row's HTML is live for its generation;
+          // the job that wrote it finalizes a moment later. Settle the channel
+          // so the assertions never race that tail, and so a render that
+          // rejected fails here instead of surfacing as a wrong-status
+          // assertion.
           await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {

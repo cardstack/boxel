@@ -154,6 +154,19 @@ const MISSING_EXPORT_TAIL =
   `which then surfaces as confusing downstream errors. This Proxy ` +
   `surfaces the missing import directly.)`;
 
+// The Proxy above is the only place this message is minted, so this is the
+// only other place that has to agree with its wording. Exported because the
+// failure it names is not always the card's: a prerender page still running
+// the previous host bundle resolves current realm source against the wrong
+// module and fails exactly this way. A caller that can see the host shell
+// moved under the render needs to recognize the message to treat it as
+// retryable rather than persist it as the card's content.
+const MISSING_EXPORT_MESSAGE = /Module '[^']+' has no exported member '[^']+'/;
+
+export function isMissingExportMessage(message: string): boolean {
+  return MISSING_EXPORT_MESSAGE.test(message);
+}
+
 function buildMissingExportMessage(
   moduleIdentifier: string,
   prop: string,

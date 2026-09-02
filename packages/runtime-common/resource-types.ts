@@ -79,6 +79,14 @@ export type Relationship = {
     search?: string | null;
   };
   data?: ResourceID | ResourceID[] | null;
+  // Free-form per the spec. A query-backed relationship uses two keys, both
+  // written by the indexer's expansion pass (`applyQueryResults`):
+  //   - `errors`: the per-realm failures the expansion collected.
+  //   - `total`: how many instances the query matches, which exceeds `data`'s
+  //     length once the page ceiling clamps the expansion. Read back as
+  //     `getRelationshipMembershipState(...).totalMatchCount`, whose
+  //     `isPartial` companion is the signal that a rollup over `data` alone
+  //     would be short.
   meta?: Record<string, any>;
 };
 

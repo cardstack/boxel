@@ -51,6 +51,11 @@ interface QueryFieldState {
   // batch of stable per-card GETs.
   seedCardURLs?: string[];
   seedRealms?: string[];
+  // The query's true match count, off `relationships.{field}.meta.total`. It
+  // exceeds the seeded record count once the page ceiling clamped the
+  // indexer's expansion, which is the only way this side can tell it was
+  // handed a prefix rather than the whole set.
+  seedTotal?: number;
   seedErrors?: Array<{
     realm: string;
     type: string;
@@ -165,8 +170,22 @@ export function ensureQueryFieldSearchResource(
   let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
   let isLive = !inPrerender;
 
+  // Nothing to build a resource around yet, so build none. The alternative —
+  // creating one and declining to cache it — repeats every side effect of
+  // creation on every read: a fresh resource bound to the instance's lifetime,
+  // a re-armed load barrier (the reuse path above documents that re-arm as the
+  // feedback loop that saturates the render thread), and a loading-signal bump
+  // whose own invalidation brings the reader back here. The thunk consumes
+  // nothing tracked either way, so recovery depends on a later read regardless.
+  if (!args()) {
+    log.info(
+      `ensureQueryFieldSearchResource: query not yet resolvable for field=${field.name}; deferring to a later read`,
+    );
+    return undefined;
+  }
+
   log.info(
-    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; source=${trackingContext.source ?? 'unknown'}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
   searchResource = store.getSearchResource(
     instance,
@@ -192,6 +211,33 @@ export function ensureQueryFieldSearchResource(
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
+            // What the resource is allowed to believe about the match count,
+            // in order of how much is known. A count the indexer reported
+            // passes through as the count. Where it reported none but recorded
+            // a realm failure, the rows in hand are labelled a floor — that
+            // says both that the count is unknown and why, which is what turns
+            // into the field's shortfall signal. Where it reported none and no
+            // realm failed, the count is simply unknowable and says so.
+            //
+            // The ordering matters because the fallback is inference: absent
+            // any of these the resource takes the total from the record count,
+            // and a set short by a realm nobody could count would read as the
+            // whole of it — a confident number over an incomplete set, which is
+            // the failure this field's status exists to report rather than
+            // reproduce. An ordinary seed reaches that inference legitimately,
+            // because there nothing was withheld.
+            ...(fieldState?.seedTotal != null
+              ? { meta: { page: { total: fieldState.seedTotal } } }
+              : fieldState?.seedErrors?.length
+                ? {
+                    meta: {
+                      page: { total: seedRecords.length },
+                      incomplete: true,
+                    },
+                  }
+                : seedSearchURL != null
+                  ? { totalUnknown: true }
+                  : {}),
           }
         : undefined,
     },
@@ -207,6 +253,61 @@ export function ensureQueryFieldSearchResource(
   return searchResource;
 }
 
+// Resolve a query-backed relationship as its owner deserializes, so the field's
+// membership — and every `computeVia` reducing over it — is current without a
+// template having to read the field first. The seed captured from the owner's
+// document answers immediately, and the resource arms its realm-event
+// subscription so later writes to matching cards refresh it.
+//
+// Two opt-outs. A store that must render as a pure function of the document it
+// was handed reports `resolvesQueryFieldsEagerly: false`, which keeps indexing
+// and prerender resolving lazily through the field getter exactly as they do
+// without this call. A field whose query is expensive or rarely read declares
+// `eager: false` and resolves on first access instead.
+//
+// Failure degrades to the lazy path rather than propagating: this runs for
+// every query field on every deserialized card, including cards nothing will
+// ever render, so a resource that can't be built must not take the owner's
+// deserialization down with it. The field getter builds the resource again on
+// first read, where the same failure surfaces to the render that depends on it.
+export function resolveQueryFieldEagerly(
+  store: CardStore,
+  instance: BaseDef,
+  field: Field,
+): void {
+  if (!field.queryDefinition || field.eager === false) {
+    return;
+  }
+  if (!store?.resolvesQueryFieldsEagerly) {
+    return;
+  }
+  // The owner's realm is what a query interpolates against, and it is not
+  // always assigned by the time its own deserialization finishes — a contained
+  // FieldDef receives it from its parent afterwards, and a card created without
+  // an id has no `meta` to carry it. Resolving now would build a resource
+  // around an unresolvable query, and because that path reads no tracked state
+  // the resource would never re-derive one. Leave the field to the getter,
+  // which runs once the realm is known.
+  if (!(instance as any)[realmURLSymbol]) {
+    return;
+  }
+  // A render context decides `isLive` for the resource's whole lifetime, and
+  // index renders interleave with an interactive app's own loads. Creating the
+  // resource here could hand a live card a non-live resource that never
+  // subscribes, so let the getter create it in the context that reads it.
+  if ((globalThis as any).__boxelRenderContext) {
+    return;
+  }
+  try {
+    ensureQueryFieldSearchResource(store, instance, field);
+  } catch (err) {
+    log.warn(
+      `eager resolution of query field ${field.name} failed; deferring to first read`,
+      err,
+    );
+  }
+}
+
 // Peek at the search resource already created for a query field, without
 // triggering creation. Returns `undefined` when the resource hasn't been
 // instantiated yet (no consumer has read the field). Pure read — useful for
@@ -217,6 +318,22 @@ export function peekQueryFieldSearchResource(
   fieldName: string,
 ): StoreSearchResource | undefined {
   return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
+}
+
+// Whether the realms this field targets all answered when its results were
+// resolved. A realm that failed contributes its error and no rows, so the
+// field holds a set that is short by an amount nobody can measure — the count
+// it would have contributed is exactly what the failure withheld.
+//
+// Read alongside the match count rather than instead of it: once a search
+// reports a count, that count describes what the field holds now and this
+// record of an earlier failure no longer bears on it.
+export function queryFieldHasUnreachableRealms(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let errors = queryFieldStates.get(instance)?.get(fieldName)?.seedErrors;
+  return (errors?.length ?? 0) > 0;
 }
 
 // Mirror the SearchResource's resource-level error state onto the data bucket
@@ -562,6 +679,16 @@ export function captureQueryFieldSeedData(
     ? parseRealmsParam(new URL(fieldState.seedSearchURL))
     : [];
   fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
+  // Only meaningful alongside a seed the indexer resolved. A raw source file's
+  // relationships carry no `meta.total`, and an unresolved seed is about to be
+  // replaced by a live query that reports its own total.
+  let seedTotal = (relationship?.meta as any)?.total;
+  fieldState.seedTotal =
+    fieldState.seedSearchURL != null &&
+    typeof seedTotal === 'number' &&
+    Number.isFinite(seedTotal)
+      ? seedTotal
+      : undefined;
 }
 
 function resolveQueryAndRealm(
@@ -611,6 +738,17 @@ function resolveQueryAndRealm(
     return undefined;
   }
 
+  // Deliberately the query as authored, with no page ceiling applied. The
+  // ceiling is the server's to enforce — `_search` clamps this query's page on
+  // arrival, and the indexer clamps the same query in its own expansion — and
+  // the number behind it is an ops-tunable env var this side cannot read. A
+  // client that guessed at it would produce a query differing from the one the
+  // seed URL advertises the moment an operator tuned it, and a seeded resource
+  // decides whether to skip its initial search by comparing exactly those two.
+  // Guessing wrong there costs a redundant `_federated-search` per query field
+  // per loaded card; leaving the page off costs nothing, because the server
+  // bounds the result set either way and reports the true match count alongside
+  // it.
   return {
     realmHrefs: normalized.realms,
     searchURL: buildQuerySearchURL(normalized.realms, normalized.query),

@@ -7,6 +7,7 @@ import {
   Deferred,
   type LooseSingleCardDocument,
   rri,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -16,6 +17,7 @@ import {
   visitOperatorMode,
 } from '../../helpers';
 import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup';
+import { getTestRealmRegistry } from '../../helpers/test-realm-registry';
 
 import type {
   IncrementalIndexEventContent,
@@ -35,6 +37,89 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
     // The helper's realm-building beforeEach runs for these tests too, and
     // caches under this module's name, which the outer prefix cannot match.
     setupRealmCacheTeardown(hooks);
+
+    test('a card another client created reads as being prepared, then renders itself once indexing lands', async function (assert) {
+      // Another client's write lands on the realm's file system, with no
+      // indexing pass behind it yet. Writing through the adapter reproduces
+      // that: the bytes are on the realm, and nothing about the card has
+      // passed through this tab — no instance in its store to fall back on,
+      // which is what makes the placeholder the right thing to show.
+      let { adapter } = getTestRealmRegistry().get(testRealmURL)!;
+      let cardURL = `${testRealmURL}Person/late`;
+      await adapter.write(
+        'Person/late.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Late' },
+            meta: {
+              adoptsFrom: { module: rri('../person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      // The file event is how this tab finds out an outside write happened —
+      // it is what puts the file in the tree, ahead of any index row for it.
+      getService('message-service').relayRealmEvent({
+        eventName: 'update',
+        added: ['Person/late.json'],
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        getService('store').peek(cardURL),
+        undefined,
+        'the card never passed through this tab, so nothing of it is in the store',
+      );
+
+      await visitOperatorMode({
+        stacks: [[{ id: cardURL, format: 'isolated' }]],
+      });
+
+      assert
+        .dom('[data-test-card-awaiting-index]')
+        .containsText(
+          'Preparing this card',
+          'the card reads as being prepared rather than missing',
+        );
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('nothing is reported as an error');
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+        .doesNotExist('the card itself has nothing to render yet');
+
+      // Indexing catches up with the file that was already there — the same
+      // bytes, now with a row behind them.
+      let response = await getService('network').authedFetch(
+        `${testRealmURL}_invalidate`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: SupportedMimeType.JSONAPI,
+            'Content-Type': SupportedMimeType.JSONAPI,
+          },
+          body: JSON.stringify({
+            data: { attributes: { urls: [`${testRealmURL}Person/late.json`] } },
+          }),
+        },
+      );
+      assert.strictEqual(
+        response.status,
+        204,
+        'the realm indexed the file that was already on disk',
+      );
+      await settled();
+
+      assert
+        .dom('[data-test-card-awaiting-index]')
+        .doesNotExist('the placeholder gives way on its own');
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+        .hasText('Late', 'the card renders without a reload');
+    });
 
     test('stack item live updates when index changes', async function (assert) {
       await visitOperatorMode({

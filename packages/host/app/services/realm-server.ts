@@ -35,6 +35,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -507,8 +508,9 @@ export default class RealmServerService extends Service {
   }
 
   getRealmServersForRealms(realms: string[]) {
+    // `testRealmURL` is a URL-form literal, so it has an origin to read.
     let testRealmOrigin = isTesting()
-      ? new URL(testRealmURL).origin
+      ? new URL(testRealmURL).origin // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
       : undefined;
     let sessionTokens = this.readSessionTokens();
 
@@ -516,13 +518,31 @@ export default class RealmServerService extends Service {
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      // A realm identifier may be a registered prefix, which neither carries an
+      // origin to compare nor matches the URL a session token is filed under.
+      // Resolve once and let both questions below ask in URL form, so the
+      // function is form-agnostic end to end rather than only at the skip.
+      let resolvedRealmURL = resolvedRealmURLHref(
+        this.network.virtualNetwork,
+        normalizedRealmURL,
+      );
+      // Anything resolving to the test realm's origin is served by the test
+      // realm server and skipped.
       if (
         testRealmOrigin &&
-        new URL(normalizedRealmURL).origin === testRealmOrigin
+        new URL(resolvedRealmURL).origin === testRealmOrigin
       ) {
         continue;
       }
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      // A token is filed under the realm resource's own url, which is whatever
+      // spelling created the resource — so try the identifier as given and its
+      // resolved form. Missing the token does not fail loudly: the loop would
+      // `continue`, and a realm that is the only entry would leave the set
+      // empty and answer with this realm server instead of the realm's.
+      let token =
+        sessionTokens[normalizedRealmURL] ??
+        sessionTokens[realmURL] ??
+        sessionTokens[resolvedRealmURL];
       if (!token) {
         continue;
       }
@@ -555,6 +575,8 @@ export default class RealmServerService extends Service {
   private normalizeRealmServerURL(url: string): string {
     let normalizedURL = ensureTrailingSlash(url);
     if (isTesting()) {
+      // `testRealmURL` is a URL-form literal, so it has an origin to read.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       let testRealmOrigin = new URL(testRealmURL).origin;
       // In tests, realm URLs are often rooted at the test realm origin but
       // are served by the base realm server; remap to the base origin so

@@ -487,7 +487,9 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
   test('can create local instance in stack (in readonly remote realm, card-def from readonly realm)', async function (assert) {
     removeRecentCards();
     setRecentCards([
-      [`${baseRealm.url}Skill/catalog-listing`],
+      // Any base realm instance whose type is not Spec, so the menu offers two
+      // distinct types from a realm the user cannot write to.
+      [`${baseRealm.url}welcome-to-boxel`],
       [`${baseRealm.url}cards/skill`], // spec instance
       [`${baseRealm.url}index`],
     ]);
@@ -502,11 +504,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
         '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Spec"]',
       )
       .exists();
-    assert
-      .dom(
-        '[data-test-boxel-menu-item]:nth-of-type(2) [data-test-boxel-menu-item-text="Skill"]',
-      )
-      .exists();
+    assert.dom('[data-test-boxel-menu-item-text="WelcomeToBoxel"]').exists();
 
     // new cards will be created in default writable user realm (does not have write-permission to base)
     await click(`[data-test-boxel-menu-item-text="Spec"]`);
@@ -514,8 +512,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
 
     await click('[data-test-new-file-button]');
-    await click(`[data-test-boxel-menu-item-text="Skill"]`);
-    await assertCardCreated(assert, 'Skill', userRealm, 0, 2);
+    await click(`[data-test-boxel-menu-item-text="WelcomeToBoxel"]`);
+    await assertCardCreated(assert, 'WelcomeToBoxel', userRealm, 0, 2);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 3 });
   });
 

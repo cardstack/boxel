@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "default",
-        "module": "https://cardstack.com/base/structured-theme"
+        "module": "@cardstack/base/structured-theme"
       }
     },
     "type": "card",
@@ -15,9 +15,6 @@
         "summary": "A serene ocean-inspired design system featuring deep blues, crystalline waters, and flowing aquatic elements. Perfect for applications that need to convey depth, tranquility, and fluid movement.",
         "cardThumbnailURL": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&h=300&fit=crop&crop=center"
       },
-      "cssImports": [
-        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"
-      ],
       "typography": {
         "body": {
           "fontSize": "1rem",
@@ -101,7 +98,10 @@
         "secondaryForeground": "#0369a1",
         "destructiveForeground": "#ffffff",
         "sidebarAccentForeground": "#0c4a6e",
-        "sidebarPrimaryForeground": "#f0f9ff"
+        "sidebarPrimaryForeground": "#f0f9ff",
+        "success": null,
+        "themeFontSize": null,
+        "themeScale": null
       },
       "darkModeVariables": {
         "card": "#1e293b",
@@ -149,8 +149,12 @@
         "secondaryForeground": "#cbd5e1",
         "destructiveForeground": "#ffffff",
         "sidebarAccentForeground": "#0f172a",
-        "sidebarPrimaryForeground": "#0f172a"
-      }
+        "sidebarPrimaryForeground": "#0f172a",
+        "success": null,
+        "themeFontSize": null,
+        "themeScale": null
+      },
+      "customCssImports": []
     }
   }
 }

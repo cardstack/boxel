@@ -1218,6 +1218,90 @@ module(`Integration | search resource`, function (hooks) {
         };
       }
 
+      test(`a seed that reports its count unknowable does not have one inferred from its rows`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        // The state a query-backed field lands in when a realm it targeted
+        // failed: the indexer resolved the field, withheld `meta.total`
+        // because the count is exactly what the failure took, and the rows in
+        // hand therefore look like the whole set. Inferring a total from them
+        // is what turns "unknown" into "you have all of them".
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              totalUnknown: true,
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'the seeded rows are still held',
+        );
+        assert.strictEqual(
+          search.totalMatchCount,
+          undefined,
+          'but no match count is reported',
+        );
+        assert.false(
+          search.isPartial,
+          'and no shortfall is claimed against a count nobody reported',
+        );
+      });
+
+      test(`a seed carrying a count larger than its rows reports the shortfall`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              meta: { page: { total: cards.length + 3 } },
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.totalMatchCount,
+          cards.length + 3,
+          'the seeded match count is reported as given',
+        );
+        assert.true(
+          search.isPartial,
+          'and the rows falling short of it is a shortfall',
+        );
+      });
+
       test(`seed-only resolve: no fetch fires when isLive=false and a seed is present (prerender path)`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         // Reset the fetch counter — the seed prep above used a live
@@ -1260,6 +1344,129 @@ module(`Integration | search resource`, function (hooks) {
           search.instances.map((i) => i.id),
           cards.map((c) => c.id),
           'seed cards are returned in order',
+        );
+      });
+
+      // What a seed is allowed to imply about the match count. With no meta the
+      // resource infers the total from the rows, which is right only when
+      // nothing was withheld. A producer that could not count — a query field
+      // whose search lost a realm — says so on the seed, and the inference must
+      // not overwrite it: inferring there turns "how many is unknown" into "you
+      // hold all of them", which is the confident-number failure the whole
+      // shortfall signal exists to prevent.
+      test(`a seed carrying no meta infers the total from its rows`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: { cards, searchURL, realms: [testRealmURL] },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.meta?.page?.total,
+          cards.length,
+          'nothing was withheld, so the rows in hand are the match count',
+        );
+        assert.notOk(
+          search.meta?.incomplete,
+          'and the result set is not labelled short',
+        );
+      });
+
+      test(`a seed labelled incomplete keeps the label, so its count reads as a floor`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              // The shape a query field seeds when its search reached a realm
+              // that never answered: the rows that arrived, and the count
+              // marked as covering only them.
+              meta: { page: { total: cards.length }, incomplete: true },
+              queryErrors: [
+                {
+                  realm: 'https://example.invalid/offline/',
+                  type: 'network',
+                  message: 'realm did not answer',
+                },
+              ],
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.true(
+          search.meta?.incomplete,
+          'the label survives seeding, so a consumer can tell the count is a floor',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'the realms that answered still contribute their rows',
+        );
+      });
+
+      // The live leg's own way of holding less than the query asks about. A
+      // search that fails as a unit returns no rows, and an empty result set is
+      // not evidence that the query matches nothing — nothing was counted at
+      // all. Reporting `total: 0` unqualified hands a rollup the one number the
+      // failure cannot justify, and it is the most believable wrong answer
+      // there is, so the meta is labelled and the count reads as unknown.
+      test(`a search that fails as a unit refuses to call its empty result a count`, async function (assert) {
+        releaseFetch.fulfill();
+        let realmServer = getService('realm-server') as RealmServerService;
+        realmServer.maybeAuthedFetchForRealms = (async () => {
+          throw new Error('realm did not answer');
+        }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: true,
+            isAutoSaved: false,
+            storeService,
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.instances.length,
+          0,
+          'the failed search holds no rows',
+        );
+        assert.true(
+          search.meta?.incomplete,
+          'and labels the empty result set, so its zero is not read as a count',
         );
       });
 

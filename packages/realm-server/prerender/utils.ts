@@ -1,12 +1,28 @@
 import {
   cleanCapturedHTML,
+  declaredCaptureSpecHash,
+  DEFAULT_CAPTURE_VIEWPORT,
+  shouldCarryForwardDeclaredEntry,
   delay,
   logger,
+  SCREENSHOT_DEFAULT_BACKGROUND,
+  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+  SCREENSHOT_DEFAULT_IMAGE_TYPE,
+  SCREENSHOT_MAX_CAPTURES,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  screenshotContentType,
+  type DeclaredScreenshotCaptureResult,
+  type DeclaredScreenshotError,
+  type DeclaredScreenshotFormat,
+  type DeclaredScreenshotRoster,
+  type DeclaredScreenshotSpecPayload,
+  type DeclaredScreenshotVisitArgs,
+  type DeclaredScreenshotVisitResult,
   type PrerenderMeta,
   type ScreenshotCaptureEntry,
   type ScreenshotCaptureResult,
   type ScreenshotFormat,
+  type ScreenshotImageType,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
@@ -43,7 +59,7 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
 
-import type { CDPSession, Page } from 'puppeteer';
+import type { CDPSession, ElementHandle, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
@@ -100,6 +116,18 @@ export interface CaptureOptions {
   // Screenshot-only: per-capture viewport / scale / fullPage / clip overrides.
   // Ignored by the HTML/meta/module capture paths.
   captureSpec?: ScreenshotCaptureSpec;
+  // Declared-screenshot-only: per-entry (keyed by capture name) encoding and
+  // page background for the capture. The on-demand surfaces never set this —
+  // their captures are always PNG on the page's own background.
+  entryOutput?: Record<string, DeclaredEntryOutput>;
+}
+
+// The output parameters a declared screenshot adds beyond the wire spec's
+// geometry: the encoded image type and the page background painted behind
+// the card ('transparent' captures with alpha).
+export interface DeclaredEntryOutput {
+  type: ScreenshotImageType;
+  background: string;
 }
 
 export interface ModuleCapture {
@@ -1312,12 +1340,9 @@ async function waitForImagePaint(
 
 // Puppeteer's default launch viewport (no `defaultViewport` override). Used to
 // restore a pooled page when we can't read its prior viewport — the canonical
-// size the indexing HTML-capture path expects.
-const DEFAULT_SCREENSHOT_VIEWPORT = {
-  width: 800,
-  height: 600,
-  deviceScaleFactor: 1,
-};
+// size the indexing HTML-capture path expects. Shared with the capture-spec
+// canonicalizer, which elides a spec spelling out exactly these values.
+const DEFAULT_SCREENSHOT_VIEWPORT = DEFAULT_CAPTURE_VIEWPORT;
 
 interface ResolvedViewport {
   width: number;
@@ -1335,10 +1360,18 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip, envelope } =
+  let { viewport, deviceScaleFactor, fullPage, clip, target, envelope } =
     captureSpec ?? {};
   return [
-    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, envelope },
+    {
+      name: 'default',
+      viewport,
+      deviceScaleFactor,
+      fullPage,
+      clip,
+      target,
+      envelope,
+    },
   ];
 }
 
@@ -1447,16 +1480,30 @@ async function detectTerminalPrerenderError(
 // to the DOM. The parent render status stays 'ready' across an envelope
 // change, so waitForPrerenderSettle alone can't distinguish the new box from
 // the old one.
+// When `slotName` is given, only an envelope whose `data-render-screenshot`
+// names that slot satisfies the wait — the stale-render guard for
+// consecutive render-based captures whose declared boxes coincide (the box
+// dimensions alone can't tell slot A's settled render from slot B's).
 async function waitForEnvelopeBox(
   page: Page,
   envelope: { width: number; height: number },
   opts?: CaptureOptions,
+  slotName?: string,
 ): Promise<void> {
   await page.waitForFunction(
-    (w: number, h: number) => {
-      let el = document.querySelector(
+    (w: number, h: number, name: string | null) => {
+      let el: HTMLElement | null = null;
+      for (let candidate of document.querySelectorAll<HTMLElement>(
         '[data-render-envelope]',
-      ) as HTMLElement | null;
+      )) {
+        if (
+          name === null ||
+          candidate.getAttribute('data-render-screenshot') === name
+        ) {
+          el = candidate;
+          break;
+        }
+      }
       if (!el) {
         return false;
       }
@@ -1465,6 +1512,7 @@ async function waitForEnvelopeBox(
     { timeout: effectiveRouteWaitTimeoutMs(opts) },
     envelope.width,
     envelope.height,
+    slotName ?? null,
   );
 }
 
@@ -1480,11 +1528,75 @@ async function waitForReflow(page: Page): Promise<void> {
   );
 }
 
+// Paint the declared background behind the whole page for the duration of a
+// capture. Inline styles on <html> and <body> win over app CSS and restore
+// cleanly to '' after. 'transparent' pairs with `omitBackground` in the
+// screenshot call — both html and body must be non-opaque or Chromium's
+// compositor paints them over the removed default background.
+async function setCaptureBackground(
+  page: Page,
+  background: string | null,
+): Promise<void> {
+  await page.evaluate((value: string) => {
+    document.documentElement.style.background = value;
+    if (document.body) {
+      document.body.style.background = value;
+    }
+  }, background ?? '');
+}
+
 async function captureOneEntry(
   page: Page,
   entry: ScreenshotCaptureEntry,
   deviceScaleFactor: number,
+  output?: DeclaredEntryOutput,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A `target` is an element-handle screenshot, a capture call distinct from
+  // the page-level one below: it crops to the first match's box and honors no
+  // clip/fullPage (rejected above). `page.$` runs the selector through
+  // `document.querySelector`, so a selector that matches nothing, or is not a
+  // valid CSS selector (including an XPath-shaped string, which querySelector
+  // cannot execute), is a capture error naming the selector rather than an
+  // uncaught throw or a wrong crop.
+  if (entry.target) {
+    let handle: ElementHandle<Element> | null;
+    try {
+      handle = await page.$(entry.target);
+    } catch (err) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target selector is invalid: ${entry.target}`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (!handle) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target matched no element: ${entry.target}`,
+        { title: 'Screenshot target not found' },
+      );
+    }
+    try {
+      let base64 = (await handle.screenshot({
+        encoding: 'base64',
+        type: 'png',
+      })) as string;
+      // The element screenshot's extent is Chromium's, not ours to predict, so
+      // the reported CSS dims come from the PNG's IHDR (physical px at bytes
+      // 16..23) divided back by the scale in effect — report and bytes cannot
+      // disagree.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      return {
+        name: entry.name,
+        base64,
+        width: Math.round(header.readUInt32BE(16) / deviceScaleFactor),
+        height: Math.round(header.readUInt32BE(20) / deviceScaleFactor),
+        deviceScaleFactor,
+      };
+    } finally {
+      await handle.dispose();
+    }
+  }
   // Reported CSS dimensions of the capture. `fullPage` reports the captured
   // document (derived from the PNG itself below, so report and bytes cannot
   // disagree); `clip` reports its own region; otherwise the viewport. Device
@@ -1518,12 +1630,43 @@ async function captureOneEntry(
       height: window.innerHeight,
     }));
   }
-  let base64 = (await page.screenshot({
-    encoding: 'base64',
-    type: 'png',
-    ...(entry.fullPage ? { fullPage: true } : {}),
-    ...(entry.clip ? { clip: entry.clip } : {}),
-  })) as string;
+  // The fullPage dimension re-derivation below parses a PNG IHDR, so a
+  // fullPage capture stays PNG regardless of a declared type (declared
+  // entries never set fullPage; this is a defensive pin, not a reachable
+  // branch).
+  let imageType: ScreenshotImageType = entry.fullPage
+    ? 'png'
+    : (output?.type ?? 'png');
+  let transparent = output?.background === 'transparent';
+  let backgroundApplied = false;
+  if (output) {
+    await setCaptureBackground(
+      page,
+      transparent ? 'transparent' : output.background,
+    );
+    backgroundApplied = true;
+  }
+  let base64: string;
+  try {
+    base64 = (await page.screenshot({
+      encoding: 'base64',
+      type: imageType,
+      // Pinned so the encoder's default can't drift the byte hash of a
+      // stable render between puppeteer versions.
+      ...(imageType === 'png' ? {} : { quality: SCREENSHOT_LOSSY_QUALITY }),
+      ...(transparent ? { omitBackground: true } : {}),
+      ...(entry.fullPage ? { fullPage: true } : {}),
+      ...(entry.clip ? { clip: entry.clip } : {}),
+    })) as string;
+  } finally {
+    if (backgroundApplied) {
+      try {
+        await setCaptureBackground(page, null);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+  }
   if (entry.fullPage) {
     // The scroll-size read above and the capture are two separate
     // measurements (Chromium sizes fullPage from its own layout metrics),
@@ -1544,9 +1687,21 @@ async function captureOneEntry(
   };
 }
 
+// JPEG/WebP encoder quality for declared captures, pinned (see the quality
+// note in captureOneEntry).
+const SCREENSHOT_LOSSY_QUALITY = 90;
+
+// How long a capture-only component may hold its `data-screenshot-pending`
+// readiness signal before its slot's capture fails. Longer than the image
+// paint budget: this covers real media decode (a video seek, a PDF page
+// paint, a WebGL first frame) that image-paint waiting can't see.
+const SCREENSHOT_PENDING_WAIT_MS = 15_000;
+
 export async function captureScreenshot(
   page: Page,
-  format: ScreenshotFormat,
+  // Declared screenshots capture `atom` too; the on-demand surfaces stay on
+  // the narrower roster their parsers enforce.
+  format: ScreenshotFormat | DeclaredScreenshotFormat,
   ancestorLevel: number,
   opts?: CaptureOptions,
 ): Promise<ScreenshotCapture | RenderError> {
@@ -1558,10 +1713,11 @@ export async function captureScreenshot(
     }`,
   );
 
-  // Defensive: `fullPage` and `clip` are mutually exclusive (Puppeteer ignores
-  // clip under fullPage). The shared capture-spec parse already 400s this on
-  // both request surfaces, but a direct prerender-server caller could still
-  // send it — fail cleanly rather than return a silently-wrong screenshot.
+  // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
+  // fullPage capture ignores a clip, and an element (`target`) screenshot
+  // honors neither. The shared capture-spec parse already 400s these on both
+  // request surfaces, but a direct prerender-server caller could still send one
+  // — fail cleanly rather than return a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
@@ -1570,24 +1726,55 @@ export async function captureScreenshot(
         { title: 'Invalid screenshot capture spec' },
       );
     }
+    if (entry.target && entry.clip) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.fullPage) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and fullPage`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
   }
 
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
   // at a caller-specified size (or 2× scale) would silently change subsequent
   // index prerenders. Snapshot the current viewport before overriding and
-  // restore it in `finally`. A viewport override is any explicit viewport /
-  // deviceScaleFactor OR an envelope (whose box is sized to the viewport).
-  let anyViewportOverride = entries.some(
-    (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
-  );
+  // restore it in `finally`.
+  //
+  // The base geometry is the engine default, never the page's current
+  // viewport: the ledger identity elides a default-valued viewport, so an
+  // entry that specifies none *asserts* the default — a capture taken at
+  // whatever geometry a pooled page was left in would persist and serve under
+  // a hash claiming DEFAULT_CAPTURE_VIEWPORT until the source generation
+  // bumps. A viewport override is therefore any explicit viewport /
+  // deviceScaleFactor, an envelope (whose box is sized to the viewport), OR a
+  // page not currently at the default — so every capture starts from the
+  // geometry its identity claims.
   let originalViewport = page.viewport();
-  let baseViewport: ResolvedViewport = {
-    width: originalViewport?.width ?? DEFAULT_SCREENSHOT_VIEWPORT.width,
-    height: originalViewport?.height ?? DEFAULT_SCREENSHOT_VIEWPORT.height,
-    deviceScaleFactor:
-      originalViewport?.deviceScaleFactor ??
-      DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
-  };
+  let baseViewport: ResolvedViewport = { ...DEFAULT_SCREENSHOT_VIEWPORT };
+  let pageAtBase =
+    originalViewport != null &&
+    sameViewport(
+      {
+        width: originalViewport.width,
+        height: originalViewport.height,
+        deviceScaleFactor:
+          originalViewport.deviceScaleFactor ??
+          DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
+      },
+      baseViewport,
+    );
+  let anyViewportOverride =
+    !pageAtBase ||
+    entries.some(
+      (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
+    );
   let viewportOverridden = false;
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
@@ -1717,6 +1904,7 @@ export async function captureScreenshot(
         page,
         entry,
         currentViewport.deviceScaleFactor,
+        opts?.entryOutput?.[entry.name],
       );
       screenshotMs += Date.now() - captureStart;
       if ('type' in item) {
@@ -1744,6 +1932,296 @@ export async function captureScreenshot(
       }
     }
   }
+}
+
+// One declared slot's effective capture parameters: the roster payload with
+// declaration defaults applied plus its capture identity hash.
+interface ResolvedDeclaredEntry {
+  name: string;
+  payload: DeclaredScreenshotSpecPayload;
+  specHash: string;
+  deviceScaleFactor: number;
+  imageType: ScreenshotImageType;
+  background: string;
+  keyBy: 'generation' | 'file-content';
+}
+
+function renderErrorMessage(e: RenderError): string {
+  return e.error?.message ?? 'screenshot capture failed';
+}
+
+// Wait for the capture-only component's explicit readiness signal: while its
+// async content (media decode, canvas paint) is unready it renders a
+// `data-screenshot-pending` attribute and removes it when painted. No such
+// element means ready. A component that never resolves it fails the slot —
+// persisting a byte-hashed unready frame would cache the wrong pixels until
+// the next generation.
+async function waitForScreenshotPendingClear(
+  page: Page,
+  name: string,
+): Promise<RenderError | undefined> {
+  try {
+    // Interval polling, not 'raf': pooled tabs can be backgrounded, where
+    // Chromium throttles animation frames (the settle hook avoids RAF for
+    // the same reason).
+    await page.waitForFunction(
+      () => document.querySelector('[data-screenshot-pending]') == null,
+      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 100 },
+    );
+    return undefined;
+  } catch {
+    return buildInvalidRenderResponseError(
+      page,
+      `capture-only component for screenshot "${name}" still signals data-screenshot-pending after ${SCREENSHOT_PENDING_WAIT_MS}ms`,
+      { title: 'Screenshot render never painted' },
+    );
+  }
+}
+
+// Capture one render-based declared entry through the dedicated
+// render.screenshot route (format-based entries batch through
+// captureScreenshot instead). The route's template renders the capture-only
+// component into a fixed box sized to the declaration, so the viewport is
+// set to that box and the plain viewport screenshot captures it whole.
+async function captureRenderBasedEntry(
+  page: Page,
+  resolved: ResolvedDeclaredEntry,
+  opts?: CaptureOptions,
+): Promise<ScreenshotCaptureItem | RenderError> {
+  let { name, payload, deviceScaleFactor } = resolved;
+  let box = { width: payload.width, height: payload.height };
+  await page.setViewport({ ...box, deviceScaleFactor });
+  await transitionTo(page, 'render.screenshot', name);
+  await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
+  await waitForPrerenderSettle(page);
+  await waitForEnvelopeBox(page, box, opts, name);
+  let terminal = await detectTerminalPrerenderError(page);
+  if (terminal) {
+    return renderCaptureToError(
+      page,
+      { status: terminal.status, value: terminal.raw },
+      'render.screenshot',
+    );
+  }
+  await waitForImagePaint(page);
+  let pendingError = await waitForScreenshotPendingClear(page, name);
+  if (pendingError) {
+    return pendingError;
+  }
+  return await captureOneEntry(
+    page,
+    { name, viewport: box, deviceScaleFactor },
+    deviceScaleFactor,
+    { type: resolved.imageType, background: resolved.background },
+  );
+}
+
+// Capture a card's declared screenshots (`static screenshots`) on the same
+// warm tab a prerender-html visit just rendered on. Reads the merged roster
+// from the render.screenshots route, carries forward file-content-keyed
+// slots whose source bytes are unchanged, batches format-based entries per
+// format through captureScreenshot, and renders capture-only components
+// through render.screenshot. Per-slot failures land in `errors` (the
+// broken-links model: the visit publishes normally, the manifest omits the
+// name); only a roster-level failure returns a RenderError.
+export async function captureDeclaredScreenshots(
+  page: Page,
+  args: DeclaredScreenshotVisitArgs,
+  opts?: CaptureOptions,
+): Promise<DeclaredScreenshotVisitResult | RenderError> {
+  log.debug(`captureDeclaredScreenshots start url=${page.url()}`);
+  await transitionTo(page, 'render.screenshots');
+  await waitForRoutePathSuffix(page, '/screenshots', opts);
+  await waitForPrerenderSettle(page);
+  let result = await captureResult(page, 'textContent', opts);
+  if (result.status === 'error' || result.status === 'unusable') {
+    return renderCaptureToError(page, result, 'render.screenshots');
+  }
+  let roster: DeclaredScreenshotRoster;
+  try {
+    let parsed = JSON.parse(result.value) as {
+      roster?: DeclaredScreenshotRoster;
+    } | null;
+    roster = parsed?.roster ?? {};
+  } catch {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.screenshots returned a non-JSON response: ${result.value}`,
+      { title: 'Invalid screenshots roster response' },
+    );
+  }
+  let names = Object.keys(roster).sort();
+  if (names.length === 0) {
+    return { entries: [] };
+  }
+
+  let entries: DeclaredScreenshotCaptureResult[] = [];
+  let errors: DeclaredScreenshotError[] = [];
+
+  // The batch cap protects the visit's time budget the same way it protects
+  // the on-demand sync wait; names are sorted, so which slots overflow is
+  // deterministic rather than declaration-order-dependent.
+  for (let name of names.slice(SCREENSHOT_MAX_CAPTURES)) {
+    errors.push({
+      name,
+      message: `declared screenshots exceed the capture cap of ${SCREENSHOT_MAX_CAPTURES}; "${name}" was not captured`,
+    });
+  }
+
+  let fresh: ResolvedDeclaredEntry[] = [];
+  for (let name of names.slice(0, SCREENSHOT_MAX_CAPTURES)) {
+    let payload = roster[name];
+    let specHash = await declaredCaptureSpecHash(name, payload);
+    let resolved: ResolvedDeclaredEntry = {
+      name,
+      payload,
+      specHash,
+      deviceScaleFactor:
+        payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+      imageType: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+      background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+      keyBy: payload.keyBy ?? 'generation',
+    };
+    if (
+      shouldCarryForwardDeclaredEntry({
+        keyBy: resolved.keyBy,
+        specHash,
+        prior: args.priorManifest?.[name],
+        contentHash: args.contentHash,
+      })
+    ) {
+      entries.push({
+        name,
+        specHash,
+        width: payload.width,
+        height: payload.height,
+        deviceScaleFactor: resolved.deviceScaleFactor,
+        contentType: screenshotContentType(resolved.imageType),
+        imageType: resolved.imageType,
+        keyBy: resolved.keyBy,
+        ...(payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
+        carriedForward: true,
+      });
+      continue;
+    }
+    fresh.push(resolved);
+  }
+
+  let finish = (
+    resolved: ResolvedDeclaredEntry,
+    item: ScreenshotCaptureItem,
+  ) => {
+    entries.push({
+      name: resolved.name,
+      specHash: resolved.specHash,
+      width: item.width,
+      height: item.height,
+      deviceScaleFactor: item.deviceScaleFactor,
+      contentType: screenshotContentType(resolved.imageType),
+      imageType: resolved.imageType,
+      keyBy: resolved.keyBy,
+      ...(resolved.payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
+      base64: item.base64,
+    });
+  };
+
+  let byFormat = new Map<DeclaredScreenshotFormat, ResolvedDeclaredEntry[]>();
+  let renderBased: ResolvedDeclaredEntry[] = [];
+  for (let resolved of fresh) {
+    if (resolved.payload.render) {
+      renderBased.push(resolved);
+    } else {
+      let format = resolved.payload.format!;
+      let group = byFormat.get(format) ?? [];
+      group.push(resolved);
+      byFormat.set(format, group);
+    }
+  }
+
+  for (let format of [...byFormat.keys()].sort()) {
+    let group = byFormat.get(format)!;
+    let captures: ScreenshotCaptureEntry[] = group.map((resolved) =>
+      format === 'fitted'
+        ? {
+            name: resolved.name,
+            envelope: {
+              width: resolved.payload.width,
+              height: resolved.payload.height,
+            },
+            deviceScaleFactor: resolved.deviceScaleFactor,
+          }
+        : {
+            name: resolved.name,
+            viewport: {
+              width: resolved.payload.width,
+              height: resolved.payload.height,
+            },
+            deviceScaleFactor: resolved.deviceScaleFactor,
+          },
+    );
+    let entryOutput = Object.fromEntries(
+      group.map((resolved) => [
+        resolved.name,
+        { type: resolved.imageType, background: resolved.background },
+      ]),
+    );
+    let shot = await captureScreenshot(page, format, 0, {
+      ...opts,
+      captureSpec: { captures },
+      entryOutput,
+    });
+    if ('type' in shot) {
+      // A format group shares one render, so its failure fails every slot in
+      // the group — but never the other groups or the visit.
+      for (let resolved of group) {
+        errors.push({ name: resolved.name, message: renderErrorMessage(shot) });
+      }
+      continue;
+    }
+    for (let item of shot.captures) {
+      let resolved = group.find((g) => g.name === item.name);
+      if (resolved) {
+        finish(resolved, item);
+      }
+    }
+  }
+
+  if (renderBased.length > 0) {
+    let originalViewport = page.viewport();
+    try {
+      for (let resolved of renderBased) {
+        try {
+          let outcome = await captureRenderBasedEntry(page, resolved, opts);
+          if ('type' in outcome) {
+            errors.push({
+              name: resolved.name,
+              message: renderErrorMessage(outcome),
+            });
+          } else {
+            finish(resolved, outcome);
+          }
+        } catch (e: any) {
+          errors.push({
+            name: resolved.name,
+            message: e?.message ?? String(e),
+          });
+        }
+      }
+    } finally {
+      // Restore so the next reuse of this pooled page sees the original
+      // viewport, not the last capture box.
+      try {
+        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+  }
+
+  log.debug(
+    `captureDeclaredScreenshots done entries=${entries.length} errors=${errors.length}`,
+  );
+  return { entries, ...(errors.length > 0 ? { errors } : {}) };
 }
 
 // Best-effort CPU / heap capture via the CDP `Performance` domain. Runs

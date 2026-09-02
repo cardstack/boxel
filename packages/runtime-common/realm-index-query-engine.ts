@@ -93,6 +93,7 @@ import {
   buildQuerySearchURL,
   getValueForResourcePath,
 } from './query-field-utils.ts';
+import { applyServerSearchPageBound } from './search-bounds.ts';
 
 // We allow up to this many traversals into the same card type per
 // `populateQueryFields` walk, matching the field-set the host emits at
@@ -871,14 +872,15 @@ export class RealmIndexQueryEngine {
         if (opts?.linkFields && !opts.linkFields.includes(fullFieldName)) {
           continue;
         }
-        let { results, errors, searchURL } = await this.executeQueryForField({
-          fieldDefinition,
-          fieldName: fullFieldName,
-          queryDefinition,
-          resource,
-          realmURL,
-          opts,
-        });
+        let { results, errors, searchURL, total } =
+          await this.executeQueryForField({
+            fieldDefinition,
+            fieldName: fullFieldName,
+            queryDefinition,
+            resource,
+            realmURL,
+            opts,
+          });
         this.applyQueryResults({
           fieldDefinition,
           fieldName: fullFieldName,
@@ -886,6 +888,7 @@ export class RealmIndexQueryEngine {
           results,
           errors,
           searchURL,
+          total,
         });
         continue;
       }
@@ -958,14 +961,15 @@ export class RealmIndexQueryEngine {
         fieldOrCard: meta.fieldOrCard,
         query: meta.query,
       };
-      let { results, errors, searchURL } = await this.executeQueryForField({
-        fieldDefinition,
-        fieldName,
-        queryDefinition: meta.query,
-        resource,
-        realmURL,
-        opts,
-      });
+      let { results, errors, searchURL, total } =
+        await this.executeQueryForField({
+          fieldDefinition,
+          fieldName,
+          queryDefinition: meta.query,
+          resource,
+          realmURL,
+          opts,
+        });
       this.applyQueryResults({
         fieldDefinition,
         fieldName,
@@ -973,6 +977,7 @@ export class RealmIndexQueryEngine {
         results,
         errors,
         searchURL,
+        total,
       });
     }
   }
@@ -995,6 +1000,12 @@ export class RealmIndexQueryEngine {
     results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
+    // How many instances the query matches across every realm it targets,
+    // independent of how many `results` the bounded page carries. `undefined`
+    // means the count is unknown — no realm reported one, or one of them
+    // failed and took its share of the count with it. A consumer must not read
+    // that as zero.
+    total: number | undefined;
   }> {
     let fieldPath = fieldName.includes('.')
       ? fieldName.slice(0, fieldName.lastIndexOf('.'))
@@ -1019,14 +1030,41 @@ export class RealmIndexQueryEngine {
         this.realmHrefForReference(reference),
     });
     if (!normalized) {
-      return { results: [], errors: [], searchURL: '' };
+      return { results: [], errors: [], searchURL: '', total: undefined };
     }
 
-    let { query, realms } = normalized;
-    let searchURL = buildQuerySearchURL(realms, query);
+    let { realms } = normalized;
+    // Bound what this expansion assembles into the card's document. The pass
+    // runs in-process, so no HTTP bound reaches it on its own. Applying the
+    // server bound here is what makes the field resolve to the same page on
+    // every leg — this pass, a peer realm's `_search`, and the client's live
+    // refresh all bound it to the same size — and `total` below carries what
+    // that page left out.
+    let query = applyServerSearchPageBound(normalized.query);
+    // The seed URL advertises the query as authored, not the bounded one. It is
+    // the client's copy of this field's query, and the client rebuilds the same
+    // query from the same definition to decide whether the seed already answers
+    // it — a page this side added would make the two differ and re-run every
+    // seeded field's search. The client's rebuild reaches `_search`, which
+    // applies its own ceiling, so the page it omits is enforced regardless.
+    let searchURL = buildQuerySearchURL(realms, normalized.query);
     let aggregated: (CardResource<Saved> | FileMetaResource)[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
+    // Summed across realms, and left `undefined` until a realm reports one so a
+    // field whose every realm errored doesn't claim a total of zero.
+    let total: number | undefined;
+    // Set when a realm is asked for a count and doesn't supply a usable one.
+    // Its share is then missing from the sum exactly as a failed realm's is, so
+    // what the sum describes is the realms that answered rather than the query.
+    let countMissingFromSum = false;
+    let addToTotal = (realmTotal: number | undefined) => {
+      if (typeof realmTotal !== 'number' || !Number.isFinite(realmTotal)) {
+        countMissingFromSum = true;
+        return;
+      }
+      total = (total ?? 0) + realmTotal;
+    };
 
     // Query each targeted realm and merge. A realm that errors — most often
     // because the caller lacks permission on it — contributes its error and no
@@ -1037,7 +1075,7 @@ export class RealmIndexQueryEngine {
       if (realm === this.realmURL.href) {
         try {
           if (await this.queryTargetsFileMeta(query.filter, opts)) {
-            let { files } = await this.#indexQueryEngine.searchFiles(
+            let { files, meta } = await this.#indexQueryEngine.searchFiles(
               this.realmURL,
               query,
               opts,
@@ -1045,6 +1083,7 @@ export class RealmIndexQueryEngine {
             realmResults = files.map((fileEntry) =>
               fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
             );
+            addToTotal(meta?.page?.total);
           } else {
             let collection = await this.#indexQueryEngine.searchCards(
               this.realmURL,
@@ -1054,6 +1093,7 @@ export class RealmIndexQueryEngine {
             realmResults = Array.isArray(collection.cards)
               ? collection.cards
               : [];
+            addToTotal(collection.meta?.page?.total);
           }
         } catch (err: unknown) {
           let message =
@@ -1076,6 +1116,7 @@ export class RealmIndexQueryEngine {
           );
         }
         realmResults = remoteResult.cards;
+        addToTotal(remoteResult.total);
       }
 
       for (let result of realmResults) {
@@ -1097,7 +1138,27 @@ export class RealmIndexQueryEngine {
       );
     }
 
-    return { results: aggregated, errors, searchURL };
+    return {
+      results: aggregated,
+      errors,
+      searchURL,
+      // The match count, published only when every targeted realm contributed
+      // its share of it. A realm that failed, and a realm that answered without
+      // a count, each withhold precisely the quantity needed to make the sum a
+      // count — so what is left is a floor, and publishing it would hand a
+      // rollup a confident figure over an incomplete set. That is the failure
+      // this total exists to report rather than a smaller version of it.
+      // Unknown is the honest answer, and a consumer tells it from a real count
+      // because it is absent rather than zero.
+      //
+      // The sum is never short of the rows for any other reason: cross-realm
+      // dedup counts an id both realms report twice and keeps it once, which
+      // can only put the sum above what survived, never below.
+      total:
+        errors.length > 0 || countMissingFromSum || total == null
+          ? undefined
+          : total,
+    };
   }
 
   // The realm holding `reference`, as a real URL href.
@@ -1139,6 +1200,7 @@ export class RealmIndexQueryEngine {
     results,
     errors,
     searchURL,
+    total,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
@@ -1146,6 +1208,7 @@ export class RealmIndexQueryEngine {
     results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
+    total: number | undefined;
   }): void {
     resource.relationships = resource.relationships ?? {};
     for (let key of Object.keys(resource.relationships)) {
@@ -1211,10 +1274,24 @@ export class RealmIndexQueryEngine {
             .map((card) => ({ type: card.type ?? 'card', id: card.id }))
         : undefined;
 
+    // How many instances the query matches, as against how many `data` names.
+    // The two differ once the page ceiling clamps the expansion, and a rollup
+    // reducing over the rows is wrong by that difference with nothing else to
+    // say so. Written only alongside real `data`: an empty `searchURL` means
+    // the query never resolved, which is not a match count of anything.
+    //
+    // A singular `linksTo` is deliberately left out. Its query is forced to
+    // `page.size = 1`, so a total above one is the field working as declared —
+    // it surfaces the first match — not a set that got cut short.
+    let totalMeta =
+      relationshipData !== undefined && total != null ? { total } : undefined;
+
     resource.relationships[fieldName] = {
       links: baseRelationshipLinks,
       ...(relationshipData !== undefined ? { data: relationshipData } : {}),
-      ...(errorMeta ? { meta: errorMeta } : {}),
+      ...(errorMeta || totalMeta
+        ? { meta: { ...errorMeta, ...totalMeta } }
+        : {}),
     };
 
     results.forEach((card, index) => {
@@ -1234,6 +1311,9 @@ export class RealmIndexQueryEngine {
   ): Promise<{
     cards: (CardResource<Saved> | FileMetaResource)[];
     error?: QueryFieldErrorDetail;
+    // The peer realm's own match count for this query, which its `_search`
+    // reports independently of the page it served.
+    total?: number;
   }> {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
@@ -1319,7 +1399,38 @@ export class RealmIndexQueryEngine {
           cards.push(item);
         }
       }
-      return { cards };
+      // The peer fanned this query out itself, and says so when its own merge
+      // came back short a realm. Its total is then a sum over the realms that
+      // answered it — a floor wearing the shape of a count — and the rows are
+      // short by however many the missing realm holds. A 200 carries that as a
+      // flag rather than a status, so reading only `ok` would publish the floor
+      // as exact. Report it as this realm having failed to answer in full,
+      // which puts it under the same withhold-on-error rule a realm that
+      // errored outright falls under.
+      let remoteMeta = (
+        json as { meta?: { page?: { total?: unknown }; incomplete?: unknown } }
+      ).meta;
+      if (remoteMeta?.incomplete) {
+        return {
+          cards,
+          error: {
+            realm: realmHref,
+            type: 'unknown',
+            message:
+              'remote realm reported an incomplete result set: its own search omitted a realm, so neither its rows nor its count cover the query',
+          },
+        };
+      }
+      // Absent that, the peer clamps this query to its own page ceiling, so
+      // `data` can be a prefix of what it matched. Its `meta.page.total` is the
+      // only report of the rest.
+      let remoteTotal = remoteMeta?.page?.total;
+      return {
+        cards,
+        ...(typeof remoteTotal === 'number' && Number.isFinite(remoteTotal)
+          ? { total: remoteTotal }
+          : {}),
+      };
     } catch (err: unknown) {
       let message =
         err instanceof Error ? err.message : String(err ?? 'unknown error');

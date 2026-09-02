@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { profileCommand } from './commands/profile.ts';
+import { registerBrowseCommand } from './commands/browse.ts';
 import { registerConsolidateWorkspacesCommand } from './commands/consolidate-workspaces.ts';
 import { registerLintCommand } from './commands/lint.ts';
 import { registerParseCommand } from './commands/parse.ts';
@@ -7,6 +8,7 @@ import { registerReadTranspiledCommand } from './commands/read-transpiled.ts';
 import { registerRealmCommand } from './commands/realm/index.ts';
 import { registerFileCommand } from './commands/file/index.ts';
 import { registerRunCommand } from './commands/run-command.ts';
+import { registerScreenshotCommand } from './commands/screenshot.ts';
 import { registerSearchCommand } from './commands/search.ts';
 import { registerTestCommand } from './commands/test.ts';
 import { setQuiet } from './lib/cli-log.ts';
@@ -127,11 +129,13 @@ Environment variables (for 'add'):
       },
     );
 
+  registerBrowseCommand(program);
   registerFileCommand(program);
   registerLintCommand(program);
   registerParseCommand(program);
   registerRealmCommand(program);
   registerRunCommand(program);
+  registerScreenshotCommand(program);
   registerSearchCommand(program);
   registerTestCommand(program);
   registerReadTranspiledCommand(program);

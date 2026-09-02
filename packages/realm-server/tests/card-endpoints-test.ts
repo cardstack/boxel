@@ -920,6 +920,107 @@ module(basename(import.meta.filename), function () {
           assert.ok(response.body.data, 'full body is returned');
           assert.ok(response.get('etag'), '200 response still carries an ETag');
         });
+
+        // A write lands on the realm's file system before it is indexed, so
+        // "no index row" and "no card" are different situations. Writing
+        // straight to disk (rather than through `realm.write`) leaves a file
+        // the index has never seen — the state a client reads during the
+        // window between a write and the indexing pass that follows it, and
+        // the state any replica that did not handle the write is in.
+        module(
+          'card source on disk that the index has never seen',
+          function (hooks) {
+            hooks.beforeEach(function () {
+              let realmDir = join(dir.name, 'realm_server_1', 'test');
+              writeFileSync(
+                join(realmDir, 'unindexed-card.json'),
+                JSON.stringify({
+                  data: {
+                    type: 'card',
+                    attributes: { firstName: 'Pending' },
+                    meta: {
+                      adoptsFrom: { module: './person', name: 'Person' },
+                    },
+                  },
+                }),
+              );
+              // A collection document is a card document but never gets an
+              // instance row of its own, so no amount of waiting makes it
+              // servable.
+              writeFileSync(
+                join(realmDir, 'unindexed-collection.json'),
+                JSON.stringify({ data: [] }),
+              );
+            });
+
+            test('the 404 for a single-card source says it is awaiting indexing rather than missing', async function (assert) {
+              let response = await request
+                .get('/unindexed-card')
+                .set('Accept', 'application/vnd.card+json');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.true(
+                response.body.errors?.[0]?.awaitingIndex,
+                'the error carries the awaiting-index marker',
+              );
+            });
+
+            test('the conditional-GET path says the same thing', async function (assert) {
+              let response = await request
+                .get('/unindexed-card')
+                .set('Accept', 'application/vnd.card+json')
+                .set('If-None-Match', '"stale-etag"');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.true(
+                response.body.errors?.[0]?.awaitingIndex,
+                'the error carries the awaiting-index marker',
+              );
+            });
+
+            test('a source the indexer would never give an instance row is a plain 404', async function (assert) {
+              let response = await request
+                .get('/unindexed-collection')
+                .set('Accept', 'application/vnd.card+json');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.strictEqual(
+                response.body.errors?.[0]?.awaitingIndex,
+                undefined,
+                'nothing suggests a row is coming for it',
+              );
+            });
+          },
+        );
+
+        test('a card with neither an index row nor a source file is a plain 404', async function (assert) {
+          let response = await request
+            .get('/nonexistent-card')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `HTTP 404 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.errors?.[0]?.awaitingIndex,
+            undefined,
+            'nothing suggests the card is on its way',
+          );
+        });
       });
 
       module('published realm', function (hooks) {
@@ -4792,6 +4893,11 @@ boxel:
                     page: { size: 1 },
                   },
                 });
+                @field partiallyFailingMatches = linksToMany(Person, {
+                  query: {
+                    realms: ['${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                  },
+                });
               }
             `,
             'favorite.json': {
@@ -4921,6 +5027,11 @@ boxel:
         matchesRelationship?.meta?.errors,
         'successful remote query does not include errors metadata',
       );
+      assert.strictEqual(
+        matchesRelationship?.meta?.total,
+        1,
+        'a query whose every realm answered reports its match count',
+      );
       assert.deepEqual(
         matchesRelationship?.data,
         [{ type: 'card', id: `${providerRealmURL}person-remote` }],
@@ -4978,6 +5089,34 @@ boxel:
           (error: any) => error.realm === UNREACHABLE_REALM_URL,
         ),
         'meta includes unreachable realm entry for failing query',
+      );
+      assert.strictEqual(
+        failingRelationship.meta.total,
+        undefined,
+        'a query whose realm failed reports no match count',
+      );
+
+      // One realm answered and one did not. The realm that failed reported no
+      // count, and how many instances it holds is exactly what the failure
+      // withheld — so the rows in hand look like the whole set and a rollup
+      // over them would read as final. The count is withheld rather than
+      // summed from the realms that happened to answer.
+      let partialRelationship = relationships.partiallyFailingMatches;
+      assert.deepEqual(
+        partialRelationship?.data,
+        [{ type: 'card', id: `${providerRealmURL}person-remote` }],
+        'the reachable realm still contributes its results',
+      );
+      assert.ok(
+        partialRelationship?.meta?.errors?.some(
+          (error: any) => error.realm === UNREACHABLE_REALM_URL,
+        ),
+        'and the unreachable realm is recorded as an error',
+      );
+      assert.strictEqual(
+        partialRelationship?.meta?.total,
+        undefined,
+        'no match count is claimed while one realm is unaccounted for',
       );
       let failingSearchLink = failingRelationship.links?.search;
       assert.ok(

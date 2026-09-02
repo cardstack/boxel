@@ -459,31 +459,28 @@ jobs:
     needs: [test-web-assets, check-percy, check-index-cache]
     strategy:
       fail-fast: false
+      # Three places carry the shard count and must move together: this list,
+      # `shardTotal` below, and `--shard-count` on the timings generator, which
+      # decides whether a rebalance is worth committing by predicting the
+      # slowest shard.
+      #
+      # Fewer, longer shards rather than more, shorter ones. Setup is ~195s per
+      # shard and largely irreducible — it is bound by the runner's cores, not
+      # by latency, so parallelising or pre-computing it moves the cost rather
+      # than removing it. Each added shard therefore buys a shrinking slice of
+      # test time for a fixed ~3 minutes of machine
+      # time and one more slot held. Measured on ~8,500s of test work: at 20
+      # shards the slowest shard took 13.1 minutes for 3.62 machine-hours, at
+      # 12 it took 18.0 for 3.08. Sixteen sits between them, keeping most of
+      # the wall clock while returning a fifth of the slots to the pool.
+      #
+      # The modelled wall-clock cost overstates the real one, because it
+      # assumes every shard starts immediately. They do not: shards have been
+      # observed queueing up to 242s waiting for a runner, and 20 concurrent
+      # jobs per host run is a large share of the pool.
       matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
-        shardTotal: [20]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardTotal: [16]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -829,6 +826,69 @@ jobs:
         if: ${{ !cancelled() }}
         run: test -s junit/host-${{ matrix.shardIndex }}.xml
 
+      # Percy can lose a snapshot without anything turning red. The test
+      # helper races each upload against a 25s budget and, on expiry, lets the
+      # test carry on so it can finish inside QUnit's own budget — the right
+      # call for the test, but the snapshot may never reach the CLI. The build
+      # then finalises looking complete and, on `main`, is auto-approved into
+      # the baseline; every snapshot it dropped resurfaces as a 100% "new
+      # snapshot" diff on later builds and unrelated PRs.
+      #
+      # Abandonment on its own is far too blunt to gate on — it is common, and
+      # the CLI usually does finish the upload after the test moved on. What
+      # distinguishes a real loss is that the CLI never received the snapshot
+      # at all, so tally both counts here and let the finalize job compare
+      # them. `test-output.log` holds the retry's output when a shard retried
+      # (the retry `mv`s over it), so these counts describe the attempt that
+      # actually contributed snapshots.
+      - name: Tally Percy snapshots for this shard
+        if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+        run: |
+          set -uo pipefail
+          # `grep -c` exits 1 on zero matches while still printing 0, and
+          # prints nothing at all if the log is missing — default both so the
+          # comparison below can't be handed an empty string.
+          attempted=$(grep -c '\[percy-snapshot\] attempted ' /tmp/test-output.log || true)
+          # Match the label-independent part of the CLI's line. @percy/logger
+          # builds the label as 'percy' and appends ':<scope>' only while its
+          # level is 'debug' (format() in its logger.js), so this same event
+          # prints '[percy:core] Snapshot taken:' under PERCY_LOGLEVEL=debug
+          # and '[percy] Snapshot taken:' at every other level. Matching the
+          # scoped form would tie this count to a log level set in the test
+          # step's env for unrelated reasons — drop that line and every shard
+          # reports taken=0, which on main reads as a total loss and rejects a
+          # healthy build irreversibly. The finalize job also refuses to treat
+          # a build-wide zero as a real loss, for the same reason.
+          taken=$(grep -c '] Snapshot taken: ' /tmp/test-output.log || true)
+          attempted=${attempted:-0}
+          taken=${taken:-0}
+          printf 'shard=%s\nattempted=%s\ntaken=%s\n' \
+            "${{ matrix.shardIndex }}" "$attempted" "$taken" > /tmp/percy-tally.txt
+          cat /tmp/percy-tally.txt
+          if [ "$taken" -lt "$attempted" ]; then
+            echo "::warning::Shard ${{ matrix.shardIndex }} attempted $attempted Percy snapshot(s) but the CLI received $taken, so this build's snapshot set is incomplete. On main the finalize job rejects such a build so it cannot become a baseline."
+            echo "::group::Snapshots this shard abandoned"
+            grep '\[percy-snapshot\]' /tmp/test-output.log | grep 'abandoned after' || true
+            echo "::endgroup::"
+          fi
+
+      - name: Upload Percy snapshot tally
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+        with:
+          # Scope the name to the run attempt, for the reason spelled out on
+          # the junit report below: artifacts are retained per attempt under
+          # one run_id and download-artifact has no attempt filter. The cost
+          # here is worse than a stale report, because the finalize job sums
+          # the tallies it finds — a prior attempt's shortfall would be added
+          # to a clean re-run's totals and reject a build that lost nothing.
+          # The Percy nonce is already attempt-scoped, so each attempt is a
+          # distinct build and its tally has to be too.
+          name: percy-tally-${{ github.run_attempt }}-${{ matrix.shardIndex }}
+          path: /tmp/percy-tally.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
@@ -963,6 +1023,62 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      # Per-shard counts of snapshots attempted vs snapshots the Percy CLI
+      # actually received. Any shortfall means this build is missing a
+      # snapshot it was supposed to carry — see the tally step in host-test.
+      - name: Download Percy snapshot tallies
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          pattern: percy-tally-${{ github.run_attempt }}-*
+          path: /tmp/percy-tallies
+
+      - name: Total the Percy snapshot tallies
+        id: tally
+        run: |
+          set -uo pipefail
+          attempted=0
+          taken=0
+          shards=0
+          for f in /tmp/percy-tallies/*/percy-tally.txt; do
+            [ -f "$f" ] || continue
+            shards=$((shards + 1))
+            a=$(sed -n 's/^attempted=//p' "$f")
+            t=$(sed -n 's/^taken=//p' "$f")
+            attempted=$((attempted + ${a:-0}))
+            taken=$((taken + ${t:-0}))
+          done
+          lost=$((attempted - taken))
+          # The CLI can report more than the suite attempted only if the
+          # markers ever drift; clamp so a miscount can't read as negative.
+          if [ "$lost" -lt 0 ]; then lost=0; fi
+
+          # A build that attempted snapshots and had NONE reach the CLI is far
+          # more likely a broken marker than a real total loss — a genuine loss
+          # of every snapshot would have to mean the CLI never ran, which
+          # `percy build:finalize` below would not survive either. Since the
+          # reject this feeds cannot be undone, refuse to act on that reading:
+          # report zero lost, and fail the job afterwards so a broken gate is
+          # loud rather than quietly permissive. Failing here instead would
+          # skip finalize and strand the Percy build unfinalised.
+          marker_broken=false
+          if [ "$attempted" -gt 0 ] && [ "$taken" -eq 0 ]; then
+            marker_broken=true
+            lost=0
+          fi
+
+          echo "shards=$shards attempted=$attempted taken=$taken lost=$lost marker_broken=$marker_broken"
+          echo "lost=$lost" >> "$GITHUB_OUTPUT"
+          echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
+          echo "taken=$taken" >> "$GITHUB_OUTPUT"
+          echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
+          # No tallies at all means the shards never got far enough to write
+          # them; that is the host-test failure the reject step already
+          # covers, so say so rather than reading it as a clean run.
+          if [ "$shards" -eq 0 ]; then
+            echo "::notice::No Percy snapshot tallies were uploaded, so snapshot loss could not be assessed for this build."
+          fi
+
       - name: Finalise Percy
         id: finalize
         run: |
@@ -990,6 +1106,11 @@ jobs:
       # shard would have produced resurface as diffs on unrelated PRs.
       # Rejecting the build keeps it from becoming a baseline.
       #
+      # A shard need not die to cost the build a snapshot: it can pass while
+      # abandoning an upload the CLI never received, which is why the tally
+      # shortfall rejects too. Both conditions describe the same defect — a
+      # build whose snapshot set is smaller than the run produced.
+      #
       # `percy build:reject` authenticates with BrowserStack account
       # credentials rather than the project token: @percy/cli-build reads
       # BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY (see
@@ -997,16 +1118,31 @@ jobs:
       # exits non-zero when either is missing — so the step runs only when
       # both are present and otherwise skips itself rather than failing the
       # job.
-      - name: Reject the Percy build when a host shard failed
+      # The snapshot-loss trigger is scoped to `main`, where the shard-failure
+      # one is not. Rejecting exists to stop a build becoming a baseline, and
+      # only `main` builds are auto-approved into that role — so on a PR a
+      # reject protects nothing. It also cannot be undone (the reviews
+      # endpoint answers 409 for any later action on a rejected build), and it
+      # would take the snapshots that *did* upload out of review along with
+      # the missing one. Losing a snapshot is far more common than losing a
+      # shard, so applying it to PRs too would block review on a large share
+      # of builds for no protective gain.
+      - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
-          needs.host-test.result != 'success'
+          (
+            needs.host-test.result != 'success'
+            || (
+              steps.tally.outputs.lost != '0'
+              && github.ref == 'refs/heads/main'
+            )
+          )
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
           && env.BROWSERSTACK_ACCESS_KEY != ''
         run: |
           set -eo pipefail
           npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
-          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — host-test finished as '${{ needs.host-test.result }}', so its snapshot set is incomplete and must not become a baseline."
+          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — host-test finished as '${{ needs.host-test.result }}' and the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}. An incomplete snapshot set must not become a baseline."
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
@@ -1015,14 +1151,30 @@ jobs:
       # build never passes through both silently.
       - name: Note that an incomplete build was left unrejected
         if: >-
-          needs.host-test.result != 'success'
+          (
+            needs.host-test.result != 'success'
+            || (
+              steps.tally.outputs.lost != '0'
+              && github.ref == 'refs/heads/main'
+            )
+          )
           && (
             steps.finalize.outputs.build_id == ''
             || env.BROWSERSTACK_USERNAME == ''
             || env.BROWSERSTACK_ACCESS_KEY == ''
           )
         run: |
-          echo "::warning::host-test finished as '${{ needs.host-test.result }}', so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
+          echo "::warning::host-test finished as '${{ needs.host-test.result }}' and the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}, so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
+
+      # Runs after finalize so the Percy build is sealed either way. The tally
+      # already declined to reject on this reading, so all that is left is to
+      # make sure a gate that has stopped measuring anything cannot pass for a
+      # working one.
+      - name: Fail when the Percy snapshot markers stopped matching
+        if: ${{ steps.tally.outputs.marker_broken == 'true' }}
+        run: |
+          echo "::error::The shards attempted ${{ steps.tally.outputs.attempted }} Percy snapshot(s) and the CLI was recorded as receiving none, which is a broken tally rather than a real loss — no build reaching finalize loses every snapshot. Snapshot loss went unchecked for this build. Look first at the markers the tally counts: '[percy-snapshot] attempted ' in packages/host/tests/helpers/percy-snapshot.ts, and '] Snapshot taken: ' from the Percy CLI."
+          exit 1
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
@@ -1172,11 +1324,24 @@ jobs:
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    needs: [host-test, host-merge-reports-and-publish]
+    # host-test only: the memory reports come from its shards, and the junit
+    # report now comes from the merged PR's own run rather than from this
+    # run's merge-and-publish job.
+    needs: [host-test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      # Naming any permission sets every unnamed one to none, so the reads the
+      # shard-timing source lookup performs have to appear here. Without them
+      # each `gh` call 404s, and since that lookup is best-effort it would
+      # leave the timings quietly unrefreshed on every main run rather than
+      # failing visibly.
       contents: write
+      # Resolving the merge commit to its PR, and that PR to its head.
+      pull-requests: read
+      # Listing that head's workflow runs, inspecting one run's jobs, and
+      # downloading its merged junit artifact.
+      actions: read
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1193,15 +1358,102 @@ jobs:
           pattern: memory-report-*
           merge-multiple: true
 
-      # The merged junit report feeds the shard-timing update. Best-effort:
-      # if the merge job failed to produce it, the memory baseline still
-      # updates and the timings file is simply left alone this run.
-      - name: Download merged junit report
+      # The shard weights are consumed by `pull_request` runs, so they have to
+      # be measured on one. This push-to-main run is the least representative
+      # shape available: Percy is always on for a non-PR event, and the index
+      # cache is deliberately skipped (see `Check if cached index is usable`),
+      # which together cost about 1.5x per test. The penalty is uneven —
+      # fixture-heavy acceptance modules pay far more of it than unit tests —
+      # so weights taken here mis-*assign* work rather than merely mis-scale
+      # it, and greedy packing is scale-invariant so a uniform factor would
+      # have been harmless. Measured: a packer predicting a 1s spread produced
+      # a 239s one.
+      #
+      # Take the report from the run of the PR that produced this merge, and
+      # only when that run was representative and complete. Anything else
+      # leaves the file alone, because a stale-but-consistent set of weights
+      # balances better than a fresh set measured in the wrong environment —
+      # which is also why there is no fallback to this run's own report.
+      - name: Download merged junit report from the merged PR's run
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: merged-junit-report
-          name: host-test-report-merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+
+          # Two ways to end up not refreshing, and they deserve different
+          # volume. `leave` is the ordinary one: this merge has no run worth
+          # measuring, which is most merges. `broke` is a call that failed
+          # outright — a missing permission, a transport error — which would
+          # otherwise be indistinguishable from "nothing qualifying" and would
+          # disable this for as long as it took someone to notice the file had
+          # stopped moving.
+          leave() { echo "$1 — leaving shard timings unchanged"; exit 0; }
+          broke() { echo "::warning title=Shard timings not refreshed::$1"; exit 0; }
+
+          # This endpoint returns every PR whose history contains the commit,
+          # not just the one that merged it — an open branch that merged main
+          # in qualifies too, and the ordering is undocumented. Match on the
+          # merge commit instead of taking the first.
+          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" \
+            --jq 'map(select(.merge_commit_sha == env.MERGE_SHA)) | .[0].number // empty') ||
+            broke "could not list the pull requests for $MERGE_SHA"
+          [ -n "$pr" ] || leave "no PR is associated with $MERGE_SHA"
+
+          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty') ||
+            broke "could not read PR #$pr"
+          [ -n "$head_sha" ] || leave "could not resolve the head commit of PR #$pr"
+
+          # Newest successful CI Host run for that head. A run with failed
+          # shards reports only the modules that ran, and the generator keeps
+          # existing values for the rest — which is how weights from different
+          # eras end up mixed in one file.
+          #
+          # First attempt only, for the same reason. "Re-run failed jobs"
+          # publishes a second artifact of the same name holding just the
+          # re-run shards, and `gh run download --name` resolves to the newer
+          # one: run 33021863111 carries 121,401 B from attempt 1 and 8,259 B
+          # from attempt 2, while its conclusion still reads success. Coverage
+          # cannot catch that — the generator measures attribution against the
+          # report's own total, so a report of 273 testcases is ~100%
+          # attributable and passes.
+          run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
+            --jq '[.workflow_runs[]
+                   | select(.name == "CI Host" and .conclusion == "success" and .run_attempt == 1)]
+                  | sort_by(.created_at) | last | .id // empty') ||
+            broke "could not list workflow runs for $head_sha"
+          [ -n "$run_id" ] || leave "PR #$pr has no first-attempt CI Host run that passed outright"
+
+          # One jobs fetch answers both remaining questions.
+          jobs_json=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100") ||
+            broke "could not inspect the jobs of run $run_id"
+
+          # Percy roughly doubles some tests and leaves others alone, so a
+          # Percy-enabled run is no better a model of the median PR run than a
+          # push run is. Ask the run itself rather than the head's commit
+          # statuses: that endpoint pages at 30, depends on Percy having posted
+          # by now, and either miss would silently take the permissive branch.
+          # `Finalise Percy` is skipped when Percy did not run and succeeds
+          # when it did, which is authoritative for this run and needs no extra
+          # call. An answer we cannot read is treated as "ran": the whole point
+          # of this filter is to not measure a Percy-loaded run.
+          percy=$(printf '%s' "$jobs_json" |
+            jq -r '[.jobs[] | select(.name | test("Finalise Percy")) | .conclusion] | first // "unknown"')
+          [ "$percy" = "skipped" ] || leave "PR #$pr's run reports Finalise Percy as $percy"
+
+          # The other half of the 1.5x. `Import cached realm index` is skipped
+          # rather than absent when the cache is unusable, so its conclusion
+          # distinguishes the two shapes.
+          imported=$(printf '%s' "$jobs_json" |
+            jq -r '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
+                    | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
+          [ "${imported:-0}" -gt 0 ] || leave "run $run_id indexed from scratch"
+
+          gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
+            || leave "run $run_id published no merged report"
+          echo "Shard timings will be regenerated from PR #$pr's run $run_id"
 
       - name: Update memory baseline and shard timings
         # Retry from the latest main: another PR may merge to main while host
@@ -1242,8 +1494,17 @@ jobs:
             # Nonzero exit (e.g. the attribution-coverage floor) fails the
             # job loudly rather than committing a degraded weights file.
             if [ -f merged-junit-report/host.xml ]; then
+              # Non-fatal. The generator attributes module titles by scanning
+              # test sources on disk, which are main's after the reset above,
+              # while the report now comes from the PR's head — so a module
+              # renamed or deleted on main since that head is unattributable
+              # and can push coverage under the generator's floor, which exits
+              # nonzero. Everything else about this refresh is best-effort, and
+              # failing here would also take down the memory-baseline commit
+              # below, which has nothing to do with shard timings.
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
-                --min-drift-seconds 60 --shard-count 20
+                --min-drift-seconds 60 --shard-count 16 ||
+                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run $run_id"
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
