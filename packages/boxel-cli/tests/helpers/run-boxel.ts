@@ -129,6 +129,12 @@ export const RUN_BOXEL_DEFAULT_DEADLINE_MS = 60_000;
  * exiting — a fraction of the deadline it is protecting.
  */
 const DEADLINE_MARGIN_MS = 30_000;
+/**
+ * Grace between the deadline's SIGTERM and a SIGKILL. Long enough for a
+ * command that shuts down on a signal to do it, short enough that the
+ * deadline still ends the command well inside the enclosing test's budget.
+ */
+const KILL_ESCALATION_MS = 5_000;
 
 /**
  * The harness deadline exists to stop a *wedged* command from hanging its
@@ -200,9 +206,13 @@ export function runBoxel(
     // the result can say the command was killed. spawn's kill leaves only a
     // null exit code behind, which reads as an ordinary failure.
     let timedOut = false;
+    let escalation: NodeJS.Timeout | undefined;
     let deadline = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
+      // A command that handles SIGTERM, or is stuck somewhere that cannot run
+      // a handler, would otherwise outlive the deadline meant to end it.
+      escalation = setTimeout(() => child.kill('SIGKILL'), KILL_ESCALATION_MS);
     }, deadlineMs);
 
     let stdout = '';
@@ -218,12 +228,20 @@ export function runBoxel(
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
-    child.on('error', (err) => {
+    let settled = false;
+    let clearTimers = () => {
       clearTimeout(deadline);
-      reject(err);
-    });
-    child.on('close', (code) => {
-      clearTimeout(deadline);
+      if (escalation) {
+        clearTimeout(escalation);
+      }
+    };
+
+    let settle = (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
       // Nearly every call site asserts with `expect(res.ok, res.stderr)`, so
       // stderr is where a reader looks for the reason. A killed command has
       // written no reason of its own — say so there, with what it had printed
@@ -251,6 +269,28 @@ export function runBoxel(
           }
         },
       });
+    };
+
+    child.on('error', (err) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
+      reject(err);
+    });
+    // `close` is the normal end: it waits for the stdio pipes, so all output
+    // is captured.
+    child.on('close', (code) => settle(code));
+    // Those same pipes stay open while a grandchild that inherited them is
+    // alive — `boxel parse` runs ember-tsc, `boxel test` launches chromium —
+    // so on the deadline path the command's own exit is the answer, and
+    // waiting for `close` would hand the deadline back to whatever outlived
+    // it.
+    child.on('exit', (code) => {
+      if (timedOut) {
+        settle(code);
+      }
     });
 
     if (options.input !== undefined) {

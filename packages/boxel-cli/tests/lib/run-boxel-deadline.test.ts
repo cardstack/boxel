@@ -15,10 +15,31 @@ let scriptDir: string;
 let stubBin: string;
 let originalBin: string | undefined;
 
-// Stands in for the CLI. `--hang` idles past any deadline; otherwise it
-// prints on both streams and exits 0.
+// Stands in for the CLI, in the shapes a deadline has to cope with:
+//
+//   --hang           idles past any deadline
+//   --deaf           idles and swallows SIGTERM, like a command with its own
+//                    shutdown handler
+//   --leave-orphan   idles after spawning a child that inherits its stdio and
+//                    outlives it, the way `boxel parse` leaves ember-tsc and
+//                    `boxel test` leaves chromium — the pipes stay open, so
+//                    `close` never arrives
+//
+// Anything else prints on both streams and exits 0.
 const STUB_CLI = `
-if (process.argv.includes('--hang')) {
+const { spawn } = require('node:child_process');
+if (process.argv.includes('--deaf')) {
+  process.on('SIGTERM', () => {});
+}
+if (process.argv.includes('--leave-orphan')) {
+  spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], {
+    stdio: 'inherit',
+    detached: true,
+  }).unref();
+}
+if (
+  process.argv.some((a) => ['--hang', '--deaf', '--leave-orphan'].includes(a))
+) {
   process.stderr.write('working…\\n');
   setInterval(() => {}, 1 << 30);
 } else {
@@ -62,6 +83,25 @@ describe('runBoxel deadline', () => {
     expect(res.stderr).toMatch(/\[runBoxel\] killed after \d+ms/);
     expect(res.stderr).toContain('deadline 1000ms');
     expect(res.stderr).toContain('--hang');
+  });
+
+  it('ends a command that swallows SIGTERM', async () => {
+    let startedAt = Date.now();
+    let res = await runBoxel(['--deaf'], { timeout: 1_000 });
+    expect(res.timedOut).toBe(true);
+    // SIGTERM at 1s, SIGKILL 5s later: the deadline still ends the command,
+    // rather than handing the enclosing test's budget the job.
+    expect(Date.now() - startedAt).toBeLessThan(20_000);
+  });
+
+  it('ends a command whose orphan keeps the stdio pipes open', async () => {
+    let startedAt = Date.now();
+    let res = await runBoxel(['--leave-orphan'], { timeout: 1_000 });
+    expect(res.timedOut).toBe(true);
+    expect(res.stderr).toContain('working…');
+    // The orphan holds the pipes for a minute; resolving on the command's own
+    // exit means the deadline is not waiting on it.
+    expect(Date.now() - startedAt).toBeLessThan(20_000);
   });
 
   it('refuses a deadline that would pre-empt the command own deadline', async () => {
