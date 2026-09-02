@@ -106,6 +106,7 @@ import {
   isDirectIndexedFieldKey,
   cardTypeName,
   fileNameFromUrl,
+  referenceNamesFile,
   isDeclaredScreenshotFormat,
   isValidScreenshotName,
   DECLARED_SCREENSHOT_FORMATS,
@@ -4223,8 +4224,17 @@ function lazilyLoadLink(
         (isCardError(error) && error.status === 404) ||
         (typeof error?.message === 'string' &&
           /not found/i.test(error.message));
+      // The realm file the broken reference stands for: a card instance is
+      // served out of `<id>.json`, while a reference that names a file is
+      // already the file. The field's own type settles it when the field is
+      // declared to hold a file; otherwise the reference's shape does, judged
+      // by a registered extension rather than by a dot, so a card id that
+      // carries one keeps the `.json` its row is keyed on. This string is both
+      // what the reader is told is missing and the dep invalidation watches, so
+      // a `.json` appended to a file path names a row that can never appear and
+      // the mended link never reaches this consumer.
       let referenceForMissingFile =
-        isFileLink || reference.endsWith('.json')
+        isFileLink || referenceNamesFile(reference)
           ? reference
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &

@@ -24,6 +24,7 @@ import {
   Component,
   contains,
   field,
+  FileDef,
   getDataBucket,
   linksToMany,
   setupBaseRealm,
@@ -75,7 +76,16 @@ function makeCards() {
       </template>
     };
   }
-  return { Person, Pet };
+  // A `linksToMany(FileDef)` field: each slot holds a file, so a broken slot
+  // has to read as a missing file rather than a missing card.
+  class Gallery extends CardDef {
+    static displayName = 'Gallery';
+    @field photos = linksToMany(FileDef);
+    static isolated = class extends Component<typeof Gallery> {
+      <template><@fields.photos @format='fitted' /></template>
+    };
+  }
+  return { Person, Pet, Gallery };
 }
 
 // Build a Person attached to the realm-backed store without indexing it, so
@@ -126,11 +136,11 @@ module(
     // Realm holds Person/Pet plus two real Pets (`Pet/mango`, `Pet/vangogh`);
     // `Pet/ghost` is never present, so links to it resolve to a 404.
     async function setupRealm() {
-      let { Person, Pet } = makeCards();
+      let { Person, Pet, Gallery } = makeCards();
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          'test-cards.gts': { Person, Pet },
+          'test-cards.gts': { Person, Pet, Gallery },
           'Pet/mango.json': {
             data: {
               attributes: { firstName: 'Mango' },
@@ -477,6 +487,51 @@ module(
       assert
         .dom('[data-test-broken-link-template]')
         .exists({ count: 1 }, 'the broken placeholder is still in place');
+    });
+
+    test('a broken file element is labelled by its file name and reads as a missing file', async function (assert) {
+      await setupRealm();
+      let store = getService('store');
+      let resource: LooseCardResource = {
+        attributes: {},
+        meta: {
+          adoptsFrom: { module: testRRI('test-cards'), name: 'Gallery' },
+        },
+      };
+      let gallery = (await store.__dangerousCreateFromSerialized(
+        resource,
+        { data: resource },
+        new URL(testRealmURL),
+      )) as CardDefType;
+      let missingImage = `${testRealmURL}Gallery/images/photo.jpg`;
+      getDataBucket(gallery).set('photos', [
+        {
+          type: 'link-not-found',
+          reference: missingImage,
+          errorDoc: {
+            status: 404,
+            title: 'Link Not Found',
+            message: `missing file ${missingImage}`,
+            additionalErrors: null,
+          } satisfies SerializedError,
+        },
+      ]);
+
+      await renderCard(loader, gallery, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      assert
+        .dom('[data-test-broken-link-headline]')
+        .hasText(
+          'Linked file not found',
+          'the placeholder names the kind of thing the slot holds',
+        );
+      assert
+        .dom('[data-test-broken-link-type]')
+        .hasText(
+          'photo.jpg',
+          'the label is the file name, not the directory a card reference would read as its type',
+        );
     });
   },
 );

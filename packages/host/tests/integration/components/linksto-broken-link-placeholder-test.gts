@@ -27,6 +27,7 @@ import {
   field,
   FileDef,
   getDataBucket,
+  getRelationshipMembershipState,
   linksTo,
   setupBaseRealm,
   StringField,
@@ -523,6 +524,54 @@ module(
           MISSING_IMAGE_URL,
           'the reference is the file path the realm is missing',
         );
+    });
+
+    test('a broken link to a file path reports that path, not a .json beside it', async function (assert) {
+      await setupRealm();
+      // A `linksTo` declared to hold a card, holding a reference that names a
+      // file. The realm holds no such file, so reading the link 404s and the
+      // producer plants the sentinel from a real failure rather than a
+      // hand-written one.
+      let person = await createPerson({
+        pet: { links: { self: MISSING_IMAGE_URL } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let slot = getRelationshipMembershipState(person, 'pet').membership?.[0];
+      assert.strictEqual(slot?.kind, 'not-found', 'the link reports not-found');
+      assert.strictEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.message : undefined,
+        `missing file ${MISSING_IMAGE_URL}`,
+        'the failure names the file path itself, with no .json appended',
+      );
+      assert.deepEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.deps : undefined,
+        [MISSING_IMAGE_URL],
+        'the dep invalidation watches is the file path, which a row can be keyed on',
+      );
+    });
+
+    test('a broken link to a dotted card id reports its .json file', async function (assert) {
+      await setupRealm();
+      // `.6` is not a registered file extension, so the dot belongs to the id.
+      // The realm serves such an instance out of `<id>.json`, which is the file
+      // to report and the dep to watch.
+      let dottedId = `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`;
+      let person = await createPerson({
+        pet: { links: { self: dottedId } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let slot = getRelationshipMembershipState(person, 'pet').membership?.[0];
+      assert.strictEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.message : undefined,
+        `missing file ${dottedId}.json`,
+        'a dotted card id keeps the .json its row is keyed on',
+      );
     });
 
     test('a broken card link is labelled by its card type', async function (assert) {

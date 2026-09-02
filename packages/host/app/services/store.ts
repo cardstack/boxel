@@ -3074,19 +3074,8 @@ export default class StoreService extends Service implements StoreInterface {
     });
     let result = await extractor.extract();
     if (result.status === 'error' || !result.resource) {
-      // Carry the extract's own status through. A file the realm does not hold
-      // fails with the fetch's 404, and that status is what tells the link
-      // producer it is looking at a missing file rather than a file that blew
-      // up while being read — the difference between the "Link Not Found"
-      // placeholder a reader can act on and a generic error. Anything without
-      // a usable status is a genuine extract failure, so 500 stands.
-      let failure = result.error?.error;
-      let msg = failure?.message ?? 'File extract failed';
-      let status =
-        typeof failure?.status === 'number' && failure.status >= 400
-          ? failure.status
-          : 500;
-      return new CardError(msg, { status });
+      let msg = result.error?.error?.message ?? 'File extract failed';
+      return new CardError(msg, { status: 500 });
     }
     return { data: result.resource };
   }
