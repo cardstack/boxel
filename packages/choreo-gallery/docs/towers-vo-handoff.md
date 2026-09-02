@@ -7,14 +7,15 @@ so the audio arrives from the side. This is where it arrives.
 
 ## Take it from here
 
-    branch  towers/vo-kaitai
-    commit  a475a81  "Towers: the ridge-raising speaks"
+    branch  towers/vo-kaitai        <- merge the tip, not a commit
     base    towers/quality @ 3774d1b
 
     git merge towers/vo-kaitai
 
 It branches from `towers/quality`, so if that is where you are the merge is a
-fast-forward and there is nothing to resolve.
+fast-forward and there is nothing to resolve. Take the tip rather than a named
+commit — this file lives on the branch it describes, so any sha written here
+is one amend away from being wrong, and was, once.
 
 **If it is not a fast-forward, be careful with the mp3s.** Git cannot merge
 binary files: it will stop and ask, and there is no hand-editing your way out
