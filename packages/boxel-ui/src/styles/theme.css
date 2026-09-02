@@ -45,6 +45,21 @@
   --card-foreground: var(--boxel-dark);
   --popover: var(--boxel-light);
   --popover-foreground: var(--boxel-dark);
+  /* Neutral surfaces beyond shadcn's, by role: the workspace ground behind the
+     page, a well sunk into a card, an editable region at rest, the pointer
+     acknowledgement, zebra rows, the selected row. `--foreground` must read on
+     all of them, so none carries its own -foreground. `--hover` is translucent
+     so it composes over whichever surface it lands on. */
+  --canvas: var(--boxel-100);
+  --inset: var(--boxel-50);
+  --field: var(--boxel-light);
+  --hover: var(--boxel-dark-10);
+  --stripe: var(--boxel-50);
+  --selected: color-mix(in oklch, var(--primary) 15%, var(--card));
+  --tooltip: var(--boxel-dark);
+  --tooltip-foreground: var(--boxel-light);
+  /* third ink step, fainter than --muted-foreground */
+  --subtle-foreground: var(--boxel-400);
 
   /* roles */
   --primary: var(--boxel-highlight);
@@ -60,8 +75,10 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
+  --border-strong: var(--boxel-400);
   --input: var(--boxel-400);
   --ring: var(--boxel-highlight);
+  --control-height: 2.5rem;
 
   /* charts */
   --chart-1: var(--boxel-fuschia);
@@ -69,6 +86,8 @@
   --chart-3: var(--boxel-lime);
   --chart-4: var(--boxel-blue);
   --chart-5: var(--boxel-green);
+  --chart-6: var(--boxel-orange);
+  --chart-7: var(--boxel-cyan);
 
   /* sidebar */
   --sidebar: var(--boxel-light);
@@ -112,10 +131,38 @@
   --shadow-xl:
     0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --shadow-inset: inset 0 1px 2px hsl(0 0% 0% / 0.1);
 
   /* status */
   --success: var(--boxel-success);
+  --success-foreground: var(--boxel-light);
   --warning: var(--boxel-warning);
+  --warning-foreground: var(--boxel-dark);
+  --info: var(--boxel-blue);
+  --info-foreground: var(--boxel-light);
+  --attention: var(--boxel-pink);
+  --attention-foreground: var(--boxel-light);
+  --overlay: var(--boxel-dark-50);
+
+  /* Hue as ink. `--x`/`--x-foreground` cover ink *on* a hue's fill; `--x-ink` is
+     the hue used *as* ink on a neutral surface (a status label, a link, an icon).
+     The default pulls each hue toward --foreground so it darkens on light and
+     lightens on dark; a theme that sets only `--x` still gets a readable ink.
+     Re-declared in the dark block: a var() inside a custom property resolves
+     where it is declared, so a dark subtree would otherwise inherit the
+     light-resolved color. */
+  --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+  --secondary-ink: color-mix(in oklch, var(--secondary) 60%, var(--foreground));
+  --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+  --destructive-ink: color-mix(
+    in oklch,
+    var(--destructive) 60%,
+    var(--foreground)
+  );
+  --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+  --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
+  --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+  --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
 
   /* other */
   --boxel-button-default-border: var(--boxel-button-border-color);
@@ -196,9 +243,32 @@
   --accent-foreground: var(--boxel-light);
   --destructive: var(--boxel-danger);
   --destructive-foreground: var(--boxel-light-100);
+  --canvas: #1e1b26;
+  --inset: #302d3b;
+  --field: var(--boxel-700);
+  --hover: var(--boxel-light-10);
+  --stripe: var(--boxel-600);
+  --selected: color-mix(in oklch, var(--primary) 15%, var(--card));
+  --tooltip: var(--boxel-200);
+  --tooltip-foreground: var(--boxel-dark);
+  --subtle-foreground: #8a8895;
   --border: var(--boxel-550);
+  --border-strong: #6e6c78;
   --input: var(--boxel-550);
   --ring: var(--boxel-highlight);
+  --overlay: var(--boxel-dark-80);
+  --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+  --secondary-ink: color-mix(in oklch, var(--secondary) 60%, var(--foreground));
+  --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+  --destructive-ink: color-mix(
+    in oklch,
+    var(--destructive) 60%,
+    var(--foreground)
+  );
+  --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+  --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
+  --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+  --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);
   --sidebar-primary: var(--boxel-highlight);

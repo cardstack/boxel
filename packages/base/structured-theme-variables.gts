@@ -139,6 +139,14 @@ export class ThemeTypographyField extends FieldDef {
   @field caption = contains(TypographyField, {
     description: 'Caption/annotation and small text typography settings.',
   });
+  @field label = contains(TypographyField, {
+    description:
+      'UI label typography: control text, table headers, badges, and other chrome.',
+  });
+  @field eyebrow = contains(TypographyField, {
+    description:
+      'Eyebrow typography: the small, tracked-out kicker above a title.',
+  });
   get cssVariableFields(): CssVariableFieldEntry[] | undefined {
     return calculateTypographyVariables(this, 'theme');
   }
@@ -202,6 +210,16 @@ export class ThemeTypographyField extends FieldDef {
         <section class='theme-typography-edit-section'>
           <h4 class='theme-typography-edit-heading'>Caption</h4>
           <@fields.caption />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Label</h4>
+          <@fields.label />
+        </section>
+
+        <section class='theme-typography-edit-section'>
+          <h4 class='theme-typography-edit-heading'>Eyebrow</h4>
+          <@fields.eyebrow />
         </section>
 
       </div>
@@ -268,6 +286,20 @@ export class ThemeTypographyField extends FieldDef {
             Small text
           {{/if}}
         </small>
+        <span class='theme-typography-label'>
+          {{#if @model.label.sampleText}}
+            {{@model.label.sampleText}}
+          {{else}}
+            UI label
+          {{/if}}
+        </span>
+        <span class='theme-typography-eyebrow'>
+          {{#if @model.eyebrow.sampleText}}
+            {{@model.eyebrow.sampleText}}
+          {{else}}
+            Eyebrow
+          {{/if}}
+        </span>
       </section>
       <style scoped>
         .theme-typography {
@@ -285,6 +317,21 @@ export class ThemeTypographyField extends FieldDef {
         p {
           margin: 0;
           word-break: break-word;
+        }
+        .theme-typography-label {
+          font-family: var(--boxel-label-font-family);
+          font-size: var(--boxel-label-font-size);
+          font-weight: var(--boxel-label-font-weight);
+          line-height: var(--boxel-label-line-height);
+          letter-spacing: var(--boxel-label-letter-spacing);
+        }
+        .theme-typography-eyebrow {
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
+          text-transform: uppercase;
         }
       </style>
     </template>
@@ -498,6 +545,45 @@ export default class ThemeVarField extends FieldDef {
   @field popoverForeground = contains(ColorField, {
     description: describeColor('Text color for popover content.'),
   });
+  // neutral surfaces beyond shadcn's; --foreground must read on all of them
+  @field canvas = contains(ColorField, {
+    description: describeColor(
+      'Workspace ground behind the page background. Do not use as foreground color.',
+    ),
+  });
+  @field inset = contains(ColorField, {
+    description: describeColor(
+      'Background of a well sunk into a card. Do not use as foreground color.',
+    ),
+  });
+  @field field = contains(ColorField, {
+    description: describeColor(
+      'Background of an editable input at rest; its border is --input. Do not use as foreground color.',
+    ),
+  });
+  @field hover = contains(ColorField, {
+    description: describeColor(
+      'Pointer-hover surface, usually translucent so it composes over any background.',
+    ),
+  });
+  @field stripe = contains(ColorField, {
+    description: describeColor(
+      'Alternate (zebra) row background. Sits between --card and --hover.',
+    ),
+  });
+  @field selected = contains(ColorField, {
+    description: describeColor(
+      'Selected row/item background. Falls back to a tint of --primary over --card when unset.',
+    ),
+  });
+  @field tooltip = contains(ColorField, {
+    description: describeColor(
+      'Tooltip background; the one inverted surface. Do not use as foreground color.',
+    ),
+  });
+  @field tooltipForeground = contains(ColorField, {
+    description: describeColor('Text color on tooltip surfaces.'),
+  });
   @field primary = contains(ColorField, {
     description: describeColor(
       'Primary brand/action cta background-color. Do not use as foreground color.',
@@ -524,6 +610,11 @@ export default class ThemeVarField extends FieldDef {
   @field mutedForeground = contains(ColorField, {
     description: describeColor('Muted foreground color.'),
   });
+  @field subtleForeground = contains(ColorField, {
+    description: describeColor(
+      'Third ink step, fainter than --muted-foreground: timestamps, tertiary counts, placeholder-adjacent text.',
+    ),
+  });
   @field accent = contains(ColorField, {
     description: describeColor('Accent background-color.'),
   });
@@ -543,16 +634,92 @@ export default class ThemeVarField extends FieldDef {
       'Success/positive feedback color. Not standard shadcn: falls back to the fixed Boxel status palette green (--boxel-success) when unset.',
     ),
   });
+  @field successForeground = contains(ColorField, {
+    description: describeColor('Text/icon color on success surfaces.'),
+  });
   @field warning = contains(ColorField, {
     description: describeColor(
       'Warning/caution feedback color. Not standard shadcn: falls back to the fixed Boxel status palette yellow (--boxel-warning) when unset.',
     ),
   });
+  @field warningForeground = contains(ColorField, {
+    description: describeColor('Text/icon color on warning surfaces.'),
+  });
+  @field info = contains(ColorField, {
+    description: describeColor(
+      'Informational feedback color. Not standard shadcn. Do not use as foreground color.',
+    ),
+  });
+  @field infoForeground = contains(ColorField, {
+    description: describeColor('Text/icon color on info surfaces.'),
+  });
+  @field attention = contains(ColorField, {
+    description: describeColor(
+      'Needs-your-attention feedback color, distinct from warning and destructive. Not standard shadcn. Do not use as foreground color.',
+    ),
+  });
+  @field attentionForeground = contains(ColorField, {
+    description: describeColor('Text/icon color on attention surfaces.'),
+  });
+  @field overlay = contains(ColorField, {
+    description: describeColor('Translucent scrim behind modals and drawers.'),
+  });
+
+  // hue-as-ink variables: each hue used as text/icon color on a neutral
+  // surface, as opposed to the -foreground color used on the hue's own fill
+  @field primaryInk = contains(ColorField, {
+    description: describeColor(
+      'Primary hue as text/icon color on neutral surfaces (links, labels). Falls back to a mix of --primary and --foreground when unset.',
+    ),
+  });
+  @field secondaryInk = contains(ColorField, {
+    description: describeColor(
+      'Secondary hue as text/icon color on neutral surfaces. Falls back to a mix of --secondary and --foreground when unset.',
+    ),
+  });
+  @field accentInk = contains(ColorField, {
+    description: describeColor(
+      'Accent hue as text/icon color on neutral surfaces. Falls back to a mix of --accent and --foreground when unset.',
+    ),
+  });
+  @field destructiveInk = contains(ColorField, {
+    description: describeColor(
+      'Destructive hue as text/icon color on neutral surfaces. Falls back to a mix of --destructive and --foreground when unset.',
+    ),
+  });
+  @field successInk = contains(ColorField, {
+    description: describeColor(
+      'Success hue as text/icon color on neutral surfaces. Falls back to a mix of --success and --foreground when unset.',
+    ),
+  });
+  @field warningInk = contains(ColorField, {
+    description: describeColor(
+      'Warning hue as text/icon color on neutral surfaces. Falls back to a mix of --warning and --foreground when unset.',
+    ),
+  });
+  @field infoInk = contains(ColorField, {
+    description: describeColor(
+      'Info hue as text/icon color on neutral surfaces. Falls back to a mix of --info and --foreground when unset.',
+    ),
+  });
+  @field attentionInk = contains(ColorField, {
+    description: describeColor(
+      'Attention hue as text/icon color on neutral surfaces. Falls back to a mix of --attention and --foreground when unset.',
+    ),
+  });
+
   @field border = contains(ColorField, {
     description: describeColor('Specifies border-color.'),
   });
+  @field borderStrong = contains(ColorField, {
+    description: describeColor(
+      'One visible step darker than --border, for dividers that must hold their own.',
+    ),
+  });
   @field input = contains(ColorField, {
-    description: describeColor('Background/border color for inputs.'),
+    description: describeColor(
+      'Border color for inputs; the input background is --field.',
+    ),
   });
   @field ring = contains(ColorField, {
     description: describeColor('Focus ring color.'),
@@ -573,6 +740,12 @@ export default class ThemeVarField extends FieldDef {
   });
   @field chart5 = contains(ColorField, {
     description: describeColor('Quinary chart/graph color.'),
+  });
+  @field chart6 = contains(ColorField, {
+    description: describeColor('Sixth chart/graph color.'),
+  });
+  @field chart7 = contains(ColorField, {
+    description: describeColor('Seventh chart/graph color.'),
   });
 
   // sidebar color variables
@@ -637,6 +810,10 @@ export default class ThemeVarField extends FieldDef {
   @field trackingNormal = contains(CSSValueField, {
     description: 'Specifies letter-spacing base value.',
   });
+  @field controlHeight = contains(CSSValueField, {
+    description:
+      'Height of form controls (inputs, selects, buttons). Defaults to 2.5rem.',
+  });
   // box-shadow primitives, stored so tweakcn themes round-trip losslessly.
   // The composed shadow scale below does not derive from them; editing these
   // has no effect on rendered shadows.
@@ -686,6 +863,9 @@ export default class ThemeVarField extends FieldDef {
   @field shadow2xl = contains(CSSValueField, {
     description: 'Largest shadow depth.',
   });
+  @field shadowInset = contains(CSSValueField, {
+    description: 'Inset shadow for sunken wells and inputs.',
+  });
 
   get cssVariableFields(): CssVariableFieldEntry[] | undefined {
     let fields = getFields(this);
@@ -730,17 +910,54 @@ export default class ThemeVarField extends FieldDef {
     'popoverForeground',
     'muted',
     'mutedForeground',
+    'subtleForeground',
+  ];
+  private surfaceColors = [
+    'canvas',
+    'inset',
+    'field',
+    'hover',
+    'stripe',
+    'selected',
+    'tooltip',
+    'tooltipForeground',
   ];
   private formColors = [
     'border',
+    'borderStrong',
     'input',
     'ring',
     'destructive',
     'destructiveForeground',
     'success',
+    'successForeground',
     'warning',
+    'warningForeground',
+    'info',
+    'infoForeground',
+    'attention',
+    'attentionForeground',
+    'overlay',
   ];
-  private chartColors = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5'];
+  private inkColors = [
+    'primaryInk',
+    'secondaryInk',
+    'accentInk',
+    'destructiveInk',
+    'successInk',
+    'warningInk',
+    'infoInk',
+    'attentionInk',
+  ];
+  private chartColors = [
+    'chart1',
+    'chart2',
+    'chart3',
+    'chart4',
+    'chart5',
+    'chart6',
+    'chart7',
+  ];
   private sidebarColors = [
     'sidebar',
     'sidebarForeground',
@@ -761,6 +978,7 @@ export default class ThemeVarField extends FieldDef {
     'shadowLg',
     'shadowXl',
     'shadow2xl',
+    'shadowInset',
   ];
   get fieldGroups() {
     return [
@@ -777,8 +995,16 @@ export default class ThemeVarField extends FieldDef {
         fields: getFieldGroup(this.uiComponentColors, this),
       },
       {
+        title: 'Surface Colors',
+        fields: getFieldGroup(this.surfaceColors, this),
+      },
+      {
         title: 'Form & Feedback Colors',
         fields: getFieldGroup(this.formColors, this),
+      },
+      {
+        title: 'Ink Colors',
+        fields: getFieldGroup(this.inkColors, this),
       },
       {
         title: 'Chart Colors',
@@ -849,6 +1075,7 @@ export default class ThemeVarField extends FieldDef {
         { label: 'lg', value: m.shadowLg },
         { label: 'xl', value: m.shadowXl },
         { label: '2xl', value: m.shadow2xl },
+        { label: 'Inset', value: m.shadowInset },
       ].filter((s) => s.value);
     }
 
@@ -1002,6 +1229,83 @@ export default class ThemeVarField extends FieldDef {
               <@fields.mutedForeground />
             </FieldContainer>
           </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Subtle Foreground'
+              @vertical={{true}}
+              data-test-field='subtleForeground'
+            >
+              <@fields.subtleForeground />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Surfaces</h4>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Canvas'
+              @vertical={{true}}
+              data-test-field='canvas'
+            >
+              <@fields.canvas />
+            </FieldContainer>
+            <FieldContainer
+              @label='Inset'
+              @vertical={{true}}
+              data-test-field='inset'
+            >
+              <@fields.inset />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Field'
+              @vertical={{true}}
+              data-test-field='field'
+            >
+              <@fields.field />
+            </FieldContainer>
+            <FieldContainer
+              @label='Hover'
+              @vertical={{true}}
+              data-test-field='hover'
+            >
+              <@fields.hover />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Stripe'
+              @vertical={{true}}
+              data-test-field='stripe'
+            >
+              <@fields.stripe />
+            </FieldContainer>
+            <FieldContainer
+              @label='Selected'
+              @vertical={{true}}
+              data-test-field='selected'
+            >
+              <@fields.selected />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Tooltip'
+              @vertical={{true}}
+              data-test-field='tooltip'
+            >
+              <@fields.tooltip />
+            </FieldContainer>
+            <FieldContainer
+              @label='Tooltip Foreground'
+              @vertical={{true}}
+              data-test-field='tooltipForeground'
+            >
+              <@fields.tooltipForeground />
+            </FieldContainer>
+          </div>
         </section>
 
         <section class='theme-var-edit-section'>
@@ -1015,14 +1319,21 @@ export default class ThemeVarField extends FieldDef {
               <@fields.border />
             </FieldContainer>
             <FieldContainer
+              @label='Border Strong'
+              @vertical={{true}}
+              data-test-field='borderStrong'
+            >
+              <@fields.borderStrong />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
               @label='Input'
               @vertical={{true}}
               data-test-field='input'
             >
               <@fields.input />
             </FieldContainer>
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
             <FieldContainer
               @label='Ring'
               @vertical={{true}}
@@ -1056,11 +1367,140 @@ export default class ThemeVarField extends FieldDef {
               <@fields.success />
             </FieldContainer>
             <FieldContainer
+              @label='Success Foreground'
+              @vertical={{true}}
+              data-test-field='successForeground'
+            >
+              <@fields.successForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
               @label='Warning'
               @vertical={{true}}
               data-test-field='warning'
             >
               <@fields.warning />
+            </FieldContainer>
+            <FieldContainer
+              @label='Warning Foreground'
+              @vertical={{true}}
+              data-test-field='warningForeground'
+            >
+              <@fields.warningForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Info'
+              @vertical={{true}}
+              data-test-field='info'
+            >
+              <@fields.info />
+            </FieldContainer>
+            <FieldContainer
+              @label='Info Foreground'
+              @vertical={{true}}
+              data-test-field='infoForeground'
+            >
+              <@fields.infoForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Attention'
+              @vertical={{true}}
+              data-test-field='attention'
+            >
+              <@fields.attention />
+            </FieldContainer>
+            <FieldContainer
+              @label='Attention Foreground'
+              @vertical={{true}}
+              data-test-field='attentionForeground'
+            >
+              <@fields.attentionForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Overlay'
+              @vertical={{true}}
+              data-test-field='overlay'
+            >
+              <@fields.overlay />
+            </FieldContainer>
+          </div>
+        </section>
+
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Ink Colors</h4>
+          <p class='theme-var-edit-hint'>
+            Each hue used as text or icon color on a neutral surface. Leave
+            blank to derive from the hue and the foreground color.
+          </p>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Primary Ink'
+              @vertical={{true}}
+              data-test-field='primaryInk'
+            >
+              <@fields.primaryInk />
+            </FieldContainer>
+            <FieldContainer
+              @label='Secondary Ink'
+              @vertical={{true}}
+              data-test-field='secondaryInk'
+            >
+              <@fields.secondaryInk />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Accent Ink'
+              @vertical={{true}}
+              data-test-field='accentInk'
+            >
+              <@fields.accentInk />
+            </FieldContainer>
+            <FieldContainer
+              @label='Destructive Ink'
+              @vertical={{true}}
+              data-test-field='destructiveInk'
+            >
+              <@fields.destructiveInk />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Success Ink'
+              @vertical={{true}}
+              data-test-field='successInk'
+            >
+              <@fields.successInk />
+            </FieldContainer>
+            <FieldContainer
+              @label='Warning Ink'
+              @vertical={{true}}
+              data-test-field='warningInk'
+            >
+              <@fields.warningInk />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Info Ink'
+              @vertical={{true}}
+              data-test-field='infoInk'
+            >
+              <@fields.infoInk />
+            </FieldContainer>
+            <FieldContainer
+              @label='Attention Ink'
+              @vertical={{true}}
+              data-test-field='attentionInk'
+            >
+              <@fields.attentionInk />
             </FieldContainer>
           </div>
         </section>
@@ -1106,6 +1546,22 @@ export default class ThemeVarField extends FieldDef {
               data-test-field='chart5'
             >
               <@fields.chart5 />
+            </FieldContainer>
+            <FieldContainer
+              @label='Chart 6'
+              @vertical={{true}}
+              data-test-field='chart6'
+            >
+              <@fields.chart6 />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Chart 7'
+              @vertical={{true}}
+              data-test-field='chart7'
+            >
+              <@fields.chart7 />
             </FieldContainer>
           </div>
         </section>
@@ -1237,6 +1693,13 @@ export default class ThemeVarField extends FieldDef {
             >
               <@fields.trackingNormal />
             </FieldContainer>
+            <FieldContainer
+              @label='Control Height'
+              @vertical={{true}}
+              data-test-field='controlHeight'
+            >
+              <@fields.controlHeight />
+            </FieldContainer>
           </div>
         </section>
 
@@ -1317,6 +1780,15 @@ export default class ThemeVarField extends FieldDef {
               data-test-field='shadow2xl'
             >
               <@fields.shadow2xl />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Inset'
+              @vertical={{true}}
+              data-test-field='shadowInset'
+            >
+              <@fields.shadowInset />
             </FieldContainer>
           </div>
           <h5 class='theme-var-edit-subheading'>Imported shadow primitives</h5>

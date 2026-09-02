@@ -333,4 +333,100 @@ module('Integration | structured-theme', function (hooks) {
       'imports the user added by hand survive a reset',
     );
   });
+
+  test('the extended contract tokens round-trip through setCss and cssVariables', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({}),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    assert.true(
+      card.setCss(`:root {
+        --canvas: #f1f2f3;
+        --field: #ffffff;
+        --subtle-foreground: #9a9da3;
+        --border-strong: #cfd3da;
+        --info: #2c7a8c;
+        --attention-foreground: #ffffff;
+        --primary-ink: #008f73;
+        --overlay: rgb(16 24 40 / 0.4);
+        --chart-7: #65a30d;
+        --control-height: 1.75rem;
+        --shadow-inset: inset 0 1px 2px rgb(16 24 40 / 0.16);
+      }
+      .dark {
+        --tooltip: #f7f8fa;
+        --tooltip-foreground: #24262b;
+      }`),
+    );
+    let root = card.rootVariables;
+    assert.strictEqual(root.canvas, '#f1f2f3');
+    assert.strictEqual(root.field, '#ffffff');
+    assert.strictEqual(root.subtleForeground, '#9a9da3');
+    assert.strictEqual(root.borderStrong, '#cfd3da');
+    assert.strictEqual(root.info, '#2c7a8c');
+    assert.strictEqual(root.attentionForeground, '#ffffff');
+    assert.strictEqual(root.primaryInk, '#008f73');
+    assert.strictEqual(root.overlay, 'rgb(16 24 40 / 0.4)');
+    assert.strictEqual(root.chart7, '#65a30d');
+    assert.strictEqual(root.controlHeight, '1.75rem');
+    assert.strictEqual(
+      root.shadowInset,
+      'inset 0 1px 2px rgb(16 24 40 / 0.16)',
+    );
+    assert.strictEqual(card.darkModeVariables.tooltip, '#f7f8fa');
+    assert.strictEqual(card.darkModeVariables.tooltipForeground, '#24262b');
+
+    let css = card.cssVariables ?? '';
+    for (let declaration of [
+      '--canvas: #f1f2f3',
+      '--subtle-foreground: #9a9da3',
+      '--primary-ink: #008f73',
+      '--control-height: 1.75rem',
+      '--shadow-inset: inset 0 1px 2px rgb(16 24 40 / 0.16)',
+      '--tooltip-foreground: #24262b',
+    ]) {
+      assert.true(
+        css.includes(declaration),
+        `generated CSS declares ${declaration}`,
+      );
+    }
+  });
+
+  test('label and eyebrow typography slots emit theme variables, including letter-spacing', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({}),
+      darkModeVariables: new ThemeVarField({}),
+      typography: new ThemeTypographyField({
+        heading: new TypographyField({ letterSpacing: '-0.02em' }),
+        label: new TypographyField({
+          fontSize: '0.75rem',
+          fontWeight: '500',
+          letterSpacing: '0.01em',
+        }),
+        eyebrow: new TypographyField({
+          fontSize: '0.6875rem',
+          letterSpacing: '0.08em',
+          sampleText: 'Kicker',
+        }),
+      }),
+    });
+    let css = card.cssVariables ?? '';
+    for (let declaration of [
+      '--theme-heading-letter-spacing: -0.02em',
+      '--theme-label-font-size: 0.75rem',
+      '--theme-label-font-weight: 500',
+      '--theme-label-letter-spacing: 0.01em',
+      '--theme-eyebrow-font-size: 0.6875rem',
+      '--theme-eyebrow-letter-spacing: 0.08em',
+    ]) {
+      assert.true(
+        css.includes(declaration),
+        `generated CSS declares ${declaration}`,
+      );
+    }
+    assert.false(
+      css.includes('sample-text'),
+      'sample text is not emitted as a variable',
+    );
+  });
 });

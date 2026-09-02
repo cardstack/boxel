@@ -234,6 +234,68 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-caption-font-weight: var(--theme-caption-font-weight, 500);
 
+      /* ui label: control text, table headers, badges */
+      --boxel-label-font-family: var(
+        --theme-label-font-family,
+        var(--boxel-body-font-family)
+      );
+      --boxel-label-font-size: var(
+        --theme-label-font-size,
+        var(--boxel-font-size-xs)
+      );
+      --boxel-label-line-height: var(
+        --theme-label-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-label-font-weight: var(--theme-label-font-weight, 500);
+
+      /* eyebrow: the tracked-out kicker above a title */
+      --boxel-eyebrow-font-family: var(
+        --theme-eyebrow-font-family,
+        var(--boxel-label-font-family)
+      );
+      --boxel-eyebrow-font-size: var(
+        --theme-eyebrow-font-size,
+        var(--boxel-font-size-2xs)
+      );
+      --boxel-eyebrow-line-height: var(
+        --theme-eyebrow-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight, 600);
+
+      /* letter-spacing per slot; body and label follow the theme's base tracking */
+      --boxel-heading-letter-spacing: var(
+        --theme-heading-letter-spacing,
+        normal
+      );
+      --boxel-section-heading-letter-spacing: var(
+        --theme-section-heading-letter-spacing,
+        var(--theme-heading-letter-spacing, normal)
+      );
+      --boxel-subheading-letter-spacing: var(
+        --theme-subheading-letter-spacing,
+        var(--theme-heading-letter-spacing, normal)
+      );
+      --boxel-body-letter-spacing: var(
+        --theme-body-letter-spacing,
+        var(--tracking-normal, normal)
+      );
+      --boxel-caption-letter-spacing: var(
+        --theme-caption-letter-spacing,
+        var(--boxel-body-letter-spacing)
+      );
+      --boxel-label-letter-spacing: var(
+        --theme-label-letter-spacing,
+        var(--boxel-body-letter-spacing)
+      );
+      --boxel-eyebrow-letter-spacing: var(
+        --theme-eyebrow-letter-spacing,
+        0.08em
+      );
+
+      --boxel-form-control-height: var(--control-height, 2.5rem);
+
       font-family: var(--boxel-body-font-family);
       font-size: var(--boxel-body-font-size);
       font-weight: var(--boxel-body-font-weight);
