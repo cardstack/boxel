@@ -1958,19 +1958,19 @@ export default class TowerFilm extends Component<{
     this.beats.forEach((b, i) => {
       const lead = i === 0 ? 0 : (b.lead ?? 0);
       /**
-       * THE WEATHER ARRIVES BEFORE THE CHAPTER DOES.
+       * The sky turns while the lens is still travelling: the air cue
+       * fires as the sweep BEGINS and the beat's own cue when it lands.
        *
-       * The air cue used to fire as the sweep began, which still meant
-       * the sky changed at the same moment as everything else. A day
-       * does not work that way and neither does a film: the light goes
-       * first, under the END of the passage you are still watching, so
-       * by the time the new chapter's lens lands the hour has already
-       * turned. Two ticks of pre-roll ahead of the flight.
+       * (It was briefly moved two ticks earlier, so the hour changed
+       * under the end of the previous passage. It reads badly — the
+       * light goes while you are still looking at a shot composed for
+       * the old light, which is not anticipation, just a mismatch. The
+       * change belongs to the move.)
        */
       if (lead > 0) {
         out.push({
           action: 'air',
-          delay: Math.max(0, t + TICK - 2 * TICK),
+          delay: t + TICK,
           index: String(i),
         });
       }
