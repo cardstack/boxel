@@ -317,6 +317,7 @@ const ALL_TEST_FILES: string[] = [
   './jobs-finished-listener-test',
   './realm-routing-test',
   './module-cache-invalidation-listener-test',
+  './pg-adapter-connection-error-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/archived-seal-test',
