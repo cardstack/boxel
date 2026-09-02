@@ -1,10 +1,90 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+  getRelationshipMembershipState,
+  linksTo,
+  resolveInstanceURL,
+  resolveRef,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
+import {
+  searchEntryWireQueryFromQuery,
+  type ErrorEntry,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
+import {
+  BrokenLinkTemplate,
+  FittedCardContainer,
+} from '@cardstack/boxel-ui/components';
+import { fittedFormatById } from '@cardstack/boxel-ui/helpers';
 import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { RigState, SurfaceRig, type PanSession } from './rig';
+
+// Tiles use the shared cardsgrid-tile fitted size so boards show cards at a
+// size their fitted views are designed for. FittedCardContainer applies the
+// dimensions; these constants drive the grid placement math.
+const cardsgridTile = fittedFormatById.get('cardsgrid-tile')!;
+const TILE_WIDTH = cardsgridTile.width;
+const TILE_HEIGHT = cardsgridTile.height;
+const TILE_GAP = 32;
+const GRID_COLUMNS = 4;
+// Breathing room between the world origin and the default grid (~--boxel-sp-xs)
+const GRID_PADDING = 10;
+
+interface TilePlacement {
+  index: number;
+  x: number;
+  y: number;
+}
+
+// Cards without a persisted position flow into a fixed grid, `slot` being
+// their ordinal among the board's placed tiles.
+function gridSlot(slot: number): Pick<TilePlacement, 'x' | 'y'> {
+  return {
+    x: GRID_PADDING + (slot % GRID_COLUMNS) * (TILE_WIDTH + TILE_GAP),
+    y:
+      GRID_PADDING + Math.floor(slot / GRID_COLUMNS) * (TILE_HEIGHT + TILE_GAP),
+  };
+}
+
+// A persisted coordinate, or undefined when the tile has never been placed.
+// Unset number fields serialize as null, and Number(null) is 0 — so null and
+// non-numeric values from hand-edited JSON both count as "not placed".
+function coordinate(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  let n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+// One tile on the board: the card it shows and where it sits. Keeping the
+// link and its position on the same element means a position can never drift
+// from its card when tiles are added, removed, or reordered.
+export class BoardTile extends FieldDef {
+  static displayName = 'Board Tile';
+
+  @field card = linksTo(() => CardDef);
+  @field x = contains(NumberField);
+  @field y = contains(NumberField);
+}
+
+// A tile's link state, read from the relationship membership state — a pure
+// read that never triggers the lazy link load, so the board renders tiles
+// without ever fetching the linked instances.
+function tileLinkState(tile: BoardTile) {
+  return getRelationshipMembershipState(tile as unknown as CardDef, 'card')
+    .membership?.[0];
+}
 
 interface OnInsertSignature {
   Element: HTMLElement;
@@ -19,6 +99,44 @@ class OnInsert extends Modifier<OnInsertSignature> {
   }
 }
 
+// A wheel gesture over content that can still scroll in that direction (an
+// error panel, a card with its own scroller) belongs to that content, not to
+// the canvas. Walks from the event target up to the board root.
+function wheelTargetsScrollable(event: WheelEvent): boolean {
+  const root = event.currentTarget as Element | null;
+  // Synthetic wheel events may omit one delta; treat it as no movement.
+  const deltaX = event.deltaX || 0;
+  const deltaY = event.deltaY || 0;
+  const vertical = Math.abs(deltaY) >= Math.abs(deltaX);
+  let el = event.target instanceof Element ? event.target : null;
+  while (el && el !== root) {
+    if (vertical ? canScroll(el, 'y', deltaY) : canScroll(el, 'x', deltaX)) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+function canScroll(el: Element, axis: 'x' | 'y', delta: number): boolean {
+  const style = getComputedStyle(el);
+  const overflow = axis === 'y' ? style.overflowY : style.overflowX;
+  if (overflow !== 'auto' && overflow !== 'scroll') {
+    return false;
+  }
+  const size = axis === 'y' ? el.clientHeight : el.clientWidth;
+  const extent = axis === 'y' ? el.scrollHeight : el.scrollWidth;
+  const offset = axis === 'y' ? el.scrollTop : el.scrollLeft;
+  if (extent <= size) {
+    return false;
+  }
+  return delta > 0 ? offset + size < extent - 1 : offset > 0;
+}
+
+// Wheel events inside one trackpad gesture (inertia included) arrive every
+// frame; a gap this long means a new gesture began.
+const WHEEL_GESTURE_GAP_MS = 150;
+
 class Isolated extends Component<typeof PosterBoard> {
   rig = new RigState();
   surfaceRig = new SurfaceRig(this.rig);
@@ -27,6 +145,7 @@ class Isolated extends Component<typeof PosterBoard> {
   private panSession: PanSession | null = null;
   private activePointerId: number | null = null;
   private rootElement: HTMLElement | null = null;
+  private lastContentWheelTime = -Infinity;
 
   get zoomLabel() {
     return Math.round(this.rig.magnify * 100) + '%';
@@ -43,10 +162,157 @@ class Isolated extends Component<typeof PosterBoard> {
     return htmlSafe(`cursor: ${this.isPanning ? 'grabbing' : 'grab'};`);
   }
 
+  // ── Tile placement ─────────────────────────────────────
+
+  get tiles(): BoardTile[] {
+    let owner = this.args.model as unknown as PosterBoard | undefined;
+    return owner?.tiles ?? [];
+  }
+
+  // The tiles' card reference URLs, index-aligned with `tiles`; only a
+  // `not-set` link lacks a reference. Relative wire references are resolved
+  // against the board's URL so they address the index like absolute ones.
+  get linkedRefs(): (string | undefined)[] {
+    let relativeTo = this.args.model?.id;
+    return this.tiles.map((tile) => {
+      let ref = tileLinkState(tile)?.reference;
+      return ref === undefined ? undefined : resolveRef(ref, relativeTo);
+    });
+  }
+
+  // A tile whose link was cleared renders nothing, so it holds no grid slot
+  // either: unpositioned tiles flow into the grid in linked order, and clearing
+  // a link reflows them the same way removing the tile does.
+  get tilePlacements(): TilePlacement[] {
+    let refs = this.linkedRefs;
+    let placements: TilePlacement[] = [];
+    this.tiles.forEach((tile, index) => {
+      if (refs[index] === undefined) {
+        return;
+      }
+      let x = coordinate(tile.x);
+      let y = coordinate(tile.y);
+      placements.push(
+        x !== undefined && y !== undefined
+          ? { index, x, y }
+          : { index, ...gridSlot(placements.length) },
+      );
+    });
+    return placements;
+  }
+
+  get hasCards() {
+    return this.tilePlacements.length > 0;
+  }
+
+  // Tiles render as prerendered fitted HTML addressed by the linked cards'
+  // URLs. `fitted` is bound through `htmlQuery` — a bare `eq.format` would be
+  // read as an `item.` field path and rejected. Instance index rows key on
+  // the `.json` file URL, and `scope: 'cards'` drops each card's dual-indexed
+  // file row. Undefined (no tiles with a card) leaves the search idle.
+  // References reach card code in canonical RRI form (`@scope/realm/…` for a
+  // prefix-mapped realm) while the index keys rows on URLs, so both the query
+  // and the entry matching speak the store-resolved URL. The base realm's rows
+  // key on its virtual URL, which no client-side resolution reaches; those
+  // tiles need the server-side expansion in CS-12744.
+  get linkedUrls(): (string | undefined)[] {
+    return this.linkedRefs.map((ref) =>
+      ref === undefined ? undefined : this.hrefFor(ref),
+    );
+  }
+
+  hrefFor = (reference: string): string => {
+    // `@model` is typed with optional fields, so it needs the same cast
+    // `tileLinkState` uses to hand a card to card-api.
+    let model = this.args.model as unknown as CardDef | undefined;
+    return (model && resolveInstanceURL(model, reference)?.href) ?? reference;
+  };
+
+  get tilesQuery(): SearchEntryWireQuery | undefined {
+    // Two tiles may show the same card; the index holds one row for it.
+    let urls = [
+      ...new Set(
+        this.linkedUrls.filter((url): url is string => url !== undefined),
+      ),
+    ];
+    if (urls.length === 0) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery({}, { scope: 'cards' }),
+      cardUrls: urls.map((url) => `${url}.json`),
+      filter: { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
+    };
+  }
+
+  // Results come back in engine order, not linked order, so each tile finds
+  // its own entry by resolved URL (`entry.id` is the extensionless card id).
+  entryFor = (
+    index: number,
+    entries: RenderableSearchEntryLike[],
+  ): RenderableSearchEntryLike | undefined => {
+    let url = this.linkedUrls[index];
+    return url
+      ? entries.find((entry) => this.hrefFor(entry.id) === url)
+      : undefined;
+  };
+
+  // Empty string (a `not-set` slot) is falsy, so the template's `{{#if ref}}`
+  // guard skips the placeholder for tiles with nothing to point at — glint
+  // doesn't narrow in templates, so the fallback keeps the type `string`.
+  refAt = (index: number): string => this.linkedRefs[index] ?? '';
+
+  // Terminal failures (error / not-found) per tile, index-aligned with
+  // tilePlacements. Since the board never loads its links, membership
+  // normally reports `not-loaded`; broken kinds surface here when the links
+  // were loaded elsewhere (e.g. the edit format), bringing the real errorDoc
+  // with them. Tiles whose entry never arrives fall back to the synthesized
+  // not-found placeholder below.
+  brokenSlotAt = (index: number) => {
+    let tile = this.tiles[index];
+    let rel = tile ? tileLinkState(tile) : undefined;
+    return rel && (rel.kind === 'error' || rel.kind === 'not-found')
+      ? rel
+      : undefined;
+  };
+
+  // A card can lack an index entry entirely (deleted target, unsaved link, a
+  // reference outside the searched realms) — the wire document simply omits
+  // it, leaving no errorDoc to thread through.
+  missingEntryErrorDoc = {
+    status: 404,
+    title: 'Not Found',
+    message: 'This card has no entry in the search index',
+  };
+
+  // A failed search request (network, auth, server) settles with `errors`
+  // populated and no entries at all; that is a board-wide failure, not a
+  // per-card 404, so every tile reports the search error instead.
+  searchErrorDoc = (errors: ErrorEntry[] | undefined) => errors?.[0]?.error;
+
+  tileStyle = (tile: TilePlacement) =>
+    htmlSafe(`left: ${tile.x}px; top: ${tile.y}px;`);
+
   // ── Wheel ──────────────────────────────────────────────
 
   handleWheel = (event: Event) => {
-    this.surfaceRig.handleWheel(event as WheelEvent);
+    const wheel = event as WheelEvent;
+    const now = performance.now();
+    // Ctrl/Cmd+wheel is a pinch, never a scroll, so it always zooms the board.
+    if (
+      !(wheel.ctrlKey || wheel.metaKey) &&
+      (now - this.lastContentWheelTime < WHEEL_GESTURE_GAP_MS ||
+        wheelTargetsScrollable(wheel))
+    ) {
+      // The gesture belongs to the content for as long as it lasts, as macOS
+      // latches a scroll to the scroller it started on. Any canvas momentum
+      // still running from earlier wheel events would drift under it.
+      this.lastContentWheelTime = now;
+      this.surfaceRig.stopAll();
+      return;
+    }
+    this.lastContentWheelTime = -Infinity;
+    this.surfaceRig.handleWheel(wheel);
   };
 
   // ── Pointer pan ────────────────────────────────────────
@@ -63,7 +329,10 @@ class Isolated extends Component<typeof PosterBoard> {
       return;
     }
     const target = event.target as HTMLElement;
-    if (target.closest('[data-poster-board-hud]')) {
+    // Pointers that start on the HUD or inside a card tile are not pans:
+    // capturing them would break the tile's own focus/selection behavior
+    // (and tile pointerdown becomes drag-to-move in step 3)
+    if (target.closest('[data-poster-board-hud], [data-poster-board-tile]')) {
       return;
     }
     this.panSession = this.surfaceRig.startPan(event.clientX, event.clientY);
@@ -168,9 +437,6 @@ class Isolated extends Component<typeof PosterBoard> {
     <div
       class='poster-board-root'
       style={{this.rootStyle}}
-      role='application'
-      aria-label='Poster board canvas'
-      tabindex='0'
       {{OnInsert this.handleInserted}}
       {{on 'wheel' this.handleWheel}}
       {{on 'pointerdown' this.handlePointerDown}}
@@ -178,15 +444,90 @@ class Isolated extends Component<typeof PosterBoard> {
       {{on 'pointerup' this.handlePointerUp}}
       {{on 'pointercancel' this.handlePointerUp}}
       {{on 'keydown' this.handleKeyDown}}
+      role='region'
+      aria-label='Poster board canvas'
+      tabindex='0'
       data-test-poster-board
     >
-      <div class='poster-board-plane' style={{this.planeStyle}}>
+      <div
+        class='poster-board-plane'
+        style={{this.planeStyle}}
+        data-test-poster-board-plane
+      >
         <div class='poster-board-grid' aria-hidden='true'></div>
-        <header class='poster-board-hint'>
-          <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
-          <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
-            Shift + / Shift - to zoom</p>
-        </header>
+        {{#let (component @context.searchResultsComponent) as |SearchResults|}}
+          {{! Overlays default on: each tile registers with the operator-mode
+              overlay layer, giving it the standard hover chrome (type chip,
+              options menu, selection, click-to-open) anchored to the tile. }}
+          <SearchResults @query={{this.tilesQuery}} @mode='none' as |results|>
+            {{#each this.tilePlacements key='index' as |tile|}}
+              <FittedCardContainer
+                @size='cardsgrid-tile'
+                @style={{this.tileStyle tile}}
+                class='poster-board-tile'
+                data-poster-board-tile
+                data-test-poster-board-tile={{tile.index}}
+              >
+                {{#let (this.brokenSlotAt tile.index) as |broken|}}
+                  {{#if broken}}
+                    <BrokenLinkTemplate
+                      @brokenUrl={{broken.reference}}
+                      @errorDoc={{broken.errorDoc}}
+                      @state={{broken.kind}}
+                      @format='fitted'
+                      data-test-poster-board-broken-tile={{tile.index}}
+                    />
+                  {{else}}
+                    {{#let
+                      (this.entryFor tile.index results.entries)
+                      as |entry|
+                    }}
+                      {{#if entry}}
+                        <entry.component class='poster-board-tile-card' />
+                      {{else}}
+                        {{#unless results.isLoading}}
+                          {{#let (this.refAt tile.index) as |ref|}}
+                            {{#if ref}}
+                              {{#let
+                                (this.searchErrorDoc results.errors)
+                                as |searchError|
+                              }}
+                                {{#if searchError}}
+                                  <BrokenLinkTemplate
+                                    @brokenUrl={{ref}}
+                                    @errorDoc={{searchError}}
+                                    @state='error'
+                                    @format='fitted'
+                                    data-test-poster-board-broken-tile={{tile.index}}
+                                  />
+                                {{else}}
+                                  <BrokenLinkTemplate
+                                    @brokenUrl={{ref}}
+                                    @errorDoc={{this.missingEntryErrorDoc}}
+                                    @state='not-found'
+                                    @format='fitted'
+                                    data-test-poster-board-broken-tile={{tile.index}}
+                                  />
+                                {{/if}}
+                              {{/let}}
+                            {{/if}}
+                          {{/let}}
+                        {{/unless}}
+                      {{/if}}
+                    {{/let}}
+                  {{/if}}
+                {{/let}}
+              </FittedCardContainer>
+            {{/each}}
+          </SearchResults>
+        {{/let}}
+        {{#unless this.hasCards}}
+          <header class='poster-board-hint'>
+            <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
+            <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
+              Shift + / Shift - to zoom</p>
+          </header>
+        {{/unless}}
       </div>
 
       <div
@@ -244,6 +585,9 @@ class Isolated extends Component<typeof PosterBoard> {
         width: 100%;
         height: 100%;
         overflow: hidden;
+        /* Scroll a tile's own scroller can't absorb stops here instead of
+           chaining to whatever scrolls around the board. */
+        overscroll-behavior: contain;
         touch-action: none;
         min-width: 0;
       }
@@ -259,6 +603,27 @@ class Isolated extends Component<typeof PosterBoard> {
 
       .poster-board-plane {
         will-change: transform;
+      }
+
+      .poster-board-tile {
+        position: absolute;
+      }
+
+      /* Tile content is display-only — the overlay layer owns hover/click.
+         The overlay binds its listeners to the card's root element, so that
+         element must keep receiving pointer events; only the card's own
+         controls opt out, so a link or button never intercepts a click, and
+         text never starts a selection. Other descendants stay hit-testable so
+         a card's own scroller still receives wheel events (see handleWheel).
+         `user-select` resolves through the parent, so setting it once on the
+         root covers the subtree. */
+      .poster-board-tile-card {
+        user-select: none;
+      }
+
+      .poster-board-tile-card
+        :deep(a, button, input, select, textarea, label, [role='button']) {
+        pointer-events: none;
       }
 
       .poster-board-grid {
@@ -360,6 +725,8 @@ export class PosterBoard extends CardDef {
   static displayName = 'Poster Board';
   static icon = LayoutDashboardIcon;
   static prefersWideFormat = true;
+
+  @field tiles = containsMany(BoardTile);
 
   static isolated = Isolated;
 }
