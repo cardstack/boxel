@@ -78,12 +78,33 @@ boxel_pg_max_connections_ok() {
   [ "$_bpg_current" -ge "$BOXEL_PG_MAX_CONNECTIONS" ]
 }
 
-# True once ALTER SYSTEM has been written but the restart that would apply it
-# has not happened yet, so a second caller can tell "nobody has fixed this"
-# from "it is fixed and waiting for a quiet moment".
-boxel_pg_max_connections_pending() {
+# The ceiling postgresql.conf / postgresql.auto.conf would produce on the next
+# restart, or 0 when it can't be read. This is read from the files themselves
+# on every call, so it reflects an ALTER SYSTEM immediately, with no reload.
+# Highest seqno wins, the way postgres resolves the files; a row that is
+# unparseable lands in the 0 case below, which asks for the ALTER anyway.
+#
+# Asked instead of pg_settings.pending_restart, which only says that *some*
+# restart-requiring change is outstanding: a pending change to any other value
+# looks identical to this repair's own, and gets restarted into. Note that a
+# row awaiting a restart carries error = "setting could not be applied" and
+# applied = f, so neither column can be used to filter for valid entries.
+boxel_pg_configured_max_connections() {
+  _bpg_configured=$(boxel_pg_psql -tAc \
+    "select setting from pg_file_settings where name = 'max_connections' order by seqno desc limit 1" \
+    2>/dev/null | tr -d '[:space:]')
+  case "$_bpg_configured" in
+    '' | *[!0-9]*) echo 0 ;;
+    *) echo "$_bpg_configured" ;;
+  esac
+}
+
+# True when max_connections is pinned on the container's command line. That
+# beats postgresql.auto.conf, so for such a container a restart just brings the
+# same value back and no in-place repair can raise it.
+boxel_pg_max_connections_is_command_line() {
   [ "$(boxel_pg_psql -tAc \
-    "select pending_restart from pg_settings where name = 'max_connections'" \
+    "select source = 'command line' from pg_settings where name = 'max_connections'" \
     2>/dev/null | tr -d '[:space:]')" = t ]
 }
 
@@ -105,15 +126,19 @@ _boxel_pg_apply_max_connections() {
   # was mid-restart and unreachable at the time.
   boxel_pg_max_connections_ok && return 0
 
+  # A container whose command line pins the ceiling can only be raised by
+  # recreating it, which would discard the data volume — every local realm
+  # database plus a full reindex. Say so and leave it alone; restarting would
+  # bring the same value back every time this ran.
+  if boxel_pg_max_connections_is_command_line; then
+    echo "boxel-pg has max_connections=$(boxel_pg_current_max_connections) pinned on its container command line, which overrides postgresql.auto.conf. Raising it to $BOXEL_PG_MAX_CONNECTIONS means recreating the container, discarding its databases, so it was left as it is." >&2
+    return 1
+  fi
+
   _bpg_altered=
-  if ! boxel_pg_max_connections_pending; then
+  if [ "$(boxel_pg_configured_max_connections)" -lt "$BOXEL_PG_MAX_CONNECTIONS" ]; then
     echo "boxel-pg is running with max_connections=$(boxel_pg_current_max_connections); raising it to $BOXEL_PG_MAX_CONNECTIONS."
     boxel_pg_psql -c "ALTER SYSTEM SET max_connections = $BOXEL_PG_MAX_CONNECTIONS" >/dev/null 2>&1 || return 1
-    # ALTER SYSTEM only writes the file. Reloading makes postgres read it and
-    # flag the setting as awaiting a restart, which is how a later call tells
-    # "nobody has fixed this" from "fixed, waiting for a quiet moment". The
-    # reload is a SIGHUP: it drops nothing and changes no running value.
-    boxel_pg_psql -c 'select pg_reload_conf()' >/dev/null 2>&1 || return 1
     _bpg_altered=yes
   fi
 
@@ -130,7 +155,10 @@ _boxel_pg_apply_max_connections() {
 
   docker restart "$BOXEL_PG_CONTAINER" >/dev/null 2>&1 || return 1
   boxel_pg_wait_ready || return 1
+  # Report what it actually came up with, and fail if that is not the target,
+  # rather than assume the restart did what was asked.
   echo "boxel-pg restarted with max_connections=$(boxel_pg_current_max_connections)."
+  boxel_pg_max_connections_ok
 }
 
 # Bring max_connections up to BOXEL_PG_MAX_CONNECTIONS on a container that
