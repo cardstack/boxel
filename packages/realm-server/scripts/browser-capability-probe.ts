@@ -316,7 +316,7 @@ async function check<T>(
       name,
       ok: false,
       ms: Math.round(performance.now() - t0),
-      error: String(e?.message ?? e)
+      error: String((e as Error)?.message ?? e)
         .split('\n')[0]
         .slice(0, 200),
     });
@@ -441,7 +441,9 @@ async function main() {
   let requestsFailed: string[] = [];
   let requestsSeen = 0;
   page.on('console', (m) => consoleMessages.push(m.text()));
-  page.on('pageerror', (e) => pageErrors.push(String(e?.message ?? e)));
+  page.on('pageerror', (e: unknown) =>
+    pageErrors.push(String((e as Error)?.message ?? e)),
+  );
   page.on('requestfailed', (r) => requestsFailed.push(r.url()));
   page.on('request', () => requestsSeen++);
 
@@ -866,7 +868,7 @@ async function main() {
       results.puppeteer.push({
         name: `cold session #${i + 1}`,
         ok: false,
-        error: String(e?.message ?? e).slice(0, 200),
+        error: String((e as Error)?.message ?? e).slice(0, 200),
       });
     }
   }
@@ -894,7 +896,7 @@ async function main() {
     results.puppeteer.push({
       name: 'warm re-navigate',
       ok: false,
-      error: String(e?.message ?? e).slice(0, 200),
+      error: String((e as Error)?.message ?? e).slice(0, 200),
     });
   }
 
