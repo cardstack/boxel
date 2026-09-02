@@ -31,7 +31,12 @@ function makeFileSystem() {
 
       export class Maker extends CardDef {
         @field name = contains(StringField);
-        static embedded = class Embedded extends Component<typeof this> {
+        // A linksTo field component renders its target in FITTED format —
+        // this template is what lands in the consumer's captures and HTML.
+        // The default fitted layout renders cardTitle/display-name, never
+        // this card's own fields, so without this the capture pixels would
+        // be insensitive to the very edits these tests assert on.
+        static fitted = class Fitted extends Component<typeof this> {
           <template>
             <span>Made by <@fields.name/></span>
           </template>
