@@ -98,7 +98,12 @@ describe('realm publish (integration)', () => {
     // must surface that value rather than failing the call — earlier
     // boxel-home CI broke when callers required 200/201 and got a 202.
     expect(result.status).toBe('pending');
-  }, 90_000);
+    // Three nested deadlines, and only the innermost one has anything useful
+    // to say when it fires: `--timeout 60000` makes the command report which
+    // readiness stage it was still waiting on. `runBoxel` gives it 30s of
+    // margin over that (see `resolveDeadline`), and this budget clears the
+    // sum, so the command's own report is what the failure carries.
+  }, 150_000);
 
   it('returns without waiting when waitForReady is false', async () => {
     let sourceUrl = await createSourceRealm();

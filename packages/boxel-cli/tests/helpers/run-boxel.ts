@@ -60,7 +60,11 @@ export interface RunBoxelOptions {
   env?: NodeJS.ProcessEnv;
   /** Text piped to the command's stdin. */
   input?: string;
-  /** Kill the command after this many ms (default 60s). */
+  /**
+   * Kill the command after this many ms (default 60s, and never less than a
+   * margin above a deadline the command was given on its own argv — see
+   * `resolveDeadline`).
+   */
   timeout?: number;
 }
 
@@ -71,12 +75,83 @@ export interface BoxelResult {
   /** True when the command exited 0. */
   ok: boolean;
   /**
+   * True when the harness's deadline killed the command rather than the
+   * command exiting on its own. Distinguishes "the CLI reported a failure"
+   * from "the CLI never finished", which the exit code alone cannot: a
+   * signalled process reports a null code, which is only visible as
+   * `ok === false`.
+   */
+  timedOut: boolean;
+  /**
    * Parse stdout as JSON (for commands run with `--json`). Throws with
    * the captured stdout/stderr attached when stdout isn't valid JSON, so
    * a failing command surfaces its error instead of an opaque parse
    * throw.
    */
   json<T = unknown>(): T;
+}
+
+/**
+ * The deadline a command was given on its own argv, in ms, or undefined when
+ * it was given none. Commands that poll (`realm publish`, `realm
+ * wait-for-ready`) take `--timeout <ms>` and report a precise diagnostic of
+ * their own when it elapses.
+ */
+function commandOwnDeadlineMs(args: string[]): number | undefined {
+  for (let i = 0; i < args.length; i++) {
+    let value =
+      args[i] === '--timeout'
+        ? args[i + 1]
+        : args[i].startsWith('--timeout=')
+          ? args[i].slice('--timeout='.length)
+          : undefined;
+    if (value === undefined) {
+      continue;
+    }
+    let ms = Number(value);
+    if (Number.isFinite(ms) && ms >= 0) {
+      return ms;
+    }
+  }
+  return undefined;
+}
+
+const DEFAULT_DEADLINE_MS = 60_000;
+/**
+ * How far the harness's deadline must sit above the command's own. Only needs
+ * to cover the command noticing its deadline, printing its diagnostic, and
+ * exiting — a fraction of the deadline it is protecting.
+ */
+const DEADLINE_MARGIN_MS = 30_000;
+
+/**
+ * The harness deadline exists to stop a *wedged* command from hanging its
+ * test, so it must never be the thing that pre-empts a command's own
+ * deadline. A command killed at the same instant it was about to report
+ * "timed out after Nms waiting for …" dies with that reason unwritten, and
+ * the test is left asserting on an exit code with nothing to explain it.
+ */
+function resolveDeadline(
+  args: string[],
+  requested: number | undefined,
+): number {
+  let ownDeadline = commandOwnDeadlineMs(args);
+  if (ownDeadline === undefined) {
+    return requested ?? DEFAULT_DEADLINE_MS;
+  }
+  let floor = ownDeadline + DEADLINE_MARGIN_MS;
+  if (requested === undefined) {
+    return Math.max(DEFAULT_DEADLINE_MS, floor);
+  }
+  if (requested < floor) {
+    throw new Error(
+      `runBoxel timeout of ${requested}ms cannot enforce a command that was ` +
+        `given --timeout ${ownDeadline}: the kill would race the command's ` +
+        `own deadline and discard its diagnostic. Use at least ${floor}ms, ` +
+        `or lower the command's --timeout.`,
+    );
+  }
+  return requested;
 }
 
 /**
@@ -102,13 +177,27 @@ export function runBoxel(
     ...options.env,
   };
 
+  let commandLine = [...baseArgs, ...args].join(' ');
+
   return new Promise<BoxelResult>((resolvePromise, reject) => {
+    // Inside the executor so a misconfigured deadline rejects the returned
+    // promise, the way every other failure from this helper does.
+    let deadlineMs = resolveDeadline(args, options.timeout);
+    let startedAt = Date.now();
     let child = spawn(command, [...baseArgs, ...args], {
       cwd: options.cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: options.timeout ?? 60_000,
     });
+
+    // Enforce the deadline here rather than through spawn's own `timeout`, so
+    // the result can say the command was killed. spawn's kill leaves only a
+    // null exit code behind, which reads as an ordinary failure.
+    let timedOut = false;
+    let deadline = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, deadlineMs);
 
     let stdout = '';
     let stderr = '';
@@ -123,13 +212,27 @@ export function runBoxel(
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
-    child.on('error', reject);
+    child.on('error', (err) => {
+      clearTimeout(deadline);
+      reject(err);
+    });
     child.on('close', (code) => {
+      clearTimeout(deadline);
+      // Nearly every call site asserts with `expect(res.ok, res.stderr)`, so
+      // stderr is where a reader looks for the reason. A killed command has
+      // written no reason of its own — say so there, with what it had printed
+      // before the kill left in place above it.
+      let reportedStderr = timedOut
+        ? `${stderr}\n[runBoxel] killed after ${
+            Date.now() - startedAt
+          }ms (deadline ${deadlineMs}ms): ${commandLine}\n`
+        : stderr;
       resolvePromise({
         stdout,
-        stderr,
+        stderr: reportedStderr,
         exitCode: code,
         ok: code === 0,
+        timedOut,
         json<T = unknown>(): T {
           try {
             return JSON.parse(stdout) as T;
@@ -137,7 +240,7 @@ export function runBoxel(
             throw new Error(
               `Expected JSON on stdout but parse failed (${
                 err instanceof Error ? err.message : String(err)
-              }).\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+              }).\n--- stdout ---\n${stdout}\n--- stderr ---\n${reportedStderr}`,
             );
           }
         },
