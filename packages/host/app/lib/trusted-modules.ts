@@ -1,3 +1,4 @@
+import { isHostPackageSpecifier } from '@cardstack/runtime-common/host-package-names';
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
 import config from '@cardstack/host/config/environment';
@@ -60,45 +61,6 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
   );
 }
 
-/**
- * The Host packages whose modules the Host itself provides — from its own
- * bundle, from a shim, or from the Base realm. The first path segment after
- * the scope is matched against this list rather than the scope being admitted
- * wholesale, because `@cardstack/<name>/` is NOT only an npm scope in this
- * codebase: it is also the realm-alias namespace. `addRealmMapping` registers
- * one such prefix per realm — `network.ts` from the `PREFIX_REALMS` declaration
- * in runtime-common, and `main.ts`/`worker.ts` from their `--fromUrl`
- * arguments, generically for every `https://cardstack.com/<name>/` mapping — so
- * the namespace acquires new members without this file being touched. Admitting the scope would hand
- * Direct execution to authored realm content under its alias spelling while
- * the same module's URL spelling classified as authored.
- *
- * `base` is on the list because the Base realm is trusted on its own account,
- * so its alias and its URL agree.
- *
- * A Host package missing from this list fails closed: its modules classify as
- * authored, which cages them and makes the walk try to read them. That is the
- * right direction for a stale list — visible, and never an escalation — and
- * it does not break the graph walk, which prunes on the runtime's own shim
- * registry rather than on this list.
- *
- * The list carries one constraint in the other direction, which nothing here
- * can enforce: no realm may ever be mapped under a name on it. A realm named
- * for a Host package would have its authored content admitted by this test,
- * which is the hazard above running backwards. The wiring that registers realm
- * mappings is where that belongs as an assertion.
- */
-const hostPackages = new Set([
-  'base',
-  'boxel-host',
-  'host',
-  'boxel-icons',
-  'boxel-ui',
-  'bxl',
-  'runtime-common',
-  'view-transitions',
-]);
-
 // Framework and Host-runtime modules a cage receives as a stand-in rather than
 // as authored source. Exact identifiers only: these are bare specifiers with
 // no path structure to bound, so a prefix test on any of them would admit an
@@ -121,50 +83,6 @@ const hostProvidedFrameworkModules = new Set([
   'ember-provide-consume-context',
   `${PACKAGES_FAKE_ORIGIN}ember-provide-consume-context`,
 ]);
-
-/**
- * A bare package spelling reaches this boundary BEFORE the Loader resolves it
- * to a URL, so `new URL()` normalization — which is what collapses `..` and
- * decodes escapes for every other identifier here — has not run and cannot
- * protect it. `@cardstack/base/../../evil/card` is a valid ESM specifier that
- * a resolver may take outside the package root while reading as trusted to a
- * naive prefix test.
- *
- * So the specifier is admitted only when it is unambiguously a path inside an
- * `@cardstack` package: decodable, free of the characters that carry a second
- * layer of interpretation (`\` as a separator on some resolvers, `%` for a
- * further encoding round, `?`/`#` for a query or fragment that could hide the
- * real path), and free of dot segments. Rejecting `%` outright is what makes
- * the single `decodeURIComponent` sufficient — a doubly-encoded `%252e%252e`
- * decodes to `%2e%2e`, which still carries a `%` and is refused, so there is
- * no need to decode to a fixed point.
- */
-function isHostPackageSpecifier(identifier: string): boolean {
-  if (!identifier.startsWith('@cardstack/')) {
-    return false;
-  }
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(identifier);
-  } catch {
-    return false;
-  }
-  if (
-    decoded.includes('\\') ||
-    decoded.includes('%') ||
-    decoded.includes('?') ||
-    decoded.includes('#')
-  ) {
-    return false;
-  }
-  let segments = decoded.split('/');
-  return (
-    segments.length >= 2 &&
-    segments[0] === '@cardstack' &&
-    hostPackages.has(segments[1]!) &&
-    segments.every((segment) => segment !== '.' && segment !== '..')
-  );
-}
 
 /**
  * Origin-and-path containment for an absolute module URL. The boundary path is
