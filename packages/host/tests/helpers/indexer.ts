@@ -97,6 +97,7 @@ type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
     | 'fitted_html'
     | 'atom_html'
     | 'markdown'
+    | 'screenshots'
   >;
 
 // `loader_epoch` has a database default, so fixture rows may omit it;

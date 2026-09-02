@@ -167,11 +167,19 @@ export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
   field: Field | undefined,
-  opts?: { componentCodeRef?: CodeRef },
+  opts?: {
+    componentCodeRef?: CodeRef;
+    // Render this component in place of the class's format slot — the
+    // declared-screenshot capture path's way of rendering a capture-only
+    // component with the full author surface. Bypasses the component cache:
+    // the cache is keyed only by model, and an override render must never
+    // be handed a stable format component (or poison one).
+    componentOverride?: BaseDefComponent;
+  },
 ): BoxComponent {
   // the componentCodeRef is only set on the server during card prerendering,
   // it should have no effect on component stability
-  let stable = componentCache.get(model);
+  let stable = opts?.componentOverride ? undefined : componentCache.get(model);
   if (stable?.cardOrField === cardOrField) {
     return stable.component;
   }
@@ -250,9 +258,11 @@ export function getBoxComponent(
     ) {
       viewSlot = 'embedded';
     }
-    let CardOrFieldFormatComponent: BaseDefComponent = viewSlot
-      ? componentClass[viewSlot]
-      : componentClass[effectiveFormat];
+    let CardOrFieldFormatComponent: BaseDefComponent = opts?.componentOverride
+      ? opts.componentOverride
+      : viewSlot
+        ? componentClass[viewSlot]
+        : componentClass[effectiveFormat];
     return {
       CardOrFieldFormatComponent,
       fields,
@@ -577,7 +587,9 @@ export function getBoxComponent(
         : undefined,
   };
 
-  componentCache.set(model, stable);
+  if (!opts?.componentOverride) {
+    componentCache.set(model, stable);
+  }
   return stable.component;
 }
 

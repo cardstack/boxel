@@ -3467,6 +3467,119 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-polymorphic="special-string-b"]').hasText('Mango');
     });
 
+    test('narrowing a field to a subtype changes only which card it resolves to', async function (assert) {
+      class SpecialString extends StringField {
+        static displayName = 'SpecialString';
+      }
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+      }
+      class Puppy extends Pet {
+        static displayName = 'Puppy';
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(StringField, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Mango'] } }),
+        });
+        // The link arity carries options the `contains` one has no slot for —
+        // `queryDefinition`, `eager`, and the `declaredCardThunk` that keeps
+        // resolving the declared type — and it is the arity a narrowing
+        // actually reaches, since a resolved link installs an override for
+        // its target's concrete type.
+        @field pets = linksToMany(() => Pet, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Van Gogh'] } }),
+          query: { filter: { eq: { title: 'Van Gogh' } } },
+          eager: false,
+        });
+      }
+
+      // Comparing the whole property set, rather than the options this test
+      // thought to name, is the point: a declared option that narrowing fails
+      // to carry surfaces here rather than in whichever consumer happens to
+      // read it instance-scoped.
+      function assertOnlyTheNarrowingChanged(
+        fieldName: string,
+        override: typeof CardDef | typeof StringField,
+        expectedOptions: string[],
+      ) {
+        let declared = getField(new TestCard(), fieldName)!;
+        let narrowed = getField(
+          new TestCard({ [fields]: { [fieldName]: override } }),
+          fieldName,
+        )!;
+
+        assert.strictEqual(
+          narrowed.card,
+          override,
+          `${fieldName} resolves to the subtype the override names`,
+        );
+        assert.true(
+          narrowed.isPolymorphic,
+          `${fieldName} reports the resolution as polymorphic`,
+        );
+
+        let carried = Object.keys(declared).filter(
+          (key) => key !== 'cardThunk' && key !== 'isPolymorphic',
+        );
+        assert.deepEqual(
+          carried.filter((key) => expectedOptions.includes(key)).sort(),
+          [...expectedOptions].sort(),
+          `${fieldName} carries the options this compares over`,
+        );
+        assert.deepEqual(
+          carried.filter(
+            (key) => (narrowed as any)[key] !== (declared as any)[key],
+          ),
+          [],
+          `narrowing ${fieldName} moved nothing else`,
+        );
+      }
+
+      assertOnlyTheNarrowingChanged('specialField', SpecialString, [
+        'configuration',
+        'searchable',
+      ]);
+      assertOnlyTheNarrowingChanged('pets', Puppy, [
+        'configuration',
+        'searchable',
+        'queryDefinition',
+        'eager',
+        'declaredCardThunk',
+      ]);
+
+      // Replacing an override has to produce a field resolving to the new
+      // subtype, and one owner's override must not answer another's. Asserted
+      // against `getField` directly rather than through a re-render, so a
+      // failure reads as the wrong field rather than as a component rendering
+      // the previous subtype.
+      class Kitten extends Pet {
+        static displayName = 'Kitten';
+      }
+      let card = new TestCard({ [fields]: { pets: Puppy } });
+      assert.strictEqual(getField(card, 'pets')!.card, Puppy);
+      card[fields] = { pets: Kitten };
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'replacing the override resolves to the new subtype',
+      );
+
+      let otherCard = new TestCard({ [fields]: { pets: Puppy } });
+      assert.strictEqual(
+        getField(otherCard, 'pets')!.card,
+        Puppy,
+        'a second instance resolves to its own override',
+      );
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'and leaves the first instance resolving to its own',
+      );
+    });
+
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
       class TestField extends FieldDef {
         static displayName = 'TestField';
