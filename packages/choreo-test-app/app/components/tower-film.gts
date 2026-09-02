@@ -1357,8 +1357,8 @@ export default class TowerFilm extends Component<{
   /** where the beat's sky word was planted, in world azimuth */
   private skyAz = 0;
 
-  /** where this beat's mark word stands, planted behind the building */
-  private markAt = { x: 0, z: 0 };
+  /** the azimuth the mark word is planted on, behind the building */
+  private markAz = 0;
 
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
@@ -2812,27 +2812,61 @@ export default class TowerFilm extends Component<{
            annotation and start reading it as the name of what you are
            watching. Big enough to be architecture, faint enough that
            the timber crossing it always wins. */
-        color: 'rgba(255,251,243,0.07)',
+        /* GREY, because the sky it stands in is nearly white and a
+           white outline on a white sky is an invisible word */
+        color: 'rgba(74,68,54,0.05)',
         fill: true,
         lines: m.lines,
-        shadow: 'rgba(30,22,10,0.3)',
+        shadow: 'rgba(255,252,244,0.34)',
         shadowBlur: 0.12,
         size: m.size * 2.7,
-        stroke: 'rgba(255,253,247,0.45)',
+        stroke: 'rgba(86,79,62,0.5)',
         strokeW: 0.011,
         track: 0.12,
       },
       {
         opacity: Math.min(1, raw * 2.2) * 0.62,
         ry: (this.markFace / RAD) % 360,
-        /* planted behind the subject (markAt), at ONE height for the
-           whole chapter, with a breath of upward drift — enough that it
-           is alive, not enough that it is going anywhere */
-        x: this.markAt.x,
+        /* planted behind the subject, at ONE height for the whole
+           chapter, with a breath of upward drift — enough that it is
+           alive, not enough that it is going anywhere. It is also KEPT
+           IN FRAME: the camera moves past a planted word, and a word
+           that has left the picture is not doing its job, so the anchor
+           eases back toward the lens axis whenever the projection says
+           it is heading out (see below). */
+        x: Math.sin(this.markAz) * 26,
         y: 9.4 + local * 0.9,
-        z: this.markAt.z,
+        z: Math.cos(this.markAz) * 26,
       }
     );
+    /**
+     * KEEP IT ON SCREEN. A planted word parallaxes, which is the point,
+     * but the shot can orbit far enough to carry it out of the picture.
+     * So the anchor is nudged back toward the lens whenever what it
+     * projects to is outside the safe area — slowly enough to read as
+     * the word drifting rather than the word chasing.
+     */
+    const seen = film.project(
+      Math.sin(this.markAz) * 26,
+      9.4,
+      Math.cos(this.markAz) * 26
+    );
+    const outside =
+      !seen.on ||
+      seen.x < v.w * 0.12 ||
+      seen.x > v.w * 0.88 ||
+      seen.y < v.h * 0.04;
+    if (outside) {
+      let d = v.az + Math.PI - this.markAz;
+      while (d > Math.PI) {
+        d -= Math.PI * 2;
+      }
+      while (d < -Math.PI) {
+        d += Math.PI * 2;
+      }
+      this.markAz += d * Math.min(1, dt * 0.9);
+    }
+
     /* AND IT IS TETHERED. A label floating beside a building names
        nothing; a line back to the height it is describing turns it into a
        measurement. */
@@ -3032,9 +3066,7 @@ export default class TowerFilm extends Component<{
          lens axis at the moment the beat lands, so the word is directly
          behind the subject — the structure crosses it, the camera moves
          PAST it, and it never reads as a caption stuck on the glass. */
-      const az = this.film?.view().az ?? 0;
-      const d = 26;
-      this.markAt = { x: -Math.sin(az) * d, z: -Math.cos(az) * d };
+      this.markAz = (this.film?.view().az ?? 0) + Math.PI;
     }
     this.applyAir(beat, instant);
     /**
