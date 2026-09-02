@@ -144,6 +144,15 @@ interface Beat {
   haze?: number;
 
   /**
+   * A DRONE DOES NOT HOLD PERFECTLY STILL. Degrees of vertical sway
+   * added on top of whatever the shot is already doing — a slow rise
+   * and settle through the beat, which is what a camera in the air
+   * actually does and what makes a locked-off orbit read as flown
+   * rather than rendered.
+   */
+  bob?: number;
+
+  /**
    * THE BUILDING LEAVES BY FADING, not by sinking. Running the build
    * clock backwards moves the tower down out of its own frame, and
    * since the film builds it straight back afterwards, that movement is
@@ -1056,6 +1065,7 @@ const BEATS: Beat[] = [
        seam here lets the plate shot ahead of it carry a real drift */
     cut: true,
     gloss: 'Japan · the keep',
+    bob: 1.05,
     grade: 'c-jp',
     id: 'c-jp',
     toCam: { dolly: 1.28, lookY: 2.2, ox: -0.19, pitch: 11, yaw: 228 },
@@ -1074,6 +1084,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
+    bob: 1.05,
     grade: 'c-cn',
     id: 'c-cn',
     toCam: { dolly: 1.34, lookY: 1.8, ox: -0.2, pitch: 12, yaw: 215 },
@@ -1092,6 +1103,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
+    bob: 1.05,
     grade: 'c-vn',
     id: 'c-vn',
     toCam: { dolly: 0.82, lookY: -2.6, ox: -0.2, pitch: 4, yaw: 255 },
@@ -1110,6 +1122,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
+    bob: 1.05,
     grade: 'c-th',
     id: 'c-th',
     toCam: { dolly: 1.22, lookY: 1.2, ox: -0.19, pitch: 10, yaw: 269 },
@@ -1128,6 +1141,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
+    bob: 1.05,
     grade: 'c-kh',
     id: 'c-kh',
     toCam: { dolly: 1.24, lookY: 0.4, ox: -0.14, pitch: 7, yaw: 284 },
@@ -1146,6 +1160,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
+    bob: 1.05,
     grade: 'c-tr',
     id: 'c-tr',
     toCam: { dolly: 0.94, lookY: -4, ox: -0.2, pitch: 2, yaw: 305 },
@@ -2461,14 +2476,23 @@ export default class TowerFilm extends Component<{
     const k = Math.min(1, dt * 3.2);
     this.lean.x += (this.leanTo.x - this.lean.x) * k;
     this.lean.y += (this.leanTo.y - this.lean.y) * k;
+    /* the air the shot is flown in (see Beat.bob) */
+    const air = this.beat.bob ?? 0;
+    const bob =
+      air *
+      Math.sin(
+        ((stamp - this.beatAt) / (this.beat.ticks * TICK * 1000)) *
+          Math.PI *
+          3
+      );
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
     film.pose({
       /* the lens leans into the cursor: a couple of degrees of orbit and
          a hand's width of height, which is enough for the hills to move
          against the building and nowhere near enough to fight the shot */
       az: (this.now.yaw + this.lean.x * 1.6) * RAD,
-      el: (this.now.pitch - this.lean.y * 1.1) * RAD,
-      lookY: this.now.lookY + this.lean.y * 0.5,
+      el: (this.now.pitch - this.lean.y * 1.1 + bob) * RAD,
+      lookY: this.now.lookY + this.lean.y * 0.5 + bob * 0.35,
       ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
     });
