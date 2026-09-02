@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "N-4471",
+      "issueDate": "2026-08-05",
+      "status": "matching",
+      "lineItems": [
+        {
+          "description": "27\" Monitor",
+          "quantity": 55,
+          "unitPrice": {
+            "amount": 220,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "Freight & handling",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 212.5,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": "INV N-4471 \u2014 TechSource"
+      }
+    },
+    "relationships": {
+      "purchaseOrder": {
+        "links": {
+          "self": "../PurchaseOrder/po-2026-0038"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

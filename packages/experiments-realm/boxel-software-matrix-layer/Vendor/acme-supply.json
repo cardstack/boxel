@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Supply",
+      "contactName": "Dana Reyes",
+      "email": "dana@acmesupply.example",
+      "serviceCategory": "IT Hardware",
+      "contractStart": "2026-01-15",
+      "cardInfo": {
+        "name": "Acme Supply"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

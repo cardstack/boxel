@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Jon Ferreira",
+      "email": "jon.ferreira@mail.example",
+      "appliedRole": "Product Designer",
+      "appliedDate": "2026-06-20",
+      "status": "offer",
+      "cardInfo": {
+        "name": "Jon Ferreira"
+      }
+    },
+    "relationships": {
+      "offer": {
+        "links": {
+          "self": "../Offer/jon-ferreira-offer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

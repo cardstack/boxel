@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PaymentTermsField",
+        "module": "../payment-terms-field"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Payment Terms (PT)\n\nNegotiated terms as one compound value — net days, the early-pay discount pair, the preferred rail (reusing the existing PaymentMethodField), and a computed `shorthand` that renders the industry notation (\"2/10 net 30\") wherever terms appear. The discount-window math (deadline, cash value) belongs to whoever holds the invoice date; this field carries the parts, never a date. Edit format is the Payment Terms Editor component.\n\n### Example\n\nContained example mirrors Acme Supply’s negotiated terms; the linked Vendor Profile carries it live.\n\n### Non-goals\n\nNo enforcement — dunning/discount capture read these terms, they are not run by them. No per-invoice overrides (an invoice that deviates states its own terms).",
+      "cardInfo": {
+        "name": "Payment Terms",
+        "summary": "\"2/10 net 30\" as data: net days, early-pay discount, preferred rail, computed shorthand."
+      },
+      "containedExamples": [
+        {
+          "netDays": 30,
+          "discountPct": 2,
+          "discountDays": 10,
+          "method": "bank transfer",
+          "notes": ""
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../payment-terms-field",
+              "name": "PaymentTermsField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

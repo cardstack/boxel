@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/approve-invoice-for-payment-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Approve Invoice for Payment\n\nThe control the desk exists for: NO path to payment around an open variance. The command re-runs the match from the documents (never trusting the panel's display), flips a failing invoice to 'exception', and only a clean or fully-resolved match reaches 'approved-for-payment' \u2014 from where the existing Record Payment / Process Payment flow takes over unchanged (no parallel payment model).\n\n### Example\n\nNatural target: the linked INV N-4471 \u2014 refuses while the freight variance is open; approves once it carries a resolution.\n\n### Non-goals\n\nNo payment execution. No tolerance overrides per invoice (tolerances are the desk's policy constants, documented in three-way-match.gts).",
+      "cardInfo": {
+        "name": "Approve Invoice for Payment",
+        "summary": "The AP gate: re-runs the match itself and refuses while any variance lacks a stored resolution; success \u2192 approved-for-payment, then the EXISTING payment flow takes over."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-n-4471"
+        }
+      }
+    }
+  }
+}

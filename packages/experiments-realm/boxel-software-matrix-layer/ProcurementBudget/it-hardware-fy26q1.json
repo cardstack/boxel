@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "department": "IT Hardware",
+      "period": "FY2026 Q1",
+      "budgetAmount": 120000,
+      "committed": 18400,
+      "actual": 12100,
+      "cardInfo": {
+        "name": "IT Hardware · FY2026 Q1"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../procurement-budget",
+        "name": "ProcurementBudget"
+      }
+    }
+  }
+}

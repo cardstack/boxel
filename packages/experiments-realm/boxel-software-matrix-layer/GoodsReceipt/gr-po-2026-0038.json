@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "receivedOn": "2026-08-01",
+      "receivedBy": "Priya Nair",
+      "posted": true,
+      "lines": [
+        {
+          "description": "27\" Monitor",
+          "qtyOrdered": 55,
+          "qtyReceived": 55
+        }
+      ],
+      "cardInfo": {
+        "name": "Goods Receipt · PO-2026-0038"
+      }
+    },
+    "relationships": {
+      "purchaseOrder": {
+        "links": {
+          "self": "../PurchaseOrder/po-2026-0038"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../goods-receipt",
+        "name": "GoodsReceipt"
+      }
+    }
+  }
+}

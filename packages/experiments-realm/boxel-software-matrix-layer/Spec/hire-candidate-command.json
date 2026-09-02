@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/hire-candidate-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Hire Candidate (HC)\n\nThe single writer for the candidate → employee transition. Requires an ACCEPTED offer; creates the Employee from the candidate’s identity plus the offer’s terms (role, salary, start date, status onboarding), stamps the candidate `hired` with a local-calendar decision date. Pipeline stage and permanent record can never disagree because one command writes both.\n\n### Example\n\nNatural target: the linked candidate Jon Ferreira, whose offer is accepted and who is ready to hire.\n\n### Non-goals\n\nNo onboarding checklist creation (the existing CreateOnboardingChecklistCommand owns that). No equipment/accounts provisioning.",
+      "cardInfo": {
+        "name": "Hire Candidate",
+        "summary": "Accepted offer → Employee record + candidate stamped hired, in one write."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/jon-ferreira"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

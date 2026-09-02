@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ThreeWayMatchPanel",
+        "module": "../components/three-way-match-panel"
+      },
+      "specType": "component",
+      "isCard": false,
+      "isField": false,
+      "isComponent": true,
+      "readMe": "## Three-Way Match Panel \u2b50\n\nWhat we ORDERED (PO lines) vs what ARRIVED (the PO's receivedQuantities) vs what the vendor INVOICED, per line, within tolerance (\u00b12% or $25). The match is ALWAYS re-derived from the three documents (pure functions in three-way-match.gts) \u2014 nothing derived is stored, so it can never drift; only RESOLUTIONS are stored, on the invoice, because a resolution is a human decision. Unlike the display-only siblings this is a WORKBENCH: it takes @context and runs ResolveVarianceCommand / ApproveInvoiceForPaymentCommand itself, so mounting it in the shared Invoice card needed only one additive conditional section.\n\n### Example\n\nThe linked INV N-4471: monitors line matches 55/55 clean; a freight line the PO never carried shows as 'invoiced, not on PO' \u2014 resolve it with a reason or payment stays blocked.\n\n### Non-goals\n\nNo OCR/ingest \u2014 invoices arrive as structured cards. No cross-currency compare inside the panel in v1 (resolve through Currency Registry first; the refusal-on-stale command exists). No payment execution \u2014 approval hands over to the existing Payment flow.",
+      "cardInfo": {
+        "name": "Three-Way Match Panel",
+        "summary": "The AP control surface: PO vs received vs invoiced per line within tolerance; variances become reasoned, stored resolutions; no path to payment around an open one."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-n-4471"
+        }
+      }
+    }
+  }
+}

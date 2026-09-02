@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Net-30 Standard",
+      "clauseType": "payment",
+      "riskLevel": "low",
+      "netDays": 30,
+      "lateFeePercent": 1.5,
+      "earlyPaymentDiscountPercent": 2,
+      "earlyPaymentWindowDays": 10,
+      "acceptedMethods": "ACH, wire",
+      "standardText": "Customer shall pay each undisputed invoice within thirty (30) days…",
+      "cardInfo": {
+        "name": "Net-30 Standard"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../payment-clause",
+        "name": "PaymentClause"
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "lineItems": [
+        {
+          "description": "Laptop 14\" (32GB/1TB)",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 1180,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "USB-C Dock station",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 120,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "leadTimeDays": 14,
+      "validUntil": "2026-09-28",
+      "cardInfo": {
+        "name": "Quote — TechSource"
+      }
+    },
+    "relationships": {
+      "rfq": {
+        "links": {
+          "self": "../Rfq/q1-laptop-refresh"
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/techsource"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor-quote",
+        "name": "VendorQuote"
+      }
+    }
+  }
+}

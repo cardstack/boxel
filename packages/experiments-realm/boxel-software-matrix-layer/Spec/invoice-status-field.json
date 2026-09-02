@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "InvoiceStatusField",
+        "module": "../invoice"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Invoice Status (IS)\n\n**Consume, don't rebuild.** Invoice's status is the shared PaymentStatusField, re-exported from invoice.gts under its invoice-side name. The AP (buy-side) leg is now SHIPPED as the one deliberate widening this Spec previously planned: received \u2192 matching \u2192 matched / exception \u2192 approved-for-payment, joining the existing sell-side ladder at partial/paid. Existing sell-side values and transitions are untouched; the transition graph carries both legs on the owning module (payment-status-field.gts).\n\n### Example\n\nA primitive enum cannot carry containedExamples \u2014 see the linked vendor invoice INV N-4471 (status: matching) and the sell-side INV-2026-114 (status: sent).\n\n### Non-goals\n\nNo parallel AP-only status field \u2014 one ladder, extended once, on the owning module. Edit dropdowns on sell-side invoices now list the AP values too; that is the documented cost of one shared ladder.",
+      "cardInfo": {
+        "name": "Invoice Status",
+        "summary": "CONSUME/EXTEND: invoice.gts\u2019s status ladder (a PaymentStatusField rename), with the AP match states documented as the planned extension."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-n-4471"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Invoice/inv-2026-114"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

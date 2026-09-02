@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "objective": "Make onboarding effortless for new workspace admins",
+      "period": "FY2026 Q3",
+      "keyResults": [
+        {
+          "description": "Time-to-first-card under 5 minutes",
+          "startValue": 18,
+          "targetValue": 5,
+          "currentValue": 9,
+          "unit": "min"
+        },
+        {
+          "description": "Week-1 activation rate",
+          "startValue": 34,
+          "targetValue": 60,
+          "currentValue": 51,
+          "unit": "%"
+        },
+        {
+          "description": "Setup-related support tickets per week",
+          "startValue": 42,
+          "targetValue": 15,
+          "currentValue": 24,
+          "unit": "tickets"
+        }
+      ],
+      "cardInfo": {
+        "name": "Q3 Activation OKR"
+      }
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": "../Employee/mara-lindqvist"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../okr",
+        "name": "Okr"
+      }
+    }
+  }
+}

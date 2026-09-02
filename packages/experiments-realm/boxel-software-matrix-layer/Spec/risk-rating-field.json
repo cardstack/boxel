@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "RiskRatingField",
+        "module": "../contract-risk"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Risk Rating (RR)\n\n**Consume, don’t rebuild.** `contract-risk.gts` already ships RiskRatingField: a scored-criteria scorecard (containsMany criteria → computed score → grade low/medium/high/critical with a shared color map). This Spec registers it as the GENERIC scored-criteria block the matrix wants: contract risk was its first consumer; procurement’s Score Vendor Risk command is the second real consumer (populates a vendor’s criteria and computes the grade), which is exactly the two-consumer reuse bar.\n\n### Example\n\nA compound field of another module cannot be a containedExample here — see the linked Contract (MSA — Northwind), whose risk field renders the scorecard live.\n\n### Non-goals\n\nNo new grades or criteria taxonomy in this Spec — additions happen on the owning module with both consumers checked.",
+      "cardInfo": {
+        "name": "Risk Rating",
+        "summary": "CONSUME/EXTEND: the shipping scored-criteria field from contract-risk.gts, specced as the generic risk block."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

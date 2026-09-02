@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "offeredTitle": "Product Designer",
+      "salary": 128000,
+      "startDate": "2026-10-01",
+      "status": "accepted",
+      "cardInfo": {
+        "name": "Offer — Jon Ferreira"
+      }
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/jon-ferreira"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../offer",
+        "name": "Offer"
+      }
+    }
+  }
+}

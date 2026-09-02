@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Rfq",
+        "module": "../rfq"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## RFQ (Rq)\n\nA formal ask for competitive prices: which lines, invited to which vendors, with each inbound quote recorded by the buyer (open-comparison mode — quotes are visible as they arrive; `responseDeadline` is informational, not enforced). The isolated format IS the RFQ Comparison Board: one column per quote, best value per row highlighted, Award at the foot of each column.\n\nLifecycle: draft → sent (SendRfqCommand) → comparing → awarded (AwardRfqCommand, which creates the PO) / cancelled.\n\n### Example\n\n\"Q1 Laptop Refresh\" (comparing): two recorded quotes — Acme Supply ($1,240/unit, 7-day lead) vs TechSource ($1,180/unit, 14-day lead).\n\n### Non-goals\n\nNo sealed-bid mode (quotes visible on arrival, by design — the open comparison is the demo). No vendor delivery channel: \"sending\" marks the ask issued; transmission happens by email outside the system, per the single-persona rule.",
+      "cardInfo": {
+        "name": "RFQ",
+        "summary": "A formal ask for competitive prices whose isolated view IS the side-by-side quote comparison board."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Rfq/q1-laptop-refresh"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

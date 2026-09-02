@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Mara Lindqvist",
+      "email": "mara@boxel.example",
+      "role": "Senior Engineer",
+      "department": "Engineering",
+      "startDate": "2024-03-04",
+      "status": "active",
+      "employmentType": "full-time",
+      "salary": 148000,
+      "cardInfo": {
+        "name": "Mara Lindqvist"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

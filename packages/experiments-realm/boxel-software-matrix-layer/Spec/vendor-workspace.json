@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "VendorWorkspace",
+        "module": "../components/vendor-workspace"
+      },
+      "specType": "component",
+      "isCard": false,
+      "isField": false,
+      "isComponent": true,
+      "readMe": "## Vendor Workspace (VW)\n\nThe buyer's 360° dossier ON one vendor — the single-persona reinterpretation of this concept (NOT a vendor-facing portal). Aggregates live realm data via `context.getCards` queries rather than hand-maintained link arrays: the vendor's profile and compliance state, their quotes, their POs with receipt status, win rate, and committed+spent total.\n\n### Example\n\nMounted in the linked Vendor Profile (Acme Supply) whenever an active Vendor is linked.\n\n### Non-goals\n\nNo vendor login or self-service view. No performance scoring (the existing `Score Vendor Risk` concept owns that lane).",
+      "cardInfo": {
+        "name": "Vendor Workspace",
+        "summary": "The buyer's live 360° dossier on one vendor: profile compliance, quotes, POs, win rate, and spend."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

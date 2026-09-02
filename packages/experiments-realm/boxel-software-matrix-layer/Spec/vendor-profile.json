@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "VendorProfile",
+        "module": "../vendor-profile"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Vendor Profile (VP)\n\nThe buyer-recorded intake dossier for a would-be vendor: identity, tax ID and bank details (both rendered masked to last-4 in every read format), and dated compliance credentials \u2014 certifications with expiry dates plus an insurance expiry.\n\n`complianceOk` is the award gate: current insurance AND no expired certification. The RFQ Comparison Board reads it to disable Award, and OnboardVendorCommand refuses a non-compliant profile. Single-persona rule: there is no vendor-facing submission flow \u2014 the procurement manager transcribes the vendor's paperwork.\n\n### Desk-merge additions (additive)\n\nThe profile also carries the negotiated Payment Terms (\"2/10 net 30\", rendered by its own field + editor) and Lifecycle Dates (invited/activated/reviewed stamps) \u2014 both added additively in the Desk-spec merge; instances written before them deserialize unchanged.\n\n### Examples\n\nAcme Supply (onboarded, compliance current, linked to its active Vendor) and Norvik Ltd (approved but award-blocked \u2014 its ISO 9001 lapsed May 2026).\n\n### Non-goals\n\nNo payment execution: the bank details exist so Finance can verify a vendor record by its last-4, not to pay anyone \u2014 payments belong to a Finance app. No vendor portal or self-service intake (single-persona). The active supplier relationship itself is the existing `Vendor` card (consume, don't rebuild); this card is only the vetting record that produces one.",
+      "cardInfo": {
+        "name": "Vendor Profile",
+        "summary": "Buyer-recorded intake dossier for a would-be vendor: tax and remittance details plus dated compliance credentials that gate awards."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../VendorProfile/norvik-ltd"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

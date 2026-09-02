@@ -27,6 +27,10 @@ import { Subscription } from './subscription';
 import { Payment } from './payment';
 import { formatMoney, lineTotal, sumLineItems } from './money';
 import DueDateField from './due-date-field';
+// ---- AP (buy-side) additions — additive only, per the Invoice Status Spec.
+import { PurchaseOrder } from './purchase-order';
+import { VarianceResolutionField } from './three-way-match';
+import { ThreeWayMatchPanel } from './components/three-way-match-panel';
 
 // The due-date pill states calendar facts it cannot square with the invoice's
 // lifecycle, so terminal invoices render the plain date instead of the field.
@@ -49,6 +53,13 @@ function isTerminal(status: string | null | undefined): boolean {
 // `payment-status-field.gts` (imported above as `InvoiceStatusField` for a
 // zero-diff usage site).
 
+// Re-export under the invoice-side name so the Invoice Status matrix concept
+// can be specced against the real field. The AP ladder this document's match
+// flow needs (Received → Matching → Matched / Exception → Approved for
+// Payment → Paid) is a documented extension in that Spec — widening the
+// stored enum itself would force every existing consumer's switch to grow.
+export { PaymentStatusField as InvoiceStatusField } from './payment-status-field';
+
 export class Invoice extends CardDef {
   static displayName = 'Invoice';
   static icon = FileInvoiceIcon;
@@ -64,6 +75,11 @@ export class Invoice extends CardDef {
   @field order = linksTo(() => Order);
   @field subscription = linksTo(() => Subscription);
   @field payments = linksToMany(() => Payment);
+  // ---- AP leg (additive): a VENDOR invoice names the PO it bills against,
+  // which is what makes the three-way match possible. Sell-side invoices
+  // leave both empty and render exactly as before.
+  @field purchaseOrder = linksTo(() => PurchaseOrder);
+  @field varianceResolutions = containsMany(VarianceResolutionField);
   // ADDED (Revenue Ops Console build) — written by calculate-tax-command.ts
   // via convert-quote-to-invoice-command.ts, optional (not every invoice is
   // taxed).
@@ -529,6 +545,14 @@ export class Invoice extends CardDef {
             <p class='empty'>No line items yet</p>
           {{/if}}
         </section>
+
+        {{#if @model.purchaseOrder}}
+          <section class='match'>
+            <span class='label'>Three-way match · vs
+              {{@model.purchaseOrder.poNumber}}</span>
+            <ThreeWayMatchPanel @invoice={{@model}} @context={{@context}} />
+          </section>
+        {{/if}}
 
         {{#if @model.payments.length}}
           <section class='payments'>

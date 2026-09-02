@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PropertyGallery",
+        "module": "../components/property-gallery"
+      },
+      "specType": "component",
+      "isCard": false,
+      "isField": false,
+      "isComponent": true,
+      "readMe": "## Property Gallery (PG)\n\nHero image with a thumbnail filmstrip, selection state, photo counter, and an honest empty state. Render-only and storage-neutral: the consumer supplies resolved URLs (Property Listing feeds it `photos.resolvedUrls`).\n\n### Example\n\nMounted in the linked 14 Birchwood Lane listing.\n\n### Non-goals\n\nNo lightbox/zoom or touch-swipe in v1. No upload — the field owns acquisition, the gallery owns viewing.",
+      "cardInfo": {
+        "name": "Property Gallery",
+        "summary": "Hero-plus-filmstrip photo viewer; consumer hands it resolved URLs."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PropertyListing/14-birchwood-lane"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

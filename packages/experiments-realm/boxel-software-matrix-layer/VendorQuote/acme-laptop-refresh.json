@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "lineItems": [
+        {
+          "description": "Laptop 14\" (32GB/1TB)",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 1240,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "USB-C Dock station",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 110,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "leadTimeDays": 7,
+      "validUntil": "2026-10-01",
+      "notes": "Includes on-site asset tagging.",
+      "cardInfo": {
+        "name": "Quote — Acme Supply"
+      }
+    },
+    "relationships": {
+      "rfq": {
+        "links": {
+          "self": "../Rfq/q1-laptop-refresh"
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      },
+      "vendorProfile": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor-quote",
+        "name": "VendorQuote"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Recurring checkout failures — root cause investigation",
+      "status": "investigating",
+      "severity": "high",
+      "openedOn": "2026-08-25",
+      "problemStatement": "Three enterprise customers report intermittent 500s at checkout since the Aug 22 deploy. Individual tickets are being handled, but the pattern needs one accountable investigation.",
+      "findings": "Correlates with connection-pool exhaustion during EU morning peak. Suspect the Aug 22 pool-size change.",
+      "cardInfo": {
+        "name": "Checkout failures investigation"
+      }
+    },
+    "relationships": {
+      "relatedTickets.0": {
+        "links": {
+          "self": "../Ticket/checkout-500s"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../case",
+        "name": "Case"
+      }
+    }
+  }
+}

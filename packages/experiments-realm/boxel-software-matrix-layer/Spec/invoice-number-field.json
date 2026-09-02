@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "InvoiceNumberField",
+        "module": "../invoice-number-field"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Invoice Number (IN)\n\nThe immutable identity a customer quotes back at you. Snapshot pattern, same family as PO Number: the issuing command stamps it once via `nextInvoiceNumber()`; nothing recomputes it. A primitive StringField cannot carry containedExamples â see the linked Invoice INV-2026-114.\n\n### Non-goals\n\nNo global counter service (year-scoped generator, documented in code). Wiring the existing Invoice card’s plain `invoiceNumber` StringField over to this typed field is additive follow-up on that shared block, deliberately not done here.",
+      "cardInfo": {
+        "name": "Invoice Number",
+        "summary": "Immutable invoice identity, stamped once at issue, rendered document-style everywhere."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-2026-114"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

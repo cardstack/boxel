@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "poNumber": "PO-2026-0051",
+      "status": "approved",
+      "approvalRoute": "manager",
+      "lineItems": [
+        {
+          "description": "Meeting-room AV kit",
+          "quantity": 8,
+          "unitPrice": {
+            "amount": 2300,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "approvalChain": {
+        "startedAt": "2026-08-20T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-20T15:35:00.000Z",
+            "comment": "Fit-out phase 2.",
+            "openedAt": "2026-08-20T09:00:00.000Z"
+          }
+        ]
+      },
+      "expectedDelivery": "2026-09-20",
+      "cardInfo": {
+        "name": "PO-2026-0051"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      },
+      "budget": {
+        "links": {
+          "self": "../ProcurementBudget/it-hardware-fy26q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../purchase-order",
+        "name": "PurchaseOrder"
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "poNumber": "PO-2026-0038",
+      "status": "received",
+      "approvalRoute": "manager",
+      "lineItems": [
+        {
+          "description": "27\" Monitor",
+          "quantity": 55,
+          "unitPrice": {
+            "amount": 220,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "receivedQuantities": [
+        55
+      ],
+      "approvalChain": {
+        "startedAt": "2026-07-14T10:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-15T08:20:00.000Z",
+            "comment": "Approved for onboarding cohort.",
+            "openedAt": "2026-07-14T10:00:00.000Z"
+          }
+        ]
+      },
+      "expectedDelivery": "2026-08-02",
+      "cardInfo": {
+        "name": "PO-2026-0038"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../Vendor/techsource"
+        }
+      },
+      "budget": {
+        "links": {
+          "self": "../ProcurementBudget/it-hardware-fy26q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../purchase-order",
+        "name": "PurchaseOrder"
+      }
+    }
+  }
+}

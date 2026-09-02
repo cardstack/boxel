@@ -13,7 +13,9 @@ import CreditCardIcon from '@cardstack/boxel-icons/credit-card';
 import { Invoice } from './invoice';
 import { formatMoney } from './money';
 
-const PaymentMethodField = enumField(StringField, {
+// Exported so the Payment Method matrix concept can be specced against the
+// real field (procurement's Payment Terms reuses it as the preferred rail).
+export const PaymentMethodField = enumField(StringField, {
   options: ['card', 'bank transfer', 'cash', 'other'],
   displayName: 'Payment Method',
 });

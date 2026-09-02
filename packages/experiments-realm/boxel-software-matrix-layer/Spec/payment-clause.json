@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PaymentClause",
+        "module": "../payment-clause"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Payment Clause (PC)\n\nExtends the shared Clause additively with the numbers finance scans for: Net-N days, monthly late-fee rate, early-payment discount and window, accepted methods. Instances set `clauseType` to `payment`.\n\n### Non-goals\n\nNo invoice integration — the clause states terms; Invoice enforces its own due dates.",
+      "cardInfo": {
+        "name": "Payment Clause",
+        "summary": "Typed payment-terms clause: net days, late fee, early-payment discount."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PaymentClause/net-30-standard"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Standard Mutual NDA",
+      "clauseType": "confidentiality",
+      "riskLevel": "low",
+      "termYears": 3,
+      "isMutual": true,
+      "survivesTermination": true,
+      "carveOuts": "Public knowledge; independently developed; legally compelled disclosure with notice.",
+      "standardText": "Each party shall hold the other's Confidential Information in strict confidence…",
+      "cardInfo": {
+        "name": "Standard Mutual NDA"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../confidentiality-clause",
+        "name": "ConfidentialityClause"
+      }
+    }
+  }
+}

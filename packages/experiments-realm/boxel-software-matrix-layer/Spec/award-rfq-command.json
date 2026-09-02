@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/award-rfq-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Award RFQ (Ar)\n\nThe single writer for the RFQ → PO transition. Re-enforces both award gates (stale quote, lapsed compliance), stamps the PO number (snapshot), computes the threshold route from the quote total (auto <$1k / Manager <$10k / Finance→VP ≥$10k), generates pending chain steps, copies the winning lines, and marks the RFQ awarded. An auto-route PO is approved immediately and committed against the budget; larger POs commit on final approval instead.\n\n### Example\n\nNatural target: the linked RFQ \"Q1 Laptop Refresh\" with two live quotes to choose between.\n\n### Non-goals\n\nNo decline notifications to losing vendors (v1.1 text generation). No partial awards / line splitting across vendors.",
+      "cardInfo": {
+        "name": "Award RFQ",
+        "summary": "Converts the winning quote into a draft Purchase Order with a stamped PO number and threshold-routed approval chain."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Rfq/q1-laptop-refresh"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

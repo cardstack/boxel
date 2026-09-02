@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Light-filled family house on Birchwood Lane",
+      "propertyType": "house",
+      "askingPrice": {
+        "amount": 865000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "bedrooms": 4,
+      "bathrooms": 2.5,
+      "areaSqft": 2380,
+      "yearBuilt": 1998,
+      "status": "published",
+      "publishedAt": "2026-08-20T16:00:00.000Z",
+      "description": "Corner lot with mature birches, renovated kitchen (2023), south-facing living room, and a detached studio over the garage.",
+      "photos": {
+        "images": [
+          {
+            "sourceMode": "url",
+            "url": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1200"
+          },
+          {
+            "sourceMode": "url",
+            "url": "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=1200"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "14 Birchwood Lane"
+      },
+      "address": {
+        "addressLine1": "14 Birchwood Lane",
+        "addressLine2": null,
+        "city": "Portland",
+        "state": "OR",
+        "postalCode": "97201",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": null
+        }
+      }
+    },
+    "relationships": {
+      "agent": {
+        "links": {
+          "self": "../Employee/mara-lindqvist"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../property-listing",
+        "name": "PropertyListing"
+      }
+    }
+  }
+}

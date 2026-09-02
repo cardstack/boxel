@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "provisionWaived": "Section 4.2 late fee — March invoice",
+      "scope": "one-time",
+      "effectiveDate": "2026-04-02",
+      "expiresOn": "2026-04-30",
+      "reason": "Customer payment delayed by their bank migration; relationship gesture.",
+      "cardInfo": {
+        "name": "Waiver — March late fee"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      },
+      "grantedTo": {
+        "links": {
+          "self": "../LegalEntity/cardstack-inc"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../waiver",
+        "name": "Waiver"
+      }
+    }
+  }
+}

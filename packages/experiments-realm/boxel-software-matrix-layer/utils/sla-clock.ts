@@ -1,5 +1,4 @@
 import { tracked } from '@glimmer/tracking';
-
 /**
  * One interval for the whole page, not one per reader.
  *
@@ -15,10 +14,14 @@ import { tracked } from '@glimmer/tracking';
  * the rail's count and the row's badge disagree in front of the reader.
  */
 class SlaClock {
-  @tracked now = new Date();
-  #handle: ReturnType<typeof setInterval> | null = null;
+  static {
+    dt7948.g(this.prototype, 'now', [tracked], function () {
+      return new Date();
+    });
+  }
+  #now = (dt7948.i(this, 'now'), void 0);
+  #handle = null;
   #watchers = 0;
-
   subscribe() {
     this.#watchers++;
     if (this.#handle == null) {
@@ -27,7 +30,6 @@ class SlaClock {
       }, 1000);
     }
   }
-
   unsubscribe() {
     this.#watchers = Math.max(0, this.#watchers - 1);
     if (this.#watchers === 0 && this.#handle != null) {
@@ -36,5 +38,4 @@ class SlaClock {
     }
   }
 }
-
 export const slaClock = new SlaClock();

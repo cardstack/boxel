@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "BudgetUtilizationField",
+        "module": "../budget-utilization-field"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Budget Utilization (Bu)\n\nCompound field holding three plain numbers — budget, committed, actual — and deriving percent, band (healthy <70% / warning 70–95% / critical ≥95% / over >100%), and available. The embedded format is the dual-segment bar: actual solid, committed hatched, so \"spent\" and \"promised\" never blur. Domain-neutral: the consumer decides what counts as committed vs actual and keeps the numbers current.\n\n### Example\n\nThe contained example mirrors the IT Hardware FY2026 Q1 budget: 120,000 / 18,400 / 12,100 → 25%, healthy.\n\n### Non-goals\n\nNo currency handling (plain numbers; the consumer formats). No thresholds-as-arguments yet — the bands are fixed and documented.",
+      "cardInfo": {
+        "name": "Budget Utilization",
+        "summary": "Commitment-accounting utilization: three plain numbers in, dual-segment bar and health band out."
+      },
+      "containedExamples": [
+        {
+          "budget": 120000,
+          "committed": 18400,
+          "actual": 12100
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../budget-utilization-field",
+              "name": "BudgetUtilizationField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

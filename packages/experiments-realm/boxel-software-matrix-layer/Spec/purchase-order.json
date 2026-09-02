@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PurchaseOrder",
+        "module": "../purchase-order"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Purchase Order (PO)\n\nThe binding order. Its approval path is computed from the total at issue time — under $1k auto-approves, under $10k takes one Manager step, $10k+ takes Finance → VP — and the applied route is stored (`approvalRoute`) so the policy stays auditable if thresholds change. The chain itself REUSES the shared `ApprovalChainField`/`ApprovalStepField` (Legal's blocks, second real consumer); step role labels are positional per route, deliberately not added to the shared step field.\n\nWhen the chain completes, ApprovePurchaseOrderCommand flips the PO to approved and COMMITS the total against the linked budget. `receivedQuantities` (index-aligned with lines) is maintained only by ReceiveGoodsCommand as partial receipts accumulate.\n\n### Examples\n\nPO-2026-0042 ($52,000, finance-vp route, Finance approved / VP pending), PO-2026-0051 (approved, carrying $18,400 committed), PO-2026-0038 (fully received).\n\n### Non-goals\n\nNo invoice or payment fields — three-way match is v1.1 and reuses the existing Invoice card when it lands. No editing of `poNumber` after issue (snapshot pattern, like Invoice Number).",
+      "cardInfo": {
+        "name": "Purchase Order",
+        "summary": "The binding order document: threshold-routed approval chain, immutable PO number, and commitment accounting against its budget."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PurchaseOrder/po-2026-0042"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../PurchaseOrder/po-2026-0038"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

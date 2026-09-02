@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "VendorQuote",
+        "module": "../vendor-quote"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Vendor Quote / Bid (Vq)\n\nA vendor's priced response to an RFQ, recorded by the BUYER from the vendor's email/PDF (single-persona rule). Lines reuse `LineItem` so quote totals and PO lines speak the same shape; `totalAmount` is computed. `isStale` derives from `validUntil` — a stale quote cannot be awarded. Linking `vendorProfile` is optional but recommended: it lets the comparison board surface the compliance gate.\n\n### Examples\n\nAcme Supply's quote ($53,000 total, 7-day lead, valid to Oct 1) and TechSource's ($52,000, 14-day lead).\n\n### Non-goals\n\nNo bid negotiation rounds or versioning — a revised quote is a new card. No vendor login to submit bids.",
+      "cardInfo": {
+        "name": "Vendor Quote (Bid)",
+        "summary": "A vendor's priced response to an RFQ, transcribed by the buyer: lines, lead time, and a validity date that can go stale."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorQuote/acme-laptop-refresh"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../VendorQuote/techsource-laptop-refresh"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

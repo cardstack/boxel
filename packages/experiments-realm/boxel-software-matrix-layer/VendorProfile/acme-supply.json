@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "companyName": "Acme Supply",
+      "contactName": "Dana Reyes",
+      "email": "dana@acmesupply.example",
+      "phone": "+14155550134",
+      "serviceCategory": "IT Hardware",
+      "taxId": "94-2871234",
+      "bankDetails": {
+        "bankName": "First Pacific",
+        "accountName": "Acme Supply LLC",
+        "accountNumber": "002846631",
+        "routingNumber": "121000358"
+      },
+      "certifications": [
+        {
+          "name": "ISO 9001",
+          "issuer": "TÜV",
+          "issuedOn": "2024-05-01",
+          "expiresOn": "2027-05-01"
+        },
+        {
+          "name": "SOC 2 Type II",
+          "issuer": "A-LIGN",
+          "issuedOn": "2025-08-15",
+          "expiresOn": "2026-12-15"
+        }
+      ],
+      "insuranceExpiry": "2026-11-30",
+      "status": "onboarded",
+      "notes": "Primary hardware vendor. Net-30 terms agreed at onboarding.",
+      "cardInfo": {
+        "name": "Acme Supply — Profile"
+      },
+      "address": {
+        "addressLine1": "2200 Harbor Blvd",
+        "addressLine2": null,
+        "city": "Oakland",
+        "state": "CA",
+        "postalCode": "94601",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": null
+        }
+      },
+      "paymentTerms": {
+        "netDays": 30,
+        "discountPct": 2,
+        "discountDays": 10,
+        "method": "bank transfer",
+        "notes": "Negotiated at onboarding."
+      },
+      "lifecycle": {
+        "createdAt": "2026-01-08T10:00:00.000Z",
+        "activatedAt": "2026-01-15T09:30:00.000Z",
+        "lastReviewedAt": "2026-08-30T14:00:00.000Z"
+      }
+    },
+    "relationships": {
+      "linkedVendor": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor-profile",
+        "name": "VendorProfile"
+      }
+    }
+  }
+}

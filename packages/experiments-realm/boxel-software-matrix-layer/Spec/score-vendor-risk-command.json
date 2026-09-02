@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "containedExamples": [],
+      "ref": {
+        "name": "default",
+        "module": "../commands/score-vendor-risk-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "cardInfo": {
+        "name": "Score Vendor Risk",
+        "summary": "Read-only analytic: gathers compliance, delivery, and rating evidence for one vendor and returns a 0–100 risk score with factors."
+      },
+      "readMe": "## Score Vendor Risk (SV)\n\nA read-only analytic command: finds the vendor's Vendor Profile (compliance evidence — expired certifications, lapsed insurance, or no profile at all), scans their Purchase Orders for short-shipment history via receivedQuantities, folds in the stored performance rating, and returns a 0–100 risk score (low / moderate / high) with every contributing factor spelled out. Deliberately mutates NOTHING: risk is a derived reading of current evidence, not a stored fact that could drift — re-run it whenever the answer matters.\n\n### Example\n\nNatural target: the linked Vendor (Acme Supply — low risk: compliance current, deliveries clean). Norvik Ltd's lapsed ISO 9001 scores as a compliance factor.\n\n### Non-goals\n\nNo stored risk field on Vendor (would drift from evidence). No external data (credit bureaus, sanctions lists) — realm evidence only."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

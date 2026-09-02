@@ -18,34 +18,10 @@
 // Putting the calendar in the second group is what would make a queue of fifty
 // rows recompute holiday tables every tick.
 
-export type TimerState =
-  | 'met'
-  | 'paused'
-  | 'healthy'
-  | 'warning'
-  | 'urgent'
-  | 'breached';
-
-export interface DayWindow {
-  /** 0 = Sunday … 6 = Saturday, matching Date#getDay. */
-  day: number;
-  openMinutes: number;
-  closeMinutes: number;
-}
-
-export interface BusinessSchedule {
-  /** IANA zone, e.g. 'Asia/Kuala_Lumpur'. */
-  timeZone: string;
-  windows: DayWindow[];
-  /** 'YYYY-MM-DD' dates on which the clock does not tick at all. */
-  holidays: string[];
-}
-
 const MINUTE = 60_000;
 const DAY_MINUTES = 24 * 60;
-
 /** A schedule that never stops — the fallback when a policy links no Schedule. */
-export const ALWAYS_ON: BusinessSchedule = {
+export const ALWAYS_ON = {
   timeZone: 'UTC',
   windows: [0, 1, 2, 3, 4, 5, 6].map((day) => ({
     day,
@@ -54,27 +30,16 @@ export const ALWAYS_ON: BusinessSchedule = {
   })),
   holidays: [],
 };
-
 // ---------------------------------------------------------------------------
 // Timezone-aware wall clock
 // ---------------------------------------------------------------------------
-
 // Intl is the only timezone database available to us, so the wall-clock parts
 // of an instant are read back out of a formatter rather than computed. Doing
 // this with a fixed UTC offset instead would be wrong twice a year in every
 // zone that observes DST — and an SLA that silently shifts by an hour each
 // spring is worse than one with no business hours at all.
-interface ZonedParts {
-  year: number;
-  month: number;
-  day: number;
-  weekday: number;
-  minutesOfDay: number;
-  /** 'YYYY-MM-DD' in the schedule's zone, for holiday lookup. */
-  isoDate: string;
-}
 
-const WEEKDAY_INDEX: Record<string, number> = {
+const WEEKDAY_INDEX = {
   Sun: 0,
   Mon: 1,
   Tue: 2,
@@ -83,10 +48,8 @@ const WEEKDAY_INDEX: Record<string, number> = {
   Fri: 5,
   Sat: 6,
 };
-
-const formatterCache = new Map<string, Intl.DateTimeFormat>();
-
-function formatterFor(timeZone: string): Intl.DateTimeFormat {
+const formatterCache = new Map();
+function formatterFor(timeZone) {
   let cached = formatterCache.get(timeZone);
   if (!cached) {
     cached = new Intl.DateTimeFormat('en-US', {
@@ -103,10 +66,9 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   }
   return cached;
 }
-
-export function zonedParts(at: Date, timeZone: string): ZonedParts {
-  let parts: Record<string, string> = {};
-  let formatter: Intl.DateTimeFormat;
+export function zonedParts(at, timeZone) {
+  let parts = {};
+  let formatter;
   try {
     formatter = formatterFor(timeZone);
   } catch {
@@ -130,11 +92,7 @@ export function zonedParts(at: Date, timeZone: string): ZonedParts {
     isoDate: `${parts.year}-${parts.month}-${parts.day}`,
   };
 }
-
-function windowsFor(
-  schedule: BusinessSchedule,
-  parts: ZonedParts,
-): DayWindow[] {
+function windowsFor(schedule, parts) {
   if (schedule.holidays?.includes(parts.isoDate)) {
     return [];
   }
@@ -142,8 +100,7 @@ function windowsFor(
     .filter((w) => w.day === parts.weekday && w.closeMinutes > w.openMinutes)
     .sort((a, b) => a.openMinutes - b.openMinutes);
 }
-
-function isAlwaysOn(schedule: BusinessSchedule): boolean {
+function isAlwaysOn(schedule) {
   return (
     (schedule.holidays?.length ?? 0) === 0 &&
     (schedule.windows?.length ?? 0) === 7 &&
@@ -152,11 +109,9 @@ function isAlwaysOn(schedule: BusinessSchedule): boolean {
     )
   );
 }
-
 // ---------------------------------------------------------------------------
 // The two expensive operations — called from commands, never from a template
 // ---------------------------------------------------------------------------
-
 /**
  * The wall-clock instant that is `minutes` of *working* time after `from`.
  *
@@ -164,18 +119,13 @@ function isAlwaysOn(schedule: BusinessSchedule): boolean {
  * P4 resolution target against a 8h/day schedule is nine iterations, not
  * 4,320.
  */
-export function addBusinessMinutes(
-  from: Date,
-  minutes: number,
-  schedule: BusinessSchedule = ALWAYS_ON,
-): Date {
+export function addBusinessMinutes(from, minutes, schedule = ALWAYS_ON) {
   if (!Number.isFinite(minutes) || minutes <= 0) {
     return new Date(from.getTime());
   }
   if (isAlwaysOn(schedule)) {
     return new Date(from.getTime() + minutes * MINUTE);
   }
-
   let remaining = minutes;
   let cursor = new Date(from.getTime());
   // A ticket raised on the Friday before a two-week shutdown still has to
@@ -204,20 +154,14 @@ export function addBusinessMinutes(
   }
   return new Date(cursor.getTime());
 }
-
 /** Working minutes elapsed between two instants. */
-export function businessMinutesBetween(
-  from: Date,
-  to: Date,
-  schedule: BusinessSchedule = ALWAYS_ON,
-): number {
+export function businessMinutesBetween(from, to, schedule = ALWAYS_ON) {
   if (to.getTime() <= from.getTime()) {
     return 0;
   }
   if (isAlwaysOn(schedule)) {
     return Math.round((to.getTime() - from.getTime()) / MINUTE);
   }
-
   let total = 0;
   let cursor = new Date(from.getTime());
   for (let guard = 0; guard < 400 && cursor.getTime() < to.getTime(); guard++) {
@@ -239,44 +183,19 @@ export function businessMinutesBetween(
   }
   return total;
 }
-
 // ---------------------------------------------------------------------------
 // The cheap operation — called from computed fields and once a second in the UI
 // ---------------------------------------------------------------------------
 
-export interface TimerFacts {
-  targetMinutes?: number | null;
-  startedAt?: Date | string | null;
-  /** Wall-clock instant the target expires, already business-hours adjusted. */
-  deadlineAt?: Date | string | null;
-  satisfiedAt?: Date | string | null;
-  /** Non-null while the clock is stopped. */
-  pausedSince?: Date | string | null;
-  breachedAt?: Date | string | null;
-}
-
-export interface TimerSnapshot {
-  state: TimerState;
-  /** Negative once breached. Null when there is nothing to count. */
-  remainingMinutes: number | null;
-  /** 0–100, clamped. Null when there is nothing to count. */
-  percentRemaining: number | null;
-  /** Short form for chips: '2h 34m', 'Met in 15m', '−12m'. */
-  shortLabel: string;
-  /** Long form for the workspace panel. */
-  label: string;
-}
-
-function asDate(value?: Date | string | null): Date | undefined {
+function asDate(value) {
   if (!value) {
     return undefined;
   }
   let d = value instanceof Date ? value : new Date(value);
   return isNaN(d.getTime()) ? undefined : d;
 }
-
 /** '2h 34m', '45m', '3d 4h' — never '0h 154m'. */
-export function formatMinutes(minutes: number): string {
+export function formatMinutes(minutes) {
   let m = Math.max(0, Math.round(Math.abs(minutes)));
   if (m < 60) {
     return `${m}m`;
@@ -290,23 +209,18 @@ export function formatMinutes(minutes: number): string {
   let remH = hours % 24;
   return remH ? `${days}d ${remH}h` : `${days}d`;
 }
-
 /**
  * Everything the UI needs about one timer, from its own fields plus `now`.
  *
  * `now` is a parameter rather than a `new Date()` inside so that the computed
  * field, the live badge and any future test all agree on what time it is.
  */
-export function timerSnapshot(
-  facts: TimerFacts,
-  now: Date = new Date(),
-): TimerSnapshot {
+export function timerSnapshot(facts, now = new Date()) {
   let target = facts.targetMinutes ?? null;
   let deadline = asDate(facts.deadlineAt);
   let satisfied = asDate(facts.satisfiedAt);
   let started = asDate(facts.startedAt);
   let pausedSince = asDate(facts.pausedSince);
-
   // Met wins over everything: a resolution timer that was satisfied inside its
   // window stays green even after the deadline instant passes.
   if (satisfied) {
@@ -321,12 +235,9 @@ export function timerSnapshot(
       label:
         took == null
           ? 'Target met'
-          : `Met in ${formatMinutes(took)}${
-              target ? ` of ${formatMinutes(target)}` : ''
-            }`,
+          : `Met in ${formatMinutes(took)}${target ? ` of ${formatMinutes(target)}` : ''}`,
     };
   }
-
   if (!deadline || !started) {
     return {
       state: 'paused',
@@ -336,7 +247,6 @@ export function timerSnapshot(
       label: 'No SLA target applies',
     };
   }
-
   let remaining = Math.round((deadline.getTime() - now.getTime()) / MINUTE);
   let percent =
     target && target > 0
@@ -344,7 +254,6 @@ export function timerSnapshot(
       : remaining > 0
         ? 100
         : 0;
-
   // A paused clock reports the time it had left when it stopped, which is what
   // `deadlineAt` already encodes — the resume command pushes the deadline out
   // by however long the pause lasted, so no separate arithmetic is needed here.
@@ -377,7 +286,6 @@ export function timerSnapshot(
       label: `Paused with ${formatMinutes(held)} left`,
     };
   }
-
   if (remaining <= 0) {
     return {
       state: 'breached',
@@ -387,26 +295,20 @@ export function timerSnapshot(
       label: `Breached ${formatMinutes(remaining)} ago`,
     };
   }
-
   // The three live bands from the spec. Ratio, not absolute time: 25% of a
   // 15-minute P1 target is a different kind of urgent from 25% of 72 hours,
   // but in both cases it means "three quarters of your budget is gone".
-  let state: TimerState =
-    percent > 50 ? 'healthy' : percent > 25 ? 'warning' : 'urgent';
-
+  let state = percent > 50 ? 'healthy' : percent > 25 ? 'warning' : 'urgent';
   return {
     state,
     remainingMinutes: remaining,
     percentRemaining: percent,
     shortLabel: formatMinutes(remaining),
-    label: `${formatMinutes(remaining)} remaining${
-      target ? ` of ${formatMinutes(target)}` : ''
-    }`,
+    label: `${formatMinutes(remaining)} remaining${target ? ` of ${formatMinutes(target)}` : ''}`,
   };
 }
-
 /** Ordering key for "nearest breach first". Breached sorts ahead of live. */
-export function urgencyRank(snapshot: TimerSnapshot): number {
+export function urgencyRank(snapshot) {
   switch (snapshot.state) {
     case 'breached':
       return -1_000_000 + (snapshot.remainingMinutes ?? 0);
@@ -420,9 +322,8 @@ export function urgencyRank(snapshot: TimerSnapshot): number {
       return Number.MAX_SAFE_INTEGER;
   }
 }
-
 /** The one place the six states map to a hue name from `utils/index`. */
-export const TIMER_HUE: Record<TimerState, string> = {
+export const TIMER_HUE = {
   met: 'green',
   healthy: 'green',
   warning: 'amber',

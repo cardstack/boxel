@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "requester": "Priya Nair",
+      "department": "IT Hardware",
+      "neededBy": "2026-10-15",
+      "lineItems": [
+        {
+          "description": "Laptop 14\" (32GB/1TB)",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 1180,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "USB-C Dock station",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 120,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "justification": "Q1 laptop refresh for the 40-person engineering cohort — current fleet exits warranty in November.",
+      "status": "converted-to-rfq",
+      "cardInfo": {
+        "name": "Laptop refresh — 40 units"
+      }
+    },
+    "relationships": {
+      "budget": {
+        "links": {
+          "self": "../ProcurementBudget/it-hardware-fy26q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../purchase-requisition",
+        "name": "PurchaseRequisition"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "containedExamples": [],
+      "ref": {
+        "name": "VendorOnboardingApp",
+        "module": "../vendor-onboarding-app"
+      },
+      "specType": "app",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "cardInfo": {
+        "name": "Vendor Onboarding App",
+        "summary": "Single-persona intake console: every Vendor Profile as a vetting pipeline with compliance visible at each stage."
+      },
+      "readMe": "## Vendor Onboarding App (VO)\n\nThe buyer's intake console: all Vendor Profiles laid out as a vetting pipeline (intake → under review → approved → onboarded, rejected parked below), compliance state visible on every card, click-to-open everywhere. Composes existing blocks UNCHANGED — VendorProfile carries the data and the Onboard action (OnboardVendorCommand); this app only live-queries and arranges.\n\n### Example\n\nThe linked instance shows Acme Supply (onboarded, compliant) and Norvik Ltd (approved but award-blocked on a lapsed ISO 9001).\n\n### Non-goals\n\nNo vendor-facing signup or portal (single-persona rule). No approval workflow of its own — status transitions happen on the profile and through OnboardVendorCommand, never from this shell."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorOnboardingApp/main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

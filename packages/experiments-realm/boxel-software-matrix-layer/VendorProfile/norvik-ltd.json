@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "companyName": "Norvik Ltd",
+      "contactName": "Astrid Berg",
+      "email": "astrid@norvik.example",
+      "phone": "+4722550188",
+      "serviceCategory": "IT Hardware",
+      "taxId": "NO-988112233",
+      "bankDetails": {
+        "bankName": "DNB",
+        "accountName": "Norvik Ltd",
+        "accountNumber": "15032099441",
+        "routingNumber": "DNBANOKK"
+      },
+      "certifications": [
+        {
+          "name": "ISO 9001",
+          "issuer": "DNV",
+          "issuedOn": "2023-05-01",
+          "expiresOn": "2026-05-01"
+        }
+      ],
+      "insuranceExpiry": "2027-02-28",
+      "status": "approved",
+      "notes": "ISO 9001 lapsed May 2026 — award-blocked until renewed. Renewal audit booked for October.",
+      "cardInfo": {
+        "name": "Norvik Ltd — Profile"
+      },
+      "address": {
+        "addressLine1": "Havnegata 12",
+        "addressLine2": null,
+        "city": "Oslo",
+        "state": null,
+        "postalCode": "0150",
+        "poBoxNumber": null,
+        "country": {
+          "name": "Norway",
+          "code": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor-profile",
+        "name": "VendorProfile"
+      }
+    }
+  }
+}

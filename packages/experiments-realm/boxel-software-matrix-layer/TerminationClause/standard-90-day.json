@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Standard 90-Day Exit",
+      "clauseType": "termination",
+      "riskLevel": "medium",
+      "noticeDays": 90,
+      "forConvenience": true,
+      "curePeriodDays": 30,
+      "earlyExitFeeText": "none",
+      "standardText": "Either party may terminate for convenience on ninety (90) days written notice…",
+      "cardInfo": {
+        "name": "Standard 90-Day Exit"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../termination-clause",
+        "name": "TerminationClause"
+      }
+    }
+  }
+}

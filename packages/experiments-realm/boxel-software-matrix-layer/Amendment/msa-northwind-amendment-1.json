@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amendmentNumber": 1,
+      "effectiveDate": "2026-06-01",
+      "status": "executed",
+      "executedOn": "2026-05-28",
+      "changesSummary": "Extends the term to Dec 31 2026 and raises the support tier to Premium.",
+      "changedTerms": "Section 2.1 (Term) is amended to read: \"…continuing through December 31, 2026.\"",
+      "cardInfo": {
+        "name": "Amendment No. 1 — MSA Northwind"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../amendment",
+        "name": "Amendment"
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "TechSource",
+      "contactName": "Miles Chen",
+      "email": "miles@techsource.example",
+      "serviceCategory": "IT Hardware",
+      "contractStart": "2025-11-01",
+      "cardInfo": {
+        "name": "TechSource"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

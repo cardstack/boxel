@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Master Services Agreement — Northwind",
+      "status": "signed",
+      "startDate": "2026-02-01",
+      "endDate": "2026-10-15",
+      "value": {
+        "amount": 240000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "signedAt": "2026-01-28",
+      "signatureStatus": "signed",
+      "signatureProvider": "DocuSign",
+      "contractNumber": "MSA-2026-011",
+      "autoRenews": true,
+      "renewalNoticeDays": 60,
+      "cardInfo": {
+        "name": "MSA — Northwind"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract",
+        "name": "Contract"
+      }
+    }
+  }
+}

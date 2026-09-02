@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "containedExamples": [],
+      "ref": {
+        "name": "RfqToPaymentApp",
+        "module": "../rfq-to-payment-app"
+      },
+      "specType": "app",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "cardInfo": {
+        "name": "RFQ-to-Payment App",
+        "summary": "The buyer's Procure-to-Pay console: requisitions, RFQs, POs, receipts, and budget health in one tabbed shell."
+      },
+      "readMe": "## RFQ-to-Payment App (Rt)\n\nThe Procure-to-Pay console composing the procurement blocks unchanged: a six-station flow rail (Onboarding \u2192 Requisitions \u2192 RFQs \u2192 Approvals \u2192 Receiving \u2192 Match & Pay) whose stations click through to pre-filtered lists; per-tab collection shells (search + status badges + grid/list/table views); the Vendors tab mounts the shared StatusBoard; the Invoices tab lists AP-leg vendor invoices whose isolated view carries the Three-Way Match Panel; budgets render through ProcurementBudget's dual-segment commitment bar. Every status transition stays on its owning command \u2014 no drag-to-approve anywhere.\n\n### Example\n\nThe linked instance runs the full chain against the realm's example world, ending at INV N-4471 mid-match.\n\n### Non-goals\n\nNo payment execution (Approve for Payment hands over to the existing Payment flow). No vendor persona."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../RfqToPaymentApp/main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

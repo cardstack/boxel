@@ -1,0 +1,73 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Q1 Laptop Refresh",
+      "lineItems": [
+        {
+          "description": "Laptop 14\" (32GB/1TB)",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 1180,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "USB-C Dock station",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 120,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "status": "comparing",
+      "responseDeadline": "2026-09-15",
+      "cardInfo": {
+        "name": "Q1 Laptop Refresh"
+      }
+    },
+    "relationships": {
+      "requisition": {
+        "links": {
+          "self": "../PurchaseRequisition/laptop-refresh"
+        }
+      },
+      "invitedVendors.0": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      },
+      "invitedVendors.1": {
+        "links": {
+          "self": "../Vendor/techsource"
+        }
+      },
+      "quotes.0": {
+        "links": {
+          "self": "../VendorQuote/acme-laptop-refresh"
+        }
+      },
+      "quotes.1": {
+        "links": {
+          "self": "../VendorQuote/techsource-laptop-refresh"
+        }
+      },
+      "awardedQuote": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../rfq",
+        "name": "Rfq"
+      }
+    }
+  }
+}

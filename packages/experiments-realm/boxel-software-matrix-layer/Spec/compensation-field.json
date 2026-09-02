@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "CompensationField",
+        "module": "../compensation-field"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Compensation — field (Co)\n\nA pay package as one value so every surface renders pay one way and a change can be recorded whole. Computed `summary` gives list rows a one-liner. Domain-neutral: no approval or effective-date semantics — those belong to the record card that contains it (see the Compensation card).\n\n### Non-goals\n\nNo currency conversion (plain USD-denominated numbers in v1). No payroll math — this states the package, it does not run it.",
+      "cardInfo": {
+        "name": "Compensation",
+        "summary": "A pay package as one compound value: base + period, bonus target, equity."
+      },
+      "containedExamples": [
+        {
+          "baseAmount": 164000,
+          "payPeriod": "annual",
+          "bonusTargetPercent": 10,
+          "equityShares": 2400
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../compensation-field",
+              "name": "CompensationField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

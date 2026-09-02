@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "poNumber": "PO-2026-0042",
+      "status": "pending-approval",
+      "approvalRoute": "finance-vp",
+      "lineItems": [
+        {
+          "description": "Laptop 14\" (32GB/1TB)",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 1180,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "USB-C Dock station",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 120,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "approvalChain": {
+        "startedAt": "2026-08-28T14:10:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-29T09:42:00.000Z",
+            "comment": "Within refresh budget line.",
+            "openedAt": "2026-08-28T14:10:00.000Z"
+          },
+          {
+            "decision": "pending",
+            "openedAt": "2026-08-29T09:42:00.000Z"
+          }
+        ]
+      },
+      "expectedDelivery": "2026-09-12",
+      "cardInfo": {
+        "name": "PO-2026-0042"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../Vendor/acme-supply"
+        }
+      },
+      "budget": {
+        "links": {
+          "self": "../ProcurementBudget/it-hardware-fy26q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../purchase-order",
+        "name": "PurchaseOrder"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Compensation",
+        "module": "../compensation"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Compensation — card (Co)\n\nThe auditable pay-history record: employee, effective date, the whole package (reusing CompensationField), the reason, and the approver. Append-only in spirit — a correction is a new record, so history never rewrites itself.\n\n### Non-goals\n\nNo approval workflow of its own in v1 (the approvedBy link records the decision; routing it could reuse the shared approval-chain blocks later). Employee.salary is not auto-synced from records — single-writer wiring is future work, noted so nobody assumes it exists.",
+      "cardInfo": {
+        "name": "Compensation",
+        "summary": "One dated compensation decision for one employee — who, when, why, approved by whom."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Compensation/mara-2026-promo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

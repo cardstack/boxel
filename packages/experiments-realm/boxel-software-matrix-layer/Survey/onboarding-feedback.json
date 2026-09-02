@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Onboarding Feedback",
+      "description": "Five questions for admins who finished workspace setup this month.",
+      "publishedAt": "2026-08-15T09:00:00.000Z",
+      "questions": [
+        {
+          "prompt": "How easy was the initial setup?",
+          "kind": "rating",
+          "required": true,
+          "options": []
+        },
+        {
+          "prompt": "What almost made you give up?",
+          "kind": "text",
+          "required": false,
+          "options": []
+        }
+      ],
+      "cardInfo": {
+        "name": "Onboarding Feedback"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../survey",
+        "name": "Survey"
+      }
+    }
+  }
+}

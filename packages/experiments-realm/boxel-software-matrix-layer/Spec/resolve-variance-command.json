@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/resolve-variance-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Resolve Variance\n\nStores one decision about one failing line on the invoice's varianceResolutions \u2014 reason REQUIRED (the resolution IS the audit line), one resolution per line (a change of mind is a new record, not an edit), and the invoice moves to 'matching' so the ladder shows it is being worked. Resolving computes nothing: the panel re-derives the match and treats resolved lines as non-blocking.\n\n### Example\n\nNatural target: the linked INV N-4471's freight line ('invoiced, not on PO').\n\n### Non-goals\n\nNo un-resolve. No actor identity in v1 (shared account); the attribution slot is the command boundary when identity lands.",
+      "cardInfo": {
+        "name": "Resolve Variance",
+        "summary": "Records one reasoned human decision (accept / short-pay / reject-line) about one failing match line, permanently, on the invoice."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-n-4471"
+        }
+      }
+    }
+  }
+}

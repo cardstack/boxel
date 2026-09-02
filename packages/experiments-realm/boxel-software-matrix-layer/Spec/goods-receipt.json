@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "GoodsReceipt",
+        "module": "../goods-receipt"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Goods Receipt (GR)\n\nThe receiving record for one delivery against one PO. Each line snapshots `qtyOrdered` at posting time (a receipt is an audit document — it keeps saying what was ordered then, even if the PO changes later) next to `qtyReceived`; per-line and overall match states derive from the pair. Multiple receipts accumulate against one PO (partial receiving).\n\nReceiveGoodsCommand is the single writer that posts a draft receipt: it flips the PO to received / partially-received and moves the received value from the budget's `committed` to `actual`. Over-receipt is allowed but demands a line note, and never moves more than the ordered value through the budget.\n\n### Example\n\nGoods Receipt · Aug 1 (posted): 55/55 monitors against PO-2026-0038, fully matched.\n\n### Non-goals\n\nNo inventory or stock management — arrival is recorded here, stock lives in the existing Inventory concepts. No invoice matching (v1.1, three-way).",
+      "cardInfo": {
+        "name": "Goods Receipt",
+        "summary": "What physically arrived against one PO, line by line — the receiving half of the two-way match."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../GoodsReceipt/gr-po-2026-0038"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

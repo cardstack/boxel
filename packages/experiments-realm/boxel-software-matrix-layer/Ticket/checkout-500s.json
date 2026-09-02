@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": "Checkout intermittently returns 500",
+      "status": "open",
+      "priority": "high",
+      "cardInfo": {
+        "name": "Checkout intermittently returns 500"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket",
+        "name": "Ticket"
+      }
+    }
+  }
+}

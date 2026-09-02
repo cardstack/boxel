@@ -41,12 +41,48 @@ export const PaymentStatusField = statusField({
       holds: true,
       meaning: 'Cancelled. A correction is a new invoice, not an edit.',
     },
+    // ---- AP (buy-side) leg — the one deliberate widening the Invoice
+    // Status Spec documents. A VENDOR invoice arrives 'received' rather
+    // than being drafted, runs the three-way match, and only a clean or
+    // fully-resolved match can reach payment. Sell-side values and
+    // transitions above are untouched.
+    {
+      value: 'received',
+      hue: 'slate',
+      meaning: "Vendor's invoice recorded, match not yet run.",
+    },
+    {
+      value: 'matching',
+      hue: 'blue',
+      meaning: 'Being compared line-by-line against PO and receipts.',
+    },
+    {
+      value: 'matched',
+      hue: 'green',
+      meaning: 'Every line clean within tolerance.',
+    },
+    {
+      value: 'exception',
+      hue: 'red',
+      meaning:
+        'At least one line has an unresolved variance — payment blocked.',
+    },
+    {
+      value: 'approved-for-payment',
+      hue: 'green',
+      meaning: 'Match clean or all variances resolved; payment may proceed.',
+    },
   ],
   transitions: {
     draft: ['sent', 'void'],
     sent: ['viewed', 'partial', 'paid', 'void'],
     viewed: ['partial', 'paid', 'void'],
     partial: ['paid', 'void'],
+    received: ['matching', 'void'],
+    matching: ['matched', 'exception', 'void'],
+    exception: ['matching', 'void'],
+    matched: ['approved-for-payment', 'void'],
+    'approved-for-payment': ['partial', 'paid', 'void'],
   },
 });
 

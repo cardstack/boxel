@@ -23,7 +23,11 @@
         "11",
         "12"
       ],
-      "tags": ["dunk", "nike", "general-release"],
+      "tags": [
+        "dunk",
+        "nike",
+        "general-release"
+      ],
       "images": {
         "images": [
           {

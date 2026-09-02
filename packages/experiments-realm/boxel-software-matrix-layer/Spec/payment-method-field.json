@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PaymentMethodField",
+        "module": "../payment"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Payment Method (PM)\n\n**Consume, don’t rebuild.** payment.gts ships the rail enum (card / bank transfer / cash / other); this Spec registers it and names its second consumer: PaymentTermsField carries it as the vendor’s preferred rail, alongside Payment’s original use on the transaction itself. The hardening is documentation, not code.\n\n### Example\n\nA primitive enum cannot carry containedExamples — see the linked Payment Terms on Acme Supply’s profile (rail: bank transfer).\n\n### Non-goals\n\nNo rail-specific detail fields here (IBAN/routing live on remit-to/bank blocks). Widening the rail list is the owning module’s change.",
+      "cardInfo": {
+        "name": "Payment Method",
+        "summary": "CONSUME/EXTEND: payment.gts’s rail enum (card / bank transfer / cash / other), now consumed by Payment Terms as the preferred rail."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

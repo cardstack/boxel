@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-114",
+      "issueDate": "2026-08-12",
+      "dueDate": "2026-09-11",
+      "status": "sent",
+      "lineItems": [
+        {
+          "description": "Implementation services — August",
+          "quantity": 40,
+          "unitPrice": {
+            "amount": 165,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": "INV-2026-114"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

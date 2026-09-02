@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "legalName": "Cardstack Inc.",
+      "entityType": "corporation",
+      "jurisdiction": "Delaware",
+      "registrationNumber": "DE-7241188",
+      "taxId": "84-2210934",
+      "signatoryName": "A. Reyes",
+      "signatoryTitle": "CEO",
+      "signatoryEmail": "legal@cardstack.example",
+      "cardInfo": {
+        "name": "Cardstack Inc."
+      },
+      "registeredAddress": {
+        "addressLine1": "228 Park Ave S",
+        "addressLine2": null,
+        "city": "New York",
+        "state": "NY",
+        "postalCode": "10003",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../legal-entity",
+        "name": "LegalEntity"
+      }
+    }
+  }
+}

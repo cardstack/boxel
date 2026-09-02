@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/publish-survey-command"
+      },
+      "specType": "command",
+      "isCard": false,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Publish Survey (PS)\n\nThe single writer for a survey’s publish event: requires a title and ≥1 question, then stamps `publishedAt` exactly once (added to the shared Survey block additively; `isPublished` derives from it, so the boolean can never drift).\n\n### Example\n\nNatural target: the linked Onboarding Feedback survey (already published — re-running demonstrates the once-only guard).\n\n### Non-goals\n\nNo unpublish (responses may reference the published form; retiring is a different concern). No distribution — publication states availability, delivery is out of scope.",
+      "cardInfo": {
+        "name": "Publish Survey",
+        "summary": "Stamps publishedAt once after checking the survey is actually publishable."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Survey/onboarding-feedback"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

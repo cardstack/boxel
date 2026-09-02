@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Training Services Addendum",
+      "effectiveDate": "2026-07-01",
+      "status": "executed",
+      "executedOn": "2026-06-25",
+      "addedTerms": "Provider shall additionally deliver up to four (4) on-site training days per quarter at the rates in Schedule C.",
+      "cardInfo": {
+        "name": "Training Services Addendum"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../addendum",
+        "name": "Addendum"
+      }
+    }
+  }
+}

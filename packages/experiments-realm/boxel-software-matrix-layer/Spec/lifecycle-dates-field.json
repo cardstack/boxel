@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "LifecycleDatesField",
+        "module": "../lifecycle-dates-field"
+      },
+      "specType": "field",
+      "isCard": false,
+      "isField": true,
+      "isComponent": false,
+      "readMe": "## Lifecycle Dates (LD)\n\nThe lifecycle stamps any record card carries, as one reusable block. Each stamp is an event fact written once by whichever command owns that transition; `latestTransition` derives the list-row one-liner (\"activated Aug 12\") so consumers never re-derive recency. Deliberately domain-neutral — nothing here knows what record it sits on. First consumer: Vendor Profile (invited/activated/reviewed).\n\n### Non-goals\n\nNot an audit log (no actor, no reason — those belong to the commands and their records). No status enum — statuses are the consumer’s statusField; these are just the WHEN.",
+      "cardInfo": {
+        "name": "Lifecycle Dates",
+        "summary": "Generic record-lifecycle stamps (created/activated/suspended/archived/reviewed) with a computed latest-transition label."
+      },
+      "containedExamples": [
+        {
+          "createdAt": "2026-01-08T10:00:00.000Z",
+          "activatedAt": "2026-01-15T09:30:00.000Z"
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../lifecycle-dates-field",
+              "name": "LifecycleDatesField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

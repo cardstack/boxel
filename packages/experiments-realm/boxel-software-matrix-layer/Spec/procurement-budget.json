@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ProcurementBudget",
+        "module": "../procurement-budget"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Procurement Budget (PB)\n\nOne department's spending envelope for one period, with the commitment-accounting split that separates real procurement tools from toys: `committed` is money promised by approved-but-unreceived POs; `actual` is money for goods received. Both are maintained exclusively by the commands that own those transitions (ApprovePurchaseOrderCommand, ReceiveGoodsCommand) — event-sourced numbers, never hand-edited, never recomputed by a query.\n\nUtilization renders through the reusable `BudgetUtilizationField` (dual-segment bar: actual solid, committed hatched; healthy / warning / critical / over bands).\n\n### Example\n\nIT Hardware · FY2026 Q1: $120,000 budget, $18,400 committed (PO-2026-0051), $12,100 actual (PO-2026-0038) — 25% utilized.\n\n### Non-goals\n\nNo budget approval workflow (the envelope is given; approving SPEND is the PO's chain). No multi-currency — amounts are USD numbers in v1.",
+      "cardInfo": {
+        "name": "Procurement Budget",
+        "summary": "A department's period envelope tracked with commitment accounting: committed (approved POs) and actual (received) as separate numbers."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ProcurementBudget/it-hardware-fy26q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

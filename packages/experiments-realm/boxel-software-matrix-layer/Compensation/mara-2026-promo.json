@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "effectiveDate": "2026-07-01",
+      "package": {
+        "baseAmount": 164000,
+        "payPeriod": "annual",
+        "bonusTargetPercent": 10,
+        "equityShares": 2400
+      },
+      "reason": "promotion",
+      "notes": "Promotion to Staff Engineer after leading the indexing rewrite.",
+      "cardInfo": {
+        "name": "Mara Lindqvist · Jul 2026"
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/mara-lindqvist"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../compensation",
+        "name": "Compensation"
+      }
+    }
+  }
+}

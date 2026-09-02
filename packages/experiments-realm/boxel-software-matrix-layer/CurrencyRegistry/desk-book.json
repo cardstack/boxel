@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "baseCurrency": "USD",
+      "staleAfterDays": 30,
+      "rates": [
+        {
+          "currency": "EUR",
+          "rate": 1.09,
+          "asOf": "2026-08-28",
+          "source": "ECB daily fix"
+        },
+        {
+          "currency": "GBP",
+          "rate": 1.27,
+          "asOf": "2026-08-28",
+          "source": "ECB daily fix"
+        },
+        {
+          "currency": "JPY",
+          "rate": 0.0068,
+          "asOf": "2026-05-02",
+          "source": "treasury desk"
+        }
+      ],
+      "cardInfo": {
+        "name": "Desk Book (USD base)"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../currency-registry",
+        "name": "CurrencyRegistry"
+      }
+    }
+  }
+}

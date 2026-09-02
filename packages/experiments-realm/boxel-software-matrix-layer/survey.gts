@@ -7,6 +7,8 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 import { SurveyQuestion } from './survey-question';
 import { SurveyIsolated } from './components/survey/isolated-template';
@@ -24,6 +26,18 @@ export class Survey extends CardDef {
   @field questionCount = contains(NumberField, {
     computeVia: function (this: Survey) {
       return this.questions?.length ?? 0;
+    },
+  });
+
+  // ---- Added for Publish Survey (additive only) ---------------------------
+  // Event fact, not a flag: PublishSurveyCommand writes this once and it is
+  // monotonic — `isPublished` derives from it, so the boolean can never
+  // drift from the event that made it true.
+  @field publishedAt = contains(DateTimeField);
+
+  @field isPublished = contains(BooleanField, {
+    computeVia: function (this: Survey) {
+      return Boolean(this.publishedAt);
     },
   });
 

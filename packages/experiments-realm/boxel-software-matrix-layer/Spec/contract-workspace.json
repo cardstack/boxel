@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ContractWorkspace",
+        "module": "../components/contract-workspace"
+      },
+      "specType": "component",
+      "isCard": false,
+      "isField": false,
+      "isComponent": true,
+      "readMe": "## Contract Workspace (CW)\n\nOne contract’s whole paper trail on one surface: signature state, the Clause Navigator, executed version history, and modification papers — live-queried so paper created anywhere shows up without manual wiring.\n\n### Non-goals\n\nNot a contract EDITOR — every action routes through the commands (Request Signature, Execute, Amend). Not mounted into the shared contract.gts isolated in v1 (additive follow-up on that block).",
+      "cardInfo": {
+        "name": "Contract Workspace",
+        "summary": "Everything hanging off one contract: clauses, versions, amendments, addenda, waivers, signature state."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
