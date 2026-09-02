@@ -5,12 +5,12 @@ moments. Drop the files here and they appear; leave the folder empty and
 the plates simply do not render, which is why the film is shippable
 either way.
 
-| file              | the moment it lands on                       |
-|-------------------|----------------------------------------------|
-| `azuchi.webp`     | 安土城 — Nobunaga's keep, 1576                |
-| `himeji.webp`     | 一国一城令 — the twelve surviving originals    |
-| `ishigaki.webp`   | 石垣 — dry-laid stone, the fan's incline      |
-| `shachihoko.webp` | 鯱 — the bronze roof-ridge fish               |
+| file              | the moment it lands on                      |
+| ----------------- | ------------------------------------------- |
+| `azuchi.webp`     | 安土城 — Nobunaga's keep, 1576              |
+| `himeji.webp`     | 一国一城令 — the twelve surviving originals |
+| `ishigaki.webp`   | 石垣 — dry-laid stone, the fan's incline    |
+| `shachihoko.webp` | 鯱 — the bronze roof-ridge fish             |
 
 Landscape, roughly 3:2, 1200px wide is plenty — the plate is at most
 340px across and the film desaturates it slightly to sit with the scene.

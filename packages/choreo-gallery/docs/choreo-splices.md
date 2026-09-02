@@ -1,10 +1,10 @@
 # Splices — cuts as a first-class citizen of the score
 
-*Design note, 2026-09-01. Grown out of the Towers film (`/_towers`), which
+_Design note, 2026-09-01. Grown out of the Towers film (`/_towers`), which
 is the first score that cuts like an editor instead of sweeping like a
 drone. Status: the camera half is implemented (`cut:` on a `@through`
 waypoint); the junction vocabulary below is the plan of record for the
-rest.*
+rest._
 
 ## The problem
 
@@ -72,32 +72,32 @@ not because a builder parked them.
 
 ## Part 2 — the junction vocabulary (the plan)
 
-A seam needs a *policy*, not just a location. The policy answers, per
+A seam needs a _policy_, not just a location. The policy answers, per
 medium, "what happens in the ~0–400 ms around the boundary." The set that
 covers film grammar:
 
-| join      | picture                                   | audio                        | text / DOM                    |
-|-----------|-------------------------------------------|------------------------------|-------------------------------|
-| `cut`     | step function, nothing else               | micro-fade out (~120 ms)     | leaver fades ~200 ms, no travel |
-| `wipe`    | cut + a punctuation overlay (~340 ms)     | micro-fade out               | as `cut`                      |
-| `whip`    | goal jumps; chaser races on a stiff spring (~350 ms) — a fast smooth tween, never a glide | micro-fade under the whip | old text exits during the whip |
-| `blend`   | the crossfade: freeze-blend dissolve (~460 ms) | equal-power crossfade   | old and new co-resident, cross-faded |
-| `dip`     | fade through a colour (~760 ms): freeze holds the old shot, the veil closes, the seam passes covered, the veil lifts on the new — colour per junction (black for time, paper for the gallery wall) | micro-fade out under the closing veil | as `cut` |
+| join    | picture                                                                                                                                                                                            | audio                                 | text / DOM                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------ |
+| `cut`   | step function, nothing else                                                                                                                                                                        | micro-fade out (~120 ms)              | leaver fades ~200 ms, no travel      |
+| `wipe`  | cut + a punctuation overlay (~340 ms)                                                                                                                                                              | micro-fade out                        | as `cut`                             |
+| `whip`  | goal jumps; chaser races on a stiff spring (~350 ms) — a fast smooth tween, never a glide                                                                                                          | micro-fade under the whip             | old text exits during the whip       |
+| `blend` | the crossfade: freeze-blend dissolve (~460 ms)                                                                                                                                                     | equal-power crossfade                 | old and new co-resident, cross-faded |
+| `dip`   | fade through a colour (~760 ms): freeze holds the old shot, the veil closes, the seam passes covered, the veil lifts on the new — colour per junction (black for time, paper for the gallery wall) | micro-fade out under the closing veil | as `cut`                             |
 
 Rules that hold for every join:
 
 1. **Audio never clips.** A boundary claims a ~120 ms fade-out on any
-   still-playing continuous medium (voice, video audio) *before* the
+   still-playing continuous medium (voice, video audio) _before_ the
    pause; ramps down are fast, ramps up are slow (the duck's law,
    generalized). This costs nothing perceptible and removes every pop.
-2. **No inserted time.** A join executes *across* the boundary instant —
+2. **No inserted time.** A join executes _across_ the boundary instant —
    overlays and fades run concurrently with the incoming shot's first
    frames. A join that delays the incoming shot is a pause wearing a
    costume, and is wrong.
 3. **The incoming medium starts in a presentable state.** First frame of
    video seeked and decoded ahead of the seam; first line of text laid
    out before its reveal; the scene's build clock pre-set. Preparation is
-   the join's responsibility, scheduled *before* the seam (prefetch at
+   the join's responsibility, scheduled _before_ the seam (prefetch at
    `seam − 1s`), never after.
 4. **One policy object, many media.** A junction is declared once at the
    boundary and each medium interprets its lane — the same way a beat is
@@ -107,13 +107,13 @@ Rules that hold for every join:
 frames alive at once. For DOM and video that is two elements and an
 opacity ramp. For a WebGL scene the answer turned out cleaner than the
 snapshot-a-frame-late compromise this note first predicted: the bridge
-renders one frame *on demand* and reads the canvas back in the same
+renders one frame _on demand_ and reads the canvas back in the same
 task — `preserveDrawingBuffer` never matters, and the freeze is captured
 the instant **before** the incoming pose is applied. The still fades over
 the live shot (~460 ms), wearing the live frame's own primary grade and
 sitting under the split-tone, so both sides of the dissolve pass through
 one colourist's hands. A capture from a zero-sized surface degrades to a
-clean cut, never a broken image. This is the *freeze-blend* — what most
+clean cut, never a broken image. This is the _freeze-blend_ — what most
 editors actually cut under a short dissolve anyway.
 
 **Library form (future).** The natural home is a step:
@@ -132,11 +132,11 @@ the proving ground for promoting the step.
 
 ## Part 2½ — linked tracks, independent seams (L-cuts, J-cuts, barge-in)
 
-A junction is one *event* but not one *moment*: in real editing, each
+A junction is one _event_ but not one _moment_: in real editing, each
 track crosses the boundary on its own clock. The picture cuts at the
 seam; the outgoing audio may **finish over the incoming shot** (an
 L-cut), or the incoming audio may **lead the picture** (a J-cut). The
-tracks are *linked* — the same junction triggers them — but *independent*:
+tracks are _linked_ — the same junction triggers them — but _independent_:
 each has its own offset, tail, and fade around the shared instant.
 
 So a junction's policy is per-track:
@@ -160,14 +160,14 @@ junction {
   shot speaks; two voices may not overlap.
 - `word` — the game-dialogue refinement: wait up to ~350 ms for the next
   inter-word trough (an analyser watching the line's RMS, or word
-  timestamps computed at record time), *then* fade in ~40 ms. Stops
+  timestamps computed at record time), _then_ fade in ~40 ms. Stops
   cleanly "at the next word" instead of mid-syllable. Planned; the
   architecture below is built to take it.
 
 **The architectural requirement: one throat per line.** A single shared
 audio element makes politeness impossible — however gently the old line
 is being faded, the new line's `src` swap guillotines it. Every line gets
-its own element; an interrupted line fades (or finishes) on *its own*,
+its own element; an interrupted line fades (or finishes) on _its own_,
 concurrently with the new line starting clean. Tails are therefore free:
 they cost one idle element for a few hundred milliseconds.
 
@@ -186,7 +186,7 @@ they cost one idle element for a few hundred milliseconds.
   seam into a speaking beat barge-fades the old line (~120 ms) on its own
   throat while the new line starts clean; a seam into a silent beat is an
   L-cut — the sentence finishes over the new shot and the duck lifts when
-  it lands. A beat that is *about* silence (`hush: true` — the muneage
+  it lands. A beat that is _about_ silence (`hush: true` — the muneage
   breath) is the exception that asks for quiet.
 - The cue clock is aligned to the waypoint slots (the pose-in-force seed
   occupies the spline's first slot, so cue k fires at slot k+1) — under
@@ -198,7 +198,7 @@ they cost one idle element for a few hundred milliseconds.
 - Should a shot be able to declare its own `@tension`/ease? (A whip pan
   authored as a shot wants tension near 1.)
 - Freeze-blend snapshot: `preserveDrawingBuffer` is off in most scenes;
-  the snapshot has to be taken *by the scene* at the seam (bridge API) or
+  the snapshot has to be taken _by the scene_ at the seam (bridge API) or
   accepted as one frame late.
 - Junction events for **video**: the seam should drive
   `HTMLVideoElement` seek + play precisely; needs the prefetch slot from

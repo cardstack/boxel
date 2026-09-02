@@ -135,13 +135,12 @@ export class TowerStage extends Component {
         align-items: center;
         justify-content: center;
         gap: 2px;
-        background:
-          radial-gradient(
-            120% 90% at 30% 0%,
-            rgba(255, 244, 214, 0.9) 0%,
-            rgba(236, 220, 188, 0.98) 55%,
-            #decba0 100%
-          );
+        background: radial-gradient(
+          120% 90% at 30% 0%,
+          rgba(255, 244, 214, 0.9) 0%,
+          rgba(236, 220, 188, 0.98) 55%,
+          #decba0 100%
+        );
         color: #2e2515;
         text-align: center;
       }
@@ -149,7 +148,7 @@ export class TowerStage extends Component {
       .tw-tile-k {
         margin: 0;
         font-family:
-          'Iowan Old Style', Charter, 'Palatino Linotype', Palatino, Georgia,
+          "Iowan Old Style", Charter, "Palatino Linotype", Palatino, Georgia,
           serif;
         font-size: 64px;
         line-height: 1.1;

@@ -85,6 +85,14 @@ interface Cam {
 }
 
 interface Beat {
+  /**
+   * A DRONE DOES NOT HOLD PERFECTLY STILL. Degrees of vertical sway
+   * added on top of whatever the shot is already doing — a slow rise
+   * and settle through the beat, which is what a camera in the air
+   * actually does and what makes a locked-off orbit read as flown
+   * rather than rendered.
+   */
+  bob?: number;
   /** the construction clock: one number holds it, a pair runs it */
   build?: [number, number] | number;
   /** the pose crossed at the head of this beat */
@@ -136,22 +144,20 @@ interface Beat {
    * 'sweep' — the sun itself flares across the seam and settles.
    */
   dipTo?: string;
+  /**
+   * THE BUILDING LEAVES BY FADING, not by sinking. Running the build
+   * clock backwards moves the tower down out of its own frame, and
+   * since the film builds it straight back afterwards, that movement is
+   * a journey to nowhere. A dissolve says "gone" and leaves the shot
+   * composed exactly as it was.
+   */
+  dissolve?: boolean;
   /** the English of the kanji, set small under it */
   gloss?: string;
   /** which of the six towers stands here; overrides the chapter's grade */
   grade?: string;
   /** how thick the air is, 0 the hour's own and 1 as heavy as it goes */
   haze?: number;
-
-  /**
-   * A DRONE DOES NOT HOLD PERFECTLY STILL. Degrees of vertical sway
-   * added on top of whatever the shot is already doing — a slow rise
-   * and settle through the beat, which is what a camera in the air
-   * actually does and what makes a locked-off orbit read as flown
-   * rather than rendered.
-   */
-  bob?: number;
-
   /**
    * KEEP THE AIM ON THE MIDDLE OF THE BUILDING. A crane changes the
    * camera's height and its tilt at once, and if the aim point is a
@@ -163,30 +169,6 @@ interface Beat {
    * composed.
    */
   hold?: boolean;
-
-  /**
-   * THE BUILDING LEAVES BY FADING, not by sinking. Running the build
-   * clock backwards moves the tower down out of its own frame, and
-   * since the film builds it straight back afterwards, that movement is
-   * a journey to nowhere. A dissolve says "gone" and leaves the shot
-   * composed exactly as it was.
-   */
-  dissolve?: boolean;
-
-  /**
-   * A BACKLIGHT, standing opposite the lens. For the night beats: a
-   * dark building against a dark sky is a rectangle of nothing, and
-   * every night exterior ever shot cheats exactly this way.
-   */
-  rim?: number;
-
-  /**
-   * HOW HARD IT RAINS, over and above the weather preset. The scene's
-   * rain is mixed for its own wide landing shot and all but vanishes on
-   * a long lens — and a beat whose whole argument is that the roof
-   * exists to shed water has to SHOW the water.
-   */
-  rain?: number;
   /**
    * A DESIGNED SILENCE. By default a beat with no line of its own is an
    * L-CUT: the outgoing narration finishes across the seam and fades on
@@ -213,6 +195,18 @@ interface Beat {
   kanji?: string;
   /** the eyebrow — where we are in the argument */
   kicker?: string;
+  /**
+   * TICKS SPENT ARRIVING, before this beat's own first waypoint.
+   *
+   * A cut is the right join inside a passage and the wrong one between
+   * passages: chapters change the sun, the air and the argument at once,
+   * and the sweep that carries the lens from one to the next is the
+   * thing this engine is actually good at. A beat with a lead is not cut
+   * in — the path flies to its pose over `lead` ticks first, the sky
+   * crossfades across that flight (an `air` cue fires at its start), and
+   * the beat's own type lands when the lens does.
+   */
+  lead?: number;
   /**
    * A LABEL THAT STANDS IN THE SCENE, not on the screen.
    *
@@ -271,6 +265,19 @@ interface Beat {
    * an empty folder and richer with a full one.
    */
   photo?: { caption: string; credit: string; src: string };
+  /**
+   * HOW HARD IT RAINS, over and above the weather preset. The scene's
+   * rain is mixed for its own wide landing shot and all but vanishes on
+   * a long lens — and a beat whose whole argument is that the roof
+   * exists to shed water has to SHOW the water.
+   */
+  rain?: number;
+  /**
+   * A BACKLIGHT, standing opposite the lens. For the night beats: a
+   * dark building against a dark sky is a rectangle of nothing, and
+   * every night exterior ever shot cheats exactly this way.
+   */
+  rim?: number;
   /** its reading */
   romaji?: string;
   /**
@@ -314,19 +321,6 @@ interface Beat {
   theme?: number;
   /** how long it runs, in TICKS — see the note on the path */
   ticks: number;
-
-  /**
-   * TICKS SPENT ARRIVING, before this beat's own first waypoint.
-   *
-   * A cut is the right join inside a passage and the wrong one between
-   * passages: chapters change the sun, the air and the argument at once,
-   * and the sweep that carries the lens from one to the next is the
-   * thing this engine is actually good at. A beat with a lead is not cut
-   * in — the path flies to its pose over `lead` ticks first, the sky
-   * crossfades across that flight (an `air` cue fires at its start), and
-   * the beat's own type lands when the lens does.
-   */
-  lead?: number;
   /**
    * A point on the BUILDING this beat is naming, world units. The front
    * layer draws a line to it and pins a dot on it — the one piece of the
@@ -519,7 +513,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '天守',
     kicker: 'A CONSTRUCTION STUDY',
-    vo: "Tenshu. You know the shape. Almost nobody knows what is holding it up. So let us take one apart.",
+    vo: 'Tenshu. You know the shape. Almost nobody knows what is holding it up. So let us take one apart.',
     mode: 'title',
     romaji: 'TENSHU',
     /* 普請 fushin, the old word for a building works — the scene's own
@@ -696,7 +690,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '石垣',
     kicker: 'STAGE ONE',
-    vo: "Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.",
+    vo: 'Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.',
     mark: {
       /* the wall has to be out of the ground before it has a name —
          and then it is one stage of five, so it gets out of the way */
@@ -734,7 +728,7 @@ const BEATS: Beat[] = [
     says: ['A timber cage', 'Posts stand ON stone', 'The joints do the work'],
     kanji: '柱梁',
     kicker: 'STAGE TWO',
-    vo: "Chūryō. Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.",
+    vo: 'Chūryō. Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.',
     mark: {
       bearing: 138,
       lines: ['柱梁'],
@@ -761,7 +755,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '白壁',
     kicker: 'STAGE THREE',
-    vo: "Shirakabe. Lime plaster, thick enough to be armour. White, because white does not burn.",
+    vo: 'Shirakabe. Lime plaster, thick enough to be armour. White, because white does not burn.',
     mark: {
       bearing: 155,
       lines: ['白壁'],
@@ -784,7 +778,7 @@ const BEATS: Beat[] = [
     says: ['A room to see from', 'The reason for all the rest'],
     kanji: '望楼',
     kicker: 'STAGE FOUR',
-    vo: "Bōrō. At the top, one room you can see out of. Everything below it is how you get that room into the air.",
+    vo: 'Bōrō. At the top, one room you can see out of. Everything below it is how you get that room into the air.',
     mark: {
       bearing: 170,
       lines: ['望楼'],
@@ -811,7 +805,7 @@ const BEATS: Beat[] = [
     ],
     kicker: 'STAGE FIVE',
     kanji: '瓦',
-    vo: "Kawara. Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.",
+    vo: 'Kawara. Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.',
     mark: {
       bearing: 185,
       /* the last one is the building topping out: let it stand while
@@ -937,7 +931,7 @@ const BEATS: Beat[] = [
     kanji: '千鳥破風',
     kicker: 'IN THE ROOF SLOPE',
     toCam: { dolly: 3.7, lookY: -1.2, ox: -0.18, pitch: 4, yaw: 174 },
-    vo: "Chidori-hafu. Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.",
+    vo: 'Chidori-hafu. Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.',
     mode: 'point',
     romaji: 'CHIDORI-HAFU',
     ticks: 6,
@@ -960,7 +954,7 @@ const BEATS: Beat[] = [
     kanji: '高欄',
     kicker: 'AROUND THE TOP',
     toCam: { dolly: 4.0, lookY: 4.3, ox: -0.18, pitch: 8, yaw: 184 },
-    vo: "Kōran. A rail on a ledge too narrow to walk. Built to be seen, not used.",
+    vo: 'Kōran. A rail on a ledge too narrow to walk. Built to be seen, not used.',
     mode: 'point',
     romaji: 'KŌRAN',
     theme: 0,
@@ -1012,7 +1006,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '軒',
     kicker: 'AND THE REASON FOR ALL OF IT',
-    vo: "Noki. A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.",
+    vo: 'Noki. A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.',
     mode: 'lower',
     /* an overcast grade for an overcast shot: the sky comes down, the
        warmth goes out of it, and the vignette closes a little — rain
@@ -1323,6 +1317,8 @@ interface FilmApi {
   haze(v: null | number): void;
   height(): number;
   light(p: null | { az?: number; el?: number }): void;
+  /** 1 is the building, 0 is gone — without moving the frame */
+  modelFade(k: number | null): void;
   palette(): {
     accent: string;
     ink: string;
@@ -1347,7 +1343,11 @@ interface FilmApi {
     y: number,
     z: number
   ): { on: boolean; x: number; y: number; z: number };
+  /** scale the rain field the weather preset draws; null hands it back */
+  rain(k: number | null): void;
   rewind(): void;
+  /** the backlight: intensity, and whether it stands opposite the lens */
+  rim(k: number | null, back?: boolean): void;
   sky(id: string, spec: object, place: object): void;
   snapshot(): string;
   sound(on: boolean): void;
@@ -1355,6 +1355,7 @@ interface FilmApi {
   styleIndex(): number;
   sun(): { h: number; on: boolean; w: number; x: number; y: number };
   theme(i: number, instant?: boolean): void;
+
   time(v: number): void;
   trace(
     id: string,
@@ -1364,6 +1365,7 @@ interface FilmApi {
 
   /** fade a drawn line out where it stands */
   traceFade(id: string, k: number): void;
+
   view(): {
     az: number;
     el: number;
@@ -1372,16 +1374,8 @@ interface FilmApi {
     w: number;
     zoom: number;
   };
+
   wx(i: number, instant?: boolean): void;
-
-  /** scale the rain field the weather preset draws; null hands it back */
-  rain(k: number | null): void;
-
-  /** the backlight: intensity, and whether it stands opposite the lens */
-  rim(k: number | null, back?: boolean): void;
-
-  /** 1 is the building, 0 is gone — without moving the frame */
-  modelFade(k: number | null): void;
 }
 
 export default class TowerFilm extends Component<{
@@ -1449,7 +1443,13 @@ export default class TowerFilm extends Component<{
   private markSeated = false;
 
   /** the last pose actually pushed — the final smoothing stage */
-  private sent?: { az: number; el: number; lookY: number; ox: number; zoom: number };
+  private sent?: {
+    az: number;
+    el: number;
+    lookY: number;
+    ox: number;
+    zoom: number;
+  };
 
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
@@ -1473,8 +1473,10 @@ export default class TowerFilm extends Component<{
   /** the whole film, in seconds, leads included */
   private get totalSecs(): number {
     return (
-      BEATS.reduce((n, b, i) => n + b.ticks + (i === 0 ? 0 : (b.lead ?? 0)), 0) *
-      TICK
+      BEATS.reduce(
+        (n, b, i) => n + b.ticks + (i === 0 ? 0 : (b.lead ?? 0)),
+        0
+      ) * TICK
     );
   }
 
@@ -1918,10 +1920,7 @@ export default class TowerFilm extends Component<{
      */
     const to = {
       ...drift,
-      dolly: stretch(
-        'dolly',
-        b.cam.dolly * Math.min(0.22, 0.022 * secs)
-      ),
+      dolly: stretch('dolly', b.cam.dolly * Math.min(0.22, 0.022 * secs)),
       ox: stretch('ox', Math.min(0.07, 0.008 * secs)),
       pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
       yaw: stretch('yaw', Math.min(22, 2 * secs)),
@@ -2136,9 +2135,7 @@ export default class TowerFilm extends Component<{
   }
 
   get glyphTone(): string {
-    return /[฀-๿ក-៿]/.test(this.beat.kanji ?? '')
-      ? 'is-tall'
-      : '';
+    return /[฀-๿ក-៿]/.test(this.beat.kanji ?? '') ? 'is-tall' : '';
   }
 
   get dipVeil(): string {
@@ -2596,7 +2593,10 @@ export default class TowerFilm extends Component<{
          pitch is what the wind is doing to it. So the wander is nearly
          all in the tilt, with a quarter of it in the orbit to keep the
          two from looking mechanically separate. */
-      az: (this.now.yaw + this.lean.x * 0.8 + hand * 0.25 * wander(0.37, 0.93, 2.11)) *
+      az:
+        (this.now.yaw +
+          this.lean.x * 0.8 +
+          hand * 0.25 * wander(0.37, 0.93, 2.11)) *
         RAD,
       el:
         (this.now.pitch -
@@ -2790,11 +2790,11 @@ export default class TowerFilm extends Component<{
         {
           billboard: true,
           opacity:
-          this.skyOn *
-          (beat.sky.opacity ?? 0.4) *
-          0.78 *
-          smooth(Math.max(0, Math.min(1, (local - 0.16) / 0.16))) *
-          (1 - smooth(Math.max(0, Math.min(1, (local - 0.52) / 0.16)))),
+            this.skyOn *
+            (beat.sky.opacity ?? 0.4) *
+            0.78 *
+            smooth(Math.max(0, Math.min(1, (local - 0.16) / 0.16))) *
+            (1 - smooth(Math.max(0, Math.min(1, (local - 0.52) / 0.16)))),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
@@ -3109,19 +3109,16 @@ export default class TowerFilm extends Component<{
          running long enough to be about something, names the stage, and
          is gone before the middle — a title that outstays the moment it
          titles becomes furniture. */
-      opacity:
-        0.62 *
-        smooth(Math.max(0, Math.min(1, (local - (m.at ?? 0.14)) / 0.16))) *
-        (1 -
-          smooth(
-            Math.max(
-              0,
-              Math.min(
-                1,
-                (local - ((m.at ?? 0.14) + (m.hold ?? 0.34))) / 0.2
+        opacity:
+          0.62 *
+          smooth(Math.max(0, Math.min(1, (local - (m.at ?? 0.14)) / 0.16))) *
+          (1 -
+            smooth(
+              Math.max(
+                0,
+                Math.min(1, (local - ((m.at ?? 0.14) + (m.hold ?? 0.34))) / 0.2)
               )
-            )
-          )),
+            )),
         ry: (this.markFace / RAD) % 360,
         /**
          * IT RISES OUT FROM BEHIND THE BUILDING. The word starts low
@@ -3264,10 +3261,7 @@ export default class TowerFilm extends Component<{
        close-up, so the radius is sized against the shot's magnification */
     const mag = (beat.cam.dolly + (beat.toCam?.dolly ?? beat.cam.dolly)) / 2;
     beat.trace?.forEach((spec, i) => {
-      const r = Math.max(
-        0.03,
-        Math.min(0.2, (spec.wide ? 0.13 : 0.085) / mag)
-      );
+      const r = Math.max(0.03, Math.min(0.2, (spec.wide ? 0.13 : 0.085) / mag));
       film.trace(`t${i}`, { pts: spec.pts, r });
     });
     /**
@@ -3314,11 +3308,10 @@ export default class TowerFilm extends Component<{
           if (this.freeze) {
             this.blurStamp += 1;
           }
-          this.liveEl
-            ?.animate(
-              [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
-              { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' }
-            );
+          this.liveEl?.animate(
+            [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
+            { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' }
+          );
         } else if (this.freeze) {
           if (join === 'wipe') {
             this.cutStamp += 1;
@@ -3624,9 +3617,10 @@ export default class TowerFilm extends Component<{
       return;
     }
     const err = e as ErrorEvent & PromiseRejectionEvent;
-    this.fault = String(
-      err.message ?? err.reason ?? 'unknown fault'
-    ).slice(0, 200);
+    this.fault = String(err.message ?? err.reason ?? 'unknown fault').slice(
+      0,
+      200
+    );
   };
 
   private prev = () => this.goChapter(-1);
@@ -4292,73 +4286,76 @@ export default class TowerFilm extends Component<{
             <span class="tf-ghost" aria-hidden="true">{{this.chapter.n}}</span>
             {{#if this.rolling}}
               {{#each (array this.beat) key="id" as |b|}}
-              {{! EACH ROW IS A PLANE, and the nesting is load-bearing: the
+                {{! EACH ROW IS A PLANE, and the nesting is load-bearing: the
               wrapper is the plane and the host's loop drifts it, the
               paragraph inside is the type and Motion delivers it. One
               writer each. Put both on one element and the entrance and
               the drift overwrite each other's transform every frame —
               which is the same bug the beacon in Sylva was, and it looks
               exactly as bad. }}
-              {{! the mode rides ON the block, not on the shared container: a
+                {{! the mode rides ON the block, not on the shared container: a
               leaver keeps its own layout while it fades, instead of
               teleporting to wherever the NEXT beat's mode puts blocks }}
-              <div class="tf-block is-{{b.mode}}" {{this.plate}}>
-                {{#if b.kicker}}
-                  <div class="tf-plane">
-                    <p class="tf-kicker" {{motion id="kicker" role="kick"}}>
-                      <span>{{b.kicker}}</span>
-                    </p>
-                  </div>
-                {{/if}}
-                {{! When the beat has a MARK, the term is already standing
+                <div class="tf-block is-{{b.mode}}" {{this.plate}}>
+                  {{#if b.kicker}}
+                    <div class="tf-plane">
+                      <p class="tf-kicker" {{motion id="kicker" role="kick"}}>
+                        <span>{{b.kicker}}</span>
+                      </p>
+                    </div>
+                  {{/if}}
+                  {{! When the beat has a MARK, the term is already standing
                 out in the scene at the height it names — so the front
                 layer does not set it a second time. Two copies of the
                 same word, one in the world and one on the glass, is the
                 doubled-logo problem in another costume. }}
-                {{#unless b.mark}}
-                  {{#if b.kanji}}
-                    <div class="tf-plane is-glyph" style={{this.glyphFit}}>
-                      <p
-                        class="tf-kanji {{this.glyphTone}}"
-                        {{motion id="kanji" role="glyph"}}
-                      >
-                        {{b.kanji}}
+                  {{#unless b.mark}}
+                    {{#if b.kanji}}
+                      <div class="tf-plane is-glyph" style={{this.glyphFit}}>
+                        <p
+                          class="tf-kanji {{this.glyphTone}}"
+                          {{motion id="kanji" role="glyph"}}
+                        >
+                          {{b.kanji}}
+                        </p>
+                      </div>
+                    {{/if}}
+                  {{/unless}}
+                  {{#if b.romaji}}
+                    <div class="tf-plane">
+                      <p class="tf-read" {{motion id="read" role="read"}}>
+                        <span class="tf-romaji">{{b.romaji}}</span>
+                        {{#if b.gloss}}
+                          <span class="tf-gloss">{{b.gloss}}</span>
+                        {{/if}}
                       </p>
                     </div>
                   {{/if}}
-                {{/unless}}
-                {{#if b.romaji}}
-                  <div class="tf-plane">
-                    <p class="tf-read" {{motion id="read" role="read"}}>
-                      <span class="tf-romaji">{{b.romaji}}</span>
-                      {{#if b.gloss}}
-                        <span class="tf-gloss">{{b.gloss}}</span>
-                      {{/if}}
-                    </p>
-                  </div>
-                {{/if}}
-                {{! KINETIC TYPE, not a paragraph. Each phrase is its own
+                  {{! KINETIC TYPE, not a paragraph. Each phrase is its own
                 sprite with its own role, because Choreo's text delivery
                 splits a sprite and ladders INSIDE it — a stagger across
                 four separate lines has to be four steps with four delays.
                 Which is the honest way to write it anyway: these are
                 cues, and a cue has a time. }}
-                {{#each b.says as |say index|}}
-                  <div class="tf-plane">
-                    {{! the inner span is the line's BEHAVIOR: Motion owns
+                  {{#each b.says as |say index|}}
+                    <div class="tf-plane">
+                      {{! the inner span is the line's BEHAVIOR: Motion owns
                     the p (delivery), the wrapper owns the plane (drift),
                     and this owns what the words themselves do — so a line
                     about flaring can flare without three writers fighting
                     over one transform. Styled per line, by address. }}
-                    <p
-                      class="tf-say"
-                      {{motion id=(concat "say" index) role=(concat "s" index)}}
-                    ><span
-                        class="tf-sayx sx-{{b.id}}-{{index}}"
-                      >{{say}}</span></p>
-                  </div>
-                {{/each}}
-              </div>
+                      <p
+                        class="tf-say"
+                        {{motion
+                          id=(concat "say" index)
+                          role=(concat "s" index)
+                        }}
+                      ><span
+                          class="tf-sayx sx-{{b.id}}-{{index}}"
+                        >{{say}}</span></p>
+                    </div>
+                  {{/each}}
+                </div>
               {{/each}}
             {{/if}}
 
@@ -4541,10 +4538,10 @@ export default class TowerFilm extends Component<{
           {{/if}}
 
           {{#if this.fault}}
-          <p class="tf-fault">⚠ {{this.fault}}</p>
-        {{/if}}
+            <p class="tf-fault">⚠ {{this.fault}}</p>
+          {{/if}}
 
-        {{! the transport: one segment per chapter, filled by the whole
+          {{! the transport: one segment per chapter, filled by the whole
           film's progress, and each segment is a door into its chapter }}
           <div class="tf-rail">
             <span class="tf-rail-n">{{this.chapter.n}}</span>
@@ -4681,11 +4678,8 @@ export default class TowerFilm extends Component<{
                 <span>Cut by a score · Choreo</span>
               </p>
               <div class="tf-gate-row tf-mg-row">
-                <button
-                  type="button"
-                  class="tf-go"
-                  {{on "click" this.replay}}
-                >↺ Watch again</button>
+                <button type="button" class="tf-go" {{on "click" this.replay}}>↺
+                  Watch again</button>
                 <button
                   type="button"
                   class="tf-go is-quiet"
@@ -4718,52 +4712,52 @@ export default class TowerFilm extends Component<{
         them, and the arrow keys alone are a secret. Picking one re-cuts
         the score from that chapter's head — the same move the arrows
         make, because a skip here is an edit and never a seek. }}
-        {{#if this.menu}}
-          <Choreo class="tf-menu" as |m|>
-            <div class="tf-menu-in" {{motion id="menu" role="sheet"}}>
-              <p class="tf-menu-head">TOWERS</p>
-              <p class="tf-menu-sub">A construction study · chapters</p>
-              <ol class="tf-menu-list">
-                {{#each this.contents as |c|}}
-                  <li>
-                    <button
-                      type="button"
-                      class="tf-menu-item {{if c.here 'is-here'}}"
-                      {{on "click" (fn this.pick c.head)}}
-                    >
-                      <span class="tf-menu-n">{{c.n}}</span>
-                      <span class="tf-menu-t">{{c.title}}</span>
-                      <span class="tf-menu-d">{{c.shots}} shots</span>
-                    </button>
-                  </li>
-                {{/each}}
-              </ol>
-              <p class="tf-menu-keys">← → chapter · space play · M sound · V
-                captions · C close</p>
-            </div>
-            <m.Tween
-              @of={{m.inserted "sheet"}}
-              @y={{array 26 0}}
-              @scale={{array 0.97 1}}
-              @opacity={{array 0 1}}
-              @duration={{0.42}}
-              @ease={{array 0.22 1 0.36 1}}
-            />
-            <m.Tween
-              @of={{m.removed "sheet"}}
-              @y={{array 0 18}}
-              @opacity={{array 1 0}}
-              @duration={{0.2}}
-              @ease="easeIn"
-            />
-          </Choreo>
-        {{/if}}
+      {{#if this.menu}}
+        <Choreo class="tf-menu" as |m|>
+          <div class="tf-menu-in" {{motion id="menu" role="sheet"}}>
+            <p class="tf-menu-head">TOWERS</p>
+            <p class="tf-menu-sub">A construction study · chapters</p>
+            <ol class="tf-menu-list">
+              {{#each this.contents as |c|}}
+                <li>
+                  <button
+                    type="button"
+                    class="tf-menu-item {{if c.here 'is-here'}}"
+                    {{on "click" (fn this.pick c.head)}}
+                  >
+                    <span class="tf-menu-n">{{c.n}}</span>
+                    <span class="tf-menu-t">{{c.title}}</span>
+                    <span class="tf-menu-d">{{c.shots}} shots</span>
+                  </button>
+                </li>
+              {{/each}}
+            </ol>
+            <p class="tf-menu-keys">← → chapter · space play · M sound · V
+              captions · C close</p>
+          </div>
+          <m.Tween
+            @of={{m.inserted "sheet"}}
+            @y={{array 26 0}}
+            @scale={{array 0.97 1}}
+            @opacity={{array 0 1}}
+            @duration={{0.42}}
+            @ease={{array 0.22 1 0.36 1}}
+          />
+          <m.Tween
+            @of={{m.removed "sheet"}}
+            @y={{array 0 18}}
+            @opacity={{array 1 0}}
+            @duration={{0.2}}
+            @ease="easeIn"
+          />
+        </Choreo>
+      {{/if}}
 
-        {{! THE PLAYER, floating on the picture. The playhead is
+      {{! THE PLAYER, floating on the picture. The playhead is
         chaptered, scrubbable and honest: the film cannot seek, so the
         drag reads as time and the release RE-CUTS from the shot under
         the hand. }}
-        <div class="tf-player {{if this.idle 'is-idle'}}">
+      <div class="tf-player {{if this.idle 'is-idle'}}">
         <div
           class="tf-scrub {{if this.gate 'is-away'}}"
           role="slider"
@@ -4826,11 +4820,8 @@ export default class TowerFilm extends Component<{
           <button type="button" class="tf-btn" {{on "click" this.restart}}>↺
             from the top</button>
           {{#unless this.embed}}
-            <LinkTo
-              @route="demo"
-              @model="towers"
-              class="tf-btn"
-            >⛶ How This Is Built</LinkTo>
+            <LinkTo @route="demo" @model="towers" class="tf-btn">⛶ How This Is
+              Built</LinkTo>
           {{/unless}}
           <span class="tf-time">{{this.clock}}
             <i>/</i>
@@ -4854,16 +4845,16 @@ export default class TowerFilm extends Component<{
             <span class="tf-build">{{this.build}}</span>
           {{/if}}
         </div>
-        </div>
+      </div>
 
-        {{! THE CUTTING ROOM — the wall plate under the exhibit, set in
+      {{! THE CUTTING ROOM — the wall plate under the exhibit, set in
         the house dive template like every other demo's deep dive. The
         film hands it one thing: the live junction trigger. }}
-        {{#unless this.embed}}
-          <div id="cutting-room" class="tf-notes">
-            <TowersNotes @preview={{this.previewJoin}} />
-          </div>
-        {{/unless}}
+      {{#unless this.embed}}
+        <div id="cutting-room" class="tf-notes">
+          <TowersNotes @preview={{this.previewJoin}} />
+        </div>
+      {{/unless}}
     </div>
 
     <style>
@@ -5080,7 +5071,8 @@ export default class TowerFilm extends Component<{
       }
 
       .is-grade-c-vn {
-        --tf-lut: saturate(0.92) contrast(0.94) brightness(1.18) hue-rotate(-6deg);
+        --tf-lut: saturate(0.92) contrast(0.94) brightness(1.18)
+          hue-rotate(-6deg);
         --tf-warm: #eef0cd;
         --tf-cool: #a7bda8;
         --tf-grade-a: 0.26;
@@ -6024,7 +6016,7 @@ export default class TowerFilm extends Component<{
       }
 
       .tf-rail-seg::after {
-        content: '';
+        content: "";
         position: absolute;
         inset: 5px 0 auto;
         height: 3px;
@@ -6059,7 +6051,9 @@ export default class TowerFilm extends Component<{
         padding: 8px 12px;
         background: #2a0a06;
         color: #ffb4a0;
-        font: 12px/1.4 ui-monospace, monospace;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
         border-radius: 8px;
         max-width: 80%;
       }
@@ -6292,7 +6286,6 @@ export default class TowerFilm extends Component<{
 
       /* nobody is touching it: the apparatus gets out of the way of the
          picture, the way every player made since 2010 does */
-
 
       .tf-controls {
         transition: opacity 340ms ease;
