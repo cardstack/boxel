@@ -2807,18 +2807,6 @@ export default class TowerFilm extends Component<{
   private stageMark(film: FilmApi, beat: Beat, local: number, dt: number) {
     const m = beat.mark;
     const tether = this.tetherEl;
-    /**
-     * IT COMES IN BEHIND THE BUILDING, EVERY TIME. The entry height is
-     * read off the structure at the moment the word arrives — a little
-     * under the top of whatever has been built so far — so the thing on
-     * screen always hides the word's first frames and hands it over as
-     * it climbs. Taken once per beat, because reading it every frame
-     * would make the word ride the build instead of rising past it.
-     */
-    if (!this.markSeated && local >= (m.at ?? 0.14)) {
-      this.markSeated = true;
-      this.markFrom = Math.max(0.4, film.height() - 3.4);
-    }
     /* THE CLIMB BELONGS TO THE WORD, NOT TO THE BEAT. A word that waits
        for its wall to be built must still ENTER low — otherwise it
        arrives at whatever height a ramp running since the top of the
@@ -2831,6 +2819,18 @@ export default class TowerFilm extends Component<{
         tether.style.opacity = '0';
       }
       return;
+    }
+    /**
+     * IT COMES IN BEHIND THE BUILDING, EVERY TIME. The entry height is
+     * read off the structure at the moment the word arrives — a little
+     * under the top of whatever has been built so far — so the thing on
+     * screen always hides the word's first frames and hands it over as
+     * it climbs. Taken once per beat, because reading it every frame
+     * would make the word ride the build instead of rising past it.
+     */
+    if (!this.markSeated && local >= (m.at ?? 0.14)) {
+      this.markSeated = true;
+      this.markFrom = Math.max(0.4, film.height() - 3.4);
     }
     /* the climb takes the first fifth of the beat and SETTLES — barely
        past its mark, once. The old spring bounced at the top like a
