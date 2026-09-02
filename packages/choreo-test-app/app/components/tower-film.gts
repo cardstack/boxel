@@ -524,7 +524,10 @@ const BEATS: Beat[] = [
     mode: 'plate',
     romaji: 'TENSHUKAKU',
     ticks: 4,
-    toCam: { dolly: 0.79, lookY: 0.7, ox: 0.16, pitch: 9, yaw: 13 },
+    /* the line is "the castle is the ground": the lens has to let go of
+       the building and show the ditches and shelves it sits in, so the
+       shot ends a good deal wider than it began */
+    toCam: { dolly: 0.44, lookY: 0.2, ox: 0.16, pitch: 11, yaw: 13 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -1313,6 +1316,39 @@ export default class TowerFilm extends Component<{
   /** when the current beat was entered, for the clocks it owns */
   private beatAt = 0;
 
+  /** where the beat's sky word was planted, in world azimuth */
+  private skyAz = 0;
+
+  /**
+   * THE POINTER MOVES THE WORLD A LITTLE.
+   *
+   * A film that cannot be touched is a video, and the whole argument
+   * here is that this is a scene. So the cursor gets a few degrees of
+   * lean: the lens takes a fraction of it (real parallax — the building
+   * and the hills separate) and the type planes take more of it in the
+   * other direction, each layer by its own depth. It is small enough to
+   * be felt rather than played with, and damped, so it never fights the
+   * shot the score is composing.
+   */
+  private lean = { x: 0, y: 0 };
+  private leanTo = { x: 0, y: 0 };
+
+  private aim = (e: PointerEvent) => {
+    const el = this.pageEl ?? this.frameEl;
+    if (!el) {
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    this.leanTo.x = Math.max(
+      -1,
+      Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1)
+    );
+    this.leanTo.y = Math.max(
+      -1,
+      Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1)
+    );
+  };
+
   /** the haze the beat asked for — the weather drift breathes around it */
   private hazeBase: number | null = null;
 
@@ -1802,6 +1838,7 @@ export default class TowerFilm extends Component<{
     this.frameEl = el;
     this.pageEl = el.closest('.tf-page') as HTMLElement;
     window.addEventListener('keydown', this.key);
+    window.addEventListener('pointermove', this.aim);
     window.addEventListener('error', this.trip);
     window.addEventListener('unhandledrejection', this.trip);
     const frame = el.querySelector('iframe');
@@ -1916,6 +1953,7 @@ export default class TowerFilm extends Component<{
       window.removeEventListener('keydown', this.key);
       window.removeEventListener('error', this.trip);
       window.removeEventListener('unhandledrejection', this.trip);
+      window.removeEventListener('pointermove', this.aim);
       frame.removeEventListener('load', onLoad);
       document.body.classList.remove('tf-film', 'tf-embedded');
       this.film = undefined;
@@ -2124,14 +2162,22 @@ export default class TowerFilm extends Component<{
     /* a chaser lands on a millionth of a pixel rather than on zero, and an
        off-centre frustum that is never quite centred keeps the projection
        matrix rebuilt every frame for nothing — so zero means zero */
+    const k = Math.min(1, dt * 3.2);
+    this.lean.x += (this.leanTo.x - this.lean.x) * k;
+    this.lean.y += (this.leanTo.y - this.lean.y) * k;
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
     film.pose({
-      az: this.now.yaw * RAD,
-      el: this.now.pitch * RAD,
-      lookY: this.now.lookY,
-      ox,
+      /* the lens leans into the cursor: a couple of degrees of orbit and
+         a hand's width of height, which is enough for the hills to move
+         against the building and nowhere near enough to fight the shot */
+      az: (this.now.yaw + this.lean.x * 1.6) * RAD,
+      el: (this.now.pitch - this.lean.y * 1.1) * RAD,
+      lookY: this.now.lookY + this.lean.y * 0.5,
+      ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
     });
+    this.pageEl?.style.setProperty('--tf-lx', this.lean.x.toFixed(3));
+    this.pageEl?.style.setProperty('--tf-ly', this.lean.y.toFixed(3));
 
     const beat = this.beat;
     /**
@@ -2192,27 +2238,41 @@ export default class TowerFilm extends Component<{
 
     /* the world layer fades with the beat rather than cutting with it */
     if (beat.sky) {
-      const v = film.view();
       const d = beat.sky.dist ?? 30;
-      const a = v.az + (beat.sky.az ?? 0) * RAD;
+      /**
+       * PARALLAX. This used to be placed at `view().az + offset`, which
+       * pins the word to the LENS: the camera orbits, the glyph orbits
+       * with it, and a hundred feet of type sits perfectly still in the
+       * frame — the one thing that tells an eye it is looking at a
+       * sticker rather than a place. The angle is now taken once, when
+       * the beat lands, and the word stays where it was put: the shot
+       * moves past it.
+       */
+      const a = this.skyAz;
       this.skyOn += (1 - this.skyOn) * Math.min(1, dt * 1.6);
       film.sky(
         'chapter',
         {
-          /* HOLLOW. A filled glyph this size, sitting in the same air as
-             the building, reads as a stain on the lens; an outline reads
-             as type drawn in the world — you can see the hill through it
-             and the eaves cross it without turning it to mud. */
-          color: '#2e2515',
+          /* HOLLOW, HUGE, AND NEARLY GONE. A filled glyph sharing air
+             with the building is a stain on the lens; a hard outline is
+             a diagram drawn on the sky. What the shot wants is a word
+             the WEATHER is holding — twice the size, a hairline, and
+             faint enough that the hill reads straight through it. */
+          color: '#f2ebd6',
           lines: beat.sky.lines,
-          size: beat.sky.size * 1.35,
-          stroke: '#2e2515',
-          strokeW: 0.02,
+          size: beat.sky.size * 2.1,
+          /* LIGHT, not ink. Drawn in the same warm white the front door
+             uses, at a hairline: over this film's grounds a pale
+             outline reads as a word held in the air, where a dark one
+             reads as a diagram printed on the sky. */
+          stroke: 'rgba(244,238,222,0.62)',
+          strokeW: 0.0072,
           track: beat.sky.track ?? 0.16,
         },
         {
           billboard: true,
-          opacity: this.skyOn * (beat.sky.opacity ?? 0.4) * smooth(local * 3),
+          opacity:
+          this.skyOn * (beat.sky.opacity ?? 0.4) * 0.5 * smooth(local * 3),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
@@ -2670,6 +2730,10 @@ export default class TowerFilm extends Component<{
       film.time(beat.build);
     } else if (Array.isArray(beat.build)) {
       film.time(beat.build[0]);
+    }
+    if (beat.sky) {
+      /* plant the word where the shot can see it, once */
+      this.skyAz = (this.film?.view().az ?? 0) + (beat.sky.az ?? 0) * RAD;
     }
     this.applyAir(beat, instant);
     /**
@@ -4749,6 +4813,35 @@ export default class TowerFilm extends Component<{
         display: none;
       }
 
+      /* THE PLANES LEAN. Each layer takes the pointer at its own depth —
+         the ghost furthest, the big glyph next, the reading lines least
+         — so the type stack has air in it rather than being one sheet
+         of glass in front of a picture. */
+      .tf-block {
+        transform: translate3d(
+          calc(var(--tf-lx, 0) * -9px),
+          calc(var(--tf-ly, 0) * -5px),
+          0
+        );
+      }
+
+      .tf-plate .tf-ghost {
+        transform: translateY(-50%)
+          translate3d(
+            calc(var(--tf-lx, 0) * -26px),
+            calc(var(--tf-ly, 0) * -14px),
+            0
+          );
+      }
+
+      .tf-kanji {
+        transform: translate3d(
+          calc(var(--tf-lx, 0) * -15px),
+          calc(var(--tf-ly, 0) * -8px),
+          0
+        );
+      }
+
       /* the ghost NUMERAL keeps its old treatment: a filled slab of ink
          at a whisper of opacity, behind the plate. It is a page
          furniture mark, not type in the world — the hollow treatment
@@ -5167,7 +5260,10 @@ export default class TowerFilm extends Component<{
         text-align: center;
         font-family: var(--tf-ui);
         color: #f7f0e0;
-        margin-right: clamp(40px, 11vw, 190px);
+        /* hard right: the poster is a two-column composition — building
+           in one half, wordmark in the other — and the wordmark drifting
+           toward the middle closes the gap that makes it one */
+        margin-right: clamp(18px, 4vw, 76px);
       }
 
       /* the museum frame: hairline, inset like a mat, above the scene
