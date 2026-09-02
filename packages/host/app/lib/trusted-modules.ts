@@ -66,10 +66,10 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
  * the scope is matched against this list rather than the scope being admitted
  * wholesale, because `@cardstack/<name>/` is NOT only an npm scope in this
  * codebase: it is also the realm-alias namespace. `addRealmMapping` registers
- * one such prefix per realm — `network.ts` for the catalog, skills and
- * OpenRouter realms, and `main.ts`/`worker.ts` generically for every
- * `https://cardstack.com/<name>/` mapping, so the namespace acquires new
- * members without this file being touched. Admitting the scope would hand
+ * one such prefix per realm — `network.ts` from the `PREFIX_REALMS` declaration
+ * in runtime-common, and `main.ts`/`worker.ts` from their `--fromUrl`
+ * arguments, generically for every `https://cardstack.com/<name>/` mapping — so
+ * the namespace acquires new members without this file being touched. Admitting the scope would hand
  * Direct execution to authored realm content under its alias spelling while
  * the same module's URL spelling classified as authored.
  *
