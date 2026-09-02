@@ -549,6 +549,38 @@ const BUILD = 'cut-9 · the dissolve moved into the glass, the voice is primed';
 const AWAKE = new URLSearchParams(window.location.search).has('awake');
 
 /**
+ * THE LEVELS. The reads were recorded across sessions and their mean
+ * loudness spreads seven decibels (ffmpeg volumedetect, 2026-09-02: -24.6
+ * to -31.9 dB). An element's volume cannot go above 1, so the loud ones
+ * come down to meet the quiet ones at about -29 dB mean; the three
+ * quietest stay where they are. Peaks never clip (all under -3.8 dBFS),
+ * so this is a trim, not a limiter.
+ */
+const VO_GAIN: Record<string, number> = {
+  azuchi: 0.63,
+  boro: 0.7,
+  'c-cn': 0.94,
+  'c-jp': 0.7,
+  'c-kh': 0.79,
+  'c-th': 0.71,
+  'c-tr': 0.9,
+  'c-vn': 0.85,
+  coda: 0.77,
+  hafu: 0.84,
+  hikaku: 0.6,
+  ikkoku: 0.9,
+  ishi2: 0.92,
+  kawara: 0.68,
+  koran: 0.8,
+  noki: 0.68,
+  plaster: 0.9,
+  shiro: 0.91,
+  teppo: 0.72,
+  title: 0.85,
+  what: 0.93,
+};
+
+/**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
  * files in `public/towers/vo/`. The kinetic type is paced against the VOICE,
  * not against the beat: the last cue should land as the line is finishing,
@@ -3907,6 +3939,30 @@ export default class TowerFilm extends Component<{
     return `${config.rootURL}towers/vo/${beat.id}.mp3`;
   }
 
+  /** the level each line settles at (see VO_GAIN) */
+  private gainOf = new WeakMap<HTMLAudioElement, number>();
+
+  /** the mirror of `fadeEl`: from silence up to the line's level */
+  private riseEl(el: HTMLAudioElement, to: number, ms: number) {
+    this.gainOf.set(el, to);
+    const prior = this.fades.get(el);
+    if (prior !== undefined) {
+      window.clearInterval(prior);
+    }
+    const t0 = performance.now();
+    const timer = window.setInterval(() => {
+      const f = (performance.now() - t0) / ms;
+      if (f >= 1) {
+        el.volume = to;
+        window.clearInterval(timer);
+        this.fades.delete(el);
+      } else {
+        el.volume = to * f;
+      }
+    }, 16);
+    this.fades.set(el, timer);
+  }
+
   /** ask the network for the line after this one, now, while nobody waits */
   private primeNext(beat: Beat) {
     const next = BEATS[BEATS.indexOf(beat) + 1];
@@ -4084,7 +4140,7 @@ export default class TowerFilm extends Component<{
       window.clearInterval(timer);
       this.fades.delete(el);
     }
-    el.volume = 1;
+    el.volume = this.gainOf.get(el) ?? 1;
   }
 
   private hushVoice(ms = 120) {
@@ -4116,7 +4172,11 @@ export default class TowerFilm extends Component<{
     if (el !== primed) {
       el.src = src;
     }
-    el.volume = 1;
+    /* no line starts at full volume: a short rise takes the click off the
+       entrance, and each file lands at its own level so the reads sit
+       together instead of seven decibels apart */
+    el.volume = 0;
+    this.riseEl(el, VO_GAIN[beat.id] ?? 1, 70);
     this.primeNext(beat);
     /**
      * THE MIX. Narration is the foreground and the scene's music is a
