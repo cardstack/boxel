@@ -2541,8 +2541,8 @@ export default class TowerFilm extends Component<{
           this.skyOn *
           (beat.sky.opacity ?? 0.4) *
           0.78 *
-          smooth(local * 3) *
-          (1 - Math.max(0, Math.min(1, (local - 0.66) / 0.24))),
+          smooth(Math.max(0, Math.min(1, (local - 0.16) / 0.16))) *
+          (1 - smooth(Math.max(0, Math.min(1, (local - 0.52) / 0.16)))),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
@@ -2829,14 +2829,14 @@ export default class TowerFilm extends Component<{
         track: 0.12,
       },
       {
-        /* IN, AND THEN OUT. The word does not need to watch the whole
-         build: it arrives, names the stage, and leaves while the stage
-         is still going up — which is also what stops the picture
-         accumulating furniture as the tower grows. */
+        /* IN LATE, OUT EARLY. The word arrives after the shot has been
+         running long enough to be about something, names the stage, and
+         is gone before the middle — a title that outstays the moment it
+         titles becomes furniture. */
       opacity:
-        Math.min(1, raw * 2.2) *
         0.62 *
-        (1 - Math.max(0, Math.min(1, (local - 0.58) / 0.22))),
+        smooth(Math.max(0, Math.min(1, (local - 0.18) / 0.14))) *
+        (1 - smooth(Math.max(0, Math.min(1, (local - 0.46) / 0.14)))),
         ry: (this.markFace / RAD) % 360,
         /* planted behind the subject, at ONE height for the whole
            chapter, with a breath of upward drift — enough that it is
