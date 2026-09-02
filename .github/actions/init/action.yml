@@ -100,10 +100,16 @@ runs:
     # have contributed to is then incomplete and rejected as a baseline.
     #
     # So the CDN is only reached on a cache miss. The cache key carries the
-    # pinned version, which makes each entry immutable for that version and a
-    # bump a fresh download. On a miss the retry window is minutes rather than
-    # seconds, so an outage on the scale of the one above is ridden out instead
-    # of ending the job.
+    # pinned version and its checksum, so any change to the pin is a fresh
+    # entry and a fresh download. The checksum belongs in the key and not just
+    # in the verification below: cache entries are immutable, and `actions/
+    # cache` skips its save step entirely after an exact key hit. A key on the
+    # version alone would therefore let a corrected checksum be shadowed by the
+    # entry it invalidates — every job would restore it, reject it, re-download
+    # the right binary, and then be unable to save it — quietly putting the CDN
+    # back on the critical path this step exists to keep it off. On a miss the
+    # retry window is minutes rather than seconds, so an outage on the scale of
+    # the one above is ridden out instead of ending the job.
     #
     # The version and checksum live in their own step so the cache key and the
     # download agree on them by construction.
@@ -123,7 +129,7 @@ runs:
       name: Setup mkcert cache
       with:
         path: ${{ steps.mkcert.outputs.dir }}
-        key: ${{ runner.os }}-${{ runner.arch }}-mkcert-${{ steps.mkcert.outputs.version }}
+        key: ${{ runner.os }}-${{ runner.arch }}-mkcert-${{ steps.mkcert.outputs.version }}-${{ steps.mkcert.outputs.sha256 }}
 
     # certutil, mkcert's only other requirement, already ships on the runner
     # image; the apt path below covers a future image that drops it.
