@@ -663,7 +663,10 @@ const BEATS: Beat[] = [
       src: 'ishigaki.webp',
     },
     romaji: 'ISHIGAKI',
-    sun: { az: -70, el: 12 },
+    /* a building site is a DAYTIME place: the stone goes down in real
+       light, not in the last of it — the low sun here made the whole
+       construction chapter look like an evening */
+    sun: { az: -70, el: 36 },
     theme: 0,
     ticks: 7,
     to: [2.8, 1.6, 0.6],
@@ -2521,24 +2524,25 @@ export default class TowerFilm extends Component<{
              a diagram drawn on the sky. What the shot wants is a word
              the WEATHER is holding — twice the size, a hairline, and
              faint enough that the hill reads straight through it. */
-          color: 'rgba(255,251,243,0.42)',
-          fill: true,
+          color: 'rgba(252,247,236,0.34)',
           lines: beat.sky.lines,
-          shadow: 'rgba(255,248,236,0.5)',
+          shadow: 'rgba(40,30,14,0.34)',
           shadowBlur: 0.16,
           size: beat.sky.size * 3.4,
           /* LIGHT, not ink. Drawn in the same warm white the front door
              uses, at a hairline: over this film's grounds a pale
              outline reads as a word held in the air, where a dark one
              reads as a diagram printed on the sky. */
-          stroke: 'rgba(255,253,247,0.7)',
-          strokeW: 0.009,
           track: beat.sky.track ?? 0.16,
         },
         {
           billboard: true,
           opacity:
-          this.skyOn * (beat.sky.opacity ?? 0.4) * 0.78 * smooth(local * 3),
+          this.skyOn *
+          (beat.sky.opacity ?? 0.4) *
+          0.78 *
+          smooth(local * 3) *
+          (1 - Math.max(0, Math.min(1, (local - 0.66) / 0.24))),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
@@ -2812,20 +2816,27 @@ export default class TowerFilm extends Component<{
            annotation and start reading it as the name of what you are
            watching. Big enough to be architecture, faint enough that
            the timber crossing it always wins. */
-        /* GREY, because the sky it stands in is nearly white and a
-           white outline on a white sky is an invisible word */
-        color: 'rgba(74,68,54,0.05)',
-        fill: true,
+        /* TINTED, not outlined. An outline is a drawing of a word; a
+           tint is the word itself, standing in the same air as
+           everything else and taking the same light. Grey because the
+           sky it stands in is nearly white, and faint enough that the
+           building crossing it always wins. */
+        color: 'rgba(78,71,56,0.3)',
         lines: m.lines,
-        shadow: 'rgba(255,252,244,0.34)',
-        shadowBlur: 0.12,
+        shadow: 'rgba(255,252,244,0.28)',
+        shadowBlur: 0.14,
         size: m.size * 2.7,
-        stroke: 'rgba(86,79,62,0.5)',
-        strokeW: 0.011,
         track: 0.12,
       },
       {
-        opacity: Math.min(1, raw * 2.2) * 0.62,
+        /* IN, AND THEN OUT. The word does not need to watch the whole
+         build: it arrives, names the stage, and leaves while the stage
+         is still going up — which is also what stops the picture
+         accumulating furniture as the tower grows. */
+      opacity:
+        Math.min(1, raw * 2.2) *
+        0.62 *
+        (1 - Math.max(0, Math.min(1, (local - 0.58) / 0.22))),
         ry: (this.markFace / RAD) % 360,
         /* planted behind the subject, at ONE height for the whole
            chapter, with a breath of upward drift — enough that it is
@@ -3134,6 +3145,38 @@ export default class TowerFilm extends Component<{
     film.rim(beat.rim ?? null, true);
   }
 
+  /**
+   * THE HOUR A CUT INHERITS.
+   *
+   * Theme and weather are stated where they CHANGE, so a beat halfway
+   * through the film usually says nothing about either — which is right
+   * for a film played from the top and wrong for one dropped into. A
+   * deep link (or a chapter skip) would open in whatever sky was last
+   * set, which since the front door became an evening meant the
+   * construction chapter got built at dusk. So a cut resolves its own
+   * hour first: walk back to the last beat that named one, and take it.
+   */
+  private settleAir(index: number) {
+    const film = this.film;
+    if (!film) {
+      return;
+    }
+    for (let i = index; i >= 0; i -= 1) {
+      const t = BEATS[i]?.theme;
+      if (t !== undefined) {
+        film.theme(t, true);
+        break;
+      }
+    }
+    for (let i = index; i >= 0; i -= 1) {
+      const w = BEATS[i]?.wx;
+      if (w !== undefined) {
+        film.wx(w, true);
+        break;
+      }
+    }
+  }
+
   private shot = (state: {
     dolly: number;
     look?: { x: number; y: number; z: number };
@@ -3226,6 +3269,7 @@ export default class TowerFilm extends Component<{
     this.ended = false;
     this.playing = true;
     this.lap += 1;
+    this.settleAir(index);
     this.applyBeat(BEATS[index]!, true);
     /* the re-cut score opens on a spliced first waypoint, so the goal
        steps straight to this pose; the snap lands the lens beside it,
@@ -3546,6 +3590,7 @@ export default class TowerFilm extends Component<{
       this.sound = true;
       this.film.sound(true);
     }
+    this.settleAir(this.from);
     this.applyBeat(this.beats[0]!, true);
     /* ...and the sky comes with it, NOT instantly: the evening of the
        poster crossfades into the film's own morning across the launch */
