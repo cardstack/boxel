@@ -15,6 +15,10 @@ import { resolve } from 'path';
 // asserts the config end of it.
 const RUN_BOXEL_DEADLINE_HEADROOM_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000 + RUN_BOXEL_DEADLINE_HEADROOM_MS;
+// The wall-clock a teardown can legitimately spend, mirrored from
+// `tests/helpers/fixture-budgets.ts` because a vitest config cannot import the
+// suite's TypeScript. `tests/lib/deadline-ladder` asserts the two stay in step.
+const FIXTURE_TEARDOWN_BUDGET_MS = 60_000 + 60_000 + 15_000;
 
 export default defineConfig({
   resolve: {
@@ -38,11 +42,21 @@ export default defineConfig({
     // abandons goes on to bind the fixture's port (see
     // tests/integration/fixture-teardown.test.ts).
     //
+    // Teardown is what actually sets this number, though, not the runBoxel
+    // deadline: `stopTestRealmServer` can spend every one of its budgets in
+    // sequence — settling an abandoned boot, draining a job already claimed,
+    // then closing a pool that job still holds (tests/helpers/fixture-budgets).
+    // A hook that fires inside that sum stops teardown partway, and what it
+    // did not reach becomes the next file's failure, which is the whole
+    // failure mode the budgets exist to prevent.
+    //
     // This is a ceiling for a wedged fixture, not a target: a healthy boot
     // uses a small fraction of it, and one that runs an order of magnitude
     // over its usual cost prints its phase breakdown (see
     // `reportSlowFixture` in tests/helpers/integration.ts).
-    hookTimeout: TEST_TIMEOUT_MS + RUN_BOXEL_DEADLINE_HEADROOM_MS,
+    hookTimeout:
+      Math.max(TEST_TIMEOUT_MS, FIXTURE_TEARDOWN_BUDGET_MS) +
+      RUN_BOXEL_DEADLINE_HEADROOM_MS,
     sequence: {
       hooks: 'list',
     },

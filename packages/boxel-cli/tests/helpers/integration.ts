@@ -2,6 +2,11 @@ import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import * as os from 'os';
+import {
+  BOOT_SETTLE_TIMEOUT_MS,
+  DRAIN_BUDGET_MS,
+  DB_CLOSE_BUDGET_MS,
+} from './fixture-budgets.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import { runBoxel } from './run-boxel.ts';
 import {
@@ -113,14 +118,6 @@ function fixtureTotalMs(): number {
 }
 
 /**
- * Wait for the in-flight boot to publish its results (or fail) so teardown
- * sees everything it created. A boot that outlives this window is reported by
- * `startTestRealmServer`'s own pre-flight check in the next file rather than
- * hanging teardown here.
- */
-const BOOT_SETTLE_TIMEOUT_MS = 60_000;
-
-/**
  * True when something is accepting connections at `host:port`. Used to tell a
  * leaked fixture server apart from a clean start, so the leak is reported at
  * the boot that trips over it.
@@ -141,6 +138,12 @@ function isPortListening(host: string, port: number): Promise<boolean> {
   });
 }
 
+/**
+ * Wait for the in-flight boot to publish its results (or fail) so teardown
+ * sees everything it created. A boot that outlives this window is reported by
+ * `startTestRealmServer`'s own pre-flight check in the next file rather than
+ * hanging teardown here.
+ */
 async function settleBoot(): Promise<void> {
   let boot = pendingBoot;
   if (!boot) {
@@ -367,6 +370,49 @@ export function getTestDbAdapter(): PgAdapter | undefined {
   return dbAdapter;
 }
 
+// The two budgeted steps below both wait on the same thing: index work this
+// suite started and stopped caring about. A suite whose assertions finish
+// before the from-scratch index does is asking teardown to sit through a whole
+// index pass, prerender round-trips included. `fixture-budgets` carries why
+// each step can wait indefinitely and why a harness must not.
+//
+// Abandoning that work is safe in the one way that matters: `prepareTestDB`
+// names a database per process and per call, so the job runs on a database
+// belonging to this file alone and cannot reach the next file's data. It logs
+// connection errors once the pool is gone, and its pool stays checked out
+// until the process exits — noise and a handful of connections against a
+// throwaway test cluster, in exchange for ports that are free when the next
+// suite starts.
+
+// Resolves true if the step finished, false if the budget expired or it threw.
+// Never rejects: a teardown failure must not replace whatever the suite was
+// reporting, and the timer is unref'd so a step still running cannot be the
+// reason the process stays up.
+async function withBudget(
+  label: string,
+  step: Promise<unknown>,
+  budgetMs: number,
+): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  let finished = await Promise.race([
+    step.then(
+      () => true,
+      (e: unknown) => {
+        console.warn(`[teardown] ${label} failed: ${String(e)}`);
+        return false;
+      },
+    ),
+    new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), budgetMs);
+      timer.unref();
+    }),
+  ]);
+  if (timer) {
+    clearTimeout(timer);
+  }
+  return finished;
+}
+
 export async function stopTestRealmServer(): Promise<void> {
   // A boot whose caller stopped waiting for it is still going to publish a
   // listening server into the module state below, so teardown waits for it
@@ -387,12 +433,34 @@ export async function stopTestRealmServer(): Promise<void> {
     publisher = undefined;
   }
   if (runner) {
-    await runner.destroy();
+    let drained = await withBudget(
+      'queue runner drain',
+      runner.destroy(),
+      DRAIN_BUDGET_MS,
+    );
     runner = undefined;
+    if (!drained) {
+      console.warn(
+        `[teardown] a claimed job outlived its ${DRAIN_BUDGET_MS / 1000}s drain ` +
+          `budget and is left running against ${process.env.PGDATABASE}. Queue or ` +
+          `database errors logged past this point belong to the suite that just ended.`,
+      );
+    }
   }
   if (dbAdapter) {
-    await dbAdapter.close();
+    let closed = await withBudget(
+      'database pool close',
+      dbAdapter.close(),
+      DB_CLOSE_BUDGET_MS,
+    );
     dbAdapter = undefined;
+    if (!closed) {
+      console.warn(
+        `[teardown] the pool for ${process.env.PGDATABASE} still had clients ` +
+          `checked out after ${DB_CLOSE_BUDGET_MS / 1000}s; its connections are ` +
+          `left to the process exit.`,
+      );
+    }
   }
   if (realmsRootDir) {
     fs.rmSync(realmsRootDir, { recursive: true, force: true });
