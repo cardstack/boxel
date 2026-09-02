@@ -366,6 +366,46 @@ module(basename(import.meta.filename), function () {
       assert.true(realms.includes(ri('@test/realm/')));
       assert.true(realms.includes(ri('@test/other/')));
     });
+
+    test('knownRealms omits shimmed package namespaces', function (assert) {
+      // Both kinds share the mapping table because both have to resolve, so
+      // the table alone cannot answer which realms exist. A caller that
+      // enumerates realms — a picker, a permissions check — would otherwise
+      // receive a Host package namespace indistinguishable from a realm.
+      vn.addPackageMapping('@test/pkg/', 'http://localhost:9100/pkg/');
+
+      assert.deepEqual(
+        vn.knownRealms(),
+        [ri('@test/realm/')],
+        'the package namespace is not a realm',
+      );
+      assert.true(
+        vn.isPackageNamespace('@test/pkg/'),
+        'and reports as a package namespace',
+      );
+      assert.strictEqual(
+        vn.resolveImport('@test/pkg/components'),
+        'http://localhost:9100/pkg/components',
+        'while resolving exactly as a realm mapping would',
+      );
+    });
+
+    test('registering a prefix as a realm reclaims it from the package set', function (assert) {
+      // The annotation must not outlive the registration that set it, or a
+      // prefix later registered as a realm would stay hidden from
+      // `knownRealms` for the rest of the process.
+      vn.addPackageMapping('@test/reclaimed/', 'http://localhost:9200/pkg/');
+      vn.addRealmMapping('@test/reclaimed/', 'http://localhost:9200/realm/');
+
+      assert.false(
+        vn.isPackageNamespace('@test/reclaimed/'),
+        'it is a realm now',
+      );
+      assert.true(
+        vn.knownRealms().includes(ri('@test/reclaimed/')),
+        'and knownRealms reports it',
+      );
+    });
   });
 
   module('VirtualNetwork resolver methods', function () {
