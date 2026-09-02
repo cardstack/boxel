@@ -92,6 +92,8 @@ interface Beat {
    * actually does and what makes a locked-off orbit read as flown
    * rather than rendered.
    */
+  /** no scrim behind the type: the block sits on the picture bare */
+  bare?: boolean;
   bob?: number;
   /** the construction clock: one number holds it, a pair runs it */
   build?: [number, number] | number;
@@ -168,7 +170,8 @@ interface Beat {
    * flown move can go anywhere and the building stays where it was
    * composed.
    */
-  hold?: boolean;
+  /** aim: true holds the building's mid-height, 'top' holds the cut line */
+  hold?: boolean | 'top';
   /** times of day to walk across the beat, evenly (page theme indices) */
   hours?: number[];
   /**
@@ -416,7 +419,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#ffd9a8'),
     cool: hex('#b9c8e6'),
     gradeA: 0.3,
-    vigA: 0.5,
+    vigA: 0,
   },
   iron: {
     sat: 0.72,
@@ -427,7 +430,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#e8d9c2'),
     cool: hex('#9fb0c8'),
     gradeA: 0.4,
-    vigA: 0.65,
+    vigA: 0,
   },
   chalk: {
     sat: 0.88,
@@ -438,7 +441,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#fffdf6'),
     cool: hex('#cfdde8'),
     gradeA: 0.2,
-    vigA: 0.22,
+    vigA: 0,
   },
   ink: {
     sat: 0.98,
@@ -449,7 +452,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#ffc9a1'),
     cool: hex('#8fa0c9'),
     gradeA: 0.32,
-    vigA: 0.68,
+    vigA: 0,
   },
   wet: {
     sat: 0.72,
@@ -460,7 +463,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#cfd6dd'),
     cool: hex('#7d8b9e'),
     gradeA: 0.44,
-    vigA: 0.8,
+    vigA: 0,
   },
   plate: {
     sat: 0.86,
@@ -471,7 +474,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#f6e8d2'),
     cool: hex('#c3c8bd'),
     gradeA: 0.18,
-    vigA: 0.36,
+    vigA: 0,
   },
   'c-jp': {
     sat: 0.84,
@@ -482,7 +485,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#f6e8d2'),
     cool: hex('#bcc6bb'),
     gradeA: 0.2,
-    vigA: 0.36,
+    vigA: 0,
   },
   /* THE SIX COUNTRIES ARE SIX CLIMATES, and the grade is where the film
      says so. Each lineup shot gets its own colourist's pass — not a
@@ -499,7 +502,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#e8e6e0'),
     cool: hex('#9fb3cc'),
     gradeA: 0.4,
-    vigA: 0.36,
+    vigA: 0,
   },
   /* the humid south: saturated, soft contrast (wet air), a jade cool
      and a lime warm, the hue turned a touch toward green */
@@ -512,7 +515,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#e6f0c8'),
     cool: hex('#7fb59a'),
     gradeA: 0.34,
-    vigA: 0.42,
+    vigA: 0,
   },
   /* the hot plain: bright, gold in both ends of the tone, the vignette
      nearly gone — a noon with nowhere to hide */
@@ -525,7 +528,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#ffd77a'),
     cool: hex('#d9b56a'),
     gradeA: 0.34,
-    vigA: 0.28,
+    vigA: 0,
   },
   /* laterite and monsoon haze: sepia into the stone's own rust, the
      corners closed down, the light heavier than anywhere else */
@@ -538,7 +541,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#e9b98a'),
     cool: hex('#9c8a70'),
     gradeA: 0.4,
-    vigA: 0.55,
+    vigA: 0,
   },
   /* dressed limestone under a hard clear sky: the warm end nearly white,
      the cool end İznik blue, contrast up — Mediterranean light */
@@ -551,7 +554,7 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#fff6e8'),
     cool: hex('#86a8cc'),
     gradeA: 0.34,
-    vigA: 0.3,
+    vigA: 0,
   },
 };
 
@@ -585,6 +588,21 @@ const STILL_JOINS = new Set([
   'wipe',
 ]);
 
+/** how long each join holds the picture, in seconds — the type waits it out */
+const JOIN_SECS: Record<string, number> = {
+  blend: 0.52,
+  blur: 0.64,
+  defocus: 0.7,
+  dip: 0.76,
+  flash: 0.3,
+  iris: 0.9,
+  luma: 0.9,
+  melt: 1.9,
+  sweep: 0.6,
+  whip: 0.36,
+  wipe: 1.15,
+};
+
 /**
  * THE LEVELS. The reads were recorded across sessions and their mean
  * loudness spreads seven decibels (ffmpeg volumedetect, 2026-09-02: -24.6
@@ -602,7 +620,6 @@ const VO_GAIN: Record<string, number> = {
   'c-th': 0.71,
   'c-tr': 0.9,
   'c-vn': 0.85,
-  coda: 0.77,
   hafu: 0.84,
   hikaku: 0.6,
   ikkoku: 0.9,
@@ -634,7 +651,7 @@ const VO_SECS: Record<string, number> = {
   'c-th': 6.11,
   'c-tr': 7.47,
   'c-vn': 7.84,
-  coda: 11.36,
+  kaitai: 16.5,
   detail: 3.58,
   hafu: 10.21,
   hikaku: 6.5,
@@ -1103,7 +1120,6 @@ const BEATS: Beat[] = [
     lead: 2,
     /* raking, not overhead: a profile is only visible when the light
        crosses it, and this whole chapter is about profiles */
-    sun: { az: -88, el: 23 },
     says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
@@ -1468,87 +1484,38 @@ const BEATS: Beat[] = [
    * its subject and the coda opens on a building already standing.
    */
   {
-    /* ---------------------------------------------------------------- *
-     * THE UN-BUILD.
-     *
-     * The film ends by taking the tower apart. The scene's build clock
-     * is a function of time and nothing stops it running backwards, so
-     * the roof lifts, the plaster goes, the timber cage comes down and
-     * the stone follows — the scaffolding returning around it as it
-     * goes — while the lens pulls back to the frame the film opened on.
-     * No other four minutes of this could end this way, and it says the
-     * argument (a building is a stack of answers, and every one of them
-     * comes apart in the order it went up) without a word of summary.
-     * ---------------------------------------------------------------- */
-    /* THE DECONSTRUCTION IS THE BUILD CLOCK RUN BACKWARDS. It was a
-       whole-model opacity fade, and a multi-part model at forty percent
-       is an X-ray — interiors through walls, a hollow silhouette that
-       never quite left before the coda stood it back up. The cut plane
-       that raised it takes it down in the order it went up, stage by
-       stage, with the scene's own hit at every joint. */
+    /* THE ENDING, in one breath: the tower comes down in the order it went
+       up while the day runs out, the lens pulls back the whole way, and
+       the end card arrives on the last stone. One beat, one line — the
+       voice runs under the takedown and the night. */
     build: [4.4, 0],
-    cam: { dolly: 1.05, lookY: 2.6, ox: -0.02, pitch: 9, yaw: 300 },
+    cam: { dolly: 0.95, lookY: 1.8, ox: -0.04, pitch: 8, yaw: 300 },
     ch: 4,
     cut: true,
     gloss: 'in the order it went up',
-    hush: true,
-    id: 'unbuild',
-    join: 'blend',
-    /* GOLDEN HOUR, and it is a decision rather than a mood: the film's
-       poster stands in the late light, so ending there closes the loop
-       — and a low raking sun is the only light that makes a building
-       coming apart read as silhouette rather than as parts. The middle
-       chapters stay bright and even because they are explaining; the
-       ending is allowed to be beautiful. */
-    /* the day runs out as the tower comes down: morning, noon, dusk,
-       night, a quarter of the beat each — and no sun override, so each
-       hour brings its own light */
+    grade: 'ink',
+    /* the aim rides the cut line, so the takedown stays in the centre of
+       the frame while the lens pulls back (zoom is a field-of-view
+       divisor: smaller is wider) */
+    bare: true,
+    hold: 'top',
     hours: [0, 1, 2, 3],
-    theme: 0,
+    id: 'kaitai',
+    join: 'blend',
     kanji: '解体',
     kicker: 'AND BACK DOWN',
     mode: 'lower',
     romaji: 'KAITAI',
-    says: ['Nothing here was bolted', 'Every joint was cut to fit'],
-    ticks: 7,
-    toCam: { dolly: 0.5, lookY: 1.2, ox: -0.02, pitch: 13, yaw: 316 },
-  },
-
-  /* ---------------------------------------------------------------- *
-   * CODA
-   * ---------------------------------------------------------------- */
-  {
-    /* whole again for the last word — the beat before took it down */
-    build: 4.4,
-    cam: { dolly: 0.62, lookY: -0.6, ox: 0.2, pitch: 14, yaw: 256 },
-    ch: 4,
-    /* the last frame is the empty ground the film started on. The
-       closing thought is WRITTEN, not read: the un-build has just made
-       the point, and a voice arriving to explain it would be the film
-       not trusting its own ending. */
-    cut: true,
-    id: 'coda',
-    join: 'blend',
-    /* the last of the same light the door stood in */
-    /* and it ends in the night it arrived at */
-    grade: 'ink',
-    theme: 3,
-    says: ['A roof', 'built tall enough', 'to be seen from the fields'],
-    kanji: '天守',
-    mode: 'title',
-    romaji: 'TENSHU',
-    sky: {
-      az: 16,
-      dist: 26,
-      lines: ['天守'],
-      opacity: 0.36,
-      size: 4,
-      track: 0.2,
-      y: 7.5,
-    },
-    style: 0,
-    ticks: 7,
-    toCam: { dolly: 0.6, lookY: -0.4, ox: 0.2, pitch: 16, yaw: 264 },
+    says: [
+      'Tile, plaster, timber',
+      'Stone last',
+      'A hill with a shape in it',
+      'Enough to see from the fields',
+    ],
+    theme: 0,
+    ticks: 10,
+    toCam: { dolly: 0.4, lookY: -0.6, ox: -0.02, pitch: 12, yaw: 336 },
+    vo: 'Take it down in the order it went up. Tile, plaster, timber. Stone last — the stone was never the building. It was the ground, raised. What is left is a hill with a shape in it. And the shape is enough to see from the fields.',
   },
 ];
 
@@ -1656,6 +1623,8 @@ interface FilmApi {
   /** the reconstruction tag: on while the building is going up */
   tag(v: boolean): void;
   theme(i: number, instant?: boolean): void;
+  /** how long a theme blend takes, in seconds; null is the page's own */
+  themeDur(s: null | number): void;
 
   time(v: number): void;
   trace(
@@ -2462,12 +2431,23 @@ export default class TowerFilm extends Component<{
    * (`VO_SECS`), and a beat with no recording paces against two thirds of
    * its own length, which is where a read for it would sit anyway.
    */
+  /**
+   * THE TRANSITION FIRST, THEN THE TYPE. A setting that arrives while the
+   * seam is still on screen is read against two pictures at once. The
+   * block waits for the incoming join to finish and a breath more, then
+   * enters in its order: kicker, glyph, reading — and the lines after.
+   */
+  get typeAt(): number[] {
+    const wait = (JOIN_SECS[this.beat.join ?? ''] ?? 0) + 0.45;
+    return [wait, wait + 0.12, wait + 0.36];
+  }
+
   get sayAt(): number[] {
     const b = this.beat;
     const n = b.says?.length ?? 0;
     const dur = b.ticks * TICK;
     const vo = VO_SECS[b.id];
-    const first = 0.5;
+    const first = this.typeAt[2]! + 0.3;
     /* land the last cue on the line's last breath, never inside the
        beat's own exit */
     const last = Math.max(
@@ -2930,7 +2910,13 @@ export default class TowerFilm extends Component<{
        the MIDDLE of whatever is standing, in the rig's own coordinates
        — half the built height, so a crane can go anywhere and the
        building stays centred on the way */
-    const lookY = this.beat.hold ? film.height() * 0.5 - 7.065 : this.now.lookY;
+    const lookY =
+      this.beat.hold === 'top'
+        ? /* the cut line, kept a little above centre, never under the ground */
+          Math.max(1.4, film.height() * 0.62) - 7.065
+        : this.beat.hold
+          ? film.height() * 0.5 - 7.065
+          : this.now.lookY;
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
     /**
      * ONE LAST FILTER BEFORE THE GLASS.
@@ -3069,7 +3055,10 @@ export default class TowerFilm extends Component<{
       (stamp - this.beatAt) / (beat.ticks * TICK * 1000)
     );
 
-    if (Array.isArray(beat.build)) {
+    /* only while the film is rolling: an ended or gated film must not keep
+       driving the last beat's clock, or a restart finds the tower still
+       down behind the door */
+    if (Array.isArray(beat.build) && this.rolling) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
     }
     /**
@@ -3090,7 +3079,16 @@ export default class TowerFilm extends Component<{
        standing inside it as a leaver is the flash — the old setting at
        full strength for the length of its exit. With the block at 0 on
        its own inline style, the leaver has nothing to come back to. */
-    const typeA = this.ended || last ? 1 : smooth(Math.min(1, left / 1.0));
+    /* and it does not ARRIVE until the seam is over: the entrance tweens
+       apply their from-values when they start, not when the pass starts,
+       so for the length of the wait the block would stand at full
+       strength over the transition. The block itself is held at 0 until
+       the wait is up and rises over the next 0.4 s, under the tweens. */
+    const since = (stamp - this.beatAt) / 1000;
+    const wait = this.typeAt[0]! - 0.05;
+    const enter = smooth(Math.max(0, Math.min(1, (since - wait) / 0.4)));
+    const tailA = this.ended || last ? 1 : smooth(Math.min(1, left / 1.0));
+    const typeA = Math.min(enter, tailA);
     this.pageEl?.style.setProperty('--tf-type-a', typeA.toFixed(3));
     if (this.plateEl) {
       this.plateEl.style.opacity = typeA.toFixed(3);
@@ -3098,13 +3096,16 @@ export default class TowerFilm extends Component<{
     /* THE HOURS OF A BEAT: a beat can walk the page's times of day across
        its length — the ending goes morning, noon, dusk, night as the
        tower comes down, and stays in the night */
-    if (beat.hours?.length) {
+    if (beat.hours?.length && this.rolling) {
       const step = Math.min(
         beat.hours.length - 1,
         Math.floor(local * beat.hours.length)
       );
       if (step !== this.hourStep) {
         this.hourStep = step;
+        /* each hour blends across its whole share of the beat, so the
+           day turns rather than steps */
+        film.themeDur((beat.ticks * TICK) / beat.hours.length);
         film.theme(beat.hours[step]!, false);
       }
     }
@@ -3817,6 +3818,13 @@ export default class TowerFilm extends Component<{
       film.time(beat.build);
     } else if (Array.isArray(beat.build)) {
       film.time(beat.build[0]);
+    } else {
+      /* EVERY BEAT OWNS ITS BUILD STATE. A beat that says nothing wants
+         the building whole — so a chapter skip, a scrub or a restart
+         landing anywhere after the ending finds the tower standing, not
+         the last beat's rubble. Only the construction chapter and the
+         ending say otherwise, and they say it explicitly. */
+      film.time(4.4);
     }
     if (beat.sky) {
       /* plant the word where the shot can see it, once */
@@ -3912,13 +3920,16 @@ export default class TowerFilm extends Component<{
       ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD }
       : null;
     this.sunGoal = want;
-    if (instant || !this.sunNow || !want) {
+    if (hard || !this.sunNow || !want) {
       this.sunNow = want ? { ...want } : null;
       film.light(this.sunNow);
     }
     this.struck = '';
     this.hourStep = -1;
     this.gradeSnap = hard;
+    if (!beat.hours) {
+      film.themeDur(null);
+    }
     this.hazeBase = beat.haze ?? null;
     film.haze(this.hazeBase);
     if (beat.wx !== undefined) {
@@ -4341,6 +4352,10 @@ export default class TowerFilm extends Component<{
         film.clearTrace(`t${i}`);
       }
       film.duck(1);
+      /* the end card idled the page (nothing under it changes); the door
+         needs it drawing again, or the poster is the ending's last frame */
+      film.idle(false);
+      this.idled = false;
       film.time(4.4);
       film.style(0);
       /* the door's own hour: late afternoon, long shadow */
@@ -4463,26 +4478,10 @@ export default class TowerFilm extends Component<{
    * weather, the world type, the traces and the lens all go back to
    * their opening state in one frame, and the film starts.
    */
+  /** the end card's WATCH AGAIN is the front door, not the first beat: the
+   *  choice of sound is made there, every time */
   private replay = () => {
-    const film = this.film;
-    this.freeze = '';
-    this.film?.voiceStop(120);
-    if (film) {
-      film.modelFade(1);
-      film.rain(null);
-      film.rim(null);
-      film.fade('mark', 0);
-      film.fade('chapter', 0);
-      for (let i = 0; i < 4; i++) {
-        film.clearTrace(`t${i}`);
-      }
-      film.duck(1);
-    }
-    this.markSeated = false;
-    this.skyOn = 0;
-    this.dimNow = 0;
-    this.ended = false;
-    this.cutTo(0, true);
+    this.restart();
   };
 
   /** the chapter menu. The film keeps running behind it, blurred: a
@@ -4541,7 +4540,8 @@ export default class TowerFilm extends Component<{
         light falling off, not as a panel, which is the difference
         between a documentary and a slide. }}
         <div
-          class="tf-scrim tf-scrim-{{this.beat.mode}}"
+          class="tf-scrim tf-scrim-{{this.beat.mode}}
+            {{if this.beat.bare 'is-bare'}}"
           aria-hidden="true"
         ></div>
 
@@ -4796,7 +4796,7 @@ export default class TowerFilm extends Component<{
               a mistake, because it is one. }}
               <n.Tween
                 @of={{n.inserted "kick"}}
-                @delay={{0.5}}
+                @delay={{get this.typeAt 0}}
                 @opacity={{array 0 1}}
                 @y={{array 10 0}}
                 @duration={{0.55}}
@@ -4814,7 +4814,7 @@ export default class TowerFilm extends Component<{
                 @by="character"
                 @order="center"
                 @stagger={{0.07}}
-                @delay={{0.62}}
+                @delay={{get this.typeAt 1}}
                 @opacity={{array 0 1}}
                 @y={{array 16 0}}
                 @duration={{0.9}}
@@ -4822,7 +4822,7 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "read"}}
-                @delay={{0.86}}
+                @delay={{get this.typeAt 2}}
                 @opacity={{array 0 1}}
                 @y={{array 8 0}}
                 @duration={{0.62}}
@@ -5858,6 +5858,13 @@ export default class TowerFilm extends Component<{
         transition: background 700ms ease;
       }
 
+      /* a bare beat: no scrim at all — under a walk through the hours the
+         scrim's paper colour snaps with each theme, and a dish of colour
+         snapping behind the type is worse than no dish */
+      .tf-scrim.is-bare {
+        display: none;
+      }
+
       .tf-scrim-lower {
         background: radial-gradient(
           128% 82% at 0% 112%,
@@ -5959,6 +5966,15 @@ export default class TowerFilm extends Component<{
          edit lands on a frame with two things happening in it. Half a
          second of fade ahead of the change empties the corner first,
          and the cut is then only ever about the picture. */
+      /* the ink follows the hour: the palette is swapped per theme by wear,
+         and under a walk through the day the type must not snap from black
+         to white — it turns with the light */
+      .tf-type,
+      .tf-type p,
+      .tf-type span {
+        transition: color 2400ms ease;
+      }
+
       .tf-type {
         position: absolute;
         inset: 0;
