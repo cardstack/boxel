@@ -176,12 +176,20 @@ runs:
             fi
             url="https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64"
             # Downloaded outside the cache directory so a half-written file
-            # cannot be what gets saved. `--retry-all-errors` covers the
-            # connection failures curl does not count as retryable on its own;
-            # a 504 it would retry regardless. `--max-time` resets on each
-            # retry, so it bounds one attempt rather than the whole loop —
-            # without it a single stalled connection would eat the entire
-            # window and never reach a second attempt.
+            # cannot be what gets saved.
+            #
+            # `--max-time` resets on each retry, so it bounds one attempt
+            # rather than the whole loop — without it a single stalled
+            # connection would eat the entire window and never reach a second
+            # attempt. The stall it cuts short exits 28, which curl counts as
+            # transient, so the retry loop picks it up unaided.
+            #
+            # `--retry-all-errors` adds the connection-level failures — reset,
+            # refused, DNS, TLS — that curl does not count as transient; a 504
+            # or a stalled transfer it would retry regardless. It retries
+            # permanent failures too, so a version pinned above to a tag that
+            # does not exist spends the whole window below before failing, in
+            # every job that runs this action.
             timeout 6m curl -fsSL \
               --connect-timeout 20 --max-time 90 \
               --retry 12 --retry-delay 20 --retry-max-time 240 --retry-all-errors \
