@@ -142,6 +142,14 @@ interface Beat {
   grade?: string;
   /** how thick the air is, 0 the hour's own and 1 as heavy as it goes */
   haze?: number;
+
+  /**
+   * HOW HARD IT RAINS, over and above the weather preset. The scene's
+   * rain is mixed for its own wide landing shot and all but vanishes on
+   * a long lens — and a beat whose whole argument is that the roof
+   * exists to shed water has to SHOW the water.
+   */
+  rain?: number;
   /**
    * A DESIGNED SILENCE. By default a beat with no line of its own is an
    * L-CUT: the outgoing narration finishes across the seam and fades on
@@ -253,6 +261,19 @@ interface Beat {
   theme?: number;
   /** how long it runs, in TICKS — see the note on the path */
   ticks: number;
+
+  /**
+   * TICKS SPENT ARRIVING, before this beat's own first waypoint.
+   *
+   * A cut is the right join inside a passage and the wrong one between
+   * passages: chapters change the sun, the air and the argument at once,
+   * and the sweep that carries the lens from one to the next is the
+   * thing this engine is actually good at. A beat with a lead is not cut
+   * in — the path flies to its pose over `lead` ticks first, the sky
+   * crossfades across that flight (an `air` cue fires at its start), and
+   * the beat's own type lands when the lens does.
+   */
+  lead?: number;
   /**
    * A point on the BUILDING this beat is naming, world units. The front
    * layer draws a line to it and pins a dot on it — the one piece of the
@@ -480,7 +501,13 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'SHIRO',
     ticks: 5,
-    toCam: { dolly: 1.85, lookY: 5.7, ox: -0.1, pitch: -3, yaw: -5 },
+    /* THE SECOND SHOT SETS THE PACE. The title crawls on purpose; if the
+       shot after it crawls too, a viewer concludes the whole film does.
+       This one moves: the lens falls away from the stone by nearly half
+       while the ground swings twenty degrees under it — a scale change
+       reads faster than any orbit, and it lands exactly on the next
+       shot's pose so the cut is still forward. */
+    toCam: { dolly: 1.2, lookY: 4.2, ox: -0.1, pitch: 6, yaw: 2 },
   },
   {
     cam: { dolly: 0.72, lookY: 1.0, ox: 0.16, pitch: 8, yaw: 2 },
@@ -506,12 +533,14 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.9, lookY: 1.4, ox: 0.14, pitch: 6, yaw: 18 },
     ch: 1,
-    /* HISTORY opens through black — three and a half centuries pass in
-       the dark between the standing keep and the first of its kind */
-    cut: true,
+    /* HISTORY does not open through black any more. A CHAPTER changes
+       the sun, the air and the argument at once, and the sweep that
+       carries the lens there is the connective tissue a cut throws
+       away — so chapter heads fly in over two ticks and the sky turns
+       under them (Beat.lead). Quick cuts belong INSIDE a passage. */
+    lead: 2,
     gloss: 'Azuchi, 1576',
     id: 'azuchi',
-    join: 'dip',
     says: ['1576', 'Seven storeys. Gilded.', 'Gone in six years.'],
     kanji: '安土城',
     kicker: 'THE FIRST OF ITS KIND',
@@ -590,12 +619,12 @@ const BEATS: Beat[] = [
     build: [0, 1.07],
     cam: { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
     ch: 2,
-    /* out of the edict's night, through black, into the building morning */
-    cut: true,
+    /* out of the edict's night into the building morning — swept, not
+       cut: the night lifts across the flight (Beat.lead) */
+    lead: 2,
     gloss: 'the stone base',
     haze: 0.42,
     id: 'ishigaki',
-    join: 'dip',
     says: [
       'No mortar. None.',
       '扇の勾配 — the fan’s incline',
@@ -762,6 +791,7 @@ const BEATS: Beat[] = [
     ch: 3,
     gloss: 'four things worth naming',
     id: 'detail',
+    lead: 2,
     says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
@@ -785,7 +815,12 @@ const BEATS: Beat[] = [
     gloss: 'the roof-ridge fish',
     haze: 0.34,
     id: 'shachi',
-    join: 'iris',
+    /* THE DETAIL CHAPTER USES ONE JOIN. Five different transitions
+       between five views of the same roof read as five different films;
+       an editor picks one grammar for a passage and keeps it. The push
+       dissolve is the quiet one — it moves, so the cut is felt, and it
+       carries no colour of its own. */
+    join: 'blend',
     says: [
       'Tiger’s head, fish’s body',
       'Bronze, at both ends of the ridge',
@@ -816,6 +851,7 @@ const BEATS: Beat[] = [
     gloss: 'the plover gable',
     haze: 0.45,
     id: 'hafu',
+    join: 'blend',
     says: [
       'A dormer named for a plover',
       'Light and air into a deep floor',
@@ -863,7 +899,11 @@ const BEATS: Beat[] = [
     gloss: 'the fan’s incline',
     haze: 0.3,
     id: 'ishi2',
-    join: 'defocus',
+    join: 'blend',
+    /* the weather arrives while we are still on the stone, so the eave
+       beat opens INTO rain rather than waiting for it to mix in */
+    rain: 0.5,
+    wx: 1,
     says: [
       'Vertical at the top',
       'Flaring at the foot',
@@ -892,7 +932,7 @@ const BEATS: Beat[] = [
     gloss: 'the eave',
     haze: 0.55,
     id: 'noki',
-    join: 'blur',
+    join: 'blend',
     says: [
       'A metre of overhang',
       'It keeps water off the wall',
@@ -902,6 +942,7 @@ const BEATS: Beat[] = [
     kicker: 'AND THE REASON FOR ALL OF IT',
     vo: "Noki. A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.",
     mode: 'lower',
+    rain: 1.15,
     romaji: 'NOKI',
     ticks: 6,
     to: [-0.46, 4.98, -3.29],
@@ -927,12 +968,10 @@ const BEATS: Beat[] = [
     ch: 4,
     /* the museum plate arrives through paper — a light dip, not a dark
        one: the gallery wall, not the passage of time */
-    cut: true,
-    dipTo: '#f2ead6',
+    lead: 2,
     gloss: 'comparison',
     haze: 0.12,
     id: 'hikaku',
-    join: 'dip',
     says: ['Six towers', 'One problem', 'Height, from what you have'],
     kanji: '比較',
     kicker: 'ONE PROBLEM',
@@ -955,13 +994,14 @@ const BEATS: Beat[] = [
     wx: 0,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 212 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 212 },
     ch: 4,
     /* the first of the six enters the way the other five do — and a
        seam here lets the plate shot ahead of it carry a real drift */
     cut: true,
     gloss: 'Japan · the keep',
     id: 'c-jp',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 228 },
     join: 'blend',
     says: ['Timber frame, stone skirt', 'Height by stacking roofs'],
     kanji: '天守',
@@ -973,11 +1013,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 219 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 228 },
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
     id: 'c-cn',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 244 },
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
@@ -989,11 +1030,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 226 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 244 },
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
     id: 'c-vn',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 260 },
     join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
@@ -1005,11 +1047,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 233 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 260 },
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
     id: 'c-th',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 276 },
     join: 'blend',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
@@ -1021,11 +1064,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 240 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 276 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
     id: 'c-kh',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 292 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1037,11 +1081,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 247 },
+    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 292 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
     id: 'c-tr',
+    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 308 },
     join: 'blend',
     says: [
       'Mass in compression',
@@ -1203,6 +1248,9 @@ interface FilmApi {
     zoom: number;
   };
   wx(i: number, instant?: boolean): void;
+
+  /** scale the rain field the weather preset draws; null hands it back */
+  rain(k: number | null): void;
 }
 
 export default class TowerFilm extends Component<{
@@ -1255,6 +1303,9 @@ export default class TowerFilm extends Component<{
   private lastTick = 0;
   /** when the current beat was entered, for the clocks it owns */
   private beatAt = 0;
+
+  /** the haze the beat asked for — the weather drift breathes around it */
+  private hazeBase: number | null = null;
 
   /* the score's goal, and the two stages that chase it */
   private goal: Cam = { ...BEATS[0]!.cam };
@@ -1439,7 +1490,12 @@ export default class TowerFilm extends Component<{
   }
 
   get filmSeconds(): number {
-    return this.beats.reduce((n, b) => n + b.ticks, 0) * TICK;
+    return (
+      this.beats.reduce(
+        (n, b, i) => n + b.ticks + (i === 0 ? 0 : (b.lead ?? 0)),
+        0
+      ) * TICK
+    );
   }
 
   /**
@@ -1452,6 +1508,107 @@ export default class TowerFilm extends Component<{
    * instead of arriving at it, and a hold is genuinely still without
    * anything having stopped.
    */
+  /**
+   * WHERE A SHOT ENDS — the beat's authored tail, floored so it always
+   * reads as a move, and clamped so it never travels past the pose the
+   * next shot begins on. Shared by the path (which lerps its waypoints
+   * across it) and by the LAUNCH: a cut hands the chaser this shot's own
+   * speed, so the lens is already travelling when the cut lands rather
+   * than easing up from a standstill.
+   */
+  private tailFor(bi: number): Cam {
+    const beats = this.beats;
+    const b = beats[bi]!;
+    const drift = b.toCam ?? {
+      ...b.cam,
+      dolly: b.cam.dolly * 1.05,
+      pitch: b.cam.pitch + 1.4,
+      yaw: b.cam.yaw + 6,
+    };
+    /**
+     * A SHOT MUST MOVE ON SCREEN, not on paper.
+     *
+     * Frame-differencing a screen capture of the cut said it plainly:
+     * outside the seams, whole minutes of this film change by about
+     * 5/255 per SECOND — 0.08 per frame, which is nothing at all. The
+     * authored tails looked like moves in the score (four to eight
+     * degrees of orbit, three per cent of push) and read as STILLS in
+     * the picture, because an orbit barely displaces the subject it is
+     * aimed at and two chase stages low-pass whatever is left.
+     *
+     * So a tail is a DIRECTION and a floor, not a distance: what the
+     * beat asks for is honoured, and anything slower than a real slow
+     * move is stretched up to one. The floors are per second, so a
+     * long hold travels further than a short one and every shot drifts
+     * at the same speed. The push does most of the work — a scale
+     * change moves every pixel and the aim keeps the subject centred —
+     * and the orbit gives the background its parallax.
+     *
+     * A shot that ENDS AT A SEAM may be stretched freely: nothing
+     * crosses a cut, so the far side is a different shot and cannot be
+     * bounced into. Inside a continuous run the next beat's head is
+     * this same lens still travelling, so the stretch stops there —
+     * landing exactly on the next head is the smoothest tail there is
+     * (the spline crosses it without a corner), and passing it is what
+     * makes the camera arrive, back up and go again.
+     *
+     * Pitch carries a floor too, because orbit alone can fail to READ:
+     * the worm's-eye on the stone base moves two degrees a second and
+     * changes almost nothing on screen, since a flat wall aimed at
+     * from a fixed height looks the same from either side of it. A
+     * little tilt moves the whole frame.
+     */
+    const next = beats[bi + 1];
+    const secs = b.ticks * TICK;
+    const sgn = (d: number) => (d < 0 ? -1 : 1);
+    const stretch = (
+      key: 'dolly' | 'pitch' | 'yaw',
+      floor: number
+    ): number => {
+      const head = b.cam[key];
+      const d = drift[key] - head;
+      const nose = next ? next.cam[key] - head : 0;
+      /* the direction is the beat's own, or the next shot's if the
+         beat asked for nothing at all */
+      const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
+      /**
+       * NEVER TRAVEL PAST WHERE THE NEXT SHOT BEGINS. Inside a run
+       * that would make the camera arrive, back up and go again. At a
+       * CUT it is worse, and it is what chapter four was doing: the
+       * details sit eight or ten degrees apart, the floor asked for
+       * twenty-two, so every shot orbited past its successor's pose
+       * and the cut jumped BACKWARDS into it — a film that appears to
+       * be running one section behind its own captions.
+       */
+      const reach = !next
+        ? Infinity
+        : sgn(nose) === way && nose !== 0
+          ? Math.abs(nose)
+          : 0;
+      const want = Math.min(
+        Math.max(Math.abs(d), floor),
+        Math.max(Math.abs(d), reach)
+      );
+      return head + way * want;
+    };
+    const to = {
+      ...drift,
+      dolly: stretch(
+        'dolly',
+        b.cam.dolly * Math.min(0.22, 0.022 * secs)
+      ),
+      pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
+      yaw: stretch('yaw', Math.min(22, 2 * secs)),
+    };
+    return {
+      dolly: to.dolly,
+      lookY: to.lookY,
+      ox: to.ox,
+      pitch: to.pitch,
+      yaw: to.yaw,
+    };
+  }
+
   get path() {
     const pts: {
       cut?: boolean;
@@ -1474,6 +1631,7 @@ export default class TowerFilm extends Component<{
        * last run left the lens.
        */
       const splice = b.cut === true || (bi === 0 && this.from > 0);
+      const to = this.tailFor(bi);
       /**
        * A HOLD BREATHES. Before the splices, every "held" shot secretly
        * lived on the one spline's residual sway; clamped shots took that
@@ -1483,87 +1641,25 @@ export default class TowerFilm extends Component<{
        * length, too slow to read as a move and just enough that the
        * frame is alive. An authored toCam always wins.
        */
-      const drift = b.toCam ?? {
-        ...b.cam,
-        dolly: b.cam.dolly * 1.05,
-        pitch: b.cam.pitch + 1.4,
-        yaw: b.cam.yaw + 6,
-      };
-      /**
-       * A SHOT MUST MOVE ON SCREEN, not on paper.
-       *
-       * Frame-differencing a screen capture of the cut said it plainly:
-       * outside the seams, whole minutes of this film change by about
-       * 5/255 per SECOND — 0.08 per frame, which is nothing at all. The
-       * authored tails looked like moves in the score (four to eight
-       * degrees of orbit, three per cent of push) and read as STILLS in
-       * the picture, because an orbit barely displaces the subject it is
-       * aimed at and two chase stages low-pass whatever is left.
-       *
-       * So a tail is a DIRECTION and a floor, not a distance: what the
-       * beat asks for is honoured, and anything slower than a real slow
-       * move is stretched up to one. The floors are per second, so a
-       * long hold travels further than a short one and every shot drifts
-       * at the same speed. The push does most of the work — a scale
-       * change moves every pixel and the aim keeps the subject centred —
-       * and the orbit gives the background its parallax.
-       *
-       * A shot that ENDS AT A SEAM may be stretched freely: nothing
-       * crosses a cut, so the far side is a different shot and cannot be
-       * bounced into. Inside a continuous run the next beat's head is
-       * this same lens still travelling, so the stretch stops there —
-       * landing exactly on the next head is the smoothest tail there is
-       * (the spline crosses it without a corner), and passing it is what
-       * makes the camera arrive, back up and go again.
-       *
-       * Pitch carries a floor too, because orbit alone can fail to READ:
-       * the worm's-eye on the stone base moves two degrees a second and
-       * changes almost nothing on screen, since a flat wall aimed at
-       * from a fixed height looks the same from either side of it. A
-       * little tilt moves the whole frame.
-       */
-      const next = beats[bi + 1];
-      const secs = b.ticks * TICK;
-      const sgn = (d: number) => (d < 0 ? -1 : 1);
-      const stretch = (
-        key: 'dolly' | 'pitch' | 'yaw',
-        floor: number
-      ): number => {
-        const head = b.cam[key];
-        const d = drift[key] - head;
-        const nose = next ? next.cam[key] - head : 0;
-        /* the direction is the beat's own, or the next shot's if the
-           beat asked for nothing at all */
-        const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
-        /**
-         * NEVER TRAVEL PAST WHERE THE NEXT SHOT BEGINS. Inside a run
-         * that would make the camera arrive, back up and go again. At a
-         * CUT it is worse, and it is what chapter four was doing: the
-         * details sit eight or ten degrees apart, the floor asked for
-         * twenty-two, so every shot orbited past its successor's pose
-         * and the cut jumped BACKWARDS into it — a film that appears to
-         * be running one section behind its own captions.
-         */
-        const reach = !next
-          ? Infinity
-          : sgn(nose) === way && nose !== 0
-            ? Math.abs(nose)
-            : 0;
-        const want = Math.min(
-          Math.max(Math.abs(d), floor),
-          Math.max(Math.abs(d), reach)
-        );
-        return head + way * want;
-      };
-      const to = {
-        ...drift,
-        dolly: stretch(
-          'dolly',
-          b.cam.dolly * Math.min(0.22, 0.022 * secs)
-        ),
-        pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
-        yaw: stretch('yaw', Math.min(22, 2 * secs)),
-      };
+      /* THE ARRIVAL. A lead spends its ticks travelling from wherever
+         the last shot finished to this beat's own head, so a chapter
+         change is a move rather than a jump. It cannot apply to the
+         first beat of a cut: there is nothing behind it to leave. */
+      const lead = bi === 0 ? 0 : (b.lead ?? 0);
+      const prev = pts[pts.length - 1];
+      if (lead > 0 && prev) {
+        for (let k = 1; k <= lead; k++) {
+          const f = k / (lead + 1);
+          pts.push({
+            dolly: lerp(prev.dolly, b.cam.dolly, f),
+            look: { x: 0, y: lerp(prev.look.y, b.cam.lookY, f), z: 0 },
+            pitch: lerp(prev.pitch, b.cam.pitch, f),
+            x: lerp(prev.x, b.cam.ox ?? 0, f),
+            y: 0,
+            yaw: lerp(prev.yaw, b.cam.yaw, f),
+          });
+        }
+      }
       for (let k = 0; k < b.ticks; k++) {
         const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
         pts.push({
@@ -1593,13 +1689,29 @@ export default class TowerFilm extends Component<{
    */
   get cues() {
     let t = 0;
-    return this.beats.map((b, i) => {
-      const at = t;
-      t += b.ticks * TICK;
+    const out: { action: string; delay: number; index: string }[] = [];
+    this.beats.forEach((b, i) => {
+      const lead = i === 0 ? 0 : (b.lead ?? 0);
+      /* the sky turns while the lens is still travelling: the air cue
+         fires as the sweep begins, the beat's own cue when it lands */
+      if (lead > 0) {
+        out.push({
+          action: 'air',
+          delay: t + TICK,
+          index: String(i),
+        });
+      }
+      const at = t + lead * TICK;
+      t = at + b.ticks * TICK;
       /* a Perform target is a NAME, and a beat's name is its place in the
          script — the index, as a string, so the cue and the array agree */
-      return { delay: at === 0 ? 0 : at + TICK, index: String(i) };
+      out.push({
+        action: 'beat',
+        delay: at === 0 ? 0 : at + TICK,
+        index: String(i),
+      });
     });
+    return out;
   }
 
   /**
@@ -1850,12 +1962,25 @@ export default class TowerFilm extends Component<{
     };
   });
 
-  private snap(c: Cam) {
+  private snap(c: Cam, launch?: Cam, secs?: number) {
     this.goal = { ...c };
     this.mid = { ...c };
     this.now = { ...c };
+    /**
+     * A CUT LANDS ON A MOVING CAMERA.
+     *
+     * Snapping used to zero the chaser's velocity, so every cut arrived
+     * at a standstill and eased up into its move — the one thing a cut
+     * must never do, because the ease-in is the join announcing itself.
+     * An operator does not stop between shots; the next shot is already
+     * running when the frame changes. So the chaser is handed the
+     * incoming shot's OWN speed (its whole travel over its whole
+     * length) and starts at pace.
+     */
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
-      this.midV[k] = 0;
+      const a = k === 'ox' ? (c.ox ?? 0) : c[k];
+      const b = launch ? (k === 'ox' ? (launch.ox ?? 0) : launch[k]) : a;
+      this.midV[k] = secs ? (b - a) / secs : 0;
       this.nowV[k] = 0;
     }
     this.film?.pose({
@@ -1887,7 +2012,7 @@ export default class TowerFilm extends Component<{
        Lower stiffness filters the spline's residual sway before the
        page's own chase filters it again — except mid-whip, when the
        hand is deliberately fast (see whipUntil). */
-    const w = this.whipUntil > performance.now() ? 13 : 4.4;
+    const w = this.whipUntil > performance.now() ? 13 : 6.6;
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
       const g = k === 'ox' ? (this.goal.ox ?? 0) : this.goal[k];
       const m = k === 'ox' ? (this.mid.ox ?? 0) : this.mid[k];
@@ -1943,6 +2068,26 @@ export default class TowerFilm extends Component<{
 
     if (Array.isArray(beat.build)) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
+    }
+
+    /**
+     * WEATHER CROSSES THE SHOT. The scene lights itself beautifully and
+     * then holds that light for four minutes, which is the one thing
+     * daylight never does. So every beat long enough to notice gets a
+     * cloud: the air thickens, a cool shadow passes over the picture,
+     * and it clears again before the beat is out. It is one pass, phased
+     * off the beat's own place in the script so no two land alike, and
+     * it never touches the grade — a chapter's colour is an argument,
+     * this is only the sky.
+     */
+    if (beat.ticks * TICK >= 8) {
+      const phase = ((this.beatIndex * 0.37) % 1) * 0.25;
+      const w = Math.max(0, Math.min(1, (local - 0.12 - phase) / 0.62));
+      const cloud = Math.sin(Math.PI * w) ** 2;
+      film.haze((this.hazeBase ?? 0) + 0.17 * cloud);
+      this.pageEl?.style.setProperty('--tf-cloud', cloud.toFixed(3));
+    } else {
+      this.pageEl?.style.setProperty('--tf-cloud', '0');
     }
 
     /* the lineup's metronome: the beat divides itself evenly among its
@@ -2368,7 +2513,7 @@ export default class TowerFilm extends Component<{
           const shot = film.snapshot();
           this.freeze = shot.length > 64 ? shot : '';
         }
-        this.snap(beat.cam);
+        this.snap(beat.cam, this.tailFor(this.beatIndex), beat.ticks * TICK);
         if (join === 'dip') {
           this.dipColor = beat.dipTo ?? '#0d0905';
           this.dipStamp += 1;
@@ -2441,18 +2586,7 @@ export default class TowerFilm extends Component<{
     } else if (Array.isArray(beat.build)) {
       film.time(beat.build[0]);
     }
-    if (beat.theme !== undefined) {
-      film.theme(beat.theme, instant);
-    }
-    /* both are shot properties, so both are released when a beat does not
-       ask — otherwise one raking close-up would light the rest of the film */
-    film.light(
-      beat.sun ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD } : null
-    );
-    film.haze(beat.haze ?? null);
-    if (beat.wx !== undefined) {
-      film.wx(beat.wx, instant);
-    }
+    this.applyAir(beat, instant);
     /**
      * THE VOICE CROSSES ON ITS OWN CLOCK. Tracks are linked by the seam
      * but independent across it: a beat with its own line fades the old
@@ -2473,6 +2607,36 @@ export default class TowerFilm extends Component<{
       /* nothing is actually speaking: the silent beat gets its music */
       this.film?.duck(1);
     }
+  }
+
+  /**
+   * THE AIR OF A SHOT: grade, sun, haze, weather. Split out of the beat
+   * so a chapter's sky can begin turning while the lens is still flying
+   * into it — the `air` cue fires at the head of a lead, the beat's own
+   * cue when it lands, and applying it twice is harmless because every
+   * one of these is a set, not a step.
+   */
+  private applyAir(beat: Beat, instant = false) {
+    const film = this.film;
+    if (!film) {
+      return;
+    }
+    if (beat.theme !== undefined) {
+      film.theme(beat.theme, instant);
+    }
+    /* both are shot properties, so both are released when a beat does not
+       ask — otherwise one raking close-up would light the rest of the film */
+    film.light(
+      beat.sun ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD } : null
+    );
+    this.hazeBase = beat.haze ?? null;
+    film.haze(this.hazeBase);
+    if (beat.wx !== undefined) {
+      film.wx(beat.wx, instant);
+    }
+    /* the weather preset draws rain for the page's own wide shot; a beat
+       that is ABOUT the rain asks for more of it (Beat.rain) */
+    film.rain(beat.rain ?? null);
   }
 
   private shot = (state: {
@@ -2501,6 +2665,13 @@ export default class TowerFilm extends Component<{
       this.ended = true;
       this.hushVoice(200);
       this.film?.duck(0.35);
+      return;
+    }
+    if (command.action === 'air') {
+      const i = Number(command.target);
+      if (Number.isFinite(i) && this.beats[i]) {
+        this.applyAir(this.beats[i]!);
+      }
       return;
     }
     if (command.action === 'beat') {
@@ -2562,8 +2733,13 @@ export default class TowerFilm extends Component<{
     this.lap += 1;
     this.applyBeat(BEATS[index]!, true);
     /* the re-cut score opens on a spliced first waypoint, so the goal
-       steps straight to this pose; the snap lands the lens beside it */
-    this.snap(BEATS[index]!.cam);
+       steps straight to this pose; the snap lands the lens beside it,
+       already carrying that shot's own speed */
+    this.snap(
+      BEATS[index]!.cam,
+      this.tailFor(0),
+      BEATS[index]!.ticks * TICK
+    );
   }
 
   /** an uncaught error anywhere becomes a visible line — a film that
@@ -2872,6 +3048,14 @@ export default class TowerFilm extends Component<{
       this.film.sound(true);
     }
     this.applyBeat(this.beats[0]!, true);
+    /* THE CLICK IS ANSWERED IN THE SAME FRAME. A door that opens onto a
+       still picture reads as a page that did not hear you: the lens
+       leaves with the film's own opening speed already on it. */
+    this.snap(
+      this.beats[0]!.cam,
+      this.tailFor(0),
+      this.beats[0]!.ticks * TICK
+    );
     this.booted = true;
     this.lastTick = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -3065,6 +3249,11 @@ export default class TowerFilm extends Component<{
         an even wash corner to corner, and an even frame has no centre.
         It darkens at the same diagonal the sun throws, so the corner
         away from the light is the heavier one. }}
+        {{! THE CLOUD. Driven per frame from --tf-cloud: a cool shadow
+        crossing the picture on a diagonal while the air thickens under
+        it, so a four-minute afternoon is not one unbroken light. }}
+        <div class="tf-cloud" aria-hidden="true"></div>
+
         <div class="tf-vig" aria-hidden="true"></div>
 
         {{! THE DIM. A wash that comes in WITH the annotation and lifts
@@ -3368,7 +3557,7 @@ export default class TowerFilm extends Component<{
                   <c.Perform
                     @at={{at "film"}}
                     @delay={{cue.delay}}
-                    @action="beat"
+                    @action={{cue.action}}
                     @target={{cue.index}}
                   />
                 {{/each}}
@@ -3982,6 +4171,29 @@ export default class TowerFilm extends Component<{
       }
 
       /* ---- the lens ------------------------------------------------- */
+      /* the passing cloud: a cool, soft-edged shadow raked with the sun */
+      .tf-cloud {
+        position: absolute;
+        inset: -20%;
+        z-index: 1;
+        pointer-events: none;
+        opacity: calc(var(--tf-cloud, 0) * 0.5);
+        background: linear-gradient(
+          calc(var(--tf-rake, 35deg) + 108deg),
+          transparent 0%,
+          rgba(96, 108, 128, 0.16) 26%,
+          rgba(78, 92, 116, 0.3) 50%,
+          rgba(96, 108, 128, 0.16) 74%,
+          transparent 100%
+        );
+        mix-blend-mode: multiply;
+        transform: translate3d(
+          calc(var(--tf-cloud, 0) * -3%),
+          calc(var(--tf-cloud, 0) * 2%),
+          0
+        );
+      }
+
       .tf-vig {
         position: absolute;
         inset: 0;
@@ -4414,19 +4626,25 @@ export default class TowerFilm extends Component<{
         display: none;
       }
 
+      /* THE GHOST GLYPH wears the front door's treatment: bigger than
+         feels safe, and HOLLOW. A filled glyph at 7% over a building is
+         a smudge — you cannot tell whether it is type or haze. An
+         outline is unambiguously drawn, holds its shape over any part
+         of the picture, and lets the tower show through it. */
       .tf-plate .tf-ghost {
         display: block;
         position: absolute;
-        right: 3%;
+        right: 2%;
         top: 50%;
         transform: translateY(-50%);
         font-family: var(--tf-ui);
-        font-size: clamp(180px, 30vw, 460px);
+        font-size: clamp(240px, 38vw, 620px);
         font-weight: 700;
-        line-height: 0.8;
-        letter-spacing: -0.04em;
-        color: var(--tf-ink);
-        opacity: 0.07;
+        line-height: 0.78;
+        letter-spacing: -0.03em;
+        color: transparent;
+        -webkit-text-stroke: 1.5px var(--tf-ink);
+        opacity: 0.16;
         pointer-events: none;
         z-index: -1;
       }
@@ -4611,9 +4829,13 @@ export default class TowerFilm extends Component<{
       }
 
       /* ---- the disc menu --------------------------------------------- */
+      /* the sheet belongs to the picture: it scrims the scene and its
+         transport, and leaves the wall plate below the film alone —
+         a menu that dims an article is a modal, not a disc menu */
       .tf-menu {
         position: absolute;
-        inset: 0;
+        inset: 0 0 auto 0;
+        height: 100svh;
         z-index: 6;
         display: flex;
         align-items: center;
