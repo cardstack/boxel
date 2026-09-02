@@ -758,7 +758,7 @@ jobs:
       PRERENDER_BROWSER_WS_ENDPOINT: ws://127.0.0.1:9222
       # One CDP connection per pooled page: on this engine a connection that
       # holds several pages loses the page globals evaluate() should see.
-      PRERENDER_BROWSER_CONNECTION_PER_PAGE: '1'
+      PRERENDER_BROWSER_CONNECTION_PER_PAGE: "1"
       PRERENDER_PAGE_INIT_SCRIPT_FILE: ${{ github.workspace }}/packages/realm-server/scripts/browser-probe-shims/obscura.js
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
