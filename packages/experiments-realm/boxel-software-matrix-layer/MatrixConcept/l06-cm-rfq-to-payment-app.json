@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "RFQ-to-Payment App",
       "symbol": "Rt",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: rfq-to-payment-app.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/rfq-to-payment-app",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -34,7 +34,13 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm",
+      "specKind": "app",
+      "specExampleCount": 1,
+      "specReadmeChars": 866,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RfqToPaymentApp/main\"]",
+      "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
     "meta": {
       "adoptsFrom": {

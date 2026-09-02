@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Termination Clause",
       "symbol": "TC",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: termination-clause.gts",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/termination-clause",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": ""
+      "source": "matrix-realm",
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 339,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TerminationClause/standard-90-day\"]",
+      "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
     "meta": {
       "adoptsFrom": {

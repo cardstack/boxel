@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/invoice-status-field",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": "matrix-realm"
+      "source": "matrix-realm",
+      "specKind": "field",
+      "specExampleCount": 2,
+      "specReadmeChars": 910,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-n-4471\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-114\"]",
+      "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
     "meta": {
       "adoptsFrom": {

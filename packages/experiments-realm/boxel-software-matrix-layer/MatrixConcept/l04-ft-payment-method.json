@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/payment-method-field",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": "matrix-realm"
+      "source": "matrix-realm",
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 631,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/VendorProfile/acme-supply\"]",
+      "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
     "meta": {
       "adoptsFrom": {
