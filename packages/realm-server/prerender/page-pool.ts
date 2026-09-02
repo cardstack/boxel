@@ -4,6 +4,7 @@ import {
   type PrerenderQueue,
   uuidv4,
 } from '@cardstack/runtime-common';
+import { readFileSync } from 'fs';
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { resolvePrerenderManagerURL } from './config.ts';
@@ -226,6 +227,19 @@ export type ConsoleErrorEntry = {
 };
 
 const log = logger('prerenderer');
+
+let pageInitScriptCache: { file: string; source: string } | undefined;
+function readPageInitScript(): string | undefined {
+  let file = process.env.PRERENDER_PAGE_INIT_SCRIPT_FILE;
+  if (!file) {
+    return undefined;
+  }
+  if (pageInitScriptCache?.file !== file) {
+    pageInitScriptCache = { file, source: readFileSync(file, 'utf8') };
+    log.info('Loaded prerender page init script from %s', file);
+  }
+  return pageInitScriptCache.source;
+}
 const chromeLog = logger('prerenderer-chrome');
 const STANDBY_CREATION_RETRIES = 3;
 const STANDBY_BACKOFF_MS = 500;
@@ -3194,6 +3208,14 @@ export class PagePool {
         globalThis as unknown as { __boxelRenderContext?: boolean }
       ).__boxelRenderContext = true;
     });
+    // Optional page init script, run in every new document before the
+    // host's own scripts. Lets an experiment polyfill or patch the
+    // browser environment (e.g. a Web API a non-Chrome engine lacks)
+    // without touching the host app.
+    let initScript = readPageInitScript();
+    if (initScript) {
+      await page.evaluateOnNewDocument(initScript);
+    }
   }
 
   // Attach all per-page error/exception observability surfaces. The

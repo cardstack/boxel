@@ -21,9 +21,26 @@ const execFileAsync = promisify(execFile);
 export class BrowserManager {
   #browser: Browser | null = null;
   #browserUserDataDir: string | undefined;
+  // Set when the browser is a remote CDP endpoint we attached to rather
+  // than a Chrome we launched: there is no process to kill, no profile
+  // directory to sweep, and closing must disconnect rather than shut the
+  // remote engine down.
+  #connectedRemotely = false;
 
   async getBrowser(): Promise<Browser> {
     if (this.#browser) {
+      return this.#browser;
+    }
+    let remoteEndpoint = process.env.PRERENDER_BROWSER_WS_ENDPOINT;
+    if (remoteEndpoint) {
+      log.info(
+        'Connecting to remote CDP browser at %s instead of launching Chrome',
+        remoteEndpoint,
+      );
+      this.#browser = await puppeteer.connect({
+        browserWSEndpoint: remoteEndpoint,
+      });
+      this.#connectedRemotely = true;
       return this.#browser;
     }
     await this.cleanupUserDataDirs();
@@ -112,6 +129,9 @@ export class BrowserManager {
   }
 
   async cleanupUserDataDirs(): Promise<void> {
+    if (this.#connectedRemotely) {
+      return;
+    }
     let activeDir = this.#browserUserDataDir;
     if (!activeDir && this.#browser) {
       // If Puppeteer is running but we cannot locate its profile, avoid deleting.
@@ -390,6 +410,17 @@ export class BrowserManager {
 
   async #closeBrowser(): Promise<void> {
     if (!this.#browser) {
+      return;
+    }
+    if (this.#connectedRemotely) {
+      try {
+        await this.#browser.disconnect();
+      } catch (e) {
+        log.warn('Error disconnecting from remote browser:', e);
+      } finally {
+        this.#browser = null;
+        this.#connectedRemotely = false;
+      }
       return;
     }
     let proc = this.#browser.process();
