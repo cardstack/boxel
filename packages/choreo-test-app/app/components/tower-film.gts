@@ -455,7 +455,7 @@ const BEATS: Beat[] = [
     /* the film opens from as far out as the lens goes and spends the
        whole first beat arriving — a slow push from "a landscape with
        something in it" to "this building, specifically" */
-    cam: { dolly: 0.46, lookY: -1.2, ox: 0.2, pitch: 12, yaw: -46 },
+    cam: { dolly: 0.46, lookY: -1.2, ox: 0.3, pitch: 12, yaw: -46 },
     ch: 0,
     gloss: 'the keep',
     id: 'title',
@@ -994,14 +994,14 @@ const BEATS: Beat[] = [
     wx: 0,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 212 },
+    cam: { dolly: 0.86, lookY: -2.9, ox: -0.2, pitch: 4, yaw: 212 },
     ch: 4,
     /* the first of the six enters the way the other five do — and a
        seam here lets the plate shot ahead of it carry a real drift */
     cut: true,
     gloss: 'Japan · the keep',
     id: 'c-jp',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 228 },
+    toCam: { dolly: 1.28, lookY: 2.2, ox: -0.19, pitch: 11, yaw: 228 },
     join: 'blend',
     says: ['Timber frame, stone skirt', 'Height by stacking roofs'],
     kanji: '天守',
@@ -1013,12 +1013,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 0.92, lookY: 0.6, ox: 0.1, pitch: 9, yaw: 228 },
+    cam: { dolly: 0.9, lookY: -1.4, ox: -0.19, pitch: 7, yaw: 228 },
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
     id: 'c-cn',
-    toCam: { dolly: 1.5, lookY: 5, ox: 0.02, pitch: 15, yaw: 215 },
+    toCam: { dolly: 1.34, lookY: 1.8, ox: -0.2, pitch: 12, yaw: 215 },
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
@@ -1030,12 +1030,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 1.55, lookY: 4.6, ox: -0.02, pitch: 14, yaw: 244 },
+    cam: { dolly: 1.38, lookY: 2.6, ox: -0.19, pitch: 12, yaw: 244 },
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
     id: 'c-vn',
-    toCam: { dolly: 0.84, lookY: 0.2, ox: -0.08, pitch: 6, yaw: 255 },
+    toCam: { dolly: 0.82, lookY: -2.6, ox: -0.2, pitch: 4, yaw: 255 },
     join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
@@ -1047,12 +1047,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 1.05, lookY: -3.2, ox: -0.05, pitch: -4, yaw: 260 },
+    cam: { dolly: 1.02, lookY: -4.2, ox: -0.2, pitch: -3, yaw: 260 },
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
     id: 'c-th',
-    toCam: { dolly: 1.3, lookY: 3.4, ox: -0.05, pitch: 12, yaw: 269 },
+    toCam: { dolly: 1.22, lookY: 1.2, ox: -0.19, pitch: 10, yaw: 269 },
     join: 'blend',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
@@ -1064,12 +1064,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 1.16, lookY: 1.4, ox: -0.16, pitch: 8, yaw: 276 },
+    cam: { dolly: 1.12, lookY: -1.6, ox: -0.22, pitch: 6, yaw: 276 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
     id: 'c-kh',
-    toCam: { dolly: 1.32, lookY: 2.2, ox: 0.14, pitch: 9, yaw: 284 },
+    toCam: { dolly: 1.24, lookY: 0.4, ox: -0.14, pitch: 7, yaw: 284 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1081,12 +1081,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 1.3, lookY: 5.6, ox: -0.04, pitch: 15, yaw: 292 },
+    cam: { dolly: 1.22, lookY: 3.4, ox: -0.19, pitch: 13, yaw: 292 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
     id: 'c-tr',
-    toCam: { dolly: 0.96, lookY: -2.4, ox: -0.04, pitch: 3, yaw: 305 },
+    toCam: { dolly: 0.94, lookY: -4, ox: -0.2, pitch: 2, yaw: 305 },
     join: 'blend',
     says: [
       'Mass in compression',
@@ -2080,20 +2080,27 @@ export default class TowerFilm extends Component<{
        it has depth — two faces, two eave lines, and a shadow that
        reads. The swing is slow and even, side to side, so the frame is
        never still and never travelling anywhere either. */
-    film.pose({
-      az: (c.yaw + 34 + 11 * Math.sin(t * 0.2)) * RAD,
-      el: (c.pitch + 2.4 + 1.4 * Math.sin(t * 0.13)) * RAD,
-      lookY: c.lookY + 0.6 * Math.sin(t * 0.15),
-      ox: (c.ox ?? 0) * 0.4,
-      zoom: c.dolly * (0.92 + 0.05 * Math.sin(t * 0.11 + 1.1)),
-    });
-    this.posterPose = {
-      dolly: c.dolly * (0.92 + 0.05 * Math.sin(t * 0.11 + 1.1)),
-      lookY: c.lookY + 0.6 * Math.sin(t * 0.15),
-      ox: (c.ox ?? 0) * 0.4,
+    /* THE POSTER IS CLOSE. The film's opening frame is as wide as the
+       lens goes, which is right for a first shot and wrong for a
+       poster: the door should show the building at a size worth
+       pressing play for, and the press then RECOILS — a fast pull back
+       out to the wide opening frame, from which the film's own slow
+       push begins. */
+    const pose = {
+      dolly: c.dolly * (2.25 + 0.09 * Math.sin(t * 0.11 + 1.1)),
+      lookY: c.lookY + 1.4 + 0.6 * Math.sin(t * 0.15),
+      ox: c.ox ?? 0,
       pitch: c.pitch + 2.4 + 1.4 * Math.sin(t * 0.13),
       yaw: c.yaw + 34 + 11 * Math.sin(t * 0.2),
     };
+    film.pose({
+      az: pose.yaw * RAD,
+      el: pose.pitch * RAD,
+      lookY: pose.lookY,
+      ox: pose.ox,
+      zoom: pose.dolly,
+    });
+    this.posterPose = pose;
   };
 
   private posterRaf?: number;
@@ -3142,7 +3149,7 @@ export default class TowerFilm extends Component<{
       this.now = { ...this.posterPose };
       this.mid = { ...this.posterPose };
       this.goal = { ...this.beats[0]!.cam };
-      this.whipUntil = performance.now() + 1500;
+      this.whipUntil = performance.now() + 1200;
       for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
         this.midV[k] = 0;
         this.nowV[k] = 0;
