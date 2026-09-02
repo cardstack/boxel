@@ -27,6 +27,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   realmConfigCardJSON,
+  fixtureImageURL,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -430,8 +431,9 @@ module('Acceptance | host mode tests', function (hooks) {
     await visit('/test/Pet/mango.json');
 
     assert.dom('[data-test-host-mode-content]').hasStyle({
-      'background-image':
-        'url("/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
+      'background-image': `url("${fixtureImageURL(
+        '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+      )}")`,
     });
 
     assert

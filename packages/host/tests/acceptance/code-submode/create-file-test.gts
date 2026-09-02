@@ -36,6 +36,7 @@ import {
   setupUserSubscription,
   cardDefFieldCount,
   realmConfigCardJSON,
+  fixtureImageURL,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -604,7 +605,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom(`[data-test-selected-type]`).hasText('Person');
       assert
         .dom(`[data-test-selected-type] [data-test-realm-icon-url]`)
-        .hasStyle({ backgroundImage: `url("${testRealmAIconURL}")` });
+        .hasStyle({
+          backgroundImage: `url("${fixtureImageURL(testRealmAIconURL)}")`,
+        });
 
       let deferred = new Deferred<void>();
       let fileID = '';

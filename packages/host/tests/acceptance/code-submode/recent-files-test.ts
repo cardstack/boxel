@@ -30,6 +30,7 @@ import {
   setupUserSubscription,
   withCachedRealmSetup,
   realmConfigCardJSON,
+  fixtureImageURL,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -351,7 +352,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert
       .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasStyle({
-        backgroundImage: 'url("/test-fixtures/realm-images/boxel-logo.png")',
+        backgroundImage: `url("${fixtureImageURL(
+          '/test-fixtures/realm-images/boxel-logo.png',
+        )}")`,
       })
       .hasAttribute('role', 'img')
       .hasAttribute('aria-label', 'Test Workspace B');
