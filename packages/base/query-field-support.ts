@@ -211,21 +211,33 @@ export function ensureQueryFieldSearchResource(
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
-            // The indexer's match count, so a seeded field knows straight away
-            // whether it holds the whole set. Absent it, the resource would
-            // infer a total from the record count and a truncated seed would
-            // read as complete until a live re-query corrected it — so when the
-            // indexer resolved this field and still reported no count, say the
-            // count is unknowable rather than leave the resource to guess. That
-            // is the state a field lands in when one of its realms failed, and
-            // the state where guessing does the most damage: the rows in hand
-            // look like the whole set precisely because the failure withheld
-            // the rest.
+            // What the resource is allowed to believe about the match count,
+            // in order of how much is known. A count the indexer reported
+            // passes through as the count. Where it reported none but recorded
+            // a realm failure, the rows in hand are labelled a floor — that
+            // says both that the count is unknown and why, which is what turns
+            // into the field's shortfall signal. Where it reported none and no
+            // realm failed, the count is simply unknowable and says so.
+            //
+            // The ordering matters because the fallback is inference: absent
+            // any of these the resource takes the total from the record count,
+            // and a set short by a realm nobody could count would read as the
+            // whole of it — a confident number over an incomplete set, which is
+            // the failure this field's status exists to report rather than
+            // reproduce. An ordinary seed reaches that inference legitimately,
+            // because there nothing was withheld.
             ...(fieldState?.seedTotal != null
               ? { meta: { page: { total: fieldState.seedTotal } } }
-              : seedSearchURL != null
-                ? { totalUnknown: true }
-                : {}),
+              : fieldState?.seedErrors?.length
+                ? {
+                    meta: {
+                      page: { total: seedRecords.length },
+                      incomplete: true,
+                    },
+                  }
+                : seedSearchURL != null
+                  ? { totalUnknown: true }
+                  : {}),
           }
         : undefined,
     },
