@@ -488,15 +488,27 @@ jobs:
         run: pnpm test:shard-assignment
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
+        # The services keep logging for as long as they run, so their output
+        # goes to the file alone rather than to the job log as well. Streamed
+        # to the job log it interleaves with — and buries — the Playwright
+        # reporter output of the step below, at a rate that puts the run's
+        # summary tens of megabytes above the end of the log. The file is
+        # printed and uploaded whole after the tests.
         run: |
-          MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+          MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix >> /tmp/server.log 2>&1 &
           timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
       - name: Print realm server logs
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        # Grouped so the dump collapses to a single line in the run view; it
+        # is tens of thousands of lines and everything after it is otherwise
+        # unreachable by scrolling.
+        run: |
+          echo '::group::realm server log'
+          cat /tmp/server.log
+          echo '::endgroup::'
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
@@ -564,6 +576,20 @@ jobs:
           path: packages/matrix/test-results/**/trace.zip
           retention-days: 30
           if-no-files-found: ignore
+
+      - name: Name the failing Playwright tests
+        # Last step in the job, so the failing test titles and their errors are
+        # what the end of the job log holds — readable from a log tail, and
+        # without downloading an artifact. Replays this shard's own blob report
+        # through the `list` reporter; the reporter Playwright runs during the
+        # test step writes that report rather than printing to the console, so
+        # this is where the titles enter the log.
+        if: ${{ failure() }}
+        # A report that cannot be replayed must not be what a reader sees
+        # instead of the test failure that triggered this step.
+        continue-on-error: true
+        working-directory: packages/matrix
+        run: pnpm exec playwright merge-reports --reporter list ./blob-report
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
