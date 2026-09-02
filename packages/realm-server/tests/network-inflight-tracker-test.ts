@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { basename } from 'path';
 import { NetworkInflightTracker } from '../prerender/network-inflight-tracker.ts';
 
 // The tracker is the one render-hang signal that survives a wedged page
@@ -9,7 +10,7 @@ import { NetworkInflightTracker } from '../prerender/network-inflight-tracker.ts
 // oldest-first (the longest-hanging fetch is the interesting one), and
 // both the count and per-URL length are capped so a pathological page
 // can't bloat the persisted diagnostics row.
-module('network-inflight-tracker', function () {
+module(basename(import.meta.filename), function () {
   test('a started request is reported until it settles', function (assert) {
     let tracker = new NetworkInflightTracker();
     tracker.recordStarted('1', 'https://example.com/a');

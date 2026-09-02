@@ -35,11 +35,13 @@ function escapeXml(str) {
 // testcase in a suite called "default", which made the report useless for
 // anything that needs to know where a test lives.
 //
-// `fullName` is the module path ending in the test name, and every test file
-// here opens with `module(basename(import.meta.filename), …)`, so its first
-// element is the file. That is the attribution shard weighting needs, and it
-// is exact rather than inferred. `suiteName` (the innermost module) is the
-// fallback for a test declared outside any file-level module.
+// `fullName` is the module path ending in the test name, and this suite names
+// every top-level module after the file it lives in — `info-test.ts`,
+// `realm-endpoints/info-test.ts` when nested, either followed by
+// ` | qualifier` where one file declares several. So its first element
+// identifies the file, which is the attribution shard weighting needs, exactly
+// and without inference. `suiteName` (the innermost module) is the fallback for
+// a test declared outside any module at all.
 function moduleNameFor(data) {
   const fullName = Array.isArray(data.fullName) ? data.fullName : [];
   return fullName[0] || data.suiteName || 'default';

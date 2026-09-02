@@ -4,11 +4,20 @@
 // drives duration-weighted shard assignment (see scripts/shard-test-modules.cjs)
 // — from a merged junit report of a full realm-server CI run.
 //
-// Attribution is exact rather than inferred: every test file opens with
-// `module(basename(import.meta.filename), …)`, and the junit reporter records
-// that outermost module as the testsuite name, so a suite name *is* a file
+// Attribution is exact rather than inferred: the junit reporter records a
+// test's outermost module as its testsuite name, and this suite names every
+// top-level module after the file it lives in, so a suite name *is* a file
 // name. (The host suite's equivalent has to match test titles against sources
 // because its modules are not named after files.)
+//
+// Three shapes of that name are in use, and all three must resolve or a third
+// of the runtime goes unattributed:
+//
+//   info-test.ts                      a file directly under tests/
+//   realm-endpoints/info-test.ts      a nested file, path-qualified
+//   node-realm-test.ts | file stat …  a file's second top-level module
+//
+// The times of a file's several suites are summed.
 //
 // Files absent from the report keep whatever the committed file already says,
 // so a partial run degrades the weights rather than erasing them. Files that
@@ -18,7 +27,7 @@
 //   gh run download <ci-run-id> --name realm-server-test-report-merged -D /tmp/rs
 //   node scripts/generate-test-module-timings.mjs /tmp/rs/realm-server.xml
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,9 +63,11 @@ function collectTestFiles(dir, prefix) {
 }
 
 const onDisk = collectTestFiles(testsDir, '');
-// Suite names are basenames; shard assignment works in paths relative to
-// tests/. Map one to the other, and report a basename that matches two files
+// Shard assignment works in paths relative to tests/, so every suite name has
+// to come back as one of those. A path-qualified name already is one; a bare
+// basename needs the map, which holds null for a basename that two files share
 // rather than silently attributing both to whichever sorted first.
+const byPath = new Set(onDisk);
 const byBasename = new Map();
 for (const file of onDisk) {
   const base = file.split('/').pop();
@@ -65,6 +76,20 @@ for (const file of onDisk) {
   } else {
     byBasename.set(base, file);
   }
+}
+
+// Returns a path, null for an ambiguous basename, or undefined for a name that
+// belongs to no file. Dropping a ` | qualifier` is a retry rather than a
+// guess: the shortened name still has to name a file on disk to be accepted.
+function resolveFile(name) {
+  if (byPath.has(name)) {
+    return name;
+  }
+  if (byBasename.has(name)) {
+    return byBasename.get(name);
+  }
+  const qualifier = name.indexOf(' | ');
+  return qualifier === -1 ? undefined : resolveFile(name.slice(0, qualifier));
 }
 
 const xml = readFileSync(junitPath, 'utf8');
@@ -82,7 +107,7 @@ for (const [, rawName, rawTime] of suites) {
   const name = rawName.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
   const seconds = Number(rawTime);
   total += seconds;
-  const file = byBasename.get(name);
+  const file = resolveFile(name);
   if (file === null) {
     ambiguous.push(name);
     continue;
@@ -111,7 +136,9 @@ if (coverage < MIN_ATTRIBUTED) {
   }
   console.error(
     'A report where everything lands in one suite usually means the junit reporter ' +
-      'is not recording fullName[0] — see scripts/junit-reporter.cjs.',
+      'is not recording fullName[0] — see scripts/junit-reporter.cjs. A scattering ' +
+      'of free-form names instead means those top-level modules are not named after ' +
+      'their file, which is what makes a suite name resolvable at all.',
   );
   process.exit(1);
 }
@@ -142,5 +169,16 @@ console.log(
 if (ambiguous.length) {
   console.warn(
     `Skipped ${ambiguous.length} suite name(s) matching more than one file: ${ambiguous.join(', ')}`,
+  );
+}
+
+// A file that no run has ever measured is packed at DEFAULT_WEIGHT, so a
+// genuinely slow one distorts a shard for as long as it stays invisible. Above
+// the coverage floor that is easy to miss, hence the list.
+const unmeasured = onDisk.filter((file) => merged[file] === undefined);
+if (unmeasured.length) {
+  console.warn(
+    `${unmeasured.length} file(s) have no recorded duration and will be packed at the ` +
+      `default weight: ${unmeasured.sort().join(', ')}`,
   );
 }
