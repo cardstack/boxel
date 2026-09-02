@@ -7,6 +7,7 @@ import {
   containsMany,
   getRelationshipMembershipState,
   linksTo,
+  resolveInstanceURL,
   resolveRef,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
@@ -200,28 +201,48 @@ class Isolated extends Component<typeof PosterBoard> {
   // read as an `item.` field path and rejected. Instance index rows key on
   // the `.json` file URL, and `scope: 'cards'` drops each card's dual-indexed
   // file row. Undefined (no tiles with a card) leaves the search idle.
-  get tilesQuery(): SearchEntryWireQuery | undefined {
-    let refs = this.linkedRefs.filter(
-      (ref): ref is string => ref !== undefined,
+  // References reach card code in canonical RRI form (`@scope/realm/…` for a
+  // prefix-mapped realm) while the index keys rows on URLs, so both the query
+  // and the entry matching speak the store-resolved URL. The base realm's rows
+  // key on its virtual URL, which no client-side resolution reaches; those
+  // tiles need the server-side expansion in CS-12744.
+  get linkedUrls(): (string | undefined)[] {
+    return this.linkedRefs.map((ref) =>
+      ref === undefined ? undefined : this.hrefFor(ref),
     );
-    if (refs.length === 0) {
+  }
+
+  hrefFor = (reference: string): string => {
+    // `@model` is typed with optional fields, so it needs the same cast
+    // `tileLinkState` uses to hand a card to card-api.
+    let model = this.args.model as unknown as CardDef | undefined;
+    return (model && resolveInstanceURL(model, reference)?.href) ?? reference;
+  };
+
+  get tilesQuery(): SearchEntryWireQuery | undefined {
+    let urls = this.linkedUrls.filter(
+      (url): url is string => url !== undefined,
+    );
+    if (urls.length === 0) {
       return undefined;
     }
     return {
       ...searchEntryWireQueryFromQuery({}, { scope: 'cards' }),
-      cardUrls: refs.map((ref) => `${ref}.json`),
+      cardUrls: urls.map((url) => `${url}.json`),
       filter: { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
     };
   }
 
   // Results come back in engine order, not linked order, so each tile finds
-  // its own entry by reference URL (`entry.id` is the extensionless card id).
+  // its own entry by resolved URL (`entry.id` is the extensionless card id).
   entryFor = (
     index: number,
     entries: RenderableSearchEntryLike[],
   ): RenderableSearchEntryLike | undefined => {
-    let ref = this.linkedRefs[index];
-    return ref ? entries.find((entry) => entry.id === ref) : undefined;
+    let url = this.linkedUrls[index];
+    return url
+      ? entries.find((entry) => this.hrefFor(entry.id) === url)
+      : undefined;
   };
 
   // Empty string (a `not-set` slot) is falsy, so the template's `{{#if ref}}`
