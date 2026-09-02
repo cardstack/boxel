@@ -1433,6 +1433,43 @@ module(`Integration | search resource`, function (hooks) {
         );
       });
 
+      // The live leg's own way of holding less than the query asks about. A
+      // search that fails as a unit returns no rows, and an empty result set is
+      // not evidence that the query matches nothing — nothing was counted at
+      // all. Reporting `total: 0` unqualified hands a rollup the one number the
+      // failure cannot justify, and it is the most believable wrong answer
+      // there is, so the meta is labelled and the count reads as unknown.
+      test(`a search that fails as a unit refuses to call its empty result a count`, async function (assert) {
+        releaseFetch.fulfill();
+        let realmServer = getService('realm-server') as RealmServerService;
+        realmServer.maybeAuthedFetchForRealms = (async () => {
+          throw new Error('realm did not answer');
+        }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: true,
+            isAutoSaved: false,
+            storeService,
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.instances.length,
+          0,
+          'the failed search holds no rows',
+        );
+        assert.true(
+          search.meta?.incomplete,
+          'and labels the empty result set, so its zero is not read as a count',
+        );
+      });
+
       test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         fetchCalls = 0;

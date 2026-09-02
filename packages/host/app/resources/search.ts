@@ -966,12 +966,23 @@ export class SearchResource<
         }
         this.#log.error(`search task failed`, err);
         this._errors = [searchErrorEntry(err)];
-        // A search that failed matched nothing it could report. The zero here
-        // pairs with the emptied result set for the loading/rendering path; it
-        // is not a match count, so `totalMatchCount` stays unknown rather than
-        // letting a rollup read the failure as "there are none".
+        // Zero rows, and zero is not a count of anything: the search failed as
+        // a unit, so what the query matches was never computed. The zero is
+        // kept because the loading and rendering paths need the shape, and both
+        // markers beside it say it is not a count — a rollup reading it would
+        // otherwise settle on the one number no failure can justify, and it is
+        // the most believable wrong answer there is, an empty result set and an
+        // empty match set rendering identically.
+        //
+        // Both are needed, because they are read separately and answer
+        // different halves. `seedTotalUnknown` is what `totalMatchCount`
+        // consults, so it withholds the count. `incomplete` is what the field's
+        // probe consults for the shortfall, and without it the count comes back
+        // unknown while nothing reports rows missing — "how many is unknown,
+        // and you hold all of them", which is the contradiction the shortfall
+        // signal exists to prevent.
         this.seedTotalUnknown = true;
-        this._meta = { page: { total: 0 } };
+        this._meta = { page: { total: 0 }, incomplete: true };
         if (this._instances.length > 0) {
           try {
             await this.updateInstances([], dependencyTrackingContext);
