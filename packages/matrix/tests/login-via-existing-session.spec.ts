@@ -12,8 +12,10 @@ import {
 // Exercises Synapse's login_via_existing_session feature (MSC3882), which the
 // test homeserver config enables. A client holding an access token mints a
 // short-lived, single-use login token and hands a session off to the browser
-// via ?loginToken — the pre-authenticated hand-off this repo consumes in
-// packages/host/app/components/matrix/login.gts.
+// via ?loginToken — the pre-authenticated hand-off this repo consumes in the
+// <Login> component (packages/host/app/components/matrix/login.gts) when logged
+// out, and in the index route (packages/host/app/routes/index.gts) to switch
+// accounts when already logged in.
 //
 // NOTE: Synapse rate-limits get_token to one request per minute per user id
 // (hardcoded in the servlet — no rc_* setting relaxes it), so every test here
@@ -85,11 +87,16 @@ test.describe('login_via_existing_session', () => {
     // The switch must go straight from session A to session B: record whether
     // the password form ever mounts during the hand-off page load.
     await page.addInitScript(() => {
+      let w = window as {
+        __sawPasswordForm?: boolean;
+        __passwordFormObserverInstalled?: boolean;
+      };
       new MutationObserver(() => {
         if (document.querySelector('[data-test-password-field]')) {
-          (window as { __sawPasswordForm?: boolean }).__sawPasswordForm = true;
+          w.__sawPasswordForm = true;
         }
       }).observe(document.documentElement, { childList: true, subtree: true });
+      w.__passwordFormObserverInstalled = true;
     });
 
     // Landing with ?loginToken while logged in as A switches to B.
@@ -99,10 +106,21 @@ test.describe('login_via_existing_session', () => {
       displayName: usernameB,
       userId: credentialsB.userId,
     });
+    let observed = await page.evaluate(() => {
+      let w = window as {
+        __sawPasswordForm?: boolean;
+        __passwordFormObserverInstalled?: boolean;
+      };
+      return {
+        installed: w.__passwordFormObserverInstalled,
+        saw: w.__sawPasswordForm,
+      };
+    });
+    expect(observed.installed, 'the password-form observer installed').toBe(
+      true,
+    );
     expect(
-      await page.evaluate(
-        () => (window as { __sawPasswordForm?: boolean }).__sawPasswordForm,
-      ),
+      observed.saw,
       'the login form never appears during the switch',
     ).toBeFalsy();
     // The single-use token is stripped so a refresh can't re-trigger the

@@ -132,6 +132,13 @@ export default class Card extends Route {
     // switch entirely. When there is no stored session the browser is logged
     // out, so <Login> consumes the token instead; we don't handle that here.
     let loginToken = peekLoginToken();
+    if (loginToken) {
+      // `persistedUserId` reads the storage handle that `loadState` assigns
+      // (behind an awaited `requestStorageAccess()` on the iframe path). Await
+      // `ready` before gating on it, or a cold load reads `undefined` and falls
+      // through to booting the stored session — the behavior this block removes.
+      await this.matrixService.ready;
+    }
     if (loginToken && this.matrixService.persistedUserId) {
       consumeLoginTokenFromUrl(); // single-use: strip up front so a refresh can't retry
       let didStart = this.didMatrixServiceStart;
@@ -143,15 +150,14 @@ export default class Card extends Route {
         await this.matrixService.switchAccount(loginToken);
         return;
       } catch (e) {
-        // Redemption failed before any teardown, so the current session is
-        // untouched. Restore the flag: if the service hadn't started yet the
-        // boot below establishes the current account; if it had, skip the
-        // redundant re-boot and stay signed in as it.
+        // A redemption failure throws before any teardown, so the current
+        // account is intact. A later failure (logout/start) has already torn
+        // that account down and persisted the incoming one. Either way, restore
+        // the flag and fall through: the boot below re-establishes whichever
+        // account is persisted now — recovering the switch or landing on the
+        // login form.
         this.didMatrixServiceStart = didStart;
-        console.error(
-          'Error switching accounts via loginToken; staying signed in',
-          e,
-        );
+        console.error('Error consuming loginToken; falling back to boot', e);
       }
     }
 

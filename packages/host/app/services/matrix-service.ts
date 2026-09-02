@@ -798,20 +798,22 @@ export default class MatrixService extends Service {
   async switchAccount(loginToken: string): Promise<void> {
     await this.ready;
     let previousAuth = this.getAuth();
+    if (!previousAuth) {
+      throw new Error(
+        `switchAccount requires a persisted session to switch away from`,
+      );
+    }
     let auth = await this.loginWithSsoToken(loginToken);
     await this.logout({
       skipIndexTransition: true,
       serverLogoutAuth: previousAuth,
     });
-    // The realm-server and per-realm session tokens carry the outgoing
-    // account's session-room claim, and logout()/clearLocalStorage leave them
-    // in place. Forget them so the incoming account mints its own on boot
-    // rather than reusing them and trying to join a session room it was never
-    // invited to (a 403 that fails the boot). setClient() during start()
-    // re-reads these keys, so clearing them here is enough. Mirrors
-    // forgetPersistedSession, which documents this hazard.
-    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
-    window.localStorage.removeItem(SessionLocalStorageKey);
+    // logout()/clearLocalStorage leave the outgoing account's realm session
+    // tokens; forget them so the incoming account mints its own on boot rather
+    // than reusing them and trying to join a session room it was never invited
+    // to (a 403 that fails the boot). setClient() during start() re-reads these
+    // keys, so clearing them here is enough.
+    this.forgetRealmSessionTokens();
     await this.start({ auth, refreshRoutes: true });
   }
 
@@ -3165,13 +3167,19 @@ export default class MatrixService extends Service {
   // (personal realm, realm auth) stay put; only this browser's local link to
   // the device is forgotten.
   //
-  // Storage-only, and all three keys of it. The realm tokens are persisted
-  // apart from the Matrix session, and a session-room claim inside the
-  // realm-server token is the identity a later realm-auth handshake adopts:
-  // leaving it behind hands the next account a session room belonging to this
-  // one, which it is not invited to and cannot join.
+  // Storage-only, and all three keys of it.
   forgetPersistedSession() {
     this.clearAuth();
+    this.forgetRealmSessionTokens();
+  }
+
+  // The realm-server and per-realm session tokens are persisted apart from the
+  // Matrix session, and a session-room claim inside the realm-server token is
+  // the identity a later realm-auth handshake adopts: leaving a previous
+  // account's keys behind hands the next account a session room belonging to
+  // that one, which it is not invited to and cannot join. Forget them whenever
+  // the persisted account changes.
+  private forgetRealmSessionTokens() {
     window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
     window.localStorage.removeItem(SessionLocalStorageKey);
   }
