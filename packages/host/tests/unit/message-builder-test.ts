@@ -8,6 +8,7 @@ import {
 
 import { RoomMember } from '@cardstack/host/lib/matrix-classes/member';
 import MessageBuilder from '@cardstack/host/lib/matrix-classes/message-builder';
+import { labelFromToolName } from '@cardstack/host/lib/matrix-classes/message-tool';
 
 import type { CardMessageEvent } from '@cardstack/base/matrix-event';
 
@@ -38,6 +39,46 @@ module('Unit | matrix | message-builder', function (hooks) {
       isStreamingFinished: false,
     },
   } as unknown as CardMessageEvent;
+
+  test('a tool request without a description label gets one from the tool name', async function (assert) {
+    let event = {
+      ...streamingEvent,
+      content: {
+        ...streamingEvent.content,
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'one-request',
+            name: 'read-file-for-ai-assistant_a831',
+            arguments: JSON.stringify({
+              attributes: { fileIdentifier: 'https://example.test/index.json' },
+            }),
+          },
+        ],
+      },
+    } as unknown as CardMessageEvent;
+    let message = await new MessageBuilder(
+      event,
+      this.owner,
+      builderContext(),
+    ).buildMessage();
+    assert.strictEqual(message.tools.length, 1);
+    assert.strictEqual(
+      message.tools[0].description,
+      'Read file for ai assistant',
+    );
+
+    assert.strictEqual(
+      labelFromToolName('switch-submode_dd88'),
+      'Switch submode',
+    );
+    assert.strictEqual(
+      labelFromToolName('patchCardInstance'),
+      'PatchCardInstance',
+    );
+    assert.strictEqual(labelFromToolName(undefined), undefined);
+    assert.strictEqual(labelFromToolName(''), undefined);
+  });
 
   test('overlapping updateMessage passes build one MessageTool per tool request', async function (assert) {
     let message = await new MessageBuilder(

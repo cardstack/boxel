@@ -19,7 +19,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
-import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import {
+  basicMappings,
+  TOOL_CALL_DESCRIPTION_SCHEMA,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
@@ -397,9 +400,7 @@ export default class FileDefManagerImpl
             parameters: {
               type: 'object',
               properties: {
-                description: {
-                  type: 'string',
-                },
+                description: TOOL_CALL_DESCRIPTION_SCHEMA,
                 ...(await command.getInputJsonSchema(
                   this.getCardAPI(),
                   mappings,
