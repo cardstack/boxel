@@ -30,22 +30,70 @@ export const HOST_PACKAGE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The name segment a `@scope/name/` prefix claims, or undefined when the value
- * is not of that shape. `@cardstack/boxel-ui/` claims `boxel-ui`.
+ * The Host package a `@cardstack/<name>/…` identifier names, or undefined when
+ * it names none.
+ *
+ * This is the one implementation of that question, because two consumers have
+ * to agree on it exactly: the host's module classifier decides what runs
+ * uncaged, and `addRealmMapping` refuses to register a realm that the
+ * classifier would then trust. A second, subtly different predicate is a hole
+ * rather than a duplicate — a spelling one accepts and the other rejects
+ * reopens the boundary from configuration alone.
+ *
+ * Hence the decode, and the rejections that go with it. `%62oxel-ui` decodes to
+ * `boxel-ui`, so comparing the raw segment would miss it while the classifier
+ * does not. An identifier that still holds `%`, `\`, `?` or `#` after decoding,
+ * or that walks with `.`/`..`, names nothing: those are ways to write one thing
+ * and have it read as another, and the answer for all of them is no.
+ *
+ * The scope must be `@cardstack` literally. `@other/boxel-ui/` names no Host
+ * package however it is spelled, so a realm may hold it.
  */
-export function scopedPrefixName(prefix: string): string | undefined {
-  if (!prefix.startsWith('@')) {
+export function hostPackageNameOf(identifier: string): string | undefined {
+  if (!identifier.startsWith('@cardstack/')) {
     return undefined;
   }
-  let segments = prefix.split('/');
-  return segments.length >= 2 && segments[1] !== '' ? segments[1] : undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(identifier);
+  } catch {
+    return undefined;
+  }
+  if (
+    decoded.includes('\\') ||
+    decoded.includes('%') ||
+    decoded.includes('?') ||
+    decoded.includes('#')
+  ) {
+    return undefined;
+  }
+  let segments = decoded.split('/');
+  if (segments.length < 2 || segments[0] !== '@cardstack') {
+    return undefined;
+  }
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    return undefined;
+  }
+  let name = segments[1]!;
+  return HOST_PACKAGE_NAMES.has(name) ? name : undefined;
 }
 
 /**
- * Whether a prefix would claim a Host package's name. `base` is excluded: it is
- * a realm as well as a Host package, and registering it is correct.
+ * Whether an identifier names a Host package, and so may run uncaged.
+ */
+export function isHostPackageSpecifier(identifier: string): boolean {
+  return hostPackageNameOf(identifier) !== undefined;
+}
+
+/**
+ * Whether registering this prefix as a realm would hand the classifier
+ * authored content to trust.
+ *
+ * The same question as `isHostPackageSpecifier`, less the one legitimate
+ * overlap: `base` is a Host package name and the base realm's prefix, and the
+ * base realm is trusted on its own account, so registering it is correct.
  */
 export function claimsHostPackageName(prefix: string): boolean {
-  let name = scopedPrefixName(prefix);
-  return name !== undefined && name !== 'base' && HOST_PACKAGE_NAMES.has(name);
+  let name = hostPackageNameOf(prefix);
+  return name !== undefined && name !== 'base';
 }

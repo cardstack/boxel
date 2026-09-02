@@ -1,7 +1,10 @@
 import { module, test } from 'qunit';
 
 import { VirtualNetwork } from '@cardstack/runtime-common';
-import { HOST_PACKAGE_NAMES } from '@cardstack/runtime-common/host-package-names';
+import {
+  HOST_PACKAGE_NAMES,
+  isHostPackageSpecifier,
+} from '@cardstack/runtime-common/host-package-names';
 
 const TARGET = 'https://realms.example.test/somewhere/';
 
@@ -63,6 +66,39 @@ module('Unit | realm mapping host-package guard', function () {
       virtualNetwork.toURL('@cardstack/catalog/listing').href,
       `${TARGET}listing`,
       'ordinary realm prefixes register and resolve as before',
+    );
+  });
+  test('an encoded name cannot slip past the guard', function (assert) {
+    // The classifier decodes before deciding, so `%62oxel-ui` reaches it as
+    // `boxel-ui` and is trusted. A guard comparing the raw segment would permit
+    // the realm the classifier then trusts — the boundary open again, spelled
+    // differently. Both sides ask one shared predicate for exactly this reason.
+    let virtualNetwork = new VirtualNetwork();
+    assert.true(
+      isHostPackageSpecifier('@cardstack/%62oxel-ui/components'),
+      'the classifier decodes and trusts it',
+    );
+    assert.throws(
+      () => virtualNetwork.addRealmMapping('@cardstack/%62oxel-ui/', TARGET),
+      /is a Host package name/,
+      'so the guard refuses it too',
+    );
+  });
+
+  test('a realm outside the @cardstack scope may hold any name', function (assert) {
+    // The classifier trusts nothing outside `@cardstack`, so
+    // `@other/boxel-ui/` carries no hazard and refusing it would break a
+    // legitimate realm for a name collision that cannot matter.
+    let virtualNetwork = new VirtualNetwork();
+    assert.false(
+      isHostPackageSpecifier('@other/boxel-ui/components'),
+      'the classifier does not trust it',
+    );
+    virtualNetwork.addRealmMapping('@other/boxel-ui/', TARGET);
+    assert.strictEqual(
+      virtualNetwork.toURL('@other/boxel-ui/thing').href,
+      `${TARGET}thing`,
+      'and it registers and resolves normally',
     );
   });
 });

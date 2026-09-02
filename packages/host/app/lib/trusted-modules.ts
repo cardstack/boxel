@@ -1,4 +1,4 @@
-import { HOST_PACKAGE_NAMES } from '@cardstack/runtime-common/host-package-names';
+import { isHostPackageSpecifier } from '@cardstack/runtime-common/host-package-names';
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
 import config from '@cardstack/host/config/environment';
@@ -62,12 +62,11 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
 }
 
 /**
- * See `HOST_PACKAGE_NAMES` in runtime-common for the list and why the
- * `@cardstack/<name>/` namespace is shared between Host packages and realm
- * aliases. The constraint in the other direction — that no realm may be mapped
- * under one of these names, or its authored content would be admitted here as
- * Host-owned — is asserted by `VirtualNetwork.addRealmMapping`, which is the
- * wiring that registers them and the only place that can see it.
+ * `isHostPackageSpecifier` and its list live in runtime-common, because
+ * `VirtualNetwork.addRealmMapping` has to ask the same question in reverse —
+ * refusing to register a realm whose content would be admitted here as
+ * Host-owned — and two predicates that must agree exactly are a hole rather
+ * than a duplicate.
  *
  * A Host package missing from that list fails closed: its modules classify as
  * authored, which cages them and makes the walk try to read them. That is the
@@ -75,7 +74,6 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
  * does not break the graph walk, which prunes on the runtime's own shim
  * registry rather than on this list.
  */
-const hostPackages = HOST_PACKAGE_NAMES;
 
 // Framework and Host-runtime modules a cage receives as a stand-in rather than
 // as authored source. Exact identifiers only: these are bare specifiers with
@@ -117,32 +115,6 @@ const hostProvidedFrameworkModules = new Set([
  * decodes to `%2e%2e`, which still carries a `%` and is refused, so there is
  * no need to decode to a fixed point.
  */
-function isHostPackageSpecifier(identifier: string): boolean {
-  if (!identifier.startsWith('@cardstack/')) {
-    return false;
-  }
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(identifier);
-  } catch {
-    return false;
-  }
-  if (
-    decoded.includes('\\') ||
-    decoded.includes('%') ||
-    decoded.includes('?') ||
-    decoded.includes('#')
-  ) {
-    return false;
-  }
-  let segments = decoded.split('/');
-  return (
-    segments.length >= 2 &&
-    segments[0] === '@cardstack' &&
-    hostPackages.has(segments[1]!) &&
-    segments.every((segment) => segment !== '.' && segment !== '..')
-  );
-}
 
 /**
  * Origin-and-path containment for an absolute module URL. The boundary path is

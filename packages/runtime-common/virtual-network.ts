@@ -1,6 +1,6 @@
 import {
   claimsHostPackageName,
-  scopedPrefixName,
+  hostPackageNameOf,
 } from './host-package-names.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
@@ -178,7 +178,7 @@ export class VirtualNetwork {
     if (claimsHostPackageName(realmIdentifier)) {
       throw new Error(
         `Refusing to map realm ${realmIdentifier}: ` +
-          `"${scopedPrefixName(realmIdentifier)}" is a Host package name, and a ` +
+          `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
           `realm registered under it would have its authored content trusted as ` +
           `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
       );
