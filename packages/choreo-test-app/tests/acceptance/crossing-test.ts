@@ -83,6 +83,16 @@ module('Acceptance | crossing', function (hooks) {
   test('going home leaves nothing stranded at a seeded opacity', async function (assert) {
     await visit('/');
     await frames(6);
+    // the gallery AT REST, tile by tile: the flight is measured against
+    // each card's own height, not against its neighbours'. Cards differ
+    // in height by design — a long lede is a taller row — so comparing
+    // tiles to each other only asserts that the copy is evenly cut.
+    const restHeights = new Map(
+      [...document.querySelectorAll<HTMLElement>('.card')].map((el) => [
+        el.dataset['demo'],
+        el.offsetHeight,
+      ])
+    );
     await click(".card[data-demo='playhead'] .card-meta");
     await waitUntil(() => !crossingActive(), { timeout: 8000 });
     await frames(4);
@@ -96,13 +106,20 @@ module('Acceptance | crossing', function (hooks) {
     );
     // the flight must not lean on the grid: a receiver animating its
     // LAYOUT size stretches its whole row mid-crossing (the stretched-
-    // gallery screenshot). Shape-matching rides transform scale instead.
-    const midHeights = [...document.querySelectorAll<HTMLElement>('.card')].map(
-      (el) => el.offsetHeight
-    );
-    assert.true(
-      Math.max(...midHeights) - Math.min(...midHeights) < 8,
-      `no card row stretches under the flight (${Math.min(...midHeights).toFixed(0)}..${Math.max(...midHeights).toFixed(0)})`
+    // gallery screenshot). Shape-matching rides transform scale instead,
+    // which leaves layout alone — so every tile still stands at the
+    // height it had at rest.
+    const stretched = [...document.querySelectorAll<HTMLElement>('.card')]
+      .map((el) => ({
+        demo: el.dataset['demo'],
+        rest: restHeights.get(el.dataset['demo']) ?? 0,
+        now: el.offsetHeight,
+      }))
+      .filter((c) => Math.abs(c.now - c.rest) >= 8);
+    assert.deepEqual(
+      stretched.map((c) => `${c.demo} ${c.rest}->${c.now}`),
+      [],
+      'no card stretches under the flight'
     );
     // mid-flight only the counterpart tile is lit; every unmatched card
     // HOLDS its hidden pose — dark, not entering — until the settle
