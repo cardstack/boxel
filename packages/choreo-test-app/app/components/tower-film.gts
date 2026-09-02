@@ -3948,17 +3948,37 @@ export default class TowerFilm extends Component<{
    * is held as a still, the camera is PLACED at the opening pose behind
    * it, and the still fades away.
    */
+  /**
+   * BACK IN FROM THE END CARD — a hard reset, not a journey.
+   *
+   * The film ends three hundred degrees around the building, with the
+   * tower dissolved, the sky at golden hour, the rain gone and a chapter
+   * numeral on screen. Tweening any of that back to the opening is a
+   * confusing ten seconds in which nothing is either the ending or the
+   * beginning. So the ending is CLEARED: every overlay, the model, the
+   * weather, the world type, the traces and the lens all go back to
+   * their opening state in one frame, and the film starts.
+   */
   private replay = () => {
     const film = this.film;
+    this.freeze = '';
+    this.hushVoice(120);
     if (film) {
-      const shot = film.snapshot();
-      this.freeze = shot.length > 64 ? shot : '';
+      film.modelFade(1);
+      film.rain(null);
+      film.rim(null);
+      film.fade('mark', 0);
+      film.fade('chapter', 0);
+      for (let i = 0; i < 4; i++) {
+        film.clearTrace(`t${i}`);
+      }
+      film.duck(1);
     }
+    this.markSeated = false;
+    this.skyOn = 0;
+    this.dimNow = 0;
     this.ended = false;
     this.cutTo(0, true);
-    if (this.freeze) {
-      this.blendStamp += 1;
-    }
   };
 
   /** the chapter menu. The film keeps running behind it, blurred: a
