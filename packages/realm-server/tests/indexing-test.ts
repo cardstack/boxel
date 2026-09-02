@@ -1187,6 +1187,28 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('file fitted HTML renders the modified time a file-meta read reports', async function (assert) {
+      // The FileDef shells render `· <relative date>` from `meta.lastModified`.
+      // The prerendered rendering hydrates from the extract's resource rather
+      // than from a served file-meta document, so that resource has to carry
+      // the row's timestamps — otherwise the baked HTML silently omits a
+      // segment a live render of the same file shows, and the two disagree
+      // on screen.
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}random-file.txt`),
+      );
+      assert.ok(entry?.lastModified, 'the file row carries last_modified');
+      let fittedHtml = Object.values(entry?.fittedHtml ?? {}).join('');
+      assert.ok(
+        fittedHtml.includes('data-test-file-fitted'),
+        'the file entry has FileDef fitted HTML',
+      );
+      assert.ok(
+        /class="sub-mod"[^>]*>·\s*[^\s<]/.test(fittedHtml),
+        `the fitted HTML renders a modified time, got: ${fittedHtml.slice(0, 2000)}`,
+      );
+    });
+
     test('indexes card json resources as file entries too', async function (assert) {
       let entry = await realm.realmIndexQueryEngine.file(
         new URL(`${testRealm}mango.json`),

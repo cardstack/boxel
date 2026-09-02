@@ -453,6 +453,12 @@ async function visitForPrerenderedHtml({
   // skip buffering the file (same optimization as the index visit; only
   // forwarded when both are present).
   let { contentHash, contentSize } = await batch.getContentMeta(localPath);
+  // And the file's timestamps, the same values the index visit writes to its
+  // row (visit-file.ts): the extract stamps them onto the resource this
+  // visit's fileRender pass hydrates its FileDef from, so the HTML it bakes
+  // shows the same modified time a live render of the row does. Served from
+  // the prefetch above; the row already exists once the index visit has run.
+  let fileCreatedAt = await batch.ensureFileCreatedAt(localPath);
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
@@ -466,6 +472,10 @@ async function visitForPrerenderedHtml({
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),
+    ...(fileRef.lastModified != null
+      ? { fileLastModified: fileRef.lastModified }
+      : {}),
+    fileCreatedAt,
   };
 
   let response: RenderVisitResponse = await prerenderer.prerenderVisit({
