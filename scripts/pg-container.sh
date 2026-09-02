@@ -27,12 +27,17 @@ BOXEL_PG_IMAGE=postgres:16.3
 # fails callers with "sorry, too many clients already".
 BOXEL_PG_MAX_CONNECTIONS=400
 
+# Stamped on every connection this file opens, so the deferral check can tell
+# a stack that is using postgres from this script's own polls.
+BOXEL_PG_APPNAME=boxel-pg-maint
+
 # Run psql inside the container over TCP. The postgres:16.3 image does not
 # always create the /var/run/postgresql unix socket, so a bare `psql -U postgres`
 # can fail on the socket path; postgres listens on *:5432 with trust auth, so
 # TCP works regardless.
 boxel_pg_psql() {
-  docker exec "$BOXEL_PG_CONTAINER" psql -h 127.0.0.1 -p 5432 -U postgres -w "$@"
+  docker exec -e PGAPPNAME="$BOXEL_PG_APPNAME" "$BOXEL_PG_CONTAINER" \
+    psql -h 127.0.0.1 -p 5432 -U postgres -w "$@"
 }
 
 # Probe over TCP for the same reason, plus one of its own: while the image
@@ -108,10 +113,13 @@ boxel_pg_max_connections_is_command_line() {
     2>/dev/null | tr -d '[:space:]')" = t ]
 }
 
-# Client backends other than the one asking.
+# Client backends that belong to something other than this script. Sibling
+# callers poll `show max_connections` once a second while they wait for the
+# lock, and those connections are client backends like any other — counting
+# them would defer the repair on a machine where nothing else is connected.
 boxel_pg_client_count() {
   _bpg_clients=$(boxel_pg_psql -tAc \
-    "select count(*) from pg_stat_activity where pid <> pg_backend_pid() and backend_type = 'client backend'" \
+    "select count(*) from pg_stat_activity where pid <> pg_backend_pid() and backend_type = 'client backend' and application_name <> '$BOXEL_PG_APPNAME'" \
     2>/dev/null | tr -d '[:space:]')
   case "$_bpg_clients" in
     '' | *[!0-9]*) return 1 ;;
