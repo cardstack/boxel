@@ -1,0 +1,80 @@
+# Towers — the porting delta
+
+What the source page (`threeui/src/shaders/japanese-tower/Towers.html`,
+3,387 lines over three.js r149) can do, against what the film at
+`/_towers` asks of it. The vendored copy in `test-app/public/towers.html`
+carries the whole page; nothing below was stripped — the gap is in what
+the beats _use_.
+
+## The page's atmosphere, in full
+
+| system                  | knobs                                                          | what it does                                                                                                                                                                                              |
+| ----------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **hours** (`THEMES`)    | MORNING · NOON · SUNSET · NIGHT                                | sky gradient (six stops), fog colour and range, ground and grass tint, ridge colours, key light az/el/colour, hemi/ambient/fill/rim, shadow depth, blob, glow, stars, and a full CSS palette for the type |
+| **weather** (`WEATHER`) | CLEAR · RAIN · STORM · SNOW                                    | fog pull-in and tint, sun/hemi/ambient scaling, sky and ground tint, star fade, a rain pool (density, fall speed), a snow pool, `wet`, `dust`, an ambience loop per state, lightning (`bolt`)             |
+| **blizzard**            | `blizK` on a 41 s cycle (12 calm · 6 build · 15 blow · 8 ease) | fog pulled closer, another bite out of the sun, flakes grown into streaks, more of the pool drawn                                                                                                         |
+| **settled snow**        | `snowPack`, banks over 24 s, thaws over 13 s                   | whitens the grass (`uSnow` in the blade shader), dusts tile and plaster but not timber or gilt                                                                                                            |
+| **wet ground**          | from `wet`                                                     | terrain roughness down, metalness up, a puddle mesh at 0.72, splash sprites stepped by `wxRain`                                                                                                           |
+| **wind on the grass**   | `uWind`, `uWindAmp`, two noise octaves                         | the sway — steady, never gusting; `uWindAmp` is a constant 0.30                                                                                                                                           |
+| **lightning**           | `strike()`, `boltK`                                            | a bolt light, the sky material flashed, a screen-blended plane over the frame                                                                                                                             |
+| **construction**        | `applyTime(t)`, 0..4.4                                         | a clip plane with a soft cap disc, scaffold groups per stage, a hit per stage (`ping`)                                                                                                                    |
+| **six towers**          | `STYLES`                                                       | Japan, China, Vietnam, Thailand, Cambodia, Türkiye — each with its own music, build hit and bell                                                                                                          |
+
+## What the film used before this pass
+
+- Hours: all four (`theme` per beat).
+- Weather: CLEAR and RAIN only. STORM and SNOW never. No blizzard, no
+  settled snow, no lightning.
+- Wet ground: only as a side effect of RAIN on `noki` / `hikaku`.
+- Wind: the constant.
+- Construction: forward only; the "deconstruction" was an opacity fade.
+- Grades: six per-country LUTs that were the same afternoon in six
+  tints.
+
+## What was ported in this pass
+
+- **`__film.winter({ pack, gust })`** — settled snow and a pinned
+  blizzard on the _shot's_ clock. The page's own timings (24 s to bank,
+  41 s per blizzard cycle) are right for a wide shot somebody sits in and
+  wrong for a five-second beat that has to read as cold on its first
+  frame. `null` hands both back to the weather. `Beat.winter` carries it;
+  `settleAir` inherits it across a jump.
+- **China snows.** `c-cn`: `wx: 3`, `winter: { gust: 0.55, pack: 0.8 }`.
+  `c-vn` returns to `wx: 0`, `winter: null` — the thaw goes with the cut,
+  not the page's thirteen seconds.
+- **Cambodia at eye level.** The prasat reads from level or below — its
+  terraces and redented corners are the point; from above it is a heap.
+  Both ends of the move now sit at or under the horizon (pitch −4 → −1).
+- **The deconstruction is the build clock run backwards.** `unbuild:
+build: [4.4, 0]`; the coda restores `build: 4.4`. The fade it replaces
+  turned a multi-part model into an X-ray at forty percent.
+- **Six climates in the grade.** China drained to steel with a cool
+  split-tone; Vietnam saturated jade and lime, hue toward green; Thailand
+  gold in both ends with the vignette nearly gone; Cambodia laterite
+  sepia with the corners closed; Türkiye limestone white against İznik
+  blue, contrast up.
+- **The transport over the picture.** The source runs its track as a
+  hairline over the scene; the film's was a solid 76 px band under the
+  frame. It is a fade of the chapter's own paper now, pinned to the
+  viewport, and the stage owns the whole height.
+
+## Still on the table
+
+- **STORM for the rain chapter.** `noki` / `hikaku` are RAIN (`wx: 1`)
+  with `rain: 1.15`. STORM (`wx: 2`) pulls the fog in, takes the sun to
+  0.14, doubles the drops and arms lightning — and `__strike()` is
+  already on the window. A single bolt on the `hikaku` cut ("six towers,
+  one problem") is a cheap, earned punctuation. Needs a `Beat.strike`
+  and a `__film.strike()`.
+- **Wind as a knob.** `uWindAmp` never moves. A `__film.wind(amp)` and a
+  gust on the storm beats (0.30 → 0.6) is ten lines; under the blizzard
+  it should track `gust`.
+- **Night stars.** `ikkoku` / `ishigaki` are NIGHT (`theme: 3`) with
+  `starK: 1` — check they are visible under the grade's vignette.
+- **Weather ambience.** `syncWeatherAudio` runs a loop per state (rain,
+  storm, wind_snow). With sound on, the snow beat now brings wind under
+  the Chinese score — listen for the level against the voice duck.
+- **The `-plain` VO variants** on disk are unreferenced.
+- **Storm on the Vietnam beat?** Monsoon would be honest; it is the one
+  beat with a masonry body that would take the wet well. Left clear so
+  the snow's exit reads.

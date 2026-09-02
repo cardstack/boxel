@@ -347,6 +347,8 @@ interface Beat {
    */
   vo?: string;
   /** weather: 0 clear, 1 rain, 2 storm, 3 snow */
+  /** settled snow and a pinned blizzard, on the shot's clock; null clears */
+  winter?: null | { gust: number; pack: number };
   wx?: number;
 }
 
@@ -472,60 +474,74 @@ const GRADES: Record<string, FilmGrade> = {
     gradeA: 0.2,
     vigA: 0.36,
   },
+  /* THE SIX COUNTRIES ARE SIX CLIMATES, and the grade is where the film
+     says so. Each lineup shot gets its own colourist's pass — not a
+     tint on the same afternoon, a different afternoon. */
+  /* the north, in snow: colour drained to steel, the split-tone all cool,
+     the whites lifted — the eye should feel the temperature drop at the
+     cut before the flakes register */
   'c-cn': {
-    sat: 0.95,
-    con: 0.97,
-    bri: 1.16,
-    sep: 0.06,
-    hue: 0,
-    warm: hex('#ffd9a0'),
-    cool: hex('#c0a68e'),
-    gradeA: 0.28,
-    vigA: 0.44,
-  },
-  'c-vn': {
-    sat: 0.92,
-    con: 0.94,
+    sat: 0.62,
+    con: 1.02,
     bri: 1.18,
     sep: 0,
-    hue: -6 * (Math.PI / 180),
-    warm: hex('#eef0cd'),
-    cool: hex('#a7bda8'),
-    gradeA: 0.26,
-    vigA: 0.4,
+    hue: 0,
+    warm: hex('#e8e6e0'),
+    cool: hex('#9fb3cc'),
+    gradeA: 0.4,
+    vigA: 0.36,
   },
+  /* the humid south: saturated, soft contrast (wet air), a jade cool
+     and a lime warm, the hue turned a touch toward green */
+  'c-vn': {
+    sat: 1.0,
+    con: 0.92,
+    bri: 1.14,
+    sep: 0,
+    hue: -8 * (Math.PI / 180),
+    warm: hex('#e6f0c8'),
+    cool: hex('#7fb59a'),
+    gradeA: 0.34,
+    vigA: 0.42,
+  },
+  /* the hot plain: bright, gold in both ends of the tone, the vignette
+     nearly gone — a noon with nowhere to hide */
   'c-th': {
-    sat: 1.02,
-    con: 0.93,
+    sat: 1.12,
+    con: 0.96,
+    bri: 1.28,
+    sep: 0.04,
+    hue: 0,
+    warm: hex('#ffd77a'),
+    cool: hex('#d9b56a'),
+    gradeA: 0.34,
+    vigA: 0.28,
+  },
+  /* laterite and monsoon haze: sepia into the stone's own rust, the
+     corners closed down, the light heavier than anywhere else */
+  'c-kh': {
+    sat: 0.86,
+    con: 1.02,
+    bri: 1.1,
+    sep: 0.2,
+    hue: 0,
+    warm: hex('#e9b98a'),
+    cool: hex('#9c8a70'),
+    gradeA: 0.4,
+    vigA: 0.55,
+  },
+  /* dressed limestone under a hard clear sky: the warm end nearly white,
+     the cool end İznik blue, contrast up — Mediterranean light */
+  'c-tr': {
+    sat: 0.8,
+    con: 1.05,
     bri: 1.3,
     sep: 0,
     hue: 0,
-    warm: hex('#ffe9ad'),
-    cool: hex('#d3c6a0'),
-    gradeA: 0.24,
+    warm: hex('#fff6e8'),
+    cool: hex('#86a8cc'),
+    gradeA: 0.34,
     vigA: 0.3,
-  },
-  'c-kh': {
-    sat: 0.9,
-    con: 0.99,
-    bri: 1.14,
-    sep: 0.12,
-    hue: 0,
-    warm: hex('#f2cfa4'),
-    cool: hex('#b9a184'),
-    gradeA: 0.3,
-    vigA: 0.5,
-  },
-  'c-tr': {
-    sat: 0.8,
-    con: 0.96,
-    bri: 1.26,
-    sep: 0,
-    hue: 0,
-    warm: hex('#fdf3e2'),
-    cool: hex('#a9bacd'),
-    gradeA: 0.22,
-    vigA: 0.34,
   },
 };
 
@@ -1300,6 +1316,10 @@ const BEATS: Beat[] = [
     hold: true,
     id: 'c-cn',
     toCam: { dolly: 0.689, lookY: -2.8, ox: -0.22, pitch: 3, yaw: 214 },
+    /* the north: it is snowing, the ground has taken it, and the wind is
+       up enough to streak the flakes — cold on the first frame */
+    winter: { gust: 0.55, pack: 0.8 },
+    wx: 3,
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
@@ -1320,6 +1340,10 @@ const BEATS: Beat[] = [
     hold: true,
     id: 'c-vn',
     toCam: { dolly: 0.672, lookY: -3.2, ox: -0.22, pitch: 2, yaw: 276 },
+    /* south again: the snow goes with the cut, not on the page's
+       thirteen-second thaw */
+    winter: null,
+    wx: 0,
     join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
@@ -1357,7 +1381,10 @@ const BEATS: Beat[] = [
        corner in front of it, and moves about a quarter as far as its
        neighbours. A comparison is only fair if every subject is shown
        at its best, and "its best" is not the same lens for all six. */
-    cam: { dolly: 0.672, lookY: -1.4, ox: -0.21, pitch: 6, yaw: 290 },
+    /* the prasat reads from eye level or below — its terraces and the
+       redented corners are the point, and from above it is a heap. Both
+       ends of the move stay at or under the horizon. */
+    cam: { dolly: 0.74, lookY: -3.4, ox: -0.21, pitch: -4, yaw: 290 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
@@ -1365,7 +1392,7 @@ const BEATS: Beat[] = [
     grade: 'c-kh',
     hold: true,
     id: 'c-kh',
-    toCam: { dolly: 0.738, lookY: 0.7, ox: -0.17, pitch: 9, yaw: 296 },
+    toCam: { dolly: 0.8, lookY: -1.6, ox: -0.17, pitch: -1, yaw: 296 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1420,9 +1447,14 @@ const BEATS: Beat[] = [
      * argument (a building is a stack of answers, and every one of them
      * comes apart in the order it went up) without a word of summary.
      * ---------------------------------------------------------------- */
-    build: 4.4,
+    /* THE DECONSTRUCTION IS THE BUILD CLOCK RUN BACKWARDS. It was a
+       whole-model opacity fade, and a multi-part model at forty percent
+       is an X-ray — interiors through walls, a hollow silhouette that
+       never quite left before the coda stood it back up. The cut plane
+       that raised it takes it down in the order it went up, stage by
+       stage, with the scene's own hit at every joint. */
+    build: [4.4, 0],
     cam: { dolly: 1.05, lookY: 2.6, ox: -0.02, pitch: 9, yaw: 300 },
-    dissolve: true,
     ch: 4,
     cut: true,
     gloss: 'in the order it went up',
@@ -1450,6 +1482,8 @@ const BEATS: Beat[] = [
    * CODA
    * ---------------------------------------------------------------- */
   {
+    /* whole again for the last word — the beat before took it down */
+    build: 4.4,
     cam: { dolly: 0.62, lookY: -0.6, ox: 0.2, pitch: 14, yaw: 256 },
     ch: 4,
     /* the last frame is the empty ground the film started on. The
@@ -1592,6 +1626,8 @@ interface FilmApi {
     zoom: number;
   };
 
+  /** settled snow (`pack`) and a pinned blizzard (`gust`), 0..1; null clears */
+  winter(w: null | { gust: number; pack: number }): void;
   wx(i: number, instant?: boolean): void;
 }
 
@@ -3724,6 +3760,9 @@ export default class TowerFilm extends Component<{
     if (beat.wx !== undefined) {
       film.wx(beat.wx, instant);
     }
+    if (beat.winter !== undefined) {
+      film.winter(beat.winter);
+    }
     /* the weather preset draws rain for the page's own wide shot; a beat
        that is ABOUT the rain asks for more of it (Beat.rain) */
     film.rain(beat.rain ?? null);
@@ -3760,6 +3799,16 @@ export default class TowerFilm extends Component<{
         break;
       }
     }
+    /* the snow a cut inherits — and a jump to before the first winter
+       beat must land on bare ground, not on whatever was last pinned */
+    let winter: Beat['winter'] = null;
+    for (let i = index; i >= 0; i -= 1) {
+      if (BEATS[i]?.winter !== undefined) {
+        winter = BEATS[i]!.winter;
+        break;
+      }
+    }
+    film.winter(winter ?? null);
   }
 
   private shot = (state: {
@@ -5254,7 +5303,7 @@ export default class TowerFilm extends Component<{
 
       .tf-stage {
         position: relative;
-        height: calc(100svh - 76px);
+        height: 100svh;
         flex: none;
         overflow: hidden;
       }
@@ -6466,12 +6515,24 @@ export default class TowerFilm extends Component<{
          that fills the window: it takes the bottom of every composition
          and it disappears exactly when you reach for it. Below the
          picture it costs seventy-six pixels once and is always there. */
+      /* THE TRANSPORT SITS ON THE PICTURE, not under it. The source page
+         runs its track as a hairline over the scene; here the strip was a
+         solid band of paper that took 76px off every frame. It is a fade
+         of the chapter's own paper now, so the film owns the whole
+         viewport and the controls read as a ledge on the glass. */
       .tf-player {
-        position: relative;
+        /* fixed, not absolute: the page runs on below the stage, so the
+           page's bottom is not the frame's bottom */
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
         z-index: 5;
-        flex: none;
-        background: #e3d2ae;
-        border-top: 1px solid #cbb992;
+        background: linear-gradient(
+          to top,
+          var(--tf-paper-b),
+          var(--tf-paper-c)
+        );
       }
 
       /* nothing hides any more: the bar is not in the picture's way */
