@@ -199,6 +199,14 @@ interface Beat {
    * edge-on and disappears. A damped follow does neither.
    */
   mark?: {
+    /**
+     * WHEN THE WORD ARRIVES, as a fraction of the beat. A word naming a
+     * thing that is still being built has to wait for the thing: the
+     * stone base beat opens on bare ground, and 石垣 turning up over an
+     * empty field names nothing. Default is early (0.14); the first
+     * stage waits until its wall is properly out of the ground.
+     */
+    at?: number;
     /** degrees round the orbit, fixed in the world */
     bearing: number;
     lines: string[];
@@ -650,6 +658,8 @@ const BEATS: Beat[] = [
     kicker: 'STAGE ONE',
     vo: "Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.",
     mark: {
+      /* the wall has to be out of the ground before it has a name */
+      at: 0.42,
       bearing: 120,
       lines: ['石垣'],
       r: 7,
@@ -2848,8 +2858,11 @@ export default class TowerFilm extends Component<{
          titles becomes furniture. */
       opacity:
         0.62 *
-        smooth(Math.max(0, Math.min(1, (local - 0.14) / 0.16))) *
-        (1 - smooth(Math.max(0, Math.min(1, (local - 0.48) / 0.2)))),
+        smooth(Math.max(0, Math.min(1, (local - (m.at ?? 0.14)) / 0.16))) *
+        (1 -
+          smooth(
+            Math.max(0, Math.min(1, (local - ((m.at ?? 0.14) + 0.34)) / 0.2))
+          )),
         ry: (this.markFace / RAD) % 360,
         /**
          * IT RISES OUT FROM BEHIND THE BUILDING. The word starts low
@@ -2884,7 +2897,7 @@ export default class TowerFilm extends Component<{
       this.markFrom + local * 13,
       Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff
     );
-    const lit = local > 0.12 && local < 0.5;
+    const lit = local > (m.at ?? 0.14) - 0.02 && local < (m.at ?? 0.14) + 0.36;
     const outside =
       lit && (!seen.on || seen.x < v.w * 0.12 || seen.x > v.w * 0.88);
     if (outside) {
