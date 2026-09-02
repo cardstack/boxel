@@ -1,6 +1,7 @@
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type { Join } from 'glimmer-motion/film';
 
 /**
  * Deep dive for the Towers film — the wall plate under the exhibit.
@@ -9,7 +10,7 @@ import { on } from '@ember/modifier';
  * previewJoin through @preview.
  */
 const TowersNotes: TOC<{
-  Args: { preview?: (join: string) => void };
+  Args: { preview?: (join: Join) => void };
 }> = <template>
   <section class="dive" aria-label="How it works">
     <header class="dive-head">
