@@ -2569,15 +2569,39 @@ export default class TowerFilm extends Component<{
      * every edit into a tiny dissolve. The snap clears it, so the first
      * frame of a new building is exactly the new building.
      */
+    /**
+     * THE HAND ON THE STICKS.
+     *
+     * Three sines at unrelated rates, summed and scaled by the lens:
+     * about a sixth of a degree of wander on a wide shot and a fraction
+     * of that on a close-up, plus a breath of it in the zoom. It is
+     * deterministic (no RNG, so no frame ever jumps), continuous (no
+     * discontinuity to catch the eye), and slower than a shake — this
+     * is the drift of somebody holding a machine steady, not a handheld
+     * effect. Turn it off by setting HAND to 0.
+     */
+    const clock = stamp / 1000;
+    const wander = (a: number, b: number, c: number) =>
+      Math.sin(clock * a) * 0.6 +
+      Math.sin(clock * b) * 0.3 +
+      Math.sin(clock * c) * 0.1;
+    const HAND = 0.17;
+    const hand = HAND / Math.max(0.8, Math.min(3.4, this.now.dolly));
     const want = {
       /* the lens leans into the cursor: a couple of degrees of orbit and
          a hand's width of height, which is enough for the hills to move
          against the building and nowhere near enough to fight the shot */
-      az: (this.now.yaw + this.lean.x * 0.8) * RAD,
-      el: (this.now.pitch - this.lean.y * 0.5 + bob) * RAD,
+      az: (this.now.yaw + this.lean.x * 0.8 + hand * wander(0.37, 0.93, 2.11)) *
+        RAD,
+      el:
+        (this.now.pitch -
+          this.lean.y * 0.5 +
+          bob +
+          hand * 0.7 * wander(0.29, 1.07, 1.83)) *
+        RAD,
       lookY: lookY + this.lean.y * 0.3 + (this.beat.hold ? 0 : bob * 0.3),
       ox: ox - this.lean.x * 0.012,
-      zoom: this.now.dolly,
+      zoom: this.now.dolly * (1 + 0.0018 * wander(0.23, 0.71, 1.51)),
     };
     const g = Math.min(1, dt * 16);
     const sent = this.sent ?? { ...want };
