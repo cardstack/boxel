@@ -169,6 +169,8 @@ interface Beat {
    * composed.
    */
   hold?: boolean;
+  /** times of day to walk across the beat, evenly (page theme indices) */
+  hours?: number[];
   /**
    * A DESIGNED SILENCE. By default a beat with no line of its own is an
    * L-CUT: the outgoing narration finishes across the seam and fades on
@@ -407,7 +409,7 @@ const hex = (h: string): [number, number, number] => [
 const GRADES: Record<string, FilmGrade> = {
   amber: {
     sat: 0.9,
-    con: 0.94,
+    con: 0.968,
     bri: 1.07,
     sep: 0,
     hue: 0,
@@ -418,7 +420,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   iron: {
     sat: 0.72,
-    con: 0.98,
+    con: 1.009,
     bri: 1.04,
     sep: 0.1,
     hue: 0,
@@ -429,7 +431,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   chalk: {
     sat: 0.88,
-    con: 0.96,
+    con: 0.989,
     bri: 1.12,
     sep: 0,
     hue: 0,
@@ -440,7 +442,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   ink: {
     sat: 0.98,
-    con: 1,
+    con: 1.03,
     bri: 1.06,
     sep: 0,
     hue: 0,
@@ -451,7 +453,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   wet: {
     sat: 0.72,
-    con: 0.92,
+    con: 0.948,
     bri: 0.98,
     sep: 0,
     hue: -4 * (Math.PI / 180),
@@ -462,7 +464,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   plate: {
     sat: 0.86,
-    con: 0.95,
+    con: 0.978,
     bri: 1.07,
     sep: 0,
     hue: 0,
@@ -473,7 +475,7 @@ const GRADES: Record<string, FilmGrade> = {
   },
   'c-jp': {
     sat: 0.84,
-    con: 0.95,
+    con: 0.978,
     bri: 1.08,
     sep: 0,
     hue: 0,
@@ -490,7 +492,7 @@ const GRADES: Record<string, FilmGrade> = {
      cut before the flakes register */
   'c-cn': {
     sat: 0.62,
-    con: 1.02,
+    con: 1.051,
     bri: 1.06,
     sep: 0,
     hue: 0,
@@ -503,7 +505,7 @@ const GRADES: Record<string, FilmGrade> = {
      and a lime warm, the hue turned a touch toward green */
   'c-vn': {
     sat: 1.0,
-    con: 0.92,
+    con: 0.948,
     bri: 1.05,
     sep: 0,
     hue: -8 * (Math.PI / 180),
@@ -516,7 +518,7 @@ const GRADES: Record<string, FilmGrade> = {
      nearly gone — a noon with nowhere to hide */
   'c-th': {
     sat: 1.12,
-    con: 0.96,
+    con: 0.989,
     bri: 1.1,
     sep: 0.04,
     hue: 0,
@@ -529,7 +531,7 @@ const GRADES: Record<string, FilmGrade> = {
      corners closed down, the light heavier than anywhere else */
   'c-kh': {
     sat: 0.86,
-    con: 1.02,
+    con: 1.051,
     bri: 1.04,
     sep: 0.2,
     hue: 0,
@@ -542,7 +544,7 @@ const GRADES: Record<string, FilmGrade> = {
      the cool end İznik blue, contrast up — Mediterranean light */
   'c-tr': {
     sat: 0.8,
-    con: 1.05,
+    con: 1.082,
     bri: 1.11,
     sep: 0,
     hue: 0,
@@ -571,6 +573,17 @@ const BUILD = 'cut-10 · a player, a mixer, six climates, and the fork';
  * gate would otherwise (correctly) stop the film dead. Tooling only.
  */
 const AWAKE = new URLSearchParams(window.location.search).has('awake');
+
+/** the joins that hold a still of the outgoing shot over the incoming one */
+const STILL_JOINS = new Set([
+  'blend',
+  'blur',
+  'dip',
+  'iris',
+  'luma',
+  'melt',
+  'wipe',
+]);
 
 /**
  * THE LEVELS. The reads were recorded across sessions and their mean
@@ -1487,8 +1500,11 @@ const BEATS: Beat[] = [
        coming apart read as silhouette rather than as parts. The middle
        chapters stay bright and even because they are explaining; the
        ending is allowed to be beautiful. */
-    sun: { az: -104, el: 15 },
-    theme: 2,
+    /* the day runs out as the tower comes down: morning, noon, dusk,
+       night, a quarter of the beat each — and no sun override, so each
+       hour brings its own light */
+    hours: [0, 1, 2, 3],
+    theme: 0,
     kanji: '解体',
     kicker: 'AND BACK DOWN',
     mode: 'lower',
@@ -1514,8 +1530,9 @@ const BEATS: Beat[] = [
     id: 'coda',
     join: 'blend',
     /* the last of the same light the door stood in */
-    sun: { az: -100, el: 12 },
-    theme: 2,
+    /* and it ends in the night it arrived at */
+    grade: 'ink',
+    theme: 3,
     says: ['A roof', 'built tall enough', 'to be seen from the fields'],
     kanji: '天守',
     mode: 'title',
@@ -1579,7 +1596,8 @@ interface FilmApi {
   dur: number;
   fade(id: string, opacity: number): void;
   /** the mood — CSS filter() terms, the split tone and the vignette, in the glass */
-  grade(g: FilmGrade): void;
+  /** the mood, eased on the page's clock — or snapped, under a still-join */
+  grade(g: FilmGrade, instant?: boolean): void;
   haze(v: null | number): void;
   height(): number;
   /** nothing on screen will change: stop drawing it */
@@ -1635,6 +1653,8 @@ interface FilmApi {
   style(i: number): number;
   styleIndex(): number;
   sun(): { h: number; on: boolean; w: number; x: number; y: number };
+  /** the reconstruction tag: on while the building is going up */
+  tag(v: boolean): void;
   theme(i: number, instant?: boolean): void;
 
   time(v: number): void;
@@ -1709,6 +1729,10 @@ export default class TowerFilm extends Component<{
   private rakeDeg = 35;
   /** which beat's lightning cue has fired (reset on every beat change) */
   private struck = '';
+  /** which of the beat's hours (Beat.hours) is in force; -1 between beats */
+  private hourStep = -1;
+  /** the next grade goes to the glass without its ease (a still-join) */
+  private gradeSnap = false;
 
   /** the scrub track's width in px, kept by a ResizeObserver */
   private trackW = 0;
@@ -2978,7 +3002,8 @@ export default class TowerFilm extends Component<{
     const mood = this.grade;
     if (mood !== this.gradeSent || this.rakeDeg !== this.rakeSent) {
       const spec = GRADES[mood] ?? GRADES['amber']!;
-      film.grade({ ...spec, rake: this.rakeDeg * RAD });
+      film.grade({ ...spec, rake: this.rakeDeg * RAD }, this.gradeSnap);
+      this.gradeSnap = false;
       this.gradeSent = mood;
       this.rakeSent = this.rakeDeg;
     }
@@ -3059,10 +3084,30 @@ export default class TowerFilm extends Component<{
     const span = (beat.ticks + nextLead) * TICK;
     const left = Math.max(0, span - (stamp - this.beatAt) / 1000);
     const last = !BEATS[this.absoluteIndex + 1];
-    this.pageEl?.style.setProperty(
-      '--tf-type-a',
-      (this.ended || last ? 1 : smooth(Math.min(1, left / 0.5))).toFixed(3)
-    );
+    /* THE TYPE LEAVES BEFORE THE CUT AND DOES NOT COME BACK. The fade is
+       written on the block itself, not only on the container: a container
+       that snaps back to 1 for the next beat while the old block is still
+       standing inside it as a leaver is the flash — the old setting at
+       full strength for the length of its exit. With the block at 0 on
+       its own inline style, the leaver has nothing to come back to. */
+    const typeA = this.ended || last ? 1 : smooth(Math.min(1, left / 1.0));
+    this.pageEl?.style.setProperty('--tf-type-a', typeA.toFixed(3));
+    if (this.plateEl) {
+      this.plateEl.style.opacity = typeA.toFixed(3);
+    }
+    /* THE HOURS OF A BEAT: a beat can walk the page's times of day across
+       its length — the ending goes morning, noon, dusk, night as the
+       tower comes down, and stays in the night */
+    if (beat.hours?.length) {
+      const step = Math.min(
+        beat.hours.length - 1,
+        Math.floor(local * beat.hours.length)
+      );
+      if (step !== this.hourStep) {
+        this.hourStep = step;
+        film.theme(beat.hours[step]!, false);
+      }
+    }
     /* THE CHAPTER'S NUMERAL LEAVES WITH THE CHAPTER. It is furniture
        for the passage, not for the beat, so it holds across the shots
        inside a chapter and fades out over the tail of the last one —
@@ -3675,7 +3720,12 @@ export default class TowerFilm extends Component<{
           const shot = film.snapshot();
           this.freeze = shot.length > 64 ? shot : '';
         }
-        if (beat.cut) {
+        /* A WIPE IS A CUT with punctuation over it (docs/choreo-splices.md):
+           the still of the outgoing shot sweeps off to reveal the incoming
+           one, so the lens must already BE on the incoming shot. Without
+           the cut, the sweep revealed the old shot still gliding toward the
+           new pose — the same picture twice, once as a still and once live. */
+        if (beat.cut || join === 'wipe') {
           this.snap(beat.cam, this.tailFor(this.beatIndex), beat.ticks * TICK);
         }
         if (join === 'dip') {
@@ -3817,12 +3867,24 @@ export default class TowerFilm extends Component<{
    * one of these is a set, not a step.
    */
   private applyAir(beat: Beat, instant = false) {
+    /* THE STILL IS A, THE LIVE IS B. One scene cannot show two shots at
+       once, so every join that carries a still of the outgoing shot (a
+       cut, a wipe, a blend, a melt, a dip) needs the incoming shot to be
+       ENTIRELY itself on its first live frame — hour, weather, grade
+       snapped, not eased. Otherwise the sweep reveals the same building
+       still wearing the last shot's light, and the seam reads as the
+       same picture twice. Only a join with no still (a whip, a plain
+       glide) gets to ease. */
+    const hard =
+      instant ||
+      !!beat.cut ||
+      (beat.join !== undefined && STILL_JOINS.has(beat.join));
     const film = this.film;
     if (!film) {
       return;
     }
     if (beat.theme !== undefined) {
-      film.theme(beat.theme, instant);
+      film.theme(beat.theme, hard);
     }
     /**
      * THE SUN MOVES, it does not switch on. Both sun and haze are shot
@@ -3842,15 +3904,18 @@ export default class TowerFilm extends Component<{
       film.light(this.sunNow);
     }
     this.struck = '';
+    this.hourStep = -1;
+    this.gradeSnap = hard;
     this.hazeBase = beat.haze ?? null;
     film.haze(this.hazeBase);
     if (beat.wx !== undefined) {
-      film.wx(beat.wx, instant);
+      film.wx(beat.wx, hard);
     }
     if (beat.winter !== undefined) {
       film.winter(beat.winter);
     }
     film.mix(beat.mix ?? null);
+    film.tag(Array.isArray(beat.build) && beat.build[1] > beat.build[0]);
     /* the weather preset draws rain for the page's own wide shot; a beat
        that is ABOUT the rain asks for more of it (Beat.rain) */
     film.rain(beat.rain ?? null);
@@ -4797,7 +4862,7 @@ export default class TowerFilm extends Component<{
                   (n.removed "s2")
                   (n.removed "s3")
                 }}
-                @opacity={{array 1 0}}
+                @opacity={{0}}
                 @y={{array 0 -7}}
                 @duration={{0.3}}
                 @ease="easeIn"
@@ -4805,7 +4870,7 @@ export default class TowerFilm extends Component<{
               <n.Tween
                 @of={{n.removed "read"}}
                 @delay={{0.05}}
-                @opacity={{array 1 0}}
+                @opacity={{0}}
                 @y={{array 0 -7}}
                 @duration={{0.3}}
                 @ease="easeIn"
@@ -4813,7 +4878,7 @@ export default class TowerFilm extends Component<{
               <n.Tween
                 @of={{n.removed "glyph"}}
                 @delay={{0.1}}
-                @opacity={{array 1 0}}
+                @opacity={{0}}
                 @y={{array 0 -9}}
                 @duration={{0.34}}
                 @ease="easeIn"
@@ -4821,7 +4886,7 @@ export default class TowerFilm extends Component<{
               <n.Tween
                 @of={{n.removed "kick"}}
                 @delay={{0.16}}
-                @opacity={{array 1 0}}
+                @opacity={{0}}
                 @y={{array 0 -7}}
                 @duration={{0.3}}
                 @ease="easeIn"
@@ -4866,7 +4931,7 @@ export default class TowerFilm extends Component<{
               />
               <g.Tween
                 @of={{g.removed "shot"}}
-                @opacity={{array 1 0}}
+                @opacity={{0}}
                 @duration={{0.24}}
                 @ease="easeIn"
               />
