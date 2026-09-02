@@ -1153,15 +1153,21 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 1.2, lookY: -2.2, ox: -0.26, pitch: 5, yaw: 300 },
+    /* THE ONE SHOT THAT PULLS ITS PUNCH. This model does not hold up
+       close — its corbelling reads as steps at any distance a drone
+       would want — so the shot stands back, keeps a FACE rather than a
+       corner in front of it, and moves about a quarter as far as its
+       neighbours. A comparison is only fair if every subject is shown
+       at its best, and "its best" is not the same lens for all six. */
+    cam: { dolly: 0.82, lookY: -1.4, ox: -0.21, pitch: 6, yaw: 290 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
-    bob: 1.5,
+    bob: 0.8,
     grade: 'c-kh',
     hold: true,
     id: 'c-kh',
-    toCam: { dolly: 1.48, lookY: 2.4, ox: 0.02, pitch: 11, yaw: 278 },
+    toCam: { dolly: 0.9, lookY: 0.7, ox: -0.17, pitch: 9, yaw: 296 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
