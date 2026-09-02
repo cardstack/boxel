@@ -1,0 +1,124 @@
+name: Fetch a cached release asset
+description: |
+  Fetch one pinned release asset, verify it against its expected SHA-256, and
+  cache it between jobs so the release CDN is reached only on a cache miss.
+  Outputs the path to a verified local copy; what to do with it — install it,
+  unpack it — is the caller's business.
+
+inputs:
+  name:
+    description: >-
+      Short identifier for the asset, used for the cache directory, the cache
+      key, and log messages (e.g. "mkcert").
+    required: true
+  url:
+    description: >-
+      URL of the release asset. Its last path segment becomes the local
+      filename, so this must be a plain asset URL with no query string.
+    required: true
+  sha256:
+    description: >-
+      Expected SHA-256 of the asset, pinned in this repository rather than
+      taken from a checksums file served beside the asset. A checksum fetched
+      from the same host it vouches for only proves the two files agree; a
+      pinned one is what makes both the download and the cache entry
+      trustworthy.
+    required: true
+
+outputs:
+  path:
+    description: Path to the verified local copy of the asset.
+    value: ${{ steps.plan.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    # The path and the cache key are derived in one step so the cache, the
+    # download and the verification cannot disagree about them.
+    #
+    # The checksum is the whole identity in the key: any change to the pin is a
+    # fresh entry. Keying on a version instead would be actively harmful, since
+    # entries are immutable and `actions/cache` skips its save after an exact
+    # key hit — a corrected checksum would be shadowed by the entry it
+    # invalidates, every job restoring it, rejecting it, re-downloading, and
+    # unable to save the replacement, quietly putting the CDN back on the
+    # critical path this action exists to keep it off.
+    - name: Plan the fetch
+      id: plan
+      shell: bash
+      env:
+        ASSET_NAME: ${{ inputs.name }}
+        ASSET_URL: ${{ inputs.url }}
+        ASSET_SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+        dir="${HOME}/.cache/boxel/release-assets/${ASSET_NAME}"
+        {
+          echo "dir=${dir}"
+          echo "path=${dir}/${ASSET_URL##*/}"
+          echo "cache-key=${RUNNER_OS}-${RUNNER_ARCH}-${ASSET_NAME}-${ASSET_SHA256}"
+        } >> "$GITHUB_OUTPUT"
+
+    # No `restore-keys`: a near-miss would restore some other asset, which the
+    # checksum below would then reject and re-download anyway.
+    - name: Setup the asset cache
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: ${{ steps.plan.outputs.cache-key }}
+
+    - name: Fetch and verify
+      shell: bash
+      env:
+        ASSET_NAME: ${{ inputs.name }}
+        ASSET_URL: ${{ inputs.url }}
+        ASSET_SHA256: ${{ inputs.sha256 }}
+        ASSET_PATH: ${{ steps.plan.outputs.path }}
+        ASSET_DIR: ${{ steps.plan.outputs.dir }}
+        CACHE_KEY: ${{ steps.plan.outputs.cache-key }}
+      run: |
+        set -euo pipefail
+
+        # Verified on the cache-hit path too: a restored entry is as much a
+        # supply-chain input as a fresh download, and the cache is writable
+        # from any branch of this repository.
+        if [ -f "$ASSET_PATH" ] &&
+           printf '%s  %s\n' "$ASSET_SHA256" "$ASSET_PATH" | sha256sum -c --status -; then
+          echo "${ASSET_NAME} restored from the cache"
+          exit 0
+        fi
+
+        # A present-but-wrong file is not an alarm to stop on — the fresh
+        # copy's checksum below is fatal, so nothing unverified reaches the
+        # caller either way. It is worth an annotation rather than a log line,
+        # though, because the state is silent and does not clear itself: the
+        # entry was saved under the same key this job just hit, and
+        # `actions/cache` skips its save after an exact hit, so the download
+        # below cannot replace it. Every job then restores it, rejects it, and
+        # goes to the CDN, indefinitely, while still passing. Only evicting the
+        # entry ends that, so the annotation names it.
+        if [ -e "$ASSET_PATH" ]; then
+          echo "::warning title=Cached ${ASSET_NAME} failed its checksum::Evict the '${CACHE_KEY}' cache entry: it cannot be overwritten, so every job is downloading ${ASSET_NAME} from the release CDN until it is gone."
+          rm -f "$ASSET_PATH"
+        fi
+
+        # Downloaded outside the cache directory so a half-written file cannot
+        # be what gets saved. The retry window is four minutes, long enough to
+        # ride out a CDN outage that a default one-second backoff exhausts in
+        # eighteen seconds, inside a six-minute ceiling that bounds the step
+        # whatever curl does. `--retry-all-errors` covers the connection
+        # failures curl does not count as retryable on its own; a 504 it would
+        # retry regardless. `--max-time` resets on each retry, so it bounds one
+        # attempt rather than the whole loop — without it a single stalled
+        # connection would eat the entire window and never reach a second
+        # attempt.
+        download="$(mktemp -d)/${ASSET_URL##*/}"
+        timeout 6m curl -fsSL \
+          --connect-timeout 20 --max-time 90 \
+          --retry 12 --retry-delay 20 --retry-max-time 240 --retry-all-errors \
+          -o "$download" "$ASSET_URL"
+        printf '%s  %s\n' "$ASSET_SHA256" "$download" | sha256sum -c -
+
+        mkdir -p "$ASSET_DIR"
+        mv "$download" "$ASSET_PATH"
+        echo "${ASSET_NAME} downloaded and verified"
