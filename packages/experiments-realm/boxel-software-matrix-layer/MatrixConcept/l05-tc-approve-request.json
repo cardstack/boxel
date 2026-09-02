@@ -18,7 +18,7 @@
       "owner": "lucas",
       "workState": "Done",
       "notes": "App 2: Talent & Resource Tracker (v1.1)",
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/sd-cmd-approve",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": "matrix-realm"
+      "source": "matrix-realm",
+      "specKind": "command",
+      "specExampleCount": 1,
+      "specReadmeChars": 1145,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ServiceRequest/1256-laptop-request\"]",
+      "verifiedAt": "2026-09-02T10:38:13.000Z"
     },
     "meta": {
       "adoptsFrom": {
