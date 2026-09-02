@@ -1977,6 +1977,18 @@ export default class TowerFilm extends Component<{
    * size they collide with the kicker above and the reading below. Tall
    * scripts take a reduced setting with real leading.
    */
+  /**
+   * HOW MANY CHARACTERS HAVE TO FIT. A vertical setting is as tall as
+   * its string, and 一国一城令 is five glyphs — at the plate's own size
+   * that column runs off the top of the frame and the film crops its
+   * own title. The count goes to CSS, which sizes the column to the
+   * height available rather than to a number somebody typed once while
+   * looking at a three-glyph word.
+   */
+  get glyphFit(): string {
+    return `--tf-glyphs:${Math.max(2, [...(this.beat.kanji ?? '')].length)}`;
+  }
+
   get glyphTone(): string {
     return /[฀-๿ក-៿]/.test(this.beat.kanji ?? '')
       ? 'is-tall'
@@ -2472,14 +2484,14 @@ export default class TowerFilm extends Component<{
              uses, at a hairline: over this film's grounds a pale
              outline reads as a word held in the air, where a dark one
              reads as a diagram printed on the sky. */
-          stroke: 'rgba(244,238,222,0.62)',
-          strokeW: 0.0072,
+          stroke: 'rgba(246,240,226,0.9)',
+          strokeW: 0.0095,
           track: beat.sky.track ?? 0.16,
         },
         {
           billboard: true,
           opacity:
-          this.skyOn * (beat.sky.opacity ?? 0.4) * 0.5 * smooth(local * 3),
+          this.skyOn * (beat.sky.opacity ?? 0.4) * 0.78 * smooth(local * 3),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
@@ -2737,13 +2749,18 @@ export default class TowerFilm extends Component<{
     film.sky(
       'mark',
       {
+        /* the same treatment the sky word wears — outlined and blended,
+           so a label standing at the height it names belongs to the
+           scene rather than being stuck on the front of it */
         color: '#2a2110',
         lines: m.lines,
-        size: m.size,
+        size: m.size * 1.12,
+        stroke: 'rgba(38,30,14,0.9)',
+        strokeW: 0.022,
         track: 0.1,
       },
       {
-        opacity: Math.min(1, raw * 2.2) * 0.92,
+        opacity: Math.min(1, raw * 2.2) * 0.72,
         ry: (this.markFace / RAD) % 360,
         x: Math.sin(a) * m.r,
         y,
@@ -3735,7 +3752,7 @@ export default class TowerFilm extends Component<{
                 doubled-logo problem in another costume. }}
                 {{#unless b.mark}}
                   {{#if b.kanji}}
-                    <div class="tf-plane is-glyph">
+                    <div class="tf-plane is-glyph" style={{this.glyphFit}}>
                       <p
                         class="tf-kanji {{this.glyphTone}}"
                         {{motion id="kanji" role="glyph"}}
@@ -3780,21 +3797,21 @@ export default class TowerFilm extends Component<{
               {{/each}}
             {{/if}}
 
+            {{! THE TYPE IS ITS OWN SCENE.
+            Every element in this block enters and leaves on ONE
+            vocabulary — a short rise, a fade, the same curve — and in
+            one order: kicker, glyph, reading, then the lines against
+            the voice. It leaves as a wave in reverse, the lines first
+            and the kicker last, so the block reads as a thing that
+            arrived and departed rather than as four unrelated fades
+            that happened to share a corner. Randomness in type is
+            almost never timing; it is a vocabulary nobody agreed on. }}
             <n.Parallel>
-              <n.Tween
-                @of={{array
-                  (n.removed "kick")
-                  (n.removed "glyph")
-                  (n.removed "read")
-                }}
-                @opacity={{array 1 0}}
-                @duration={{0.3}}
-                @ease="easeIn"
-              />
               <n.Tween
                 @of={{n.inserted "kick"}}
                 @opacity={{array 0 1}}
-                @duration={{0.6}}
+                @y={{array 10 0}}
+                @duration={{0.55}}
                 @ease="easeOut"
               />
               {{! THE HERO MOMENT, and it is a mask rather than a fade: each
@@ -3808,51 +3825,61 @@ export default class TowerFilm extends Component<{
                 @of={{n.inserted "glyph"}}
                 @by="character"
                 @order="center"
-                @stagger={{0.09}}
-                @delay={{0.12}}
+                @stagger={{0.07}}
+                @delay={{0.16}}
                 @opacity={{array 0 1}}
-                @duration={{1.0}}
+                @y={{array 16 0}}
+                @duration={{0.9}}
                 @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "read"}}
-                @delay={{0.5}}
+                @delay={{0.46}}
                 @opacity={{array 0 1}}
-                @duration={{0.7}}
+                @y={{array 8 0}}
+                @duration={{0.62}}
                 @ease="easeOut"
               />
               {{! four slots, landing ACROSS the beat rather than together —
               and paced against the measured read (see `sayAt`), so the
               last cue lands as the voice finishes whether the line runs
-              four seconds or thirteen }}
+              four seconds or thirteen. Same rise, same curve, every
+              time: the WHEN belongs to the voice, the HOW belongs to
+              the block. }}
               <n.Tween
                 @of={{n.inserted "s0"}}
                 @delay={{get this.sayAt 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.8}}
+                @y={{array 8 0}}
+                @duration={{0.7}}
                 @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s1"}}
                 @delay={{get this.sayAt 1}}
                 @opacity={{array 0 1}}
-                @duration={{0.8}}
+                @y={{array 8 0}}
+                @duration={{0.7}}
                 @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s2"}}
                 @delay={{get this.sayAt 2}}
                 @opacity={{array 0 1}}
-                @duration={{0.8}}
+                @y={{array 8 0}}
+                @duration={{0.7}}
                 @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s3"}}
                 @delay={{get this.sayAt 3}}
                 @opacity={{array 0 1}}
-                @duration={{0.8}}
+                @y={{array 8 0}}
+                @duration={{0.7}}
                 @ease="easeOut"
               />
+              {{! and out, in reverse: the sentence goes first, the name
+              of the thing goes last }}
               <n.Tween
                 @of={{array
                   (n.removed "s0")
@@ -3861,6 +3888,31 @@ export default class TowerFilm extends Component<{
                   (n.removed "s3")
                 }}
                 @opacity={{array 1 0}}
+                @y={{array 0 -7}}
+                @duration={{0.3}}
+                @ease="easeIn"
+              />
+              <n.Tween
+                @of={{n.removed "read"}}
+                @delay={{0.05}}
+                @opacity={{array 1 0}}
+                @y={{array 0 -7}}
+                @duration={{0.3}}
+                @ease="easeIn"
+              />
+              <n.Tween
+                @of={{n.removed "glyph"}}
+                @delay={{0.1}}
+                @opacity={{array 1 0}}
+                @y={{array 0 -9}}
+                @duration={{0.34}}
+                @ease="easeIn"
+              />
+              <n.Tween
+                @of={{n.removed "kick"}}
+                @delay={{0.16}}
+                @opacity={{array 1 0}}
+                @y={{array 0 -7}}
                 @duration={{0.3}}
                 @ease="easeIn"
               />
@@ -5149,7 +5201,13 @@ export default class TowerFilm extends Component<{
       .is-plate .tf-kanji {
         writing-mode: vertical-rl;
         margin: 0;
-        font-size: clamp(44px, 5.4vw, 88px);
+        /* the column never grows past the frame: whichever is smaller,
+           the designed size or the height each glyph can have and still
+           leave the set inside the picture */
+        font-size: min(
+          clamp(44px, 5.4vw, 88px),
+          calc(62svh / var(--tf-glyphs, 3))
+        );
         letter-spacing: 0.1em;
         line-height: 1;
       }
