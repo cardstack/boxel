@@ -604,35 +604,21 @@ const JOIN_SECS: Record<string, number> = {
 };
 
 /**
- * THE LEVELS. The reads were recorded across sessions and their mean
- * loudness spreads seven decibels (ffmpeg volumedetect, 2026-09-02: -24.6
- * to -31.9 dB). An element's volume cannot go above 1, so the loud ones
- * come down to meet the quiet ones at about -29 dB mean; the three
- * quietest stay where they are. Peaks never clip (all under -3.8 dBFS),
- * so this is a trim, not a limiter.
+ * THE LEVELS. Every read is now normalised in the FILE to -29 dB mean
+ * (ffmpeg volumedetect), so nothing needs trimming to meet anything: the
+ * spread across the film is 0.1 dB and peaks sit between -5.7 and -10.8
+ * dBFS. This table used to carry twenty entries pulling the loud ones
+ * down to the level of the quietest three, which was the only direction
+ * available while the files themselves disagreed — an element's volume
+ * cannot go above 1, so the quiet ones could never come up. Normalising
+ * the files instead raises those three (detail, shachi, timber, and
+ * ishigaki) and leaves the mix exactly where it was tuned, because the
+ * product of file level and gain is unchanged.
+ *
+ * It stays as the hook for a line that lands off the pack: record it,
+ * measure it, and if it still disagrees, put it here.
  */
-const VO_GAIN: Record<string, number> = {
-  azuchi: 0.63,
-  boro: 0.7,
-  'c-cn': 0.94,
-  'c-jp': 0.7,
-  'c-kh': 0.79,
-  'c-th': 0.71,
-  'c-tr': 0.9,
-  'c-vn': 0.85,
-  hafu: 0.84,
-  hikaku: 0.6,
-  ikkoku: 0.9,
-  ishi2: 0.92,
-  kawara: 0.68,
-  koran: 0.8,
-  noki: 0.68,
-  plaster: 0.9,
-  shiro: 0.91,
-  teppo: 0.72,
-  title: 0.85,
-  what: 0.93,
-};
+const VO_GAIN: Record<string, number> = {};
 
 /**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
@@ -651,7 +637,7 @@ const VO_SECS: Record<string, number> = {
   'c-th': 6.11,
   'c-tr': 7.47,
   'c-vn': 7.84,
-  kaitai: 16.5,
+  kaitai: 16.12,
   detail: 3.58,
   hafu: 10.21,
   hikaku: 6.5,

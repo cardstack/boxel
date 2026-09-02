@@ -19,18 +19,30 @@ sounds like somebody standing still.
 - Silence: about 0.15 s at the head, 0.4 s at the tail. The film rises
   the line in over 70 ms and fades it out itself.
 
-## 1. `kaitai` — the ending (NEW, needed)
+## 1. `kaitai` — the ending ✅ RECORDED
 
 **Window:** 20 s, under the takedown and the day running out. **Target
 read:** 15–17 s. The end card arrives on the last stone; the line must
 be finished by then.
 
-**Line:**
+**Line as recorded** (`VO_SECS.kaitai = 16.12`):
 
 > Take it down in the order it went up. Tile, plaster, timber. Stone
 > last — the stone was never the building. It was the ground, raised.
-> What is left is a hill with a shape in it. And the shape is enough to
-> see from the fields.
+> A hill with a shape in it. Enough to see from the fields.
+
+**The line above was cut to fit, and this is the flag you asked for.** As
+written it came in at 20.1, 20.2 and 20.6 seconds across three takes — over
+the target and at the window itself. The narrator reads this film at about
+150 wpm and the line was fifty words; there is no read of it that lands at
+16 seconds without being hurried, and the direction asks for slower.
+
+The cut drops two connectives only — _What is left is_ and _And the shape
+is_ — which leaves the spoken words in exact agreement with the four
+on-screen cues, where the full line was not. Nothing else changed: the
+opening, "Stone last", the ground-raised thesis and the fields all survive.
+If you would rather have the full line, the 20.06s take is the shortest of
+the three and the window would need to grow by about a second.
 
 **Direction:** this is the last thing said. Slower than the rest by a
 hair, not softer. "Stone last" is two words with a full stop after it.
@@ -57,10 +69,15 @@ clear of type. If a line is wanted:
 syllables, hard g). Only record if the silence is not working; the
 silence is the intended cut.
 
-## 3. Re-records worth doing (optional)
+## 3. Levels ✅ DONE — normalised, not re-recorded
 
-Measured against the rest (mean loudness), these sit furthest from the
-pack and are being trimmed in code:
+The four quiet reads were **normalised in the file to -29 dB mean** rather
+than re-recorded, which reaches the same goal without gambling a new take
+against a read that was already approved. -29 dB is the level `VO_GAIN` was
+trimming everything down to, so the mix is unchanged and the product of file
+level and gain is identical — but the quiet ones could never be raised in
+code, and now they do not need to be. `VO_GAIN` is empty and the spread
+across the film is 0.1 dB. Where they were:
 
 | file         | mean dB | note                                                |
 | ------------ | ------- | --------------------------------------------------- |
@@ -69,12 +86,14 @@ pack and are being trimmed in code:
 | `timber.mp3` | −30.2   | quiet, and the tightest fit (12.8 s in a 14 s beat) |
 | `hikaku.mp3` | −24.6   | loudest; trimmed to 0.60                            |
 
-A re-record of the three quiet ones at the level of the others would let
-the trim table shrink toward 1.0. Same lines, same direction; see
-`docs/towers-vo.md` for the text and the term pronunciations.
+`ishigaki` (-30.1) was in the same position and went with them. Measurements
+per file are in `docs/towers-vo-files.md`.
 
 ## Not needed
 
 - `unbuild` and `coda` no longer exist as beats; `coda.mp3` on disk is
-  unreferenced (the ending replaces it).
-- The `-plain` variants on disk are unreferenced.
+  unreferenced (the ending replaces it). Left on disk, not deleted — it is a
+  finished read and costs nothing to keep.
+- The `-plain` variants on disk are unreferenced, and likewise kept.
+- `muneage` was not recorded. The doc says the silence is the intended cut,
+  so it stays a silence until someone says otherwise.
