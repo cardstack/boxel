@@ -380,7 +380,7 @@ const TICK = 2;
  * boot and shown in the corner under `?debug`, so "is my page current?"
  * is a glance rather than a theory.
  */
-const BUILD = 'cut-6 · no join outlives its own play';
+const BUILD = 'cut-7 · flown, graded, and the bar is back';
 
 /**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
@@ -4877,7 +4877,7 @@ export default class TowerFilm extends Component<{
 
       .tf-stage {
         position: relative;
-        height: 100svh;
+        height: calc(100svh - 76px);
         flex: none;
         overflow: hidden;
       }
@@ -6110,39 +6110,22 @@ export default class TowerFilm extends Component<{
       /* THE PLAYER FLOATS ON THE PICTURE, the way every player does —
          a paper bar under the frame costs fifty pixels of film and
          announces that this is a document with a video in it. */
+      /* THE BAR IS UNDER THE PICTURE, not on it. A player floating over
+         the frame is right for a video in a page and wrong for a film
+         that fills the window: it takes the bottom of every composition
+         and it disappears exactly when you reach for it. Below the
+         picture it costs seventy-six pixels once and is always there. */
       .tf-player {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        position: relative;
         z-index: 5;
-        padding-bottom: 4px;
-        background: linear-gradient(
-          to top,
-          rgba(18, 13, 5, 0.74),
-          rgba(18, 13, 5, 0.32) 62%,
-          rgba(18, 13, 5, 0) 100%
-        );
-        transition: opacity 340ms ease;
+        flex: none;
+        background: #e3d2ae;
+        border-top: 1px solid #cbb992;
       }
 
-      /* IDLE HIDES THE CHROME, NOT THE FILM'S PLACE IN ITSELF. The
-         controls go; the playhead stays as a hairline, which is both
-         the progress and the thing you reach for to bring the rest
-         back. A player that vanishes completely reads as a player that
-         was never there. */
-      .tf-player.is-idle {
-        background: none;
-      }
-
-      .tf-player.is-idle .tf-controls {
-        opacity: 0;
-        pointer-events: none;
-      }
-
+      /* nothing hides any more: the bar is not in the picture's way */
       .tf-player.is-idle .tf-scrub-track {
-        height: 3px;
-        opacity: 0.5;
+        height: 4px;
       }
 
       .tf-scrub {
@@ -6177,7 +6160,7 @@ export default class TowerFilm extends Component<{
       .tf-scrub-ch {
         position: relative;
         overflow: hidden;
-        background: rgba(247, 240, 224, 0.3);
+        background: rgba(120, 96, 52, 0.26);
         border-radius: 2px;
       }
 
@@ -6203,7 +6186,7 @@ export default class TowerFilm extends Component<{
         margin: -5.5px 0 0 -5.5px;
         border-radius: 50%;
         background: var(--tf-red);
-        box-shadow: 0 0 0 2px var(--tf-white);
+        box-shadow: 0 0 0 2px #e3d2ae;
         transform: scale(0);
         transition: transform 160ms ease;
       }
@@ -6231,7 +6214,7 @@ export default class TowerFilm extends Component<{
       .tf-time {
         margin-left: auto;
         font-variant-numeric: tabular-nums;
-        color: rgba(247, 240, 224, 0.82);
+        color: #6f6146;
       }
 
       .tf-time i {
@@ -6250,8 +6233,8 @@ export default class TowerFilm extends Component<{
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 5.5% 12px;
-        color: #f3ead6;
+        padding: 6px 5.5% 10px;
+        color: #3f3520;
         font-family: var(--tf-ui);
         font-size: 11px;
         letter-spacing: 0.14em;
@@ -6259,9 +6242,9 @@ export default class TowerFilm extends Component<{
 
       .tf-btn {
         appearance: none;
-        border: 1px solid rgba(247, 240, 224, 0.32);
+        border: 1px solid #c2b18c;
         background: transparent;
-        color: #f3ead6;
+        color: #3f3520;
         padding: 6px 12px;
         border-radius: 999px;
         font: inherit;
