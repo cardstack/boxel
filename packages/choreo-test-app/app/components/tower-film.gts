@@ -1960,7 +1960,17 @@ export default class TowerFilm extends Component<{
         }
       }
       for (let k = 0; k < b.ticks; k++) {
-        const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
+        /**
+         * EASED ACROSS THE SHOT, not stepped evenly through it. The
+         * waypoints used to be spaced linearly, which asks the spline
+         * to hold a constant speed from the first frame to the last —
+         * so a long drone move starts and stops abruptly and every
+         * waypoint is a small correction. Spacing them on a smoothstep
+         * puts the shot's speed in the middle, where a flown camera
+         * keeps it, and leaves the ends calm.
+         */
+        const t = b.ticks === 1 ? 0 : k / (b.ticks - 1);
+        const f = t * t * (3 - 2 * t);
         pts.push({
           cut: splice && k === 0 ? true : undefined,
           dolly: lerp(b.cam.dolly, to.dolly, f),
@@ -2378,7 +2388,7 @@ export default class TowerFilm extends Component<{
        Lower stiffness filters the spline's residual sway before the
        page's own chase filters it again — except mid-whip, when the
        hand is deliberately fast (see whipUntil). */
-    const w = this.whipUntil > performance.now() ? 13 : 6.6;
+    const w = this.whipUntil > performance.now() ? 13 : 5.2;
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
       const g = k === 'ox' ? (this.goal.ox ?? 0) : this.goal[k];
       const m = k === 'ox' ? (this.mid.ox ?? 0) : this.mid[k];
@@ -2473,26 +2483,33 @@ export default class TowerFilm extends Component<{
     /* a chaser lands on a millionth of a pixel rather than on zero, and an
        off-centre frustum that is never quite centred keeps the projection
        matrix rebuilt every frame for nothing — so zero means zero */
-    const k = Math.min(1, dt * 3.2);
+    const k = Math.min(1, dt * 1.8);
     this.lean.x += (this.leanTo.x - this.lean.x) * k;
     this.lean.y += (this.leanTo.y - this.lean.y) * k;
     /* the air the shot is flown in (see Beat.bob) */
     const air = this.beat.bob ?? 0;
+    const flown = Math.min(
+      1,
+      Math.max(0, (stamp - this.beatAt) / (this.beat.ticks * TICK * 1000))
+    );
+    /* ONE breath across the shot, faded in and out at the ends so the
+       sway never starts or stops abruptly. Three half-cycles of it (the
+       first attempt) is not a drone in the air, it is a hand shaking —
+       and on top of a move that is already covering ground it reads as
+       the whole shot being unsteady. */
     const bob =
       air *
-      Math.sin(
-        ((stamp - this.beatAt) / (this.beat.ticks * TICK * 1000)) *
-          Math.PI *
-          3
-      );
+      Math.sin(flown * Math.PI * 1.6) *
+      smooth(Math.min(1, flown / 0.18)) *
+      smooth(Math.min(1, (1 - flown) / 0.18));
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
     film.pose({
       /* the lens leans into the cursor: a couple of degrees of orbit and
          a hand's width of height, which is enough for the hills to move
          against the building and nowhere near enough to fight the shot */
-      az: (this.now.yaw + this.lean.x * 1.6) * RAD,
-      el: (this.now.pitch - this.lean.y * 1.1 + bob) * RAD,
-      lookY: this.now.lookY + this.lean.y * 0.5 + bob * 0.35,
+      az: (this.now.yaw + this.lean.x * 1.1) * RAD,
+      el: (this.now.pitch - this.lean.y * 0.75 + bob) * RAD,
+      lookY: this.now.lookY + this.lean.y * 0.35 + bob * 0.3,
       ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
     });
