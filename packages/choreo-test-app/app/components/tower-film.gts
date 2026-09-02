@@ -1013,12 +1013,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 228 },
+    cam: { dolly: 0.92, lookY: 0.6, ox: 0.1, pitch: 9, yaw: 228 },
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
     id: 'c-cn',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 244 },
+    toCam: { dolly: 1.5, lookY: 5, ox: 0.02, pitch: 15, yaw: 215 },
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
@@ -1030,12 +1030,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 244 },
+    cam: { dolly: 1.55, lookY: 4.6, ox: -0.02, pitch: 14, yaw: 244 },
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
     id: 'c-vn',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 260 },
+    toCam: { dolly: 0.84, lookY: 0.2, ox: -0.08, pitch: 6, yaw: 255 },
     join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
@@ -1047,12 +1047,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 260 },
+    cam: { dolly: 1.05, lookY: -3.2, ox: -0.05, pitch: -4, yaw: 260 },
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
     id: 'c-th',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 276 },
+    toCam: { dolly: 1.3, lookY: 3.4, ox: -0.05, pitch: 12, yaw: 269 },
     join: 'blend',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
@@ -1064,12 +1064,12 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 276 },
+    cam: { dolly: 1.16, lookY: 1.4, ox: -0.16, pitch: 8, yaw: 276 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
     id: 'c-kh',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 292 },
+    toCam: { dolly: 1.32, lookY: 2.2, ox: 0.14, pitch: 9, yaw: 284 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1081,12 +1081,12 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.86, lookY: -1.2, ox: -0.06, pitch: 5, yaw: 292 },
+    cam: { dolly: 1.3, lookY: 5.6, ox: -0.04, pitch: 15, yaw: 292 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
     id: 'c-tr',
-    toCam: { dolly: 1.42, lookY: 4.2, ox: -0.06, pitch: 13, yaw: 308 },
+    toCam: { dolly: 0.96, lookY: -2.4, ox: -0.04, pitch: 3, yaw: 305 },
     join: 'blend',
     says: [
       'Mass in compression',
@@ -1109,25 +1109,33 @@ const BEATS: Beat[] = [
    * its subject and the coda opens on a building already standing.
    */
   {
-    cam: { dolly: 0.66, lookY: 1.8, ox: 0, pitch: 10, yaw: 250 },
+    /* ---------------------------------------------------------------- *
+     * THE UN-BUILD.
+     *
+     * The film ends by taking the tower apart. The scene's build clock
+     * is a function of time and nothing stops it running backwards, so
+     * the roof lifts, the plaster goes, the timber cage comes down and
+     * the stone follows — the scaffolding returning around it as it
+     * goes — while the lens pulls back to the frame the film opened on.
+     * No other four minutes of this could end this way, and it says the
+     * argument (a building is a stack of answers, and every one of them
+     * comes apart in the order it went up) without a word of summary.
+     * ---------------------------------------------------------------- */
+    build: [4.4, 0],
+    cam: { dolly: 1.05, lookY: 2.6, ox: -0.02, pitch: 9, yaw: 300 },
     ch: 4,
-    cycle: [
-      { kanji: 'CAMİ', style: 5 },
-      { kanji: 'ប្រាសាទ', style: 4 },
-      { kanji: 'ปรางค์', style: 3 },
-      { kanji: '佛塔', style: 2 },
-      { kanji: '寶塔', style: 1 },
-      { kanji: '天守', style: 0 },
-    ],
-    /* the recap is a cut, not a continuation: the last country's shot
-       was travelling past this pose and used to arrive, back up three
-       degrees and go again */
     cut: true,
-    id: 'lineup',
+    gloss: 'in the order it went up',
+    hush: true,
+    id: 'unbuild',
     join: 'blend',
-    mode: 'clear',
-    ticks: 3,
-    toCam: { dolly: 0.66, lookY: 1.8, ox: 0, pitch: 10, yaw: 254 },
+    kanji: '解体',
+    kicker: 'AND BACK DOWN',
+    mode: 'lower',
+    romaji: 'KAITAI',
+    says: ['Nothing here was bolted', 'Every joint was cut to fit'],
+    ticks: 7,
+    toCam: { dolly: 0.5, lookY: 1.2, ox: -0.02, pitch: 13, yaw: 316 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -1136,14 +1144,15 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.62, lookY: -0.6, ox: 0.2, pitch: 14, yaw: 256 },
     ch: 4,
-    /* the closing dissolve: the lineup's last stamp melts into the
-       final shot */
+    /* the last frame is the empty ground the film started on. The
+       closing thought is WRITTEN, not read: the un-build has just made
+       the point, and a voice arriving to explain it would be the film
+       not trusting its own ending. */
     cut: true,
     id: 'coda',
     join: 'blend',
-    says: ['Six materials', 'One problem', '天守'],
+    says: ['A roof', 'built tall enough', 'to be seen from the fields'],
     kanji: '天守',
-    vo: 'Six materials. One problem. Six answers. Not a fortress that happens to be beautiful. A roof, built tall enough to be seen from the fields.',
     mode: 'title',
     romaji: 'TENSHU',
     sky: {
@@ -1843,7 +1852,10 @@ export default class TowerFilm extends Component<{
            decision, not a miss — honour it now */
         if (this.wanted !== undefined) {
           this.begin(this.wanted);
+          return;
         }
+        this.posterAt = 0;
+        this.posterRaf ??= requestAnimationFrame(this.poster);
         return;
       }
       /* IDEMPOTENT, or nothing. This load path re-runs whenever the
@@ -1852,7 +1864,15 @@ export default class TowerFilm extends Component<{
          branch and TOGGLED THE SOUND BACK OFF — the "with sound" click
          un-clicking itself one pass later. Only a film that has not
          begun may be begun on its behalf. */
-      if (!this.booted) {
+      /**
+       * ONLY A FILM WITH NO DOOR STARTS ITSELF. The embed has no gate by
+       * design and a deep link has already chosen its shot; the theater
+       * route at the top has a front door, and a door that opens itself
+       * on a fast (or cached) load is a film that started without being
+       * asked — which is how the poster's own circuit got two seconds
+       * and then vanished.
+       */
+      if (!this.booted && (this.embed || this.from > 0)) {
         this.begin(false);
       }
     };
@@ -2029,6 +2049,58 @@ export default class TowerFilm extends Component<{
     }
   }
 
+  /**
+   * THE POSTER TURNS.
+   *
+   * A still frame behind a title is indistinguishable from a JPEG, and
+   * this whole film's argument is that it is not one. So while the door
+   * is up the lens makes a slow circuit of the opening pose — a few
+   * degrees either side, breathing in and out — which says "live 3D"
+   * before a word is read and costs one rAF. It hands over on the
+   * click: the film does not snap away from the poster, it flies from
+   * wherever the circuit had reached.
+   */
+  private poster = (stamp: number) => {
+    if (!this.gate || this.booted) {
+      this.posterRaf = undefined;
+      return;
+    }
+    this.posterRaf = requestAnimationFrame(this.poster);
+    const film = this.film;
+    if (!film) {
+      return;
+    }
+    if (!this.posterAt) {
+      this.posterAt = stamp;
+    }
+    const t = (stamp - this.posterAt) / 1000;
+    const c = this.beats[0]!.cam;
+    /* THREE-QUARTERS ON, and swinging. Dead in front of a building is
+       an elevation drawing; the corner is where a tower shows you that
+       it has depth — two faces, two eave lines, and a shadow that
+       reads. The swing is slow and even, side to side, so the frame is
+       never still and never travelling anywhere either. */
+    film.pose({
+      az: (c.yaw + 34 + 11 * Math.sin(t * 0.2)) * RAD,
+      el: (c.pitch + 2.4 + 1.4 * Math.sin(t * 0.13)) * RAD,
+      lookY: c.lookY + 0.6 * Math.sin(t * 0.15),
+      ox: (c.ox ?? 0) * 0.4,
+      zoom: c.dolly * (0.92 + 0.05 * Math.sin(t * 0.11 + 1.1)),
+    });
+    this.posterPose = {
+      dolly: c.dolly * (0.92 + 0.05 * Math.sin(t * 0.11 + 1.1)),
+      lookY: c.lookY + 0.6 * Math.sin(t * 0.15),
+      ox: (c.ox ?? 0) * 0.4,
+      pitch: c.pitch + 2.4 + 1.4 * Math.sin(t * 0.13),
+      yaw: c.yaw + 34 + 11 * Math.sin(t * 0.2),
+    };
+  };
+
+  private posterRaf?: number;
+  private posterAt = 0;
+  /** where the poster's circuit had reached when the door was answered */
+  private posterPose?: Cam;
+
   private frame = (stamp: number) => {
     this.raf = requestAnimationFrame(this.frame);
     const film = this.film;
@@ -2120,9 +2192,15 @@ export default class TowerFilm extends Component<{
       film.sky(
         'chapter',
         {
+          /* HOLLOW. A filled glyph this size, sitting in the same air as
+             the building, reads as a stain on the lens; an outline reads
+             as type drawn in the world — you can see the hill through it
+             and the eaves cross it without turning it to mud. */
           color: '#2e2515',
           lines: beat.sky.lines,
-          size: beat.sky.size,
+          size: beat.sky.size * 1.35,
+          stroke: '#2e2515',
+          strokeW: 0.02,
           track: beat.sky.track ?? 0.16,
         },
         {
@@ -2725,7 +2803,7 @@ export default class TowerFilm extends Component<{
     this.cutTo(heads[next]!);
   };
 
-  private cutTo(index: number) {
+  private cutTo(index: number, hard = false) {
     this.from = index;
     this.beatIndex = 0;
     this.ended = false;
@@ -2737,8 +2815,8 @@ export default class TowerFilm extends Component<{
        already carrying that shot's own speed */
     this.snap(
       BEATS[index]!.cam,
-      this.tailFor(0),
-      BEATS[index]!.ticks * TICK
+      hard ? undefined : this.tailFor(0),
+      hard ? undefined : BEATS[index]!.ticks * TICK
     );
   }
 
@@ -3043,19 +3121,39 @@ export default class TowerFilm extends Component<{
       return;
     }
     this.gate = false;
+    if (this.posterRaf !== undefined) {
+      cancelAnimationFrame(this.posterRaf);
+      this.posterRaf = undefined;
+    }
     if (withSound) {
       this.sound = true;
       this.film.sound(true);
     }
     this.applyBeat(this.beats[0]!, true);
-    /* THE CLICK IS ANSWERED IN THE SAME FRAME. A door that opens onto a
-       still picture reads as a page that did not hear you: the lens
-       leaves with the film's own opening speed already on it. */
-    this.snap(
-      this.beats[0]!.cam,
-      this.tailFor(0),
-      this.beats[0]!.ticks * TICK
-    );
+    /**
+     * THE CLICK IS ANSWERED IN THE SAME FRAME — and answered with the
+     * biggest move in the film. The lens does not cut to the opening
+     * shot; it FLIES there from wherever the poster's circuit had
+     * reached, on the stiff spring, so the first thing the viewer sees
+     * after pressing the button is the camera taking off. A door that
+     * opens onto a still frame reads as a page that did not hear you.
+     */
+    if (this.posterPose) {
+      this.now = { ...this.posterPose };
+      this.mid = { ...this.posterPose };
+      this.goal = { ...this.beats[0]!.cam };
+      this.whipUntil = performance.now() + 1500;
+      for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
+        this.midV[k] = 0;
+        this.nowV[k] = 0;
+      }
+    } else {
+      this.snap(
+        this.beats[0]!.cam,
+        this.tailFor(0),
+        this.beats[0]!.ticks * TICK
+      );
+    }
     this.booted = true;
     this.lastTick = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -3084,10 +3182,26 @@ export default class TowerFilm extends Component<{
     return `${Math.floor(s / 60)} min ${s % 60 ? `${s % 60} s` : ''}`.trim();
   }
 
-  /** back in from the end card */
+  /**
+   * BACK IN FROM THE END CARD — a dissolve, not a flight.
+   *
+   * The film ends three hundred degrees around the building from where
+   * it opened, so tweening the lens home spins it like a globe. The
+   * ending cross-fades into the opening frame instead: the last frame
+   * is held as a still, the camera is PLACED at the opening pose behind
+   * it, and the still fades away.
+   */
   private replay = () => {
+    const film = this.film;
+    if (film) {
+      const shot = film.snapshot();
+      this.freeze = shot.length > 64 ? shot : '';
+    }
     this.ended = false;
-    this.cutTo(0);
+    this.cutTo(0, true);
+    if (this.freeze) {
+      this.blendStamp += 1;
+    }
   };
 
   /** the chapter menu. The film keeps running behind it, blurred: a
@@ -3975,7 +4089,9 @@ export default class TowerFilm extends Component<{
         );
         -webkit-mask-size: 300% 300%;
         -webkit-mask-repeat: no-repeat;
-        animation: tf-swipe 620ms cubic-bezier(0.5, 0, 0.24, 1) forwards;
+        /* Star Wars speed: a wipe is a STATEMENT, and at two-thirds of a
+           second it reads as a glitch rather than a decision */
+        animation: tf-swipe 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
       }
 
       /* the sweep is the mask; the last breath of opacity is a SEAL. A
@@ -4626,25 +4742,23 @@ export default class TowerFilm extends Component<{
         display: none;
       }
 
-      /* THE GHOST GLYPH wears the front door's treatment: bigger than
-         feels safe, and HOLLOW. A filled glyph at 7% over a building is
-         a smudge — you cannot tell whether it is type or haze. An
-         outline is unambiguously drawn, holds its shape over any part
-         of the picture, and lets the tower show through it. */
+      /* the ghost NUMERAL keeps its old treatment: a filled slab of ink
+         at a whisper of opacity, behind the plate. It is a page
+         furniture mark, not type in the world — the hollow treatment
+         belongs to the glyphs that share air with the building. */
       .tf-plate .tf-ghost {
         display: block;
         position: absolute;
-        right: 2%;
+        right: 3%;
         top: 50%;
         transform: translateY(-50%);
         font-family: var(--tf-ui);
-        font-size: clamp(240px, 38vw, 620px);
+        font-size: clamp(180px, 30vw, 460px);
         font-weight: 700;
-        line-height: 0.78;
-        letter-spacing: -0.03em;
-        color: transparent;
-        -webkit-text-stroke: 1.5px var(--tf-ink);
-        opacity: 0.16;
+        line-height: 0.8;
+        letter-spacing: -0.04em;
+        color: var(--tf-ink);
+        opacity: 0.07;
         pointer-events: none;
         z-index: -1;
       }
@@ -5021,6 +5135,11 @@ export default class TowerFilm extends Component<{
          seats the building left of centre, so the door takes the right
          third — the same real estate the title beat's type owns — and
          its wash leans that way too instead of dimming the whole frame */
+      /* THE DOOR DOES NOT BLUR THE BUILDING. A poster's job is to make
+         the subject look like the reason to press play; a blur makes it
+         look like a placeholder. The scene stays sharp and keeps
+         turning (see the poster orbit) — the only thing over it is a
+         ground for the type, raked away from the tower. */
       .tf-gate {
         position: absolute;
         inset: 0;
@@ -5030,10 +5149,10 @@ export default class TowerFilm extends Component<{
         justify-content: flex-end;
         background: linear-gradient(
           100deg,
-          rgba(28, 22, 10, 0.08) 32%,
-          rgba(28, 22, 10, 0.62) 74%
+          rgba(24, 18, 8, 0) 26%,
+          rgba(24, 18, 8, 0.28) 52%,
+          rgba(22, 16, 7, 0.72) 82%
         );
-        backdrop-filter: blur(1px);
       }
 
       .tf-gate-in {
