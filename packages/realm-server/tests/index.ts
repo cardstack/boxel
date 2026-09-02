@@ -261,6 +261,8 @@ const ALL_TEST_FILES: string[] = [
   './prewarm-query-field-test',
   './prerender-html-split-test',
   './prerender-html-split-integration-test',
+  './declared-screenshot-persist-test',
+  './declared-screenshots-indexing-test',
   './prerender-html-reconcile-test',
   './media-cache-adapter-test',
   './media-cache-gc-test',

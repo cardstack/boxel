@@ -82,6 +82,14 @@ export interface PrerenderedHtmlTable {
   // is mirrored onto `error_doc.diagnostics`, matching the `boxel_index`
   // pattern. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
+  // The declared-screenshot manifest: {name → {specHash, objectKey,
+  // contentType, dims, …}} for every `static screenshots` slot the
+  // prerender-html visit captured (or carried forward) for this row. Swaps
+  // with the row on its existing generation counter like every other
+  // artifact here. Null when captures weren't requested (no MediaCache
+  // configured) or the card declares none; a slot whose capture failed is
+  // simply absent (see `diagnostics.screenshotErrors`).
+  screenshots: Record<string, unknown> | null;
   // Originating worker job id. Only present on `prerendered_html_working`;
   // the production `prerendered_html` mirror does not carry this column,
   // hence the field is optional.
@@ -163,4 +171,5 @@ export const coerceTypes = Object.freeze({
   rendered_at: 'VARCHAR',
   value: 'JSON',
   diagnostics: 'JSON',
+  screenshots: 'JSON',
 });

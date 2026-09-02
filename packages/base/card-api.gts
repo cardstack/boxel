@@ -114,6 +114,8 @@ import {
   SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredScreenshotRoster,
+  type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
 } from '@cardstack/runtime-common';
 import {
@@ -2714,7 +2716,7 @@ export class BaseDef {
   static getComponent(
     card: BaseDef,
     field?: Field,
-    opts?: { componentCodeRef?: CodeRef },
+    opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
   ) {
     return getComponent(card, field, opts);
   }
@@ -2829,6 +2831,15 @@ export type BaseDefComponent = ComponentLike<{
 // where the component renders, not what it may use: it gets the full author
 // surface (`@model`/`@fields`/`@context`) and may render linked data.
 //
+// A capture-only component whose content readies asynchronously (a video
+// frame seeked onto a canvas, a PDF page paint, a WebGL first frame — work
+// invisible to image-paint waiting) signals readiness through the DOM: while
+// unready it renders a `data-screenshot-pending` attribute on any element,
+// and removes it when painted. The capture engine waits (bounded) for no
+// such element to remain; a component that never resolves its pending
+// element fails that slot's capture rather than persisting an unready frame.
+// Components with no async work omit the attribute and capture immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
@@ -2841,7 +2852,8 @@ export type ScreenshotSpec = {
   // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
   // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
-  // 'transparent' or any CSS color. Default 'white'.
+  // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
+  // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
   // Feed this capture to `cardThumbnailURL`. At most one entry across a
   // card's merged declarations may set this.
@@ -3003,6 +3015,14 @@ function assertValidScreenshotSpec(
         .join(', ')}`,
     );
   }
+  // Cross-field: jpeg has no alpha channel, so a transparent background is a
+  // contradiction it cannot represent — the capture would silently composite
+  // onto black. webp and png both carry alpha and stay legal.
+  if (entry.background === 'transparent' && entry.type === 'jpeg') {
+    throw new Error(
+      `${prefix}: background 'transparent' cannot be captured as jpeg (no alpha channel) — use type 'png' or 'webp', or an opaque background`,
+    );
+  }
 }
 
 // The one read path for `static screenshots`: merges declarations by name up
@@ -3076,6 +3096,45 @@ export function getScreenshots(
     );
   }
   return merged;
+}
+
+// The merged declarations in the serializable form that crosses the render
+// page boundary to the capture engine: identical to the specs except the
+// capture-only component, which cannot serialize — it is flagged
+// `render: true` and re-resolved in-page by slot name when its capture
+// renders.
+export function serializeDeclaredScreenshots(
+  cardOrFileClass: typeof CardDef | typeof FileDef,
+): DeclaredScreenshotRoster {
+  let roster: DeclaredScreenshotRoster = {};
+  for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
+    let payload: DeclaredScreenshotSpecPayload = {
+      width: spec.width,
+      height: spec.height,
+    };
+    if (spec.deviceScaleFactor !== undefined) {
+      payload.deviceScaleFactor = spec.deviceScaleFactor;
+    }
+    if (spec.background !== undefined) {
+      payload.background = spec.background;
+    }
+    if (spec.useAsThumbnail !== undefined) {
+      payload.useAsThumbnail = spec.useAsThumbnail;
+    }
+    if (spec.keyBy !== undefined) {
+      payload.keyBy = spec.keyBy;
+    }
+    if (spec.type !== undefined) {
+      payload.type = spec.type;
+    }
+    if (spec.render) {
+      payload.render = true;
+    } else {
+      payload.format = spec.format;
+    }
+    roster[name] = payload;
+  }
+  return roster;
 }
 
 export class FieldDef extends BaseDef {
@@ -5282,9 +5341,20 @@ function codeRefCacheKey(codeRef: CodeRef | undefined): string {
 export function getComponent(
   model: BaseDef,
   field?: Field,
-  opts?: { componentCodeRef?: CodeRef },
+  opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
 ): BoxComponent {
   if (field) {
+    return getBoxComponent(
+      model.constructor as BaseDefConstructor,
+      Box.create(model),
+      field,
+      opts,
+    );
+  }
+  // An override render is never cached: the cache key covers only the
+  // codeRef, and a capture-only component must not collide with (or stand
+  // in for) the model's stable format component.
+  if (opts?.componentOverride) {
     return getBoxComponent(
       model.constructor as BaseDefConstructor,
       Box.create(model),

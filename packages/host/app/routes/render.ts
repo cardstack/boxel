@@ -399,6 +399,7 @@ export default class RenderRoute extends Route<Model> {
     // Reset before any await so a reader can never see a previous card's
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
+    (globalThis as any).__boxelRenderRefreshCapturedDeps = undefined;
     // Bind the stores to this visit's render scope before anything is fetched
     // or hydrated. A tab serves visits from many scopes and holds the
     // instances they loaded, and a resident link target is handed to
@@ -740,6 +741,20 @@ export default class RenderRoute extends Route<Model> {
     // same tab can never read a predecessor's snapshot.
     (globalThis as any).__boxelRenderCapturedDeps =
       this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
+    // The dependency tracker keeps accumulating for this card's session after
+    // settle — child-route renders (a declared screenshot's capture-only
+    // component, ancestor format renders) load through the same tracker but
+    // land after the snapshot above was taken. This hook lets the capture
+    // engine re-snapshot once those renders are done, so a capture-only
+    // component's loads still fan into the row's deps. Cleared alongside the
+    // snapshot at the top of #buildModel.
+    (globalThis as any).__boxelRenderRefreshCapturedDeps = () => {
+      let deps = this.network.virtualNetwork.unresolveURLs(
+        snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+      );
+      (globalThis as any).__boxelRenderCapturedDeps = deps;
+      return deps;
+    };
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
