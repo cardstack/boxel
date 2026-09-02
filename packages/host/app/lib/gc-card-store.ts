@@ -93,6 +93,11 @@ type StoreHooks = {
               message: string;
               status?: number;
             }>;
+            // Declared on every hop the seed travels, not just at its ends. The
+            // flag exists to stop a match count being inferred from the rows,
+            // so a hop that forwards the seed field by field rather than whole
+            // would drop it and restore exactly the inference it prevents.
+            totalUnknown?: boolean;
           }
         | undefined;
     },
@@ -1461,6 +1466,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         isLoading: false,
         meta: { page: { total: 0 } },
         errors: undefined,
+        // No search ran, so there is no match count — `undefined`, not the
+        // zero in `meta` above, which is a placeholder for the rendering path.
+        totalMatchCount: undefined,
+        isPartial: false,
       } as StoreSearchResource<T>;
     }
     return this.#storeHooks.getSearchResource(

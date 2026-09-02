@@ -518,6 +518,15 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
+  // How many rows the query matches, as against how many `instances` holds.
+  // `undefined` is unknown, never zero. Prefer this over reading
+  // `meta.page.total`: the raw meta carries a placeholder in states where no
+  // count is knowable, and this getter is what tells those apart.
+  readonly totalMatchCount: number | undefined;
+  // `instances` is a bounded prefix of what the query matches. Computed from
+  // the server's own result set rather than the reconciled one, so a locally
+  // edited or created card can't be mistaken for a short page.
+  readonly isPartial: boolean;
 }
 
 export type GetSearchResourceFuncOpts = {
@@ -544,6 +553,10 @@ export type GetSearchResourceFuncOpts = {
     // ceiling clamped the expansion. Absent it, the resource takes the
     // record count for the total and a truncated seed reads as complete.
     meta?: QueryResultsMeta;
+    // The seed's match count is not knowable and must not be inferred from its
+    // rows — the producer resolved the field but deliberately reported no
+    // total, as a query-backed field does when one of its realms failed.
+    totalUnknown?: boolean;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -4261,6 +4274,7 @@ registerRelationshipProbe((instance, field) => {
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
     let queryTotalMatchCount: number | undefined;
+    let queryIsPartial = false;
     // Recorded when the field's results were resolved, so it is available on
     // the seeded path — which is where a partial realm failure otherwise reads
     // as a complete set, the indexed document having baked in the rows that
@@ -4280,18 +4294,20 @@ registerRelationshipProbe((instance, field) => {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
-      // The page ceiling bounds `instances` but not this: it is what the query
-      // matched, so the two disagree exactly when the field holds a prefix.
-      //
-      // Unless the search lost a realm. Then the total covers only the realms
-      // that answered, which is a floor rather than the match count, so it is
-      // withheld — and the field is short by the amount that realm withheld
-      // along with it.
+      // Both come off the resource rather than being recomputed here. It is the
+      // only place that holds the server's match count and the server's own
+      // result set together; `instances` above is that set reconciled against
+      // local Store state, so measuring a shortfall against it would report one
+      // whenever a card was edited out of the filter locally.
+      queryTotalMatchCount = resource.totalMatchCount;
+      queryIsPartial = resource.isPartial;
+      // Unless the search lost a realm. The count then covers only the realms
+      // that answered — a floor rather than the match count — so it is withheld
+      // and the shortfall is reported without one, the same answer the
+      // indexer's own leg gives for the same situation.
       if (resource.meta?.incomplete) {
         queryHasUnreachableRealms = true;
-      } else {
-        let total = resource.meta?.page?.total;
-        queryTotalMatchCount = typeof total === 'number' ? total : undefined;
+        queryTotalMatchCount = undefined;
       }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
@@ -4300,6 +4316,7 @@ registerRelationshipProbe((instance, field) => {
       isQueryField: true,
       queryMembership,
       queryTotalMatchCount,
+      queryIsPartial,
       queryHasUnreachableRealms,
     };
   }
@@ -5636,6 +5653,10 @@ class FallbackCardStore implements CardStore {
       isLoading: false,
       meta: { page: { total: 0 } },
       errors: undefined,
+      // No search ran, so there is no match count — `undefined`, not the zero
+      // in `meta` above, which is a placeholder for the rendering path.
+      totalMatchCount: undefined,
+      isPartial: false,
     } as StoreSearchResource<T>;
   }
 }

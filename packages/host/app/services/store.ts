@@ -1764,6 +1764,12 @@ export default class StoreService extends Service implements StoreInterface {
           status?: number;
         }>;
         cardURLs?: string[];
+        // Declared here as well as on the card-facing type, because this hop
+        // is where the seed is handed to the resource. The flag exists to stop
+        // a match count being inferred from the rows; leaving it off the
+        // signature would let a future refactor forward the seed field by
+        // field and silently restore that inference.
+        totalUnknown?: boolean;
       };
     },
   ): SearchResource<T> {
