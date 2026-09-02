@@ -2315,7 +2315,10 @@ export default class TowerFilm extends Component<{
     const pose = {
       dolly: c.dolly * (2.25 + 0.09 * Math.sin(t * 0.11 + 1.1)),
       lookY: c.lookY + 1.4 + 0.6 * Math.sin(t * 0.15),
-      ox: c.ox ?? 0,
+      /* the two halves of the poster lean back toward the middle: the
+         building comes in off the left edge, the wordmark off the right,
+         and the gap between them is the composition */
+      ox: (c.ox ?? 0) * 0.66,
       pitch: c.pitch + 2.4 + 1.4 * Math.sin(t * 0.13),
       yaw: c.yaw + 34 + 11 * Math.sin(t * 0.2),
     };
@@ -5743,7 +5746,7 @@ export default class TowerFilm extends Component<{
         /* hard right: the poster is a two-column composition — building
            in one half, wordmark in the other — and the wordmark drifting
            toward the middle closes the gap that makes it one */
-        margin-right: clamp(18px, 4vw, 76px);
+        margin-right: clamp(34px, 7vw, 132px);
       }
 
       /* the museum frame: hairline, inset like a mat, above the scene
