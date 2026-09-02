@@ -1344,6 +1344,9 @@ export default class TowerFilm extends Component<{
   /** where the beat's sky word was planted, in world azimuth */
   private skyAz = 0;
 
+  /** where this beat's mark word stands, planted behind the building */
+  private markAt = { x: 0, z: 0 };
+
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
   private sunGoal: { az: number; el: number } | null = null;
@@ -1902,12 +1905,20 @@ export default class TowerFilm extends Component<{
     const out: { action: string; delay: number; index: string }[] = [];
     this.beats.forEach((b, i) => {
       const lead = i === 0 ? 0 : (b.lead ?? 0);
-      /* the sky turns while the lens is still travelling: the air cue
-         fires as the sweep begins, the beat's own cue when it lands */
+      /**
+       * THE WEATHER ARRIVES BEFORE THE CHAPTER DOES.
+       *
+       * The air cue used to fire as the sweep began, which still meant
+       * the sky changed at the same moment as everything else. A day
+       * does not work that way and neither does a film: the light goes
+       * first, under the END of the passage you are still watching, so
+       * by the time the new chapter's lens lands the hour has already
+       * turned. Two ticks of pre-roll ahead of the flight.
+       */
       if (lead > 0) {
         out.push({
           action: 'air',
-          delay: t + TICK,
+          delay: Math.max(0, t + TICK - 2 * TICK),
           index: String(i),
         });
       }
@@ -2777,24 +2788,29 @@ export default class TowerFilm extends Component<{
            than the structure — soft-edged, its own glow holding it
            against the hills, the building crossing in FRONT of it — is
            part of the place. */
-        color: 'rgba(255,251,243,0.5)',
+        /* white OUTLINE, on its own plane behind the building, and
+           smaller than the sky word: this one names a part rather than
+           the chapter, so it stands at the height of the thing it names
+           and keeps climbing with it. */
+        color: 'rgba(255,251,243,0.16)',
         fill: true,
         lines: m.lines,
-        shadow: 'rgba(255,248,236,0.55)',
-        shadowBlur: 0.15,
-        size: m.size * 3.2,
-        stroke: 'rgba(255,253,247,0.72)',
-        strokeW: 0.012,
+        shadow: 'rgba(30,22,10,0.42)',
+        shadowBlur: 0.1,
+        size: m.size * 1.55,
+        stroke: 'rgba(255,253,247,0.86)',
+        strokeW: 0.016,
         track: 0.12,
       },
       {
         opacity: Math.min(1, raw * 2.2) * 0.86,
         ry: (this.markFace / RAD) % 360,
-        /* stood well beyond the building, so the structure crosses in
-           FRONT of the word instead of the word sitting on the glass */
-        x: Math.sin(a) * m.r * 2.2,
-        y,
-        z: Math.cos(a) * m.r * 2.2,
+        /* planted behind the subject (markAt), and still travelling
+           upward through the whole beat — the word rises with the stage
+           it names instead of arriving and parking */
+        x: this.markAt.x,
+        y: y + local * 1.4,
+        z: this.markAt.z,
       }
     );
     /* AND IT IS TETHERED. A label floating beside a building names
@@ -2990,6 +3006,15 @@ export default class TowerFilm extends Component<{
     if (beat.sky) {
       /* plant the word where the shot can see it, once */
       this.skyAz = (this.film?.view().az ?? 0) + (beat.sky.az ?? 0) * RAD;
+    }
+    if (beat.mark) {
+      /* AND THE MARK STANDS BEHIND THE BUILDING. Taken once, along the
+         lens axis at the moment the beat lands, so the word is directly
+         behind the subject — the structure crosses it, the camera moves
+         PAST it, and it never reads as a caption stuck on the glass. */
+      const az = this.film?.view().az ?? 0;
+      const d = 26;
+      this.markAt = { x: -Math.sin(az) * d, z: -Math.cos(az) * d };
     }
     this.applyAir(beat, instant);
     /**
