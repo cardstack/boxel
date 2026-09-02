@@ -2,6 +2,7 @@ import {
   claimsHostPackageName,
   hostPackageNameOf,
 } from './host-package-names.ts';
+import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import type {
@@ -181,6 +182,27 @@ export class VirtualNetwork {
           `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
           `realm registered under it would have its authored content trusted as ` +
           `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
+      );
+    }
+    // Within the `@cardstack` scope a realm must be one the declaration names.
+    // The launch-script scan cannot see a prefix that never appears literally
+    // in a scanned file — `RESOLVED_SOFTWARE_FACTORY_REALM_URL=https://cardstack.com/software-factory/`
+    // reaches `main.ts`'s alias branch and registers `@cardstack/software-factory/`
+    // with nothing to notice — so the set is checked here, where the value is
+    // known however it arrived.
+    //
+    // Only that scope: `@cardstack/` is the namespace the Host and the
+    // declaration share, and a realm outside it collides with neither. Tests
+    // and third parties register their own prefixes freely.
+    if (
+      realmIdentifier.startsWith('@cardstack/') &&
+      !PREFIX_REALM_PREFIXES.includes(ensureTrailingSlash(realmIdentifier))
+    ) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: the @cardstack scope is ` +
+          `reserved for the realms PREFIX_REALMS declares, and this is not one ` +
+          `of them (${PREFIX_REALM_PREFIXES.join(', ')}). Declare it there, or ` +
+          `use a prefix outside the @cardstack scope.`,
       );
     }
     this.addPrefixMapping(realmIdentifier, targetURL);

@@ -171,6 +171,7 @@ import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import {
   captureSpecHash,
+  captureSpecOverrides,
   parseCaptureSpecParams,
   type CaptureSpec,
 } from './capture-spec.ts';
@@ -4225,11 +4226,17 @@ export class Realm {
   }
 
   // The miss path: a capture no ledger entry satisfies. Full captureSpec
-  // power on an unauthenticated-reachable GET is an unbounded spec space, so
-  // new captures are per-realm opt-in (`allowArbitraryScreenshots` on the
-  // realm's config card — the gate blocks Chrome work, never serving), and
-  // an open realm's captures run through the same per-realm serialized
-  // screenshot queue as the POST endpoint, bounded by a sync-wait budget:
+  // power on an unauthenticated-reachable GET is an unbounded spec space —
+  // on an open realm every distinct viewport/dsf/fullPage/clip combination
+  // is its own render and its own ledger entry — so new captures are
+  // per-realm opt-in (`allowArbitraryScreenshots` on the realm's config
+  // card — the gate blocks Chrome work, never serving). That opt-in is the
+  // deliberate cost boundary: no per-instance spec-cardinality cap beyond
+  // it, since the parse bounds each capture's pixel cost, the serialized
+  // lane bounds concurrency, and the on-demand lane's idle TTL reclaims
+  // entries nothing requests. An open realm's captures run through the same
+  // per-realm serialized screenshot queue as the POST endpoint, bounded by
+  // a sync-wait budget:
   //   - lane already too deep for the budget → immediate 503 + Retry-After
   //     (fail fast instead of holding a doomed connection);
   //   - otherwise enqueue and wait up to the budget; the job persists its
@@ -4307,10 +4314,11 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
-        // The GET DSL's spec is canonical by construction (viewport / scale /
-        // clip params are reserved), so there are never capture overrides on
-        // this lane.
-        captureSpec: null,
+        // The spec's geometry overrides (viewport / dsf / fullPage / clip)
+        // ride to the capture engine; the entry key's `captureSpecHash`
+        // already covers them, so the persisted capture serves only on this
+        // exact spec's URL.
+        captureSpec: captureSpecOverrides(spec),
         persist: { ...entryKey, lane: 'on-demand' },
         surface: 'get-dsl',
         loggingCorrelationId: perf.correlationId,
@@ -4382,13 +4390,27 @@ export class Realm {
           ...stagePerf,
           jobWaitMs,
         });
-        return systemError({
+        let response = systemError({
           requestContext,
           message: `screenshot capture failed for ${entryKey.sourceURL}`,
           additionalError: outcome.error
             ? new Error(String(outcome.error))
             : undefined,
         });
+        // A failed capture persists nothing, so no ledger entry will
+        // short-circuit the repeat: without explicit freshness every `<img>`
+        // load of this URL is a fresh Chrome render. Some failures are
+        // durable properties of the request — a fullPage capture whose
+        // document extent exceeds the physical-pixel cap fails every time,
+        // and only the capture engine can discover that. Carry the same
+        // short window the miss and gate responses use, so a capture that
+        // keeps failing costs one render per window rather than one per
+        // image load.
+        response.headers.set(
+          'cache-control',
+          `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        );
+        return response;
       }
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({

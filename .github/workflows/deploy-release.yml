@@ -201,12 +201,120 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ inputs.realm-server-image }}
-      timeout-minutes: 10
-      wait-for-service-stability: true
+      # Stability is checked by wait-realm-server-stable below rather than by
+      # the action's waiter, which reports TIMEOUT while its own polls are
+      # succeeding — the same failure the worker deploy above works around
+      # with a fixed sleep. On 2026-08-31 it gave up after 3m49s, eight
+      # seconds before ECS recorded the deployment as COMPLETED, failing a
+      # main run whose deploy had in fact landed.
+      wait-for-service-stability: false
+
+  # The drain gate the three jobs below depend on. ECS is the authority on
+  # whether a rollout landed, so ask it directly: COMPLETED means the new task
+  # set is serving and the previous one is gone, which is the precondition the
+  # removal migrations and the shell recycle actually need.
+  wait-realm-server-stable:
+    name: Wait for realm server stability
+    needs: [deploy-realm-server]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up env
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
+          else
+            echo "unrecognized environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Wait for the primary deployment to complete
+        env:
+          CLUSTER: ${{ inputs.environment }}
+          SERVICE: boxel-realm-server-${{ inputs.environment }}
+          CONTAINER: boxel-realm-server
+          EXPECTED_IMAGE: ${{ inputs.realm-server-image }}
+        run: |
+          set -uo pipefail
+          # Observed convergence runs 5.5-9.5 minutes, so the ten minutes the
+          # action was given left no headroom on a slow day. Twenty gives room
+          # without letting a genuinely stuck rollout hold the pipeline.
+          #
+          # "PRIMARY is COMPLETED" on its own is not enough to open this gate.
+          # ECS is eventually consistent, so a poll landing just after
+          # update-service can still describe the *previous* deployment, which
+          # is COMPLETED by definition; and a circuit-breaker rollback promotes
+          # that previous revision back to PRIMARY, where it reaches COMPLETED
+          # again. Either would let the removal migrations run while the old
+          # tasks are still serving, which is the one thing this gate exists to
+          # prevent. So match on identity too: the primary deployment has to be
+          # running the image this deploy asked for. The render step writes
+          # that input into the task definition verbatim, so it is an exact
+          # comparison.
+          resolved_taskdef=""
+          resolved_image=""
+          taskdef=""
+          state=unknown
+          deadline=$(( $(date +%s) + 1200 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            # A rollback marks the attempted deployment FAILED before restoring
+            # the old one, so look for that before trusting whatever is PRIMARY.
+            # The backticks in these queries are JMESPath literals, not command
+            # substitution, so single quotes are correct throughout.
+            # shellcheck disable=SC2016
+            failed_reason=$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].deployments[?rolloutState==`FAILED`].rolloutStateReason | [0]' \
+              --output text)
+            if [ -n "$failed_reason" ] ; then
+              if [ "$failed_reason" != "None" ] ; then
+                echo "::error title=Realm server rollout failed::$failed_reason"
+                exit 1
+              fi
+            fi
+
+            # shellcheck disable=SC2016
+            read -r taskdef state <<<"$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].deployments[?status==`PRIMARY`].[taskDefinition,rolloutState]' \
+              --output text)"
+
+            # Resolve the image only when the revision changes; this loop runs
+            # every 15s for up to twenty minutes.
+            if [ "$taskdef" != "$resolved_taskdef" ] ; then
+              resolved_taskdef="$taskdef"
+              # shellcheck disable=SC2016
+              resolved_image=$(aws ecs describe-task-definition \
+                --task-definition "$taskdef" \
+                --query "taskDefinition.containerDefinitions[?name=='$CONTAINER'].image | [0]" \
+                --output text)
+            fi
+
+            if [ "$resolved_image" = "$EXPECTED_IMAGE" ] ; then
+              if [ "$state" = "COMPLETED" ] ; then
+                echo "rollout completed for ${taskdef##*/} running $resolved_image"
+                exit 0
+              fi
+            fi
+            echo "primary=${taskdef##*/} state=${state:-pending} image=${resolved_image:-unknown}"
+            sleep 15
+          done
+          echo "::error title=Realm server rollout did not complete::after 20 minutes the primary deployment is ${taskdef##*/} (${state}) running ${resolved_image:-unknown}, expected ${EXPECTED_IMAGE}"
+          exit 1
 
   post-deploy-realm-server:
     name: After realm server stable deployment
-    needs: [deploy-realm-server]
+    needs: [wait-realm-server-stable]
     runs-on: ubuntu-latest
     steps:
       - name: Call post-deployment endpoint on realm server
@@ -253,7 +361,7 @@ jobs:
   # separate /_post-deployment hook that can fail independently of the only real
   # precondition here — the old tasks being gone.
   migrate-db-remove:
-    needs: [deploy-realm-server]
+    needs: [wait-realm-server-stable]
     name: Run DB removal migrations
     runs-on: ubuntu-latest
     permissions:
@@ -309,7 +417,7 @@ jobs:
     # independently of the recycle's only real precondition — the new shell
     # being served. Coupling to it would skip this recycle on an unrelated
     # hook failure.
-    needs: [deploy-realm-server]
+    needs: [wait-realm-server-stable]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:

@@ -10,6 +10,7 @@ import {
   logger,
   modulesConsumedInMeta,
   RealmPaths,
+  renderScopeFor,
   type Batch,
   type DefinitionLookup,
   type IndexWriter,
@@ -48,6 +49,11 @@ export interface PrerenderHtmlPassArgs {
   // every row this pass writes; the monotonic swap guard uses it to reject
   // out-of-order zombie writes.
   generation: number;
+  // The queue job of the index pass that spawned this one. Both halves of that
+  // pass present a prerender tab with the same render scope, so a tab serving
+  // them does not discard what it loaded when they alternate. Null for a job
+  // enqueued without a spawning pass.
+  spawningJobId: number | null;
   // The realm's loader epoch the spawning pass renders under. Threaded on
   // every visit so each prerender tab this pass touches resets its loader
   // exactly once when the realm's module surface changed.
@@ -99,6 +105,7 @@ export async function runPrerenderHtmlPass({
   realmURL,
   changes,
   generation,
+  spawningJobId,
   loaderEpoch,
   preWarm,
   indexWriter,
@@ -285,6 +292,7 @@ export async function runPrerenderHtmlPass({
           await visitForPrerenderedHtml({
             url: new URL(href),
             realmURL,
+            spawningJobId,
             realmPaths,
             reader,
             batch,
@@ -369,6 +377,7 @@ export async function runPrerenderHtmlPass({
 async function visitForPrerenderedHtml({
   url,
   realmURL,
+  spawningJobId,
   realmPaths,
   reader,
   batch,
@@ -384,6 +393,7 @@ async function visitForPrerenderedHtml({
 }: {
   url: URL;
   realmURL: URL;
+  spawningJobId: number | null;
   realmPaths: RealmPaths;
   reader: Reader;
   batch: Batch;
@@ -465,6 +475,20 @@ async function visitForPrerenderedHtml({
     url: fileURL,
     auth,
     batchId,
+    // The job of the index pass that spawned this one, so both halves of that
+    // pass present a tab with one scope. A job enqueued without a spawning
+    // pass keys on its own — except when it has no real job either, where the
+    // caller's `-1` placeholder would make one bucket shared by every such
+    // pass; carry no scope there and let the page fall back to the job id,
+    // which is narrower and so never unsound. Same rule as `visit-file.ts`.
+    ...((spawningJobId ?? jobInfo.jobId) >= 0
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            spawningJobId ?? jobInfo.jobId,
+          ),
+        }
+      : {}),
     visitType: 'prerender-html',
     renderOptions,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),

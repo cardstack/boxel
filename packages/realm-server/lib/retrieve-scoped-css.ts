@@ -84,23 +84,21 @@ export async function retrieveScopedCSS({
   return scopedCSS;
 }
 
-function decodeScopedCSSFromDeps(deps: string[]): string | null {
+export function decodeScopedCSSFromDeps(deps: string[]): string | null {
   let cssBlocks = new Set<string>();
 
   for (let dep of deps) {
     if (typeof dep !== 'string') {
       continue;
     }
-    let pathname: string;
-    try {
-      pathname = new URL(dep).pathname;
-    } catch (_error) {
+    // Deps come in two forms: absolute URLs (realm-local modules) and
+    // prefix-form RRIs like `@cardstack/base/...` (registered realms). The
+    // decoder anchors on the trailing `.<encoded>.glimmer-scoped.css`, so
+    // both forms decode directly with no URL parse.
+    if (!isScopedCSSRequest(dep)) {
       continue;
     }
-    if (!isScopedCSSRequest(pathname)) {
-      continue;
-    }
-    let decoded = decodeScopedCSSRequest(pathname);
+    let decoded = decodeScopedCSSRequest(dep);
     if (decoded?.css) {
       cssBlocks.add(decoded.css);
     }

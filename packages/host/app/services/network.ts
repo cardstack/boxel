@@ -5,9 +5,9 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import {
+  PREFIX_REALMS,
   VirtualNetwork,
   authorizationMiddleware,
-  baseRealm,
   fetcher,
 } from '@cardstack/runtime-common';
 
@@ -72,38 +72,42 @@ export default class NetworkService extends Service {
       // prerender this is the global setTimeout, so behavior is unchanged.
       scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
     });
-    let resolvedBaseRealmURL = new URL(
-      withTrailingSlash(config.resolvedBaseRealmURL),
-    );
-    // URL mapping kept for the fake https://cardstack.com/base/ → real URL.
-    // addRealmMapping registers the @cardstack/base/ scoped prefix.
-    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
-    virtualNetwork.addRealmMapping(
-      '@cardstack/base/',
-      resolvedBaseRealmURL.href,
-    );
+    // Registered from the shared declaration rather than one block per realm,
+    // so this set cannot drift from the one the realm-server registers.
+    //
+    // The URLs come from `prefixRealmURLs`, which carries where each prefix
+    // realm is served, rather than from the realm-list properties: a test build
+    // trims the catalog and openrouter realms out of its lists for isolation
+    // while the realm-server still serves them, and the prefix has to resolve
+    // either way. A realm absent from this build has no entry and no prefix.
+    // An `alias` additionally maps a `https://` spelling onto the same realm;
+    // only the base realm has one.
+    let prefixRealmURLs = (config.prefixRealmURLs ?? {}) as Record<
+      string,
+      string
+    >;
+    let configuredURLs = config as unknown as Record<string, string>;
+    for (let { prefix, alias, hostConfigKey } of PREFIX_REALMS) {
+      // Wherever the environment names the realm, that URL is what everything
+      // else in the process resolves it to, so registering a prefix against
+      // anything else would split the two. The map covers only the realms the
+      // environment has trimmed from its lists — the catalog and openrouter
+      // realms in a test build — which is the gap it was added for. Reading the
+      // property here widens nothing, because nothing is written back.
+      let servedAt = configuredURLs[hostConfigKey] ?? prefixRealmURLs[prefix];
+      if (typeof servedAt !== 'string' || servedAt === '') {
+        continue;
+      }
+      let resolvedRealmURL = new URL(withTrailingSlash(servedAt));
+      if (alias) {
+        virtualNetwork.addURLMapping(new URL(alias), resolvedRealmURL);
+      }
+      virtualNetwork.addRealmMapping(prefix, resolvedRealmURL.href);
+    }
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
-    if (config.resolvedCatalogRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/catalog/',
-        config.resolvedCatalogRealmURL,
-      );
-    }
-    if (config.resolvedSkillsRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/skills/',
-        config.resolvedSkillsRealmURL,
-      );
-    }
-    if (config.resolvedOpenRouterRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/openrouter/',
-        config.resolvedOpenRouterRealmURL,
-      );
-    }
     // Some test fixture content (JSON card files under tests/cards/, embedded
     // card ids in test data) refers to the live test realm by its standard-
     // mode URL `https://localhost:4202/test/`. In environment mode the live

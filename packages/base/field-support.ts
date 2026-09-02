@@ -758,12 +758,24 @@ export function relationshipStateForEntry<T extends CardDef>(
 // `membership` is the per-element resolution(s), in document order:
 //   - declared `linksTo`: a one-element array;
 //   - declared `linksToMany`: one entry per element;
-//   - query-backed (either arity): `undefined` while the search is in flight
-//     (membership not yet known), then an array once results arrive — the same
-//     shape as a non-query `linksToMany`. A re-triggered live query returns it
-//     to `undefined` while running, then back to an array.
+//   - query-backed `linksTo`: a one-element array, matching the arity of the
+//     field getter, which surfaces the query's first result;
+//   - query-backed `linksToMany`: one entry per result;
+//   - query-backed (either arity): `undefined` until the search has produced a
+//     result set — membership is not yet known. A re-triggered live query
+//     returns it to `undefined` while running, then back to an array.
+//
+// `isLoaded` says membership is known and nothing is in flight, which is the
+// signal to read a rollup over the field and trust the answer. It is the pair
+// `isLoading` needs: a query-backed field whose search has not begun reports
+// `isLoading: false` with no membership, so `isLoading` alone cannot tell "no
+// answer yet" from "the answer is empty". The three states are:
+//   - `isLoading: true`                    — a fetch or search is running;
+//   - `isLoading: false, isLoaded: false`  — nothing has resolved this field;
+//   - `isLoading: false, isLoaded: true`   — membership is final (possibly `[]`).
 export interface RelationshipStatus<T extends CardDef = CardDef> {
   isLoading: boolean;
+  isLoaded: boolean;
   membership: RelationshipState<T>[] | undefined;
 }
 
@@ -822,10 +834,20 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
   if (field.queryDefinition) {
     // Query-backed: membership and loading both come from the field's search
     // resource (supplied by the probe), not the data bucket. `membership` is
-    // `undefined` while the search is in flight.
+    // `undefined` until the search has produced a result set.
+    let resolved = probe?.queryMembership as RelationshipState<T>[] | undefined;
+    // A singular query-backed field surfaces the query's first result, so its
+    // membership is that one slot — not the whole result set the search
+    // returned. A result set with nothing in it is a slot with no target, the
+    // same `not-set` a declared `linksTo` reports when it holds none.
+    let membership =
+      resolved && field.fieldType === 'linksTo'
+        ? [resolved[0] ?? relationshipStateForEntry<T>(null)]
+        : resolved;
     return {
       isLoading,
-      membership: probe?.queryMembership as RelationshipState<T>[] | undefined,
+      isLoaded: !isLoading && membership !== undefined,
+      membership,
     };
   }
 
@@ -854,7 +876,10 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
     // Singular `linksTo` — a one-element membership keeps the shape consistent.
     membership = [relationshipStateForEntry<T>(related)];
   }
-  return { isLoading, membership };
+  // A declared link's membership comes straight from the data bucket, so it is
+  // known as soon as the owner deserializes; only an in-flight target load
+  // holds it back from final.
+  return { isLoading, isLoaded: !isLoading, membership };
 }
 
 export interface BrokenLinkFinding {

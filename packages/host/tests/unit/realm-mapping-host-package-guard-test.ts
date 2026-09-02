@@ -18,7 +18,9 @@ const TARGET = 'https://realms.example.test/somewhere/';
 module('Unit | realm mapping host-package guard', function () {
   test('a realm may not claim a Host package name', function (assert) {
     let virtualNetwork = new VirtualNetwork();
-    for (let name of ['boxel-ui', 'boxel-host', 'runtime-common']) {
+    // Driven from the list so a name added to it is covered without this file
+    // being touched.
+    for (let name of [...HOST_PACKAGE_NAMES].filter((n) => n !== 'base')) {
       assert.throws(
         () => virtualNetwork.addRealmMapping(`@cardstack/${name}/`, TARGET),
         /is a Host package name/,
@@ -100,5 +102,51 @@ module('Unit | realm mapping host-package guard', function () {
       `${TARGET}thing`,
       'and it registers and resolves normally',
     );
+  });
+  test('an encoded spelling of base is refused', function (assert) {
+    // The exemption is the literal prefix, not the name. A mapping is stored
+    // and matched under the raw spelling while the classifier decodes before
+    // deciding, so exempting by name would let `@cardstack/%62ase/` resolve to
+    // any target and still be trusted as `base` — the base realm's trust
+    // pointing somewhere else entirely. Reachable from config: `main.ts` hands
+    // the raw segment of a `https://cardstack.com/<name>/` alias straight to
+    // `addRealmMapping`.
+    let virtualNetwork = new VirtualNetwork();
+    for (let spelling of [
+      '@cardstack/%62ase/',
+      '@cardstack/bas%65/',
+      '@cardstack/%62%61se/',
+    ]) {
+      assert.true(
+        isHostPackageSpecifier(`${spelling}evil-card`),
+        `${spelling} is trusted by the classifier`,
+      );
+      assert.throws(
+        () => virtualNetwork.addRealmMapping(spelling, TARGET),
+        /is a Host package name/,
+        `${spelling} is refused as a realm`,
+      );
+    }
+  });
+
+  test('the @cardstack scope admits only declared realms', function (assert) {
+    // The launch-script scan cannot see a prefix that never appears literally
+    // in a scanned file, and `main.ts` derives one from any
+    // `https://cardstack.com/<name>/` value however it arrived — an env var
+    // included. This is where that is caught.
+    let virtualNetwork = new VirtualNetwork();
+    assert.throws(
+      () =>
+        virtualNetwork.addRealmMapping('@cardstack/software-factory/', TARGET),
+      /reserved for the realms PREFIX_REALMS declares/,
+      'an undeclared @cardstack realm is refused',
+    );
+    for (let declared of ['@cardstack/catalog/', '@cardstack/skills/']) {
+      virtualNetwork.addRealmMapping(declared, TARGET);
+      assert.true(
+        virtualNetwork.isRegisteredPrefix(declared),
+        `${declared} is declared and registers`,
+      );
+    }
   });
 });
