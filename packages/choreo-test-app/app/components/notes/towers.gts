@@ -14,16 +14,49 @@ const TowersNotes: TOC<{
   <section class="dive" aria-label="How it works">
     <header class="dive-head">
       <p class="dive-kicker">The cutting room</p>
-      <h2>A film with no video file, cut live by a score</h2>
+      <h2>This is not a video</h2>
       <p class="dive-lede">
-        The picture above is not footage. It is a three.js construction study
-        driven through a one-block bridge, shot by a camera the score authors,
-        graded in CSS and a fullscreen shader, narrated from per-beat audio, and
-        EDITED — cuts, wipes, dissolves, dips — by the same timeline that
-        delivers the type. This page is about the editing half: what it means
-        for a motion timeline to splice.
+        The picture above is not footage and was never a file. It is a live
+        composite — a 3D scene, motion graphics and a score — rendered in your
+        browser at whatever size the frame has, and responsive the way a page
+        is: resize it and the shot reframes, the type re-sets, the bar re-lays.
+        It has interactive chapters — skip anywhere and the film re-cuts itself
+        from that shot — and its own audio mixer: music, effects, weather and
+        voice on separate buses, ducked and faded live. Underneath, a three.js
+        construction study driven through a one-block bridge, shot by a camera
+        the score authors, graded in a fullscreen shader, mixed on a Web Audio
+        graph, narrated from per-beat reads, and EDITED — cuts, wipes,
+        dissolves, dips — by the same timeline that delivers the type. This page
+        is about the editing half: what it means for a motion timeline to
+        splice.
       </p>
     </header>
+
+    <section class="dd">
+      <h3>About this film</h3>
+      <div class="dd-col">
+        <p>
+          Towers was made the way a short film is made, with the same care and
+          the same jobs — a script, a shot list, a colourist's pass, a sound
+          mix, a cutting room, a premiere — and none of it was shot. Every frame
+          is generated: the building is a three.js scene, the camera is a score,
+          the grade is a shader, the voice is synthesised, the music and the
+          weather are mixed live on a Web Audio graph, and the whole thing is
+          composited in your browser as you watch it, at whatever size you give
+          it. It is entirely generated with AI, and it is directed by a human.
+          The direction is the part that cannot be generated: which shot follows
+          which, where the day runs out, how long the silence lasts after the
+          roof closes, when the rain is allowed and when it is not, what the
+          snow is for. Those calls were made one at a time, watched, and made
+          again, the way an edit is made — and the film argues that this is what
+          motion graphics on the web can now be: not a video embedded in a page,
+          but a film that
+          <em>is</em>
+          the page, with chapters you can enter, a mixer you can touch, and a
+          picture that has never been a file.
+        </p>
+      </div>
+    </section>
 
     <section class="dd">
       <h3>One clock, one path</h3>
@@ -73,11 +106,19 @@ const TowersNotes: TOC<{
       <div class="dd-col">
         <p>
           A seam carries a policy, not just a location. Eleven joins cover the
-          grammar, every one riding a single trick: the bridge renders one frame
-          on demand and reads the canvas back synchronously, so the outgoing
-          picture is captured the instant before the cut and the transition
-          plays on that still while the live shot runs underneath. Click any of
-          these and it happens upstairs, right now, over whatever is playing:
+          grammar, on two tricks. The still-based joins — wipe, blur, luma,
+          iris, dip — ride a synchronous snapshot: the bridge renders one frame
+          on demand and reads the canvas back, so the outgoing picture is
+          captured the instant before the cut and the transition plays on that
+          still while the live shot runs underneath. The dissolves — blend and
+          melt — moved into the glass: the page holds the outgoing frame on the
+          GPU and mixes it in the post pass, and when nothing but the lens
+          changes across the seam it keeps the outgoing camera ALIVE, cloned
+          with its last velocity, so both shots move under the dissolve. The
+          wipe's sweep is two compositor transforms — a masked sheet slides, the
+          still inside slides back — because a mask that moves repaints a
+          full-resolution frame every tick and stutters. Click any of these and
+          it happens upstairs, right now, over whatever is playing:
         </p>
         {{#if @preview}}
           <div class="dd-joins">
@@ -111,11 +152,14 @@ const TowersNotes: TOC<{
           </p>
         {{/if}}
         <p>
-          In the film each is placed where it means something: HISTORY arrives
-          through black, the matchlock guns arrive on the flash, the rain beat
-          comes in through its own mist, the stone racks into focus, the
-          comparison plates enter through paper-white, and the coda takes the
-          closing dissolve.
+          In the film each is placed where it means something: the ground is
+          wiped in under the title, the matchlock guns arrive on the flash, the
+          construction chapter comes in through black because a standing keep
+          cannot be wiped off a field, the prang arrives on the slow melt, and
+          the coda takes the closing dissolve. Under a still-based join the
+          hour, the weather, the sun and the grade SNAP at the seam — the still
+          already wears the old light, so a crossfade underneath it would be the
+          old shot dressed wrong.
         </p>
       </div>
     </section>
@@ -125,19 +169,19 @@ const TowersNotes: TOC<{
       <div class="dd-col">
         <p>
           Every track crosses a seam on its own clock, the way an editor lays
-          audio. A sentence interrupted by a new line barge-fades over ~120ms on
-          its
-          <em>own</em>
-          audio element while the new line starts clean on a fresh one — one
-          throat per line, because a shared element guillotines the old take on
-          the
-          <code>src</code>
-          swap no matter how politely you fade. A seam into a silent shot is an
-          L-cut: the sentence finishes over the new picture and the music lifts
-          when it lands. A beat that is
+          audio. The sound is one Web Audio graph: music, effects, weather and
+          voice on their own buses into one master, so mute means all of it and
+          the fader on the bar is one gain. A line is a decoded buffer on the
+          voice bus with a 70 ms rise; a new line lets the old one down over
+          ~120 ms rather than guillotining it. While a line plays the music
+          ducks fast on an S-curve and recovers slow, and the weather bed ducks
+          with it — rain at full bed over a sentence is the sentence lost. A
+          seam into a silent shot is an L-cut: the sentence finishes over the
+          new picture and the music lifts when it lands. A beat that is
           <em>about</em>
-          silence asks for quiet by name. The music bed ducks fast and recovers
-          slow, and no boundary anywhere hard-clips a waveform.
+          silence asks for quiet by name. Each country's bed arrives and leaves
+          over three seconds, and every read is normalised in the file to the
+          same level, so nothing needs trimming to meet anything.
         </p>
       </div>
     </section>
@@ -151,10 +195,18 @@ const TowersNotes: TOC<{
           itself arrives with the wrong velocity. Skipping RE-CUTS instead: the
           beat list is sliced, and the path, the cues and the sequence's name
           change together — the region plays a different, shorter film whose
-          first waypoint is spliced. The transport at the top of the frame is
-          the same re-cut wearing a broadcast bar: one segment per chapter,
-          sized by real running time, filled by whole-film progress, each
-          segment a door.
+          first waypoint is spliced. The head beat is applied exactly once per
+          cut: the cut applies it so the picture is right before the run exists,
+          and the run's first cue, which names the same beat a pass later, is
+          skipped — applying it twice ran the join twice. The player along the
+          foot of the frame is the same re-cut wearing the grammar every viewer
+          knows: one segment per chapter sized by running time, a knob on the
+          fill's own end, a hover bubble naming the shot under the hand, and a
+          drag that reads as time and releases as an edit. Pause holds
+          everything at once — the score's run, the page's own clock (grass,
+          weather, build, day), the audio graph — and resume shifts the beat
+          clock by the length of the hold, so the hours and the type pick up
+          where they stood.
         </p>
       </div>
     </section>
@@ -173,12 +225,17 @@ const TowersNotes: TOC<{
           <a href="https://x.com/MengTo" target="_blank" rel="noopener">Meng To</a>,
           vendored whole on its own pinned three r149 and reached through one
           function-call bridge: pose goals for a cascaded camera chase,
-          annotation tubes drawn on the geometry itself, a shader post pass
-          (grain, edge aberration, vignette, a milk lift into the blacks), the
-          sun moved per shot, the air thickened per shot, the music ducked under
-          the voice — and the one-frame synchronous snapshot that makes every
-          freeze-based join possible. The full design note lives at
-          <code>docs/choreo-splices.md</code>.
+          annotation tubes drawn on the geometry itself, a shader post pass that
+          converts the linear render to sRGB before it grades (grain, edge
+          aberration, a per-chapter and per-country grade with its own contrast
+          and warmth, no vignette), the sun moved per shot, the air thickened
+          per shot, snow that settles and rain that leaves the ground wet, a
+          frame budget that owns the pixel ratio, a master fader and a hold —
+          and the one-frame synchronous snapshot that makes every still-based
+          join possible. The full design note lives at
+          <code>docs/choreo-splices.md</code>; the quality pass and its numbers
+          in
+          <code>docs/towers-quality.md</code>.
         </p>
       </div>
     </section>

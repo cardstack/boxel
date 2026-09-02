@@ -533,7 +533,7 @@ shot = (pose) => {
     apis: ['@through', 'cut: true', '@camera3dFrom', 'c.Perform'],
     group: '3D',
     id: 'towers',
-    lede: 'A four-minute museum film — shot, cut, graded and narrated by one score.',
+    lede: 'Not a video. A four-minute museum film composited live in the browser — a 3D scene, motion graphics and a score, cut in real time at any size, with interactive chapters and its own audio mixer.',
     notes: TowersNotes,
     sample: `{{! THE WHOLE FILM IS ONE CAMERA STEP: every beat contributes
     waypoints to one spline — a hold breathes, a cut waypoint SPLICES the
