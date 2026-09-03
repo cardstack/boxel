@@ -42,18 +42,6 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 
-// Opt-in HTTP/2 stall diagnostics (see installHttp2Diagnostics). Off by
-// default; set in the host-test CI job so an intermittent "request accepted
-// but never answered" h2 stall dumps its full session/stream state instead of
-// surfacing only as an opaque 60s host-test timeout. The h2 path is taken
-// whenever a TLS cert/key is provided (see createListener): local dev — both
-// standard mode and env mode behind Traefik — and CI provision an mkcert leaf
-// and run h2. Hosted staging/prod set no cert (TLS terminates at the load
-// balancer in front) and fall into the no-cert branch, serving plain
-// HTTP/1.1. BOXEL_ENVIRONMENT is the local Traefik-in-front mode, not the
-// production mechanism.
-const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
-
 // HTTP/2 PING keepalive tuning. The h2 transport between Chrome and this
 // server can wedge: the session stops carrying frames entirely — the server's
 // PINGs go unanswered (PONG is handled by the peer's network stack, not JS,
@@ -88,17 +76,11 @@ const HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS = 15000;
 // wedge is unreachable from the server.
 const HTTP2_KEEPALIVE_POST_DESTROY_CONFIRM_MS = 2000;
 
-// Per-session liveness recorded by the PING keepalive and read by the h2
-// diagnostics, so diagnostic dumps can say whether the underlying session was
-// still answering pings (transport alive, stream wedged) or had gone silent
-// (whole session wedged). The id correlates [h2-keepalive] lines with the
-// [h2-diag] session #N lines.
+// Per-session liveness recorded by the PING keepalive, so a teardown warning
+// can name the session and say how long ago it last answered a ping.
 interface SessionLiveness {
   id: number;
-  lastPingAt: number | undefined;
   lastPongAt: number | undefined;
-  lastRttMs: number | undefined;
-  consecutiveMisses: number;
 }
 
 export type RealmHttpServer =
@@ -305,13 +287,9 @@ function buildHttp2SecureServer(
       `Unable to construct HTTPS/h2 server (malformed cert?): ${(e as Error).message}`,
     );
   }
-  // Always on (the fix, not a diagnostic): tear down wedged h2 sessions so a
-  // hung browser fetch rejects (and retries) instead of hanging until a test
-  // timeout. Returns the shared liveness map the diagnostics read.
-  let liveness = installHttp2Keepalive(tlsServer, log);
-  if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
-    installHttp2Diagnostics(tlsServer, log, liveness);
-  }
+  // Tear down wedged h2 sessions so a hung browser fetch rejects (and retries)
+  // instead of hanging until a test timeout.
+  installHttp2Keepalive(tlsServer, log);
   return tlsServer;
 }
 
@@ -363,21 +341,17 @@ function endStreamOnFinalDataFrame(
 }
 
 // Wire the HTTP/2 PING keepalive onto every session the secure server
-// accepts — see the HTTP2_KEEPALIVE_* constants for the rationale. Returns
-// the liveness map so the diagnostics can report each session's ping health.
+// accepts — see the HTTP2_KEEPALIVE_* constants for the rationale.
 function installHttp2Keepalive(
   tlsServer: http2.Http2SecureServer,
   log: ReturnType<typeof logger>,
-): WeakMap<http2.Http2Session, SessionLiveness> {
+) {
   let liveness = new WeakMap<http2.Http2Session, SessionLiveness>();
   let nextSessionId = 0;
   tlsServer.on('session', (session) => {
     liveness.set(session, {
       id: nextSessionId++,
-      lastPingAt: undefined,
       lastPongAt: undefined,
-      lastRttMs: undefined,
-      consecutiveMisses: 0,
     });
     // Belt-and-suspenders: TCP keepalive surfaces a dead peer at the socket
     // layer even if the h2 PING path is somehow starved. Best-effort.
@@ -391,7 +365,6 @@ function installHttp2Keepalive(
     }
     startSessionKeepalive(session, log, {}, liveness);
   });
-  return liveness;
 }
 
 interface KeepaliveOptions {
@@ -427,18 +400,12 @@ export function startSessionKeepalive(
   let misses = 0;
   let nextTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function record(patch: Partial<SessionLiveness>) {
+  function recordPong() {
     if (!liveness) {
       return;
     }
-    let prev = liveness.get(session) ?? {
-      id: -1,
-      lastPingAt: undefined,
-      lastPongAt: undefined,
-      lastRttMs: undefined,
-      consecutiveMisses: 0,
-    };
-    liveness.set(session, { ...prev, ...patch });
+    let prev = liveness.get(session) ?? { id: -1, lastPongAt: undefined };
+    liveness.set(session, { ...prev, lastPongAt: Date.now() });
   }
 
   function sessionLabel() {
@@ -464,7 +431,6 @@ export function startSessionKeepalive(
 
   function onMiss(reason: string) {
     misses++;
-    record({ consecutiveMisses: misses });
     if (misses < maxMissedPings) {
       scheduleNext();
       return;
@@ -557,24 +523,19 @@ export function startSessionKeepalive(
       then();
     }
 
-    record({ lastPingAt: Date.now() });
     let queued: boolean;
     try {
       // ping() returns false when the frame couldn't be queued; the callback
       // fires on PONG (or with an error if the session dies first).
       queued =
-        session.ping((err: Error | null, duration: number) => {
+        session.ping((err: Error | null) => {
           finish(() => {
             if (err) {
               onMiss(`ping errored: ${err.message}`);
               return;
             }
             misses = 0;
-            record({
-              lastPongAt: Date.now(),
-              lastRttMs: Math.round(duration),
-              consecutiveMisses: 0,
-            });
+            recordPong();
             scheduleNext();
           });
         }) !== false;
@@ -631,300 +592,6 @@ function withForcedConnectionClose(
     activeSockets.clear();
   };
   return server;
-}
-
-// Instrument the HTTP/2 secure server so an intermittent stall — a stream that
-// is accepted but whose response never reaches the browser — is observable
-// instead of surfacing only as a downstream 60s host-test timeout. The flake
-// has been isolated to "something in the Chrome ↔ Node http2 path" (the h1
-// toggle made it vanish and the byte-peek dispatcher was exonerated), but the
-// mechanism is still unknown. This narrows it down by answering, for any
-// long-open stream:
-//   - did the app ever produce a response? (sawRequest / res.writableEnded /
-//     headersSent) — distinguishes an app-side hang from an h2 transport stall
-//   - is the stream flow-control-blocked? (stream localWindowSize, session
-//     effectiveLocalWindowSize / remoteWindowSize / outboundQueueSize)
-//   - is the connection over its stream budget? (local/remote
-//     maxConcurrentStreams vs. live open-stream count)
-//   - how did it finally end? (rstCode / aborted on close)
-// Read-only: it attaches observer listeners and reads getters, never consuming
-// the stream body or writing a response, so it cannot perturb the path it
-// watches. Periodic so a single stuck stream is dumped repeatedly and its
-// window/queue evolution is visible.
-//
-// The per-stream sweep above only fires once a server-side stream has been
-// open >8s. A captured hang showed it completely clean, which is itself the
-// clue: the wedge is somewhere that never becomes a long-open server stream.
-// So each sweep ALSO emits a session-level snapshot to cover what the
-// per-stream view is blind to:
-//   - did the server receive the hung request at all? (the roll-up's
-//     `openStreams` count + the per-session `inFlight=[…]` path list — a client
-//     hang with `openStreams=0` means it never arrived)
-//   - is the session at its concurrent-stream ceiling, so the browser is
-//     queueing requests it never sends? (live/peak vs maxConcurrentStreams)
-//   - is the connection flow-control-deadlocked? (session windows + outbound
-//     queue, sampled continuously rather than only per stalled stream)
-//   - is the transport even alive during the hang? (each session's PING
-//     liveness, read from the keepalive's shared map — a recent pong means
-//     the transport is alive and only a stream is stuck; a stale/never pong
-//     with rising misses means the whole session went silent and the
-//     keepalive is about to tear it down)
-function installHttp2Diagnostics(
-  tlsServer: http2.Http2SecureServer,
-  log: ReturnType<typeof logger>,
-  liveness: WeakMap<http2.Http2Session, SessionLiveness>,
-) {
-  const STALL_THRESHOLD_MS = 8000;
-  const SWEEP_INTERVAL_MS = 5000;
-
-  interface TrackedStream {
-    id: number;
-    method: string;
-    path: string;
-    startedAt: number;
-    sawRequest: boolean;
-    res?: http2.Http2ServerResponse;
-    everStalled: boolean;
-  }
-
-  interface SessionRec {
-    id: number;
-    peakStreams: number;
-  }
-
-  let nextId = 0;
-  let nextSessionId = 0;
-  let sessions = new Map<http2.ServerHttp2Session, SessionRec>();
-  let open = new Map<http2.ServerHttp2Stream, TrackedStream>();
-
-  tlsServer.on('session', (session) => {
-    let srec: SessionRec = {
-      // The keepalive's session listener is registered first, so its liveness
-      // record already exists — reuse its id so [h2-diag] and [h2-keepalive]
-      // lines correlate.
-      id: liveness.get(session)?.id ?? nextSessionId++,
-      peakStreams: 0,
-    };
-    sessions.set(session, srec);
-    log.info(
-      `[h2-diag] session #${srec.id} opened (live sessions=${sessions.size})`,
-    );
-    session.on('close', () => {
-      sessions.delete(session);
-      log.info(
-        `[h2-diag] session #${srec.id} closed (live sessions=${sessions.size})`,
-      );
-    });
-    session.on('error', (e) =>
-      log.warn(`[h2-diag] session #${srec.id} error: ${e.message}`),
-    );
-    session.on('frameError', (type, code, id) =>
-      log.warn(
-        `[h2-diag] session #${srec.id} frameError type=${type} code=${code} streamId=${id}`,
-      ),
-    );
-    session.on('goaway', (code, lastStreamID) =>
-      log.warn(
-        `[h2-diag] session #${srec.id} goaway errorCode=${code} lastStreamID=${lastStreamID}`,
-      ),
-    );
-    session.on('timeout', () =>
-      log.warn(`[h2-diag] session #${srec.id} timeout`),
-    );
-  });
-
-  // Get-or-create the per-stream record. Both the `stream` and `request`
-  // events populate it, and either may fire first: the compat `request`
-  // listener that `createSecureServer(..., app.callback())` registers runs
-  // before this function's `stream` listener and emits `request`
-  // synchronously, so for a normal request the record is created from the
-  // `request` side; a stream that stalls before the app ever dispatches is
-  // created from the `stream` side with `sawRequest` left false. (Creating it
-  // only from `stream` would always report `sawRequest=false`, defeating the
-  // app-hang-vs-transport-stall distinction.)
-  function trackStream(
-    stream: http2.ServerHttp2Stream,
-    method: string,
-    path: string,
-  ): TrackedStream {
-    let rec = open.get(stream);
-    if (!rec) {
-      rec = {
-        id: nextId++,
-        method,
-        path,
-        startedAt: Date.now(),
-        sawRequest: false,
-        everStalled: false,
-      };
-      open.set(stream, rec);
-    }
-    return rec;
-  }
-
-  tlsServer.on('stream', (stream, headers) => {
-    trackStream(
-      stream,
-      String(headers[':method'] ?? '?'),
-      String(headers[':path'] ?? '?'),
-    );
-    // The `stream` event always fires for an h2 stream, so attach the close
-    // cleanup here exactly once regardless of which event created the record.
-    stream.once('close', () => {
-      let rec = open.get(stream);
-      open.delete(stream);
-      if (rec && rec.everStalled) {
-        log.warn(
-          `[h2-diag] stream #${rec.id} ${rec.method} ${rec.path} CLOSED after ` +
-            `${Date.now() - rec.startedAt}ms rstCode=${stream.rstCode} ` +
-            `aborted=${stream.aborted} sawRequest=${rec.sawRequest} ` +
-            `resWritableEnded=${rec.res?.writableEnded ?? 'n/a'}`,
-        );
-      }
-    });
-  });
-
-  tlsServer.on('request', (req, res) => {
-    // h1 requests (allowHTTP1) have no backing h2 stream; only h2 is in scope.
-    let stream = req.stream as http2.ServerHttp2Stream | undefined;
-    if (stream == null) {
-      return;
-    }
-    let rec = trackStream(stream, req.method ?? '?', req.url ?? '?');
-    rec.sawRequest = true;
-    rec.res = res;
-  });
-
-  let timer = setInterval(() => {
-    let now = Date.now();
-    for (let [stream, rec] of open) {
-      let age = now - rec.startedAt;
-      if (age < STALL_THRESHOLD_MS) {
-        continue;
-      }
-      rec.everStalled = true;
-      // `stream.session` can be undefined once a stalled stream's session has
-      // gone away — keep the optional chaining rather than assuming it's live.
-      let session = stream.session;
-      let ss = session?.state;
-      let st = stream.state;
-      // maxConcurrentStreams is negotiated per-session, so the budget signal
-      // must compare against this session's own live stream count, not the
-      // process-wide total (which spans every browser session).
-      let liveThisSession = 0;
-      if (session) {
-        for (let other of open.keys()) {
-          if (other.session === session) {
-            liveThisSession++;
-          }
-        }
-      }
-      // PING liveness disambiguates the wedge: a recent pong (low pongAge,
-      // missedPings=0) means the transport is alive and only this stream is
-      // stuck; a stale/never pongAge with rising missedPings means the whole
-      // session has gone silent and the keepalive is about to tear it down.
-      let live = session ? liveness.get(session) : undefined;
-      let stalledPongAge =
-        live?.lastPongAt != null ? `${now - live.lastPongAt}ms` : 'never';
-      log.warn(
-        `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
-          `sawRequest=${rec.sawRequest} ` +
-          `res(headersSent=${rec.res?.headersSent ?? 'n/a'} ` +
-          `writableEnded=${rec.res?.writableEnded ?? 'n/a'}) ` +
-          `stream(closed=${stream.closed} destroyed=${stream.destroyed} ` +
-          `aborted=${stream.aborted} ` +
-          `localClose=${st?.localClose} remoteClose=${st?.remoteClose} ` +
-          `localWindow=${st?.localWindowSize}) ` +
-          `session(closed=${session?.closed} destroyed=${session?.destroyed} ` +
-          `outboundQueueSize=${ss?.outboundQueueSize} ` +
-          `effectiveLocalWindow=${ss?.effectiveLocalWindowSize} ` +
-          `effectiveRecvData=${ss?.effectiveRecvDataLength} ` +
-          `remoteWindow=${ss?.remoteWindowSize} ` +
-          `liveStreamsThisSession=${liveThisSession} liveStreamsTotal=${open.size}) ` +
-          `keepalive(pingRtt=${live?.lastRttMs ?? 'n/a'}ms pongAge=${stalledPongAge} ` +
-          `missedPings=${live?.consecutiveMisses ?? 0}) ` +
-          `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
-          `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
-      );
-    }
-
-    // Session-level snapshot — see the function comment. Covers the wedges the
-    // per-stream sweep above is structurally blind to (request queued before a
-    // server stream exists, connection-level flow-control stall, dead transport).
-    let healthyPongs = 0;
-    for (let [session, srec] of sessions) {
-      // A force-destroyed session that never emitted 'close' (the keepalive
-      // logs this transport-wedge case) is only ever removed on the 'close'
-      // event — so without this it would linger here for minutes, inflating
-      // liveSessions and re-reporting a dead connection every sweep. Once we
-      // can see it's destroyed, drop it so the counts reflect reality.
-      if (session.destroyed) {
-        sessions.delete(session);
-        log.warn(
-          `[h2-diag] session #${srec.id} destroyed without 'close' — ` +
-            `dropping from live set (live sessions=${sessions.size})`,
-        );
-        continue;
-      }
-      let inFlight: { rec: TrackedStream; age: number }[] = [];
-      for (let [stream, rec] of open) {
-        if (stream.session === session) {
-          inFlight.push({ rec, age: now - rec.startedAt });
-        }
-      }
-      if (inFlight.length > srec.peakStreams) {
-        srec.peakStreams = inFlight.length;
-      }
-      let live = liveness.get(session);
-      let pongAge =
-        live?.lastPongAt != null ? now - live.lastPongAt : undefined;
-      // The keepalive pings every HTTP2_KEEPALIVE_INTERVAL_MS, so a healthy
-      // session's last pong is at most one interval (plus rtt) old.
-      let pongHealthy =
-        pongAge != null && pongAge < HTTP2_KEEPALIVE_INTERVAL_MS * 2;
-      if (pongHealthy) {
-        healthyPongs++;
-      }
-      // Log a per-session line only when it's doing work or its last ping went
-      // unanswered; idle, healthy sessions are covered by the roll-up below.
-      let pongOverdue = live?.lastPingAt != null && !pongHealthy;
-      if (inFlight.length > 0 || pongOverdue) {
-        let ss = session.state;
-        let shown = inFlight.slice(0, 12);
-        let list = shown
-          .map((e) => `${e.rec.method} ${e.rec.path} ${e.age}ms`)
-          .join(', ');
-        let more =
-          inFlight.length > shown.length
-            ? ` +${inFlight.length - shown.length} more`
-            : '';
-        log.warn(
-          `[h2-diag] session #${srec.id} ` +
-            `streams=${inFlight.length}/peak=${srec.peakStreams}/` +
-            `max(local=${session.localSettings?.maxConcurrentStreams} ` +
-            `remote=${session.remoteSettings?.maxConcurrentStreams}) ` +
-            `win(localEff=${ss?.effectiveLocalWindowSize} ` +
-            `remote=${ss?.remoteWindowSize} ` +
-            `recvData=${ss?.effectiveRecvDataLength} ` +
-            `outQ=${ss?.outboundQueueSize}) ` +
-            `ping(rtt=${live?.lastRttMs ?? 'n/a'}ms ` +
-            `pongAge=${pongAge != null ? `${pongAge}ms` : 'never'} ` +
-            `missed=${live?.consecutiveMisses ?? 0}) ` +
-            `inFlight=[${list}${more}]`,
-        );
-      }
-    }
-    // Greppable roll-up: a client hang showing `openStreams=0 pingHealthy=N/N`
-    // means the request never reached the server (it's wedged client-side or in
-    // transit); `openStreams>0` with the hung path in a session's inFlight list
-    // means the server received it and the response is what's stuck.
-    log.info(
-      `[h2-diag] sweep liveSessions=${sessions.size} ` +
-        `openStreams=${open.size} pingHealthy=${healthyPongs}/${sessions.size}`,
-    );
-  }, SWEEP_INTERVAL_MS);
-  // Don't let the sweep timer hold the process open during shutdown.
-  timer.unref?.();
 }
 
 // Same-port 308 redirect for plain-text HTTP requests that land on the
