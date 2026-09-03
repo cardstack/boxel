@@ -755,9 +755,6 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
         version: 8.67.0(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -995,6 +992,9 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2193,9 +2193,6 @@ importers:
       '@percy/ember':
         specifier: 'catalog:'
         version: 5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2)
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.61.0
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
@@ -2406,9 +2403,6 @@ importers:
       ember-window-mock:
         specifier: ^1.0.1
         version: 1.0.2(@babel/core@7.29.7)(@glint/template@1.7.7)
-      es-module-lexer:
-        specifier: ^1.7.0
-        version: 1.7.0
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -2697,6 +2691,9 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2

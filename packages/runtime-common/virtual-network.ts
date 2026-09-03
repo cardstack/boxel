@@ -182,17 +182,17 @@ export class VirtualNetwork {
    * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
-    // A realm's content is authored, and `@cardstack/<name>/` is the npm scope
-    // as well as the realm-alias namespace. A realm registered under a Host
-    // package's name would therefore have its authored content classified as
-    // Host-provided and run uncaged — the caging boundary failing open, from
-    // configuration alone. `base` is the one name that is legitimately both.
+    // `@cardstack/<name>/` is the npm scope as well as the realm-alias
+    // namespace, and a realm mapping and a package mapping are stored under
+    // that one prefix — so a realm registered under a Host package's name does
+    // not sit beside it, it replaces whichever was registered first. `base` is
+    // the one name that is legitimately both.
     if (claimsHostPackageName(realmIdentifier)) {
       throw new Error(
         `Refusing to map realm ${realmIdentifier}: ` +
           `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
-          `realm registered under it would have its authored content trusted as ` +
-          `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
+          `realm registered under it would collide with that package's prefix. ` +
+          `Use addPackageMapping for a shimmed package namespace.`,
       );
     }
     // Within the `@cardstack` scope a realm must be one the declaration names.
@@ -229,11 +229,11 @@ export class VirtualNetwork {
    * Resolution is identical to a realm mapping — the prefix has to resolve for
    * `CodeRef.moduleHref` to work on a specifier like
    * `@cardstack/boxel-ui/components` — but the content behind it is Host-owned,
-   * so it is *supposed* to carry a Host package's name and running uncaged is
-   * correct. That is the whole difference from `addRealmMapping`, which refuses
-   * those names, and the reason the two are separate entry points rather than a
-   * flag: nothing downstream can tell a realm from a package namespace by
-   * looking at the mapping, so the caller has to say which it registered.
+   * so it is *supposed* to carry a Host package's name. That is the whole
+   * difference from `addRealmMapping`, which refuses those names, and the
+   * reason the two are separate entry points rather than a flag: the resulting
+   * mapping is the same shape either way, so the caller has to say which it
+   * registered. `prefixKind` reports back what was recorded here.
    */
   addPackageMapping(packageNamespace: string, targetURL: string): void {
     this.packageNamespacePrefixes.add(ensureTrailingSlash(packageNamespace));
