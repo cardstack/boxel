@@ -242,6 +242,9 @@ export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
+  // TEMPORARY DIAGNOSTIC — remove before merging.
+  private static diagLoaderCount = 0;
+  private diagLoaderId = ++Loader.diagLoaderCount;
 
   private moduleShims = new Map<string, Record<string, any>>();
   // Cache keys of modules whose fetch answered with a host-registered value
@@ -355,6 +358,9 @@ export class Loader {
   }
 
   static cloneLoader(loader: Loader): Loader {
+    // TEMPORARY DIAGNOSTIC — remove before merging.
+    // eslint-disable-next-line no-console
+    console.warn(`[dup-diag] cloneLoader from=${loader.diagLoaderId}`);
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
@@ -1379,13 +1385,16 @@ export class Loader {
 
   private setModule(moduleIdentifier: string, module: Module) {
     let key = this.moduleCacheKey(moduleIdentifier);
-    // TEMPORARY DIAGNOSTIC — remove before merging. Records every caching of a
-    // base `spec`/`card-api` module with the key it lands under, so a second
-    // evaluation of the same key (two class objects, one module) is visible.
+    // TEMPORARY DIAGNOSTIC — remove before merging. The key collapses every
+    // spelling, so one loader holds one copy; what this records is which
+    // loader evaluated it. Several loaders each evaluating the module is how
+    // two class objects coexist without the cache ever being cleared, and an
+    // instance validated against another loader's class is the reported
+    // `instanceof` failure.
     if (/(^|\/)(@cardstack\/base|base)\/(spec|card-api)$/.test(key)) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[dup-diag] setModule state=${module.state} key=${key} id=${moduleIdentifier}`,
+        `[dup-diag] setModule loader=${this.diagLoaderId} state=${module.state} key=${key} id=${moduleIdentifier}`,
       );
     }
     this.modules.set(key, module);
