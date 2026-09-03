@@ -105,6 +105,50 @@ export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 type Fetch = typeof fetch;
 
+interface ModuleRegistration {
+  dependencyList: string[];
+  implementation: Function;
+}
+
+// Evaluates the AMD registration wrapper `transpileAmd` produces and hands back
+// what the module registered.
+//
+// This is a function rather than inline code in `fetchModule` because `eval`
+// runs the module inside the scope it is called from: every local in view is a
+// name the module's source can read instead of getting the ReferenceError an
+// undeclared identifier is owed. Here the only names in view are the two
+// parameters and `define`, and the parameters are deliberately spelled
+// unlikely — a module writing `module` or `src` gets its ReferenceError rather
+// than one of the loader's internals.
+function evaluateModuleInCurrentRealm(
+  amdSource: string,
+  amdModuleIdentifier: string,
+): ModuleRegistration {
+  type DefineFunc = ((
+    mid: string,
+    dependencyList: string[],
+    impl: Function,
+  ) => void) & {
+    registration?: ModuleRegistration;
+  };
+
+  // this local is here for the evals to see. We're sticking the registration
+  // onto the function itself because that's a convenient way to ensure that
+  // build tools like Rollup don't optimize it away. Rollup violates the JS
+  // spec by removing a local that's visible to `eval`.
+  let define = ((_mid: string, dependencyList: string[], impl: Function) => {
+    define.registration = { dependencyList, implementation: impl };
+  }) as DefineFunc;
+  eval(amdSource);
+  // Source that never called `define` leaves nothing to register. Saying so
+  // here keeps it from surfacing later as an undefined dependency list being
+  // prefetched or advanced.
+  if (!define.registration) {
+    throw new Error(`Module ${amdModuleIdentifier} did not register itself`);
+  }
+  return define.registration;
+}
+
 // Transient upstream statuses that we briefly retry on module-source fetches
 // (e.g. nginx returning 502/503/504 while the single-writer realm server is
 // momentarily stalled under reindex load — see CS-10820). Kept private so
@@ -479,9 +523,9 @@ export class Loader {
     }
 
     // `advanceToState` re-reads the module map after each of its own awaits,
-    // but this read happens after it has resolved. An eviction landing in
+    // but this read happens after it has resolved. A cache discard landing in
     // between leaves nothing to return, so advance the replacement rather than
-    // reporting the state the eviction produced as a bug.
+    // reporting the state the discard produced as a bug.
     for (;;) {
       await this.advanceToState(resolvedModule, 'evaluated');
       this.trackKnownModuleDependencies(
@@ -756,11 +800,10 @@ export class Loader {
               // again — one extra level per clear that lands inside a single
               // walk, and one more unit of work for every level, since each
               // copies and rescans the stack. Only adding or removing a realm
-              // mapping fires a clear, which happens as a realm is registered or
-              // torn down — rare, discrete events, and reachable on a process
-              // already serving, since creating a realm can remap it — so a walk
-              // normally spans zero of them; a walk racing an unbounded stream
-              // of them descends without a bound.
+              // mapping fires a clear, and the processes that hold a loader map
+              // their realms before constructing one, so a walk normally spans
+              // zero of them; a walk racing an unbounded stream of them
+              // descends without a bound.
               if (
                 isRegistered(depModule) &&
                 stack['registered-completing-deps'].includes(
@@ -1336,37 +1379,8 @@ export class Loader {
       throw exception;
     }
 
-    type DefineFunc = ((
-      mid: string,
-      depList: string[],
-      impl: Function,
-    ) => void) & {
-      dependencyList: UnregisteredDep[];
-      implementation: Function;
-    };
-
-    // this local is here for the evals to see. We're sticking the
-    // dependencyList and implementation onto the function itself because that's
-    // a convenient way to ensure that build tools like Rollup don't optimize it
-    // away. Rollup violates the JS spec by removing a local that's visible to `eval`.
-    let define = ((_mid: string, depList: string[], impl: Function) => {
-      define.dependencyList = depList.map((depId) => {
-        if (depId === 'exports') {
-          return { type: 'exports' };
-        } else if (depId === '__import_meta__') {
-          return { type: '__import_meta__' };
-        } else {
-          return {
-            type: 'dep',
-            moduleURL: new URL(
-              this.resolveImport(depId),
-              new URL(moduleIdentifier),
-            ),
-          };
-        }
-      });
-      define.implementation = impl;
-    }) as DefineFunc;
+    let registration: ModuleRegistration;
+    let dependencyList: UnregisteredDep[];
 
     try {
       // Append `sourceURL` so stack traces from inside the eval-ed AMD
@@ -1374,7 +1388,26 @@ export class Loader {
       // Strip any CR/LF from the identifier so a maliciously-crafted
       // module URL can't terminate the comment and inject extra source
       // text into the eval-ed program.
-      eval(src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''));
+      registration = evaluateModuleInCurrentRealm(
+        src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''),
+        moduleIdentifier,
+      );
+      dependencyList = registration.dependencyList.map(
+        (depId): UnregisteredDep => {
+          if (depId === 'exports') {
+            return { type: 'exports' };
+          } else if (depId === '__import_meta__') {
+            return { type: '__import_meta__' };
+          }
+          return {
+            type: 'dep',
+            moduleURL: new URL(
+              this.resolveImport(depId),
+              new URL(moduleIdentifier),
+            ),
+          };
+        },
+      );
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -1387,8 +1420,8 @@ export class Loader {
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
-      dependencyList: define.dependencyList,
-      implementation: define.implementation,
+      dependencyList,
+      implementation: registration.implementation,
     };
 
     this.setModule(moduleIdentifier, registeredModule);

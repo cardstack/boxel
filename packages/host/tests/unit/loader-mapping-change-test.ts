@@ -336,6 +336,8 @@ module('Unit | loader mapping change during a fetch', function (hooks) {
   let virtualNetwork: VirtualNetwork;
   let loader: Loader;
   let mappingChanges = 0;
+  let loaderPrototype: Record<string, unknown>;
+  let originalAdvanceToState: unknown;
 
   hooks.beforeEach(function () {
     server = new SourceServer(fixtures);
@@ -343,6 +345,18 @@ module('Unit | loader mapping change during a fetch', function (hooks) {
     loader = new Loader(virtualNetwork.fetch, virtualNetwork.resolveImport, {
       virtualNetwork,
     });
+    loaderPrototype = Object.getPrototypeOf(loader) as Record<string, unknown>;
+    originalAdvanceToState = loaderPrototype.advanceToState;
+  });
+
+  // One test below steps into `advanceToState` by patching the prototype. A
+  // `finally` in that test cannot be relied on to undo it: the interleaving it
+  // drives is an import that may never settle, which is what the guard under
+  // test prevents, and an abandoned async function runs no `finally`. Restoring
+  // here keeps a failure of that kind from leaving every later test running a
+  // wrapper closed over this test's server.
+  hooks.afterEach(function () {
+    loaderPrototype.advanceToState = originalAdvanceToState;
   });
 
   // Registering a mapping is what discards the loader's caches; the alias is
@@ -393,10 +407,7 @@ module('Unit | loader mapping change during a fetch', function (hooks) {
     // The read this covers happens after the walk has resolved, so no fetch
     // can reach it — driving the interleaving means stepping in where the
     // import awaits. Counting microtasks instead would pin nothing stable.
-    let prototype = Object.getPrototypeOf(loader) as Record<string, unknown>;
-    let walk = prototype.advanceToState as (
-      ...args: unknown[]
-    ) => Promise<void>;
+    let walk = originalAdvanceToState as (...args: unknown[]) => Promise<void>;
     assert.strictEqual(
       typeof walk,
       'function',
@@ -404,7 +415,7 @@ module('Unit | loader mapping change during a fetch', function (hooks) {
     );
 
     let discards = 0;
-    prototype.advanceToState = async function (
+    loaderPrototype.advanceToState = async function (
       this: Loader,
       ...args: unknown[]
     ) {
@@ -416,18 +427,12 @@ module('Unit | loader mapping change during a fetch', function (hooks) {
       return result;
     };
 
-    try {
-      let module = await loader.import<{ leaf(): string }>(
-        server.url('leaf.js'),
-      );
-      assert.strictEqual(
-        module.leaf(),
-        'leaf',
-        'the import resolves against the module that replaced the discarded one',
-      );
-    } finally {
-      prototype.advanceToState = walk;
-    }
+    let module = await loader.import<{ leaf(): string }>(server.url('leaf.js'));
+    assert.strictEqual(
+      module.leaf(),
+      'leaf',
+      'the import resolves against the module that replaced the discarded one',
+    );
     assert.strictEqual(
       discards,
       1,
