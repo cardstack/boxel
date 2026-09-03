@@ -1068,6 +1068,9 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
+      '@types/flat':
+        specifier: 'catalog:'
+        version: 5.0.5
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.24
@@ -1080,6 +1083,9 @@ importers:
       '@types/rsvp':
         specifier: 'catalog:'
         version: 4.0.9
+      '@types/uuid':
+        specifier: 'catalog:'
+        version: 9.0.8
       '@universal-ember/test-support':
         specifier: 'catalog:'
         version: 0.5.1(@babel/core@7.29.7(supports-color@8.1.1))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)
@@ -1119,6 +1125,9 @@ importers:
       ember-resources:
         specifier: 'catalog:'
         version: 7.0.8(@glimmer/component@2.1.1(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      ember-source:
+        specifier: 'catalog:'
+        version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0

@@ -128,18 +128,29 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // and every package the host runtime makes importable from card code.
 //
 // That last set is the one that matters for correctness, and it is not a
-// judgement call: it is exactly the list the host shims onto the virtual
-// network in `packages/host/app/lib/externals.ts`. A card may import any
-// of them and run, so parse must be able to type-check any of them —
-// `ember-modifier`, `ember-concurrency`, `date-fns`, `lodash-es`, … Each
-// is therefore a declared boxel-cli dependency, and
-// `tests/card-runtime-packages.test.ts` fails if the two lists diverge.
+// judgement call: it is the list the host shims onto the virtual network
+// in `packages/host/app/lib/externals.ts`. A card may import any of them
+// and run, so parse must be able to type-check any of them —
+// `ember-modifier`, `ember-concurrency`, `date-fns`, `lodash-es`, … Most
+// are declared boxel-cli dependencies; the rest resolve through a path
+// alias below, through glint's Ember environment, or through a generated
+// ambient declaration. `tests/card-runtime-packages.test.ts` fails when a
+// shimmed package is covered by none of those.
+//
 // A shim the CLI can't resolve is worse than a missing feature: glint
 // reports "Cannot find module …" against correct card code, inviting the
 // author to rewrite code that was never broken.
 //
-// In the monorepo (no bundled-types) host's node_modules carries the full
-// transitive set in one place, so a single symlink suffices.
+// One gap this cannot close: a workspace patch under `patchedDependencies`
+// applies in the monorepo only. `matrix-js-sdk`'s patch widens its event
+// interfaces, so a card typing an `app.boxel.*` matrix event checks clean
+// here and errors against a published install's unpatched declarations.
+//
+// In the monorepo (no bundled-types) host's node_modules carries most of
+// the set in one place, so a single symlink covers it. Host doesn't
+// declare quite everything it shims, so a package host reaches only
+// transitively — or not at all — can resolve in a published install and
+// not in monorepo dev.
 const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
 
 // In a published install those deps can be split across dirs. Usually
@@ -643,6 +654,14 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
+          // Bundled `@cardstack/bxl` source imports its siblings by
+          // explicit `.ts` specifier. Without this each of those is a
+          // TS5097 — none reaches the caller (they're outside the temp
+          // dir, so the loop below drops them), but they still count
+          // toward `totalDiagnosticLines`, which is what tells a real
+          // "glint resolved nothing" breakage from a clean run. Safe
+          // under `noEmit`, and it keeps that signal meaningful.
+          allowImportingTsExtensions: true,
           // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
           // Workspaces routinely include `.test.gts` files that call
           // `assert.dom(...)` without importing qunit-dom directly (they
@@ -663,7 +682,12 @@ async function runGlintCheck(
             '@cardstack/bxl/*': [`${BXL_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
-            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
+            // The host registers each tool module under both its
+            // `tools/` specifier and the pre-rename `commands/` one, so
+            // card content that still carries the old spelling loads.
+            // Both aliases therefore target `tools/`, which is where the
+            // modules live.
+            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
             // Card code imports host tools as
             // `@cardstack/boxel-host/tools/<name>`.
             '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],

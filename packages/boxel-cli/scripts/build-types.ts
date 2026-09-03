@@ -659,11 +659,12 @@ declare module '@cardstack/boxel-icons/*' {
   export default value;
 }
 
-// \`ember-source\` exposes no \`./types\` entry through its package
-// \`exports\`, so these specifiers resolve for card code only because the
-// host shims them onto the virtual network as empty stubs. Mirror that
-// stub shape here so an import type-checks to the same nothing it
-// evaluates to at runtime.
+// The host shims these onto the virtual network as empty stubs, so card
+// code can import them and load. Neither resolves to a module without
+// help: ember-source's \`./types\` entry points at an ambient global
+// declaration file rather than a module, and \`./types/preview\` has no
+// export entry at all. Declaring them here keeps the import resolving,
+// as permissively as the stub it evaluates to.
 declare module 'ember-source/types' {
   const value: any;
   export default value;

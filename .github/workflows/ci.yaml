@@ -136,12 +136,6 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
-              # `boxel parse` must be able to type-check every package the
-              # host makes importable from card code, and a suite here
-              # pins the two lists together. Without this path a host-only
-              # shim addition merges green and reddens main on a commit
-              # whose own CI never ran the failing suite.
-              - 'packages/host/app/lib/externals.ts'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
