@@ -126,6 +126,32 @@ function assignByWeight(modules, timings, shard, totalShards) {
   return bins[shard - 1].modules.sort();
 }
 
+// The load of the heaviest shard when `modules` are packed by `packingTimings`
+// but actually cost what `actualTimings` says. The drift gate in
+// scripts/generate-test-module-timings.mjs asks this twice — packed with the
+// committed weights and packed with the fresh ones, both costed with the fresh
+// ones — and only rewrites the committed file when the gap is worth a commit.
+// It packs with assignByWeight itself rather than a copy of it, so the
+// prediction cannot describe an assignment CI does not perform.
+function slowestShardSeconds(
+  modules,
+  packingTimings,
+  actualTimings,
+  totalShards,
+) {
+  let slowest = 0;
+  for (let shard = 1; shard <= totalShards; shard++) {
+    const load = assignByWeight(
+      modules,
+      packingTimings,
+      shard,
+      totalShards,
+    ).reduce((sum, name) => sum + weightFor(name, actualTimings), 0);
+    slowest = Math.max(slowest, load);
+  }
+  return slowest;
+}
+
 function modulesForShard(shard, totalShards, dir = testsDir) {
   const allModules = collectTestModules(dir, '').sort();
   const timings = loadTimings(dir);
@@ -166,6 +192,7 @@ module.exports = {
   collectTestModules,
   loadTimings,
   modulesForShard,
+  slowestShardSeconds,
   testsDir,
   weightFor,
 };

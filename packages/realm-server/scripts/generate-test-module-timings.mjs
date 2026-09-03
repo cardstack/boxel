@@ -24,18 +24,39 @@
 // so a partial run degrades the weights rather than erasing them. Files that
 // no longer exist on disk are dropped.
 //
-// Usage:
+// CI runs this after every push to main (realm-server-shard-timings-update in
+// .github/workflows/ci.yaml) and commits the result. By hand:
+//
 //   gh run download <ci-run-id> --name realm-server-test-report-merged -D /tmp/rs
 //   node scripts/generate-test-module-timings.mjs /tmp/rs/realm-server.xml
+//
+// Options:
+//   --min-drift-seconds <n>  Only rewrite the file when doing so improves the
+//                            predicted slowest shard by at least n seconds
+//                            (default 0: always write). CI passes a threshold
+//                            so run-to-run jitter does not become a commit per
+//                            main push. When this was added, two consecutive
+//                            runs of one branch disagreed by 26s and 41s on
+//                            the slowest shard, while weights a day stale cost
+//                            93s to 124s.
+//   --shard-count <n>        Shard count the prediction packs into. Required
+//                            with --min-drift-seconds, and with no default:
+//                            the prediction is a slowest-shard time, so a
+//                            stale default would quietly answer for a shard
+//                            count nobody runs. ci.yaml passes both and is the
+//                            only place naming the number.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+import shardTestModules from './shard-test-modules.cjs';
 import {
   createResolver,
   discoverTestFiles,
   testsDir,
 } from './test-module-names.mjs';
+
+const { slowestShardSeconds } = shardTestModules;
 
 const timingsPath = join(testsDir, 'test-module-timings.json');
 
@@ -45,10 +66,39 @@ const timingsPath = join(testsDir, 'test-module-timings.json');
 // so refuse instead.
 const MIN_ATTRIBUTED = 0.9;
 
-const junitPath = process.argv[2];
-if (!junitPath) {
+const args = process.argv.slice(2);
+let junitPath;
+let minDriftSeconds = 0;
+let shardCount;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--min-drift-seconds') {
+    minDriftSeconds = Number(args[++i]);
+  } else if (args[i] === '--shard-count') {
+    shardCount = Number(args[++i]);
+  } else if (!junitPath) {
+    junitPath = args[i];
+  }
+}
+
+if (
+  !junitPath ||
+  Number.isNaN(minDriftSeconds) ||
+  (shardCount !== undefined &&
+    (!Number.isInteger(shardCount) || shardCount < 1))
+) {
   console.error(
-    'Usage: node scripts/generate-test-module-timings.mjs <merged-junit-xml>',
+    'Usage: node scripts/generate-test-module-timings.mjs <merged-junit-xml> [--min-drift-seconds n] [--shard-count n]',
+  );
+  process.exit(1);
+}
+
+// Only the drift gate packs shards, so a plain regeneration needs no count. A
+// gate run without one, though, would compare slowest-shard times for an
+// invented shard count and decide whether to rewrite the file on that. Fail
+// rather than guess.
+if (minDriftSeconds > 0 && shardCount === undefined) {
+  console.error(
+    '--min-drift-seconds requires --shard-count: the prediction is a slowest-shard time, which depends on how many shards there are.',
   );
   process.exit(1);
 }
@@ -131,14 +181,6 @@ for (const file of onDisk) {
   }
 }
 
-writeFileSync(timingsPath, `${JSON.stringify(merged, null, 2)}\n`);
-
-const fresh = onDisk.filter((f) => timings[f] !== undefined).length;
-const kept = Object.keys(merged).length - fresh;
-console.log(
-  `Wrote ${relative(process.cwd(), timingsPath)}: ${fresh} files measured, ` +
-    `${kept} kept from the previous file, ${(coverage * 100).toFixed(1)}% of ${total.toFixed(0)}s attributed.`,
-);
 if (ambiguous.length) {
   console.warn(
     `Skipped ${ambiguous.length} suite name(s) matching more than one file: ${ambiguous.join(', ')}`,
@@ -147,7 +189,9 @@ if (ambiguous.length) {
 
 // A file that no run has ever measured is packed at DEFAULT_WEIGHT, so a
 // genuinely slow one distorts a shard for as long as it stays invisible. Above
-// the coverage floor that is easy to miss, hence the list.
+// the coverage floor that is easy to miss, hence the list — printed whether or
+// not the file is rewritten, because the gate below asks whether a rebalance
+// is worth a commit, not whether every file has been seen.
 const unmeasured = onDisk.filter((file) => merged[file] === undefined);
 if (unmeasured.length) {
   console.warn(
@@ -155,3 +199,32 @@ if (unmeasured.length) {
       `default weight: ${unmeasured.sort().join(', ')}`,
   );
 }
+
+// Drift gate: pack once with the committed weights and once with the fresh
+// ones, cost both packings with the fresh weights (the best estimate of what
+// the files actually take), and only rewrite when the gap clears the
+// threshold. A day-old file typically costs 90s to 120s on the slowest shard;
+// two runs of the same code disagree by 30s to 40s.
+if (Object.keys(prior).length > 0 && minDriftSeconds > 0) {
+  const staleCost = slowestShardSeconds(onDisk, prior, merged, shardCount);
+  const freshCost = slowestShardSeconds(onDisk, merged, merged, shardCount);
+  const improvement = staleCost - freshCost;
+  console.log(
+    `Predicted slowest shard: ${staleCost.toFixed(0)}s with the committed weights, ` +
+      `${freshCost.toFixed(0)}s with the regenerated ones ` +
+      `(improvement ${improvement.toFixed(0)}s, threshold ${minDriftSeconds}s).`,
+  );
+  if (improvement < minDriftSeconds) {
+    console.log('Within threshold — leaving the weights file unchanged.');
+    process.exit(0);
+  }
+}
+
+writeFileSync(timingsPath, `${JSON.stringify(merged, null, 2)}\n`);
+
+const fresh = onDisk.filter((f) => timings[f] !== undefined).length;
+const kept = Object.keys(merged).length - fresh;
+console.log(
+  `Wrote ${relative(process.cwd(), timingsPath)}: ${fresh} files measured, ` +
+    `${kept} kept from the previous file, ${(coverage * 100).toFixed(1)}% of ${total.toFixed(0)}s attributed.`,
+);

@@ -18,6 +18,7 @@ const {
   assignByWeight,
   assignRoundRobin,
   loadTimings,
+  slowestShardSeconds,
   weightFor,
 } = shardTestModules;
 
@@ -169,6 +170,44 @@ module(basename(import.meta.filename), function () {
       shards.findIndex((s) => s.includes('a-test.ts')),
       shards.findIndex((s) => s.includes('b-test.ts')),
       'the two heaviest files were packed onto the same shard',
+    );
+  });
+
+  // The drift gate in scripts/generate-test-module-timings.mjs decides whether
+  // fresh measurements are worth a commit by asking what the committed packing
+  // costs at the fresh weights. Packing and costing use different weights, and
+  // the test pins which is which: cost both with the stale weights and every
+  // regeneration looks pointless.
+  test('the drift prediction costs a stale packing at the fresh weights', function (assert) {
+    const files = ['a-test.ts', 'b-test.ts', 'c-test.ts', 'd-test.ts'];
+    const stale = {
+      'a-test.ts': 10,
+      'b-test.ts': 10,
+      'c-test.ts': 10,
+      'd-test.ts': 10,
+    };
+    // a has grown tenfold since the weights were written.
+    const fresh = { ...stale, 'a-test.ts': 100 };
+
+    assert.strictEqual(
+      slowestShardSeconds(files, stale, fresh, 2),
+      110,
+      'packed as four equal files, a shares a shard with one other and now costs 110',
+    );
+    assert.strictEqual(
+      slowestShardSeconds(files, fresh, fresh, 2),
+      100,
+      'packed by the fresh weights, a sits alone',
+    );
+    assert.strictEqual(
+      slowestShardSeconds(files, stale, fresh, 1),
+      130,
+      'one shard costs the whole suite',
+    );
+    assert.strictEqual(
+      slowestShardSeconds(['new-test.ts'], {}, {}, 1),
+      DEFAULT_WEIGHT,
+      'an unmeasured file is costed as the splitter packs it',
     );
   });
 
