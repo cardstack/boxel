@@ -26,14 +26,14 @@ type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid' | 'failed';
 
 // 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant',
 // 'patchCardInstance' -> 'Patch card instance'. Tool names are a kebab or
-// camelCase slug, usually with a short hash suffix (see
+// camelCase slug, usually with a four-character hex hash suffix (see
 // buildCommandFunctionNameFromResolvedRef).
 export function labelFromToolName(name: string | undefined) {
   if (!name) {
     return undefined;
   }
   let words = name
-    .replace(/_[0-9a-f]+$/i, '')
+    .replace(/_[0-9a-f]{4}$/i, '')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .split(/[-_\s]+/)
     .filter(Boolean)

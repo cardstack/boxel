@@ -77,6 +77,11 @@ module('Unit | matrix | message-builder', function (hooks) {
       'Patch card instance',
     );
     assert.strictEqual(labelFromToolName('SyncCommand_ab12'), 'Sync command');
+    assert.strictEqual(
+      labelFromToolName('sync_feeds'),
+      'Sync feeds',
+      'only a four-character hex tail is treated as the hash',
+    );
     assert.strictEqual(labelFromToolName(undefined), undefined);
     assert.strictEqual(labelFromToolName(''), undefined);
   });
