@@ -1139,6 +1139,14 @@ jobs:
       - name: Build
         run: pnpm build
         working-directory: packages/boxel-cli
+      # The unit suite drives a real browser: local-mode `boxel test` runs the
+      # host's compiled test bundle in chromium, so `tests/local-mode.test.ts`
+      # launches one. Chromium only — `loadChromium` is the sole browser this
+      # package launches, and firefox/webkit would pull system libraries this
+      # job has no other use for.
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install chromium
+        working-directory: packages/boxel-cli
       - name: Run unit tests
         run: pnpm test:unit
         working-directory: packages/boxel-cli
