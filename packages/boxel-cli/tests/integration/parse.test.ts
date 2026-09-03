@@ -27,6 +27,11 @@ const NOTHING_CHECKED = 'produced no TS diagnostics';
 async function parseFixture(name: string): Promise<ParseRealmResult> {
   let res = await runBoxel(['parse', '--json'], {
     cwd: resolve(FIXTURES_DIR, name),
+    // `parse` gives ember-tsc 120s of its own and reports when that elapses.
+    // That deadline is not on argv, so `runBoxel` cannot derive a budget above
+    // it — set here, under the 180s test budget below, so a type-check that
+    // overruns is ember-tsc's report rather than a bare kill.
+    timeout: 150_000,
   });
   return res.json<ParseRealmResult>();
 }

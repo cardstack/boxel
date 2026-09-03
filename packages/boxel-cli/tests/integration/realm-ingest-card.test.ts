@@ -194,7 +194,9 @@ beforeAll(async () => {
       '--realm',
       realmHref,
     ],
-    { home, timeout: 600_000 },
+    // Under the hook's 600s budget, so a wedged ingest is killed and named by
+    // the harness rather than abandoned by the hook at the same instant.
+    { home, timeout: 540_000 },
   );
 }, 600_000);
 
@@ -263,7 +265,9 @@ describe('realm ingest-card (integration)', () => {
     } finally {
       fs.rmSync(rriDir, { recursive: true, force: true });
     }
-  }, 120_000);
+    // Clears the command's 120s so the kill, and the command line it names,
+    // is what a wedge reports.
+  }, 150_000);
 
   it('does not copy base-realm modules the card imports', () => {
     // The copied source still imports the base realm by absolute URL; no

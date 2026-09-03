@@ -61,9 +61,15 @@ async function createSourceRealm(): Promise<string> {
 function uniquePublishedUrl(): string {
   // Realm server enforces `domainsForPublishedRealms` (typically
   // `['localhost']` in tests) — use a *.localhost subdomain so the URL
-  // passes the publish-handler's allow-list. The hostname resolves to
-  // 127.0.0.1 via RFC 6761, and the realm-server listens on the same
-  // port for any host, so fetch() reaches it.
+  // passes the publish-handler's allow-list. The realm-server listens on the
+  // same port for any host, so fetch() reaches it once the name resolves.
+  //
+  // Resolving it is an environment requirement, not something RFC 6761
+  // guarantees: the readiness poll runs through the OS resolver, and a
+  // subdomain of `localhost` only answers where the resolver synthesizes one
+  // (systemd-resolved, macOS). On a host with plain `files dns` and only
+  // `127.0.0.1 localhost` in /etc/hosts, every poll fails to resolve and the
+  // wait below burns its full timeout.
   let port = new URL(TEST_REALM_SERVER_URL).port;
   return `http://published-${uniqueRealmName()}.localhost:${port}/`;
 }
@@ -84,7 +90,11 @@ describe('realm publish (integration)', () => {
         '60000',
         '--json',
       ],
-      { home },
+      // Both rungs above the command are set here, because the helper cannot
+      // see the test budget and so cannot check that the ladder holds: 60s for
+      // the command to report which readiness stage it was waiting on, 90s
+      // before the harness kills it, and the test budget below clears that.
+      { home, timeout: 90_000 },
     );
     expect(res.ok, res.stderr).toBe(true);
     let result = res.json<PublishResultJson>();
@@ -98,7 +108,10 @@ describe('realm publish (integration)', () => {
     // must surface that value rather than failing the call — earlier
     // boxel-home CI broke when callers required 200/201 and got a 202.
     expect(result.status).toBe('pending');
-  }, 90_000);
+    // The outermost of the three deadlines set on this test, clearing the 90s
+    // harness deadline above so the command's own report — not vitest
+    // abandoning it — is what a readiness failure carries.
+  }, 150_000);
 
   it('returns without waiting when waitForReady is false', async () => {
     let sourceUrl = await createSourceRealm();
@@ -121,7 +134,7 @@ describe('realm publish (integration)', () => {
 
     expect(result.publishedRealmURL).toBe(publishedUrl);
     expect(result.status).toBe('pending');
-  }, 60_000);
+  });
 
   it('republishes by unpublishing first when the target URL already exists', async () => {
     let sourceUrl = await createSourceRealm();
@@ -152,7 +165,7 @@ describe('realm publish (integration)', () => {
     let republished = res.json<PublishResultJson>();
 
     expect(republished.publishedRealmURL).toBe(publishedUrl);
-  }, 90_000);
+  });
 
   it('throws a useful error when the source realm does not exist', async () => {
     let bogusSource = `${TEST_REALM_SERVER_URL}/does-not-exist-${uniqueRealmName()}/`;
@@ -175,7 +188,7 @@ describe('realm publish (integration)', () => {
     );
     expect(res.exitCode).toBe(1);
     expect(res.stderr).toContain('Publish failed: HTTP');
-  }, 30_000);
+  });
 
   it('blocks publishing an unpublishable realm unless forced', async () => {
     // The noop prerenderer makes every indexed instance an error document, so
@@ -206,7 +219,7 @@ describe('realm publish (integration)', () => {
     expect(res.ok, res.stderr).toBe(true);
     let result = res.json<PublishResultJson>();
     expect(result.publishedRealmURL).toBe(publishedUrl);
-  }, 90_000);
+  });
 });
 
 describe('realm unpublish (integration)', () => {
@@ -228,7 +241,7 @@ describe('realm unpublish (integration)', () => {
 
     expect(result.unpublished).toBe(true);
     expect(result.error).toBeUndefined();
-  }, 60_000);
+  });
 
   it('treats a missing realm as success when tolerateMissing is set', async () => {
     let bogusUrl = `${TEST_REALM_SERVER_URL}/never-published-${uniqueRealmName()}/`;
@@ -243,7 +256,7 @@ describe('realm unpublish (integration)', () => {
     expect(result.unpublished).toBe(false);
     expect(result.notFound).toBe(true);
     expect(result.error).toBeUndefined();
-  }, 30_000);
+  });
 
   it('reports an error for a missing realm when tolerateMissing is unset', async () => {
     let bogusUrl = `${TEST_REALM_SERVER_URL}/never-published-${uniqueRealmName()}/`;
@@ -259,5 +272,5 @@ describe('realm unpublish (integration)', () => {
     expect(result.unpublished).toBe(false);
     expect(result.notFound).toBe(true);
     expect(result.error).toMatch(/not currently published/);
-  }, 30_000);
+  });
 });
