@@ -7641,10 +7641,19 @@ export class Realm {
     publishable: boolean | null;
   }> {
     try {
-      let results = (await query(this.#dbAdapter, [
-        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
-        param(this.url),
-      ])) as {
+      // Both columns are declared `boolean | null` and consumers compare them
+      // as booleans, so coerce them: adapters are free to hand back a
+      // driver-native spelling for a boolean column — postgres yields real
+      // booleans, SQLite yields 1/0 — and an uncoerced 1 fails every
+      // `=== true` check downstream while still looking truthy.
+      let results = (await query(
+        this.#dbAdapter,
+        [
+          `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+          param(this.url),
+        ],
+        { show_as_catalog: 'BOOLEAN', publishable: 'BOOLEAN' },
+      )) as {
         show_as_catalog: boolean | null;
         publishable: boolean | null;
       }[];

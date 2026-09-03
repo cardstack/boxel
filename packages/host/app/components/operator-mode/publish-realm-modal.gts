@@ -128,6 +128,7 @@ export default class PublishRealmModal extends Component<Signature> {
     | null = null;
 
   @tracked private initialSelectionsSet = false;
+  @tracked private realmMetaLoaded = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -156,31 +157,31 @@ export default class PublishRealmModal extends Component<Signature> {
       !this.hasSelectedPublishedRealmURLs ||
       this.isUnpublishingAnyRealms ||
       this.isPublishing ||
-      this.isRealmUnpublishable
+      this.isRealmFlaggedUnpublishable
     );
   }
 
-  // The publish endpoint accepts a workspace only while its realm_metadata
-  // row says publishable, and 422s otherwise — so the answer is known before
-  // the request and belongs next to the other pre-publish checks, rather than
-  // arriving as a per-domain failure after the attempt. Publishing clears the
-  // flag on the published copy, so a workspace that is itself a published site
-  // is the ordinary way to reach this state.
+  // Mirrors the publish endpoint, which accepts a realm only when its
+  // realm_metadata row says publishable is exactly true and 422s otherwise —
+  // a missing row included. Anything short of true is a refusal here too, so
+  // the dialog and the server agree on which workspaces can be published.
   //
-  // Nullish is "not known yet", not "refused": the realm service answers a
-  // placeholder with `publishable: null` while a realm's metadata is in
-  // flight, and treating that as a refusal would block publishing every time
-  // the dialog opened ahead of its own realm info. Tested for falsiness
-  // rather than `=== false` because the flag arrives as whichever shape its
-  // realm's adapter yields for a boolean column: real booleans from
-  // postgres-backed realms, 0/1 from SQLite-backed ones.
-  get isRealmUnpublishable() {
-    let publishable = this.realm.info(this.currentRealmURL)?.publishable as
-      | boolean
-      | number
-      | null
-      | undefined;
-    return publishable != null && !publishable;
+  // Gated on the metadata actually having been read rather than on the value
+  // being non-null, because `realm.info` answers a placeholder carrying
+  // `publishable: null` while a realm's metadata is still in flight, and a
+  // dialog that opened ahead of its own realm info would otherwise refuse a
+  // perfectly publishable workspace. `realmMetaLoaded` distinguishes "not
+  // known yet" from "known, and not publishable"; the flag's own value is
+  // then compared without regard to how a given adapter spells a boolean.
+  //
+  // Named for the realm_metadata flag specifically: `publishable` also names
+  // the unrelated per-resource violation report this dialog fetches, which
+  // only warns and never blocks.
+  get isRealmFlaggedUnpublishable() {
+    if (!this.realmMetaLoaded) {
+      return false;
+    }
+    return this.realm.info(this.currentRealmURL).publishable !== true;
   }
 
   get shouldShowPrivateDependencyWarning() {
@@ -966,6 +967,9 @@ export default class PublishRealmModal extends Component<Signature> {
   ensureInitialSelectionsTask = restartableTask(
     async (claim: ClaimedDomain | null = null) => {
       await this.realm.ensureRealmMeta(this.currentRealmURL);
+      // The realm's own metadata — `publishable` included — is readable from
+      // here on, so the publishability gate can stop deferring.
+      this.realmMetaLoaded = true;
       this.applyInitialSelections(claim);
     },
   );
@@ -1008,7 +1012,7 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
-        {{#if this.isRealmUnpublishable}}
+        {{#if this.isRealmFlaggedUnpublishable}}
           <div
             class='publish-warning warning'
             data-test-unpublishable-realm-warning
@@ -1022,9 +1026,7 @@ export default class PublishRealmModal extends Component<Signature> {
             <div class='publish-warning-body'>
               <div>
                 This workspace is not publishable, so it cannot be published to
-                any domain. Publishing a workspace marks the published copy
-                itself unpublishable, so a workspace that is already a published
-                site cannot be published again.
+                any domain.
               </div>
             </div>
           </div>
