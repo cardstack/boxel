@@ -1,5 +1,4 @@
 import type { PromptParts } from '@cardstack/runtime-common/ai';
-import { DEFAULT_FALLBACK_MODEL_ID } from '@cardstack/runtime-common/matrix-constants';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { ChatCompletionStreamParams } from 'openai/lib/ChatCompletionStream';
 import { readRealmFileTool } from './read-realm-file.ts';
@@ -18,7 +17,7 @@ export function buildChatCompletionRequest(
   if (!prompt.model) {
     throw new Error('Model is required');
   }
-  let model = prompt.model ?? DEFAULT_FALLBACK_MODEL_ID;
+  let model = prompt.model;
 
   let request: ChatCompletionStreamParams = {
     model,
