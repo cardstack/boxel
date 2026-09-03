@@ -324,12 +324,23 @@ export type RealmIndexCounts = {
 };
 
 // Marker header the host SPA attaches to its outbound search calls and card
-// writes when it's running inside a prerender tab. The prerender server uses
-// puppeteer's `evaluateOnNewDocument` to inject a window global
-// (`__boxelRenderContext = true`) into every Chrome tab before the host
-// loads; the host's fetch wrappers read that flag and add this header on
-// those requests only — narrowly scoped so non-realm-server origins (icons,
-// vite, etc.) don't see it on a CORS preflight.
+// writes when it's running inside a prerender tab. Two different host-side
+// flags produce it, and the split is deliberate:
+//
+//   - Search calls read `__boxelRenderContext`, which the prerender server
+//     injects into every Chrome tab via puppeteer's `evaluateOnNewDocument`
+//     before the host loads, and which the prerender-shaped routes also
+//     raise when they activate.
+//   - Card writes read `__boxelHeadlessCommand`, raised only by the
+//     command-runner route. Host tests raise `__boxelRenderContext` around
+//     in-browser index renders that run alongside an interactive app, and a
+//     save from that app must keep answering from the index — so a write
+//     cannot use the broader flag. A command is the only writer in a
+//     prerender tab anyway; the render routes block persistence outright.
+//
+// Either way the header goes on those requests only, narrowly scoped so
+// non-realm-server origins (icons, vite, etc.) don't see it on a CORS
+// preflight.
 //
 // The realm reads it as "the caller is the host SPA mid-render, and it is
 // holding a prerender render slot until this request returns". Two inbound
