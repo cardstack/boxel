@@ -37,9 +37,9 @@
       "specUsageRef": null,
       "source": "matrix-realm",
       "specKind": "component",
-      "specExampleCount": 1,
-      "specReadmeChars": 427,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PropertyListing/14-birchwood-lane\"]",
+      "specExampleCount": 2,
+      "specReadmeChars": 972,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PropertyListing/14-birchwood-lane\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PropertyListing/742-evergreen-terrace\"]",
       "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
     "meta": {
