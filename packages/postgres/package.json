@@ -20,6 +20,7 @@
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
     "concurrently": "catalog:",
     "sql-parser-cst": "catalog:",
     "typescript": "catalog:"

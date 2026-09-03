@@ -15,6 +15,10 @@ on:
     paths:
       - "packages/observability/**"
       - ".github/workflows/observability-diff.yml"
+      # The two actions that put grafanactl on PATH: a change to either is
+      # otherwise invisible to CI, since no other workflow runs them on a PR.
+      - ".github/actions/install-grafanactl/**"
+      - ".github/actions/fetch-cached-release-asset/**"
 
 permissions:
   contents: read
@@ -68,7 +72,6 @@ jobs:
       # diffing rather than substituting the real value, so PR comment
       # output can never carry the credential. See diff.sh for details.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
-      GRAFANACTL_VERSION: "0.1.10"
       DIFF_MARKER: "<!-- observability-diff -->"
       MAX_COMMENT_BYTES: 60000
 
@@ -97,8 +100,6 @@ jobs:
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
-        with:
-          version: ${{ env.GRAFANACTL_VERSION }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0

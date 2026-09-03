@@ -78,6 +78,50 @@ module('Unit | loader consumed modules truncation', function () {
       'both walks describe one loader the same way',
     );
   });
+
+  test('a dependency walk that reached a module this loader does not hold is not memoized', async function (assert) {
+    // `getKnownConsumedModules` memoizes what it walked, and nothing clears
+    // that memo when a module later registers — the only thing that discards it
+    // is a realm-mapping change. So a walk that passed through a name this
+    // loader holds no entry for saw part of the graph, and recording it would
+    // answer with that partial set for the life of the loader. The index takes
+    // a module's dependencies from this walk, so a set frozen short is an edit
+    // to the missing subtree never invalidating what imported it.
+    //
+    // Reaching the gap needs no interleaving: a fetch that fails deletes that
+    // one module's entry and leaves its siblings, which `fetchModule` does on
+    // every 404 — routine, since populating the definition cache probes
+    // extension candidates with real fetches.
+    let sources: Record<string, string> = {
+      '/a': `import './b'; import './nope'; export const a = 'a';`,
+      '/b': `export const b = 'b';`,
+    };
+    let loader = new Loader(sourceFetch(sources));
+    let origin = 'http://trunc3.example';
+
+    await assert.rejects(
+      loader.import(`${origin}/a`),
+      /unable to fetch .*\/nope/,
+      'the import fails on the dependency nothing serves',
+    );
+    assert.deepEqual(
+      loader.getKnownConsumedModules(`${origin}/a`).sort(),
+      [`${origin}/b`, `${origin}/nope`],
+      'the walk names the edge it could not descend',
+    );
+
+    // `/nope` exists now, and brings a dependency of its own. A memoized walk
+    // would still answer with the set collected while it was absent.
+    sources['/nope'] = `import './deep'; export const nope = 'nope';`;
+    sources['/deep'] = `export const deep = 'deep';`;
+    await loader.import(`${origin}/a`);
+
+    assert.deepEqual(
+      loader.getKnownConsumedModules(`${origin}/a`).sort(),
+      [`${origin}/b`, `${origin}/deep`, `${origin}/nope`],
+      'the second walk descends the subtree the first one could not reach',
+    );
+  });
 });
 
 // Serves `sources` by pathname, 404ing anything absent, so a graph is written
