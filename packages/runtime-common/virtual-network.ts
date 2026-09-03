@@ -263,6 +263,11 @@ export class VirtualNetwork {
   removeRealmMapping(realmIdentifier: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
+    // Hygiene rather than correctness: `prefixKind` checks `realmMappings`
+    // first, so an annotation left behind here is already unobservable, and
+    // both registration doors set the kind for whatever they register. What
+    // this prevents is the set outliving every mapping that justified it and
+    // growing for the life of the process.
     this.packageNamespacePrefixes.delete(normalizedId);
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
@@ -286,11 +291,23 @@ export class VirtualNetwork {
   }
 
   /**
-   * Whether a registered prefix names a shimmed package namespace rather than a
-   * realm. For callers that hold a prefix and need to know which it is.
+   * Which kind of thing a prefix was registered as, or undefined when this
+   * network has not registered it.
+   *
+   * Three-valued rather than a boolean, because "not a package" and "not
+   * registered at all" are the two answers a caller most needs to keep apart —
+   * collapsing them is the same conflation `knownRealms()` exists to undo, and
+   * a boolean would put it back one call further along. Nothing else recovers
+   * the third case: `isRegisteredPrefix` tests a *reference* with `startsWith`,
+   * so it answers true for a descendant of a registered prefix and cannot
+   * distinguish an exact key from a path beneath one.
    */
-  isPackageNamespace(prefix: string): boolean {
-    return this.packageNamespacePrefixes.has(ensureTrailingSlash(prefix));
+  prefixKind(prefix: string): 'realm' | 'package' | undefined {
+    let normalized = ensureTrailingSlash(prefix);
+    if (!this.realmMappings.has(normalized)) {
+      return undefined;
+    }
+    return this.packageNamespacePrefixes.has(normalized) ? 'package' : 'realm';
   }
 
   /**

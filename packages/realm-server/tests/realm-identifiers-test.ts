@@ -379,8 +379,9 @@ module(basename(import.meta.filename), function () {
         [ri('@test/realm/')],
         'the package namespace is not a realm',
       );
-      assert.true(
-        vn.isPackageNamespace('@test/pkg/'),
+      assert.strictEqual(
+        vn.prefixKind('@test/pkg/'),
+        'package',
         'and reports as a package namespace',
       );
       assert.strictEqual(
@@ -397,14 +398,23 @@ module(basename(import.meta.filename), function () {
       vn.addPackageMapping('@test/reclaimed/', 'http://localhost:9200/pkg/');
       vn.addRealmMapping('@test/reclaimed/', 'http://localhost:9200/realm/');
 
-      assert.false(
-        vn.isPackageNamespace('@test/reclaimed/'),
+      assert.strictEqual(
+        vn.prefixKind('@test/reclaimed/'),
+        'realm',
         'it is a realm now',
       );
       assert.true(
         vn.knownRealms().includes(ri('@test/reclaimed/')),
         'and knownRealms reports it',
       );
+    });
+
+    test('prefixKind separates unregistered from realm', function (assert) {
+      // The distinction a boolean could not carry: a prefix this network has
+      // never seen is not a realm, and a caller deciding how to treat one must
+      // not read the absence as "realm".
+      assert.strictEqual(vn.prefixKind('@test/realm/'), 'realm');
+      assert.strictEqual(vn.prefixKind('@never/registered/'), undefined);
     });
   });
 
