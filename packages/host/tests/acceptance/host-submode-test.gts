@@ -374,6 +374,10 @@ module('Acceptance | host submode', function (hooks) {
         trail: [`${testRealmURL}Person/1.json`],
       });
       await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      // The warning waits on the dialog's own `ensureRealmMeta`, so it can
+      // render a beat after the dialog does.
+      await waitFor('[data-test-unpublishable-realm-warning]');
 
       assert
         .dom('[data-test-unpublishable-realm-warning]')
@@ -429,6 +433,8 @@ module('Acceptance | host submode', function (hooks) {
         trail: [`${testRealmURL}Person/1.json`],
       });
       await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-unpublishable-realm-warning]');
 
       assert
         .dom('[data-test-unpublishable-realm-warning]')
@@ -506,6 +512,8 @@ module('Acceptance | host submode', function (hooks) {
         trail: [`${testRealmURL}Person/1.json`],
       });
       await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-default-domain-checkbox]');
 
       assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
 
