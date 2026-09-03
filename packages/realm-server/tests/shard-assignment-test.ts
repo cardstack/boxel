@@ -11,6 +11,7 @@ import {
   discoverTestFiles,
   testsDir,
 } from '../scripts/test-module-names.mjs';
+import { ALL_TEST_FILES, buildModuleFilter } from './helpers/suite-registry.ts';
 
 const {
   DEFAULT_WEIGHT,
@@ -100,6 +101,54 @@ module(basename(import.meta.filename), function () {
           `${file}: the module title ${JSON.stringify(title)} resolves to ${JSON.stringify(
             resolveFile(title),
           )}`,
+        );
+      }
+    }
+  });
+
+  // Sharding decides which files a shard *runs*; this list decides which files
+  // exist as far as the runner is concerned. A file missing here is assigned a
+  // shard, packed with a weight, and never parsed — it reports nothing, and
+  // nothing reports that it reported nothing. Three files were in that state
+  // when this test was written, one of them the file you are reading.
+  test('every test file is registered in ALL_TEST_FILES', function (assert) {
+    const onDisk = new Set<string>(discoverTestFiles());
+    const registered = new Set(
+      ALL_TEST_FILES.map((entry) => `${entry.replace(/^\.\//, '')}.ts`),
+    );
+    assert.strictEqual(
+      ALL_TEST_FILES.length,
+      registered.size,
+      'ALL_TEST_FILES lists the same file twice',
+    );
+    assert.deepEqual(
+      [...onDisk].filter((file) => !registered.has(file)),
+      [],
+      'test files on disk that ALL_TEST_FILES does not load',
+    );
+    assert.deepEqual(
+      [...registered].filter((file) => !onDisk.has(file)),
+      [],
+      'ALL_TEST_FILES entries with no file on disk',
+    );
+  });
+
+  // The other half of the same failure. A shard gets its file list through
+  // TEST_MODULES and turns it into a QUnit name filter, so a module whose title
+  // the filter cannot express runs nowhere — silently, since a filter that
+  // matches nothing is indistinguishable from a file with no tests. That is
+  // what the ` | qualifier` form did before the filter learned to admit it: two
+  // files and five modules stopped running, and CI stayed green.
+  test('the module filter matches every declared top-level module', function (assert) {
+    for (const file of discoverTestFiles()) {
+      const filter = buildModuleFilter([file]);
+      const pattern = new RegExp(filter.slice(1, -1));
+      const source = readFileSync(join(testsDir, file), 'utf8');
+      for (const title of declaredModuleTitles(source, file)) {
+        // QUnit tests its filter against `<module name>: <test name>`.
+        assert.true(
+          pattern.test(`${title}: a test`),
+          `${file}: TEST_MODULES would not select the module ${JSON.stringify(title)}`,
         );
       }
     }
