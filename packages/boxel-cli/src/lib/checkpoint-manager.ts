@@ -65,6 +65,29 @@ export class CheckpointManager {
     return pathExists(path.join(this.gitDir, '.git'));
   }
 
+  /**
+   * True once the history repo holds a commit to read.
+   *
+   * `.git` existing is not enough: `init()` runs `git init` and then three
+   * more git commands before its bootstrap commit lands, so a reader that
+   * arrives in that window finds an initialized repo with an unborn HEAD —
+   * a state `git log` refuses outright ("your current branch 'master' does
+   * not have any commits yet") rather than reporting an empty history. A
+   * workspace whose history is being initialized by a concurrent `realm
+   * watch` flush is the ordinary way to land in it.
+   */
+  private async hasCommits(): Promise<boolean> {
+    // `rev-parse --verify --quiet` exits 1 with no output when the revision
+    // does not resolve, which is the unborn-HEAD answer. Only that code is
+    // tolerated: a repository git cannot read at all exits 128, and must
+    // surface rather than read as "no history".
+    const head = await this.spawnGit(
+      ['rev-parse', '--verify', '--quiet', 'HEAD'],
+      (code) => code === 1,
+    );
+    return head.trim().length > 0;
+  }
+
   private async syncFilesToHistory(): Promise<void> {
     const files = await this.getWorkspaceFiles();
     const fileSet = new Set(files);
@@ -341,7 +364,7 @@ export class CheckpointManager {
   }
 
   async getCheckpoints(limit = 50): Promise<Checkpoint[]> {
-    if (!(await this.isInitialized())) {
+    if (!(await this.isInitialized()) || !(await this.hasCommits())) {
       return [];
     }
 
@@ -629,6 +652,24 @@ export class CheckpointManager {
   ];
 
   private git(...args: string[]): Promise<string> {
+    // `status` answers through its exit code rather than through failure — a
+    // dirty tree is non-zero — so nothing it returns is an error.
+    return this.spawnGit(
+      args,
+      args.includes('status') ? () => true : () => false,
+    );
+  }
+
+  /**
+   * @param isAnswer decides which non-zero exit codes are part of the
+   * command's answer rather than a failure. Everything else still rejects, so
+   * a fatal (git uses 128: no repository, dubious ownership, a corrupt object
+   * store) is never mistaken for a negative result.
+   */
+  private spawnGit(
+    args: string[],
+    isAnswer: (code: number | null) => boolean,
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
       const child = spawn(
         'git',
@@ -651,7 +692,7 @@ export class CheckpointManager {
       child.on('error', (err) => reject(err));
 
       child.on('close', (code) => {
-        if (code !== 0 && !args.includes('status')) {
+        if (code !== 0 && !isAnswer(code)) {
           reject(
             new Error(
               `git ${args.join(' ')} failed: ${stderr.trim()}` +

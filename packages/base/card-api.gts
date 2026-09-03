@@ -7,6 +7,7 @@ import {
   BrokenLinkTemplate,
   CopyButton,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
 } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -104,6 +105,8 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  fileNameFromUrl,
+  referenceNamesFile,
   isDeclaredScreenshotFormat,
   isValidScreenshotName,
   DECLARED_SCREENSHOT_FORMATS,
@@ -114,12 +117,16 @@ import {
   SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredScreenshotRoster,
+  type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  queryFieldHasUnreachableRealms,
+  resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -359,6 +366,12 @@ interface Options {
 
 interface RelationshipOptions extends Options {
   query?: QueryWithInterpolations;
+  // Whether a query-backed relationship resolves as soon as its owner
+  // deserializes, rather than waiting for something to read the field.
+  // Defaults to true. Set it false for a field whose query is expensive or
+  // rarely read, and the search runs on first access instead. Has no meaning
+  // without `query`.
+  eager?: boolean;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -404,6 +417,7 @@ export interface FieldConstructor<T> {
   searchable?: Searchable;
   name: string;
   queryDefinition?: QueryWithInterpolations;
+  eager?: boolean;
 }
 
 type CardChangeSubscriber = (
@@ -411,6 +425,27 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
+
+// Whether a card or field class declares any query-backed relationship. Keyed
+// by class because the answer comes from the field declarations, which an
+// instance-level link override never changes — it narrows a link's target type,
+// not whether the link is query-backed.
+const classHasQueryFields = initSharedState(
+  'classHasQueryFields',
+  () => new WeakMap<typeof BaseDef, boolean>(),
+);
+
+function hasQueryFields(instance: BaseDef): boolean {
+  let klass = instance.constructor as typeof BaseDef;
+  let cached = classHasQueryFields.get(klass);
+  if (cached === undefined) {
+    cached = Object.values(getFields(klass, { includeComputeds: true })).some(
+      (field) => Boolean(field?.queryDefinition),
+    );
+    classHasQueryFields.set(klass, cached);
+  }
+  return cached;
+}
 
 const stores = initSharedState(
   'stores',
@@ -488,6 +523,15 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
+  // How many rows the query matches, as against how many `instances` holds.
+  // `undefined` is unknown, never zero. Prefer this over reading
+  // `meta.page.total`: the raw meta carries a placeholder in states where no
+  // count is knowable, and this getter is what tells those apart.
+  readonly totalMatchCount: number | undefined;
+  // `instances` is a bounded prefix of what the query matches. Computed from
+  // the server's own result set rather than the reconciled one, so a locally
+  // edited or created card can't be mistaken for a short page.
+  readonly isPartial: boolean;
 }
 
 export type GetSearchResourceFuncOpts = {
@@ -509,6 +553,15 @@ export type GetSearchResourceFuncOpts = {
     // skipped query-backed expansion — the resource loads each ID by
     // URL instead of running a live re-query.
     cardURLs?: string[];
+    // The result meta the seed was resolved under, chiefly `page.total` —
+    // the query's match count, which exceeds `cards.length` when the page
+    // ceiling clamped the expansion. Absent it, the resource takes the
+    // record count for the total and a truncated seed reads as complete.
+    meta?: QueryResultsMeta;
+    // The seed's match count is not knowable and must not be inferred from its
+    // rows — the producer resolved the field but deliberately reported no
+    // total, as a query-backed field does when one of its realms failed.
+    totalUnknown?: boolean;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -593,6 +646,10 @@ export interface CardStore {
   recentCardDocLoads?(): Array<{ url: string; ms: number }>;
   recentFileMetaLoads?(): Array<{ url: string; ms: number }>;
   recentQueryLoads?(): Array<{ meta: QueryLoadMeta; ms: number }>;
+  // Whether a query-backed relationship resolves as soon as its owner
+  // deserializes into this store. Absent means it does not, so a store that has
+  // no opinion never starts a search on its own behalf.
+  resolvesQueryFieldsEagerly?: boolean;
   getSearchResource: GetSearchResourceFunc;
 }
 
@@ -622,6 +679,9 @@ export interface Field<
   configuration?: ConfigurationInput<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
+  // Whether a query-backed relationship resolves when its owner deserializes.
+  // Absent is the same as true; only an explicit false defers to first read.
+  eager?: boolean;
   captureQueryFieldSeedData?(
     instance: BaseDef,
     value: any,
@@ -1269,6 +1329,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly eager?: boolean;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1277,6 +1338,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     isPolymorphic,
     searchable,
     queryDefinition,
+    eager,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1285,6 +1347,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
+    this.eager = eager;
   }
 
   get card(): CardT {
@@ -1687,7 +1750,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
-                  @displayName={{cardTypeName broken.reference}}
+                  @itemType={{brokenLinkItemType linksToField}}
+                  @displayName={{brokenLinkDisplayName
+                    linksToField
+                    broken.reference
+                  }}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
@@ -1727,6 +1794,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly eager?: boolean;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1735,6 +1803,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     isPolymorphic,
     searchable,
     queryDefinition,
+    eager,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1743,6 +1812,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
+    this.eager = eager;
   }
 
   get card(): FieldT {
@@ -1779,7 +1849,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         instance,
         this,
         dependencyTrackingContext,
-      )!;
+      );
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
@@ -1788,7 +1858,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
-      let records = searchResource.instances ?? ([] as any[]);
+      let records = searchResource?.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
         this.card,
@@ -2342,6 +2412,29 @@ export function brokenLinkFormat(
   }
 }
 
+// What the placeholder says is missing. A `linksTo(FileDef)` slot holds a file,
+// so its failure reads as a missing file rather than a missing card.
+export function brokenLinkItemType(
+  field: Field<LinkableDefConstructor>,
+): BrokenLinkItemType {
+  return isFileDef(field.card) ? 'file' : 'card';
+}
+
+// The label the placeholder shows next to the link-off icon. The two reference
+// shapes name themselves in different segments: a card instance url is
+// `<Type>/<id>`, whose readable name is the type; a file url is a path, whose
+// readable name is the file name. Reading a file url as a card reference names
+// the directory that happens to sit second-to-last — `images` for a missing
+// `images/photo.jpg` — which points a reader at nothing.
+export function brokenLinkDisplayName(
+  field: Field<LinkableDefConstructor>,
+  reference: string,
+): string {
+  return isFileDef(field.card)
+    ? fileNameFromUrl(reference)
+    : cardTypeName(reference);
+}
+
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
@@ -2449,7 +2542,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query } = options ?? {};
+      let { computeVia, searchable, query, eager } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2464,6 +2557,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         name: fieldName,
         searchable,
         queryDefinition: query,
+        eager,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2478,7 +2572,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query } = options ?? {};
+      let { computeVia, searchable, query, eager } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2493,6 +2587,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         name: fieldName,
         searchable,
         queryDefinition: query,
+        eager,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2651,7 +2746,7 @@ export class BaseDef {
   static getComponent(
     card: BaseDef,
     field?: Field,
-    opts?: { componentCodeRef?: CodeRef },
+    opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
   ) {
     return getComponent(card, field, opts);
   }
@@ -2766,6 +2861,15 @@ export type BaseDefComponent = ComponentLike<{
 // where the component renders, not what it may use: it gets the full author
 // surface (`@model`/`@fields`/`@context`) and may render linked data.
 //
+// A capture-only component whose content readies asynchronously (a video
+// frame seeked onto a canvas, a PDF page paint, a WebGL first frame — work
+// invisible to image-paint waiting) signals readiness through the DOM: while
+// unready it renders a `data-screenshot-pending` attribute on any element,
+// and removes it when painted. The capture engine waits (bounded) for no
+// such element to remain; a component that never resolves its pending
+// element fails that slot's capture rather than persisting an unready frame.
+// Components with no async work omit the attribute and capture immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
@@ -2778,7 +2882,8 @@ export type ScreenshotSpec = {
   // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
   // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
-  // 'transparent' or any CSS color. Default 'white'.
+  // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
+  // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
   // Feed this capture to `cardThumbnailURL`. At most one entry across a
   // card's merged declarations may set this.
@@ -2940,6 +3045,14 @@ function assertValidScreenshotSpec(
         .join(', ')}`,
     );
   }
+  // Cross-field: jpeg has no alpha channel, so a transparent background is a
+  // contradiction it cannot represent — the capture would silently composite
+  // onto black. webp and png both carry alpha and stay legal.
+  if (entry.background === 'transparent' && entry.type === 'jpeg') {
+    throw new Error(
+      `${prefix}: background 'transparent' cannot be captured as jpeg (no alpha channel) — use type 'png' or 'webp', or an opaque background`,
+    );
+  }
 }
 
 // The one read path for `static screenshots`: merges declarations by name up
@@ -3013,6 +3126,45 @@ export function getScreenshots(
     );
   }
   return merged;
+}
+
+// The merged declarations in the serializable form that crosses the render
+// page boundary to the capture engine: identical to the specs except the
+// capture-only component, which cannot serialize — it is flagged
+// `render: true` and re-resolved in-page by slot name when its capture
+// renders.
+export function serializeDeclaredScreenshots(
+  cardOrFileClass: typeof CardDef | typeof FileDef,
+): DeclaredScreenshotRoster {
+  let roster: DeclaredScreenshotRoster = {};
+  for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
+    let payload: DeclaredScreenshotSpecPayload = {
+      width: spec.width,
+      height: spec.height,
+    };
+    if (spec.deviceScaleFactor !== undefined) {
+      payload.deviceScaleFactor = spec.deviceScaleFactor;
+    }
+    if (spec.background !== undefined) {
+      payload.background = spec.background;
+    }
+    if (spec.useAsThumbnail !== undefined) {
+      payload.useAsThumbnail = spec.useAsThumbnail;
+    }
+    if (spec.keyBy !== undefined) {
+      payload.keyBy = spec.keyBy;
+    }
+    if (spec.type !== undefined) {
+      payload.type = spec.type;
+    }
+    if (spec.render) {
+      payload.render = true;
+    } else {
+      payload.format = spec.format;
+    }
+    roster[name] = payload;
+  }
+  return roster;
 }
 
 export class FieldDef extends BaseDef {
@@ -3947,19 +4099,28 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is job-scoped: the prerender tab is
-      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
-      // render of each indexing job, so every instance in it was deserialized
-      // during THIS job, from a realm source that is immutable for the job's
-      // life. So an instance already in the store is current — reuse it directly
+      // Inside an indexing render the store is scoped to the realm view being
+      // rendered: it drops every instance it holds when the render scope moves
+      // (the host store's `observeIndexingJob`, called before a render
+      // hydrates its card and from the load path — not a member of the
+      // `CardStore` interface in this file), so every instance in it was
+      // deserialized
+      // against THIS view of the realm's files. Note it is that drop which
+      // carries the guarantee, not the `clearCache` reset — that one is
+      // scheduled only when a pass invalidates an executable, and reaches only
+      // the single tab its visit lands on, so a pass that changed only
+      // instances schedules none at all.
+      // So an instance already in the store is current — reuse it directly
       // instead of re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
       // redundancy is what makes a densely cross-linked render quadratic (the
       // same target reached through many parents is rebuilt once per parent).
       // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
-      // render (the live app) a link may be stale after invalidation and must
-      // reload, and a render with no job id has no job-scoped-store guarantee.
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
+      // gate the store scopes itself on: outside a render (the live app) a link
+      // may be stale after invalidation and must reload, and a render carrying
+      // no job id is one whose store never scoped itself, so it offers no
+      // guarantee to reuse on.
       let inIndexingRender =
         typeof globalThis !== 'undefined' &&
         Boolean((globalThis as any).__boxelRenderContext) &&
@@ -4063,8 +4224,17 @@ function lazilyLoadLink(
         (isCardError(error) && error.status === 404) ||
         (typeof error?.message === 'string' &&
           /not found/i.test(error.message));
+      // The realm file the broken reference stands for: a card instance is
+      // served out of `<id>.json`, while a reference that names a file is
+      // already the file. The field's own type settles it when the field is
+      // declared to hold a file; otherwise the reference's shape does, judged
+      // by a registered extension rather than by a dot, so a card id that
+      // carries one keeps the `.json` its row is keyed on. This string is both
+      // what the reader is told is missing and the dep invalidation watches, so
+      // a `.json` appended to a file path names a row that can never appear and
+      // the mended link never reaches this consumer.
       let referenceForMissingFile =
-        isFileLink || reference.endsWith('.json')
+        isFileLink || referenceNamesFile(reference)
           ? reference
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &
@@ -4201,18 +4371,52 @@ registerRelationshipProbe((instance, field) => {
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
+    let queryTotalMatchCount: number | undefined;
+    let queryIsPartial = false;
+    // Recorded when the field's results were resolved, so it is available on
+    // the seeded path — which is where a partial realm failure otherwise reads
+    // as a complete set, the indexed document having baked in the rows that
+    // did arrive.
+    let queryHasUnreachableRealms = queryFieldHasUnreachableRealms(
+      instance,
+      field.name,
+    );
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
-      // directly), so this takes precedence.
+      // directly), so this takes precedence. A failed search matched nothing it
+      // could report, so the count stays unknown rather than reading a stale
+      // one off the resource.
       queryMembership = [relationshipStateForEntry(bucketEntry)];
     } else if (!isLoading && resource) {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
+      // Both come off the resource rather than being recomputed here. It is the
+      // only place that holds the server's match count and the server's own
+      // result set together; `instances` above is that set reconciled against
+      // local Store state, so measuring a shortfall against it would report one
+      // whenever a card was edited out of the filter locally.
+      queryTotalMatchCount = resource.totalMatchCount;
+      queryIsPartial = resource.isPartial;
+      // Unless the search lost a realm. The count then covers only the realms
+      // that answered — a floor rather than the match count — so it is withheld
+      // and the shortfall is reported without one, the same answer the
+      // indexer's own leg gives for the same situation.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+        queryTotalMatchCount = undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
-    return { isLoading, isQueryField: true, queryMembership };
+    return {
+      isLoading,
+      isQueryField: true,
+      queryMembership,
+      queryTotalMatchCount,
+      queryIsPartial,
+      queryHasUnreachableRealms,
+    };
   }
   return {
     isLoading: hasInflightLoadForField(instance, field.name),
@@ -4972,6 +5176,29 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // saved will throw
       instance[isSavedInstance] = true;
     }
+
+    // Resolve every query-backed relationship on this instance — not just the
+    // ones the document carried data for, since a field whose query the
+    // document never resolved is the one with no seed to answer from and so
+    // the one that most needs its search started. Runs once the instance is
+    // fully assembled, because a query interpolates against the owner's own
+    // fields and realm context.
+    //
+    // Gated on a per-class answer first: `getFields` memoizes only inside a
+    // render context, and this runs outside one, so enumerating a card's fields
+    // here costs a full prototype walk on every deserialize. Whether a class
+    // declares any query-backed field is a property of the definition, so it is
+    // computed once and every card without one skips the walk entirely.
+    if (hasQueryFields(instance)) {
+      let store = getStore(instance);
+      for (let field of Object.values(
+        getFields(instance, { includeComputeds: true }),
+      )) {
+        if (field?.queryDefinition) {
+          resolveQueryFieldEagerly(store, instance, field);
+        }
+      }
+    }
   }
 
   // now we make the instance "live" after it's all constructed
@@ -5153,9 +5380,20 @@ function codeRefCacheKey(codeRef: CodeRef | undefined): string {
 export function getComponent(
   model: BaseDef,
   field?: Field,
-  opts?: { componentCodeRef?: CodeRef },
+  opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
 ): BoxComponent {
   if (field) {
+    return getBoxComponent(
+      model.constructor as BaseDefConstructor,
+      Box.create(model),
+      field,
+      opts,
+    );
+  }
+  // An override render is never cached: the cache key covers only the
+  // codeRef, and a capture-only component must not collide with (or stand
+  // in for) the model's stable format component.
+  if (opts?.componentOverride) {
     return getBoxComponent(
       model.constructor as BaseDefConstructor,
       Box.create(model),
@@ -5524,6 +5762,10 @@ class FallbackCardStore implements CardStore {
       isLoading: false,
       meta: { page: { total: 0 } },
       errors: undefined,
+      // No search ran, so there is no match count — `undefined`, not the zero
+      // in `meta` above, which is a placeholder for the rendering path.
+      totalMatchCount: undefined,
+      isPartial: false,
     } as StoreSearchResource<T>;
   }
 }

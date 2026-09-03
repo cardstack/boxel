@@ -14,7 +14,9 @@ import {
   CreateCardFn,
   CardCrudFunctions,
   isFileDef,
+  brokenLinkDisplayName,
   brokenLinkFormat,
+  brokenLinkItemType,
 } from './card-api';
 import {
   getRelationshipMembershipState,
@@ -50,7 +52,6 @@ import {
   uuidv4,
   CardCrudFunctionsContextName,
   CardErrorJSONAPI,
-  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -312,7 +313,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                     @errorDoc={{entry.broken.errorDoc}}
                     @state={{entry.broken.kind}}
                     @format='fitted'
-                    @displayName={{cardTypeName entry.broken.reference}}
+                    @itemType={{brokenLinkItemType @field}}
+                    @displayName={{brokenLinkDisplayName
+                      @field
+                      entry.broken.reference
+                    }}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{entry.index}}
                   />
@@ -473,7 +478,11 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
                     @errorDoc={{broken.errorDoc}}
                     @state={{broken.kind}}
                     @format='atom'
-                    @displayName={{cardTypeName broken.reference}}
+                    @itemType={{brokenLinkItemType @field}}
+                    @displayName={{brokenLinkDisplayName
+                      @field
+                      broken.reference
+                    }}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{i}}
                   />
@@ -732,7 +741,11 @@ export function getLinksToManyComponent({
                               effectiveFormat
                               effectiveFormat
                             }}
-                            @displayName={{cardTypeName broken.reference}}
+                            @itemType={{brokenLinkItemType field}}
+                            @displayName={{brokenLinkDisplayName
+                              field
+                              broken.reference
+                            }}
                             @viewCard={{crud.viewCard}}
                             data-test-plural-view-item={{i}}
                           />

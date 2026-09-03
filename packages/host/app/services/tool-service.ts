@@ -25,7 +25,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
-import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import {
+  basicMappings,
+  TOOL_CALL_DESCRIPTION_SCHEMA,
+} from '@cardstack/runtime-common/helpers/ai';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
@@ -1180,18 +1183,19 @@ export default class ToolService extends Service {
         ) as LoaderService
       ).loader;
       let mappings = await basicMappings(loader);
+      // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
+      // so it is not required here even though the tool definition given to
+      // the model lists it as required.
       let jsonSchema = {
         type: 'object',
         properties: {
-          description: {
-            type: 'string',
-          },
+          description: TOOL_CALL_DESCRIPTION_SCHEMA,
           ...(await toolInstance.getInputJsonSchema(
             this.matrixService.cardAPI,
             mappings,
           )),
         },
-        required: ['attributes', 'description'],
+        required: ['attributes'],
         additionalProperties: false,
       };
       const ajv = new Ajv();

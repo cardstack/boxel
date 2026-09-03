@@ -38,5 +38,9 @@
     },
     "types": ["@cardstack/local-types"]
   },
-  "include": ["**/*.ts", "**/*.gts"]
+  "include": [
+    "**/*.ts",
+    "**/*.gts",
+    "../host/node_modules/qunit-dom/dist/es/install.d.ts"
+  ]
 }

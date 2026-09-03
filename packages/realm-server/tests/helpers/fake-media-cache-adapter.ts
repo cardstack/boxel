@@ -10,9 +10,14 @@ export class FakeMediaCacheAdapter implements MediaCacheAdapter {
   objects = new Map<string, Uint8Array>();
   deleted: string[] = [];
   failDeletesFor = new Set<string>();
+  failNextPut = false;
   streamShape: 'readable' | 'iterable' = 'readable';
 
   async put(key: string, bytes: Uint8Array, _opts: { contentType: string }) {
+    if (this.failNextPut) {
+      this.failNextPut = false;
+      throw new Error('simulated put failure');
+    }
     if (this.objects.has(key)) {
       return { deduped: true };
     }

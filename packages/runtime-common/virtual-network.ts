@@ -1,3 +1,8 @@
+import {
+  claimsHostPackageName,
+  hostPackageNameOf,
+} from './host-package-names.ts';
+import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import type {
@@ -25,6 +30,17 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // Which keys of `realmMappings` are shimmed package namespaces rather than
+  // realms. Both kinds live in one table because both have to resolve — a
+  // prefix that does not resolve cannot serve `CodeRef.moduleHref` — so the
+  // table alone cannot answer "which realms does this network know?".
+  //
+  // An annotation rather than a kind on each entry, so no resolution path
+  // changes: everything that iterates `realmMappings` keeps reading a target
+  // directly. Both shapes fail the same way if this drifts — a realm omitted
+  // from a report, never a prefix that stops resolving — and this way the
+  // resolution code has nothing to get wrong.
+  private packageNamespacePrefixes = new Set<string>();
   // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
   // membership checks) resolve the same identifiers over and over and only
   // ever need the href STRING, yet toURL pays a native `new URL()` per call —
@@ -166,7 +182,66 @@ export class VirtualNetwork {
    * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
-    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    // A realm's content is authored, and `@cardstack/<name>/` is the npm scope
+    // as well as the realm-alias namespace. A realm registered under a Host
+    // package's name would therefore have its authored content classified as
+    // Host-provided and run uncaged — the caging boundary failing open, from
+    // configuration alone. `base` is the one name that is legitimately both.
+    if (claimsHostPackageName(realmIdentifier)) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: ` +
+          `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
+          `realm registered under it would have its authored content trusted as ` +
+          `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
+      );
+    }
+    // Within the `@cardstack` scope a realm must be one the declaration names.
+    // The launch-script scan cannot see a prefix that never appears literally
+    // in a scanned file — `RESOLVED_SOFTWARE_FACTORY_REALM_URL=https://cardstack.com/software-factory/`
+    // reaches `main.ts`'s alias branch and registers `@cardstack/software-factory/`
+    // with nothing to notice — so the set is checked here, where the value is
+    // known however it arrived.
+    //
+    // Only that scope: `@cardstack/` is the namespace the Host and the
+    // declaration share, and a realm outside it collides with neither. Tests
+    // and third parties register their own prefixes freely.
+    if (
+      realmIdentifier.startsWith('@cardstack/') &&
+      !PREFIX_REALM_PREFIXES.includes(ensureTrailingSlash(realmIdentifier))
+    ) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: the @cardstack scope is ` +
+          `reserved for the realms PREFIX_REALMS declares, and this is not one ` +
+          `of them (${PREFIX_REALM_PREFIXES.join(', ')}). Declare it there, or ` +
+          `use a prefix outside the @cardstack scope.`,
+      );
+    }
+    // Registering the same prefix as a realm reclaims it: the annotation must
+    // never outlive the registration that set it.
+    this.packageNamespacePrefixes.delete(ensureTrailingSlash(realmIdentifier));
+    this.addPrefixMapping(realmIdentifier, targetURL);
+  }
+
+  /**
+   * Map a `@scope/name/` prefix onto the origin serving a shimmed Host package,
+   * rather than onto a realm.
+   *
+   * Resolution is identical to a realm mapping — the prefix has to resolve for
+   * `CodeRef.moduleHref` to work on a specifier like
+   * `@cardstack/boxel-ui/components` — but the content behind it is Host-owned,
+   * so it is *supposed* to carry a Host package's name and running uncaged is
+   * correct. That is the whole difference from `addRealmMapping`, which refuses
+   * those names, and the reason the two are separate entry points rather than a
+   * flag: nothing downstream can tell a realm from a package namespace by
+   * looking at the mapping, so the caller has to say which it registered.
+   */
+  addPackageMapping(packageNamespace: string, targetURL: string): void {
+    this.packageNamespacePrefixes.add(ensureTrailingSlash(packageNamespace));
+    this.addPrefixMapping(packageNamespace, targetURL);
+  }
+
+  private addPrefixMapping(prefix: string, targetURL: string): void {
+    let normalizedId = ensureTrailingSlash(prefix);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
@@ -188,6 +263,12 @@ export class VirtualNetwork {
   removeRealmMapping(realmIdentifier: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
+    // Hygiene rather than correctness: `prefixKind` checks `realmMappings`
+    // first, so an annotation left behind here is already unobservable, and
+    // both registration doors set the kind for whatever they register. What
+    // this prevents is the set outliving every mapping that justified it and
+    // growing for the life of the process.
+    this.packageNamespacePrefixes.delete(normalizedId);
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
@@ -195,8 +276,38 @@ export class VirtualNetwork {
     this.notifyMappingChange();
   }
 
+  /**
+   * The realms this network can resolve — the mapping table less the shimmed
+   * package namespaces, which resolve the same way but are the Host's own
+   * modules rather than a realm's authored content.
+   *
+   * Every other reader of the table wants resolvable prefixes and so wants both
+   * kinds; this is the one that means realms.
+   */
   knownRealms(): RealmIdentifier[] {
-    return [...this.realmMappings.keys()] as RealmIdentifier[];
+    return [...this.realmMappings.keys()].filter(
+      (prefix) => !this.packageNamespacePrefixes.has(prefix),
+    ) as RealmIdentifier[];
+  }
+
+  /**
+   * Which kind of thing a prefix was registered as, or undefined when this
+   * network has not registered it.
+   *
+   * Three-valued rather than a boolean, because "not a package" and "not
+   * registered at all" are the two answers a caller most needs to keep apart —
+   * collapsing them is the same conflation `knownRealms()` exists to undo, and
+   * a boolean would put it back one call further along. Nothing else recovers
+   * the third case: `isRegisteredPrefix` tests a *reference* with `startsWith`,
+   * so it answers true for a descendant of a registered prefix and cannot
+   * distinguish an exact key from a path beneath one.
+   */
+  prefixKind(prefix: string): 'realm' | 'package' | undefined {
+    let normalized = ensureTrailingSlash(prefix);
+    if (!this.realmMappings.has(normalized)) {
+      return undefined;
+    }
+    return this.packageNamespacePrefixes.has(normalized) ? 'package' : 'realm';
   }
 
   /**

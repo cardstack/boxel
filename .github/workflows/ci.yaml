@@ -1113,7 +1113,13 @@ jobs:
     # CS-11161) needs to fail here pre-merge rather than on main post-merge.
     if: needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A healthy run is ~10 minutes. The headroom is for the unhealthy one: a
+    # fixture that wedges costs its whole hook budget
+    # (packages/boxel-cli/vitest.config.mjs) before the file reports, and a job
+    # cancelled on this cap reports nothing at all — the nameless failure that
+    # budget exists to avoid. This covers a handful of wedged fixtures, not all
+    # of them; a systemic fixture failure will still hit the cap.
+    timeout-minutes: 30
     concurrency:
       group: boxel-cli-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true

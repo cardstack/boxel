@@ -53,14 +53,24 @@ function spawnFakeWatcher(opts: {
 
   return new Promise((resolve, reject) => {
     let resolved = false;
+    let buf = '';
+    // The fixture prints its own reason for dying on stderr. Collect it so a
+    // failure to start reports that reason rather than just an exit code.
+    let errBuf = '';
+    child.stderr?.on('data', (chunk) => (errBuf += chunk.toString()));
+
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        reject(new Error('fake watcher did not signal ready in time'));
+        reject(
+          new Error(
+            `fake watcher did not signal ready in ${READY_TIMEOUT_MS}ms` +
+              `${errBuf ? `; it printed:\n${errBuf.trimEnd()}` : ''}`,
+          ),
+        );
       }
     }, READY_TIMEOUT_MS);
 
-    let buf = '';
     child.stdout?.on('data', (chunk) => {
       buf += chunk.toString();
       if (buf.includes('FAKE_WATCHER_READY') && !resolved) {
@@ -76,11 +86,20 @@ function spawnFakeWatcher(opts: {
         reject(err);
       }
     });
-    child.on('exit', (code) => {
+    // `close` rather than `exit`: the reason this rejection reports is
+    // whatever the fixture wrote to stderr, and only `close` guarantees that
+    // stream has been drained.
+    child.on('close', (code) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(timer);
-        reject(new Error(`fake watcher exited early with code ${code}`));
+        reject(
+          new Error(
+            `fake watcher exited early with code ${code}${
+              errBuf ? `:\n${errBuf.trimEnd()}` : ' and printed nothing'
+            }`,
+          ),
+        );
       }
     });
   });

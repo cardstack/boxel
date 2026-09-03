@@ -10,6 +10,12 @@ export async function ensureUserRecord(matrixUserId: string): Promise<void> {
       'exec',
       'boxel-pg',
       'psql',
+      // The postgres image does not always create the unix socket, so force
+      // TCP; it listens on *:5432 with trust auth.
+      '-h',
+      '127.0.0.1',
+      '-p',
+      '5432',
       '-U',
       'postgres',
       '-w',

@@ -394,6 +394,40 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch.clear();
   }
 
+  // Bind the store to the indexing job now in progress. The render route calls
+  // this before it hydrates a card, which is the only point early enough to
+  // matter: a render whose link targets are all resident never loads anything,
+  // so the store would otherwise never see that the job had moved on.
+  //
+  // The service keeps in-flight maps of its own, outside the card store, and
+  // they hand a caller a promise without re-reading the realm. A `getCard` or
+  // a `loadModel` issued under the previous scope and still pending across the
+  // boundary would answer a caller in the new scope with an instance built
+  // from a document read before the write — exactly what dropping residency
+  // exists to prevent, arriving by a different route. Dropping the entries
+  // stops the adoption: the pending work still settles, and the new scope
+  // issues its own read. Only on an actual crossing, so that two visits
+  // within one job keep their dedup.
+  //
+  // What the drop does not stop is the settling read's own `setCard`, which
+  // plants its pre-boundary instance into the new scope's residency — it
+  // removes the map entry, not the write that lands after it. Reaching that
+  // needs a read still in flight when the next visit builds its model, which
+  // is what `#waitForRenderLoadStability` stands between; it is the residual
+  // this design leaves, not something the drop closes.
+  observeIndexingJob(): void {
+    if (!this.store.observeIndexingJob()) {
+      return;
+    }
+    this.inflightGetCards = new Map();
+    this.inflightGetFileMeta = new Map();
+    this.inflightCardLoads = new Map();
+    this.inflightSearch = new Map();
+    // `inflightCardMutations` is deliberately kept: a render context blocks
+    // persistence, so there is nothing of this job's in it, and dropping a
+    // save that somehow were in flight would lose the only handle on it.
+  }
+
   // Drop every resolved-doc search-cache entry. Used for hard resets
   // (`resetState`, `resetCache`) and by tests; NOT called from the
   // render route's per-visit deactivate, because the cache is meant
@@ -1730,6 +1764,12 @@ export default class StoreService extends Service implements StoreInterface {
           status?: number;
         }>;
         cardURLs?: string[];
+        // Declared here as well as on the card-facing type, because this hop
+        // is where the seed is handed to the resource. The flag exists to stop
+        // a match count being inferred from the rows; leaving it off the
+        // signature would let a future refactor forward the seed field by
+        // field and silently restore that inference.
+        totalUnknown?: boolean;
       };
     },
   ): SearchResource<T> {
@@ -1995,10 +2035,29 @@ export default class StoreService extends Service implements StoreInterface {
       this.network.authedFetch,
       this.network.virtualNetwork,
       {
+        resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
     );
+  }
+
+  // A query-backed relationship resolves when its owner deserializes here, so a
+  // card's membership — and every `computeVia` reducing over it — is current
+  // without a template having to read the field first.
+  //
+  // Two stores are excluded, because both must render as a pure function of the
+  // document they were handed: the render store, and every store inside the
+  // dedicated prerender app (where the deserializing store is the regular one,
+  // which an `isRenderStore` term alone would miss). `__boxelRenderContext` is
+  // deliberately not part of the test — card-prerender sets it around index
+  // renders that run alongside an interactive app, whose own query fields must
+  // keep resolving through those windows.
+  protected resolvesQueryFieldsEagerly(): boolean {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return false;
+    }
+    return !this.isRenderStore;
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -2898,7 +2957,13 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return cardError;
     } finally {
-      if (id) {
+      // Only retract this call's own entry: a scope boundary clears the map
+      // mid-flight, so a newer caller's entry can be sitting under this id.
+      if (
+        id &&
+        deferred &&
+        this.inflightGetCards.get(id) === deferred.promise
+      ) {
         this.inflightGetCards.delete(id);
       }
     }
@@ -2971,7 +3036,7 @@ export default class StoreService extends Service implements StoreInterface {
       deferred.fulfill(fileInstance as T);
       return fileInstance as T;
     } catch (error: any) {
-      let errorResponse = processCardError(id, error);
+      let errorResponse = processCardError(id, error, 'file-meta');
       let cardError = errorResponse.errors[0];
       deferred.fulfill(cardError);
       console.error(
@@ -2980,7 +3045,10 @@ export default class StoreService extends Service implements StoreInterface {
       );
       return cardError;
     } finally {
-      this.inflightGetFileMeta.delete(id);
+      // Guarded for the same reason as the card read above.
+      if (this.inflightGetFileMeta.get(id) === deferred.promise) {
+        this.inflightGetFileMeta.delete(id);
+      }
     }
   }
 
@@ -3543,24 +3611,29 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
+// `readType` names what the failed read asked the realm for. A realm serves
+// card instances and file metadata out of one URL namespace, so the URL alone
+// cannot say which of the two a 404 is about — only the caller knows, and the
+// not-found wording below is written from it.
 function processCardError(
   url: string | undefined,
   error: any,
+  readType: StoreReadType = 'card',
 ): CardErrorsJSONAPI {
   let httpStatus = typeof error?.status === 'number' ? error.status : undefined;
   let errorResponse: CardErrorsJSONAPI;
-  try {
-    let parsed = JSON.parse(error.responseText);
-    errorResponse = formattedError(url, error, parsed.errors?.[0]);
-  } catch (parseError) {
+  let body = errorResponseBody(error);
+  if (body) {
+    errorResponse = formattedError(url, error, body.errors?.[0]);
+  } else {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        errorResponse = formattedError(url, error, {
-          status: 404,
-          title: 'Card Not Found',
-          message: `The card ${url} does not exist`,
-        });
+        errorResponse = formattedError(
+          url,
+          error,
+          notFoundError(url, readType),
+        );
         break;
       default:
         errorResponse = formattedError(url, error, undefined);
@@ -3579,6 +3652,42 @@ function processCardError(
     }
   }
   return errorResponse;
+}
+
+// The raw response body of a failed read, when one survived to here. Only a
+// failure thrown straight from a fetch wrapper carries `responseText`: a realm
+// error response is rebuilt into a `CardError` from the JSON:API document it
+// carried, which keeps the status and message but not the body text. The
+// bodiless and the unparseable case both come back `undefined`, which is what
+// routes a read to the status-tailored fallback in `processCardError`.
+function errorResponseBody(error: any): { errors?: any[] } | undefined {
+  if (typeof error?.responseText !== 'string') {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(error.responseText);
+  } catch {
+    return undefined;
+  }
+  return parsed != null && typeof parsed === 'object'
+    ? (parsed as { errors?: any[] })
+    : undefined;
+}
+
+function notFoundError(
+  url: string | undefined,
+  readType: StoreReadType,
+): Partial<CardErrorJSONAPI> {
+  let { title, noun } =
+    readType === 'file-meta'
+      ? { title: 'File Not Found', noun: 'file' }
+      : { title: 'Card Not Found', noun: 'card' };
+  return {
+    status: 404,
+    title,
+    message: `The ${noun} ${url} does not exist`,
+  };
 }
 
 function needsServerStateMerge(

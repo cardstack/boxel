@@ -11,7 +11,7 @@ import {
 import { createHash } from 'crypto';
 import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
-import { Pool, Client, type Notification } from 'pg';
+import { Pool, Client, type PoolClient, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
@@ -119,6 +119,41 @@ type ChannelState = {
   establishment: Promise<void>;
 };
 
+// `pg` reports a connection dying as an `error` event, and an `error` event
+// with no listener is an uncaught exception — so every connection whose
+// lifecycle this module owns carries one, whether it lives for a query or for
+// the life of a subscription. A short-lived client is no less exposed: its
+// in-flight query rejects into the caller that can handle it, and the socket's
+// closing event arrives afterwards with nobody left to hear it.
+//
+// The migration runner is the deliberate exception. `migrate()` is given a
+// connection config rather than a client, so node-pg-migrate opens and owns
+// that connection, and a drop there has to stop startup rather than be logged
+// and continued: the rejection it raises already does that, and a listener
+// would only be racing it. Recording is for a process that should survive the
+// drop, which a half-applied schema is not.
+//
+// Severity says whether anything recovers. A pooled client is replaced on the
+// next checkout and a short-lived one reports through its caller, so those are
+// `warn`. A connection held for the life of a subscription has no reconnect
+// path — losing it degrades whatever depends on those notifications for the
+// rest of the process's life, which is worth alerting on.
+//
+// Returns a function that stops recording, for the callers that hand their
+// client back: a pool re-attaches its own idle listener on release, and this
+// one must come off so the client it owns again carries exactly one.
+function recordConnectionErrors(
+  client: Client | PoolClient,
+  label: string,
+  severity: 'warn' | 'error',
+): () => void {
+  let onError = (e: Error) => {
+    log[severity](`connection error on ${label}: ${String(e)}`);
+  };
+  client.on('error', onError);
+  return () => client.removeListener('error', onError);
+}
+
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
@@ -159,6 +194,15 @@ export class PgAdapter implements DBAdapter {
       password,
       port,
       max,
+    });
+    // An idle client whose connection dies — a failover, a restart, an
+    // administrator terminating the backend — emits `error` on the pool, and
+    // an `error` event nobody listens for is an uncaught exception. The pool
+    // has already discarded the client by the time this runs and stays
+    // usable, so recording it is the whole job: without this listener a
+    // process that was about to reconnect dies instead.
+    this.pool.on('error', (e: Error) => {
+      log.warn(`error on idle client of ${this.url}: ${String(e)}`);
     });
   }
 
@@ -337,6 +381,11 @@ export class PgAdapter implements DBAdapter {
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
     let client = await this.pool.connect();
+    // A checked-out client's death is nobody's event: the pool removes its
+    // own idle listener for the duration of the checkout, so the in-flight
+    // query rejects into the caller that handles it and the socket's closing
+    // event lands unheard.
+    let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     log.debug(
       `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
     );
@@ -355,6 +404,7 @@ export class PgAdapter implements DBAdapter {
       );
       throw e;
     } finally {
+      stopRecording();
       client.release();
     }
   }
@@ -382,6 +432,15 @@ export class PgAdapter implements DBAdapter {
     //   https://github.com/brianc/node-postgres/issues/1543#issuecomment-353622236
     // So for listen purposes, we establish a completely separate connection.
     let client = new Client(this.config);
+    recordConnectionErrors(
+      client,
+      `the LISTEN connection for ${channel}`,
+      // Nothing reconnects this: the subscription is dead for the life of the
+      // process, and every caller waiting on those notifications silently
+      // falls back to whatever polling it has. `error` so it can be alerted
+      // on rather than read afterwards.
+      'error',
+    );
     await client.connect();
     try {
       client.on('notification', (n) => {
@@ -571,6 +630,7 @@ export class PgAdapter implements DBAdapter {
     await this.started;
 
     let client = await this.pool.connect();
+    let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
       log.debug('search: %s trace: %j', sql.text, sql.values);
@@ -602,6 +662,7 @@ export class PgAdapter implements DBAdapter {
       released = true;
       throw e;
     } finally {
+      stopRecording();
       if (!released) {
         client.release();
       }
@@ -624,6 +685,11 @@ export class PgAdapter implements DBAdapter {
     const config = postgresConfig();
     let client = new Client(
       Object.assign({}, config, { database: 'postgres' }),
+    );
+    recordConnectionErrors(
+      client,
+      'the migration bootstrap connection',
+      'warn',
     );
     try {
       await client.connect();
@@ -701,6 +767,11 @@ export class PgAdapter implements DBAdapter {
       .replace(/^-|-$/g, '');
 
     let client = new Client(config);
+    recordConnectionErrors(
+      client,
+      'the environment-mode permission fixup',
+      'warn',
+    );
     try {
       await client.connect();
       let realmServerUrl = `http://realm-server.${slug}.localhost`;
@@ -743,6 +814,7 @@ export class PgAdapter implements DBAdapter {
     }
 
     let client = new Client(config);
+    recordConnectionErrors(client, 'the migration-rename fixup', 'warn');
     try {
       await client.connect();
       let { rows } = await client.query(

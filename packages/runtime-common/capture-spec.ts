@@ -80,26 +80,52 @@ export function isCaptureFormat(value: unknown): value is CaptureFormat {
   return (CAPTURE_FORMATS as readonly unknown[]).includes(value);
 }
 
-export interface CaptureSpec {
+// The engine's default capture geometry — Puppeteer's launch viewport (no
+// `defaultViewport` override), the size every canonical capture renders at.
+// Pinned here because the canonical form elides default-valued fields: a
+// request spelling these values explicitly must hash identically to one that
+// omits them, which only works if both sides agree on what the defaults are.
+export const DEFAULT_CAPTURE_VIEWPORT = {
+  width: 800,
+  height: 600,
+  deviceScaleFactor: 1,
+} as const;
+
+// The full capture identity: the render format plus the per-capture geometry
+// overrides. This is what canonicalizes into the MediaCache ledger key, so a
+// custom-geometry capture persists and serves exactly like a format-only one.
+// Built by inclusion (`Pick`), not by extending `ScreenshotCaptureSpec`
+// wholesale: the canonical form serializes exactly these fields, so a field
+// outside the pick (`envelope`, `captures`, or anything the capture engine
+// grows later) cannot ride into the identity and silently hash two distinct
+// captures onto one ledger key. Widening the identity means changing this
+// pick, `canonicalCaptureSpecString` / `canonicalCaptureSpecQuery` below,
+// and `sameCaptureSpec` (jobs/screenshot-card.ts) together — and the
+// exhaustive destructure in `canonicalOverrides` refuses to compile until
+// the widened pick is actually handled there.
+export interface CaptureSpec extends Pick<
+  ScreenshotCaptureSpec,
+  'viewport' | 'deviceScaleFactor' | 'fullPage' | 'clip'
+> {
   format: CaptureFormat;
 }
 
-// Whether a screenshot job's per-capture overrides (viewport / scale /
-// fullPage / clip) make it a non-canonical render. The canonical capture
-// identity (and thus the MediaCache ledger and job coalescing) cannot
-// represent these overrides, so everything keyed on that identity must treat
-// an override-carrying capture as outside it: never persisted under a ledger
-// key, never joined to (or by) a canonical twin.
-export function hasCaptureSpecOverrides(
-  captureSpec: ScreenshotCaptureSpec | null | undefined,
-): boolean {
-  return !!captureSpec && Object.keys(captureSpec).length > 0;
+// The geometry overrides a spec carries beyond the engine defaults — the
+// portion of the identity the prerenderer must be told about (`format` rides
+// separately on the job args). Null when the spec is all-defaults, matching
+// the `ScreenshotCardArgs.captureSpec: ... | null` contract.
+export function captureSpecOverrides(
+  spec: CaptureSpec,
+): ScreenshotCaptureSpec | null {
+  let overrides = canonicalOverrides(spec);
+  return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
 // ---------------------------------------------------------------------------
 // ScreenshotCaptureSpec bounds + strict parse — one enforcement point for
 // every surface that accepts a spec off the wire (the realm-server's POST
-// /_screenshot-card body and the prerender server's /prerender-screenshot
+// /_screenshot-card body, the GET `_screenshot/` URL DSL via
+// `parseCaptureSpecParams`, and the prerender server's /prerender-screenshot
 // route), and the home of the caps the capture path itself enforces for the
 // extents only it can know (a fullPage capture's document size).
 // ---------------------------------------------------------------------------
@@ -466,17 +492,27 @@ function checkMergedOverrides(
 }
 
 // Engine defaults are elided so equal capture intents key identically:
-// `{ deviceScaleFactor: 1 }` and `{ fullPage: false }` mean the same capture
-// as no spec at all. Runs after the batch merge, so an entry that explicitly
-// sets a field back to its default wins over a batch-wide override first.
+// `{ deviceScaleFactor: 1 }`, `{ fullPage: false }`, and an explicit
+// `DEFAULT_CAPTURE_VIEWPORT`-sized viewport mean the same capture as no spec
+// at all. Runs after the batch merge, so an entry that explicitly sets a
+// field back to its default wins over a batch-wide override first.
 function elideDefaults(
   spec: ScreenshotCaptureOverrides,
 ): ScreenshotCaptureOverrides {
   let out: ScreenshotCaptureOverrides = {};
-  if (spec.viewport) {
+  if (
+    spec.viewport &&
+    !(
+      spec.viewport.width === DEFAULT_CAPTURE_VIEWPORT.width &&
+      spec.viewport.height === DEFAULT_CAPTURE_VIEWPORT.height
+    )
+  ) {
     out.viewport = spec.viewport;
   }
-  if (spec.deviceScaleFactor !== undefined && spec.deviceScaleFactor !== 1) {
+  if (
+    spec.deviceScaleFactor !== undefined &&
+    spec.deviceScaleFactor !== DEFAULT_CAPTURE_VIEWPORT.deviceScaleFactor
+  ) {
     out.deviceScaleFactor = spec.deviceScaleFactor;
   }
   if (spec.fullPage) {
@@ -638,44 +674,91 @@ export function parseScreenshotCaptureSpec(
   return { captureSpec: { captures: entries } };
 }
 
+// The identity's geometry fields, default-elided via the one shared rule
+// (`elideDefaults`), so the parse and the hash canonicalize identically. The
+// parameter is the identity type itself and the destructure is exhaustive
+// over it: widening the `CaptureSpec` pick fails to compile here — the one
+// function that has to learn a new identity field — instead of silently
+// dropping the field from the ledger key and hashing two distinct captures
+// onto one entry.
+function canonicalOverrides(
+  spec: Omit<CaptureSpec, 'format'>,
+): ScreenshotCaptureSpec {
+  let { viewport, deviceScaleFactor, fullPage, clip, ...rest } = spec;
+  rest satisfies Record<string, never>;
+  return elideDefaults({ viewport, deviceScaleFactor, fullPage, clip });
+}
+
 // The DSL's parameter surface grows with the capture engine; these names are
 // reserved for the engine capabilities the project's URL grammar assigns
 // them, and refused (never ignored) while the engine lacks them.
-const RESERVED_CAPTURE_PARAMS = new Set([
-  'envelope',
+const RESERVED_CAPTURE_PARAMS = new Set(['envelope', 'target']);
+const CAPTURE_PARAMS = new Set([
+  'format',
   'viewport',
   'dsf',
   'fullPage',
   'clip',
-  'target',
 ]);
 
 export type CaptureSpecParseResult =
   | { spec: CaptureSpec }
   | { error: { field: string; message: string } };
 
+// The URL grammar for the geometry params — each is the flat spelling of the
+// POST body's field, so the two surfaces express one identity:
+//   viewport=1280x800      ⇔ captureSpec.viewport {width, height}
+//   dsf=2                  ⇔ captureSpec.deviceScaleFactor
+//   fullPage=true          ⇔ captureSpec.fullPage
+//   clip=0,0,400x300       ⇔ captureSpec.clip {x, y, width, height}
+const VIEWPORT_PARAM_PATTERN = /^(\d+)x(\d+)$/;
+
+// Maps a shared-validator error (spelled in POST-body field terms) onto the
+// GET param that carried the offending value, keeping one error wording
+// across both surfaces while still naming the field in the caller's own
+// grammar.
+function captureParamForSpecError(message: string): string {
+  // clip before viewport: the containment errors name both fields, and the
+  // clip is the value that broke the constraint.
+  if (message.includes('captureSpec.clip')) {
+    return 'clip';
+  }
+  if (message.includes('captureSpec.viewport')) {
+    return 'viewport';
+  }
+  if (message.includes('captureSpec.deviceScaleFactor')) {
+    return 'dsf';
+  }
+  if (message.includes('fullPage')) {
+    return 'fullPage';
+  }
+  return 'clip';
+}
+
 // Parses the flat, unprefixed query params of a `_screenshot/` request into
 // a spec. Strict on principle (see the module comment): unknown and
 // reserved params, repeated params, and out-of-range values are each a 400
-// naming the offending field. `name=` addresses a declared screenshot, a
-// different addressing form entirely — the route splits it off before
-// calling this.
+// naming the offending field. Bounds validation is the same
+// `parseScreenshotCaptureSpec` the POST body runs, so the two surfaces
+// accept and refuse identical geometry with identical wording. `name=`
+// addresses a declared screenshot, a different addressing form entirely —
+// the route splits it off before calling this.
 export function parseCaptureSpecParams(
   searchParams: URLSearchParams,
 ): CaptureSpecParseResult {
   for (let key of new Set(searchParams.keys())) {
-    if (key === 'format') {
+    if (CAPTURE_PARAMS.has(key)) {
+      if (searchParams.getAll(key).length > 1) {
+        return {
+          error: { field: key, message: `${key} may only be given once` },
+        };
+      }
       continue;
     }
     let message = RESERVED_CAPTURE_PARAMS.has(key)
       ? `parameter "${key}" is not supported by this capture engine`
       : `unsupported parameter "${key}"`;
     return { error: { field: key, message } };
-  }
-  if (searchParams.getAll('format').length > 1) {
-    return {
-      error: { field: 'format', message: 'format may only be given once' },
-    };
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCaptureFormat(format)) {
@@ -690,22 +773,130 @@ export function parseCaptureSpecParams(
       },
     };
   }
-  return { spec: { format } };
+
+  // Translate the URL grammar into the POST body's shape, then run the one
+  // shared validator over it. Grammar failures (a malformed value) are named
+  // here; bounds failures come back from the validator in its own wording.
+  let raw: Record<string, unknown> = {};
+  let viewport = searchParams.get('viewport');
+  if (viewport !== null) {
+    let match = VIEWPORT_PARAM_PATTERN.exec(viewport);
+    if (!match) {
+      return {
+        error: {
+          field: 'viewport',
+          message:
+            'viewport must be "<width>x<height>" with positive integers (e.g. viewport=1280x800)',
+        },
+      };
+    }
+    raw.viewport = { width: Number(match[1]), height: Number(match[2]) };
+  }
+  let dsf = searchParams.get('dsf');
+  if (dsf !== null) {
+    let scale = Number(dsf);
+    if (dsf.trim() === '' || !Number.isFinite(scale)) {
+      return {
+        error: {
+          field: 'dsf',
+          message: 'dsf must be a positive number (e.g. dsf=2)',
+        },
+      };
+    }
+    raw.deviceScaleFactor = scale;
+  }
+  let fullPage = searchParams.get('fullPage');
+  if (fullPage !== null) {
+    if (fullPage !== 'true' && fullPage !== 'false') {
+      return {
+        error: {
+          field: 'fullPage',
+          message: 'fullPage must be "true" or "false"',
+        },
+      };
+    }
+    raw.fullPage = fullPage === 'true';
+  }
+  let clip = searchParams.get('clip');
+  if (clip !== null) {
+    // x and y parse as `Number` rather than by pattern: the POST body admits
+    // any non-negative finite value, whose canonical `String` form can be
+    // scientific notation — the served URL must reparse whatever the shared
+    // validator admitted. Width and height are positive integers, so their
+    // spelling is always plain digits.
+    let clipError = {
+      error: {
+        field: 'clip',
+        message:
+          'clip must be "<x>,<y>,<width>x<height>" with non-negative x/y and positive integer width/height (e.g. clip=0,0,400x300)',
+      },
+    };
+    let parts = clip.split(',');
+    if (parts.length !== 3) {
+      return clipError;
+    }
+    let [xPart, yPart, extentPart] = parts;
+    let extentMatch = /^(\d+)x(\d+)$/.exec(extentPart);
+    let x = Number(xPart);
+    let y = Number(yPart);
+    if (
+      xPart.trim() === '' ||
+      yPart.trim() === '' ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !extentMatch
+    ) {
+      return clipError;
+    }
+    raw.clip = {
+      x,
+      y,
+      width: Number(extentMatch[1]),
+      height: Number(extentMatch[2]),
+    };
+  }
+
+  let parsed = parseScreenshotCaptureSpec(raw, format);
+  if (parsed.error) {
+    return {
+      error: {
+        field: captureParamForSpecError(parsed.error),
+        message: parsed.error,
+      },
+    };
+  }
+  return { spec: { format, ...(parsed.captureSpec ?? {}) } };
 }
 
-// The canonical serialization: keys sorted, default-valued fields elided —
-// so the all-defaults spec is `{}` however it was spelled, and any two
-// requests meaning the same capture hash identically.
+// The canonical serialization: keys sorted (nested objects included),
+// default-valued fields elided — so the all-defaults spec is `{}` however it
+// was spelled, and any two requests meaning the same capture hash
+// identically.
 export function canonicalCaptureSpecString(spec: CaptureSpec): string {
   let canonical: Record<string, unknown> = {};
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
     canonical.format = spec.format;
   }
-  return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(canonical).sort(([a], [b]) => a.localeCompare(b)),
-    ),
-  );
+  let overrides = canonicalOverrides(spec);
+  if (overrides.viewport) {
+    canonical.viewport = sortKeys(overrides.viewport);
+  }
+  if (overrides.deviceScaleFactor != null) {
+    canonical.deviceScaleFactor = overrides.deviceScaleFactor;
+  }
+  if (overrides.fullPage) {
+    canonical.fullPage = true;
+  }
+  if (overrides.clip) {
+    canonical.clip = sortKeys(overrides.clip);
+  }
+  return JSON.stringify(sortKeys(canonical));
+}
+
+function sortKeys<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)),
+  ) as T;
 }
 
 // The ledger key component for a spec: the hash of its canonical form (the
@@ -719,14 +910,171 @@ export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
 
 // The spec's canonical query string — '' for the all-defaults spec — so a
 // served URL round-trips through `parseCaptureSpecParams` back to the same
-// canonical form.
+// canonical form. Numbers serialize through `String`, which is already the
+// shortest round-trip form (`2`, not `2.0`), matching how `Number` reparses
+// them. Assembled by hand rather than through `URLSearchParams`, which would
+// percent-encode the clip commas (`clip=0%2C0%2C400x300`) — `,` is a valid
+// query sub-delim, and the emitted URL should read as the same grammar the
+// params document and the 400 messages teach. Safe without encoding because
+// every value comes from the closed grammar above: format is an enum, the
+// rest are digits, `x`, `,`, and a decimal point.
 export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
-  let searchParams = new URLSearchParams();
+  let params: string[] = [];
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
-    searchParams.set('format', spec.format);
+    params.push(`format=${spec.format}`);
   }
-  let qs = searchParams.toString();
-  return qs.length > 0 ? `?${qs}` : '';
+  let overrides = canonicalOverrides(spec);
+  if (overrides.viewport) {
+    params.push(
+      `viewport=${overrides.viewport.width}x${overrides.viewport.height}`,
+    );
+  }
+  if (overrides.deviceScaleFactor != null) {
+    params.push(`dsf=${overrides.deviceScaleFactor}`);
+  }
+  if (overrides.fullPage) {
+    params.push('fullPage=true');
+  }
+  if (overrides.clip) {
+    params.push(
+      `clip=${overrides.clip.x},${overrides.clip.y},${overrides.clip.width}x${overrides.clip.height}`,
+    );
+  }
+  return params.length > 0 ? `?${params.join('&')}` : '';
+}
+
+// ---------------------------------------------------------------------------
+// Declared-screenshot capture identity + manifest — the grammar shared by the
+// prerender pass (which captures and persists) and the realm's
+// `_screenshot/…?name=` route (which joins a manifest entry to the ledger).
+// ---------------------------------------------------------------------------
+
+export const SCREENSHOT_IMAGE_TYPES = ['png', 'jpeg', 'webp'] as const;
+export type ScreenshotImageType = (typeof SCREENSHOT_IMAGE_TYPES)[number];
+export const SCREENSHOT_DEFAULT_IMAGE_TYPE: ScreenshotImageType = 'png';
+export const SCREENSHOT_DEFAULT_BACKGROUND = 'white';
+
+export function isScreenshotImageType(
+  value: unknown,
+): value is ScreenshotImageType {
+  return (SCREENSHOT_IMAGE_TYPES as readonly unknown[]).includes(value);
+}
+
+export function screenshotContentType(type: ScreenshotImageType): string {
+  switch (type) {
+    case 'png':
+      return 'image/png';
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+  }
+}
+
+// One merged `static screenshots` entry as it crosses the render-page
+// boundary: everything in the declaration except the capture-only component
+// itself, which cannot serialize — it is flagged `render: true` and
+// re-resolved in-page by slot name when the capture renders.
+export interface DeclaredScreenshotSpecPayload {
+  width: number;
+  height: number;
+  deviceScaleFactor?: number;
+  background?: string;
+  useAsThumbnail?: boolean;
+  keyBy?: 'generation' | 'file-content';
+  type?: ScreenshotImageType;
+  format?: DeclaredScreenshotFormat;
+  render?: true;
+}
+
+export type DeclaredScreenshotRoster = Record<
+  string,
+  DeclaredScreenshotSpecPayload
+>;
+
+// The canonical identity of one declared capture. Unlike the wire spec —
+// whose canonical form elides defaults so equivalent spellings collapse —
+// this keys the *effective* pixel parameters with declaration defaults
+// applied, so a later change to a default is a change of identity (and thus
+// a recapture) rather than a silent aliasing of old bytes under new intent.
+// The slot name is part of the identity: a capture-only component's pixels
+// are identified only by the slot that declares it, and format twins sharing
+// a ledger row would let one slot's re-persist reclaim the other's object.
+// `keyBy` and `useAsThumbnail` steer invalidation and consumption, not
+// pixels, so they stay out.
+export function canonicalDeclaredCaptureString(
+  name: string,
+  payload: DeclaredScreenshotSpecPayload,
+): string {
+  let canonical: Record<string, unknown> = {
+    background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+    declared: name,
+    deviceScaleFactor:
+      payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+    height: payload.height,
+    source: payload.render ? 'render' : payload.format,
+    type: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+    width: payload.width,
+  };
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(canonical).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  );
+}
+
+export async function declaredCaptureSpecHash(
+  name: string,
+  payload: DeclaredScreenshotSpecPayload,
+): Promise<string> {
+  return await computeMediaCacheKey(
+    new TextEncoder().encode(canonicalDeclaredCaptureString(name, payload)),
+  );
+}
+
+// One name's entry in a `prerendered_html.screenshots` manifest — the
+// indexing-time artifact that joins a `?name=` request to its MediaCache
+// ledger row (`specHash`) and object (`objectKey`), and carries the
+// dimensions/consumption facts serve-time readers need without a ledger
+// round-trip. `sourceContentHash` is recorded for `keyBy: 'file-content'`
+// slots so the next prerender pass can carry the entry forward without
+// re-rendering when the source file's bytes are unchanged.
+export interface ScreenshotManifestEntry {
+  specHash: string;
+  objectKey: string;
+  contentType: string;
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  useAsThumbnail?: true;
+  sourceContentHash?: string;
+}
+
+export type ScreenshotManifest = Record<string, ScreenshotManifestEntry>;
+
+// The engine-side carry-forward decision for one declared slot: a
+// `file-content`-keyed entry whose capture identity (spec hash) and source
+// bytes (content hash) both match the prior manifest's is reused without
+// re-rendering — a generation advance alone (a dependency edit, say) must
+// not re-decode large media. Everything else re-captures.
+export function shouldCarryForwardDeclaredEntry({
+  keyBy,
+  specHash,
+  prior,
+  contentHash,
+}: {
+  keyBy: 'generation' | 'file-content';
+  specHash: string;
+  prior: ScreenshotManifestEntry | undefined;
+  contentHash: string | null | undefined;
+}): boolean {
+  return (
+    keyBy === 'file-content' &&
+    !!contentHash &&
+    !!prior &&
+    prior.specHash === specHash &&
+    prior.sourceContentHash === contentHash
+  );
 }
 
 // The durable served URL for one capture of one instance: the platform's

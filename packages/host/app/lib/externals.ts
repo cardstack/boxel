@@ -88,12 +88,16 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
   // Spec cards published for boxel-ui components use the bare specifier
   // `@cardstack/boxel-ui/components` in their `ref.module`. The
-  // VirtualNetwork needs a realm mapping to translate that into the
+  // VirtualNetwork needs a prefix mapping to translate that into the
   // fake-packages URL form the rest of the runtime already accepts
   // (see `isGloballyPublicDependency` in runtime-common/realm.ts).
   // The shimModule calls above register the JS module; this registers
-  // the realm prefix so CodeRef.moduleHref resolves.
-  virtualNetwork.addRealmMapping(
+  // the prefix so CodeRef.moduleHref resolves.
+  //
+  // Registered as a package namespace rather than a realm: the content behind
+  // it is this bundle's own, so carrying a Host package's name is correct.
+  // `addRealmMapping` refuses those names precisely so a realm cannot.
+  virtualNetwork.addPackageMapping(
     '@cardstack/boxel-ui/',
     `${PACKAGES_FAKE_ORIGIN}@cardstack/boxel-ui/`,
   );

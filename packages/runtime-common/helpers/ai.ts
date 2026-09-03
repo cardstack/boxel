@@ -650,6 +650,22 @@ export function generateJsonSchemaForCardType(
   }
 }
 
+// The `description` argument every tool call carries is a one-sentence label
+// the assistant UI shows on the tool pill. No command reads it, so the host
+// does not require it when validating a call: a request that has everything
+// the command needs must not fail over a missing label. The tool definitions
+// handed to the model still list it as required, and this text tells the
+// model what to put there, so the label is rarely missing in practice.
+export const TOOL_CALL_DESCRIPTION_SCHEMA = {
+  type: 'string',
+  description:
+    'One short sentence, for the user, saying what this call does and why.',
+} as const;
+
+// What the model is told a tool call must include. Deliberately stricter
+// than host validation, which requires only `attributes`.
+export const TOOL_CALL_REQUIRED_PROPERTIES = ['attributes', 'description'];
+
 export function getPatchTool(
   attachedOpenCardId: CardDef['id'],
   patchSpec: any,
@@ -662,9 +678,7 @@ export function getPatchTool(
       parameters: {
         type: 'object',
         properties: {
-          description: {
-            type: 'string',
-          },
+          description: TOOL_CALL_DESCRIPTION_SCHEMA,
           attributes: {
             type: 'object',
             properties: {
@@ -681,7 +695,7 @@ export function getPatchTool(
             },
           },
         },
-        required: ['attributes', 'description'],
+        required: TOOL_CALL_REQUIRED_PROPERTIES,
       },
     },
   };

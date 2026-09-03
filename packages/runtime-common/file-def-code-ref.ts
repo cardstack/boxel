@@ -138,6 +138,18 @@ export function segmentNamesFile(name: string): boolean {
   return extensionOfName(name) in FILEDEF_CODE_REF_BY_EXTENSION;
 }
 
+// Whether a reference names a file rather than a card instance. String form of
+// `urlNamesFile`, for a reference that may not parse as a URL (a registered
+// prefix id such as `@cardstack/skills/some-skill`). Judged the same way, by a
+// registered extension on the last path segment: a dot alone proves nothing,
+// because a card id can carry one, and reading such a dot as an extension is
+// what turns `<realm>/ModelConfiguration/claude-sonnet-4.6` into a reference to
+// a file that does not exist.
+export function referenceNamesFile(reference: string): boolean {
+  let path = reference.split(/[?#]/)[0];
+  return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
+}
+
 export function resolveFileDefCodeRef(
   fileURL: URL,
   virtualNetwork: VirtualNetwork,

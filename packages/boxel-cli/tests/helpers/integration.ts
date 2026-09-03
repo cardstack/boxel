@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as net from 'net';
 import * as path from 'path';
 import * as os from 'os';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
@@ -47,6 +48,8 @@ const noopPrerenderer: Prerenderer = {
 };
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
+const TEST_REALM_SERVER_HOST = new URL(TEST_REALM_SERVER_URL).hostname;
+const TEST_REALM_SERVER_PORT = Number(new URL(TEST_REALM_SERVER_URL).port);
 
 export const TEST_USERNAME = `cli-test-${Date.now()}`;
 export const TEST_PASSWORD = 'test-password-for-cli';
@@ -57,6 +60,127 @@ let dbAdapter: PgAdapter | undefined;
 let publisher: PgQueuePublisher | undefined;
 let runner: PgQueueRunner | undefined;
 let realmsRootDir: string | undefined;
+
+/**
+ * The in-flight `startTestRealmServer` boot, from its first line until it
+ * either publishes its results into the module state above or throws.
+ *
+ * Every integration file boots its fixture on the same fixed port, and the
+ * whole suite shares one process (`--poolOptions.forks.singleFork`), so the
+ * fixture's teardown has to be able to clean up a boot that its own caller
+ * has stopped waiting for. vitest enforces a hook budget by rejecting the
+ * hook's promise; it cannot cancel the work the hook started, so a `beforeAll`
+ * that overruns leaves the boot running and hands control to `afterAll`
+ * immediately — the boot then binds the fixture port with nothing left holding
+ * a reference to the server. `stopTestRealmServer` awaits this handle first
+ * (see `settleBoot`), which is what keeps one overrun boot from turning into
+ * `EADDRINUSE` in every file that follows.
+ */
+let pendingBoot: Promise<unknown> | undefined;
+
+/**
+ * Wall-clock cost of each phase of the fixture the current file is standing
+ * up, in the order the phases run: the server boot first, then whatever
+ * profile setup the file asks for. A phase with no entry had not been
+ * reached, which is what makes this readable for a hook that overran its
+ * budget — the phase that never landed is the one that was still running.
+ */
+let fixturePhases: [string, number][] = [];
+
+async function timePhase<T>(
+  name: string,
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  let start = Date.now();
+  try {
+    return await fn();
+  } finally {
+    fixturePhases.push([name, Date.now() - start]);
+  }
+}
+
+function formatFixturePhases(): string {
+  if (fixturePhases.length === 0) {
+    return '(no fixture recorded)';
+  }
+  return `${fixturePhases
+    .map(([name, ms]) => `${name}=${ms}ms`)
+    .join(' ')} total=${fixtureTotalMs()}ms`;
+}
+
+function fixtureTotalMs(): number {
+  return fixturePhases.reduce((sum, [, ms]) => sum + ms, 0);
+}
+
+/**
+ * How long teardown waits for an in-flight boot to publish its results (or
+ * fail), so that it sees everything the boot created.
+ *
+ * A cap rather than an unbounded wait, because a boot that never settles would
+ * otherwise hold teardown until the hook budget above it. Reaching the cap is
+ * the one case teardown cannot clean up: the boot has by definition not
+ * reached its `listen` yet, so there is nothing to close and nothing for the
+ * next file's pre-flight check to see either. Generous enough that a boot
+ * costing an order of magnitude over its usual second is still waited out.
+ */
+const BOOT_SETTLE_TIMEOUT_MS = 60_000;
+
+/**
+ * True when something is accepting connections at `host:port`. Used to tell a
+ * leaked fixture server apart from a clean start, so the leak is reported at
+ * the boot that trips over it.
+ */
+export function isPortListening(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let socket = new net.Socket();
+    let settle = (listening: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(listening);
+    };
+    socket.setTimeout(1000);
+    socket.once('connect', () => settle(true));
+    socket.once('timeout', () => settle(false));
+    socket.once('error', () => settle(false));
+    socket.connect(port, host);
+  });
+}
+
+async function settleBoot(): Promise<void> {
+  let boot = pendingBoot;
+  if (!boot) {
+    return;
+  }
+  pendingBoot = undefined;
+  // Teardown reached a boot that is still running, so the hook that started it
+  // never got its result — it overran its budget or its file failed around it.
+  // The phase list names how far the boot got, which is the one thing the
+  // hook's own `Hook timed out` report cannot say.
+  console.log(
+    `[boxel-cli fixture] teardown is waiting on a boot that is still in ` +
+      `flight; ${
+        fixturePhases.length === 0
+          ? 'it had not finished its first phase (the database clone)'
+          : `phases so far: ${formatFixturePhases()}`
+      }`,
+  );
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      // A rejected boot has already been reported to the hook that started
+      // it; teardown only needs the boot settled, so that nothing is still
+      // writing to the module state it is about to tear down.
+      boot.catch(() => {}),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, BOOT_SETTLE_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
 
 export interface RealmConfig {
   realmURL: URL;
@@ -106,9 +230,73 @@ export async function startTestRealmServer(
       'startTestRealmServer: pass either `realms` or `fileSystem`, not both',
     );
   }
+  fixturePhases = [];
+  slowFixtureReported = false;
+  // The handle is published before the first `await`, so a caller that stops
+  // waiting the instant it calls this still leaves teardown something to find.
+  // Nothing here may be awaited ahead of the assignment — the port check runs
+  // inside the boot for that reason.
+  let boot = (async () => {
+    await assertFixturePortFree();
+    return await bootTestRealmServer(options);
+  })();
+  pendingBoot = boot;
+  try {
+    return await boot;
+  } finally {
+    // Clearing the handle is what tells teardown it has nothing to wait for:
+    // the caller has the boot's outcome. Only a boot whose caller never
+    // reaches here leaves it set.
+    if (pendingBoot === boot) {
+      pendingBoot = undefined;
+      reportSlowFixture();
+    }
+  }
+}
 
+/**
+ * A fixture that stands up at its usual cost — around a second, most of it the
+ * server boot — is silent. One an order of magnitude above that prints its
+ * phase breakdown, well before the hook budget is in danger, because a suite
+ * whose fixtures have drifted toward the limit is what turns runner load into
+ * hook timeouts. The breakdown says which phase to go after.
+ */
+const SLOW_FIXTURE_THRESHOLD_MS = 10_000;
+let slowFixtureReported = false;
+
+function reportSlowFixture(): void {
+  if (slowFixtureReported || fixtureTotalMs() < SLOW_FIXTURE_THRESHOLD_MS) {
+    return;
+  }
+  slowFixtureReported = true;
+  console.log(`[boxel-cli fixture] slow setup: ${formatFixturePhases()}`);
+}
+
+/**
+ * Fail before booting when something already holds the fixture port, and say
+ * what that means. A bare `listen EADDRINUSE` from inside the realm server's
+ * boot names a port and nothing else; the failure a reader needs to recognise
+ * is that this file never had the port to begin with.
+ */
+async function assertFixturePortFree(): Promise<void> {
+  if (
+    !(await isPortListening(TEST_REALM_SERVER_HOST, TEST_REALM_SERVER_PORT))
+  ) {
+    return;
+  }
+  throw new Error(
+    `fixture port ${TEST_REALM_SERVER_URL} is already accepting connections, ` +
+      `so a test realm server cannot bind it. The usual cause is a fixture ` +
+      `boot that outlived the teardown of the file that started it — look ` +
+      `for a hook timeout in the file that ran before this one.`,
+  );
+}
+
+async function bootTestRealmServer(
+  options: StartTestRealmServerOptions,
+): Promise<{ realms: Realm[]; testRealmHttpServer: Server }> {
   prepareTestDB();
-  dbAdapter = await createTestPgAdapter();
+  dbAdapter = await timePhase('clone-test-db', () => createTestPgAdapter());
   publisher = new PgQueuePublisher(dbAdapter);
   // Test-only hardening for a leak in runtime-common's enqueueReindexRealmJob:
   // server.createRealm, handle-publish-realm, and full-reindex discard the Job
@@ -148,7 +336,10 @@ export async function startTestRealmServer(
     },
   ];
 
-  let result = await runTestRealmServerWithRealms({
+  // Bound outside the timing closure: the pieces above live in module state so
+  // teardown can reach them, and a closure over module state reads them as
+  // possibly-undefined.
+  let bootArgs = {
     realmsRootPath: path.join(realmsRootDir, 'realm_server_1'),
     realms,
     virtualNetwork,
@@ -157,13 +348,16 @@ export async function startTestRealmServer(
     dbAdapter,
     matrixURL,
     prerenderer: options.prerenderer ?? noopPrerenderer,
-  });
+  };
+  let result = await timePhase('boot-realm-server', () =>
+    runTestRealmServerWithRealms(bootArgs),
+  );
 
   testRealmHttpServer = result.testRealmHttpServer;
   activeRealms = result.realms;
 
   if (options.registerMatrixUser !== false) {
-    await registerCliTestUser();
+    await timePhase('register-matrix-user', () => registerCliTestUser());
   }
 
   return {
@@ -183,6 +377,12 @@ export function getTestDbAdapter(): PgAdapter | undefined {
 }
 
 export async function stopTestRealmServer(): Promise<void> {
+  // A boot whose caller stopped waiting for it is still going to publish a
+  // listening server into the module state below, so teardown waits for it
+  // rather than racing it. Everything after this point tears down the full
+  // set of resources the boot created, whether or not the hook that asked
+  // for them ever saw them.
+  await settleBoot();
   for (let realm of activeRealms) {
     realm.unsubscribe();
   }
@@ -261,19 +461,31 @@ export function reloadProfile(home: string): ProfileManager {
 }
 
 /**
- * Register the cli-test user in Synapse. Re-registering an existing user
- * produces a benign 4xx that callers can ignore. Most tests get this via
- * `startTestRealmServer` (default `registerMatrixUser: true`); tests that
- * opt out and use JWT injection don't need it.
+ * Register the cli-test user in Synapse, idempotently: the account already
+ * existing is the expected outcome for a second call, which is what a file
+ * that boots the fixture more than once produces (the username is per-process,
+ * and Synapse keeps the account for the life of the container). Most tests get
+ * this via `startTestRealmServer` (default `registerMatrixUser: true`); tests
+ * that opt out and use JWT injection don't need it.
  */
 export async function registerCliTestUser(): Promise<void> {
-  await registerUser({
-    matrixURL,
-    displayname: 'CLI Test User',
-    username: TEST_USERNAME,
-    password: TEST_PASSWORD,
-    registrationSecret: matrixRegistrationSecret,
-  });
+  try {
+    await registerUser({
+      matrixURL,
+      displayname: 'CLI Test User',
+      username: TEST_USERNAME,
+      password: TEST_PASSWORD,
+      registrationSecret: matrixRegistrationSecret,
+    });
+  } catch (err) {
+    // Synapse's admin-register endpoint reports a taken user id with
+    // `M_USER_IN_USE`, which `registerUser` surfaces as a thrown error
+    // carrying the response body. The account we want exists with the
+    // password we want; anything else is a real failure.
+    if (!String(err).includes('M_USER_IN_USE')) {
+      throw err;
+    }
+  }
 }
 
 /**
@@ -286,13 +498,19 @@ export async function setupTestProfile(
   realmServerUrl: string = `${TEST_REALM_SERVER_URL}/`,
 ): Promise<string> {
   let matrixId = `@${TEST_USERNAME}:localhost`;
-  await pm.addProfile(
-    matrixId,
-    TEST_PASSWORD,
-    'CLI Test User',
-    matrixURL.href,
-    realmServerUrl,
+  // Synapse hashes the password on every login, so this is a real cost in the
+  // setup hook rather than a local write — it belongs in the phase list beside
+  // the server boot.
+  await timePhase('matrix-login', () =>
+    pm.addProfile(
+      matrixId,
+      TEST_PASSWORD,
+      'CLI Test User',
+      matrixURL.href,
+      realmServerUrl,
+    ),
   );
+  reportSlowFixture();
   return matrixId;
 }
 

@@ -10,6 +10,16 @@ export default class ResponseState {
   private allowedToolNames: Set<string> | undefined;
   isStreamingFinished = false;
   isCanceled = false;
+  // The provider's finish_reason for this turn. Only the chunk that ends the
+  // generation carries one; keep the last non-null value so trailing chunks
+  // (e.g. the usage report) cannot clear it.
+  finishReason: string | undefined;
+
+  updateFinishReason(finishReason: string | null | undefined) {
+    if (finishReason) {
+      this.finishReason = finishReason;
+    }
+  }
 
   setAllowedToolNames(names: Iterable<string> | undefined) {
     this.allowedToolNames = names ? new Set(names) : undefined;
@@ -116,6 +126,7 @@ export default class ResponseState {
       toolCalls: this.toolCalls,
       isStreamingFinished: this.isStreamingFinished,
       isCanceled: this.isCanceled,
+      finishReason: this.finishReason,
     };
   }
 }
