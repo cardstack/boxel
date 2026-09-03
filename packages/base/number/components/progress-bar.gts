@@ -4,6 +4,7 @@ import {
   getNumericValue,
   calculatePercentage,
   getFormattedDisplayValue,
+  statusRampColor,
 } from '../util/index';
 
 export interface ProgressBarOptions {
@@ -61,17 +62,7 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
     if (this.options.useGradient === false) {
       return 'var(--primary)';
     }
-    const p = this.percentage;
-    if (p <= 25) {
-      return 'var(--destructive)';
-    }
-    if (p <= 50) {
-      return 'var(--warning)';
-    }
-    if (p <= 75) {
-      return 'var(--accent)';
-    }
-    return 'var(--success)';
+    return statusRampColor(this.percentage);
   }
 
   get fillStyle() {
@@ -83,7 +74,11 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
   <template>
     <span class='progress-bar-atom'>
       <div class='progress-bar-track'>
-        <div class='progress-bar-fill' style={{this.fillStyle}}></div>
+        <div
+          class='progress-bar-fill'
+          style={{this.fillStyle}}
+          data-test-progress-bar-fill
+        ></div>
       </div>
     </span>
 
@@ -145,22 +140,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
     if (this.options.useGradient === false) {
       return 'var(--primary)';
     }
-    const p = this.percentage;
-    // State-based colors based on progress percentage
-    // 0-25%: Red (low progress)
-    if (p <= 25) {
-      return 'var(--destructive)';
-    }
-    // 25-50%: Orange (moderate progress)
-    if (p <= 50) {
-      return 'var(--warning)';
-    }
-    // 50-75%: Yellow (good progress)
-    if (p <= 75) {
-      return 'var(--accent)';
-    }
-    // 75-100%: Green (excellent progress)
-    return 'var(--success)';
+    return statusRampColor(this.percentage);
   }
 
   get fillStyle() {
@@ -212,6 +192,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
         <div
           class='progress-bar-fill {{if this.isGradient "gradient" "solid"}}'
           style={{this.fillStyle}}
+          data-test-progress-bar-fill
         >
           {{#if this.shouldShowText}}
             <div class='progress-bar-info'>

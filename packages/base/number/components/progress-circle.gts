@@ -5,6 +5,7 @@ import {
   getNumericValue,
   calculatePercentage,
   getFormattedDisplayValue,
+  statusRampColor,
 } from '../util/index';
 
 export interface ProgressCircleOptions {
@@ -61,17 +62,7 @@ export class ProgressCircleAtom extends GlimmerComponent<ProgressCircleSignature
     if (this.options.useGradient === false) {
       return 'var(--primary)';
     }
-    const p = this.percentage;
-    if (p <= 25) {
-      return 'var(--destructive)';
-    }
-    if (p <= 50) {
-      return 'var(--warning)';
-    }
-    if (p <= 75) {
-      return 'var(--accent)';
-    }
-    return 'var(--success)';
+    return statusRampColor(this.percentage);
   }
 
   <template>
@@ -156,22 +147,7 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
     if (this.options.useGradient === false) {
       return 'var(--primary)';
     }
-    const p = this.percentage;
-    // State-based colors based on progress percentage
-    // 0-25%: Red (low progress)
-    if (p <= 25) {
-      return 'var(--destructive)';
-    }
-    // 25-50%: Orange (moderate progress)
-    if (p <= 50) {
-      return 'var(--warning)';
-    }
-    // 50-75%: Yellow (good progress)
-    if (p <= 75) {
-      return 'var(--accent)';
-    }
-    // 75-100%: Green (excellent progress)
-    return 'var(--success)';
+    return statusRampColor(this.percentage);
   }
 
   get displayValue() {

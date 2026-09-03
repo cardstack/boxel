@@ -5,6 +5,7 @@ import {
   getFormattedDisplayValue,
   getNumericValue,
   calculatePercentage,
+  statusRampColor,
 } from '../util/index';
 
 export interface ScoreOptions {
@@ -56,11 +57,7 @@ export class ScoreAtom extends GlimmerComponent<ScoreSignature> {
   }
 
   get iconColor() {
-    const p = this.percentage;
-    if (p >= 75) return 'var(--success)';
-    if (p >= 50) return 'var(--accent)';
-    if (p >= 25) return 'var(--warning)';
-    return 'var(--destructive)';
+    return statusRampColor(this.percentage);
   }
 
   get displayValue() {
@@ -141,11 +138,7 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
   }
 
   get scoreColor() {
-    const p = this.percentage;
-    if (p >= 75) return 'var(--success)';
-    if (p >= 50) return 'var(--accent)';
-    if (p >= 25) return 'var(--warning)';
-    return 'var(--destructive)';
+    return statusRampColor(this.percentage);
   }
 
   get tierLabel() {
@@ -175,6 +168,7 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
         <div
           class='score-badge'
           style={{htmlSafe (concat 'background: ' this.scoreColor)}}
+          data-test-score-badge
         >
           <svg
             class='badge-icon'
