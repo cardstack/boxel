@@ -30,14 +30,14 @@ class StubRealmService extends Service {
     'https://writable.example/': {
       info: {
         name: 'Writable Realm',
-        iconURL: 'https://example.com/writable.png',
+        iconURL: '/test-fixtures/realm-images/letter-a.png',
       },
       canWrite: true,
     },
     'https://readonly.example/': {
       info: {
         name: 'Read-only Realm',
-        iconURL: 'https://example.com/readonly.png',
+        iconURL: '/test-fixtures/realm-images/letter-c.png',
       },
       canWrite: false,
     },

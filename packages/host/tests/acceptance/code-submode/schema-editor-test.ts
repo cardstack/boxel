@@ -431,8 +431,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+              '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: '/test-fixtures/realm-images/boxel-logo.png',
           }),
         },
       });
@@ -545,7 +545,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     // Check that realm icons in the schema editor are correct (card and its fields)
 
-    let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
+    let realm1IconUrl = '/test-fixtures/realm-images/boxel-logo.png';
     let realm2IconUrl = 'https://boxel-images.boxel.ai/icons/cardstack.png';
 
     await waitForRealmIcon(

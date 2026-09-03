@@ -150,6 +150,20 @@ const baseTestMatrix = {
 
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
+/**
+ * The absolute form of a root-relative fixture image path.
+ *
+ * Fixture images live in `public/test-fixtures/realm-images/` and realms name
+ * them with a root-relative URL, which keeps a fixture independent of whatever
+ * origin the test server happens to be on. `getComputedStyle` resolves `url()`
+ * against the document base though, so a computed `background-image` comes
+ * back carrying that origin and never equals the path as written. Assertions
+ * on computed styles have to compare against this instead.
+ */
+export function fixtureImageURL(path: string) {
+  return new URL(path, window.location.origin).href;
+}
+
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
