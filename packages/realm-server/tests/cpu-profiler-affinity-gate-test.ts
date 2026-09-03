@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { basename } from 'path';
 import {
   shouldProfileAffinity,
   getAffinityProfileTargets,
@@ -12,7 +13,7 @@ import {
 // the dependency-free pure function (no Chrome / CDP) — a member of the
 // target list profiles, and an empty list, a non-member affinity, or an
 // empty/undefined affinity profiles nothing.
-module('cpu-profiler affinity gate', function () {
+module(`${basename(import.meta.filename)} | affinity gate`, function () {
   let a = 'realm:https://realms.example/team/realm-a/';
   let b = 'realm:https://realms.example/team/realm-b/';
 
@@ -64,7 +65,7 @@ module('cpu-profiler affinity gate', function () {
 // time and parses it as a comma-separated list — each entry trimmed,
 // empties dropped. Unset or whitespace-only resolves to an empty list so
 // the gate above is inert.
-module('cpu-profiler affinity targets env', function (hooks) {
+module(`${basename(import.meta.filename)} | targets env`, function (hooks) {
   let original: string | undefined;
   hooks.beforeEach(function () {
     original = process.env.PRERENDER_PROFILE_AFFINITY;

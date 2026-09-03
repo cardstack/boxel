@@ -89,7 +89,11 @@ import type IndexController from '@cardstack/host/controllers/index';
 
 import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
-import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
+import {
+  getRandomBackgroundURL,
+  iconURLFor,
+  PERSONAL_REALM_ENDPOINT,
+} from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import {
   clearLocalStorage,
@@ -170,6 +174,18 @@ const realmEventsLogger = logger('realm:events');
 // records one →true and a teardown one →false, so a handful of entries covers
 // even a re-entrant boot; keeping the most recent dozen is ample.
 const MAX_POST_LOGIN_TRANSITIONS = 12;
+
+// Thrown by switchAccount so the caller can tell a non-destructive redemption
+// failure (the outgoing account is untouched) from a boot failure that happens
+// after the outgoing account has already been torn down and revoked.
+export class AccountSwitchError extends Error {
+  constructor(
+    readonly phase: 'redeem' | 'boot',
+    readonly originalError: unknown,
+  ) {
+    super(`account switch failed during ${phase}`);
+  }
+}
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
@@ -699,8 +715,30 @@ export default class MatrixService extends Service {
     ]);
   }
 
-  async logout() {
-    let client = this._client;
+  // `skipIndexTransition` suppresses the index-root transition at the end: the
+  // account-switch flow logs out only to immediately establish a new session,
+  // so the caller owns the navigation that follows and must not have its
+  // in-flight transition aborted (nor the URL's deep-link params overwritten
+  // with the workspace-chooser state).
+  async logout(opts?: {
+    skipIndexTransition?: true;
+    serverLogoutAuth?: LoginResponse;
+  }) {
+    // Which session to revoke server-side, decoupled from `this._client`. During
+    // an account switch the live client has already been rewritten to the
+    // incoming account's token by loginWithToken(), and the outgoing account was
+    // never booted here — so the only way to log it out server-side is a
+    // throwaway client built from its captured auth. Plain createClient has no
+    // side effects (no setClient/saveAuth) and logout(true) on a never-started
+    // client just POSTs /logout.
+    let client = opts?.serverLogoutAuth
+      ? this.matrixSDK.createClient({
+          baseUrl: matrixURL,
+          accessToken: opts.serverLogoutAuth.access_token,
+          userId: opts.serverLogoutAuth.user_id,
+          deviceId: opts.serverLogoutAuth.device_id,
+        })
+      : this._client;
     let didResetState = false;
     try {
       // Logout should synchronously move the app into a logged-out state.
@@ -732,20 +770,22 @@ export default class MatrixService extends Service {
       this.resetState();
       didResetState = true;
       await client?.logout(true);
-      // when user logs out we transition them back to an empty stack with the
-      // workspace chooser open. this way we don't inadvertently leak private
-      // card id's in the URL
-      this.router.transitionTo('index-root', {
-        queryParams: {
-          operatorModeState: stringify({
-            stacks: [],
-            submode: Submodes.Interact,
-            workspaceChooserOpened: true,
-          } as OperatorModeSerializedState),
-          sid: null,
-          clientSecret: null,
-        },
-      });
+      if (!opts?.skipIndexTransition) {
+        // when user logs out we transition them back to an empty stack with
+        // the workspace chooser open. this way we don't inadvertently leak
+        // private card id's in the URL
+        this.router.transitionTo('index-root', {
+          queryParams: {
+            operatorModeState: stringify({
+              stacks: [],
+              submode: Submodes.Interact,
+              workspaceChooserOpened: true,
+            } as OperatorModeSerializedState),
+            sid: null,
+            clientSecret: null,
+          },
+        });
+      }
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
@@ -754,6 +794,53 @@ export default class MatrixService extends Service {
       if (!didResetState) {
         this.resetState();
       }
+    }
+  }
+
+  // A loginToken next to a session stored in this browser means "switch to the
+  // token's account" (`boxel browse --profile B` against a browser signed in as
+  // A). Ordered so a bad/expired token is non-destructive:
+  //   snapshot A → redeem B (validates the token) → tear down A (revoking it
+  //   server-side via the snapshot) → boot B.
+  // Redemption runs first, so a dead token throws before any teardown and the
+  // caller stays signed in as A. The snapshot is taken up front because
+  // loginWithSsoToken() rewrites the live client's access token in place and
+  // logout() clears persisted auth — this is the only point A's session is
+  // recoverable for a server-side logout.
+  async switchAccount(loginToken: string): Promise<void> {
+    await this.ready;
+    let previousAuth = this.getAuth();
+    if (!previousAuth) {
+      throw new Error(
+        `switchAccount requires a persisted session to switch away from`,
+      );
+    }
+    let auth: LoginResponse;
+    try {
+      auth = await this.loginWithSsoToken(loginToken);
+    } catch (e) {
+      // Redemption failed before any teardown, so the current account is still
+      // intact and recoverable. Tagged 'redeem' so the caller can show a
+      // non-destructive failure page rather than falling to the login form.
+      throw new AccountSwitchError('redeem', e);
+    }
+    await this.logout({
+      skipIndexTransition: true,
+      serverLogoutAuth: previousAuth,
+    });
+    // logout()/clearLocalStorage leave the outgoing account's realm session
+    // tokens; forget them so the incoming account mints its own on boot rather
+    // than reusing them and trying to join a session room it was never invited
+    // to (a 403 that fails the boot). setClient() during start() re-reads these
+    // keys, so clearing them here is enough.
+    this.forgetRealmSessionTokens();
+    try {
+      await this.start({ auth, refreshRoutes: true });
+    } catch (e) {
+      // Boot failed after the previous account was already torn down and
+      // revoked, so it is gone — tagged 'boot' so the caller falls through to
+      // the login form rather than offering "back to your account".
+      throw new AccountSwitchError('boot', e);
     }
   }
 
@@ -788,7 +875,7 @@ export default class MatrixService extends Service {
 
     await Promise.all([
       this.createPersonalRealmForUser({
-        endpoint: 'personal',
+        endpoint: PERSONAL_REALM_ENDPOINT,
         name: `${displayName}'s Workspace`,
         iconURL: iconURLFor(displayName),
         backgroundURL: getRandomBackgroundURL(),
@@ -3107,13 +3194,19 @@ export default class MatrixService extends Service {
   // (personal realm, realm auth) stay put; only this browser's local link to
   // the device is forgotten.
   //
-  // Storage-only, and all three keys of it. The realm tokens are persisted
-  // apart from the Matrix session, and a session-room claim inside the
-  // realm-server token is the identity a later realm-auth handshake adopts:
-  // leaving it behind hands the next account a session room belonging to this
-  // one, which it is not invited to and cannot join.
+  // Storage-only, and all three keys of it.
   forgetPersistedSession() {
     this.clearAuth();
+    this.forgetRealmSessionTokens();
+  }
+
+  // The realm-server and per-realm session tokens are persisted apart from the
+  // Matrix session, and a session-room claim inside the realm-server token is
+  // the identity a later realm-auth handshake adopts: leaving a previous
+  // account's keys behind hands the next account a session room belonging to
+  // that one, which it is not invited to and cannot join. Forget them whenever
+  // the persisted account changes.
+  private forgetRealmSessionTokens() {
     window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
     window.localStorage.removeItem(SessionLocalStorageKey);
   }

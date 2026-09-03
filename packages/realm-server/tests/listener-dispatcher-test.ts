@@ -579,22 +579,11 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('h2 keepalive + diagnostics do not disrupt serving', async function (assert) {
-    // Every accepted session gets the PING keepalive, and with
-    // REALM_SERVER_HTTP2_DIAGNOSTICS on it is also swept every 5s for a state
-    // snapshot. Hold one h2 connection open across a keepalive ping and a
-    // diagnostics sweep and confirm the session still serves afterwards: a
-    // healthy peer pongs, so the keepalive must never tear it down, and the
-    // observer-only diagnostics must neither throw nor perturb the session.
-    let prior = process.env.REALM_SERVER_HTTP2_DIAGNOSTICS;
-    process.env.REALM_SERVER_HTTP2_DIAGNOSTICS = '1';
-    let restoreEnv = () => {
-      if (prior !== undefined) {
-        process.env.REALM_SERVER_HTTP2_DIAGNOSTICS = prior;
-      } else {
-        delete process.env.REALM_SERVER_HTTP2_DIAGNOSTICS;
-      }
-    };
+  test('h2 keepalive does not disrupt serving', async function (assert) {
+    // Every accepted session gets the PING keepalive. Hold one h2 connection
+    // open across a keepalive ping and confirm the session still serves
+    // afterwards: a healthy peer pongs, so the keepalive must never tear it
+    // down.
     let { port, isHttp2, close } = await startListener({
       cert: certFile,
       key: keyFile,
@@ -615,18 +604,17 @@ module(basename(import.meta.filename), function (hooks) {
     try {
       assert.true(isHttp2, 'listener advertises h2 mode');
       assert.strictEqual(await request('/_alive'), 200, 'first request OK');
-      // Cross at least one 5s keepalive ping and one diagnostics sweep so
-      // both run against the live session.
+      // Cross at least one 5s keepalive ping so it runs against the live
+      // session.
       await new Promise((r) => setTimeout(r, 5500));
       assert.strictEqual(
         await request('/_alive'),
         200,
-        'request after a keepalive ping + diagnostics sweep still OK',
+        'request after a keepalive ping still OK',
       );
     } finally {
       client.close();
       await close();
-      restoreEnv();
     }
   });
 

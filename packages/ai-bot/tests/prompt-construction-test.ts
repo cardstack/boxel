@@ -1,6 +1,9 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
-import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
+import {
+  getPatchTool,
+  TOOL_CALL_DESCRIPTION_SCHEMA,
+} from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1708,9 +1711,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
         parameters: {
           type: 'object',
           properties: {
-            description: {
-              type: 'string',
-            },
+            description: TOOL_CALL_DESCRIPTION_SCHEMA,
             attributes: {
               type: 'object',
               properties: {

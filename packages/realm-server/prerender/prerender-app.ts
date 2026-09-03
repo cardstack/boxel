@@ -10,6 +10,7 @@ import {
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
   SCREENSHOT_FORMATS,
+  type DeclaredScreenshotVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
@@ -1014,6 +1015,15 @@ export function buildPrerenderApp(options: {
             (t): t is string => typeof t === 'string',
           )
         : undefined;
+      // Declared-screenshot capture opt-in. Presence (even `{}`) turns the
+      // capture step on for a prerender-html visit; the fields inside are
+      // carry-forward inputs the capture step treats as advisory.
+      let screenshots: DeclaredScreenshotVisitArgs | undefined =
+        attrs.screenshots &&
+        typeof attrs.screenshots === 'object' &&
+        !Array.isArray(attrs.screenshots)
+          ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
+          : undefined;
 
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -1111,6 +1121,17 @@ export function buildPrerenderApp(options: {
       // so `handle-search` can gate the job-scoped search cache.
       let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
 
+      // The realm view this visit renders against. An index pass and the
+      // prerender-html job it spawned are separate queue jobs over one view, so
+      // the page keys reusable state on this rather than on the job id. Absent
+      // for a visit that carries no scope (an on-demand render); the page then
+      // falls back to the job id, which is narrower and so never unsound.
+      let rawRenderScope = attrs.renderScope;
+      let renderScope =
+        typeof rawRenderScope === 'string' && rawRenderScope.trim().length > 0
+          ? rawRenderScope
+          : undefined;
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1128,6 +1149,8 @@ export function buildPrerenderApp(options: {
         ...(batchId ? { batchId } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(jobId ? { jobId } : {}),
+        ...(screenshots ? { screenshots } : {}),
+        ...(renderScope ? { renderScope } : {}),
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();

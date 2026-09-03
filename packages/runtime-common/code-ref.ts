@@ -4,7 +4,6 @@ import type {
   BaseDef,
   CardDef,
   FieldDef,
-  FieldConstructor,
 } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import { Loader } from './loader.ts';
@@ -52,6 +51,38 @@ let localIdentities = new WeakMap<
   | { type: 'ancestorOf'; card: typeof BaseDef }
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
+
+// The own properties a field class's constructor does not set, per declared
+// field. A narrowing has to carry these across itself: the field factories
+// assign `configuration` after construction, so no parameter list can reach it.
+//
+// Derived by probing the constructor rather than hand-written, which is the
+// whole point — an option added to a field declaration is carried without this
+// having to learn about it, and a hand-written list is what dropped one twice.
+// Keyed by the declared field, which belongs to a property descriptor and so is
+// class-level: this holds one small array per field declaration in the app, not
+// one per instance.
+//
+// Derived once, which assumes a declared field's own properties are complete
+// before anything narrows it. They are: each of the four field factories
+// assigns `configuration` before returning the descriptor that `getField`
+// reads, and nothing mutates a field afterwards. A property that appeared on a
+// declared field only after its first narrowing would be dropped from every
+// narrowing thereafter, so a factory that grew a deferred assignment would need
+// to invalidate here.
+let uncarriedKeys = new WeakMap<Field<BaseDefConstructor>, string[]>();
+
+function keysNotSetByConstructor(field: Field<BaseDefConstructor>): string[] {
+  let keys = uncarriedKeys.get(field);
+  if (!keys) {
+    let probe = new (field.constructor as any)(field);
+    keys = Object.keys(field).filter(
+      (key) => probe[key] !== (field as any)[key],
+    );
+    uncarriedKeys.set(field, keys);
+  }
+  return keys;
+}
 
 // Pure shape predicates live in `card-document-shape.ts` so callers that
 // only need to recognize a CodeRef don't pull the transitive runtime
@@ -326,46 +357,51 @@ export function getField<T extends BaseDef>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
-      let fieldOverride: typeof BaseDef | undefined;
-      if (opts?.untracked) {
-        fieldOverride =
-          instance && isCardInstance(instance)
-            ? instance[fieldsUntracked]?.[fieldName]
-            : undefined;
-      } else {
-        fieldOverride =
-          instance && isCardInstance(instance)
-            ? instance[fields]?.[fieldName]
-            : undefined;
-      }
+      // Only a card instance can carry an override. Reading through `fields`
+      // rather than `fieldsUntracked` is what entangles the caller with card
+      // tracking, so which of the two is read stays a property of the lookup.
+      let overrideOwner =
+        instance && isCardInstance(instance) ? instance : undefined;
+      let fieldOverride: typeof BaseDef | undefined = overrideOwner
+        ? (opts?.untracked
+            ? overrideOwner[fieldsUntracked]
+            : overrideOwner[fields])?.[fieldName]
+        : undefined;
       if (fieldOverride) {
-        let cardThunk = fieldOverride;
-        let { computeVia, name, queryDefinition, eager } = result;
         let originalField = result;
-        let declaredCardThunk =
-          (originalField as any).declaredCardResolver ??
-          (() => originalField.card as BaseDefConstructor);
-        result = new (originalField.constructor as unknown as Field & {
-          new (args: FieldConstructor<unknown>): Field;
-        })({
-          cardThunk: () => cardThunk,
-          declaredCardThunk,
-          computeVia,
-          name,
-          isPolymorphic: true,
-          queryDefinition,
-          // The override narrows which card the link resolves to; it does not
-          // restate how the field behaves. Options that travel with the
-          // declaration have to be carried across or the rebuilt field silently
-          // loses them.
-          eager,
-        }) as Field;
-        // `configuration` is not a constructor parameter — the field factories
-        // assign it after construction — so carrying it across takes the same
-        // shape. It is read instance-scoped (a rebuilt field is exactly what
-        // that lookup returns), so dropping it would strip a narrowed field's
-        // rendering config.
-        (result as any).configuration = (originalField as any).configuration;
+        // The override narrows which card the field resolves to. It does not
+        // restate how the field behaves, so the rest of the declaration has to
+        // survive the narrowing.
+        //
+        // Build through the field's own constructor, handing it the field as its
+        // own argument. That works because every constructor parameter name is
+        // an own property of the field holding the value the constructor stored
+        // under it — not the converse, since a field also carries properties no
+        // parameter names. This keeps the narrowed field on the
+        // same hidden class as the field it was narrowed from, which is load
+        // bearing: there are four field classes, so any shared `field.*` read
+        // site already sees four shapes, V8's polymorphic ceiling. A
+        // differently-shaped clone takes those sites to eight and turns them
+        // megamorphic, slowing reads of *declared* fields everywhere, not just
+        // narrowed ones.
+        //
+        // Then carry across only what that constructor does not set, which is
+        // what makes this a clone of the declaration rather than a second list
+        // of options to keep. Copying every own property instead would be just
+        // as faithful but several times more expensive on a path a resolved
+        // link reaches for every one of its lookups.
+        //
+        // What a narrowing changes is stated on its own: the card the field
+        // resolves to, and that resolving it is polymorphic. Notably not
+        // `declaredCardThunk`, which resolves the type the field was *declared*
+        // with.
+        let narrowed = new (originalField.constructor as any)(originalField);
+        for (let key of keysNotSetByConstructor(originalField)) {
+          narrowed[key] = (originalField as any)[key];
+        }
+        narrowed.cardThunk = () => fieldOverride;
+        narrowed.isPolymorphic = true;
+        result = narrowed as Field;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',

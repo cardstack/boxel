@@ -25,7 +25,9 @@ import {
   Component,
   contains,
   field,
+  FileDef,
   getDataBucket,
+  getRelationshipMembershipState,
   linksTo,
   setupBaseRealm,
   StringField,
@@ -37,6 +39,10 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
+// A file reference is a path, so the realm never holds a `.json` alongside it —
+// the placeholder has to read it as the file it names rather than as the
+// `<Type>/<id>` shape a card reference has.
+const MISSING_IMAGE_URL = `${testRealmURL}Widget/images/photo.jpg`;
 
 // The cards are declared inside a helper rather than at module scope because the
 // base-realm helpers (CardDef, field, …) are only populated once
@@ -71,6 +77,15 @@ function makeCards() {
       </template>
     };
   }
+  // A `linksTo(FileDef)` field: the slot holds a file, so its broken state has
+  // to read as a missing file rather than a missing card.
+  class Widget extends CardDef {
+    static displayName = 'Widget';
+    @field photo = linksTo(FileDef);
+    static isolated = class extends Component<typeof Widget> {
+      <template><@fields.photo @format='embedded' /></template>
+    };
+  }
   class Person extends CardDef {
     static displayName = 'Person';
     @field firstName = contains(StringField);
@@ -93,7 +108,7 @@ function makeCards() {
       <template><@fields.pet /></template>
     };
   }
-  return { Person, Pet };
+  return { Person, Pet, Widget };
 }
 
 // Drive a real lazy-load failure: the realm never holds `Pet/ghost`, so reading
@@ -106,6 +121,19 @@ async function createPerson(
     attributes: { firstName: 'Hassan' },
     relationships,
     meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Person' } },
+  };
+  return (await store.__dangerousCreateFromSerialized(
+    resource,
+    { data: resource },
+    new URL(testRealmURL),
+  )) as CardDefType;
+}
+
+async function createWidget(): Promise<CardDefType> {
+  let store = getService('store');
+  let resource: LooseCardResource = {
+    attributes: {},
+    meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Widget' } },
   };
   return (await store.__dangerousCreateFromSerialized(
     resource,
@@ -143,11 +171,11 @@ module(
     // Realm holds Person/Pet plus one real Pet (`Pet/mango`); `Pet/ghost` is
     // never present, so links to it resolve to a 404.
     async function setupRealm() {
-      let { Person, Pet } = makeCards();
+      let { Person, Pet, Widget } = makeCards();
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          'test-cards.gts': { Person, Pet },
+          'test-cards.gts': { Person, Pet, Widget },
           'Pet/mango.json': {
             data: {
               attributes: { firstName: 'Mango' },
@@ -459,6 +487,109 @@ module(
       assert
         .dom('[data-test-add-new="pet"]')
         .doesNotExist('a read-only broken link cannot be replaced');
+    });
+
+    test('a broken file link is labelled by its file name and reads as a missing file', async function (assert) {
+      await setupRealm();
+      let widget = await createWidget();
+      getDataBucket(widget).set('photo', {
+        type: 'link-not-found',
+        reference: MISSING_IMAGE_URL,
+        errorDoc: {
+          status: 404,
+          title: 'Link Not Found',
+          message: `missing file ${MISSING_IMAGE_URL}`,
+          additionalErrors: null,
+        } satisfies SerializedError,
+      });
+
+      await renderCard(loader, widget, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      assert
+        .dom('[data-test-broken-link-headline]')
+        .hasText(
+          'Linked file not found',
+          'the placeholder names the kind of thing the slot holds',
+        );
+      assert
+        .dom('[data-test-broken-link-type]')
+        .hasText(
+          'photo.jpg',
+          'the label is the file name, not the directory a card reference would read as its type',
+        );
+      assert
+        .dom('[data-test-broken-link-url]')
+        .hasText(
+          MISSING_IMAGE_URL,
+          'the reference is the file path the realm is missing',
+        );
+    });
+
+    test('a broken link to a file path reports that path, not a .json beside it', async function (assert) {
+      await setupRealm();
+      // A `linksTo` declared to hold a card, holding a reference that names a
+      // file. The realm holds no such file, so reading the link 404s and the
+      // producer plants the sentinel from a real failure rather than a
+      // hand-written one.
+      let person = await createPerson({
+        pet: { links: { self: MISSING_IMAGE_URL } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let slot = getRelationshipMembershipState(person, 'pet').membership?.[0];
+      assert.strictEqual(slot?.kind, 'not-found', 'the link reports not-found');
+      assert.strictEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.message : undefined,
+        `missing file ${MISSING_IMAGE_URL}`,
+        'the failure names the file path itself, with no .json appended',
+      );
+      assert.deepEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.deps : undefined,
+        [MISSING_IMAGE_URL],
+        'the dep invalidation watches is the file path, which a row can be keyed on',
+      );
+    });
+
+    test('a broken link to a dotted card id reports its .json file', async function (assert) {
+      await setupRealm();
+      // `.6` is not a registered file extension, so the dot belongs to the id.
+      // The realm serves such an instance out of `<id>.json`, which is the file
+      // to report and the dep to watch.
+      let dottedId = `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`;
+      let person = await createPerson({
+        pet: { links: { self: dottedId } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let slot = getRelationshipMembershipState(person, 'pet').membership?.[0];
+      assert.strictEqual(
+        slot?.kind === 'not-found' ? slot.errorDoc.message : undefined,
+        `missing file ${dottedId}.json`,
+        'a dotted card id keeps the .json its row is keyed on',
+      );
+    });
+
+    test('a broken card link is labelled by its card type', async function (assert) {
+      await setupRealm();
+      let person = await createPerson({
+        pet: { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'isolated');
+      await waitFor('[data-test-broken-link-template]');
+
+      let embedded = `[data-test-slot='embedded']`;
+      assert
+        .dom(`${embedded} [data-test-broken-link-headline]`)
+        .hasText('Linked card not found');
+      assert
+        .dom(`${embedded} [data-test-broken-link-type]`)
+        .hasText('Pet', 'a card reference is labelled by its type segment');
     });
   },
 );

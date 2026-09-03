@@ -116,7 +116,7 @@ module('Integration | card-chooser', function (hooks) {
         'publishing-packet.gts': { PublishingPacket },
         'realm.json': realmConfigCardJSON({
           name: realmName,
-          iconURL: 'https://example-icon.test',
+          iconURL: '/test-fixtures/realm-images/boxel-logo.png',
         }),
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({

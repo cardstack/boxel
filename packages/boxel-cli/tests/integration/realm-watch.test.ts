@@ -33,6 +33,11 @@ let realmUrl: string;
 const localDirs: string[] = [];
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 const REMOTE_VISIBILITY_TIMEOUT_MS = 5_000;
+// A flush's last step is a `git commit` into a freshly initialized
+// `.boxel-history` repo — a subprocess doing real work, not a realm read, so
+// waiting for one gets its own budget. Generous on purpose: the assertion is
+// that a checkpoint appears, never that it appears quickly.
+const CHECKPOINT_TIMEOUT_MS = 30_000;
 const JWT_TEST_USER = '@cli-watch-test:localhost';
 
 function currentTestName(): string {
@@ -258,11 +263,15 @@ async function waitFor(
   predicate: () => boolean | Promise<boolean>,
   describeFailure: () => string,
   timeoutMs = REMOTE_VISIBILITY_TIMEOUT_MS,
+  // Cheap predicates (a file's existence, a handler count) can be sampled
+  // tightly. One that spawns subprocesses gets a coarser cadence, so the
+  // polling doesn't compete with the work it is waiting for.
+  pollIntervalMs = 25,
 ): Promise<void> {
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await predicate()) return;
-    await sleep(25);
+    await sleep(pollIntervalMs);
   }
   throw new Error(
     `waitFor timed out after ${timeoutMs}ms: ${describeFailure()}`,
@@ -507,9 +516,26 @@ describe('realm watch (integration)', () => {
       signal: controller.signal,
     });
 
-    // Wait long enough for the initial tick + debounced flush + at least one
-    // re-poll, then trigger shutdown.
-    await sleep(400);
+    // Shut down once the loop has produced what the assertions below read,
+    // not after a fixed interval. The tail of a flush is a `git commit` into
+    // a freshly initialized `.boxel-history` repo, which is far and away the
+    // slowest step here and the one a busy runner stretches — aborting on a
+    // stopwatch cuts it off and leaves the pull with no checkpoint behind it.
+    let checkpointManager = new CheckpointManager(localDir);
+    await waitFor(
+      async () => (await checkpointManager.getCheckpoints()).length >= 1,
+      () =>
+        `watchRealms wrote no checkpoint for ${localDir}; local file is ` +
+        `${
+          fs.existsSync(path.join(localDir, watchFixture('loop')))
+            ? 'present'
+            : 'absent'
+        }`,
+      CHECKPOINT_TIMEOUT_MS,
+      // `getCheckpoints` shells out to git, so sample it at a cadence that
+      // leaves the commit room to finish.
+      200,
+    );
     controller.abort();
     let result = await runPromise;
 
@@ -519,7 +545,7 @@ describe('realm watch (integration)', () => {
       fs.readFileSync(path.join(localDir, watchFixture('loop')), 'utf8'),
     ).toContain('loop = 1');
 
-    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+    let checkpoints = await checkpointManager.getCheckpoints();
     expect(checkpoints.length).toBeGreaterThanOrEqual(1);
     expect(checkpoints[0].source).toBe('remote');
   });

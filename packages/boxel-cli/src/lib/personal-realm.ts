@@ -1,6 +1,7 @@
 import {
   iconURLFor,
   getRandomBackgroundURL,
+  PERSONAL_REALM_ENDPOINT,
 } from '@cardstack/runtime-common/realm-display-defaults';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -10,12 +11,6 @@ import {
   requireUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
-
-// The web app's signup flow ends by creating this realm for the new account
-// (see MatrixService.initializeNewUser in the host); these values mirror it so
-// an account bootstrapped from the CLI is indistinguishable from one
-// bootstrapped from the web.
-const PERSONAL_REALM_ENDPOINT = 'personal';
 
 export type EnsurePersonalRealmResult =
   // The account already has at least one realm; nothing was done.
@@ -65,6 +60,10 @@ export async function ensurePersonalRealm(
       body: JSON.stringify({
         data: {
           type: 'realm',
+          // These attributes mirror the web app's signup flow (see
+          // MatrixService.initializeNewUser in the host) so an account
+          // bootstrapped from the CLI is indistinguishable from one
+          // bootstrapped from the web.
           attributes: {
             endpoint: PERSONAL_REALM_ENDPOINT,
             name,

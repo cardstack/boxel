@@ -8,7 +8,11 @@ import {
   type ToolContext,
   type ToolSchemaError,
 } from '@cardstack/runtime-common';
-import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import {
+  basicMappings,
+  TOOL_CALL_DESCRIPTION_SCHEMA,
+  TOOL_CALL_REQUIRED_PROPERTIES,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import * as CardAPI from './card-api';
 import {
@@ -221,12 +225,10 @@ async function generateToolDefinitions(
               parameters: {
                 type: 'object',
                 properties: {
-                  description: {
-                    type: 'string',
-                  },
+                  description: TOOL_CALL_DESCRIPTION_SCHEMA,
                   ...(await tool.getInputJsonSchema(CardAPI, mappings)),
                 },
-                required: ['attributes', 'description'],
+                required: TOOL_CALL_REQUIRED_PROPERTIES,
               },
             },
           };

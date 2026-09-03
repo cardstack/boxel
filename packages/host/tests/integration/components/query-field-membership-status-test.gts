@@ -69,6 +69,17 @@ module('Integration | query-field relationship status', function (hooks) {
         query: { filter: { eq: { name: '$this.cardTitle' } } },
         eager: false,
       });
+      // A page smaller than the match count, which is what a query field over
+      // the server's ceiling reduces to: the field holds a prefix of what it
+      // matched. One row against two matches exercises that without indexing
+      // the several hundred cards the real ceiling would need.
+      @field firstMatch = linksToMany(() => Person, {
+        query: {
+          filter: { eq: { name: '$this.cardTitle' } },
+          page: { size: 1 },
+        },
+      });
+      @field declared = linksToMany(() => Person);
     }
 
     await setupIntegrationTestRealm({
@@ -189,5 +200,77 @@ module('Integration | query-field relationship status', function (hooks) {
     let settledStatus = getRelationshipMembershipState(host, 'matches');
     assert.true(settledStatus.isLoaded, 'and it is claimed once settled');
     assert.strictEqual(settledStatus.membership?.length, 2);
+  });
+
+  test('a field whose page cuts its result set short reports the shortfall', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    let status = getRelationshipMembershipState(host, 'firstMatch');
+    assert.true(status.isLoaded, 'the field settled');
+    assert.strictEqual(
+      status.membership?.length,
+      1,
+      'and holds the one row its page allowed',
+    );
+    assert.strictEqual(
+      status.totalMatchCount,
+      2,
+      'while reporting what the query actually matched',
+    );
+    assert.true(
+      status.isPartial,
+      'so a rollup reducing over the rows is short by one',
+    );
+  });
+
+  test('a field holding its whole result set reports no shortfall', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    let status = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(status.membership?.length, 2);
+    assert.strictEqual(
+      status.totalMatchCount,
+      2,
+      'the count agrees with the membership',
+    );
+    assert.false(status.isPartial, 'so nothing was cut short');
+  });
+
+  test('an unresolved field claims no shortfall', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    // `deferred` opts out of resolving with its owner. `isPartial` asserts a
+    // membership falls short of a known total, and neither is known here.
+    let status = getRelationshipMembershipState(host, 'deferred');
+    assert.strictEqual(status.totalMatchCount, undefined);
+    assert.false(status.isPartial);
+  });
+
+  test('a singular query-backed field reports no match count', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    // Its query is forced to one row and it surfaces that first match by
+    // design, so the two matches behind it are the field working as declared —
+    // reporting them would make every singular query field look truncated.
+    let status = getRelationshipMembershipState(host, 'favorite');
+    assert.strictEqual(status.membership?.length, 1);
+    assert.strictEqual(status.totalMatchCount, undefined);
+    assert.false(status.isPartial);
+  });
+
+  test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    // It holds exactly the targets its document names — no query behind it, so
+    // no page that could cut one short.
+    let status = getRelationshipMembershipState(host, 'declared');
+    assert.true(status.isLoaded);
+    assert.strictEqual(status.totalMatchCount, undefined);
+    assert.false(status.isPartial);
   });
 });

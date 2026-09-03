@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { basename } from 'path';
 import {
   buildArtifactKey,
   getMaxSessionBytes,
@@ -48,7 +49,7 @@ function restoreEnv(snapshot: Record<string, string | undefined>): void {
   }
 }
 
-module('prerender artifact-sink key', function (hooks) {
+module(`${basename(import.meta.filename)} | key`, function (hooks) {
   let saved: Record<string, string | undefined>;
   hooks.beforeEach(function () {
     saved = snapshotEnv();
@@ -114,7 +115,7 @@ module('prerender artifact-sink key', function (hooks) {
   });
 });
 
-module('prerender artifact-sink gates', function (hooks) {
+module(`${basename(import.meta.filename)} | gates`, function (hooks) {
   let saved: Record<string, string | undefined>;
   hooks.beforeEach(function () {
     saved = snapshotEnv();
@@ -185,7 +186,7 @@ module('prerender artifact-sink gates', function (hooks) {
   });
 });
 
-module('prerender artifact-sink session budget', function (hooks) {
+module(`${basename(import.meta.filename)} | session budget`, function (hooks) {
   let saved: Record<string, string | undefined>;
   hooks.beforeEach(function () {
     saved = snapshotEnv();

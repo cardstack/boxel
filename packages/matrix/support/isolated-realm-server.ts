@@ -821,13 +821,32 @@ export class BasicSQLExecutor implements SQLExecutor {
       password: '', // trust auth, so no password needed
       database: db, // default database to connect to
     });
+    // The databases this pool connects to are dropped by the harness's own
+    // teardown, which terminates every backend on a database first. `pg`
+    // reports a connection dying as an `error` event, and an `error` event
+    // with no listener is an uncaught exception — which the runner attributes
+    // to whatever test happened to be in flight rather than to the teardown
+    // that caused it.
+    this.pool.on('error', (err: Error) => {
+      console.warn(`error on idle client of the ${this.db} pool: ${err}`);
+    });
   }
   async executeSQL(sql: string) {
     const client = await this.pool.connect();
+    // A pool removes its own idle listener for the duration of a checkout, so
+    // the listener above does not cover a client dying mid-query: that query
+    // rejects into the caller, and the socket's closing event then arrives
+    // with nobody left to hear it.
+    let onError = (err: Error) =>
+      console.warn(
+        `error on checked-out client of the ${this.db} pool: ${err}`,
+      );
+    client.on('error', onError);
     try {
       let { rows } = await client.query(sql);
       return rows;
     } finally {
+      client.removeListener('error', onError);
       client.release();
     }
   }
