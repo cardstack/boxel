@@ -3,6 +3,10 @@ const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
+import {
+  encodeLintFilename,
+  LINT_FILENAME_HEADER,
+} from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
@@ -1010,6 +1014,40 @@ export class MyCard extends CardDef {
 }
 `,
         'X-Filename header is used for parser detection',
+      );
+    });
+
+    // A header value is a ByteString, so a name outside Latin-1 travels
+    // percent-encoded (`encodeLintFilename`). The realm decodes it back before
+    // reading the extension off it, so `.gts` is still what picks the parser.
+    test('supports an X-Filename outside Latin-1 for parser detection', async function (assert) {
+      let encodedFilename = encodeLintFilename('ai\u{1F389}app-card.gts');
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set(LINT_FILENAME_HEADER, encodedFilename)
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+@field name = contains(StringField);
+}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
+`,
+        'an emoji-named .gts file is linted as .gts',
       );
     });
 

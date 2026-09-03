@@ -5,7 +5,9 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  decodeLintFilename,
   Deferred,
+  LINT_FILENAME_HEADER,
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
@@ -36,6 +38,8 @@ module('Integration | tools | patch-code', function (hooks) {
 
   const testFileName = 'task.gts';
   const fileUrl = `${testRealmURL}${testFileName}`;
+  const emojiFileName = 'ai\u{1F389}app-card.gts';
+  const emojiFileUrl = `${testRealmURL}${encodeURIComponent(emojiFileName)}`;
   const jsonFileName = 'task.json';
   const jsonFileUrl = `${testRealmURL}${jsonFileName}`;
   let adapter: any;
@@ -66,6 +70,16 @@ export class Task extends CardDef {
   "count": 1
 }
 `,
+          [emojiFileName]: `import {
+  contains,
+  field,
+  CardDef,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+export class EmojiCard extends CardDef {
+  static displayName = 'EmojiCard';
+  @field priority = contains(NumberField);
+}`,
         },
       }),
     );
@@ -95,8 +109,12 @@ export class Task extends CardDef {
       request: Request,
       _requestContext: any,
     ): Promise<LintResult> => {
-      // Verify that X-Filename header is passed correctly
-      const filename = request.headers.get('X-Filename');
+      // The X-Filename header travels percent-encoded, so that a name outside
+      // Latin-1 can be carried in a header at all. Read it back through the
+      // same codec.
+      const filename = decodeLintFilename(
+        request.headers.get(LINT_FILENAME_HEADER),
+      );
       assert.strictEqual(
         filename,
         testFileName,
@@ -150,6 +168,49 @@ export class Task extends CardDef {
   </template>
 }`;
     assert.strictEqual(result.patchedContent, expectedResult);
+  });
+
+  // The lint endpoint takes the file name in a header, and a header value is a
+  // ByteString — a name with an emoji in it cannot be assembled into the
+  // request verbatim, so it travels percent-encoded. Patching such a file has
+  // to reach the realm, and the name that arrives has to be the one on disk.
+  test('lint-fixes a file whose name is outside Latin-1', async function (assert) {
+    assert.expect(2);
+
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+
+    adapter.lintStub = async (
+      request: Request,
+      _requestContext: any,
+    ): Promise<LintResult> => {
+      assert.strictEqual(
+        decodeLintFilename(request.headers.get(LINT_FILENAME_HEADER)),
+        emojiFileName,
+        'the emoji-named file reaches the realm under its own name',
+      );
+      return {
+        output: await request.text(),
+        fixed: true,
+        messages: [],
+      };
+    };
+
+    const codeBlock = `${SEARCH_MARKER}
+  static displayName = 'EmojiCard';
+${SEPARATOR_MARKER}
+  static displayName = 'Emoji Card';
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileIdentifier: emojiFileUrl,
+      codeBlocks: [codeBlock],
+    });
+
+    assert.ok(
+      result.patchedContent?.includes("static displayName = 'Emoji Card';"),
+      'the patch is applied to the emoji-named file',
+    );
   });
 
   test('uses the open file resource when the target file is open', async function (assert) {

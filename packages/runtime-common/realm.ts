@@ -169,6 +169,7 @@ import {
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
+import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
   captureSpecHash,
@@ -4989,6 +4990,20 @@ export class Realm {
     }
   }
 
+  // The realm-relative target for a 302, built from a local path. A header
+  // value is a ByteString, so a local path carrying anything outside Latin-1 —
+  // an emoji in a file name, a CJK character — cannot go into `Location` as the
+  // path spells it: `new Response` rejects the value outright with
+  // `Cannot convert argument to a ByteString`. Resolving through `fileURL`
+  // percent-encodes the path the same way the client's own URL was encoded on
+  // the wire, so the header stays ASCII and `paths.local` recovers the same
+  // file from it. `pathname` (not `href`) keeps the target realm-relative,
+  // which is what a client reaching the realm through a different published
+  // host needs.
+  private redirectTarget(localPath: LocalPath): string {
+    return this.paths.fileURL(localPath).pathname;
+  }
+
   private async getSourceOrRedirect(
     request: Request,
     requestContext: RequestContext,
@@ -5076,7 +5091,7 @@ export class Realm {
           return notFound(request, requestContext, `${localName} not found`);
         }
         let headers = {
-          Location: `${new URL(this.url).pathname}${handle.path}`,
+          Location: this.redirectTarget(handle.path),
           [CACHE_HEADER]: CACHE_MISS_VALUE,
         };
         let response = createResponse({
@@ -6196,7 +6211,7 @@ export class Realm {
         init: {
           status: 302,
           headers: {
-            Location: `${new URL(this.url).pathname}${canonicalPath}`,
+            Location: this.redirectTarget(canonicalPath),
           },
         },
       });
@@ -6376,7 +6391,7 @@ export class Realm {
           body: null,
           init: {
             status: 302,
-            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+            headers: { Location: this.redirectTarget(foundPath) },
           },
         });
       }
@@ -6878,7 +6893,9 @@ export class Realm {
     } else {
       // Get source from plain text request body
       const source = await request.text();
-      const filename = request.headers.get('X-Filename') || 'input.gts';
+      const filename =
+        decodeLintFilename(request.headers.get(LINT_FILENAME_HEADER)) ??
+        'input.gts';
       if (!source || source.trim() === '') {
         return createResponse({
           body: JSON.stringify({
