@@ -226,8 +226,8 @@ module('Integration | overlay-menu-items', function (hooks) {
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace 1',
           backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: '/test-fixtures/realm-images/boxel-logo.png',
         }),
       },
     });

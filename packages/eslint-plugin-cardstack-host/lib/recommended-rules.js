@@ -8,6 +8,7 @@ module.exports = {
   '@cardstack/host/host-tools-registered': 'error',
   '@cardstack/host/mock-window-only': 'error',
   '@cardstack/host/no-percy-direct-import': 'error',
+  '@cardstack/host/no-remote-realm-images': 'error',
   '@cardstack/host/unique-percy-snapshot-names': 'error',
   '@cardstack/host/wrapped-setup-helpers-only': 'error',
 };

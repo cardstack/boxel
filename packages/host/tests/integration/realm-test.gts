@@ -3485,8 +3485,8 @@ posts/ignore-me.gts
       contents: {
         'realm.json': realmConfigCardJSON({
           name: 'Example Workspace',
-          backgroundURL: 'https://example-background-url.com',
-          iconURL: 'https://example-icon-url.com',
+          backgroundURL: '/test-fixtures/realm-images/4k-powder-puff.jpg',
+          iconURL: '/test-fixtures/realm-images/boxel-logo.png',
         }),
       },
     });
@@ -3506,12 +3506,12 @@ posts/ignore-me.gts
     assert.strictEqual(attributes.name, 'Example Workspace', 'name');
     assert.strictEqual(
       attributes.backgroundURL,
-      'https://example-background-url.com',
+      '/test-fixtures/realm-images/4k-powder-puff.jpg',
       'backgroundURL',
     );
     assert.strictEqual(
       attributes.iconURL,
-      'https://example-icon-url.com',
+      '/test-fixtures/realm-images/boxel-logo.png',
       'iconURL',
     );
     assert.strictEqual(
