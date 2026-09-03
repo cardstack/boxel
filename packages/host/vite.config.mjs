@@ -6,7 +6,7 @@ import {
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { readFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -207,6 +207,35 @@ function quietOptimizedDepSourcemapWarnings() {
 // HMR client where to reconnect (dev only).
 const envHostname = process.env.BOXEL_HOST_HOSTNAME;
 
+// Test fixture images live in `public/` so the test browser can reach them at
+// a root-relative URL, which also means Vite copies them into `dist/` like any
+// other public asset. Nothing a deployed host serves requests them, so the
+// production build removes them again instead of carrying them into every
+// deploy; the development build testem runs against keeps them.
+function excludeTestFixturesFromProduction(mode) {
+  let outDir;
+  return {
+    name: 'exclude-test-fixtures-from-production',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    async closeBundle() {
+      // Only an explicit production build drops them, so that an unrecognised
+      // mode errs towards keeping them: a build that should carry the images
+      // and does not fails every test that renders a realm, while an extra
+      // copy costs only bytes.
+      if (mode !== 'production') {
+        return;
+      }
+      await rm(path.join(outDir, 'test-fixtures'), {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
   // `Class.name` in user-visible places — validation errors ("references
@@ -287,6 +316,7 @@ export default defineConfig(({ mode }) => ({
       extensions,
     }),
     boxelUIChecksumPlugin(__dirname),
+    excludeTestFixturesFromProduction(mode),
   ],
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],

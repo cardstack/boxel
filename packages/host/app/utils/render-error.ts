@@ -4,6 +4,7 @@ import {
   type LooseSingleCardDocument,
   isCardError,
   type RenderError,
+  referenceNamesFile,
   rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
@@ -128,16 +129,20 @@ function applyAuthMessageOverrides(renderError: RenderError): RenderError {
   return renderError;
 }
 
+// Recover the reference a `missing file <ref>` message names, as the realm file
+// that reference stands for. That file is the one reported to a reader and the
+// dep invalidation watches, so the two reference shapes resolve differently: a
+// card instance is served out of `<id>.json`, while a reference that names a
+// file is already the file. `referenceNamesFile` draws the line at a registered
+// extension rather than at a dot, so a card id that carries one keeps the
+// `.json` its row is keyed on.
 function extractMissingRefFromMessage(message: string): string | undefined {
   let match = /^missing file (.+?)(?: not found)?$/i.exec(message.trim());
-  if (match?.[1]) {
-    let ref = match[1].trim();
-    if (!ref.endsWith('.json')) {
-      ref = `${ref}.json`;
-    }
-    return ref;
+  if (!match?.[1]) {
+    return undefined;
   }
-  return undefined;
+  let ref = match[1].trim();
+  return referenceNamesFile(ref) ? ref : `${ref}.json`;
 }
 
 function normalizeId(id: string, context?: RenderErrorContext): string {

@@ -23,6 +23,7 @@ import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import { AccountSwitchError } from '@cardstack/host/services/matrix-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -30,6 +31,10 @@ import type { SerializedState as OperatorModeSerializedState } from '@cardstack/
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import {
+  consumeLoginTokenFromUrl,
+  peekLoginToken,
+} from '@cardstack/host/utils/login-token';
 
 const { hostsOwnAssets } = ENV;
 
@@ -120,6 +125,53 @@ export default class Card extends Route {
 
     let { operatorModeState, cardPath } = params;
 
+    // Account switch: a loginToken next to a session stored in this browser
+    // means "switch to the token's account" (`boxel browse --profile B` against
+    // a browser signed in as A). Run this BEFORE booting the stored session — a
+    // days-old session may be revoked server-side, and booting it first would
+    // fail, drop the unregistered token in logout()'s transition, and skip the
+    // switch entirely. When there is no stored session the browser is logged
+    // out, so <Login> consumes the token instead; we don't handle that here.
+    let loginToken = peekLoginToken();
+    if (loginToken) {
+      // `persistedUserId` reads the storage handle that `loadState` assigns
+      // (behind an awaited `requestStorageAccess()` on the iframe path). Await
+      // `ready` before gating on it, or a cold load reads `undefined` and falls
+      // through to booting the stored session — the behavior this block removes.
+      await this.matrixService.ready;
+    }
+    if (loginToken && this.matrixService.persistedUserId) {
+      consumeLoginTokenFromUrl(); // single-use: strip up front so a refresh can't retry
+      let didStart = this.didMatrixServiceStart;
+      let controller = this.operatorModeStateService.operatorModeController;
+      controller.accountSwitchFailed = false;
+      try {
+        // switchAccount boots the new account with refreshRoutes, which
+        // re-enters this hook; set the one-shot flag first so that re-run skips
+        // the boot below (the new session is already up).
+        this.didMatrixServiceStart = true;
+        await this.matrixService.switchAccount(loginToken);
+        return;
+      } catch (e) {
+        this.didMatrixServiceStart = didStart;
+        if (e instanceof AccountSwitchError && e.phase === 'redeem') {
+          // The token was bad/expired and nothing was torn down, so the current
+          // account is intact. Show the "couldn't switch accounts" page instead
+          // of booting; its "Back to home" recovers into the current account.
+          controller.accountSwitchFailed = true;
+          console.error(
+            'Account switch failed before teardown; showing failure page',
+            e,
+          );
+          return;
+        }
+        // A post-teardown (boot) or unknown failure means the previous account
+        // is already gone. Fall through: the boot below re-establishes whichever
+        // account is persisted now — recovering the switch or landing on login.
+        console.error('Error consuming loginToken; falling back to boot', e);
+      }
+    }
+
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
       await this.matrixService.start();
@@ -145,6 +197,13 @@ export default class Card extends Route {
         );
       }
     }
+
+    // Any path that reaches the boot has moved past a prior failed switch (the
+    // failure return is above this point), so clear the flag. "Back to home"
+    // relies on this: it navigates here without clearing the flag itself, so the
+    // failure page stays up through the boot (the loading template covers it)
+    // rather than flashing the login form, and clears only once we're booted.
+    this.operatorModeStateService.operatorModeController.accountSwitchFailed = false;
 
     if (!this.matrixService.isLoggedIn) {
       if (isTesting()) {

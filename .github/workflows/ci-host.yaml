@@ -608,11 +608,6 @@ jobs:
 
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
-        env:
-          # Dump HTTP/2 session/stream state for any realm-server stream that
-          # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
-          # 60s host-test timeouts. Diagnostics-only; see server.ts.
-          REALM_SERVER_HTTP2_DIAGNOSTICS: "1"
 
       # Register the matrix users (realm_server, base_realm, …) the
       # realm-server logs in as. Without this the worker's `_mtimes`

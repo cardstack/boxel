@@ -86,7 +86,10 @@ function spawnFakeWatcher(opts: {
         reject(err);
       }
     });
-    child.on('exit', (code) => {
+    // `close` rather than `exit`: the reason this rejection reports is
+    // whatever the fixture wrote to stderr, and only `close` guarantees that
+    // stream has been drained.
+    child.on('close', (code) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(timer);

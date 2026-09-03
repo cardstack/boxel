@@ -15,9 +15,17 @@
 //
 // A hook budget has to exceed their sum; the ladder test asserts it.
 
-// Waiting out a boot whose caller stopped waiting for it. The boot goes on to
-// bind the fixture port whether or not anything holds a reference to it, so
-// teardown settles it rather than racing it.
+// How long teardown waits for an in-flight boot to publish its results (or
+// fail), so that it sees everything the boot created. The boot goes on to bind
+// the fixture port whether or not anything holds a reference to it, so teardown
+// settles it rather than racing it.
+//
+// A cap rather than an unbounded wait, because a boot that never settles would
+// otherwise hold teardown until the hook budget above it. Reaching the cap is
+// the one case teardown cannot clean up: the boot has by definition not reached
+// its `listen` yet, so there is nothing to close and nothing for the next
+// file's pre-flight check to see either. Generous enough that a boot costing an
+// order of magnitude over its usual second is still waited out.
 export const BOOT_SETTLE_TIMEOUT_MS = 60_000;
 
 // Draining the queue runner. `runner.destroy()` waits for the runner's loop to

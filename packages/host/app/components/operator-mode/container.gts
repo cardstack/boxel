@@ -1,5 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
+import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
 import { buildWaiter } from '@ember/test-waiters';
@@ -14,6 +16,8 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
 
+import stringify from 'safe-stable-stringify';
+
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -26,6 +30,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
+import AccountSwitchFailed from '@cardstack/host/components/matrix/account-switch-failed';
 import Auth from '@cardstack/host/components/matrix/auth';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
@@ -48,6 +53,7 @@ import CreateListingModal from './create-listing-modal';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type { SerializedState as OperatorModeSerializedState } from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
@@ -70,6 +76,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare realmServer: RealmServerService;
   @service declare private toolService: ToolService;
   @service declare private store: StoreService;
+  @service declare private router: RouterService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -77,6 +84,24 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.operatorModeStateService.clearStacks();
+    });
+  }
+
+  // Leave the "couldn't switch accounts" page: navigate to the workspace
+  // chooser, which re-runs the index model hook and boots the still-intact
+  // current account (it was never torn down on a redeem failure). The model hook
+  // clears `accountSwitchFailed` once booted — clearing it here instead would
+  // flash the login form while the boot is still in flight.
+  @action
+  private backToHome() {
+    this.router.transitionTo('index-root', {
+      queryParams: {
+        operatorModeState: stringify({
+          stacks: [],
+          submode: Submodes.Interact,
+          workspaceChooserOpened: true,
+        } as OperatorModeSerializedState),
+      },
     });
   }
   @provide(GetCardContextName)
@@ -186,6 +211,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       <FromElseWhere @name='modal-elsewhere' />
 
       {{#if
+        this.operatorModeStateService.operatorModeController.accountSwitchFailed
+      }}
+        <AccountSwitchFailed @onBackToHome={{this.backToHome}} />
+      {{else if
         (or
           (not this.matrixService.isLoggedIn)
           this.matrixService.isInitializingNewUser

@@ -1,7 +1,7 @@
 import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, afterAll } from 'vitest';
-import * as net from 'net';
 import {
+  isPortListening,
   startTestRealmServer,
   stopTestRealmServer,
   TEST_REALM_SERVER_URL,
@@ -30,19 +30,7 @@ const CARD_JSON = JSON.stringify({
 
 function isFixturePortListening(): Promise<boolean> {
   let { hostname, port } = new URL(TEST_REALM_SERVER_URL);
-  return new Promise((resolve) => {
-    let socket = new net.Socket();
-    let settle = (listening: boolean) => {
-      socket.removeAllListeners();
-      socket.destroy();
-      resolve(listening);
-    };
-    socket.setTimeout(1000);
-    socket.once('connect', () => settle(true));
-    socket.once('timeout', () => settle(false));
-    socket.once('error', () => settle(false));
-    socket.connect(Number(port), hostname);
-  });
+  return isPortListening(hostname, Number(port));
 }
 
 afterAll(async () => {
@@ -70,5 +58,9 @@ describe('fixture teardown (integration)', () => {
 
     await stopTestRealmServer();
     expect(await isFixturePortListening()).toBe(false);
-  });
+    // Two full fixture boots, where every other file does one — and in a test
+    // rather than a hook, so it takes `testTimeout` rather than the larger
+    // hook budget. Stated explicitly because this is the file most exposed to
+    // the boot cost drifting.
+  }, 150_000);
 });

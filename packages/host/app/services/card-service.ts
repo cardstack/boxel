@@ -377,21 +377,6 @@ export default class CardService extends Service {
     await api.flushLogs();
   }
 
-  async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
-    let response = await this.network.authedFetch(`${realmURL}_info`, {
-      headers: { Accept: SupportedMimeType.RealmInfo },
-      method: 'QUERY',
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`,
-      );
-    }
-    return (await response.json()).data.attributes;
-  }
-
   async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
     for (let operation of operations) {
       if (operation.data?.type === 'source') {

@@ -72,7 +72,7 @@ export class Message implements RoomMessageInterface {
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
-  @tracked errorMessage?: string;
+  @tracked private _errorMessage?: string;
   clientGeneratedId?: string;
   isDebugMessage?: boolean;
   reloadBillingData?: boolean;
@@ -111,6 +111,17 @@ export class Message implements RoomMessageInterface {
     this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
+  }
+
+  // Like tools, body, and usage, an error that ends a split answer (e.g. the
+  // provider's output-token limit) rides the final part of the continuation
+  // chain; the head chases it so the one rendered message shows it.
+  get errorMessage(): string | undefined {
+    return this.continuedInMessage?.errorMessage ?? this._errorMessage;
+  }
+
+  set errorMessage(errorMessage: string | undefined) {
+    this._errorMessage = errorMessage;
   }
 
   get isRetryable() {

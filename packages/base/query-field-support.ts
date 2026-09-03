@@ -211,16 +211,21 @@ export function ensureQueryFieldSearchResource(
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
-            // What the resource is allowed to believe about the match count.
-            // A count the indexer reported passes through as the count. Where
-            // it reported none but recorded a realm failure, the rows in hand
-            // are labelled a floor instead: absent any meta the resource infers
-            // the total from the record count, and a set short by a realm
-            // nobody could count would then read as the whole of it — a
-            // confident number over an incomplete set, which is the failure
-            // this field's status exists to report rather than reproduce.
-            // An ordinary seed carries neither, and the resource's own
-            // inference stands.
+            // What the resource is allowed to believe about the match count,
+            // in order of how much is known. A count the indexer reported
+            // passes through as the count. Where it reported none but recorded
+            // a realm failure, the rows in hand are labelled a floor — that
+            // says both that the count is unknown and why, which is what turns
+            // into the field's shortfall signal. Where it reported none and no
+            // realm failed, the count is simply unknowable and says so.
+            //
+            // The ordering matters because the fallback is inference: absent
+            // any of these the resource takes the total from the record count,
+            // and a set short by a realm nobody could count would read as the
+            // whole of it — a confident number over an incomplete set, which is
+            // the failure this field's status exists to report rather than
+            // reproduce. An ordinary seed reaches that inference legitimately,
+            // because there nothing was withheld.
             ...(fieldState?.seedTotal != null
               ? { meta: { page: { total: fieldState.seedTotal } } }
               : fieldState?.seedErrors?.length
@@ -230,7 +235,9 @@ export function ensureQueryFieldSearchResource(
                       incomplete: true,
                     },
                   }
-                : {}),
+                : seedSearchURL != null
+                  ? { totalUnknown: true }
+                  : {}),
           }
         : undefined,
     },

@@ -90,7 +90,11 @@ describe('realm publish (integration)', () => {
         '60000',
         '--json',
       ],
-      { home },
+      // Both rungs above the command are set here, because the helper cannot
+      // see the test budget and so cannot check that the ladder holds: 60s for
+      // the command to report which readiness stage it was waiting on, 90s
+      // before the harness kills it, and the test budget below clears that.
+      { home, timeout: 90_000 },
     );
     expect(res.ok, res.stderr).toBe(true);
     let result = res.json<PublishResultJson>();
@@ -104,11 +108,9 @@ describe('realm publish (integration)', () => {
     // must surface that value rather than failing the call — earlier
     // boxel-home CI broke when callers required 200/201 and got a 202.
     expect(result.status).toBe('pending');
-    // Three nested deadlines, and only the innermost one has anything useful
-    // to say when it fires: `--timeout 60000` makes the command report which
-    // readiness stage it was still waiting on. `runBoxel` gives it 30s of
-    // margin over that (see `resolveDeadline`), and this budget clears the
-    // sum, so the command's own report is what the failure carries.
+    // The outermost of the three deadlines set on this test, clearing the 90s
+    // harness deadline above so the command's own report — not vitest
+    // abandoning it — is what a readiness failure carries.
   }, 150_000);
 
   it('returns without waiting when waitForReady is false', async () => {

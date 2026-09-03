@@ -100,7 +100,11 @@ afterAll(async () => {
     // getTestPrerenderer() would fail for a reason of its own.
     await stopTestPrerenderServer();
   }
-});
+  // Shutting down a realm server and a browser-backed prerender server is not
+  // a 10-second job on a loaded runner, and the default hook timeout is 10s.
+  // Timing out here aborts the teardown above, which is the very thing that
+  // keeps the next file off this port — so the budget matches the setup's.
+}, 600_000);
 
 describe('federated search (integration)', () => {
   it('returns each card once (no `.json` file-row dupe) plus plain files', async () => {

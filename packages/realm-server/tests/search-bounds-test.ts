@@ -2,7 +2,6 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
-  applyQueryFieldPageBound,
   applySearchPageBound,
   applyServerSearchPageBound,
   assertRealmsBound,
@@ -13,6 +12,7 @@ import {
   SearchBoundError,
   MAX_SEARCH_PAGE_SIZE,
   SERVER_MAX_SEARCH_PAGE_SIZE,
+  SERVER_ABSOLUTE_MAX_PAGE_SIZE,
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
 } from '@cardstack/runtime-common';
@@ -144,16 +144,61 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(bounded.page, { size: SERVER_MAX_SEARCH_PAGE_SIZE });
     });
 
-    test('an explicit page over the server ceiling is rejected with a 400', function (assert) {
-      try {
-        applyServerSearchPageBound({
-          page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1 },
-        } as Query);
-        assert.ok(false, 'expected a SearchBoundError');
-      } catch (e) {
-        assert.true(e instanceof SearchBoundError);
-        assert.strictEqual((e as SearchBoundError).status, 400);
+    test('an explicit page over the default is honored up to the absolute maximum', function (assert) {
+      // Naming a size is the opt-in: the caller asked for that cost knowingly,
+      // where a caller that named nothing gets the default. This is what lets a
+      // query-backed field declare the page it needs.
+      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1 } } as Query;
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+      let atMax = { page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE } } as Query;
+      assert.strictEqual(applyServerSearchPageBound(atMax), atMax);
+    });
+
+    test('an explicit page over the absolute maximum is clamped, not rejected', function (assert) {
+      // A query-backed field's page is applied by the indexer's expansion, by a
+      // peer realm's `_search`, and by the client's live refresh. Rejecting on
+      // one leg and clamping on another is how a field resolves from its seed
+      // and then fails the first time it refreshes, so every leg clamps.
+      let bounded = applyServerSearchPageBound({
+        page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1, number: 3 },
+      } as Query);
+      assert.deepEqual(bounded.page, {
+        size: SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+        number: 3,
+      });
+    });
+
+    test('the input query is left unmutated when clamped', function (assert) {
+      let query = {
+        page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 10 },
+      } as Query;
+      applyServerSearchPageBound(query);
+      assert.deepEqual(query.page, {
+        size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 10,
+      });
+    });
+
+    test('a page whose size cannot bound anything falls back to the default', function (assert) {
+      for (let bad of [undefined, null, 0, -1, 'lots']) {
+        let bounded = applyServerSearchPageBound({
+          page: { size: bad },
+        } as unknown as Query);
+        assert.deepEqual(
+          bounded.page,
+          { size: SERVER_MAX_SEARCH_PAGE_SIZE },
+          `page.size ${JSON.stringify(bad)} takes the default`,
+        );
       }
+    });
+
+    test('the absolute maximum is at least the default', function (assert) {
+      // Opt-in territory can be empty but never inverted: an env override that
+      // put the maximum below the default would make the size a non-paginating
+      // caller is clamped to itself rejectable.
+      assert.true(
+        SERVER_ABSOLUTE_MAX_PAGE_SIZE >= SERVER_MAX_SEARCH_PAGE_SIZE,
+        'the rejection threshold never sits below the mandatory default',
+      );
     });
 
     test('a page allowed by the server ceiling can still exceed the card cap', function (assert) {
@@ -172,73 +217,71 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('the override lowers the effective server ceiling independently', function (assert) {
-      setSearchBoundsForTests({ serverMaxPageSize: 3 });
+    test('the overrides move the default and the maximum independently', function (assert) {
+      setSearchBoundsForTests({
+        serverMaxPageSize: 3,
+        serverAbsoluteMaxPageSize: 8,
+      });
+      let clamped = applyServerSearchPageBound({} as Query);
+      assert.deepEqual(
+        clamped.page,
+        { size: 3 },
+        'a query naming no page takes the default',
+      );
+      let optedIn = { page: { size: 8 } } as Query;
+      assert.strictEqual(
+        applyServerSearchPageBound(optedIn),
+        optedIn,
+        'a query naming a size within the maximum keeps it',
+      );
+      assert.deepEqual(
+        applyServerSearchPageBound({ page: { size: 9 } } as Query).page,
+        { size: 8 },
+        'and is clamped past the maximum',
+      );
+    });
+
+    test('a default above the maximum cannot hand out a larger page than an explicit request', function (assert) {
+      // Production floors the pair at module load, but the test seam does not,
+      // and an unclamped default would give a caller that named nothing a
+      // bigger page than one that asked for the maximum.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1000,
+        serverAbsoluteMaxPageSize: 10,
+      });
+      assert.deepEqual(
+        applyServerSearchPageBound({} as Query).page,
+        { size: 10 },
+        'the default is held to the maximum',
+      );
+    });
+
+    test('collapsing the two overrides leaves no opt-in room', function (assert) {
+      setSearchBoundsForTests({
+        serverMaxPageSize: 5,
+        serverAbsoluteMaxPageSize: 5,
+      });
+      assert.deepEqual(
+        applyServerSearchPageBound({ page: { size: 6 } } as Query).page,
+        { size: 5 },
+        'a larger page clamps straight back to the default',
+      );
+      assert.deepEqual(applyServerSearchPageBound({} as Query).page, {
+        size: 5,
+      });
+    });
+
+    test('the card @context cap still rejects rather than clamping', function (assert) {
+      // The two answers are for two kinds of caller: card code calling
+      // getCards surfaces the error in the card, so the author who wrote the
+      // number is the one who sees it.
       assert.throws(
-        () => applyServerSearchPageBound({ page: { size: 4 } } as Query),
+        () =>
+          applySearchPageBound({
+            page: { size: MAX_SEARCH_PAGE_SIZE + 1 },
+          } as Query),
         (e: Error) => e instanceof SearchBoundError,
       );
-      let clamped = applyServerSearchPageBound({} as Query);
-      assert.deepEqual(clamped.page, { size: 3 });
-    });
-  });
-
-  module('applyQueryFieldPageBound', function () {
-    test('an absent page is clamped to the server ceiling', function (assert) {
-      let bounded = applyQueryFieldPageBound({ filter: { eq: {} } } as Query);
-      assert.deepEqual(bounded.page, { size: SERVER_MAX_SEARCH_PAGE_SIZE });
-    });
-
-    test('a page at or under the ceiling passes through unchanged', function (assert) {
-      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE } } as Query;
-      assert.strictEqual(applyQueryFieldPageBound(query), query);
-      let smaller = { page: { size: 1, number: 0 } } as Query;
-      assert.strictEqual(applyQueryFieldPageBound(smaller), smaller);
-    });
-
-    test('an over-ceiling page is clamped rather than rejected', function (assert) {
-      // The endpoint bounds answer a request, so rejecting one costs the
-      // caller that request. A field's page.size is authored once and read on
-      // every index of every instance of that card, so the same rejection
-      // would make the card unindexable — the shortfall is reported through
-      // the relationship's match total instead.
-      let bounded = applyQueryFieldPageBound({
-        page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1, number: 2 },
-      } as Query);
-      assert.deepEqual(bounded.page, {
-        size: SERVER_MAX_SEARCH_PAGE_SIZE,
-        number: 2,
-      });
-    });
-
-    test('a page whose size cannot bound anything is clamped to the ceiling', function (assert) {
-      for (let bad of [undefined, null, 0, -1, 'lots']) {
-        let bounded = applyQueryFieldPageBound({
-          page: { size: bad },
-        } as unknown as Query);
-        assert.deepEqual(
-          bounded.page,
-          { size: SERVER_MAX_SEARCH_PAGE_SIZE },
-          `page.size ${JSON.stringify(bad)} is clamped`,
-        );
-      }
-    });
-
-    test('the input query is left unmutated', function (assert) {
-      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 10 } } as Query;
-      applyQueryFieldPageBound(query);
-      assert.deepEqual(query.page, {
-        size: SERVER_MAX_SEARCH_PAGE_SIZE + 10,
-      });
-    });
-
-    test('the override lowers the effective ceiling', function (assert) {
-      setSearchBoundsForTests({ serverMaxPageSize: 3 });
-      assert.deepEqual(
-        applyQueryFieldPageBound({ page: { size: 4 } } as Query).page,
-        { size: 3 },
-      );
-      assert.deepEqual(applyQueryFieldPageBound({} as Query).page, { size: 3 });
     });
   });
 

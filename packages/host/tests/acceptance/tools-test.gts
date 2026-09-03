@@ -535,8 +535,8 @@ module('Acceptance | Tools tests', function (hooks) {
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: '/test-fixtures/realm-images/boxel-logo.png',
         }),
         // Markdown skills for the read-skill (pull model) execution tests.
         // Neither is enabled in any room; their tools only become callable
@@ -1798,6 +1798,70 @@ module('Acceptance | Tools tests', function (hooks) {
     assert.strictEqual(
       message.content.commandRequestId,
       '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
+  });
+
+  test('a tool request without the description label still validates and runs', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-test-message-field]');
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    let roomId = getRoomIds().pop()!;
+    await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
+    await waitForNewRoomSkillsLoaded(roomId);
+    // `description` is only the label the pill shows; a model that leaves it
+    // out has still sent everything the command needs.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'no-description-request',
+          name: showCardToolName,
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
+    assert.dom('[data-test-boxel-alert="warning"]').doesNotExist();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-tool-code-block]')
+      .containsText('Show card', 'the pill label falls back to the tool name');
+
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
+    assert.strictEqual(
+      message.content.commandRequestId,
+      'no-description-request',
     );
   });
 

@@ -60,6 +60,19 @@ describe('CheckpointManager', () => {
       expect(await cm.isInitialized()).toBe(true);
       expect(await cm.getCheckpoints()).toEqual([]);
     });
+
+    it('surfaces a history repo git cannot read', async () => {
+      // An unreadable repository must not read as an empty history: the
+      // unborn-HEAD probe answers through git's exit code, and git uses a
+      // different one (128) for a fatal than for "that revision does not
+      // resolve" (1). A `.git` that is a file of garbage is the fatal case.
+      let gitDir = path.join(workspaceDir, '.boxel-history');
+      fs.mkdirSync(gitDir, { recursive: true });
+      fs.writeFileSync(path.join(gitDir, '.git'), 'not a gitfile\n', 'utf8');
+
+      expect(await cm.isInitialized()).toBe(true);
+      await expect(cm.getCheckpoints()).rejects.toThrow(/invalid gitfile/);
+    });
   });
 
   describe('detectCurrentChanges', () => {

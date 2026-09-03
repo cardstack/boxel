@@ -3,7 +3,7 @@ const { module, test, assert } = QUnit;
 import { Responder } from '../lib/responder.ts';
 import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
-import { thinkingMessage } from '../constants.ts';
+import { maxOutputTokensErrorMessage, thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -597,6 +597,110 @@ module('Responding', (hooks) => {
     } finally {
       delete process.env.AI_BOT_STREAMING_MODE;
     }
+  });
+
+  test('a generation cut off at the output-token limit surfaces an error on the final event, keeping the partial answer', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial answer'));
+    await clock.tickAsync(300);
+    // The provider stops the generation at its max output tokens.
+    await responder.onChunk(
+      {
+        choices: [{ delta: {}, finish_reason: 'length', index: 0 }],
+      } as any,
+      snapshotWithContent('partial answer'),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      last.body,
+      'partial answer',
+      'the partial answer is kept, not replaced by the error',
+    );
+    assert.equal(
+      last.errorMessage,
+      maxOutputTokensErrorMessage,
+      'the final event carries the output-limit error',
+    );
+    assert.true(last.isStreamingFinished, 'the answer is marked finished');
+  });
+
+  test('an answer split across continuation events carries the output-limit error only on its final part', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+    let longContent = 'a'.repeat(512) + 'b'.repeat(1024) + 'c'.repeat(1024);
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent(longContent));
+    await responder.onChunk(
+      {
+        choices: [{ delta: {}, finish_reason: 'length', index: 0 }],
+      } as any,
+      snapshotWithContent(longContent),
+    );
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let continuationParts = sentEvents.filter(
+      (e) => e.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+    );
+    assert.ok(continuationParts.length > 0, 'the answer was split');
+    for (let part of continuationParts) {
+      assert.strictEqual(
+        part.content.errorMessage,
+        undefined,
+        'a continuation fragment carries no error',
+      );
+    }
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      last.errorMessage,
+      maxOutputTokensErrorMessage,
+      'the final part carries the output-limit error',
+    );
+  });
+
+  test('a normally finished generation carries no error message', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('the answer'));
+    await clock.tickAsync(300);
+    await responder.onChunk(
+      {
+        choices: [{ delta: {}, finish_reason: 'stop', index: 0 }],
+      } as any,
+      snapshotWithContent('the answer'),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.strictEqual(last.errorMessage, undefined, 'no error on the event');
+  });
+
+  test('a canceled generation carries no error message even if the last chunk reported length', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial answer'));
+    await clock.tickAsync(300);
+    await responder.onChunk(
+      {
+        choices: [{ delta: {}, finish_reason: 'length', index: 0 }],
+      } as any,
+      snapshotWithContent('partial answer'),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize({ isCanceled: true });
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.true(last.isCanceled, 'the turn is marked canceled');
+    assert.strictEqual(
+      last.errorMessage,
+      undefined,
+      'a canceled turn is cut off on purpose, so no error',
+    );
   });
 
   test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {

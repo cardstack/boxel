@@ -13,6 +13,8 @@ Router.map(function () {
     this.route('icon');
     this.route('meta');
     this.route('types');
+    this.route('screenshots');
+    this.route('screenshot', { path: '/screenshot/:name' });
     this.route('file-extract');
     this.route('error');
   });

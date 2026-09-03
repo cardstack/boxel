@@ -796,8 +796,9 @@ export function relationshipStateForEntry<T extends CardDef>(
 //         this,
 //         'everyActivity',
 //       );
-//       // Returned as-is. Leaving the field empty says the count is unknown;
-//       // `?? 0` would render a confident nought over a set nobody counted.
+//       // `undefined` is unknown, not zero — see below. Returning it leaves the
+//       // field empty, which reads as "no answer"; `?? 0` would render a
+//       // confident nought over a set nobody counted.
 //       return totalMatchCount;
 //     },
 //   });
@@ -834,9 +835,14 @@ export interface RelationshipProbeResult<T extends CardDef = CardDef> {
   // Resolved membership for a query-backed field (`undefined` while in flight).
   // Ignored for declared fields, whose membership comes from the data bucket.
   queryMembership?: RelationshipState<T>[] | undefined;
-  // The match count the field's search reported (`meta.page.total`), which the
-  // page ceiling does not bound. Ignored for declared fields.
+  // The match count the field's search reported, which the page ceiling does
+  // not bound. Ignored for declared fields.
   queryTotalMatchCount?: number | undefined;
+  // Whether that search's result set is a bounded prefix of the match set.
+  // Supplied rather than derived from `queryMembership`, because only the
+  // search resource holds the match count and the server's own result set in
+  // the same terms. Ignored for declared fields.
+  queryIsPartial?: boolean;
   // Whether a realm the query targets failed to answer. Such a realm
   // contributes no rows and no count, so membership is short and the shortfall
   // is not measurable. Ignored for declared fields.
@@ -906,15 +912,20 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
       isLoaded: !isLoading && membership !== undefined,
       membership,
       totalMatchCount,
-      // A known count is the better evidence and supersedes an earlier realm
-      // failure: it describes the set the field holds now. Only where no count
-      // survives does an unreachable realm decide the question, and there it
-      // decides it affirmatively — rows are missing, just not countably.
+      // Two questions, asked in the order the evidence allows. A known count
+      // is compared in the search resource, not here: `membership` is the
+      // server's result set after reconciliation against local Store state, so
+      // measuring against it would call a field partial because the user
+      // edited one of its cards out of the filter. Where no count survives,
+      // the comparison is impossible and an unreachable realm answers instead
+      // — rows are missing, just not countably. A known count supersedes an
+      // earlier realm failure, because it describes the set the field holds
+      // now.
       isPartial:
         isSingular || membership === undefined
           ? false
           : totalMatchCount != null
-            ? totalMatchCount > membership.length
+            ? Boolean(probe?.queryIsPartial)
             : Boolean(probe?.queryHasUnreachableRealms),
     };
   }

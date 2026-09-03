@@ -27,6 +27,11 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import {
+  consumeLoginTokenFromUrl,
+  peekLoginToken,
+} from '@cardstack/host/utils/login-token';
+
 import AuthButton from './auth-button';
 import AuthFormField from './auth-form-field';
 
@@ -244,7 +249,7 @@ export default class Login extends Component<Signature> {
     // loginToken — the task itself is async (awaits matrix-sdk load + token
     // exchange + matrixService.start), and without this the password form
     // would flash for ~1-2s between mount and the auth flip.
-    if (new URLSearchParams(window.location.search).has('loginToken')) {
+    if (peekLoginToken()) {
       this.exchangingSsoToken = true;
       this.startedFromLoginToken = true;
     }
@@ -327,20 +332,12 @@ export default class Login extends Component<Signature> {
   });
 
   private consumeSsoLoginToken = restartableTask(async () => {
-    let params = new URLSearchParams(window.location.search);
-    let token = params.get('loginToken');
+    // Clears the token from the URL so a refresh doesn't re-trigger the
+    // single-use exchange.
+    let token = consumeLoginTokenFromUrl();
     if (!token) {
       return;
     }
-    // Clear the token from the URL so a refresh doesn't re-trigger the
-    // single-use exchange.
-    params.delete('loginToken');
-    let search = params.toString();
-    let newUrl =
-      window.location.pathname +
-      (search ? `?${search}` : '') +
-      window.location.hash;
-    window.history.replaceState({}, '', newUrl);
 
     try {
       let auth = await this.matrixService.loginWithSsoToken(token);

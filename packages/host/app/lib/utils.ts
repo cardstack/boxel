@@ -9,6 +9,7 @@ import {
 export {
   iconURLFor,
   getRandomBackgroundURL,
+  PERSONAL_REALM_ENDPOINT,
 } from '@cardstack/runtime-common/realm-display-defaults';
 
 import ENV from '@cardstack/host/config/environment';

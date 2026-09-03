@@ -243,6 +243,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   definitionLookup,
   virtualNetwork,
   createPrerenderAuth,
+  mediaCacheAdapter,
 }) =>
   async function (args) {
     let {
@@ -300,6 +301,10 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,
+      // Declared-screenshot persistence. Optional: a worker without a
+      // MediaCache configured still renders HTML, it just captures nothing.
+      dbAdapter,
+      mediaCacheAdapter,
     });
 
     // Fresh HTML is live — tell subscribed hosts so open live searches

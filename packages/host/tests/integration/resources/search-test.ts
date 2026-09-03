@@ -1218,6 +1218,90 @@ module(`Integration | search resource`, function (hooks) {
         };
       }
 
+      test(`a seed that reports its count unknowable does not have one inferred from its rows`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        // The state a query-backed field lands in when a realm it targeted
+        // failed: the indexer resolved the field, withheld `meta.total`
+        // because the count is exactly what the failure took, and the rows in
+        // hand therefore look like the whole set. Inferring a total from them
+        // is what turns "unknown" into "you have all of them".
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              totalUnknown: true,
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'the seeded rows are still held',
+        );
+        assert.strictEqual(
+          search.totalMatchCount,
+          undefined,
+          'but no match count is reported',
+        );
+        assert.false(
+          search.isPartial,
+          'and no shortfall is claimed against a count nobody reported',
+        );
+      });
+
+      test(`a seed carrying a count larger than its rows reports the shortfall`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              meta: { page: { total: cards.length + 3 } },
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.totalMatchCount,
+          cards.length + 3,
+          'the seeded match count is reported as given',
+        );
+        assert.true(
+          search.isPartial,
+          'and the rows falling short of it is a shortfall',
+        );
+      });
+
       test(`seed-only resolve: no fetch fires when isLive=false and a seed is present (prerender path)`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         // Reset the fetch counter — the seed prep above used a live

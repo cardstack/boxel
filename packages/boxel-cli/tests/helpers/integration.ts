@@ -122,7 +122,7 @@ function fixtureTotalMs(): number {
  * leaked fixture server apart from a clean start, so the leak is reported at
  * the boot that trips over it.
  */
-function isPortListening(host: string, port: number): Promise<boolean> {
+export function isPortListening(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     let socket = new net.Socket();
     let settle = (listening: boolean) => {
@@ -156,7 +156,11 @@ async function settleBoot(): Promise<void> {
   // hook's own `Hook timed out` report cannot say.
   console.log(
     `[boxel-cli fixture] teardown is waiting on a boot that is still in ` +
-      `flight; phases so far: ${formatFixturePhases()}`,
+      `flight; ${
+        fixturePhases.length === 0
+          ? 'it had not finished its first phase (the database clone)'
+          : `phases so far: ${formatFixturePhases()}`
+      }`,
   );
   let timer: NodeJS.Timeout | undefined;
   try {

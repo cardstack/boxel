@@ -6,10 +6,12 @@ import window from 'ember-window-mock';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 class Loading extends Component {
-  // Use the dark auth palette when this boot leads to the auth pages: either an
-  // SSO redirect is being consumed (`?loginToken`) or there is no persisted
-  // session, so the user will land on the (dark) login page. A returning user
-  // keeps the purple background, which blends into the operator-mode workspace.
+  // Use the dark auth palette only when there is no persisted session: the user
+  // is logged out and will land on the (dark) login page. A `loginToken`
+  // alongside a persisted session is an account switch that ends in the
+  // workspace, and the logged-out SSO consume has no persisted session anyway —
+  // so "no session" is the whole condition. A returning user keeps the purple
+  // background, which blends into the operator-mode workspace.
   //
   // Read the persisted-session signal straight from localStorage rather than
   // through MatrixService: instantiating that service runs its `cardAPIModule`
@@ -19,10 +21,7 @@ class Loading extends Component {
   // the fallback deps a failed render relies on. The key (`auth`) and source
   // (localStorage) match MatrixService's own `getAuth`.
   private get isAuthBoot() {
-    return (
-      new URLSearchParams(window.location.search).has('loginToken') ||
-      !window.localStorage.getItem('auth')
-    );
+    return !window.localStorage.getItem('auth');
   }
 
   <template>
