@@ -1132,10 +1132,14 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
-      test("a module failure under a steady shell is returned as the card's own", async function (assert) {
+      // What makes a module failure the card's own is not that nothing moved
+      // during the render — it is that the pool can be shown to have been on
+      // the current shell throughout. So this states both tokens.
+      test("a module failure on a pool that is current is returned as the card's own", async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1156,6 +1160,45 @@ module(basename(import.meta.filename), function () {
           res.body.data.attributes.card.error.error.message,
           MISSING_EXPORT,
           'the failure is returned for the caller to persist',
+        );
+        await built.prerenderer.stop();
+      });
+
+      // The shape that poisoned rows, and the one a token-move test cannot
+      // reach: the token moved before this render began, so nothing moves
+      // under it, and the recycle it triggered has failed — `warmedHostShellHash`
+      // stays where it was, and every render lands on the outgoing bundle. The
+      // failure is real, repeatable, and says nothing about the card, so it
+      // must not be handed back to be stored as the card's content.
+      test('a pool that never reaches the current shell answers 500 rather than a failure', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}pool-never-current`,
+          authFor(),
+        );
+        assert.strictEqual(
+          res.status,
+          500,
+          'answered retryably instead of returning a failure to persist',
+        );
+        assert.strictEqual(calls, 2, 'one re-render, and no more');
+        assert.notOk(
+          res.body?.data?.attributes?.card?.error,
+          'the distrusted failure is not in the response at all',
         );
         await built.prerenderer.stop();
       });
