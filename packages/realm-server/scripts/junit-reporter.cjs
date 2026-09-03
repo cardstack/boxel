@@ -30,8 +30,31 @@ function escapeXml(str) {
     .replace(/'/g, '&apos;');
 }
 
+// QUnit 2.x's `testEnd` payload is { name, suiteName, fullName, runtime,
+// status, errors, assertions } — there is no `module`. Reading one put every
+// testcase in a suite called "default", which made the report useless for
+// anything that needs to know where a test lives.
+//
+// `fullName` is the module path ending in the test name, and this suite names
+// every top-level module after the file it lives in — `info-test.ts`,
+// `realm-endpoints/info-test.ts` when nested, either followed by
+// ` | qualifier` where one file declares several. So its first element
+// identifies the file, which is the attribution shard weighting needs, exactly
+// and without inference.
+//
+// A test declared outside any module has no module to name: `fullName` is just
+// `[testName]` and there is no `suiteName` at all (verified against qunit
+// 2.26.0). Length is therefore what distinguishes the two, and such a test
+// belongs in "default" — a testsuite named after the test would be one no file
+// can claim, quietly eroding the generator's attribution budget under a name
+// that reads like a module.
+function moduleNameFor(data) {
+  const fullName = Array.isArray(data.fullName) ? data.fullName : [];
+  return fullName.length > 1 ? fullName[0] : 'default';
+}
+
 QUnit.on('testEnd', (data) => {
-  const moduleName = data.module || 'default';
+  const moduleName = moduleNameFor(data);
   const testName = data.name || 'unknown';
   const runtime = (data.runtime || 0) / 1000; // ms → seconds
   const status = data.status; // passed, failed, skipped, todo
