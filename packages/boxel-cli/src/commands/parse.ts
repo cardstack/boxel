@@ -107,6 +107,13 @@ const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
 const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'runtime-common')
   : join(PACKAGES_PATH, 'runtime-common');
+// `@cardstack/bxl` is card-facing — any card module may import it for a
+// `computeVia` formula — and its package `exports` point at `.ts` source
+// rather than emitted declarations, so the bundle is a source copy and
+// the alias targets it the same way the monorepo layout does.
+const BXL_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'bxl')
+  : join(PACKAGES_PATH, 'bxl', 'src');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -118,10 +125,18 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // The temp parse workspace needs the CLI's runtime deps resolvable so
 // glint can type-check card code: `@glint/ember-tsc` (and its
 // `-private/dsl`, which every compiled template imports), `content-tag`,
-// the packages card code commonly imports — `@glimmer/component`,
-// `@glimmer/tracking` — plus `qunit` / `qunit-dom` for `.test.gts`.
-// Imports outside that set surface as "Cannot find module …"; the fix is
-// adding the package as a boxel-cli dependency, not shimming it.
+// and every package the host runtime makes importable from card code.
+//
+// That last set is the one that matters for correctness, and it is not a
+// judgement call: it is exactly the list the host shims onto the virtual
+// network in `packages/host/app/lib/externals.ts`. A card may import any
+// of them and run, so parse must be able to type-check any of them —
+// `ember-modifier`, `ember-concurrency`, `date-fns`, `lodash-es`, … Each
+// is therefore a declared boxel-cli dependency, and
+// `tests/card-runtime-packages.test.ts` fails if the two lists diverge.
+// A shim the CLI can't resolve is worse than a missing feature: glint
+// reports "Cannot find module …" against correct card code, inviting the
+// author to rewrite code that was never broken.
 //
 // In the monorepo (no bundled-types) host's node_modules carries the full
 // transitive set in one place, so a single symlink suffices.
@@ -139,11 +154,13 @@ const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
 // The set to link is exactly the CLI's own declared `dependencies`: each
 // is there so card code (or a `.test.gts`) can resolve it —
 // `@glint/ember-tsc`, `content-tag`, `@glimmer/*`, `qunit`, `qunit-dom`,
-// `@types/qunit`, `@universal-ember/test-support`, … Deriving the list
-// from package.json (rather than hand-maintaining one) keeps it from
-// silently drifting out of date — a curated list already dropped
-// `@types/qunit` and `@universal-ember/test-support`, each a
-// published-install-only "Cannot find module" regression.
+// `@types/qunit`, `@universal-ember/test-support`, the host's card-facing
+// shim set, … Deriving the list from package.json rather than
+// hand-maintaining one keeps it from silently drifting out of date.
+//
+// `@types/*` entries earn their place here: a package that ships no
+// declarations of its own (`lodash-es`, `rsvp`) type-checks only when its
+// `@types` counterpart is linked alongside it.
 const CLI_DEPENDENCY_PACKAGES = (() => {
   try {
     let pkg = JSON.parse(
@@ -642,6 +659,8 @@ async function runGlintCheck(
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
             '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
+            '@cardstack/bxl': [`${BXL_PATH}/index`],
+            '@cardstack/bxl/*': [`${BXL_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],

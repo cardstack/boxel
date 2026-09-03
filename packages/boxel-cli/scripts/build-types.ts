@@ -50,6 +50,15 @@
  *                                   `include` in parse.ts's tsconfig
  *                                   (it's a workspace-only package, so
  *                                   it can't be a normal runtime dep).
+ * - `bundled-types/bxl/`         — `packages/bxl/src/*`, backing the
+ *                                   `@cardstack/bxl` path alias for card
+ *                                   `computeVia` formulas. Source, not
+ *                                   `.d.ts`: the package's own `exports`
+ *                                   resolve to `.ts`, so the source is
+ *                                   the type surface its consumers
+ *                                   already compile against. The suites
+ *                                   live in `packages/bxl/tests`, so
+ *                                   `src` needs no test filtering.
  *
  * This script runs from the monorepo only. The resulting tree is
  * committed-via-publish (`files` in package.json includes
@@ -545,6 +554,16 @@ const VENDORS: Vendor[] = [
     to: join(PACKAGE_ROOT, 'bundled-types', 'local-types'),
     filter: skipMonorepoArtifacts,
   },
+  {
+    // `@cardstack/bxl` is card-facing (a card's `computeVia` formula
+    // imports it) and its package `exports` resolve to `.ts` source, so
+    // the type surface is the source itself — no `.d.ts` emit needed.
+    // Reached through the `@cardstack/bxl` path alias in parse.ts.
+    name: 'bxl',
+    from: join(MONOREPO_PACKAGES, 'bxl', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'bxl'),
+    filter: skipMonorepoArtifacts,
+  },
 ];
 
 function skipMonorepoArtifacts(src: string): boolean {
@@ -636,6 +655,21 @@ function writeShims(outRoot: string): number {
 // internal structure, only on the fact that the import resolves.
 
 declare module '@cardstack/boxel-icons/*' {
+  const value: any;
+  export default value;
+}
+
+// \`ember-source\` exposes no \`./types\` entry through its package
+// \`exports\`, so these specifiers resolve for card code only because the
+// host shims them onto the virtual network as empty stubs. Mirror that
+// stub shape here so an import type-checks to the same nothing it
+// evaluates to at runtime.
+declare module 'ember-source/types' {
+  const value: any;
+  export default value;
+}
+
+declare module 'ember-source/types/preview' {
   const value: any;
   export default value;
 }

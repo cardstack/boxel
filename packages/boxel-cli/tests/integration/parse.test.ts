@@ -69,6 +69,20 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
     name: 'test-support',
     covers: '@universal-ember/test-support import in a .test.gts',
   },
+  {
+    // The host shims a fixed set of packages onto the virtual network,
+    // so card code may import any of them. Only the ones boxel-cli
+    // declares as dependencies get linked into the parse workspace, and
+    // the gap is invisible in the monorepo (that branch symlinks host's
+    // whole node_modules). This fixture spends the published install
+    // these tests already pay for on catching that divergence.
+    name: 'card-runtime-imports',
+    covers: 'packages the host shims for card code (ember-modifier, …)',
+  },
+  {
+    name: 'bxl-formula',
+    covers: '@cardstack/bxl import in a computeVia formula',
+  },
 ];
 
 describe('boxel parse (against the installed CLI)', () => {
