@@ -14,3 +14,19 @@ providers:
   file:
     directory: /etc/traefik/dynamic
     watch: true
+
+# INFO shows each dynamic-configuration reload, which is what dates a route
+# file's arrival or removal against the services' own logs.
+log:
+  level: INFO
+
+# Failures only. A 4xx/5xx that Traefik itself produces — 404 for a host no
+# router matches, 502 for an upstream nothing listens on — reaches no service
+# log at all, and a browser reports the missing CORS headers on it as a CORS
+# error, so this log is the only record that the request happened. JSON keeps
+# RequestHost and RouterName as fields; the common format has no host at all.
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"

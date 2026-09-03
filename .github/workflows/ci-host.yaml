@@ -446,6 +446,13 @@ jobs:
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
+      # Traefik alone sees a request for a *.ci.localhost host that no
+      # service registered a route for: it answers that 404 itself and no
+      # service log records it. Its log and route files are the evidence
+      # for that class of failure.
+      - name: Print Traefik diagnostics
+        if: ${{ !cancelled() }}
+        run: mise run ci:traefik-diagnostics
 
   host-test:
     name: Host Tests
@@ -912,6 +919,20 @@ jobs:
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
+      # Traefik alone sees a request for a *.ci.localhost host that no
+      # service registered a route for: it answers that 404 itself and no
+      # service log records it. Its log and route files are the evidence
+      # for that class of failure.
+      - name: Print Traefik diagnostics
+        if: ${{ !cancelled() }}
+        run: mise run ci:traefik-diagnostics | tee /tmp/traefik-diagnostics.log
+      - name: Upload Traefik diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: traefik-diagnostics-${{ matrix.shardIndex }}
+          path: /tmp/traefik-diagnostics.log
+          retention-days: 30
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
