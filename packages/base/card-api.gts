@@ -3233,8 +3233,14 @@ function composeScreenshotURLs(
 // The durable URL of the capture feeding `cardThumbnailURL`: the declared
 // slot flagged `useAsThumbnail` (at most one across the merged declarations,
 // enforced by `getScreenshots`), read with `screenshotURLs`' semantics — a
-// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise,
-// so the fallback chain's terminal rung (the icon default) still engages.
+// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise.
+// On live loads meta joins the persisted manifest, so an uncaptured slot
+// reads `undefined` and the fallback chain's terminal rung (the icon
+// default) engages. In the prerender render context meta is
+// declaration-derived (`screenshotsMetaFromRoster`), so this rung asserts
+// the durable URL before any capture exists: persisted HTML embeds a URL
+// that 404s until the capture lands, then self-heals — and a slot whose
+// capture never succeeds stays a 404 (a blank tile), not the icon default.
 // Same render-safety posture as `composeScreenshotURLs`: an invalid
 // declaration reads as "no thumbnail capture".
 function thumbnailScreenshotURL(
