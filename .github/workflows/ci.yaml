@@ -760,6 +760,10 @@ jobs:
       # holds several pages loses the page globals evaluate() should see.
       PRERENDER_BROWSER_CONNECTION_PER_PAGE: "1"
       PRERENDER_PAGE_INIT_SCRIPT_FILE: ${{ github.workspace }}/packages/realm-server/scripts/browser-probe-shims/obscura.js
+      # A render pass that never settles on this engine should fail fast, so a
+      # fused visit cannot outlive the 60 s test budget and cascade into
+      # EADDRINUSE for every fixture that follows.
+      RENDER_TIMEOUT_MS: "8000"
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
