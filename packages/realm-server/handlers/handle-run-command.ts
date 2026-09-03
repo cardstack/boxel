@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import * as Sentry from '@sentry/node';
 
 import type {
   DBAdapter,
@@ -24,15 +25,12 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
  * Drives the prerenderer directly from the web tier and answers with the
  * command's result. This is the public endpoint for executing host commands.
  *
- * Running the command here rather than from a queue job is what lets a
- * command write cards. The realm's JSON-API card write indexes synchronously:
- * it awaits an `incremental-index` job, which needs a worker. A command that
- * held a worker of its own for the duration of its browser-side run would
- * therefore wait on a job that cannot be claimed until the command releases
- * the worker — a deadlock the command can neither observe nor recover from,
- * since it surfaces as the enclosing job's timeout rather than as an error
- * the command's own `try`/`catch` can see. The web tier holds no worker, so
- * the write's index job is claimed while the command is still running.
+ * A synchronous caller gets its answer without a worker being held on its
+ * behalf, which matches the three sibling prerender endpoints
+ * (`/_prerender-card`, `/_prerender-module`, `/_prerender-file-extract`).
+ * That keeps a slow command from competing with indexing for worker capacity;
+ * what keeps a card-writing command from deadlocking against indexing is the
+ * deferred write path a prerender tab gets (see `DURING_PRERENDER_HEADER`).
  *
  * Request body (JSON:API):
  * ```json
@@ -131,11 +129,14 @@ export default function handleRunCommand({
           })
         : { status: 'error', error: outcome.error };
     } catch (error) {
+      // The prerenderer's own errors quote the internal manager endpoint and
+      // its raw response body, so the message stays server-side. Sentry is
+      // the alerting path for this: a swallowed throw never reaches Koa's
+      // app-level error hook, so an outage that breaks every invocation would
+      // otherwise be visible only in logs.
       console.error('Failed to run command:', error);
-      return sendResponseForSystemError(
-        ctxt,
-        `Run command failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      Sentry.captureException(error);
+      return sendResponseForSystemError(ctxt, 'Run command failed');
     }
 
     await setContextResponse(

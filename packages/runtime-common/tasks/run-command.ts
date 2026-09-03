@@ -67,18 +67,22 @@ registerQueueJobDefinition({
 
 export { runCommand };
 
-// Runs a command from a queue job, for publishers that need the invocation to
-// outlive the request that asked for it (a webhook delivery, a cron tick).
+// Runs a command from a queue job. Publishers reach this either because the
+// invocation must outlive the request that asked for it (a webhook delivery, a
+// cron tick) or because they want the queue's per-realm serialization while
+// waiting on the result (`bot-runner`'s command runner awaits `job.done`).
 //
 // A command run this way holds a worker for its whole browser-side duration,
-// so it cannot wait on anything that itself needs a worker. That rules out the
-// realm's JSON-API card write, which awaits an `incremental-index` job: with
-// no other worker free, the write completes only once this job gives up its
-// worker, which is after its timeout has already failed it — and that failure
-// lands on the job, past any `try`/`catch` the command wrote. A command that
-// persists cards belongs on `/_run-command`, which drives the prerenderer from
-// the web tier and holds no worker; a queued one can write through
-// `/_atomic`, whose writes index deferred.
+// so it must not wait on anything that itself needs a worker: with no other
+// worker free, that work can only start once this job gives up its worker,
+// which is after its timeout has already failed it — and that failure lands on
+// the job, past any `try`/`catch` the command wrote.
+//
+// Persisting cards is safe despite that, because a write from a prerender tab
+// indexes deferred and answers from its own serialization rather than awaiting
+// an `incremental-index` job (see `DURING_PRERENDER_HEADER`). What is still
+// unsafe is any command that waits for indexed state to catch up — a drain, a
+// read-back of a card it just wrote, a full reindex it awaits.
 const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   reportStatus,
   log,
@@ -111,7 +115,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
     });
     if (!outcome.ok) {
       let message = `${jobIdentity(jobInfo)} ${outcome.error}`;
-      log.error(message);
+      log.error(message, outcome.context);
       reportStatus(jobInfo, 'finish');
       return {
         status: 'error',

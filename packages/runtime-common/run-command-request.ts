@@ -23,7 +23,13 @@ export interface PreparedRunCommand {
 
 export type PrepareRunCommandResult =
   | { ok: true; prepared: PreparedRunCommand }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      // The rejected inputs, for a caller that logs structured context
+      // alongside the message.
+      context: { command: string; realmURL: string };
+    };
 
 /**
  * Resolves the permission gate, the prerender auth, and the command
@@ -59,6 +65,7 @@ export async function prepareRunCommand({
   commandInput?: JSONTypes.Object | null;
 }): Promise<PrepareRunCommandResult> {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let context = { command, realmURL: normalizedRealmURL };
   let realmPermissions = await fetchRealmPermissions(
     dbAdapter,
     new URL(normalizedRealmURL),
@@ -69,6 +76,7 @@ export async function prepareRunCommand({
     return {
       ok: false,
       error: `${runAs} does not have permissions in ${normalizedRealmURL}`,
+      context,
     };
   }
 
@@ -84,7 +92,11 @@ export async function prepareRunCommand({
     normalizedRealmURL,
   );
   if (!normalizedCommand) {
-    return { ok: false, error: `invalid command specifier: ${command}` };
+    return {
+      ok: false,
+      error: `invalid command specifier: ${command}`,
+      context,
+    };
   }
 
   return {

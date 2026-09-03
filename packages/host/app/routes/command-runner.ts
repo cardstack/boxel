@@ -85,7 +85,16 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   async beforeModel() {
     registerBoxelTransitionTo(this.router, this);
     (globalThis as any).__boxelRenderContext = true;
+    // Unlike the render routes, a command is expected to write. This flag is
+    // what tells the store's card-write path to mark its requests so the realm
+    // indexes them deferred — the tab holds a prerender render slot until the
+    // command returns, and a write that waited for indexing would wait on a
+    // job needing that slot. Narrower than `__boxelRenderContext`, which host
+    // tests also raise around in-browser index renders that run alongside an
+    // interactive app whose saves must keep their indexed echo.
+    (globalThis as any).__boxelHeadlessCommand = true;
     registerDestructor(this, () => {
+      (globalThis as any).__boxelHeadlessCommand = undefined;
       if (isTesting()) {
         (globalThis as any).__boxelRenderContext = undefined;
       }
@@ -94,6 +103,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   }
 
   deactivate() {
+    (globalThis as any).__boxelHeadlessCommand = undefined;
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }

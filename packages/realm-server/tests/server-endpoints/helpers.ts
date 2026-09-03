@@ -3,6 +3,7 @@ import type { DirResult } from 'tmp';
 import type {
   LooseSingleCardDocument,
   QueuePublisher,
+  RealmPermissions,
   QueueRunner,
   Realm,
   VirtualNetwork,
@@ -44,6 +45,13 @@ type ServerEndpointsTestOptions = {
   // module it needs to write itself (a realm-defined command, say). Mutually
   // exclusive with `fixture`.
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  // Replace the testRealm's permission map. The default makes the realm
+  // world-writable, which is what keeps most endpoint tests from needing to
+  // mint anything — but it also means a write short-circuits before the
+  // Authorization header is read (see Realm#assertPermissions). A test whose
+  // subject is an authenticated write has to narrow `'*'` to `['read']` and
+  // grant the writing user explicitly, or it proves nothing about auth.
+  permissions?: RealmPermissions;
 };
 
 export function setupServerEndpointsTest(
@@ -83,7 +91,7 @@ export function setupServerEndpointsTest(
       ? { fileSystem: options.fileSystem }
       : { fixture: options.fixture ?? 'blank' }),
     realmURL: testRealmURL,
-    permissions: {
+    permissions: options.permissions ?? {
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],
     },

@@ -323,21 +323,30 @@ export type RealmIndexCounts = {
   definitionCount: number | null;
 };
 
-// Marker header the host SPA attaches to outbound _federated-search /
-// _search calls when it's running inside a prerender tab. The prerender
-// server uses puppeteer's `evaluateOnNewDocument` to inject a window
-// global (`__boxelRenderContext = true`) into every Chrome tab before
-// the host loads; the host's realm-server fetch wrapper then reads that
-// flag and adds this header on its own outbound search requests only —
-// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
-// see it on a CORS preflight. When the realm sees this on an inbound
-// _search request it knows the caller is the host SPA mid-render and
-// switches the search to cacheOnlyDefinitions:true, which short-circuits
-// the recursive lookupDefinition → prerenderModule path in
-// populateQueryFields that causes self-referential prerender deadlocks
-// under parallel indexing. Kept as a bare string here so runtime-common
-// stays independent of realm-server. The realm-server prerender side
-// re-exports the same value from prerender-constants.ts.
+// Marker header the host SPA attaches to its outbound search calls and card
+// writes when it's running inside a prerender tab. The prerender server uses
+// puppeteer's `evaluateOnNewDocument` to inject a window global
+// (`__boxelRenderContext = true`) into every Chrome tab before the host
+// loads; the host's fetch wrappers read that flag and add this header on
+// those requests only — narrowly scoped so non-realm-server origins (icons,
+// vite, etc.) don't see it on a CORS preflight.
+//
+// The realm reads it as "the caller is the host SPA mid-render, and it is
+// holding a prerender render slot until this request returns". Two inbound
+// requests act on that:
+//
+//   - `_search` / `_federated-search` switch to cacheOnlyDefinitions:true,
+//     short-circuiting the recursive lookupDefinition → prerenderModule path
+//     in populateQueryFields that causes self-referential prerender deadlocks
+//     under parallel indexing.
+//   - a JSON-API card POST / PATCH indexes deferred and answers from the
+//     document it serialized, because reading the write back out of the index
+//     would await a job that needs the slot the caller is holding. See
+//     `serializedInstanceEcho`.
+//
+// Kept as a bare string here so runtime-common stays independent of
+// realm-server. The realm-server prerender side re-exports the same value
+// from prerender-constants.ts.
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
@@ -819,9 +828,9 @@ export interface WriteOptions {
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
   // it, the next instance's serialization would fail. This flag governs
-  // only the final indexing await. The first concrete caller is the per-
-  // file `+source` POST handler, which writes a single file at a time, so
-  // the intermediate-flush path is not exercised in practice.
+  // only the final indexing await. Every caller that passes it writes a
+  // single file, or instances only, so the intermediate-flush path is not
+  // exercised by any of them.
   waitForIndex?: boolean | null;
 }
 
@@ -5558,6 +5567,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let duringPrerender = isDuringPrerenderRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
     // card. fileSerialization runs lookupDefinition on the card's
     // adoptsFrom module, and with CS-11003's deferred +source POST a
@@ -5566,9 +5576,17 @@ export class Realm {
     // and the +json POST would fail. Draining here makes the JSON-API
     // path tolerant of an immediately-preceding +source POST without
     // disturbing the +json POST's own synchronous-indexing contract.
-    let pending = this.incrementalIndexing();
-    if (pending) {
-      await pending;
+    //
+    // A prerender-originated write skips the drain: the job it would wait on
+    // needs the render slot (and, on the queued-command path, the worker) the
+    // caller is holding, so waiting deadlocks. Such a caller runs a module it
+    // already imported, so the definition its serialization needs is indexed
+    // by the time it writes.
+    if (!duringPrerender) {
+      let pending = this.incrementalIndexing();
+      if (pending) {
+        await pending;
+      }
     }
     let body = await request.text();
     let json;
@@ -5607,6 +5625,7 @@ export class Realm {
     let included = (maybeIncluded ?? []) as CardResource[];
     let resources = [primaryResource, ...included];
     let primaryResourceURL: URL | undefined;
+    let primarySerialization: LooseSingleCardDocument | undefined;
     for (let [i, resource] of resources.entries()) {
       if (
         (i > 0 && typeof resource.lid !== 'string') ||
@@ -5653,6 +5672,9 @@ export class Realm {
       }
       let localPath = this.paths.local(fileURL);
       files.set(localPath, JSON.stringify(fileSerialization, null, 2));
+      if (i === 0) {
+        primarySerialization = fileSerialization;
+      }
     }
     if (!primaryResourceURL) {
       return systemError({
@@ -5663,33 +5685,45 @@ export class Realm {
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      ...(duringPrerender ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
-    let entry = await this.#realmIndexQueryEngine.cardDocument(
-      new URL(newURL),
-      {
-        loadLinks: true,
-        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-      },
-    );
-    if (!entry || entry?.type === 'error') {
-      let err = entry
-        ? CardError.fromSerializableError(entry.error)
-        : undefined;
-      return systemError({
-        requestContext,
-        message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
-        additionalError: err,
-        id: newURL,
+    let doc: SingleCardDocument;
+    if (duringPrerender) {
+      // See serializedInstanceEcho: the write indexed deferred, so there is
+      // nothing to read back yet.
+      doc = await this.serializedInstanceEcho(
+        primarySerialization!,
+        newURL,
+        lastModified,
+      );
+    } else {
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(newURL),
+        {
+          loadLinks: true,
+          skipQueryBackedExpansion: false,
+        },
+      );
+      if (!entry || entry?.type === 'error') {
+        let err = entry
+          ? CardError.fromSerializableError(entry.error)
+          : undefined;
+        return systemError({
+          requestContext,
+          message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
+          additionalError: err,
+          id: newURL,
+        });
+      }
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: newURL },
+          meta: { lastModified },
+        },
       });
     }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: newURL },
-        meta: { lastModified },
-      },
-    });
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -5722,6 +5756,7 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
+    let duringPrerender = isDuringPrerenderRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -5857,7 +5892,7 @@ export class Realm {
           new URL(instanceURL),
           {
             loadLinks: true,
-            skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+            skipQueryBackedExpansion: duringPrerender,
           },
         );
         if (entry && entry.type !== 'error') {
@@ -5981,15 +6016,40 @@ export class Realm {
       // connection).
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        ...(duringPrerender ? { waitForIndex: false } : {}),
       });
+      let doc: SingleCardDocument;
+      if (duringPrerender) {
+        // See serializedInstanceEcho: the write indexed deferred, so there is
+        // nothing to read back yet.
+        doc = await this.serializedInstanceEcho(
+          primarySerialization!,
+          instanceURL,
+          lastModified,
+        );
+        this.#serveInstanceIdsAsRRI(doc);
+        return createResponse({
+          body: JSON.stringify(doc, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': this.cardJsonCacheControl(requestContext),
+              ...lastModifiedHeader(doc),
+              ...(created
+                ? { 'x-created': formatRFC7231(created * 1000) }
+                : {}),
+            },
+          },
+          requestContext,
+        });
+      }
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(instanceURL),
         {
           loadLinks: true,
-          skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          skipQueryBackedExpansion: false,
         },
       );
-      let doc: SingleCardDocument;
       if (!entry || entry?.type === 'error') {
         if (
           primarySerialization &&
@@ -8311,6 +8371,42 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // Builds a card write's response out of the document just serialized to
+  // disk, instead of reading the write back out of the index.
+  //
+  // This is what a write from a prerender tab answers with. Such a caller
+  // holds a prerender render slot for as long as its write is open — and, on
+  // the queued-command path, a queue worker as well — while the index read
+  // would await the `incremental-index` job the write enqueues, a job that
+  // needs the very slot and worker the caller is holding. Answering from the
+  // serialization keeps the write independent of indexing; pairing it with
+  // `waitForIndex: false` on the write is what makes the enqueue deferred
+  // rather than awaited.
+  //
+  // The echo carries what a saving client merges back: the assigned id, the
+  // self link, `lastModified`, and the realm's `realmInfo`. It does not carry
+  // computed fields, resolved links, or the joined `meta.screenshots` — only
+  // the index knows those. A caller that needs them reads the instance again
+  // once indexing has settled.
+  private async serializedInstanceEcho(
+    serialization: LooseSingleCardDocument,
+    instanceURL: string,
+    lastModified: number | null,
+  ): Promise<SingleCardDocument> {
+    let realmInfo = await this.getRealmInfo();
+    return merge({}, serialization, {
+      data: {
+        id: instanceURL,
+        links: { self: instanceURL },
+        meta: {
+          realmURL: this.url,
+          realmInfo,
+          ...(lastModified != null ? { lastModified } : {}),
+        },
+      },
+    }) as SingleCardDocument;
   }
 
   private async fileSerialization(
