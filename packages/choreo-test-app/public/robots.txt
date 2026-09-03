@@ -1,3 +1,8 @@
 # http://www.robotstxt.org
 User-agent: *
 Disallow:
+
+# /asset/ holds the procedural models the films are shot against — an
+# asset, not a work. Each one redirects a human to its film; this keeps
+# them out of an index so nothing ever surfaces the tooling as the work.
+Disallow: /asset/

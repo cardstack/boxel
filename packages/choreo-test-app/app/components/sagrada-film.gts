@@ -28,7 +28,7 @@ import config from 'test-app/config/environment';
  *
  * THE SUBJECT is the Basílica de la Sagrada Família in Barcelona, and the
  * scene it is shot in is the construction study in `~/Projects/sagrada-
- * familia`, vendored to `public/sagrada.html` by that repo's own build
+ * familia`, vendored to `public/asset/sagrada-model.html` by that repo's own build
  * (`node build/build.mjs --lean <here>`) — never hand-edited. A page in an
  * iframe, on its own three r149, reached through `window.__film`.
  *
@@ -1712,11 +1712,11 @@ export default class SagradaFilm extends Component<{
   }
 
   get assets(): string {
-    return `${config.rootURL}sagrada/`;
+    return `${config.rootURL}asset/sagrada/`;
   }
 
   get src(): string {
-    return `${config.rootURL}sagrada.html`;
+    return `${config.rootURL}asset/sagrada-model.html`;
   }
 
   /**

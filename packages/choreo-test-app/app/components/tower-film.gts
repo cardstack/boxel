@@ -28,7 +28,7 @@ import config from 'test-app/config/environment';
  * THE SUBJECT is the Japanese castle keep — the 天守 tenshu — and the film
  * is built the way an educational one is: context, then history, then
  * construction, then detail, then a comparison that puts the whole thing
- * in a wider frame. The scene it is shot in (`public/towers.html`, Meng
+ * in a wider frame. The scene it is shot in (`public/asset/towers-model.html`, Meng
  * To's construction study from threeui, vendored whole on its own pinned
  * three r149) grows six different towers out of the ground on a clock,
  * which is the rarest thing to find in a piece of web art: a subject that
@@ -1173,11 +1173,11 @@ export default class TowerFilm extends Component<{
   worldType = WORLD_TYPE;
 
   get assets(): string {
-    return `${config.rootURL}towers/`;
+    return `${config.rootURL}asset/towers/`;
   }
 
   get src(): string {
-    return `${config.rootURL}towers.html`;
+    return `${config.rootURL}asset/towers-model.html`;
   }
 
   /**
