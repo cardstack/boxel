@@ -14,12 +14,13 @@ const DEFAULT_ALLOWED_HOSTS = ['boxel-images.boxel.ai'];
 // src or a CSS `background-image` — rather than merely storing or asserting on.
 const IMAGE_URL_PROPERTIES = new Set(['iconURL', 'backgroundURL']);
 
-// A protocol-relative URL fetches from the same third party an absolute one
-// does — the browser just borrows the page's scheme — so `//host/path` counts
-// as remote here even though it opens like a path. The single-slash form is
-// the one that stays local, and it is the form this rule wants fixtures to
-// use, so the distinction between `//` and `/` is load-bearing.
-const REMOTE_URL = /^(?:https?:)?\/\//i;
+// A value that reaches a third party is remote however it is spelled. Two
+// separators do that with no scheme at all, because the browser borrows the
+// page's, and the URL parser treats a backslash as a slash after a special
+// scheme — so `//host`, `\\host`, `\/host` and `/\host` all resolve to the
+// same origin. One separator is what stays local, and it is the form this rule
+// wants fixtures to use, so the difference between one and two is load-bearing.
+const REMOTE_URL = /^(?:https?:)?[/\\]{2}/i;
 
 function propertyKeyName(node) {
   if (node.computed) {
@@ -130,12 +131,15 @@ module.exports = {
           return;
         }
 
+        // Normalised so the pattern above and `new URL` agree on what counts
+        // as a separator. `new URL` also needs a scheme, and which one a
+        // schemeless value would borrow does not change its host.
+        let normalized = value.replace(/^((?:https?:)?)[/\\]{2}/i, '$1//');
         let host;
         try {
-          // `new URL` needs a scheme. Which one a protocol-relative value
-          // would borrow does not change its host, so any will do.
-          host = new URL(value.startsWith('//') ? `https:${value}` : value)
-            .host;
+          host = new URL(
+            normalized.startsWith('//') ? `https:${normalized}` : normalized,
+          ).host;
         } catch {
           return;
         }

@@ -9,15 +9,23 @@ an actual image — an `<img>` src or a CSS `background-image` — so a fixture 
 names a remote host puts that host in the critical path of every Percy snapshot
 which renders the realm.
 
-That is not a theoretical cost. Test fixtures pointed at `i.postimg.cc` for a
-long time, and Percy's discovery browser waits for every image the page
-references. When the host answered slowly the snapshot was slow; when it stalled
-the page `load` event never fired, Percy retried the navigation three times, and
-the snapshot was dropped — a silent loss, since the test itself still passed.
-One `main` build lost nine snapshots that way.
+Percy's discovery browser waits for every image the page references. A slow host
+makes the snapshot slow; a host that stalls means the page `load` event never
+fires, Percy retries the navigation three times, and the snapshot is dropped —
+a silent loss, because the test that asked for it still passes and only a Percy
+diff days later shows anything went wrong.
 
-Note that `allowed-hostnames` in `.percy.js` does **not** avoid this. It decides
-only whether Percy stores the bytes; the browser waits either way.
+`allowed-hostnames` in `.percy.js` does **not** avoid this. It decides only
+whether Percy stores the bytes; the browser waits either way. That is why the
+fix for a slow host is to stop referencing it, not to configure Percy
+differently.
+
+A value counts as remote however it is spelled. Two separators reach a third
+party with no scheme at all, because the browser borrows the page's, and the URL
+parser treats a backslash as a slash after a special scheme — so `//host`,
+`\\host`, `\/host` and `/\host` are all remote, while a single separator
+resolves against the page's own origin and is not. Surrounding whitespace is
+ignored, since browsers strip it before fetching.
 
 ## Rule Details
 
@@ -61,6 +69,21 @@ guessed at.
 
 - `allowedHosts` (`string[]`, defaults to `['boxel-images.boxel.ai']`) — hosts a
   realm image may be served from.
+
+The default is deliberately shorter than `allowed-hostnames` in `.percy.js`, and
+the two answer different questions. Percy's list says which hosts it may capture
+assets from, and includes the S3 bucket that serves brand assets to product
+cards. This one says which hosts a realm's icon or background may name, and no
+realm image is served from that bucket; listing it here would bless a host for a
+purpose nothing uses it for. Add it if a realm image ever needs it.
+
+What earns a host a place on this list is that it is ours, so that when it is
+slow it is ours to fix. It is not that the mechanism above stops applying — the
+discovery browser waits for `boxel-images.boxel.ai` exactly as it waits for
+anything else. For product code and for the defaults real workspaces are created
+with, a remote CDN is the right answer regardless. For a fixture, a local path
+under `packages/host/public/test-fixtures/realm-images/` is better still, because
+there is nothing to wait for at all.
 
 ## When Not To Use It
 

@@ -68,6 +68,15 @@ ruleTester.run('no-remote-realm-images', rule, {
     {
       code: `realmConfigCardJSON({ iconURL: '//boxel-images.boxel.ai/icons/cardstack.png' });`,
     },
+    // One separator resolves against the page's own origin whichever way it
+    // leans, so neither of these is remote and the rule must not claim they
+    // are.
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: '\i.postimg.cc/icon.png' });`,
+    },
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: 'https:\i.postimg.cc/icon.png' });`,
+    },
   ],
   invalid: [
     {
@@ -108,6 +117,25 @@ ruleTester.run('no-remote-realm-images', rule, {
     },
     {
       code: `realmConfigCardJSON({ backgroundURL: '//example.com/bg.jpg' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    // Every two-separator spelling resolves to the same third-party origin,
+    // because the URL parser treats a backslash as a slash after a special
+    // scheme.
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: '\\\\i.postimg.cc/L8yXRvws/icon.png' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: '\\/i.postimg.cc/L8yXRvws/icon.png' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: '/\\i.postimg.cc/L8yXRvws/icon.png' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    {
+      code: String.raw`realmConfigCardJSON({ iconURL: 'https:\\\\i.postimg.cc/L8yXRvws/icon.png' });`,
       errors: [{ messageId: 'remoteRealmImage' }],
     },
     // Whitespace is stripped before the fetch, so it cannot smuggle a remote
