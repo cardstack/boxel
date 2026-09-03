@@ -18,11 +18,11 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     return this.args.model?.cardDescription;
   }
 
+  // cardThumbnailURL carries the whole thumbnail fallback chain (explicit
+  // URL, then ImageDef link, then useAsThumbnail capture), so the social
+  // preview shows the same image as every other consumer.
   get image(): string | undefined {
-    return (
-      this.args.model?.cardInfo?.cardThumbnail?.url ??
-      this.args.model?.cardThumbnailURL
-    );
+    return this.args.model?.cardThumbnailURL || undefined;
   }
 
   get themeIcon(): string | undefined {
