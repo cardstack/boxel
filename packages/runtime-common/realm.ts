@@ -172,7 +172,9 @@ import { createResponse } from './create-response.ts';
 import {
   captureSpecHash,
   captureSpecOverrides,
+  isValidScreenshotName,
   parseCaptureSpecParams,
+  screenshotsMetaFromManifest,
   type CaptureSpec,
 } from './capture-spec.ts';
 import {
@@ -4113,17 +4115,6 @@ export class Realm {
     let instanceURL = this.paths.fileURL(
       instanceLocalPath.replace(/\.json$/, ''),
     );
-    // One narrow read is both the liveness gate and the cache key's
-    // generation: undefined means the instance is missing, deleted, or
-    // errored — an uncaptured miss — and otherwise it pins the generation an
-    // edit bumps, without hydrating the row.
-    let generationLookupStart = Date.now();
-    let sourceGeneration =
-      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
-    let generationLookupMs = Date.now() - generationLookupStart;
-    if (sourceGeneration === undefined) {
-      return mediaCacheMissResponse({ requestContext });
-    }
     let searchParams = new URL(request.url).searchParams;
 
     // `name=` addresses a declared screenshot through the instance's
@@ -4140,8 +4131,88 @@ export class Realm {
           requestContext,
         });
       }
-      // Declared-screenshot manifests are indexing-time artifacts; nothing
-      // publishes them, so every name is an uncaptured miss.
+      if (!isValidScreenshotName(name)) {
+        return badRequest({
+          message: `"${name}" is not a valid screenshot name`,
+          requestContext,
+        });
+      }
+      // The manifest read doubles as the liveness gate (same row predicate
+      // as the DSL path's generation read): undefined means the instance is
+      // missing, deleted, or errored. A live instance with no manifest, or
+      // a manifest without this name — not yet captured, capture-errored,
+      // or never declared — is an uncaptured miss with a short max-age, so
+      // an `<img>` embedded ahead of its capture picks it up on
+      // revalidation. Names never trigger capture work: declared captures
+      // are produced by the prerender pass alone.
+      let manifestLookupStart = Date.now();
+      let manifest =
+        await this.#realmIndexQueryEngine.liveInstanceScreenshots(instanceURL);
+      let manifestLookupMs = Date.now() - manifestLookupStart;
+      if (manifest === undefined) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      let manifestEntry = manifest?.[name];
+      if (!manifestEntry) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      // The manifest names the capture identity (`specHash`); the ledger
+      // row is looked up at its newest generation — a carried-forward
+      // capture's row keeps an older generation than the instance's, and a
+      // re-capture that landed after this manifest was written should serve
+      // (durable URLs never lie about identity, only lag in freshness).
+      let ledgerLookupStart = Date.now();
+      let entry = await findMediaCacheEntry(this.#dbAdapter, {
+        realmURL: this.url,
+        sourceURL: instanceURL.href,
+        captureSpecHash: manifestEntry.specHash,
+      });
+      if (!entry) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      let perf: ScreenshotServePerf = {
+        requestStart,
+        correlationId: sanitizeLoggingCorrelationId(
+          request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+        ),
+        generationLookupMs: manifestLookupMs,
+        ledgerLookupMs: Date.now() - ledgerLookupStart,
+      };
+      let serveStart = Date.now();
+      let response = await serveMediaCacheEntry({
+        request,
+        requestContext,
+        entry,
+        mediaCacheAdapter: this.#mediaCacheAdapter,
+        dbAdapter: this.#dbAdapter,
+      });
+      this.emitScreenshotServePerf(
+        {
+          realmURL: this.url,
+          sourceURL: instanceURL.href,
+          captureSpecHash: manifestEntry.specHash,
+          sourceGeneration: entry.sourceGeneration,
+        },
+        perf,
+        'hit',
+        {
+          lane: entry.lane,
+          serveMs: Date.now() - serveStart,
+        },
+        'get-named',
+      );
+      return response;
+    }
+
+    // One narrow read is both the liveness gate and the cache key's
+    // generation: undefined means the instance is missing, deleted, or
+    // errored — an uncaptured miss — and otherwise it pins the generation an
+    // edit bumps, without hydrating the row.
+    let generationLookupStart = Date.now();
+    let sourceGeneration =
+      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    let generationLookupMs = Date.now() - generationLookupStart;
+    if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
     }
 
@@ -4204,10 +4275,11 @@ export class Realm {
     perf: ScreenshotServePerf,
     outcome: ScreenshotRequestPerfEvent['outcome'],
     fields: Partial<ScreenshotRequestPerfEvent> = {},
+    surface: ScreenshotRequestPerfEvent['surface'] = 'get-dsl',
   ): void {
     emitScreenshotPerf({
       eventType: 'request',
-      surface: 'get-dsl',
+      surface,
       outcome,
       realmURL: this.url,
       sourceURL: entryKey.sourceURL,
@@ -5703,6 +5775,9 @@ export class Realm {
       delete (patch as any).type;
       delete (patch as any).meta.realmInfo;
       delete (patch as any).meta.realmURL;
+      // Server-stamped at serve time (the `meta.screenshots` join); an echo
+      // from a client must never persist into the source file.
+      delete (patch as any).meta.screenshots;
 
       promoteLocalIdsToRemoteIds({
         resource: patch,
@@ -6199,9 +6274,23 @@ export class Realm {
       this.#serveInstanceIdsAsRRI(card);
       // Surface the instance's index-data generation
       // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
-      // card+json GET can tell fresh index data from stale. A fresh `meta`
-      // object — never a mutation of the cached pristine doc's `meta`.
-      card.data.meta = { ...card.data.meta, generation: maybeError.generation };
+      // card+json GET can tell fresh index data from stale, and join the
+      // instance's declared-screenshot manifest into `meta.screenshots` (the
+      // serve-time join — the manifest is never written back into
+      // `boxel_index` or the source file). A fresh `meta` object — never a
+      // mutation of the cached pristine doc's `meta`.
+      card.data.meta = {
+        ...card.data.meta,
+        generation: maybeError.generation,
+        ...(maybeError.screenshots
+          ? {
+              screenshots: screenshotsMetaFromManifest(maybeError.screenshots, {
+                realmURL: this.url,
+                instanceLocalPath: localPath,
+              }),
+            }
+          : {}),
+      };
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the
