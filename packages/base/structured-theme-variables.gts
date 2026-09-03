@@ -361,11 +361,11 @@ export class ThemeTypographyField extends FieldDef {
           word-break: break-word;
         }
         .theme-typography-label {
-          font-family: var(--boxel-label-font-family);
-          font-size: var(--boxel-label-font-size);
-          font-weight: var(--boxel-label-font-weight);
-          line-height: var(--boxel-label-line-height);
-          letter-spacing: var(--boxel-label-letter-spacing);
+          font-family: var(--boxel-ui-label-font-family);
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
         }
         .theme-typography-eyebrow {
           font-family: var(--boxel-eyebrow-font-family);
@@ -475,19 +475,34 @@ class InheritedSwatch extends GlimmerComponent<{
   @tracked private resolved?: string;
   @tracked private expression?: string;
 
-  // The grid re-renders when the preview's color mode flips, so this re-runs
-  // per mode. Tracked state is written after render: the values are consumed
-  // by this template before the modifier installs.
+  // Tracked state is written after render: the values are consumed by this
+  // template before the modifier installs. The preview's light/dark toggle
+  // flips `data-theme` on an ancestor without necessarily tearing this tree
+  // down (Style Reference renders the palette unconditionally), so watch that
+  // attribute and re-resolve rather than relying on a re-render.
   private resolve = modifier(
     (el: HTMLElement, [name, property]: [string, string]) => {
-      schedule('afterRender', () => {
-        if (!el.isConnected) {
-          return;
-        }
-        let { expression, resolved } = resolveThemeVariable(el, name, property);
-        this.expression = expression;
-        this.resolved = resolved;
-      });
+      let read = () =>
+        schedule('afterRender', () => {
+          if (!el.isConnected) {
+            return;
+          }
+          let { expression, resolved } = resolveThemeVariable(
+            el,
+            name,
+            property,
+          );
+          this.expression = expression;
+          this.resolved = resolved;
+        });
+      read();
+      let scheme = el.closest('[data-theme]');
+      let observer: MutationObserver | undefined;
+      if (scheme) {
+        observer = new MutationObserver(read);
+        observer.observe(scheme, { attributeFilter: ['data-theme'] });
+      }
+      return () => observer?.disconnect();
     },
   );
 
@@ -877,7 +892,7 @@ export default class ThemeVarField extends FieldDef {
   });
   @field input = contains(ColorField, {
     description: describeColor(
-      'Border color for inputs; the input background is --field.',
+      'Border color for inputs, and the track fill of unfilled controls such as a switch. Input backgrounds come from --field.',
     ),
   });
   @field ring = contains(ColorField, {
@@ -1943,7 +1958,7 @@ export default class ThemeVarField extends FieldDef {
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
             <FieldContainer
-              @label='Inset'
+              @label='Shadow inset'
               @vertical={{true}}
               data-test-field='shadowInset'
             >

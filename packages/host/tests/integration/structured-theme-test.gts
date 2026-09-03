@@ -1,4 +1,9 @@
-import { settled, type RenderingTestContext } from '@ember/test-helpers';
+import {
+  click,
+  settled,
+  waitUntil,
+  type RenderingTestContext,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -11,6 +16,7 @@ import { setupRenderingTest } from '../helpers/setup';
 
 import type * as StructuredThemeModule from '@cardstack/base/structured-theme';
 import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
+import type * as StyleReferenceModule from '@cardstack/base/style-reference';
 import type * as TypographyFieldModule from '@cardstack/base/typography';
 
 // A real tweakcn export: alongside the `:root` and `.dark` variable blocks it
@@ -440,6 +446,53 @@ module('Integration | structured-theme', function (hooks) {
     assert.false(
       primaryInk?.startsWith('color-mix'),
       `the color-mix ink formula collapses to a literal color (${primaryInk})`,
+    );
+  });
+
+  // Style Reference renders the palette unconditionally, so flipping the
+  // preview's color mode never tears the swatch grid down — the resolution has
+  // to follow the toggle on its own
+  test("the Style Reference palette's inherited swatches follow the preview's dark toggle", async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let StyleReference = (
+      await loader.import<typeof StyleReferenceModule>(
+        '@cardstack/base/style-reference',
+      )
+    ).default;
+    // --primary-ink is unset in both modes, and its default mixes --primary,
+    // which this theme sets to a different color per mode
+    let card = new StyleReference({
+      rootVariables: new ThemeVarField({ primary: '#d04f99' }),
+      darkModeVariables: new ThemeVarField({ primary: '#00e5ff' }),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    let primaryInk = () =>
+      this.element
+        .querySelector(
+          '[data-test-root-vars] [data-test-var-value="--primary-ink"]',
+        )
+        ?.getAttribute('data-test-var-inherited') ?? '';
+
+    let light = primaryInk();
+    assert.ok(light.length, 'the ink default resolves in light mode');
+
+    await click('[data-test-theme-nav] [data-test-mode] input');
+    // resolution runs off a MutationObserver on the scheme wrapper, so it
+    // lands a microtask after the click settles
+    let dark = await waitUntil(
+      () => {
+        let value = primaryInk();
+        return value === light ? undefined : value;
+      },
+      { timeoutMessage: 'the inherited swatch never re-resolved for dark' },
+    );
+
+    assert.notStrictEqual(
+      dark,
+      light,
+      `the swatch re-resolves against the dark scheme (light ${light}, dark ${dark})`,
     );
   });
 

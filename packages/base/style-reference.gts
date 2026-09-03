@@ -138,7 +138,7 @@ class Isolated extends Component<typeof StyleReference> {
             @editMode={{this.editMode}}
           >
             <:colorPalette>
-              <@fields.rootVariables />
+              <@fields.rootVariables data-test-root-vars />
             </:colorPalette>
             <:typography>
               <@fields.typography />
@@ -286,11 +286,13 @@ class Isolated extends Component<typeof StyleReference> {
       section {
         scroll-margin-top: var(--boxel-sp-2xl);
       }
-      /* the header band spans the card; its text keeps to the dashboard's
-         content measure, minus the band's own padding */
+      /* the header band spans the card; its text keeps to the body's measure,
+         which is the dashboard's content measure less .dsr-content's padding
+         and the section grid's own padding-inline */
       .style-header-content {
         max-width: calc(
-          var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-2xl)
+          var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-xl) - 2 *
+            var(--boxel-sp-2xl)
         );
         margin: 0 auto;
       }

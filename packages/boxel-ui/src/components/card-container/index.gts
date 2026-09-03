@@ -234,25 +234,27 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-caption-font-weight: var(--theme-caption-font-weight, 500);
 
-      /* ui label: control text, table headers, badges */
-      --boxel-label-font-family: var(
+      /* ui label: control text, table headers, badges. Kept off the
+         `--boxel-label-*` family, which is Label's own contract and has to
+         keep falling back to the body slot. */
+      --boxel-ui-label-font-family: var(
         --theme-label-font-family,
         var(--boxel-body-font-family)
       );
-      --boxel-label-font-size: var(
+      --boxel-ui-label-font-size: var(
         --theme-label-font-size,
         var(--boxel-font-size-xs)
       );
-      --boxel-label-line-height: var(
+      --boxel-ui-label-line-height: var(
         --theme-label-line-height,
         var(--boxel-line-height-xs)
       );
-      --boxel-label-font-weight: var(--theme-label-font-weight, 500);
+      --boxel-ui-label-font-weight: var(--theme-label-font-weight, 500);
 
       /* eyebrow: the tracked-out kicker above a title */
       --boxel-eyebrow-font-family: var(
         --theme-eyebrow-font-family,
-        var(--boxel-label-font-family)
+        var(--boxel-ui-label-font-family)
       );
       --boxel-eyebrow-font-size: var(
         --theme-eyebrow-font-size,
@@ -285,7 +287,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         --theme-caption-letter-spacing,
         var(--boxel-body-letter-spacing)
       );
-      --boxel-label-letter-spacing: var(
+      --boxel-ui-label-letter-spacing: var(
         --theme-label-letter-spacing,
         var(--boxel-body-letter-spacing)
       );

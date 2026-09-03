@@ -482,7 +482,7 @@ export class CardContainerCss extends GlimmerComponent<{
             <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
             <dt><code>--boxel-body-*</code></dt><dd>p</dd>
             <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
-            <dt><code>--boxel-label-*</code></dt><dd>UI labels, control text</dd>
+            <dt><code>--boxel-ui-label-*</code></dt><dd>UI labels, control text</dd>
             <dt><code>--boxel-eyebrow-*</code></dt><dd>kicker above a title</dd>
           </dl>
         </div>
