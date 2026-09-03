@@ -7,10 +7,7 @@
         "module": "../property-listing"
       },
       "specType": "card",
-      "isCard": true,
-      "isField": false,
-      "isComponent": false,
-      "readMe": "## Property Listing (PL)\n\nThe property page a buyer would read: address, beds/baths/area, asking price, photo gallery (reusing the catalog’s MultiImageSourceField), agent, and a draft → published → under-offer → sold lifecycle whose publish moment is an event fact. Deliberately distinct from the marketplace `Listing` (sole-vault): a property is located and sold once, a collectible is shipped and priced per unit.\n\n### Non-goals\n\nNo offers/bidding flow (an Offer on a property would be its own card). No MLS/syndication integration. No mortgage math.",
+      "readMe": "## Property Listing (PL)\n\nThe property page a buyer would read: address, beds/baths/area, asking price, photo gallery (reusing the catalog’s MultiImageSourceField), agent, and a draft → published → under-offer → sold lifecycle whose publish moment is an event fact. Deliberately distinct from the marketplace `Listing` (sole-vault): a property is located and sold once, a collectible is shipped and priced per unit.\n\n### Non-goals\n\nNo offers/bidding flow (an Offer on a property would be its own card). No MLS/syndication integration. No mortgage math.\n\n### Marketplace extension (2026-09-03)\n\nAdditive: `lotSizeSqft`, `neighborhood`, `features[]` (pills on the property page), `mlsNumber`, `hoaFee`, `heroIndex` + `photoCaptions[]` (managed by Photo Organizer), computeds `daysOnMarket` (from `publishedAt`, only while on the market), `pricePerSqft`, `photoCount`. Status ladder gained `prepared` and `expired` (existing values untouched; the spec's Active/Pending map to published/under-offer). The isolated view now carries the full publish panel: pre-publish checklist, channel selector, schedule picker, and the Publish button (draft/prepared only, lazy-imports the command to avoid a module cycle).",
       "cardInfo": {
         "name": "Property Listing",
         "summary": "A real-estate listing: facts, price, photo gallery, and a publish lifecycle."
@@ -21,6 +18,11 @@
       "linkedExamples.0": {
         "links": {
           "self": "../PropertyListing/14-birchwood-lane"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../PropertyListing/742-evergreen-terrace"
         }
       }
     },

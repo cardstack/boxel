@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Jane Realtor",
+      "email": "jane@springfieldrealty.com",
+      "phone": "(555) 123-4567",
+      "role": "Listing Agent",
+      "department": "Springfield Realty Group",
+      "status": "active",
+      "employmentType": "full-time",
+      "cardInfo": {
+        "name": "Jane Realtor"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

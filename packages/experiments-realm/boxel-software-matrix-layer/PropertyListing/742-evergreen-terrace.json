@@ -1,0 +1,102 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Charming family home in the heart of Springfield",
+      "propertyType": "house",
+      "askingPrice": {
+        "amount": 425000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "bedrooms": 4,
+      "bathrooms": 2.5,
+      "areaSqft": 2400,
+      "lotSizeSqft": 8500,
+      "yearBuilt": 1985,
+      "neighborhood": "Pressboard Estates",
+      "status": "published",
+      "publishedAt": "2026-08-22T14:34:00.000Z",
+      "mlsNumber": "MLS-12345678",
+      "heroIndex": 0,
+      "features": [
+        "Hardwood floors",
+        "Updated kitchen",
+        "Fenced backyard",
+        "Central A/C",
+        "2-car garage",
+        "Walk to schools"
+      ],
+      "photoCaptions": [
+        "Front exterior",
+        "Updated kitchen",
+        "Living room",
+        "Master bedroom",
+        "Spacious backyard"
+      ],
+      "description": "Charming family home in the heart of Springfield. Recently updated kitchen with granite counters and stainless appliances. Spacious backyard perfect for entertaining. Walking distance to Springfield Elementary.",
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.unsplash.com/photo-1556911220-bff31c812dba?w=1200",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=1200",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "742 Evergreen Terrace",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "address": {
+        "addressLine1": "742 Evergreen Terrace",
+        "addressLine2": null,
+        "city": "Springfield",
+        "state": "IL",
+        "postalCode": "62701",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": null
+        }
+      },
+      "hoaFee": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      }
+    },
+    "relationships": {
+      "agent": {
+        "links": {
+          "self": "../Employee/jane-realtor"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../property-listing",
+        "name": "PropertyListing"
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": null,
+      "propertyType": "condo",
+      "askingPrice": {
+        "amount": null,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "bedrooms": 2,
+      "bathrooms": 2,
+      "areaSqft": 1200,
+      "yearBuilt": 2015,
+      "status": "draft",
+      "description": null,
+      "photos": {
+        "images": []
+      },
+      "features": [],
+      "photoCaptions": [],
+      "cardInfo": {
+        "name": "1024 Elm Street"
+      },
+      "address": {
+        "addressLine1": "1024 Elm Street",
+        "addressLine2": null,
+        "city": "Springfield",
+        "state": "IL",
+        "postalCode": "62702",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": null
+        }
+      }
+    },
+    "relationships": {
+      "agent": {
+        "links": {
+          "self": "../Employee/jane-realtor"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../property-listing",
+        "name": "PropertyListing"
+      }
+    }
+  }
+}

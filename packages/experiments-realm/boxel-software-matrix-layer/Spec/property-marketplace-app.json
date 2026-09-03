@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PropertyMarketplaceApp",
+        "module": "../property-marketplace-app"
+      },
+      "specType": "app",
+      "readMe": "## Property Marketplace (App)\n\nThe agent's market-command console (\"Command your market\"): one hero number (value on the market), a clickable pipeline rail over the shared status ladder, the book itself (search, status filter pills, sort by newest / days-on-market / price), and a Needs-attention rail (30+ DOM listings, drafts missing photos or price). New Listing creates a draft in place.\n\n### Composition\n\nConsumes the Real Estate blocks UNCHANGED: PropertyListing rows from one live `getCards` query; DOM read off the card's own computed; statuses from PROPERTY_LISTING_STATUS_LABELS. Rows open with `viewCard`; nothing is patched from the app (publishing lives on the listing card).\n\n### Identity\n\nDark navy + gold marketplace brand, declared once at the root as overridable knobs (`--marketplace-navy/-surface/-gold/-ink/-muted`) per boxel-theming §4a. Prerender gets a static shell (`isInteractive` gates the live panes).",
+      "cardInfo": {
+        "name": "Property Marketplace",
+        "summary": "Market-command console over the Real Estate blocks — value-in-force hero, pipeline rail, the book, needs-attention queue."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PropertyMarketplaceApp/springfield"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

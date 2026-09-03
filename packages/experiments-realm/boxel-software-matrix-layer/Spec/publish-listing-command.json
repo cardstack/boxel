@@ -7,10 +7,7 @@
         "module": "../commands/publish-listing-command"
       },
       "specType": "command",
-      "isCard": false,
-      "isField": false,
-      "isComponent": false,
-      "readMe": "## Publish Listing (PL)\n\nThe single writer for a property listing’s go-live: a listing may not publish half-dressed — address, asking price, and at least one photo are enforced (photo-less listings do not get viewings). Later lifecycle moves are status edits; the publish moment never rewrites.\n\n### Example\n\nNatural target: the linked 14 Birchwood Lane (already live — re-running demonstrates the once-only guard).\n\n### Non-goals\n\nNo portal syndication, no scheduled publishing.",
+      "readMe": "## Publish Listing (PL)\n\nThe single writer for a property listing’s go-live: a listing may not publish half-dressed — address, asking price, and at least one photo are enforced (photo-less listings do not get viewings). Later lifecycle moves are status edits; the publish moment never rewrites.\n\n### Example\n\nNatural target: the linked 14 Birchwood Lane (already live — re-running demonstrates the once-only guard).\n\n### Non-goals\n\nNo portal syndication, no scheduled publishing.\n\n### Marketplace extension (2026-09-03)\n\nInput gained `channels[]` (vocabulary in components/channel-selector; MLS always unioned in) and `scheduledDate`. Publishing is simulated (2–3s beat, mock `MLS-########`, per-channel success rows with example.com links); the result carries `channelResults[]` (`resultStatus`, never a nested `status` — platform bug), `mlsNumber`, `publishedAtIso`, `scheduled`. Draft OR prepared may publish; a future `scheduledDate` records intent and patches nothing (a realm has no background scheduler — rerun after the time).",
       "cardInfo": {
         "name": "Publish Listing",
         "summary": "Validates address, price, and ≥1 photo, then flips draft → published and stamps publishedAt once."
@@ -21,6 +18,11 @@
       "linkedExamples.0": {
         "links": {
           "self": "../PropertyListing/14-birchwood-lane"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../PropertyListing/1024-elm-street"
         }
       }
     },

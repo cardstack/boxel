@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PublishChecklist",
+        "module": "../components/publish-checklist"
+      },
+      "specType": "component",
+      "readMe": "## Publish Checklist (Cb)\n\nThe pre-publish gate, rendered. Four rows — photos (≥1 required, 10+ recommended), price set, description length (100+ chars recommended), address complete — each drawn as a pass ✓ / fail ✗ / warn ! glyph with the fact spelled out beside it, so an agent knows exactly what is between this listing and going live.\n\n### Contract (render-only)\n\n- `@model` — a structurally-typed bag of the facts it checks: `{ photoCount, askingPrice, description, address, cardTitle }`. Any object with those fields can be checked; the component never imports `PropertyListing`, so the same list works on a live card, a query row, or a plain draft object.\n- `get ready(): boolean` — true when no row is a hard fail (warns don't block). Consumers that need the gate programmatically read this; the list itself renders regardless.\n- `...attributes` ride onto the `<ul>` root for consumer styling.\n\n### One definition, two readers\n\nThis list paints the SAME requirements `PublishListingCommand` enforces at write time — the command re-checks everything, so the checklist can never grant what the guard refuses. If the requirements move, they move in both places deliberately.\n\n### Colour (boxel-theming)\n\nThree published knobs — `--ck-pass-color`, `--ck-fail-color`, `--ck-warn-color` — defaulting to the theme's own state tokens (`--boxel-dark-green`, `--boxel-danger`, `--boxel-warning`). Glyph chips self-dilute via `color-mix(in oklab, …)`; zero hex literals.\n\n### Non-goals\n\nNo blocking, no buttons, no toasts — the gate that refuses is the command's; this component only shows the agent the same list the guard will read.",
+      "cardInfo": {
+        "name": "Publish Checklist",
+        "summary": "Pre-publish validation list — pass/fail/warn rows for photos, price, description, and address; mirrors the Publish command's guards."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

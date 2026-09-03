@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ChannelSelector",
+        "module": "../components/channel-selector"
+      },
+      "specType": "component",
+      "readMe": "## Channel Selector (Cb)\n\nWhich distribution channels a listing publishes to. Seven check rows from the publish command's own `PUBLISH_CHANNELS` — MLS pinned checked and disabled with a Required tag (\"Triggers automatic syndication to major portals\"), Zillow/Realtor.com/Redfin tagged Auto-synced, the agent site and socials tagged Optional.\n\n### Contract (render-only)\n\n- `@selected: string[]` — the chosen channel values. The CONSUMER owns this set.\n- `@onToggle(channel)` — the consumer adds/removes the channel from its set. MLS never fires it: the row is disabled because `PublishListingCommand` unions `'mls'` in regardless — the portals syndicate FROM the MLS entry, so a publish without it is not a thing this desk sells.\n- `...attributes` ride onto the `<ul>` root.\n\nChannel values and labels are imported from `../commands/publish-listing-command` (`PUBLISH_CHANNELS`, `PUBLISH_CHANNEL_LABELS`) — one definition, so the selector can never offer a channel the command doesn't know.\n\n### Accessibility\n\nReal `<input type='checkbox'>` per row inside its `<label>` — keyboard toggling, focus ring via `:focus-visible`, and the disabled MLS row reads as disabled to assistive tech.\n\n### Colour (boxel-theming)\n\nToken-only: checkbox `accent-color` rides `--primary`, tags on `--muted-foreground`, rows separated by `--border`. Zero hex literals.\n\n### Non-goals\n\nNo persistence (channel preference storage is the consumer's), no publish action, no per-channel status — results render from the command's `channelResults`, not here.",
+      "cardInfo": {
+        "name": "Channel Selector",
+        "summary": "Publish-channel picker — seven check rows with MLS pinned required; consumer owns the selected set."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

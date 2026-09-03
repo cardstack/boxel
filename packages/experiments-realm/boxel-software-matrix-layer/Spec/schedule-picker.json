@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "SchedulePicker",
+        "module": "../components/schedule-picker"
+      },
+      "specType": "component",
+      "readMe": "## Schedule Picker (Cb)\n\n\"Publish now\" or \"publish later\" — two radio rows, the second with native date and time inputs. Built for the Publish Listing panel's deferred go-live, but the contract is generic: any command input that wants an optional future moment can mount it.\n\n### Contract (render-only)\n\n- `@value?: string` — the current ISO datetime, if a schedule is already chosen; seeds the mode and the date/time parts.\n- `@onChange(isoOrUndefined)` — fired with an ISO string when a future moment is composed, and with `undefined` when the agent picks \"Publish now\". The CONSUMER stores the value; the picker holds only its own input state.\n- `...attributes` ride onto the `<fieldset>` root.\n\n### The timezone rule\n\nThe Date is composed from LOCAL calendar parts — `new Date(y, m-1, d, hh, mm)` — and only then serialised to ISO. Never string-concatenated into an ISO with `Z`: an east-of-UTC agent scheduling \"9am Saturday\" means their 9am, not Greenwich's (the realm's documented off-by-one class).\n\n### Accessibility\n\nNative radio inputs grouped in a `<fieldset>` with a `<legend>`, native date/time inputs — keyboard and screen-reader behaviour comes from the platform, with `:focus-visible` rings on the ring token.\n\n### Colour (boxel-theming)\n\nToken-only: `accent-color` on `--primary`, borders on `--border`, legend on `--muted-foreground`. Zero hex literals.\n\n### Non-goals\n\nNo scheduler — a realm has no background clock, so the command records the intent and declines to publish early; firing at the moment is the agent's (or a future scheduler's) job. No recurring schedules, no timezone picker.",
+      "cardInfo": {
+        "name": "Schedule Picker",
+        "summary": "Publish-now-or-later radio pair with native date/time inputs — composes the moment from local calendar parts, consumer stores the ISO."
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

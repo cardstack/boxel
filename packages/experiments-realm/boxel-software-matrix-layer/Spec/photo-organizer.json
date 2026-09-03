@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PhotoOrganizer",
+        "module": "../components/photo-organizer"
+      },
+      "specType": "component",
+      "readMe": "## Photo Organizer (Cb)\n\nThe edit-side companion to Property Gallery: reorder photos (HTML5 drag-and-drop plus Move left/right buttons as the keyboard path), choose the hero (badge follows its photo through reorders), and write per-photo captions.\n\n### Contract (mutates the passed model)\n\n- `@model` — structurally typed `{ photos?: { images?, resolvedUrls? }; photoCaptions?: string[]; heroIndex?: number | null }`, so it never imports the card and cannot create a module cycle.\n- All three arrays move together: reordering `photos.images` reorders `photoCaptions` and remaps `heroIndex` in the same write. `containsMany` arrays are replaced wholesale (the MultiImageSourceField editor idiom), never index-assigned.\n\n### Why captions live on the card\n\nMultiImageSourceField is a shared catalog field with no caption slot; extending it is a boxel-catalog change. The parallel `photoCaptions` array is the additive alternative, and this organizer is the ONLY writer that keeps the arrays coupled.\n\n### Non-goals\n\nNo uploads (the field's own editor owns add/remove), no display (Property Gallery owns that).",
+      "cardInfo": {
+        "name": "Photo Organizer",
+        "summary": "Edit-side photo reorder / hero pick / captions for Property Listing — drag or buttons, arrays kept coupled."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PropertyListing/742-evergreen-terrace"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
