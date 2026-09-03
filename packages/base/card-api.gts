@@ -2470,6 +2470,12 @@ interface InternalFieldInitializer {
   description: string | undefined;
 }
 
+// Property names the system provides as getters on CardDef/FileDef. A
+// userland `@field` under one of these would shadow the getter via the
+// prototype chain silently, so the decorator refuses them by name (the
+// `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
+const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
@@ -2480,6 +2486,11 @@ export const field = function (
   if (typeof key === 'symbol') {
     throw new Error(
       `the @field decorator only supports string field names, not symbols`,
+    );
+  }
+  if (RESERVED_FIELD_NAMES.includes(key)) {
+    throw new Error(
+      `"${key}" is a reserved name: it is provided by the system and cannot be declared as a field`,
     );
   }
   if (!(target instanceof BaseDef)) {
@@ -3167,6 +3178,40 @@ export function serializeDeclaredScreenshots(
   return roster;
 }
 
+// Shared body of the `screenshotURLs` getter on CardDef and FileDef (two
+// sites, matching how `static screenshots` itself is declared — FieldDef has
+// no addressable URL, so it gets neither). Every declared slot name appears
+// as a key; the value is the capture's durable served URL when
+// `meta.screenshots` (the serve-time join, or the prerender render context's
+// declaration-derived form) holds the name, and `undefined` otherwise —
+// not-yet-captured, capture-errored, or an unsaved instance. `undefined`
+// rather than a placeholder URL is deliberate: it is the absence signal
+// consumption fallback chains (e.g. a thumbnail falling through to an icon
+// default) rely on, which a placeholder would defeat.
+function composeScreenshotURLs(
+  instance: CardDef | FileDef,
+): Record<string, string | undefined> {
+  let urls: Record<string, string | undefined> = {};
+  try {
+    for (let name of Object.keys(
+      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+    )) {
+      urls[name] = undefined;
+    }
+  } catch {
+    // An invalid declaration fails loudly at its authoring surfaces (the
+    // capture roster read, `getScreenshots` callers); a consuming template
+    // must stay render-safe, so here it reads as "nothing declared".
+  }
+  let captured = getCardMeta(instance, 'screenshots');
+  if (captured) {
+    for (let [name, entry] of Object.entries(captured)) {
+      urls[name] = entry.url;
+    }
+  }
+  return urls;
+}
+
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
   // class type cannot masquerade as a FieldDef class type
@@ -3553,6 +3598,13 @@ export class FileDef extends BaseDef {
     return this[meta]?.resourceCreatedAt;
   }
 
+  // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
+  // file-backed defs. The prerender pass captures only instance rows, so a
+  // file's declared names read `undefined` until file rows capture too.
+  get screenshotURLs(): Record<string, string | undefined> {
+    return composeScreenshotURLs(this);
+  }
+
   // The four shared format shells own identity, facts, budgets, and state for
   // every file family. What they can't know is how to draw the file itself — a
   // waveform, a page, a 3D scene — so a family supplies that one renderer here
@@ -3836,6 +3888,24 @@ export class CardDef extends BaseDef {
   get [realmURL](): URL | undefined {
     let realmURLString: string | undefined = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
+  }
+
+  // The durable served URLs of this instance's declared screenshots, keyed
+  // by slot name — one key per `static screenshots` declaration, `undefined`
+  // until a capture exists (see `composeScreenshotURLs`). `undefined` is the
+  // deliberate absence signal, so a template must guard its `<img>` —
+  // Glimmer omits the attribute for an undefined value, which renders a
+  // broken/empty image:
+  //
+  //   {{#if @model.screenshotURLs.card}}
+  //     <img src={{@model.screenshotURLs.card}} alt='preview' />
+  //   {{/if}}
+  //
+  // A getter rather than a `@field` (like FileDef's timestamp getters) so it
+  // never round-trips on a write; the name is reserved by the `@field`
+  // decorator so a userland field can't shadow it.
+  get screenshotURLs(): Record<string, string | undefined> {
+    return composeScreenshotURLs(this);
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {

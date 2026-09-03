@@ -483,4 +483,104 @@ module('Unit | declared screenshots', function (hooks) {
       /must be an object mapping names to specs/,
     );
   });
+
+  test('screenshotURLs maps declared names to captured URLs from meta', function (assert) {
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+        thumb: { format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    let instance = new Product();
+    assert.deepEqual(
+      instance.screenshotURLs,
+      { hero: undefined, thumb: undefined },
+      'every declared name is a key; undefined until a capture exists',
+    );
+
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        hero: {
+          url: 'http://example.com/r/_screenshot/card-1?name=hero',
+          hash: 'abc123',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.deepEqual(
+      instance.screenshotURLs,
+      {
+        hero: 'http://example.com/r/_screenshot/card-1?name=hero',
+        thumb: undefined,
+      },
+      'a captured name reads its durable served URL; the uncaptured one stays undefined',
+    );
+  });
+
+  test('screenshotURLs also surfaces captured names the class no longer declares', function (assert) {
+    class Plain extends cardApi.CardDef {}
+    let instance = new Plain();
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        legacy: {
+          url: 'http://example.com/r/_screenshot/card-1?name=legacy',
+          hash: 'abc123',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.deepEqual(
+      instance.screenshotURLs,
+      { legacy: 'http://example.com/r/_screenshot/card-1?name=legacy' },
+      'a manifest entry outliving its declaration still serves, so it still reads',
+    );
+  });
+
+  test('a FileDef reads screenshotURLs the same way', function (assert) {
+    class Video extends cardApi.FileDef {
+      static screenshots: Screenshots = {
+        poster: {
+          format: 'embedded',
+          width: 640,
+          height: 360,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    let instance = new Video();
+    assert.deepEqual(
+      instance.screenshotURLs,
+      { poster: undefined },
+      'the prerender pass captures only instance rows, so a file declared name reads undefined',
+    );
+  });
+
+  test('an invalid declaration reads as nothing declared rather than throwing', function (assert) {
+    class Bad extends cardApi.CardDef {
+      static screenshots: any = { hero: { width: 800 } };
+    }
+    let instance = new Bad();
+    assert.deepEqual(
+      instance.screenshotURLs,
+      {},
+      'consumption stays render-safe; the declaration error surfaces at authoring/capture surfaces',
+    );
+  });
+
+  test('the @field decorator refuses the reserved screenshotURLs name', function (assert) {
+    class Bad extends cardApi.CardDef {}
+    assert.throws(
+      () =>
+        (cardApi.field as any)(Bad.prototype, 'screenshotURLs', {
+          initializer: () => ({}),
+        }),
+      /"screenshotURLs" is a reserved name/,
+    );
+  });
 });

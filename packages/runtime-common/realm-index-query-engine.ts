@@ -94,6 +94,10 @@ import {
   getValueForResourcePath,
 } from './query-field-utils.ts';
 import { applyServerSearchPageBound } from './search-bounds.ts';
+import {
+  screenshotsMetaFromManifest,
+  type ScreenshotManifest,
+} from './capture-spec.ts';
 
 // We allow up to this many traversals into the same card type per
 // `populateQueryFields` walk, matching the field-set the host emits at
@@ -178,6 +182,11 @@ interface SearchResultDoc {
   // invalidation does not cascade indexed_at (see
   // `index-writer.ts.calculateInvalidations` realm_url filter).
   deps: string[] | null;
+  // The primary card's declared-screenshot manifest
+  // (`prerendered_html.screenshots`). Like `generation`, kept off the
+  // assembled `doc` and joined into per-instance `meta.screenshots` only by
+  // the realm's card+json GET handler.
+  screenshots: ScreenshotManifest | null;
 }
 
 export interface SearchResultError {
@@ -768,6 +777,7 @@ export class RealmIndexQueryEngine {
       generation: instance.generation,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
+      screenshots: instance.screenshots,
     };
   }
 
@@ -793,6 +803,16 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<number | undefined> {
     return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
+  }
+
+  // The live instance's declared-screenshot manifest (undefined when not
+  // live, null when live but uncaptured) — the `?name=` serving route's
+  // addressing read; liveness gate and manifest in one narrow read.
+  async liveInstanceScreenshots(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<ScreenshotManifest | null | undefined> {
+    return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
   }
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
@@ -1929,6 +1949,26 @@ export class RealmIndexQueryEngine {
             let maybeResult = instanceMap.get(entry.linkURL.href);
             if (maybeResult?.type === 'instance') {
               linkResource = maybeResult.instance;
+              // Join the linked instance's declared-screenshot manifest into
+              // its `meta`, mirroring what the serving realm's own card+json
+              // GET stamps — a cross-realm link gets the same key from that
+              // realm's GET, so consumers see one shape either way. (This
+              // layer already rewrites the resource's relationships in
+              // place; the row's resources are parsed fresh per query.)
+              if (maybeResult.screenshots) {
+                linkResource.meta = {
+                  ...linkResource.meta,
+                  screenshots: screenshotsMetaFromManifest(
+                    maybeResult.screenshots,
+                    {
+                      realmURL: realmURL.href,
+                      instanceLocalPath: realmPath
+                        .local(new URL(maybeResult.canonicalURL))
+                        .replace(/\.json$/, ''),
+                    },
+                  ),
+                };
+              }
             }
           }
           if (!linkResource && entry.expectsFileMeta) {

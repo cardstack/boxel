@@ -53,6 +53,7 @@ import {
   isReferenceFilterField,
 } from './query.ts';
 import type { SerializedError } from './error.ts';
+import type { ScreenshotManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
@@ -165,6 +166,7 @@ type IndexRowWithHtml = BoxelIndexTable &
     | 'fitted_html'
     | 'atom_html'
     | 'markdown'
+    | 'screenshots'
   >;
 
 export interface IndexedFile {
@@ -210,6 +212,10 @@ export interface IndexedInstance {
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
+  // The row's declared-screenshot manifest (`prerendered_html.screenshots`)
+  // — like the HTML columns, whatever rendering currently exists, which may
+  // trail the index-data generation until the row's prerender pass lands.
+  screenshots: ScreenshotManifest | null;
   generation: number;
   realmURL: string;
   indexedAt: number | null;
@@ -424,39 +430,48 @@ export class IndexQueryEngine {
     return resultMap;
   }
 
-  // Existence probe with `getInstance`'s exact row predicate — the same
-  // url/file_alias match, instance type, tombstone exclusion, and
+  // The live-instance row predicate, defined once: `getInstance`'s
+  // url/file_alias match, instance type, and tombstone exclusion, plus the
   // effective-error channel (a row `getInstance` would map to
-  // `instance-error` probes as not-live) — without hydrating the row.
-  // `getInstance` selects every wide column in the index (prerendered HTML,
-  // pristine/search docs), so callers that gate on liveness alone — the
-  // screenshot route runs this on every request, 304 revalidations
+  // `instance-error` is not live). Every liveness gate — `hasLiveInstance`,
+  // `liveInstanceGeneration`, `liveInstanceScreenshots` — spreads this one
+  // fragment, so the DSL and `?name=` screenshot routes' liveness semantics
+  // cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
+  // is the realm-scoped raw-SQL twin, built from the same exported join
+  // fragments.)
+  #liveInstanceConditions(url: URL): Expression {
+    return every([
+      any([
+        [`i.url =`, param(url.href)],
+        [`i.file_alias =`, param(url.href)],
+      ]),
+      ['i.type =', param('instance')],
+      any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      [`NOT ${effectiveHasError()}`],
+    ]) as Expression;
+  }
+
+  // Existence probe with the live-instance predicate, without hydrating the
+  // row. `getInstance` selects every wide column in the index (prerendered
+  // HTML, pristine/search docs), so callers that gate on liveness alone —
+  // the screenshot route runs this on every request, 304 revalidations
   // included — must not pay for a hydration they discard.
   async hasLiveInstance(url: URL, opts?: GetEntryOptions): Promise<boolean> {
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
-      ...every([
-        any([
-          [`i.url =`, param(url.href)],
-          [`i.file_alias =`, param(url.href)],
-        ]),
-        ['i.type =', param('instance')],
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-        [`NOT ${effectiveHasError()}`],
-      ]),
+      ...this.#liveInstanceConditions(url),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
     return rows.length > 0;
   }
 
   // The index generation of a live instance, or undefined when none matches —
-  // the generation companion to `hasLiveInstance`, matching the same row
-  // predicate (including the effective-error channel) but selecting the one
-  // column the screenshot cache key needs, still without hydrating the row.
-  // Used where the caller needs both the liveness gate and the generation, so
-  // the two collapse into a single narrow read.
+  // the generation companion to `hasLiveInstance`, selecting the one column
+  // the screenshot cache key needs, still without hydrating the row. Used
+  // where the caller needs both the liveness gate and the generation, so the
+  // two collapse into a single narrow read.
   async liveInstanceGeneration(
     url: URL,
     opts?: GetEntryOptions,
@@ -465,18 +480,35 @@ export class IndexQueryEngine {
       'SELECT i.generation',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
-      ...every([
-        any([
-          [`i.url =`, param(url.href)],
-          [`i.file_alias =`, param(url.href)],
-        ]),
-        ['i.type =', param('instance')],
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-        [`NOT ${effectiveHasError()}`],
-      ]),
+      ...this.#liveInstanceConditions(url),
       'LIMIT 1',
     ] as Expression)) as unknown as { generation: number }[];
     return rows.length > 0 ? Number(rows[0].generation) : undefined;
+  }
+
+  // The declared-screenshot manifest of a live instance — the `?name=`
+  // serving route's addressing read: the shared live-instance predicate (so
+  // a name resolves exactly when a DSL capture of the same instance would),
+  // selecting only the manifest column. `undefined` means no live instance
+  // matches; `null` means the instance is live but nothing has been captured
+  // for it.
+  async liveInstanceScreenshots(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<ScreenshotManifest | null | undefined> {
+    let rows = (await this.#query([
+      'SELECT ph.screenshots AS screenshots',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE',
+      ...this.#liveInstanceConditions(url),
+      'LIMIT 1',
+    ] as Expression)) as unknown as {
+      screenshots: ScreenshotManifest | null;
+    }[];
+    if (rows.length === 0) {
+      return undefined;
+    }
+    return rows[0].screenshots ?? null;
   }
 
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
@@ -502,6 +534,7 @@ export class IndexQueryEngine {
       fitted_html: fittedHtml,
       markdown,
       search_doc: searchDoc,
+      screenshots,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -521,6 +554,7 @@ export class IndexQueryEngine {
       atomHtml,
       markdown,
       searchDoc,
+      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       deps,
@@ -2269,6 +2303,7 @@ const PRERENDERED_HTML_SELECTS = [
   'embedded_html',
   'fitted_html',
   'markdown',
+  'screenshots',
 ]
   .map((col) => `ph.${col} AS ${col}`)
   .join(', ');

@@ -465,6 +465,31 @@ module(basename(import.meta.filename), function () {
       );
     }
 
+    // Seeds the `prerendered_html` manifest row the `?name=` route and the
+    // card+json `meta.screenshots` join read — the artifact the prerender
+    // pass persists via `updatePrerenderedHtmlEntry`.
+    async function seedManifestRow(
+      localPath: string,
+      screenshots: Record<string, unknown>,
+      generation = 1,
+    ) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          url: `${REALM_URL}${localPath}.json`,
+          file_alias: `${REALM_URL}${localPath}`,
+          realm_url: REALM_URL,
+          type: 'instance',
+          generation,
+          screenshots,
+        },
+        { jsonFields: ['screenshots'] },
+      );
+      await query(
+        dbAdapter,
+        insert('prerendered_html', nameExpressions, valueExpressions),
+      );
+    }
+
     async function seedRealmConfigRow(allowArbitraryScreenshots: boolean) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
@@ -903,6 +928,344 @@ module(basename(import.meta.filename), function () {
       let mixed = await get('_screenshot/card-1?name=hero&format=embedded');
       assert.strictEqual(mixed.status, 400);
       assert.true((await mixed.text()).includes('name cannot be combined'));
+
+      let malformed = await get('_screenshot/card-1?name=not%20a%20name');
+      assert.strictEqual(malformed.status, 400);
+      assert.true(
+        (await malformed.text()).includes('not a valid screenshot name'),
+      );
+    });
+
+    test('a declared name serves through the manifest join with zero capture work', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: entry.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      // The realm's capture gate stays closed: names never trigger capture
+      // work, so they serve regardless of it.
+      let response = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.headers.get('content-type'), 'image/png');
+      assert.strictEqual(
+        response.headers.get('etag'),
+        `"${entry.objectKey}"`,
+        'the ETag is the content hash',
+      );
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...PNG_BYTES],
+      );
+      assert.strictEqual(captureCalls, 0);
+      assert.strictEqual(perfEvents.length, 1, 'one record for the hit');
+      let event = perfEvents[0] as ScreenshotRequestPerfEvent;
+      assert.strictEqual(event.surface, 'get-named');
+      assert.strictEqual(event.outcome, 'hit');
+      assert.strictEqual(event.lane, 'declared');
+
+      let revalidated = await get('_screenshot/card-1?name=hero', 'GET', {
+        'if-none-match': `"${entry.objectKey}"`,
+      });
+      assert.strictEqual(
+        revalidated.status,
+        304,
+        'an If-None-Match echo answers as a bodyless 304',
+      );
+    });
+
+    test('a name serves the exact object its manifest advertises, not a newer ledger row', async function (assert) {
+      await seedInstanceRow('card-1');
+      let olderBytes = PNG_BYTES;
+      let newerBytes = new TextEncoder().encode('newer-png-bytes');
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: olderBytes,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let older = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+      }))!;
+      // A fresher capture has persisted (media lands before its manifest
+      // publishes), but the manifest still names the older artifact.
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 2,
+        bytes: newerBytes,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: older.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let response = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.headers.get('etag'),
+        `"${older.objectKey}"`,
+        'the served ETag is exactly the hash meta.screenshots advertises',
+      );
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...olderBytes],
+        'the served bytes are the manifest-pinned artifact',
+      );
+    });
+
+    test('an unknown or not-yet-captured name is an uncaptured miss', async function (assert) {
+      await seedInstanceRow('card-1');
+
+      // Live instance, no manifest at all: not yet prerendered with capture
+      // support.
+      let unrendered = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(unrendered.status, 404);
+      assert.true(
+        unrendered.headers
+          .get('cache-control')!
+          .includes(`max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`),
+        'the miss carries a short freshness window so a later capture is picked up',
+      );
+
+      // A manifest that holds other names: this one failed or was never
+      // declared.
+      await seedManifestRow('card-1', {
+        other: {
+          specHash: 'declared-other-spec',
+          objectKey: 'nonexistent-object',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+      let unknownName = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(unknownName.status, 404);
+
+      // A manifest entry whose ledger row is gone (reclaimed): still a miss,
+      // never an error.
+      let reclaimed = await get('_screenshot/card-1?name=other');
+      assert.strictEqual(reclaimed.status, 404);
+
+      assert.strictEqual(captureCalls, 0);
+      assert.deepEqual(perfEvents, [], 'uncaptured misses emit no telemetry');
+    });
+
+    test('a deleted instance stops serving its declared captures', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: entry.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET is_deleted = TRUE WHERE url = '${REALM_URL}card-1.json'`,
+      ]);
+
+      let response = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(response.status, 404);
+    });
+
+    test('card+json joins the manifest into meta.screenshots', async function (assert) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          url: `${REALM_URL}card-2.json`,
+          file_alias: `${REALM_URL}card-2`,
+          realm_url: REALM_URL,
+          type: 'instance',
+          generation: 1,
+          last_modified: Date.now(),
+          resource_created_at: Date.now(),
+          is_deleted: false,
+          pristine_doc: {
+            id: `${REALM_URL}card-2`,
+            type: 'card',
+            attributes: {},
+          },
+        },
+        { jsonFields: ['pristine_doc'] },
+      );
+      await query(
+        dbAdapter,
+        insert('boxel_index', nameExpressions, valueExpressions),
+      );
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-2`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-2`,
+        captureSpecHash: 'declared-hero-spec',
+      }))!;
+      await seedManifestRow('card-2', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: entry.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      });
+
+      let response = await get('card-2', 'GET', {
+        Accept: 'application/vnd.card+json',
+      });
+      assert.strictEqual(response.status, 200);
+      let json = await response.json();
+      assert.deepEqual(
+        json.data.meta.screenshots,
+        {
+          hero: {
+            url: `${REALM_URL}_screenshot/card-2?name=hero`,
+            hash: entry.objectKey,
+            contentType: 'image/png',
+            width: 800,
+            height: 600,
+            deviceScaleFactor: 2,
+            useAsThumbnail: true,
+          },
+        },
+        'the manifest joins into meta.screenshots in its public projection',
+      );
+
+      // An instance with no manifest gets no key at all — absence is the
+      // signal consumers fall back on.
+      await seedInstanceRow('card-1');
+      let bare = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+      });
+      assert.strictEqual(bare.status, 200);
+      let bareJson = await bare.json();
+      assert.strictEqual(bareJson.data.meta.screenshots, undefined);
+    });
+
+    test('the card+json validator rotates when the manifest changes, without any index write', async function (assert) {
+      await seedInstanceRow('card-1');
+      // A null `indexed_at` suppresses ETag emission entirely; a validator
+      // needs a real index stamp to build on.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET indexed_at = ${Date.now()} WHERE url = '${REALM_URL}card-1.json'`,
+      ]);
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: 'object-a',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let first = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+      });
+      assert.strictEqual(first.status, 200);
+      let etag = first.headers.get('etag')!;
+      assert.ok(etag, 'the response carries a validator');
+
+      let revalidated = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+        'if-none-match': etag,
+      });
+      assert.strictEqual(
+        revalidated.status,
+        304,
+        'an unchanged manifest revalidates as a 304',
+      );
+
+      // A re-capture repoints the manifest — a prerendered_html write that
+      // moves neither `indexed_at` nor the realm info. The old validator
+      // must stop matching or a cached document 304s past its own
+      // screenshots forever.
+      await query(dbAdapter, [
+        `UPDATE prerendered_html
+           SET screenshots = '{"hero":{"specHash":"declared-hero-spec","objectKey":"object-b","contentType":"image/png","width":800,"height":600,"deviceScaleFactor":2}}'::jsonb
+         WHERE url = '${REALM_URL}card-1.json'`,
+      ]);
+      let recaptured = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+        'if-none-match': etag,
+      });
+      assert.strictEqual(
+        recaptured.status,
+        200,
+        'a changed manifest fails the old validator',
+      );
+      let json = await recaptured.json();
+      assert.strictEqual(
+        json.data.meta.screenshots.hero.hash,
+        'object-b',
+        'the full response carries the fresh manifest',
+      );
+      assert.notStrictEqual(
+        recaptured.headers.get('etag'),
+        etag,
+        'the new response carries a rotated validator',
+      );
     });
 
     test('a missing instance is an uncaptured miss, not a capture attempt', async function (assert) {

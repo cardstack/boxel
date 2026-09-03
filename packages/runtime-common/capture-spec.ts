@@ -1091,3 +1091,106 @@ export function screenshotURLFor({
 }): string {
   return `${realmURL}_screenshot/${instanceLocalPath}${canonicalCaptureSpecQuery(spec)}`;
 }
+
+// The durable served URL for one *declared* screenshot of one instance —
+// the name-addressed twin of `screenshotURLFor`. Names are pre-validated by
+// `SCREENSHOT_NAME_PATTERN` (URL-safe characters only), so no encoding is
+// needed.
+export function screenshotNameURLFor({
+  realmURL,
+  instanceLocalPath,
+  name,
+}: {
+  realmURL: string;
+  instanceLocalPath: string;
+  name: string;
+}): string {
+  return `${realmURL}_screenshot/${instanceLocalPath}?name=${name}`;
+}
+
+// One name's entry in a card+json document's `meta.screenshots` — the public
+// projection of a `ScreenshotManifestEntry`. `url` is the durable served URL
+// (pre-composed server-side, where the realm/local-path split is
+// authoritative, so clients never re-derive it from alias-form ids). `hash`
+// is the artifact's content hash — the serving ETag — so a consumer can tell
+// whether a capture changed; it is absent on a declaration-derived entry
+// (see `screenshotsMetaFromRoster`) where no capture is being asserted.
+// `width`/`height` are CSS pixels with `deviceScaleFactor` multiplying the
+// physical pixels, matching the manifest. The internal manifest keys
+// (`specHash`, `objectKey`, `sourceContentHash`) deliberately do not appear:
+// they steer capture identity and carry-forward, not consumption.
+export interface ScreenshotMetaEntry {
+  url: string;
+  hash?: string;
+  contentType: string;
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  useAsThumbnail?: true;
+}
+
+export type ScreenshotsMeta = Record<string, ScreenshotMetaEntry>;
+
+// Projects a persisted manifest into the `meta.screenshots` wire shape for
+// one instance. Serve-time only — never persisted back into the index or the
+// source file.
+export function screenshotsMetaFromManifest(
+  manifest: ScreenshotManifest,
+  {
+    realmURL,
+    instanceLocalPath,
+  }: {
+    realmURL: string;
+    instanceLocalPath: string;
+  },
+): ScreenshotsMeta {
+  let result: ScreenshotsMeta = {};
+  for (let [name, entry] of Object.entries(manifest)) {
+    result[name] = {
+      url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
+      hash: entry.objectKey,
+      contentType: entry.contentType,
+      width: entry.width,
+      height: entry.height,
+      deviceScaleFactor: entry.deviceScaleFactor,
+      ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
+    };
+  }
+  return result;
+}
+
+// Projects a card's *declared* roster into the `meta.screenshots` wire shape
+// — entries with no `hash`, asserting the durable URL and the declared
+// geometry but not that a capture exists. Used by the prerender render
+// context, where captures land in the same pass but after the display-format
+// renders: prerendered HTML embeds durable URLs that may 404 briefly until
+// the pass's captures persist, then self-heal — durable URLs never lie about
+// identity, only lag in freshness. Live loads instead join the real
+// manifest, so their absence signal (the thumbnail fallback chain) stays
+// intact.
+export function screenshotsMetaFromRoster(
+  roster: DeclaredScreenshotRoster,
+  {
+    realmURL,
+    instanceLocalPath,
+  }: {
+    realmURL: string;
+    instanceLocalPath: string;
+  },
+): ScreenshotsMeta {
+  let result: ScreenshotsMeta = {};
+  for (let [name, payload] of Object.entries(roster)) {
+    result[name] = {
+      url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
+      contentType: screenshotContentType(
+        payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+      ),
+      width: payload.width,
+      height: payload.height,
+      deviceScaleFactor:
+        payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+      ...(payload.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
+    };
+  }
+  return result;
+}
