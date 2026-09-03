@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 
 // Regenerates tests/test-module-timings.json — the per-file duration data that
 // drives duration-weighted shard assignment (see scripts/shard-test-modules.cjs)
@@ -27,12 +28,15 @@
 //   gh run download <ci-run-id> --name realm-server-test-report-merged -D /tmp/rs
 //   node scripts/generate-test-module-timings.mjs /tmp/rs/realm-server.xml
 
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const testsDir = join(scriptDir, '..', 'tests');
+import {
+  createResolver,
+  discoverTestFiles,
+  testsDir,
+} from './test-module-names.mjs';
+
 const timingsPath = join(testsDir, 'test-module-timings.json');
 
 // A report whose suites are mostly unattributed means the reporter regressed
@@ -49,48 +53,8 @@ if (!junitPath) {
   process.exit(1);
 }
 
-function collectTestFiles(dir, prefix) {
-  let files = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      files = files.concat(collectTestFiles(join(dir, entry.name), rel));
-    } else if (entry.isFile() && entry.name.endsWith('-test.ts')) {
-      files.push(rel);
-    }
-  }
-  return files;
-}
-
-const onDisk = collectTestFiles(testsDir, '');
-// Shard assignment works in paths relative to tests/, so every suite name has
-// to come back as one of those. A path-qualified name already is one; a bare
-// basename needs the map, which holds null for a basename that two files share
-// rather than silently attributing both to whichever sorted first.
-const byPath = new Set(onDisk);
-const byBasename = new Map();
-for (const file of onDisk) {
-  const base = file.split('/').pop();
-  if (byBasename.has(base)) {
-    byBasename.set(base, null);
-  } else {
-    byBasename.set(base, file);
-  }
-}
-
-// Returns a path, null for an ambiguous basename, or undefined for a name that
-// belongs to no file. Dropping a ` | qualifier` is a retry rather than a
-// guess: the shortened name still has to name a file on disk to be accepted.
-function resolveFile(name) {
-  if (byPath.has(name)) {
-    return name;
-  }
-  if (byBasename.has(name)) {
-    return byBasename.get(name);
-  }
-  const qualifier = name.indexOf(' | ');
-  return qualifier === -1 ? undefined : resolveFile(name.slice(0, qualifier));
-}
+const onDisk = discoverTestFiles();
+const resolveFile = createResolver(onDisk);
 
 const xml = readFileSync(junitPath, 'utf8');
 const suites = [
@@ -134,6 +98,15 @@ if (coverage < MIN_ATTRIBUTED) {
   for (const [name, seconds] of unmatched.slice(0, 10)) {
     console.error(`  ${seconds.toFixed(1)}s  ${name}`);
   }
+  // The other way to fail: names that match several files. Without this the
+  // list above is empty and the diagnosis below sends the reader to the
+  // reporter, which is the wrong place to look.
+  if (ambiguous.length) {
+    console.error('Suite names matching more than one file:');
+    for (const name of ambiguous.slice(0, 10)) {
+      console.error(`  ${name}`);
+    }
+  }
   console.error(
     'A report where everything lands in one suite usually means the junit reporter ' +
       'is not recording fullName[0] — see scripts/junit-reporter.cjs. A scattering ' +
@@ -151,7 +124,7 @@ try {
 }
 
 const merged = {};
-for (const file of onDisk.sort()) {
+for (const file of onDisk) {
   const value = timings[file] ?? prior[file];
   if (value !== undefined) {
     merged[file] = value;

@@ -40,11 +40,17 @@ function escapeXml(str) {
 // `realm-endpoints/info-test.ts` when nested, either followed by
 // ` | qualifier` where one file declares several. So its first element
 // identifies the file, which is the attribution shard weighting needs, exactly
-// and without inference. `suiteName` (the innermost module) is the fallback for
-// a test declared outside any module at all.
+// and without inference.
+//
+// A test declared outside any module has no module to name: `fullName` is just
+// `[testName]` and there is no `suiteName` at all (verified against qunit
+// 2.26.0). Length is therefore what distinguishes the two, and such a test
+// belongs in "default" — a testsuite named after the test would be one no file
+// can claim, quietly eroding the generator's attribution budget under a name
+// that reads like a module.
 function moduleNameFor(data) {
   const fullName = Array.isArray(data.fullName) ? data.fullName : [];
-  return fullName[0] || data.suiteName || 'default';
+  return fullName.length > 1 ? fullName[0] : 'default';
 }
 
 QUnit.on('testEnd', (data) => {
