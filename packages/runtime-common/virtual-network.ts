@@ -30,6 +30,17 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // Which keys of `realmMappings` are shimmed package namespaces rather than
+  // realms. Both kinds live in one table because both have to resolve — a
+  // prefix that does not resolve cannot serve `CodeRef.moduleHref` — so the
+  // table alone cannot answer "which realms does this network know?".
+  //
+  // An annotation rather than a kind on each entry, so no resolution path
+  // changes: everything that iterates `realmMappings` keeps reading a target
+  // directly. Both shapes fail the same way if this drifts — a realm omitted
+  // from a report, never a prefix that stops resolving — and this way the
+  // resolution code has nothing to get wrong.
+  private packageNamespacePrefixes = new Set<string>();
   // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
   // membership checks) resolve the same identifiers over and over and only
   // ever need the href STRING, yet toURL pays a native `new URL()` per call —
@@ -205,6 +216,9 @@ export class VirtualNetwork {
           `use a prefix outside the @cardstack scope.`,
       );
     }
+    // Registering the same prefix as a realm reclaims it: the annotation must
+    // never outlive the registration that set it.
+    this.packageNamespacePrefixes.delete(ensureTrailingSlash(realmIdentifier));
     this.addPrefixMapping(realmIdentifier, targetURL);
   }
 
@@ -222,6 +236,7 @@ export class VirtualNetwork {
    * mapping, so the caller has to say which it registered.
    */
   addPackageMapping(packageNamespace: string, targetURL: string): void {
+    this.packageNamespacePrefixes.add(ensureTrailingSlash(packageNamespace));
     this.addPrefixMapping(packageNamespace, targetURL);
   }
 
@@ -248,6 +263,12 @@ export class VirtualNetwork {
   removeRealmMapping(realmIdentifier: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
+    // Hygiene rather than correctness: `prefixKind` checks `realmMappings`
+    // first, so an annotation left behind here is already unobservable, and
+    // both registration doors set the kind for whatever they register. What
+    // this prevents is the set outliving every mapping that justified it and
+    // growing for the life of the process.
+    this.packageNamespacePrefixes.delete(normalizedId);
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
@@ -255,8 +276,38 @@ export class VirtualNetwork {
     this.notifyMappingChange();
   }
 
+  /**
+   * The realms this network can resolve — the mapping table less the shimmed
+   * package namespaces, which resolve the same way but are the Host's own
+   * modules rather than a realm's authored content.
+   *
+   * Every other reader of the table wants resolvable prefixes and so wants both
+   * kinds; this is the one that means realms.
+   */
   knownRealms(): RealmIdentifier[] {
-    return [...this.realmMappings.keys()] as RealmIdentifier[];
+    return [...this.realmMappings.keys()].filter(
+      (prefix) => !this.packageNamespacePrefixes.has(prefix),
+    ) as RealmIdentifier[];
+  }
+
+  /**
+   * Which kind of thing a prefix was registered as, or undefined when this
+   * network has not registered it.
+   *
+   * Three-valued rather than a boolean, because "not a package" and "not
+   * registered at all" are the two answers a caller most needs to keep apart —
+   * collapsing them is the same conflation `knownRealms()` exists to undo, and
+   * a boolean would put it back one call further along. Nothing else recovers
+   * the third case: `isRegisteredPrefix` tests a *reference* with `startsWith`,
+   * so it answers true for a descendant of a registered prefix and cannot
+   * distinguish an exact key from a path beneath one.
+   */
+  prefixKind(prefix: string): 'realm' | 'package' | undefined {
+    let normalized = ensureTrailingSlash(prefix);
+    if (!this.realmMappings.has(normalized)) {
+      return undefined;
+    }
+    return this.packageNamespacePrefixes.has(normalized) ? 'package' : 'realm';
   }
 
   /**

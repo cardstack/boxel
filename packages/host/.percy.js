@@ -12,28 +12,35 @@ module.exports = {
   discovery: {
     'disallowed-hostnames': ['fonts.googleapis.com', 'fonts.gstatic.com'],
     /*
-     * Realm fixtures declare background and icon images on these hosts. Left
-     * unlisted, Percy treats each as an un-capturable remote resource: it
-     * fetches the asset, spends a round trip on `percy.io/domain-validator-
-     * worker/validate` deciding whether it may keep it, then discards it and
-     * lets the renderer fetch the URL live instead. That is paid per snapshot
-     * — `disable-cache` below means the discovery browser never reuses an
-     * earlier fetch — and it is not cheap: one run spent 16.9s over 70 such
-     * fetches, with single assets costing 2-5s each. The workspace chooser
-     * renders a tile per workspace, so it pays that several times over and
-     * pushed past the upload budget in `tests/helpers/percy-snapshot.ts`,
-     * losing the snapshot entirely.
+     * Realm fixtures declare background and icon images on these hosts.
      *
-     * Listing them here lets Percy capture the assets as ordinary snapshot
-     * resources, deduplicated by content hash across the build, so the cost
-     * is paid once rather than per snapshot. It also removes a live
-     * third-party fetch from render time, which is the same determinism
-     * argument the font hostnames above are blocked for — the difference is
-     * that these images are load-bearing for what the snapshot looks like,
-     * so they have to be captured rather than dropped.
+     * What this list decides is whether Percy keeps an asset it fetches. A
+     * listed host's assets are captured as ordinary snapshot resources,
+     * deduplicated by content hash across the build and served from that
+     * capture at render time. An unlisted host's are fetched, put through a
+     * round trip on `percy.io/domain-validator-worker/validate`, and then
+     * discarded, leaving the renderer to fetch the URL live from a host that
+     * is not ours. That is the same determinism argument the font hostnames
+     * above are blocked for; the difference is that these images are
+     * load-bearing for what the snapshot looks like, so they have to be
+     * captured rather than dropped.
+     *
+     * What the list does NOT decide is what the page load waits for. The
+     * discovery browser waits for every image the page references, listed or
+     * not, and `disable-cache` below means it refetches them per snapshot. So
+     * a slow host costs latency on every snapshot however it is listed, and
+     * when it stalls the navigation never fires `load`, Percy retries it
+     * three times, and the snapshot is dropped — silently, because the test
+     * that asked for it still passes.
+     *
+     * Listing a host therefore buys capture and render-time determinism, not
+     * immunity from a slow one. Both hosts below are ours, which is the
+     * property that earns a place here: when one is slow, it is ours to fix.
+     * A fixture that needs an image should not add a third-party host — put
+     * the image in `public/test-fixtures/realm-images/`, where there is
+     * nothing to fetch and so nothing to wait for.
      */
     'allowed-hostnames': [
-      'i.postimg.cc',
       'boxel-images.boxel.ai',
       'boxel-assets-store.s3.us-east-1.amazonaws.com',
     ],

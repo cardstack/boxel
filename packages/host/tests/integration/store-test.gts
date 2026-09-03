@@ -846,6 +846,26 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a file the realm does not hold is reported as a missing file', async function (assert) {
+    let missingFileUrl = `${testRealmURL}missing.png`;
+
+    let error = (await storeService.get(missingFileUrl, {
+      type: 'file-meta',
+    })) as CardErrorJSONAPI;
+
+    assert.strictEqual(error.status, 404, 'the error carries the HTTP status');
+    assert.strictEqual(
+      error.title,
+      'File Not Found',
+      'a missing file is titled as a missing file, not a missing card',
+    );
+    assert.strictEqual(
+      error.message,
+      `The file ${missingFileUrl} does not exist`,
+      'the message names a file, not a card',
+    );
+  });
+
   test('garbage collects cards that only consume each other', async function (assert) {
     let alpha = new PersonDef({ name: 'Alpha' });
     let beta = new PersonDef({ name: 'Beta' });
