@@ -60,9 +60,12 @@ function colorize(source: string): string {
     const quote = source[i];
     if (quote === "'" || quote === '"') {
       const end = closeQuote(source, i, quote);
-      out += wrap('string', source.slice(i, end));
-      i = end;
-      continue;
+      if (end !== -1) {
+        out += wrap('string', source.slice(i, end));
+        i = end;
+        continue;
+      }
+      /* an apostrophe in prose: fall through, take it as an atom */
     }
 
     // a handlebars comment is prose, not an expression: without this the
@@ -81,7 +84,7 @@ function colorize(source: string): string {
       continue;
     }
 
-    if (source[i] === '<' && /[A-Za-z/]/.test(source[i + 1] ?? '')) {
+    if (source[i] === '<' && /[A-Za-z/:]/.test(source[i + 1] ?? '')) {
       const end = closeTag(source, i);
       out += colorizeTag(source.slice(i, end));
       i = end;
@@ -147,9 +150,12 @@ function colorizeTag(tag: string): string {
     const quote = tag[i];
     if (quote === "'" || quote === '"') {
       const end = closeQuote(tag, i, quote);
-      out += wrap('string', tag.slice(i, end));
-      i = end;
-      continue;
+      if (end !== -1) {
+        out += wrap('string', tag.slice(i, end));
+        i = end;
+        continue;
+      }
+      /* an apostrophe in prose: fall through, take it as an atom */
     }
 
     if (tag[i] === '@') {
@@ -180,9 +186,12 @@ function colorizeExpr(
     const quote = source[i];
     if (quote === "'" || quote === '"') {
       const end = closeQuote(source, i, quote);
-      out += wrap('string', source.slice(i, end));
-      i = end;
-      continue;
+      if (end !== -1) {
+        out += wrap('string', source.slice(i, end));
+        i = end;
+        continue;
+      }
+      /* an apostrophe in prose: fall through, take it as an atom */
     }
     const taken = takeAtom(source, i, word);
     out += taken.html;
@@ -231,9 +240,25 @@ function takeAtom(
   return { html: wrap('punct', ch), next: i + 1 };
 }
 
+/**
+ * A STRING DOES NOT CROSS A LINE, and an apostrophe is not a quote.
+ *
+ * The naive rule — open at the first `'`, close at the next one — reads
+ * "the film's own type" as the start of a string and paints everything
+ * up to the next apostrophe anywhere in the sample, which in a sample
+ * with prose in it is most of the sample. Neither language quoted here
+ * lets a single- or double-quoted string span a newline, so a quote
+ * with no partner on its own line is not a delimiter: it is
+ * punctuation, and the caller takes it as an ordinary atom.
+ *
+ * Returns -1 when the quote does not close on its line.
+ */
 function closeQuote(source: string, start: number, quote: string): number {
   let i = start + 1;
   while (i < source.length) {
+    if (source[i] === '\n') {
+      return -1;
+    }
     if (source[i] === '\\') {
       i += 2;
       continue;
@@ -243,7 +268,7 @@ function closeQuote(source: string, start: number, quote: string): number {
     }
     i += 1;
   }
-  return source.length;
+  return -1;
 }
 
 function closeMustache(source: string, start: number): number {

@@ -713,6 +713,15 @@ summary,
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
+  /* the bar above is chrome and this is the page: without a gap the
+     first line of the page reads as the last line of the header */
+  padding-top: 10px;
+}
+
+/* ...and in theater it follows the picture, where it needs a great deal
+   more: the film ends at the fold and this is the first thing under it */
+.demo-body.is-theater .demo-nav {
+  padding-top: 42px;
 }
 
 .next-demo {
@@ -914,6 +923,18 @@ summary,
   aspect-ratio: 16 / 9;
   min-height: 0;
   max-height: min(88vh, 1040px);
+}
+
+/* THE BASILICA IS TALL, and its film is composed for that: the towers
+   run to the top of the frame and the rail sits under them. A well cut
+   for a wide keep crops the spires, so this one is given more height —
+   a shade taller than sixteen by nine, capped the same way. */
+.stage-wrap:has(.sg-face) {
+  aspect-ratio: 16 / 10.5;
+  min-height: 0;
+  /* and a higher ceiling than the keep's, or the extra height it was
+     just given is spent immediately on the cap */
+  max-height: min(92vh, 1180px);
 }
 
 /* ...and on a narrow screen the well takes the COMPOSITE'S OWN ASPECT
@@ -13746,6 +13767,11 @@ body.is-theater .page {
   padding-top: 0;
 }
 
+/* LEGIBLE ON A FILM, not on a page. These pictures run from a chalk
+   noon to a night, so neither the app's ink nor its paper can be relied
+   on for contrast — a mark tuned to the dark theme vanished on the
+   keep's beige morning. It gets its own ground instead: a dark, blurred
+   pill that belongs to no theme and works over any frame. */
 .theater-mark {
   position: absolute;
   top: clamp(12px, 2vw, 22px);
@@ -13753,13 +13779,22 @@ body.is-theater .page {
   z-index: 7;
   display: flex;
   align-items: center;
-  gap: 10px;
-  opacity: 0.62;
-  transition: opacity 260ms ease;
+  gap: 9px;
+  padding: 7px 13px 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(14, 12, 10, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0.9;
+  transition:
+    opacity 200ms ease,
+    background 200ms ease;
 }
 
 .theater-mark:hover {
   opacity: 1;
+  background: rgba(14, 12, 10, 0.72);
 }
 
 .theater-mark svg {
@@ -13772,14 +13807,15 @@ body.is-theater .page {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  /* not var(--ink): the pill is dark in either theme, so the type on it
+     is light in either theme */
+  color: rgba(255, 250, 242, 0.96);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
-  text-shadow: 0 0 6px var(--bg-page);
 }
 
 .theater-built:hover {

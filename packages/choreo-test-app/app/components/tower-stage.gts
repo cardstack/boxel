@@ -311,14 +311,19 @@ export class TowerStage extends Component {
         opacity: 1;
       }
 
-      body.is-theater .tw-theater-btn {
+      /* in theater the frame is the window, so there is nothing to
+         resize and nothing to go back into — both controls stand down */
+      body.is-theater .tw-theater-btn,
+      body.is-theater .tw-grip,
+      body.is-theater .tw-reset-btn,
+      body.is-theater .tw-size {
         display: none;
       }
 
-      /* opposite the way-in button, which is now on the left */
+      /* opposite the way-in button */
       .tw-reset-btn {
-        left: auto;
-        right: 14px;
+        right: auto;
+        left: 14px;
       }
 
       .tw-size {
@@ -344,14 +349,13 @@ export class TowerStage extends Component {
         transform-origin: 50% 60%;
       }
 
-      /* UPPER LEFT, and out of the way of the mark. In theater the
-         picture's top right belongs to the Choreo mark and the way
-         back out; this button is the way IN, and it is gone once you
-         are through it. */
+      /* UPPER RIGHT, where the mark stands in theater: the way in and
+         the way out are the same corner, and only ever one of them is
+         on screen — this button is gone the moment you are through it. */
       .tw-theater-btn {
         position: absolute;
         top: 14px;
-        left: 14px;
+        right: 14px;
         padding: 8px 16px;
         border-radius: 999px;
         border: 1px solid rgba(168, 98, 31, 0.45);

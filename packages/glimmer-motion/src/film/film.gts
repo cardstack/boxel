@@ -100,7 +100,7 @@ export interface FilmSignature {
     clock?: FilmClock;
     /** how much a passing cloud thickens the air */
     cloudHaze?: number;
-    /** mounted in a page's iframe: no door, no transport, begins muted */
+    /** mounted in a page's iframe: the door still opens it, but no transport and no plate */
     embed?: boolean;
     /** how much each mood brightens the frame — see `wear` */
     gradeLum?: Record<string, number>;
@@ -1897,7 +1897,15 @@ export class Film extends Component<FilmSignature> {
        re-runs this modifier on the SAME instance, and resurrecting the
        door over a running film left its buttons answering to a guard
        that told them the film had already started — because it had */
-    this.gate = !this.embed && this.from === 0 && !this.booted;
+    /* AND AN EMBED IS GATED TOO. It used to start itself, on the
+       grounds that a frame with no transport has no way to turn the
+       sound on — but that is exactly backwards: a film that starts
+       without being asked has spent no user gesture, and every browser
+       withholds audio until one is spent. So the door goes up inside
+       the frame as well, and the click that opens it is the gesture the
+       audio graph has been waiting for. A deep link (`?from`) still
+       skips it: that link asked for a shot, not for the lobby. */
+    this.gate = this.from === 0 && !this.booted;
     const onLoad = () => {
       const w = (frame as HTMLIFrameElement).contentWindow as unknown as {
         __film?: Picture;
@@ -1956,18 +1964,17 @@ export class Film extends Component<FilmSignature> {
          un-clicking itself one pass later. Only a film that has not
          begun may be begun on its behalf. */
       /**
-       * ONLY A FILM WITH NO DOOR STARTS ITSELF. The embed has no gate by
-       * design and a deep link has already chosen its shot; the theater
-       * route at the top has a front door, and a door that opens itself
-       * on a fast (or cached) load is a film that started without being
-       * asked — which is how the poster's own circuit got two seconds
-       * and then vanished.
+       * ONLY A DEEP LINK STARTS ITSELF. A door that opens on a fast (or
+       * cached) load is a film that started without being asked — which
+       * is how the poster's own circuit once got two seconds and then
+       * vanished.
        */
-      /* ...and it starts WITH sound: the mix is part of the film, and a
-         frame with no transport has no way to turn it on. Where the
-         browser withholds audio until a gesture, the graph simply waits
-         for one; the picture does not. */
-      if (!this.booted && (this.embed || this.from > 0)) {
+      /* ...and only a DEEP LINK starts itself now. `?from` named a shot,
+         so the film goes there; it plays muted until something asks
+         otherwise, because nothing has been clicked. Everything else —
+         the theater route and every embed — waits behind its door for
+         the click that buys the sound. */
+      if (!this.booted && this.from > 0) {
         this.begin(true);
       }
     };
