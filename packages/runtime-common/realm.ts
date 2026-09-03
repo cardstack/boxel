@@ -4997,11 +4997,22 @@ export class Realm {
   // `Cannot convert argument to a ByteString`. Resolving through `fileURL`
   // percent-encodes the path the same way the client's own URL was encoded on
   // the wire, so the header stays ASCII and `paths.local` recovers the same
-  // file from it. `pathname` (not `href`) keeps the target realm-relative,
-  // which is what a client reaching the realm through a different published
-  // host needs.
+  // file from it.
+  //
+  // The `./` prefix is what keeps that resolution path-relative, and it is not
+  // optional. A bare local path whose first segment reads as a URL scheme is
+  // otherwise parsed as an absolute or opaque URL, and everything up to and
+  // including the colon — the realm's own mount path along with it — is dropped
+  // from `pathname`: `notes:x.gts` yields `x.gts`, `https:x.gts` yields `/`,
+  // and a name as ordinary as `re: notes.gts` yields ` notes.gts`, which a
+  // header then trims to `notes.gts`. Each of those addresses a different file
+  // than the one that was found. `./` cannot begin a scheme, so every name
+  // resolves as a path under the realm.
+  //
+  // `pathname` (not `href`) keeps the target realm-relative, which is what a
+  // client reaching the realm through a different published host needs.
   private redirectTarget(localPath: LocalPath): string {
-    return this.paths.fileURL(localPath).pathname;
+    return this.paths.fileURL(`./${localPath}`).pathname;
   }
 
   private async getSourceOrRedirect(

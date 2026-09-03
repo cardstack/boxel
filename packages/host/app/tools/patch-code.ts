@@ -240,10 +240,11 @@ export default class PatchCodeTool extends HostBaseTool<
     let lintCommand = new LintAndFixTool(this.toolContext);
     let realmURL = this.realm.url(fileUrl);
     // `pathname` is percent-encoded, so the last segment of an emoji-named
-    // file reads as `ai%F0%9F%8E%89app-card.gts`. The tool takes the name as
-    // it is on disk, and re-encoding it for the header it travels in is
-    // `lint-and-fix`'s job — the same percent-encoding either way, which is
-    // why the header's decoder recovers the name here too.
+    // file reads as `ai%F0%9F%8E%89app-card.gts`. The tool's `filename` is the
+    // name as it is on disk — the same thing the code editor passes it from
+    // `readyFile.name` — and encoding it for the header it travels in belongs
+    // to the tool, not to each caller. The header's decoder recovers the name
+    // here because `URL.pathname` carries it under that same encoding.
     let filename =
       decodeLintFilename(new URL(fileUrl).pathname.split('/').pop()) ||
       'input.gts';
