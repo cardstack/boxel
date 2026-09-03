@@ -397,27 +397,37 @@ function regionMismatch(
   return mismatches;
 }
 
-// Tolerance of a ≤ 1px positional offset: a clip capture should equal the same
-// region of a fullPage capture, allowing the region to be off by at most one
-// pixel on either axis. Returns the lowest mismatch count over
-// the 3×3 neighborhood of sub-pixel offsets — 0 means an exact match at some
-// offset within ±1px.
-function bestRegionMismatch(
+// Assert a clip image exactly equals the region of `full` anchored at
+// (originX, originY). Exact, not tolerant: both rects are integer-valued at
+// deviceScaleFactor 1, so puppeteer passes them to Page.captureScreenshot
+// unchanged and there is no rounding to absorb — any nonzero mismatch is a
+// finding. On failure, the ±1px whole-pixel offset neighborhood is searched
+// purely to enrich the message: a best offset of (±1, ±1) with mismatches
+// near 0 says the clip origin mapping is off by one pixel, while high
+// mismatches at every offset say the content itself differs.
+function assertExactRegionMatch(
+  assert: Assert,
   clip: RgbaImage,
   full: RgbaImage,
   originX: number,
   originY: number,
-): number {
-  let best = Infinity;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      best = Math.min(
-        best,
-        regionMismatch(clip, full, originX, originY, dx, dy),
-      );
+  label: string,
+): void {
+  let mismatches = regionMismatch(clip, full, originX, originY, 0, 0);
+  let detail = '';
+  if (mismatches !== 0) {
+    let best = { dx: 0, dy: 0, mismatches };
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        let candidate = regionMismatch(clip, full, originX, originY, dx, dy);
+        if (candidate < best.mismatches) {
+          best = { dx, dy, mismatches: candidate };
+        }
+      }
     }
+    detail = ` — ${mismatches} differing pixels at (0,0); best offset in the ±1px neighborhood is (dx=${best.dx}, dy=${best.dy}) with ${best.mismatches} mismatches`;
   }
-  return best;
+  assert.strictEqual(mismatches, 0, `${label}${detail}`);
 }
 
 module(basename(import.meta.filename), function () {
@@ -1022,52 +1032,55 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a clip capture matches the corresponding region of a fullPage capture', async function (assert) {
-      // A clip capture must be the same pixels as the matching crop of a
-      // fullPage capture, allowing at most a 1px positional offset. The
-      // `tall` card is a top-anchored 1500px vertical gradient with its name
-      // at the top-left, so the crop content is layout-stable between the two
-      // renders (fullPage resizes the viewport to the document height, which
-      // must not shift the top-left region) and the gradient makes any
-      // vertical misalignment show up pixel-for-pixel.
-      let fullPageShot = await screenshot(`${realmURL}tall`, {
-        fullPage: true,
+      // A clip capture must be the exact pixels of the matching crop of a
+      // fullPage capture. All three captures come from one batch — a single
+      // settled render — so this compares crops of one DOM, not
+      // independently-hydrated renders. Neither entry changes the viewport:
+      // both reduce to a single Page.captureScreenshot with
+      // captureBeyondViewport, so nothing reflows between entries. The `tall`
+      // card is a top-anchored 1500px vertical gradient with its name at the
+      // top-left: the gradient makes a 1px *vertical* shift change every
+      // sampled color, and the name's text glyphs make a 1px *horizontal*
+      // shift detectable (the gradient alone is horizontally uniform).
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'full', fullPage: true },
+          // Top-left region including the card name; kept clear of the
+          // right-edge scrollbar column.
+          { name: 'topLeft', clip: { x: 0, y: 0, width: 400, height: 300 } },
+          // Non-origin region deep in the gradient: pins that a clip with a
+          // non-zero offset maps to the same rows of the fullPage capture.
+          { name: 'deep', clip: { x: 100, y: 500, width: 300, height: 200 } },
+        ],
       });
-      assert.strictEqual(
-        fullPageShot.response.status,
-        'ready',
-        'fullPage capture succeeded',
+      assert.strictEqual(response.status, 'ready', 'batch capture succeeded');
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
       );
-      let full = decodePngRGBA(fullPageShot.response.base64!);
+      let full = decodePngRGBA(byName.full.base64);
 
-      // A top-left region that includes the card name: text glyphs make a 1px
-      // *horizontal* shift detectable (the gradient alone is horizontally
-      // uniform). Kept clear of the right-edge scrollbar column.
-      let topLeft = await screenshot(`${realmURL}tall`, {
-        clip: { x: 0, y: 0, width: 400, height: 300 },
-      });
-      let topLeftPng = decodePngRGBA(topLeft.response.base64!);
+      let topLeftPng = decodePngRGBA(byName.topLeft.base64);
       assert.strictEqual(topLeftPng.width, 400, 'top-left clip is 400 wide');
       assert.strictEqual(topLeftPng.height, 300, 'top-left clip is 300 tall');
-      assert.strictEqual(
-        bestRegionMismatch(topLeftPng, full, 0, 0),
+      assertExactRegionMatch(
+        assert,
+        topLeftPng,
+        full,
         0,
-        'top-left clip equals the fullPage crop at (0,0) within ±1px',
+        0,
+        'top-left clip equals the fullPage crop at (0,0) exactly',
       );
 
-      // A non-origin region deep in the gradient: validates that a clip with a
-      // non-zero offset maps to the same rows of the fullPage capture. Here a
-      // 1px *vertical* shift changes every sampled color, so exact equality is
-      // a strict y-correspondence check.
-      let deep = await screenshot(`${realmURL}tall`, {
-        clip: { x: 100, y: 500, width: 300, height: 200 },
-      });
-      let deepPng = decodePngRGBA(deep.response.base64!);
+      let deepPng = decodePngRGBA(byName.deep.base64);
       assert.strictEqual(deepPng.width, 300, 'deep clip is 300 wide');
       assert.strictEqual(deepPng.height, 200, 'deep clip is 200 tall');
-      assert.strictEqual(
-        bestRegionMismatch(deepPng, full, 100, 500),
-        0,
-        'offset clip equals the fullPage crop at (100,500) within ±1px',
+      assertExactRegionMatch(
+        assert,
+        deepPng,
+        full,
+        100,
+        500,
+        'offset clip equals the fullPage crop at (100,500) exactly',
       );
     });
 
