@@ -9,9 +9,8 @@ import {
 const TARGET = 'https://realms.example.test/somewhere/';
 
 // `@cardstack/<name>/` is the npm scope and the realm-alias namespace at once,
-// and `trusted-modules` admits a specifier under a Host package's name as
-// Host-provided — which lets it run uncaged. So a realm registered under such a
-// name would have its *authored* content trusted, from configuration alone. The
+// so a realm registered under a Host package's name would answer every import
+// of that package with realm content, from configuration alone. The
 // registration is the only place that can see the difference between a realm
 // and a shimmed package namespace, because nothing downstream can tell them
 // apart by looking at the resulting mapping.
@@ -31,8 +30,8 @@ module('Unit | realm mapping host-package guard', function () {
 
   test('the base realm is the one permitted overlap', function (assert) {
     // `base` is on the Host package list *and* is a registered realm prefix:
-    // the base realm is trusted on its own account, so its alias and its URL
-    // agree. A guard that refused it would refuse the base realm itself.
+    // the base realm is what `@cardstack/base` resolves to, so its alias and
+    // its URL agree. A guard that refused it would refuse the base realm itself.
     let virtualNetwork = new VirtualNetwork();
     assert.true(
       HOST_PACKAGE_NAMES.has('base'),
@@ -71,14 +70,14 @@ module('Unit | realm mapping host-package guard', function () {
     );
   });
   test('an encoded name cannot slip past the guard', function (assert) {
-    // The classifier decodes before deciding, so `%62oxel-ui` reaches it as
-    // `boxel-ui` and is trusted. A guard comparing the raw segment would permit
-    // the realm the classifier then trusts — the boundary open again, spelled
-    // differently. Both sides ask one shared predicate for exactly this reason.
+    // The predicate decodes before deciding, so `%62oxel-ui` reaches it as
+    // `boxel-ui`. A guard comparing the raw segment would permit the realm under
+    // an encoded spelling of the same name — the same package shadowed, spelled
+    // differently.
     let virtualNetwork = new VirtualNetwork();
     assert.true(
       isHostPackageSpecifier('@cardstack/%62oxel-ui/components'),
-      'the classifier decodes and trusts it',
+      'the predicate decodes it to a Host package name',
     );
     assert.throws(
       () => virtualNetwork.addRealmMapping('@cardstack/%62oxel-ui/', TARGET),
@@ -88,13 +87,13 @@ module('Unit | realm mapping host-package guard', function () {
   });
 
   test('a realm outside the @cardstack scope may hold any name', function (assert) {
-    // The classifier trusts nothing outside `@cardstack`, so
-    // `@other/boxel-ui/` carries no hazard and refusing it would break a
-    // legitimate realm for a name collision that cannot matter.
+    // Host packages live only under `@cardstack`, so `@other/boxel-ui/`
+    // shadows nothing and refusing it would break a legitimate realm for a name
+    // collision that cannot matter.
     let virtualNetwork = new VirtualNetwork();
     assert.false(
       isHostPackageSpecifier('@other/boxel-ui/components'),
-      'the classifier does not trust it',
+      'it names no Host package',
     );
     virtualNetwork.addRealmMapping('@other/boxel-ui/', TARGET);
     assert.strictEqual(
@@ -105,12 +104,11 @@ module('Unit | realm mapping host-package guard', function () {
   });
   test('an encoded spelling of base is refused', function (assert) {
     // The exemption is the literal prefix, not the name. A mapping is stored
-    // and matched under the raw spelling while the classifier decodes before
-    // deciding, so exempting by name would let `@cardstack/%62ase/` resolve to
-    // any target and still be trusted as `base` — the base realm's trust
-    // pointing somewhere else entirely. Reachable from config: `main.ts` hands
-    // the raw segment of a `https://cardstack.com/<name>/` alias straight to
-    // `addRealmMapping`.
+    // and matched under the raw spelling, so exempting by name would let
+    // `@cardstack/%62ase/` resolve to any target while still decoding to
+    // `base` — an encoded spelling of the base realm pointing somewhere else
+    // entirely. Reachable from config: `main.ts` hands the raw segment of a
+    // `https://cardstack.com/<name>/` alias straight to `addRealmMapping`.
     let virtualNetwork = new VirtualNetwork();
     for (let spelling of [
       '@cardstack/%62ase/',
@@ -119,7 +117,7 @@ module('Unit | realm mapping host-package guard', function () {
     ]) {
       assert.true(
         isHostPackageSpecifier(`${spelling}evil-card`),
-        `${spelling} is trusted by the classifier`,
+        `${spelling} decodes to a Host package name`,
       );
       assert.throws(
         () => virtualNetwork.addRealmMapping(spelling, TARGET),
