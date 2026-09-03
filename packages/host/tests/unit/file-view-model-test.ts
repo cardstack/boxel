@@ -397,5 +397,62 @@ module('Unit | file-formats', function (hooks) {
         'a seconds timestamp is not misread as a 1970 relative date',
       );
     });
+
+    // `relativeDate` measures from `globalThis.__boxelNow` when that is set.
+    // Pinning it is what lets a rendered "3d ago" be compared between two
+    // builds: unpinned, the same timestamp walks through the thresholds as
+    // real time passes — daily while a file is under a month old — so a
+    // snapshot of it drifts on its own and has to be hidden to stay quiet.
+    module('a pinned clock', function (hooks) {
+      // 2026-01-15T12:00:00Z, in the epoch seconds the server stamps.
+      const PINNED = 1_768_478_400;
+      const DAY = 86_400;
+
+      hooks.beforeEach(function () {
+        (globalThis as { __boxelNow?: number }).__boxelNow = PINNED * 1000;
+      });
+      hooks.afterEach(function () {
+        delete (globalThis as { __boxelNow?: number }).__boxelNow;
+      });
+
+      test('measures from the pinned instant rather than the real clock', function (assert) {
+        assert.strictEqual(relativeDate(PINNED), 'today');
+        assert.strictEqual(relativeDate(PINNED - 3 * DAY), '3d ago');
+        assert.strictEqual(relativeDate(PINNED - 60 * DAY), '2mo ago');
+        assert.strictEqual(relativeDate(PINNED - 800 * DAY), '2y ago');
+      });
+
+      // The property the Percy comparison depends on: same input, same output,
+      // however much real time passes between two renders.
+      test('is stable across the thresholds it would otherwise drift through', function (assert) {
+        for (let ageDays of [0, 1, 29, 30, 364, 365, 900]) {
+          let stamp = PINNED - ageDays * DAY;
+          assert.strictEqual(
+            relativeDate(stamp),
+            relativeDate(stamp),
+            `${ageDays}d old renders identically on repeat`,
+          );
+        }
+      });
+
+      // A timestamp after the pinned instant takes the future branch, which
+      // renders an absolute date — the reason a file with a future mtime shows
+      // a date where its neighbours show an age.
+      test('renders a timestamp after the pinned instant as an absolute date', function (assert) {
+        assert.strictEqual(
+          relativeDate(PINNED + 10 * DAY),
+          shortDate(PINNED + 10 * DAY),
+        );
+      });
+
+      test('falls back to the real clock when the pin is not a number', function (assert) {
+        (globalThis as { __boxelNow?: unknown }).__boxelNow = 'nonsense';
+        assert.strictEqual(
+          relativeDate(Date.now()),
+          'today',
+          'a non-numeric pin is ignored rather than breaking the format',
+        );
+      });
+    });
   });
 });
