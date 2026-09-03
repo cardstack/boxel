@@ -136,15 +136,17 @@
 
 /* ── Themed-card boundary reset ─────────────────────────────────────────────
 
-  Which values: ONLY those that are set to default values by the light or dark
-  blocks in this file (and are not meant to be inherited) need to be reset here.
+  Which values: the component knobs the light or dark block above sets, so
+  they can't inherit into a themed card.
 
-  Deliberately NOT reset: the --theme-* typography knobs, --success and
-  --warning colors.
-
-  Why: A theme that omits them inherits the defaults, unless it wants its own,
-  in which case it simply sets them in its theme file. Resetting them would
-  make inheriting impossible to express.
+  Not listed here, for two different reasons:
+  - --success and --warning are already declared with the rest of the contract
+    on the scope selector above. Do not re-declare them `initial` here: same
+    selector, later in the file, so `initial` would win and blank the token
+    inside every themed card.
+  - the --theme-* typography knobs are left undeclared on purpose, so a nested
+    theme that omits them inherits the ambient typography; one that wants its
+    own simply sets them.
 */
 :where([data-boxel-theme-scope]) {
   --boxel-switch-thumb: initial;
