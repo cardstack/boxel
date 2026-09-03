@@ -183,15 +183,15 @@ export class VirtualNetwork {
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
     // `@cardstack/<name>/` is the npm scope as well as the realm-alias
-    // namespace. A realm registered under a Host package's name would answer
-    // every import of that package with realm content instead — the package's
-    // modules shadowed, from configuration alone. `base` is the one name that
-    // is legitimately both.
+    // namespace, and a realm mapping and a package mapping are stored under
+    // that one prefix — so a realm registered under a Host package's name does
+    // not sit beside it, it replaces whichever was registered first. `base` is
+    // the one name that is legitimately both.
     if (claimsHostPackageName(realmIdentifier)) {
       throw new Error(
         `Refusing to map realm ${realmIdentifier}: ` +
           `"${hostPackageNameOf(realmIdentifier)}" is a Host package name, and a ` +
-          `realm registered under it would shadow that package's modules. ` +
+          `realm registered under it would collide with that package's prefix. ` +
           `Use addPackageMapping for a shimmed package namespace.`,
       );
     }
@@ -231,9 +231,9 @@ export class VirtualNetwork {
    * `@cardstack/boxel-ui/components` — but the content behind it is Host-owned,
    * so it is *supposed* to carry a Host package's name. That is the whole
    * difference from `addRealmMapping`, which refuses those names, and the
-   * reason the two are separate entry points rather than a flag: nothing
-   * downstream can tell a realm from a package namespace by looking at the
-   * mapping, so the caller has to say which it registered.
+   * reason the two are separate entry points rather than a flag: the resulting
+   * mapping is the same shape either way, so the caller has to say which it
+   * registered. `prefixKind` reports back what was recorded here.
    */
   addPackageMapping(packageNamespace: string, targetURL: string): void {
     this.packageNamespacePrefixes.add(ensureTrailingSlash(packageNamespace));

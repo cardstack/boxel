@@ -7,11 +7,13 @@
  * load-bearing.
  *
  * The prefix registration reads this list to refuse a realm mapping under one
- * of these names. A realm registered as `@cardstack/boxel-ui/` would sit
- * behind the same specifiers every importer of the real `@cardstack/boxel-ui`
- * package resolves through, so an import meant for the Host package would be
- * answered with realm content instead — a module shadowed from configuration
- * alone.
+ * of these names. A realm and a Host package do not coexist under one
+ * `@cardstack/<name>/` prefix: both kinds of registration are stored under
+ * that single key, so whichever is registered last silently replaces the
+ * other, and takes its resolution with it. Which way it breaks depends on the
+ * order — an import meant for the Host package answered with realm content, or
+ * the package's namespace displacing the realm — and either way it happens
+ * from configuration alone.
  *
  * The namespace acquires new members without this file being touched:
  * `network.ts` registers a prefix per realm from the `PREFIX_REALMS`
@@ -46,14 +48,14 @@ export const HOST_PACKAGE_NAMES: ReadonlySet<string> = new Set([
  *
  * This is the one implementation of that question, and `addRealmMapping`'s
  * refusal is only as good as its answer: a spelling this predicate misses is a
- * realm that shadows a Host package from configuration alone.
+ * realm registered onto a Host package's prefix.
  *
  * Hence the decode, and the rejections that go with it. `%62oxel-ui` decodes to
  * `boxel-ui`, so comparing the raw segment would let an encoded spelling of a
  * Host package's name through. An identifier that still holds `%`, `\`, `?` or
- * `#` after decoding,
- * or that walks with `.`/`..`, names nothing: those are ways to write one thing
- * and have it read as another, and the answer for all of them is no.
+ * `#` after decoding, or that walks with `.`/`..`, names nothing: those are
+ * ways to write one thing and have it read as another, and the answer for all
+ * of them is no.
  *
  * The scope must be `@cardstack` literally. `@other/boxel-ui/` names no Host
  * package however it is spelled, so a realm may hold it.
@@ -104,17 +106,10 @@ export function hostPackageNameOf(identifier: string): string | undefined {
 }
 
 /**
- * Whether an identifier names a Host package.
- */
-export function isHostPackageSpecifier(identifier: string): boolean {
-  return hostPackageNameOf(identifier) !== undefined;
-}
-
-/**
- * Whether registering this prefix as a realm would shadow a Host package's
- * modules.
+ * Whether registering this prefix as a realm would land on a Host package's
+ * prefix.
  *
- * The same question as `isHostPackageSpecifier`, less the one legitimate
+ * The same question `hostPackageNameOf` answers, less the one legitimate
  * overlap: `base` is a Host package name and the base realm's prefix, and the
  * base realm is what that name resolves to, so registering it is correct.
  */

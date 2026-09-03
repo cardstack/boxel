@@ -3,17 +3,16 @@ import { module, test } from 'qunit';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import {
   HOST_PACKAGE_NAMES,
-  isHostPackageSpecifier,
+  hostPackageNameOf,
 } from '@cardstack/runtime-common/host-package-names';
 
 const TARGET = 'https://realms.example.test/somewhere/';
 
 // `@cardstack/<name>/` is the npm scope and the realm-alias namespace at once,
-// so a realm registered under a Host package's name would answer every import
-// of that package with realm content, from configuration alone. The
-// registration is the only place that can see the difference between a realm
-// and a shimmed package namespace, because nothing downstream can tell them
-// apart by looking at the resulting mapping.
+// and both kinds of registration are stored under that one prefix — so a realm
+// registered under a Host package's name replaces it rather than sitting beside
+// it, from configuration alone. The registration is the only place that can
+// refuse that, because the mapping it produces is the same shape either way.
 module('Unit | realm mapping host-package guard', function () {
   test('a realm may not claim a Host package name', function (assert) {
     let virtualNetwork = new VirtualNetwork();
@@ -72,11 +71,12 @@ module('Unit | realm mapping host-package guard', function () {
   test('an encoded name cannot slip past the guard', function (assert) {
     // The predicate decodes before deciding, so `%62oxel-ui` reaches it as
     // `boxel-ui`. A guard comparing the raw segment would permit the realm under
-    // an encoded spelling of the same name — the same package shadowed, spelled
+    // an encoded spelling of the same name — the same prefix taken, spelled
     // differently.
     let virtualNetwork = new VirtualNetwork();
-    assert.true(
-      isHostPackageSpecifier('@cardstack/%62oxel-ui/components'),
+    assert.strictEqual(
+      hostPackageNameOf('@cardstack/%62oxel-ui/components'),
+      'boxel-ui',
       'the predicate decodes it to a Host package name',
     );
     assert.throws(
@@ -87,12 +87,13 @@ module('Unit | realm mapping host-package guard', function () {
   });
 
   test('a realm outside the @cardstack scope may hold any name', function (assert) {
-    // Host packages live only under `@cardstack`, so `@other/boxel-ui/`
-    // shadows nothing and refusing it would break a legitimate realm for a name
-    // collision that cannot matter.
+    // Host packages live only under `@cardstack`, so `@other/boxel-ui/` takes
+    // no prefix from one, and refusing it would break a legitimate realm for a
+    // name collision that cannot matter.
     let virtualNetwork = new VirtualNetwork();
-    assert.false(
-      isHostPackageSpecifier('@other/boxel-ui/components'),
+    assert.strictEqual(
+      hostPackageNameOf('@other/boxel-ui/components'),
+      undefined,
       'it names no Host package',
     );
     virtualNetwork.addRealmMapping('@other/boxel-ui/', TARGET);
@@ -115,8 +116,9 @@ module('Unit | realm mapping host-package guard', function () {
       '@cardstack/bas%65/',
       '@cardstack/%62%61se/',
     ]) {
-      assert.true(
-        isHostPackageSpecifier(`${spelling}evil-card`),
+      assert.strictEqual(
+        hostPackageNameOf(`${spelling}evil-card`),
+        'base',
         `${spelling} decodes to a Host package name`,
       );
       assert.throws(
