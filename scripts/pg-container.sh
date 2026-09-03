@@ -28,12 +28,16 @@ BOXEL_PG_IMAGE=postgres:16.3
 # That already clears half a dozen pools, and a burst that crosses the ceiling
 # fails callers with "sorry, too many clients already".
 #
-# Applied by boxel_pg_repair_max_connections, never as a `docker run -c` flag.
-# A flag lands on pg_settings.source = 'command line', which outranks
-# postgresql.auto.conf and so cannot be raised without discarding the
-# container — which is the exact trap this file exists to get out of. Going
-# through ALTER SYSTEM for new and inherited containers alike keeps every one
-# of them repairable the next time this number moves.
+# New containers get this on the `docker run` command line, which means they
+# need no restart to reach it. Letting the repair set it instead would be
+# tidier — a command-line value outranks postgresql.auto.conf, so a container
+# created this way can only be raised by recreating it — but it is not safe
+# here: applying it takes a restart, and under run-p the sibling
+# infra:ensure-pg callers are creating databases against that same server. CI
+# fails exactly there, with `FATAL: the database system is shutting down`
+# followed by a base-realm readiness timeout. Raising this number therefore
+# also means recreating existing containers; boxel_pg_repair_max_connections
+# says so, with the command, when it meets one.
 BOXEL_PG_MAX_CONNECTIONS=400
 
 # Stamped on every connection this file opens, so the deferral check can tell
@@ -113,6 +117,14 @@ boxel_pg_configured_max_connections() {
   esac
 }
 
+# The volume holding PGDATA, so the message below can offer a recreate command
+# that keeps the databases rather than stranding them.
+boxel_pg_data_volume() {
+  docker inspect "$BOXEL_PG_CONTAINER" \
+    --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' \
+    2>/dev/null
+}
+
 # True when max_connections is pinned on the container's command line. That
 # beats postgresql.auto.conf, so for such a container a restart just brings the
 # same value back and no in-place repair can raise it.
@@ -148,7 +160,9 @@ _boxel_pg_apply_max_connections() {
   # database plus a full reindex. Say so and leave it alone; restarting would
   # bring the same value back every time this ran.
   if boxel_pg_max_connections_is_command_line; then
-    echo "boxel-pg has max_connections=$(boxel_pg_current_max_connections) pinned on its container command line, which overrides postgresql.auto.conf. Raising it to $BOXEL_PG_MAX_CONNECTIONS means recreating the container, discarding its databases, so it was left as it is." >&2
+    echo "boxel-pg has max_connections=$(boxel_pg_current_max_connections) pinned on its container command line, which overrides postgresql.auto.conf, so it cannot be raised to $BOXEL_PG_MAX_CONNECTIONS in place." >&2
+    echo "Recreate it against the same data to pick the new ceiling up:" >&2
+    echo "  docker rm -f $BOXEL_PG_CONTAINER && docker run --name $BOXEL_PG_CONTAINER -e POSTGRES_HOST_AUTH_METHOD=trust -p ${PGPORT:-5435}:5432 -v $(boxel_pg_data_volume):/var/lib/postgresql/data -d $BOXEL_PG_IMAGE -c max_connections=$BOXEL_PG_MAX_CONNECTIONS" >&2
     return 1
   fi
 
@@ -242,22 +256,26 @@ boxel_pg_repair_max_connections() {
 # infra:ensure-pg can both call this at once — so losing the creation race is
 # fine: `docker start` covers it.
 boxel_pg_ensure_running() {
+  _bpg_created=
   if [ -z "$(docker ps -f "name=$BOXEL_PG_CONTAINER" --all --format '{{.Names}}')" ]; then
     echo "Starting new $BOXEL_PG_CONTAINER container on port ${PGPORT:-5435}..."
     # Running postgres on 5435 so it doesn't collide with a native postgres
-    # that may already be running on the machine. The ceiling is deliberately
-    # not passed here — see BOXEL_PG_MAX_CONNECTIONS above.
-    docker run --name "$BOXEL_PG_CONTAINER" \
+    # that may already be running on the machine.
+    if docker run --name "$BOXEL_PG_CONTAINER" \
       -e POSTGRES_HOST_AUTH_METHOD=trust \
       -p "${PGPORT:-5435}":5432 \
-      -d "$BOXEL_PG_IMAGE" >/dev/null 2>&1 || true
+      -d "$BOXEL_PG_IMAGE" \
+      -c max_connections="$BOXEL_PG_MAX_CONNECTIONS" >/dev/null 2>&1; then
+      _bpg_created=yes
+    fi
   fi
 
-  # Only a container that is actually running can be repaired. Without this,
-  # a stopped Docker daemon sends the repair off to spend its whole readiness
-  # budget probing a container that isn't there, turning an immediate return
-  # into a silent minute.
-  if docker start "$BOXEL_PG_CONTAINER" >/dev/null 2>&1; then
+  # Repair only an inherited container that is actually running: one created
+  # just now already has the ceiling, and without the start check a stopped
+  # Docker daemon sends the repair off to spend its whole readiness budget
+  # probing a container that isn't there, turning an immediate return into a
+  # silent minute.
+  if docker start "$BOXEL_PG_CONTAINER" >/dev/null 2>&1 && [ -z "$_bpg_created" ]; then
     boxel_pg_repair_max_connections || true
   fi
   return 0
