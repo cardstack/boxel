@@ -114,12 +114,15 @@ import {
   SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredScreenshotRoster,
+  type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
@@ -517,6 +520,15 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
+  // How many rows the query matches, as against how many `instances` holds.
+  // `undefined` is unknown, never zero. Prefer this over reading
+  // `meta.page.total`: the raw meta carries a placeholder in states where no
+  // count is knowable, and this getter is what tells those apart.
+  readonly totalMatchCount: number | undefined;
+  // `instances` is a bounded prefix of what the query matches. Computed from
+  // the server's own result set rather than the reconciled one, so a locally
+  // edited or created card can't be mistaken for a short page.
+  readonly isPartial: boolean;
 }
 
 export type GetSearchResourceFuncOpts = {
@@ -538,6 +550,15 @@ export type GetSearchResourceFuncOpts = {
     // skipped query-backed expansion — the resource loads each ID by
     // URL instead of running a live re-query.
     cardURLs?: string[];
+    // The result meta the seed was resolved under, chiefly `page.total` —
+    // the query's match count, which exceeds `cards.length` when the page
+    // ceiling clamped the expansion. Absent it, the resource takes the
+    // record count for the total and a truncated seed reads as complete.
+    meta?: QueryResultsMeta;
+    // The seed's match count is not knowable and must not be inferred from its
+    // rows — the producer resolved the field but deliberately reported no
+    // total, as a query-backed field does when one of its realms failed.
+    totalUnknown?: boolean;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -2695,7 +2716,7 @@ export class BaseDef {
   static getComponent(
     card: BaseDef,
     field?: Field,
-    opts?: { componentCodeRef?: CodeRef },
+    opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
   ) {
     return getComponent(card, field, opts);
   }
@@ -2810,6 +2831,15 @@ export type BaseDefComponent = ComponentLike<{
 // where the component renders, not what it may use: it gets the full author
 // surface (`@model`/`@fields`/`@context`) and may render linked data.
 //
+// A capture-only component whose content readies asynchronously (a video
+// frame seeked onto a canvas, a PDF page paint, a WebGL first frame — work
+// invisible to image-paint waiting) signals readiness through the DOM: while
+// unready it renders a `data-screenshot-pending` attribute on any element,
+// and removes it when painted. The capture engine waits (bounded) for no
+// such element to remain; a component that never resolves its pending
+// element fails that slot's capture rather than persisting an unready frame.
+// Components with no async work omit the attribute and capture immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
@@ -2822,7 +2852,8 @@ export type ScreenshotSpec = {
   // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
   // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
-  // 'transparent' or any CSS color. Default 'white'.
+  // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
+  // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
   // Feed this capture to `cardThumbnailURL`. At most one entry across a
   // card's merged declarations may set this.
@@ -2984,6 +3015,14 @@ function assertValidScreenshotSpec(
         .join(', ')}`,
     );
   }
+  // Cross-field: jpeg has no alpha channel, so a transparent background is a
+  // contradiction it cannot represent — the capture would silently composite
+  // onto black. webp and png both carry alpha and stay legal.
+  if (entry.background === 'transparent' && entry.type === 'jpeg') {
+    throw new Error(
+      `${prefix}: background 'transparent' cannot be captured as jpeg (no alpha channel) — use type 'png' or 'webp', or an opaque background`,
+    );
+  }
 }
 
 // The one read path for `static screenshots`: merges declarations by name up
@@ -3057,6 +3096,45 @@ export function getScreenshots(
     );
   }
   return merged;
+}
+
+// The merged declarations in the serializable form that crosses the render
+// page boundary to the capture engine: identical to the specs except the
+// capture-only component, which cannot serialize — it is flagged
+// `render: true` and re-resolved in-page by slot name when its capture
+// renders.
+export function serializeDeclaredScreenshots(
+  cardOrFileClass: typeof CardDef | typeof FileDef,
+): DeclaredScreenshotRoster {
+  let roster: DeclaredScreenshotRoster = {};
+  for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
+    let payload: DeclaredScreenshotSpecPayload = {
+      width: spec.width,
+      height: spec.height,
+    };
+    if (spec.deviceScaleFactor !== undefined) {
+      payload.deviceScaleFactor = spec.deviceScaleFactor;
+    }
+    if (spec.background !== undefined) {
+      payload.background = spec.background;
+    }
+    if (spec.useAsThumbnail !== undefined) {
+      payload.useAsThumbnail = spec.useAsThumbnail;
+    }
+    if (spec.keyBy !== undefined) {
+      payload.keyBy = spec.keyBy;
+    }
+    if (spec.type !== undefined) {
+      payload.type = spec.type;
+    }
+    if (spec.render) {
+      payload.render = true;
+    } else {
+      payload.format = spec.format;
+    }
+    roster[name] = payload;
+  }
+  return roster;
 }
 
 export class FieldDef extends BaseDef {
@@ -3991,19 +4069,28 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is job-scoped: the prerender tab is
-      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
-      // render of each indexing job, so every instance in it was deserialized
-      // during THIS job, from a realm source that is immutable for the job's
-      // life. So an instance already in the store is current — reuse it directly
+      // Inside an indexing render the store is scoped to the realm view being
+      // rendered: it drops every instance it holds when the render scope moves
+      // (the host store's `observeIndexingJob`, called before a render
+      // hydrates its card and from the load path — not a member of the
+      // `CardStore` interface in this file), so every instance in it was
+      // deserialized
+      // against THIS view of the realm's files. Note it is that drop which
+      // carries the guarantee, not the `clearCache` reset — that one is
+      // scheduled only when a pass invalidates an executable, and reaches only
+      // the single tab its visit lands on, so a pass that changed only
+      // instances schedules none at all.
+      // So an instance already in the store is current — reuse it directly
       // instead of re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
       // redundancy is what makes a densely cross-linked render quadratic (the
       // same target reached through many parents is rebuilt once per parent).
       // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
-      // render (the live app) a link may be stale after invalidation and must
-      // reload, and a render with no job id has no job-scoped-store guarantee.
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
+      // gate the store scopes itself on: outside a render (the live app) a link
+      // may be stale after invalidation and must reload, and a render carrying
+      // no job id is one whose store never scoped itself, so it offers no
+      // guarantee to reuse on.
       let inIndexingRender =
         typeof globalThis !== 'undefined' &&
         Boolean((globalThis as any).__boxelRenderContext) &&
@@ -4245,18 +4332,52 @@ registerRelationshipProbe((instance, field) => {
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
+    let queryTotalMatchCount: number | undefined;
+    let queryIsPartial = false;
+    // Recorded when the field's results were resolved, so it is available on
+    // the seeded path — which is where a partial realm failure otherwise reads
+    // as a complete set, the indexed document having baked in the rows that
+    // did arrive.
+    let queryHasUnreachableRealms = queryFieldHasUnreachableRealms(
+      instance,
+      field.name,
+    );
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
-      // directly), so this takes precedence.
+      // directly), so this takes precedence. A failed search matched nothing it
+      // could report, so the count stays unknown rather than reading a stale
+      // one off the resource.
       queryMembership = [relationshipStateForEntry(bucketEntry)];
     } else if (!isLoading && resource) {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
+      // Both come off the resource rather than being recomputed here. It is the
+      // only place that holds the server's match count and the server's own
+      // result set together; `instances` above is that set reconciled against
+      // local Store state, so measuring a shortfall against it would report one
+      // whenever a card was edited out of the filter locally.
+      queryTotalMatchCount = resource.totalMatchCount;
+      queryIsPartial = resource.isPartial;
+      // Unless the search lost a realm. The count then covers only the realms
+      // that answered — a floor rather than the match count — so it is withheld
+      // and the shortfall is reported without one, the same answer the
+      // indexer's own leg gives for the same situation.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+        queryTotalMatchCount = undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
-    return { isLoading, isQueryField: true, queryMembership };
+    return {
+      isLoading,
+      isQueryField: true,
+      queryMembership,
+      queryTotalMatchCount,
+      queryIsPartial,
+      queryHasUnreachableRealms,
+    };
   }
   return {
     isLoading: hasInflightLoadForField(instance, field.name),
@@ -5220,9 +5341,20 @@ function codeRefCacheKey(codeRef: CodeRef | undefined): string {
 export function getComponent(
   model: BaseDef,
   field?: Field,
-  opts?: { componentCodeRef?: CodeRef },
+  opts?: { componentCodeRef?: CodeRef; componentOverride?: BaseDefComponent },
 ): BoxComponent {
   if (field) {
+    return getBoxComponent(
+      model.constructor as BaseDefConstructor,
+      Box.create(model),
+      field,
+      opts,
+    );
+  }
+  // An override render is never cached: the cache key covers only the
+  // codeRef, and a capture-only component must not collide with (or stand
+  // in for) the model's stable format component.
+  if (opts?.componentOverride) {
     return getBoxComponent(
       model.constructor as BaseDefConstructor,
       Box.create(model),
@@ -5591,6 +5723,10 @@ class FallbackCardStore implements CardStore {
       isLoading: false,
       meta: { page: { total: 0 } },
       errors: undefined,
+      // No search ran, so there is no match count — `undefined`, not the zero
+      // in `meta` above, which is a placeholder for the rendering path.
+      totalMatchCount: undefined,
+      isPartial: false,
     } as StoreSearchResource<T>;
   }
 }

@@ -5,7 +5,10 @@ import {
   READ_REALM_FILE_TOOL_NAME,
   readFilesLabel,
 } from '../read-realm-file.ts';
-import { thinkingMessage } from '../../constants.ts';
+import {
+  maxOutputTokensErrorMessage,
+  thinkingMessage,
+} from '../../constants.ts';
 import type ResponseState from '../response-state.ts';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
@@ -193,6 +196,18 @@ export default class MatrixResponsePublisher {
           ...(usageIncluded ? { usage: usageIncluded } : {}),
         },
       };
+      // The provider cut the generation at its output-token limit: the answer
+      // is incomplete, so tell the user. The error rides the final part of the
+      // answer (like tools and usage) rather than replacing it — the partial
+      // content is still worth keeping. A canceled turn is cut off on purpose
+      // and already labeled as such.
+      if (
+        responseStateSnapshot.isStreamingFinished &&
+        !responseStateSnapshot.isCanceled &&
+        responseStateSnapshot.finishReason === 'length'
+      ) {
+        extraData.errorMessage = maxOutputTokensErrorMessage;
+      }
       if (this.currentResponseEvent.needsContinuation) {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
           this.currentResponseEventId;

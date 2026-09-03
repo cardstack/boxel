@@ -316,6 +316,41 @@ module('Unit | declared screenshots', function (hooks) {
     assert.throws(() => cardApi.getScreenshots(BadType), /type must be one/);
   });
 
+  test('a transparent background on a jpeg capture is refused', function (assert) {
+    class TransparentJpeg extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'jpeg',
+        },
+      };
+    }
+    // webp carries alpha, so the same background stays legal there.
+    class TransparentWebp extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getScreenshots(TransparentJpeg),
+      /cannot be captured as jpeg/,
+    );
+    assert.strictEqual(
+      cardApi.getScreenshots(TransparentWebp).shot.background,
+      'transparent',
+      'an alpha-capable type accepts a transparent background',
+    );
+  });
+
   test('more than one useAsThumbnail across the merged chain is refused', function (assert) {
     class Video extends cardApi.FileDef {
       static screenshots: Screenshots = {
@@ -395,6 +430,48 @@ module('Unit | declared screenshots', function (hooks) {
     let merged = cardApi.getScreenshots(Trailer);
     assert.strictEqual(merged.poster.useAsThumbnail, undefined);
     assert.true(merged.banner.useAsThumbnail);
+  });
+
+  test('serializeDeclaredScreenshots crosses the page boundary without the component', function (assert) {
+    class HeroShot extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        card: {
+          format: 'fitted',
+          width: 400,
+          height: 300,
+          useAsThumbnail: true,
+        },
+        hero: {
+          render: HeroShot,
+          width: 320,
+          height: 180,
+          deviceScaleFactor: 1,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    let roster = cardApi.serializeDeclaredScreenshots(Product);
+    assert.deepEqual(roster.card, {
+      width: 400,
+      height: 300,
+      useAsThumbnail: true,
+      format: 'fitted',
+    });
+    assert.deepEqual(roster.hero, {
+      width: 320,
+      height: 180,
+      deviceScaleFactor: 1,
+      background: 'transparent',
+      type: 'webp',
+      render: true,
+    });
+    assert.deepEqual(
+      cardApi.serializeDeclaredScreenshots(cardApi.CardDef),
+      {},
+      'no declarations serialize to an empty roster',
+    );
   });
 
   test('a non-object declarations value is refused', function (assert) {

@@ -205,6 +205,29 @@ module.exports = function (environment) {
     featureFlags: {},
   };
 
+  // Where each `@cardstack/…` prefix realm is served. This answers a different
+  // question from the `resolved*RealmURL` values it is built from: those say
+  // which realms are part of this environment — a list the test environment
+  // trims for isolation — while this says where a prefix resolves to, which
+  // the realm-server registers for any realm it starts regardless. Keeping
+  // them separate is what lets the host agree with the realm-server about the
+  // prefix set without also joining the catalog realm to every test's realm
+  // list. A realm absent from this build has no entry, and its prefix goes
+  // unregistered.
+  //
+  // The prefixes are spelled here because this file is CommonJS evaluated at
+  // build time and cannot import `PREFIX_REALMS`. A realm-server test asserts
+  // that every key here is declared there, so the two cannot drift apart
+  // silently.
+  ENV.prefixRealmURLs = Object.fromEntries(
+    [
+      ['@cardstack/base/', ENV.resolvedBaseRealmURL],
+      ['@cardstack/catalog/', ENV.resolvedCatalogRealmURL],
+      ['@cardstack/skills/', ENV.resolvedSkillsRealmURL],
+      ['@cardstack/openrouter/', ENV.resolvedOpenRouterRealmURL],
+    ].filter(([, url]) => typeof url === 'string' && url !== ''),
+  );
+
   if (environment === 'test') {
     // Testem prefers this...
     ENV.locationType = 'none';
@@ -225,10 +248,14 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {};
 
-    // Catalog realms are not available in test environment
+    // Neither the catalog nor the OpenRouter realm belongs to a test's realm
+    // list: a test's definitions and search results must come from its own
+    // realm rather than from whatever a running catalog happens to hold, and
+    // tests exercising the model cost-tier lookup point OpenRouter at their own
+    // test realm. Their prefixes are unaffected — `prefixRealmURLs` above was
+    // built before this, so a prefix still resolves to a realm the
+    // realm-server started.
     ENV.resolvedCatalogRealmURL = undefined;
-    // Neither is the OpenRouter catalog realm; tests that exercise the model
-    // cost-tier lookup point this at their own test realm explicitly.
     ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
@@ -239,6 +266,10 @@ module.exports = function (environment) {
     ENV.logLevels = '*=warn';
   }
 
+  // The catalog owns these defaults wherever it is part of the environment.
+  // A test build is never such an environment — `resolvedCatalogRealmURL` is
+  // cleared above — so the test-realm ids assigned there survive, and a test's
+  // definitions never depend on what a running catalog holds.
   if (ENV.resolvedCatalogRealmURL) {
     ENV.defaultSystemCardId = new URL(
       'SystemCard/default',

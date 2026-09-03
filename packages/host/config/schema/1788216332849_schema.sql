@@ -138,6 +138,7 @@
    error_doc BLOB,
    rendered_at,
    diagnostics BLOB,
+   screenshots BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -160,6 +161,7 @@
    rendered_at,
    job_id INTEGER,
    diagnostics BLOB,
+   screenshots BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

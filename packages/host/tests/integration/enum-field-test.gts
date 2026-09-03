@@ -11,6 +11,7 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
+  fields,
   getField,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -979,6 +980,70 @@ module('Integration | enumField', function (hooks) {
       usageLabels,
       ['Urgent', 'Normal'],
       'dropdown shows options from parent instance configuration',
+    );
+  });
+
+  test('a field override keeps the per-usage configuration of the field it narrows', async function (assert) {
+    assert.expect(5);
+
+    // Per-usage options that differ from the FieldDef's own, so the two are
+    // told apart by which set resolves: the declaration's if the narrowing
+    // carried it across, the FieldDef's static defaults if it did not.
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Low'],
+    });
+    class NarrowedPriorityField extends PriorityField {}
+
+    class Task extends CardDef {
+      @field priority = contains(PriorityField, {
+        configuration: enumConfig(() => ({ options: ['Urgent', 'Normal'] })),
+      });
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.priority /></template>
+      };
+    }
+
+    // Naming a subtype for the field is what an override is: `getField`
+    // stops returning the declared field and returns one narrowed to the
+    // subtype, and that narrowed field is what the enum helpers resolve
+    // their options through.
+    let t = new Task({
+      priority: 'Normal',
+      [fields]: { priority: NarrowedPriorityField },
+    });
+
+    let narrowed = getField(t, 'priority');
+    assert.strictEqual(
+      narrowed?.card,
+      NarrowedPriorityField,
+      'the field resolves to the narrowed subtype',
+    );
+    assert.strictEqual(
+      narrowed?.fieldType,
+      'contains',
+      'and is still the contains field it was declared as',
+    );
+
+    assert.deepEqual(
+      enumValues(t, 'priority'),
+      ['Urgent', 'Normal'],
+      'the per-usage options survive the override',
+    );
+
+    await renderCard(loader, t, 'edit');
+    await click('.boxel-select');
+    let labels = Array.from(
+      document.querySelectorAll(
+        '.boxel-select__dropdown .boxel-select-option-text',
+      ),
+    ).map((el) => (el.textContent || '').trim());
+    assert
+      .dom('.boxel-select__dropdown .boxel-select-option-text')
+      .exists({ count: 2 }, 'the editor offers the per-usage options');
+    assert.deepEqual(
+      labels,
+      ['Urgent', 'Normal'],
+      'dropdown shows the options the field was declared with',
     );
   });
 });

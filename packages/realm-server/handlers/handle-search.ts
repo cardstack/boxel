@@ -122,22 +122,13 @@ export default function handleSearch(opts: {
     let itemLegBounded =
       isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
 
-    // The server hard page ceiling. An explicit item-leg page over the ceiling
-    // is rejected fast (400); an absent page is clamped so the query carries a
-    // LIMIT and the server never assembles/serializes an unbounded result set.
+    // The server page bounds. An absent item-leg page is clamped to the default
+    // so the query carries a LIMIT; an explicit one is honored to the absolute
+    // maximum and clamped to it above, which is logged. Either way the server
+    // never assembles/serializes an unbounded result set, and the true match
+    // count rides `meta.page.total` so a short page is visible to the caller.
     if (itemLegBounded) {
-      try {
-        parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
-      } catch (e) {
-        if (e instanceof SearchBoundError) {
-          await setContextResponse(
-            ctxt,
-            buildSearchErrorResponse(e.message, e.status),
-          );
-          return;
-        }
-        throw e;
-      }
+      parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
     }
 
     // The inner cache key: the membership query is the key's `query` member

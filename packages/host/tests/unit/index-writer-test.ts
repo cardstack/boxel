@@ -1300,6 +1300,135 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('copyFrom duplicates declared-lane MediaCache ledger rows for copied screenshot manifests', async function (assert) {
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    // Two manifest entries: one whose source ledger row exists (must be
+    // duplicated under the destination) and one whose row is already gone
+    // (must be skipped — it stays as dangling in the copy as in the source).
+    let manifest = {
+      hero: {
+        specHash: 'spec-hero',
+        objectKey: 'obj-hero',
+        contentType: 'image/png',
+        width: 400,
+        height: 300,
+        deviceScaleFactor: 2,
+      },
+      reclaimed: {
+        specHash: 'spec-reclaimed',
+        objectKey: 'obj-reclaimed',
+        contentType: 'image/png',
+        width: 100,
+        height: 100,
+        deviceScaleFactor: 2,
+      },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          deps: [],
+          types: [],
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          screenshots: manifest,
+        },
+      ],
+    );
+    await adapter.execute(
+      `INSERT INTO media_cache_ledger
+         (realm_url, source_url, capture_spec_hash, source_generation,
+          object_key, source_content_hash, lane, content_type, size_bytes,
+          width, height, created_at, last_accessed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      {
+        bind: [
+          testRealmURL,
+          `${testRealmURL}1`,
+          'spec-hero',
+          1,
+          'obj-hero',
+          'content-hash-1',
+          'declared',
+          'image/png',
+          1234,
+          400,
+          300,
+          Date.now(),
+          Date.now(),
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let [copiedRow] = (await adapter.execute(
+      `SELECT screenshots, generation FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [`${testRealmURL2}1.json`],
+        coerceTypes: { screenshots: 'JSON' },
+      },
+    )) as unknown as Pick<PrerenderedHtmlTable, 'screenshots' | 'generation'>[];
+    assert.deepEqual(
+      copiedRow.screenshots,
+      manifest,
+      'the manifest rides the copied row (object keys are content-addressed, nothing to rewrite)',
+    );
+
+    let destLedger = (await adapter.execute(
+      `SELECT source_url, capture_spec_hash, source_generation, object_key,
+              source_content_hash, lane, content_type, size_bytes, width, height
+       FROM media_cache_ledger WHERE realm_url = $1`,
+      { bind: [testRealmURL2] },
+    )) as unknown as Record<string, unknown>[];
+    assert.deepEqual(
+      destLedger,
+      [
+        {
+          source_url: `${testRealmURL2}1`,
+          capture_spec_hash: 'spec-hero',
+          source_generation: copiedRow.generation,
+          object_key: 'obj-hero',
+          source_content_hash: 'content-hash-1',
+          lane: 'declared',
+          content_type: 'image/png',
+          size_bytes: 1234,
+          width: 400,
+          height: 300,
+        },
+      ],
+      'the destination holds its own declared-lane reference for the manifest entry whose source row exists — and none for the already-reclaimed entry',
+    );
+
+    let sourceLedger = (await adapter.execute(
+      `SELECT source_url, source_generation FROM media_cache_ledger WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    )) as unknown as Record<string, unknown>[];
+    assert.strictEqual(
+      sourceLedger.length,
+      1,
+      'the source realm ledger is untouched by the copy',
+    );
+  });
+
   test('promotes prerendered_html_working rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
     // Seed both working tables as if a prior attempt of job 42 wrote this row

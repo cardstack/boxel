@@ -1,25 +1,131 @@
-import { click, triggerEvent } from '@ember/test-helpers';
+import type { TOC } from '@ember/component/template-only';
+import type Owner from '@ember/owner';
+import { click, settled, triggerEvent } from '@ember/test-helpers';
+
+import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { setupBaseRealm } from '@cardstack/host/tests/helpers/base-realm';
+import {
+  CardContextName,
+  type ErrorEntry,
+  type Loader,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
+  type SearchResultsComponentSignature,
+} from '@cardstack/runtime-common';
+
+import {
+  provideConsumeContext,
+  saveCard,
+  testRealmURL,
+} from '@cardstack/host/tests/helpers';
+import {
+  CardDef,
+  setupBaseRealm,
+} from '@cardstack/host/tests/helpers/base-realm';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
-import { PosterBoard } from './poster-board';
+import { BoardTile, PosterBoard } from './poster-board';
 
-async function renderPosterBoard() {
-  let loader = getService('loader-service').loader;
-  let card = new PosterBoard({});
-  await renderCard(loader, card, 'isolated');
+import type { CardContext } from 'https://cardstack.com/base/card-api';
+
+// This file is type-checked by two projects: experiments-realm's (which never
+// loads host's service-registry augmentations, so `getService` returns a bare
+// object) and host's (which loads the real `LoaderService` registry entry). A
+// registry augmentation here would conflict with host's, so cast structurally
+// to just the member these tests use — `Loader` is the real type, so
+// downstream `saveCard` / `loader.import` calls check for real.
+function loaderService(): { loader: Loader } {
+  return getService('loader-service') as unknown as { loader: Loader };
+}
+
+// The board renders its tiles through `@context.searchResultsComponent`, which
+// only the host app provides (operator mode / index / prerender routes). The
+// stub below stands in for it: it captures each query the board issues and
+// yields a test-controlled entry set, so tile mapping and the missing-entry
+// fallback are exercised deterministically without a live prerender index.
+let stubEntries: RenderableSearchEntryLike[] = [];
+let stubErrors: ErrorEntry[] | undefined;
+let capturedQueries: (SearchEntryWireQuery | undefined)[] = [];
+
+function stubEntry(id: string): RenderableSearchEntryLike {
+  // The board stamps its content class through `...attributes`, the same way
+  // it lands on real prerendered HTML's root element.
+  // The scroller stands in for card content that owns its own wheel gestures.
+  let component: TOC<{ Element: Element }> = <template>
+    {{! template-lint-disable no-inline-styles }}
+    <div data-test-stub-entry={{id}} ...attributes>
+      <button type='button' data-test-stub-entry-button>Stub button</button>
+      <div style='height: 40px; overflow-y: auto' data-test-stub-entry-scroller>
+        <div style='height: 400px'></div>
+      </div>
+    </div>
+  </template>;
+  return {
+    id,
+    type: 'card',
+    realmUrl: testRealmURL,
+    name: id.replace(testRealmURL, ''),
+    isError: false,
+    component,
+  };
+}
+
+class StubSearchResults extends GlimmerComponent<SearchResultsComponentSignature> {
+  constructor(owner: Owner, args: SearchResultsComponentSignature['Args']) {
+    super(owner, args);
+    capturedQueries.push(args.query);
+  }
+
+  get results() {
+    return {
+      entries: stubEntries,
+      isLoading: false,
+      meta: { page: { total: stubEntries.length } },
+      errors: stubErrors,
+    };
+  }
+
+  <template>{{yield this.results}}</template>
+}
+
+async function renderPosterBoard(board?: PosterBoard) {
+  let loader = loaderService().loader;
+  await renderCard(loader, board ?? new PosterBoard({}), 'isolated');
+}
+
+async function makeSavedNotes() {
+  let loader = loaderService().loader;
+  class Note extends CardDef {
+    static displayName = 'Note';
+  }
+  loader.shimModule(`${testRealmURL}note`, { Note });
+  let note1 = new Note();
+  let note2 = new Note();
+  await saveCard(note1, `${testRealmURL}Note/1`, loader);
+  await saveCard(note2, `${testRealmURL}Note/2`, loader);
+  return { note1, note2 };
 }
 
 export function runTests() {
   module('Rendering | poster-board card', function (hooks) {
     setupRenderingTest(hooks);
     setupBaseRealm(hooks);
+
+    hooks.beforeEach(function () {
+      stubEntries = [];
+      stubErrors = undefined;
+      capturedQueries = [];
+      // Partial by design: CardContextConsumer spreads defaults over what the
+      // provider supplies, so only the member the board reads is stubbed.
+      provideConsumeContext(CardContextName, {
+        searchResultsComponent: StubSearchResults,
+      } as unknown as CardContext);
+    });
 
     test('poster-board renders its zoom toolbar and the controls zoom, reset, and fit', async function (assert) {
       await renderPosterBoard();
@@ -104,6 +210,304 @@ export function runTests() {
         shiftKey: true,
       });
       assert.dom('[data-test-zoom-level]').hasText('83%', 'Shift+- zooms out');
+    });
+
+    test('poster-board renders prerendered entries at persisted and grid-default positions, mapped by reference', async function (assert) {
+      let { note1, note2 } = await makeSavedNotes();
+
+      // Reversed relative to the linked order: the board must map each tile
+      // to its entry by reference, never by result position
+      stubEntries = [stubEntry(note2.id), stubEntry(note1.id)];
+
+      let board = new PosterBoard({
+        tiles: [
+          // Unplaced tiles serialize with null coordinates, which must fall
+          // back to the grid rather than coerce to (0, 0)
+          new BoardTile({ card: note1, x: null, y: null }),
+          new BoardTile({ card: note2, x: 500, y: 120 }),
+        ],
+      });
+      await renderPosterBoard(board);
+
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 2 }, 'a tile renders per linked card');
+      assert
+        .dom('[data-test-poster-board-tile="0"]')
+        .hasStyle(
+          { left: '10px', top: '10px' },
+          'tile without a position lands at its padded grid-default slot',
+        );
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .hasStyle(
+          { left: '500px', top: '120px' },
+          'tile with a position renders there',
+        );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="0"] [data-test-stub-entry="${note1.id}"]`,
+        )
+        .exists('first tile shows the first linked card despite result order');
+      assert
+        .dom(
+          `[data-test-poster-board-tile="1"] [data-test-stub-entry="${note2.id}"]`,
+        )
+        .exists(
+          'second tile shows the second linked card despite result order',
+        );
+      assert
+        .dom('[data-test-poster-board] h1')
+        .doesNotExist('hint header is hidden when the board has cards');
+
+      await triggerEvent('[data-test-poster-board-tile="0"]', 'pointerdown', {
+        button: 0,
+        pointerId: 7,
+        clientX: 20,
+        clientY: 20,
+      });
+      assert
+        .dom('[data-test-poster-board]')
+        .hasStyle(
+          { cursor: 'grab' },
+          'pointerdown on a card tile does not start a board pan',
+        );
+    });
+
+    test('poster-board skips a tile whose link was cleared without leaving a gap', async function (assert) {
+      let { note1, note2 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
+
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: null }),
+            new BoardTile({ card: note2 }),
+          ],
+        }),
+      );
+
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 2 }, 'the unlinked tile renders nothing');
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .doesNotExist('no element stands in for the unlinked tile');
+      assert
+        .dom('[data-test-poster-board-tile="2"]')
+        .hasStyle(
+          { left: '212px', top: '10px' },
+          'the tile after the cleared link takes the next grid slot',
+        );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="2"] [data-test-stub-entry="${note2.id}"]`,
+        )
+        .exists('the moved tile still shows its own card');
+    });
+
+    test('poster-board keeps a persisted position with its tile when an earlier tile is removed', async function (assert) {
+      let { note1, note2 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
+
+      let board = new PosterBoard({
+        tiles: [
+          new BoardTile({ card: note1 }),
+          new BoardTile({ card: note2, x: 500, y: 120 }),
+        ],
+      });
+      await renderPosterBoard(board);
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .hasStyle({ left: '500px', top: '120px' }, 'position starts on note2');
+
+      // Removing the first tile shifts note2 into slot 0; its position moves
+      // with the tile
+      board.tiles = [board.tiles[1]];
+      await settled();
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 1 }, 'one tile remains');
+      assert
+        .dom('[data-test-poster-board-tile="0"]')
+        .hasStyle(
+          { left: '500px', top: '120px' },
+          'note2 keeps its persisted position in its new slot',
+        );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="0"] [data-test-stub-entry="${note2.id}"]`,
+        )
+        .exists('the remaining tile shows note2');
+    });
+
+    test('poster-board falls back to a not-found placeholder when a linked card has no index entry', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+
+      // stubEntries stays empty with isLoading false: the settled result set
+      // simply omits the linked card, as when its index row is gone
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .exists('the entry-less tile renders the broken-link placeholder');
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .hasAttribute(
+          'data-test-broken-link-state',
+          'not-found',
+          'the placeholder reports the not-found state',
+        );
+      assert
+        .dom('[data-test-stub-entry]')
+        .doesNotExist('no card content renders for the missing entry');
+    });
+
+    test('poster-board reports a failed search as an error, not as missing cards', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubErrors = [
+        {
+          type: 'instance-error',
+          error: {
+            status: 500,
+            title: 'Search Error',
+            message: 'search request failed',
+            additionalErrors: null,
+          },
+        },
+      ];
+
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .hasAttribute(
+          'data-test-broken-link-state',
+          'error',
+          'a search failure surfaces as an error placeholder, never as a 404',
+        );
+    });
+
+    test("poster-board queries prerendered fitted html by the linked cards' URLs", async function (assert) {
+      await renderPosterBoard();
+      assert.deepEqual(
+        capturedQueries,
+        [undefined],
+        'a board with no cards issues no query',
+      );
+
+      let { note1, note2 } = await makeSavedNotes();
+      capturedQueries = [];
+      stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: note2 }),
+          ],
+        }),
+      );
+
+      let query = capturedQueries[capturedQueries.length - 1];
+      assert.deepEqual(
+        query?.cardUrls,
+        [`${note1.id}.json`, `${note2.id}.json`],
+        'cards are addressed by their .json file URLs',
+      );
+      assert.strictEqual(
+        query?.scope,
+        'cards',
+        'the card scope drops dual-indexed file rows',
+      );
+      assert.deepEqual(
+        query?.filter,
+        { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
+        'the fitted rendering is bound through htmlQuery',
+      );
+    });
+
+    test('poster-board renders a card linked from two tiles in both tiles', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id)];
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: note1 }),
+          ],
+        }),
+      );
+
+      assert.deepEqual(
+        capturedQueries.at(-1)?.cardUrls,
+        [`${note1.id}.json`],
+        'the query asks for the shared card once',
+      );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="0"] [data-test-stub-entry="${note1.id}"]`,
+        )
+        .exists('the first tile renders the card');
+      assert
+        .dom(
+          `[data-test-poster-board-tile="1"] [data-test-stub-entry="${note1.id}"]`,
+        )
+        .exists('the second tile renders the same card');
+    });
+
+    test('poster-board leaves wheel gestures to scrollable tile content', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id)];
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+      let plane = '[data-test-poster-board-plane]';
+      let scroller = '[data-test-stub-entry-scroller]';
+      let restingTransform = document
+        .querySelector(plane)!
+        .getAttribute('style');
+
+      await triggerEvent(scroller, 'wheel', { deltaY: 120 });
+      assert
+        .dom(plane)
+        .hasAttribute(
+          'style',
+          restingTransform!,
+          'scrolling down over content that can scroll leaves the camera alone',
+        );
+
+      await triggerEvent(scroller, 'wheel', { deltaY: -120 });
+      assert
+        .dom(plane)
+        .hasAttribute(
+          'style',
+          restingTransform!,
+          'within the same gesture, reaching the content edge stays with the content',
+        );
+
+      // A pause ends the gesture; the next one starts fresh
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await triggerEvent(scroller, 'wheel', { deltaY: -120 });
+      assert.notEqual(
+        document.querySelector(plane)!.getAttribute('style'),
+        restingTransform,
+        'a new gesture at the top of the content falls through to pan the board',
+      );
+
+      let panned = document.querySelector(plane)!.getAttribute('style');
+      await triggerEvent(scroller, 'wheel', { deltaY: -120, ctrlKey: true });
+      assert.notEqual(
+        document.querySelector(plane)!.getAttribute('style'),
+        panned,
+        'a pinch over scrollable content still zooms the board',
+      );
+      assert
+        .dom('[data-test-zoom-level]')
+        .doesNotIncludeText('100%', 'the pinch changed the zoom level');
     });
 
     test('poster-board zoom reset is not undone by pending pinch momentum', async function (assert) {

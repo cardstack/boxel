@@ -9,7 +9,11 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { ScreenshotFormat } from './capture-spec.ts';
+import type {
+  ScreenshotFormat,
+  ScreenshotImageType,
+  ScreenshotManifest,
+} from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -237,6 +241,12 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Declared-screenshot slots whose capture failed during the
+  // prerender-html visit. The row publishes normally — a failed capture is
+  // an absent screenshot, not an errored card (the brokenLinks model) — and
+  // the manifest simply omits the name, so this is the only indexed signal
+  // that a declared capture is missing. Omitted when every slot captured.
+  screenshotErrors?: DeclaredScreenshotError[];
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -888,7 +898,79 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
+  // Present when the caller wants the visit to capture the card's declared
+  // screenshots (`static screenshots`) on the same warm tab — the
+  // prerender-html indexing pass sends this when it has a MediaCache to
+  // persist into. Only honored by 'prerender-html' visits.
+  screenshots?: DeclaredScreenshotVisitArgs;
+  // The realm view this visit renders against — one realm at one generation.
+  // An index pass and the `prerender_html` job it spawns are separate queue
+  // jobs that read the same files, so they carry the same scope, while the
+  // next pass over the realm carries a different one. A prerender tab keys
+  // what it may reuse across visits on this rather than on `jobId`: the two
+  // jobs interleave on a shared tab, and scoping on the job would tear that
+  // tab's state down on every alternation while still holding one view.
+  renderScope?: string;
 };
+
+// Inputs the declared-screenshot capture step needs from the indexing side:
+// what the previous pass captured (so unchanged file-content-keyed slots can
+// carry forward without re-rendering) and the source file's current
+// realm_file_meta content hash to compare against.
+export type DeclaredScreenshotVisitArgs = {
+  priorManifest?: ScreenshotManifest | null;
+  contentHash?: string | null;
+};
+
+export type DeclaredScreenshotError = {
+  name: string;
+  message: string;
+};
+
+// One declared slot's outcome from the visit's capture step. A fresh capture
+// carries `base64`; a carry-forward (`carriedForward: true`, file-content-
+// keyed slot whose source bytes are unchanged) carries no bytes — the caller
+// copies the prior manifest entry instead of persisting anything.
+export type DeclaredScreenshotCaptureResult = {
+  name: string;
+  specHash: string;
+  // CSS px of the capture box; physical pixels are these × deviceScaleFactor.
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  contentType: string;
+  imageType: ScreenshotImageType;
+  keyBy: 'generation' | 'file-content';
+  useAsThumbnail?: boolean;
+  base64?: string;
+  carriedForward?: boolean;
+};
+
+export interface DeclaredScreenshotVisitResult {
+  entries: DeclaredScreenshotCaptureResult[];
+  // Per-slot capture failures — the broken-links model: they never fail the
+  // visit, the manifest just omits the name.
+  errors?: DeclaredScreenshotError[];
+}
+
+// The scope string both halves of a pass compute independently, from the queue
+// job of the index pass — its own for the index visit, the spawning pass's for
+// the prerender-html job that pass enqueued.
+//
+// The pass's *generation* would read more naturally and is not sound: it is
+// `current_generation + 1` computed at batch start and only committed by
+// `done()`, so a pass that dies before finalizing leaves the row untouched and
+// the next pass computes the same number — the same scope, for a realm whose
+// files may have moved in between. A queue job id advances whatever happens.
+//
+// The residual is a retry of one job, which keeps its id across attempts: a
+// write landing between a failed attempt and its retry can be reduced over from
+// the earlier attempt's copies. That write enqueues its own pass, whose
+// invalidation set covers the same rows under a scope of its own, so the window
+// closes on the next pass rather than persisting.
+export function renderScopeFor(realmURL: string, passJobId: number): string {
+  return `${realmURL}@${passJobId}`;
+}
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
 // called from `IndexRunner`'s `finally` blocks after a run completes.
@@ -911,6 +993,11 @@ export interface RenderVisitResponse {
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
+  // Declared-screenshot captures, present when the visit args requested them
+  // (see PrerenderVisitArgs.screenshots) and the card pass reached the
+  // capture step. Absent entirely on prerenderers that don't support
+  // capture (the in-browser twin) — the caller writes no manifest then.
+  screenshots?: DeclaredScreenshotVisitResult;
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
@@ -1164,6 +1251,7 @@ export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
+export * from './realm-prefixes.ts';
 export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';

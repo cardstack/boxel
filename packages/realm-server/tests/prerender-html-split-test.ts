@@ -6,6 +6,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  renderScopeFor,
   systemInitiatedPrerenderHtmlPriority,
   systemInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
@@ -950,6 +951,7 @@ module(basename(import.meta.filename), function () {
         changes: [{ url: cardURL, operation: 'update' }],
         generation: 1,
         loaderEpoch: 'epoch-a',
+        spawningJobId: null,
         ...noPreWarmDeps,
         indexWriter,
         virtualNetwork,
@@ -1238,6 +1240,7 @@ module(basename(import.meta.filename), function () {
           ],
           generation: 2,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           ...noPreWarmDeps,
           indexWriter,
           virtualNetwork,
@@ -1302,6 +1305,7 @@ module(basename(import.meta.filename), function () {
           ],
           generation: 1,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           ...noPreWarmDeps,
           indexWriter,
           virtualNetwork,
@@ -1353,6 +1357,7 @@ module(basename(import.meta.filename), function () {
           changes: [{ url, operation: 'update' }],
           generation: 2,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           ...noPreWarmDeps,
           indexWriter,
           virtualNetwork,
@@ -1387,6 +1392,7 @@ module(basename(import.meta.filename), function () {
           changes: [{ url, operation: 'update' }],
           generation,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           ...noPreWarmDeps,
           indexWriter,
           virtualNetwork,
@@ -1450,6 +1456,169 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    // The scope a render is keyed to decides which resident instances a
+    // prerender tab may reuse. An index pass and the prerender_html job it
+    // spawns render the same generation of the same realm from two queue
+    // jobs, so keying on the job id alone would put them in different scopes
+    // and make each drop what the other just built — while a *different*
+    // pass, whose whole purpose is to observe a write, must not share one.
+    module('render scope', function () {
+      function scopeRecordingPrerenderer(scopes: (string | undefined)[]) {
+        return {
+          async prerenderVisit(args: { renderScope?: string }) {
+            scopes.push(args.renderScope);
+            return {
+              card: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: [],
+                types: null,
+                isolatedHTML: '<h1>rendered</h1>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+              fileRender: {
+                isolatedHTML: '<pre>rendered</pre>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+            };
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        } as unknown as Prerenderer;
+      }
+
+      async function scopesForPass(opts: {
+        spawningJobId: number | null;
+        info: ReturnType<typeof jobInfo>;
+      }): Promise<(string | undefined)[]> {
+        let url = `${testRealm}scope-${opts.info.jobId}.json`;
+        await writeInstance(1, url, '<h1>old</h1>');
+        let scopes: (string | undefined)[] = [];
+        await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          spawningJobId: opts.spawningJobId,
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(
+            new Map([
+              [
+                url,
+                JSON.stringify({
+                  data: {
+                    type: 'card',
+                    meta: {
+                      adoptsFrom: {
+                        module: `${testRealm}pine`,
+                        name: 'Pine',
+                      },
+                    },
+                  },
+                }),
+              ],
+            ]),
+          ),
+          prerenderer: scopeRecordingPrerenderer(scopes),
+          auth: 'test-auth',
+          jobInfo: opts.info,
+        });
+        return scopes;
+      }
+
+      test("the pass renders under its spawning index job's scope, not its own job id", async function (assert) {
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, spawning.jobId)],
+          'the visit carries the scope of the pass that computed the invalidation set',
+        );
+        assert.notOk(
+          scopes.includes(renderScopeFor(testRealm, htmlJob.jobId)),
+          'and not the scope of the queue job running it — a tab shared with the index visit would otherwise reload everything it just built',
+        );
+      });
+
+      test('a pass with no recorded spawning job falls back to its own', async function (assert) {
+        // A job enqueued before `spawningJobId` existed, or by a path that
+        // does not record one. Its own id still separates it from every
+        // other pass, which is what correctness needs; only the sharing with
+        // the index visit is lost.
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: null,
+          info: htmlJob,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          'falls back to the running job',
+        );
+      });
+
+      test('a pass with no real queue job carries no scope at all', async function (assert) {
+        // `tasks/prerender-html.ts` substitutes a `-1` placeholder jobInfo when
+        // the queue supplies none, to keep the logging shape. Turning that into
+        // `<realm>@-1` would be the one construction that puts genuinely
+        // unrelated passes in one scope, so the placeholder carries no scope
+        // and the page falls back to the job id — narrower, never unsound.
+        let scopes = await scopesForPass({
+          spawningJobId: null,
+          info: {
+            jobId: -1,
+            reservationId: -1,
+            priority: 0,
+            queueWaitMs: null,
+          },
+        });
+
+        assert.deepEqual(scopes, [undefined], 'no scope is sent');
+      });
+
+      test('two passes over the same realm do not share a scope', async function (assert) {
+        let first = jobInfo();
+        let second = jobInfo();
+        let firstScopes = await scopesForPass({
+          spawningJobId: first.jobId,
+          info: first,
+        });
+        let secondScopes = await scopesForPass({
+          spawningJobId: second.jobId,
+          info: second,
+        });
+
+        assert.notDeepEqual(
+          firstScopes,
+          secondScopes,
+          'a later pass renders under its own scope, so the write it exists to observe cannot be answered from what the earlier pass left resident',
+        );
+      });
+    });
+
     module('progress reporting', function () {
       function stubPrerenderer(
         visit: (url: string) => void = () => {},
@@ -1497,6 +1666,7 @@ module(basename(import.meta.filename), function () {
           ],
           generation: 1,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           indexWriter,
           virtualNetwork,
           reader: stubReader(
@@ -1563,6 +1733,7 @@ module(basename(import.meta.filename), function () {
           changes: [{ url: `${testRealm}a.txt`, operation: 'update' }],
           generation: 1,
           loaderEpoch: 'epoch-a',
+          spawningJobId: null,
           indexWriter,
           virtualNetwork,
           reader: stubReader(new Map([[`${testRealm}a.txt`, 'alpha']])),
