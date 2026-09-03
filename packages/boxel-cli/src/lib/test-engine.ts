@@ -783,6 +783,9 @@ export interface TestPageServerOptions {
  *
  * Every mount response identifies the realm it serves — see `realmHeaders`
  * for what depends on that.
+ *
+ * @internal Exported for tests, which drive the mounts without a browser.
+ * `api.ts` names its exports explicitly, so this stays inside the package.
  */
 export async function startTestPageServer(
   opts: TestPageServerOptions,
@@ -842,6 +845,8 @@ export async function startTestPageServer(
       'Access-Control-Allow-Origin': '*',
       'X-Boxel-Realm-Url': realmUrl,
       'X-Boxel-Realm-Public-Readable': 'true',
+      // Only the custom headers need naming; `Last-Modified` is on the CORS
+      // response safelist and reaches a cross-origin reader regardless.
       'Access-Control-Expose-Headers':
         'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable',
     };
@@ -968,6 +973,20 @@ export async function startTestPageServer(
         let stat = statSync(filePath);
         let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
         let needsTranspile = ext === '.gts' || ext === '.ts';
+        // A realm-server stamps this on every file serve, and the module
+        // prerender requires it: `buildModuleModel` HEADs the module with
+        // `Accept: card-source` and treats only a 404 as a shimmed module, so
+        // for a served module it reads `last-modified` and fails the render
+        // outright without one. That failure is not a 404, so the definition
+        // lookup persists it as a module error and `lookupDefinition` throws
+        // `FilterRefersToNonexistentTypeError` — the same 500 an unidentified
+        // mount produces, one step further along. `x-created` is the optional
+        // half of the pair: absent, the module's created time falls back to
+        // this, which is the best a file mount can honestly report anyway.
+        //
+        // `toUTCString` is RFC 7231 IMF-fixdate, the format `formatRFC7231`
+        // writes and the host's reader parses.
+        let lastModified = new Date(stat.mtimeMs).toUTCString();
 
         if (needsTranspile) {
           let cached = transpileCache.get(filePath);
@@ -991,6 +1010,7 @@ export async function startTestPageServer(
           }
           reply.writeHead(200, {
             'Content-Type': 'application/javascript',
+            'Last-Modified': lastModified,
             'X-Boxel-Cli-Transpiled': '1',
             ...realmHeaders(realmUrl),
           });
@@ -1001,6 +1021,7 @@ export async function startTestPageServer(
         try {
           reply.writeHead(200, {
             'Content-Type': mimeTypes[ext] ?? 'application/octet-stream',
+            'Last-Modified': lastModified,
             ...realmHeaders(realmUrl),
           });
           reply.end(readFileSync(filePath));
