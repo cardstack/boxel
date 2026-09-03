@@ -233,8 +233,25 @@ module('Integration | structured-theme', function (hooks) {
       'Poppins, sans-serif',
       'the @theme inline self-reference (var(--font-sans)) does not clobber the :root value',
     );
+    // the shadow primitives exist so a tweakcn export round-trips losslessly;
+    // a name-derivation miss (shadowX → --shadow-x, shadow2xs → --shadow-2xs)
+    // would drop them silently rather than fail
+    assert.strictEqual(card.rootVariables.shadowX, '3px');
+    assert.strictEqual(card.rootVariables.shadowY, '3px');
+    assert.strictEqual(card.rootVariables.shadowBlur, '0px');
+    assert.strictEqual(card.rootVariables.shadowSpread, '0px');
+    assert.strictEqual(card.rootVariables.shadowOpacity, '1.0');
+    assert.strictEqual(
+      card.rootVariables.shadowColor,
+      'hsl(325.78 58.18% 56.86% / 0.5)',
+    );
+    assert.strictEqual(
+      card.rootVariables.shadow2xs,
+      '3px 3px 0px 0px hsl(325.7800 58.1800% 56.8600% / 0.50)',
+    );
     assert.strictEqual(card.darkModeVariables.background, '#12242e');
     assert.strictEqual(card.darkModeVariables.fontMono, 'Fira Code, monospace');
+    assert.strictEqual(card.darkModeVariables.shadowColor, '#324859');
     assert.deepEqual(
       [...(card.cssImports ?? [])],
       [
