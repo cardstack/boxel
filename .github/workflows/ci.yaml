@@ -447,7 +447,7 @@ jobs:
       matrix:
         shardIndex: [3]
         shardTotal: [3]
-        copy: [1, 2, 3, 4, 5, 6]
+        copy: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ matrix.copy }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -578,30 +578,38 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: Name the failing Playwright tests
-        # Last step in the job, so the failing test titles and their errors are
-        # what the end of the job log holds — readable from a log tail, and
+      - name: Name the unstable Playwright tests
+        # Last step in the job, so the tests worth looking at and their errors
+        # are what the end of the job log holds — readable from a log tail, and
         # without downloading an artifact. The reporter Playwright runs during
         # the test step writes a blob report rather than printing to the
         # console, so this is where the titles enter the log.
-        if: ${{ failure() }}
+        #
+        # Runs whether or not the suite passed: a test that fails and then
+        # passes on a retry leaves the run green, and that is the earliest and
+        # most common sign of a flake. Playwright keeps a `test-results`
+        # directory per test that failed or was retried, each named for the
+        # test that produced it, so the listing alone identifies them and its
+        # emptiness is what "clean run" means here.
+        if: ${{ !cancelled() }}
         working-directory: packages/matrix
-        # Two independent namings, cheapest and most robust first. Playwright
-        # keeps a `test-results` directory per test that failed or was retried,
-        # each named for the test that produced it, so the listing alone
-        # identifies them. The replayed report then adds the errors — written
-        # to a file and echoed rather than printed straight at the job log,
-        # because the reporter's process loses all but its first writes when
-        # its stdout is the log's pipe. `|| true` keeps a report that cannot be
-        # replayed from standing in for the test failure that triggered this
-        # step; the message lands in the file either way.
+        # The replayed report supplies the errors. It is written to a file and
+        # echoed rather than printed straight at the job log, because the
+        # reporter's process loses all but its first writes when its stdout is
+        # the log's pipe. `|| true` keeps a report that cannot be replayed from
+        # standing in for the test results that motivated this step; the
+        # message lands in the file either way.
         run: |
-          echo '--- tests that failed or were retried ---'
-          ls -1 test-results 2>/dev/null || echo '(no test-results directory)'
-          echo '--- merged report ---'
-          pnpm exec playwright merge-reports --reporter list ./blob-report \
-            > /tmp/playwright-summary.txt 2>&1 || true
-          cat /tmp/playwright-summary.txt
+          if [ -n "$(ls -A test-results 2>/dev/null)" ]; then
+            echo '--- tests that failed or were retried ---'
+            ls -1 test-results
+            echo '--- merged report ---'
+            pnpm exec playwright merge-reports --reporter list ./blob-report \
+              > /tmp/playwright-summary.txt 2>&1 || true
+            cat /tmp/playwright-summary.txt
+          else
+            echo 'every test passed on its first attempt'
+          fi
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
