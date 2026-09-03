@@ -184,7 +184,7 @@ module('Integration | tools | screenshot-card', function (hooks) {
       atob(captured.authorization!.replace('Bearer ', '').split('.')[1]),
     ) as { realm?: string; permissions?: string[] };
     // A realm session token carries realm + permissions claims; a realm-server
-    // session token carries neither. This is the ticket's auth contract.
+    // session token carries neither.
     assert.ok(payload.realm, 'token is scoped to a realm');
     assert.ok(
       payload.permissions?.includes('read'),
@@ -198,12 +198,18 @@ module('Integration | tools | screenshot-card', function (hooks) {
 
     assert.strictEqual(result.captures.length, 1, 'one capture returned');
     assert.strictEqual(result.captures[0].url, servedURL, 'carries served URL');
+    // The endpoint reports canonical captures unnamed; the tool synthesizes a
+    // name (the rendered image's alt text) from the card title and format.
+    assert.strictEqual(
+      result.captures[0].name,
+      'Untitled Pet (isolated)',
+      'an unnamed capture gets a synthesized title + format name',
+    );
   });
 
   test('capture-geometry primitives are folded into a nested captureSpec and still resolve to a served URL', async function (assert) {
-    // On the full-capture-identity server (CS-12635 / #5893) a geometry
-    // capture persists under its own spec hash and serves on its own URL — the
-    // query string carries the geometry.
+    // A geometry capture persists under its own spec hash and serves on its
+    // own durable URL — the query string carries the geometry.
     let geometryURL = `${servedURL}?dsf=2&viewport=800x600`;
     respondWith = async () =>
       readyResponse({
@@ -329,6 +335,11 @@ module('Integration | tools | screenshot-card', function (hooks) {
       loginCalls.push(realmURL);
       minted = true;
     };
+    // The mint is gated on a Matrix client being available; pin the gate
+    // open so this test exercises the mint independent of harness wiring.
+    Object.defineProperty(getService('realm-server'), 'hasClient', {
+      value: true,
+    });
 
     let command = new ScreenshotCardTool(
       getService('tool-service').toolContext,
@@ -355,8 +366,12 @@ module('Integration | tools | screenshot-card', function (hooks) {
     let realm = getService('realm');
     let card = await getPet();
     realm.token = () => undefined;
-    // A login that cannot mint — e.g. no Matrix client available to serve it.
+    // A login that resolves without minting — the login task swallows its
+    // failure and leaves the token unset.
     realm.login = async () => {};
+    Object.defineProperty(getService('realm-server'), 'hasClient', {
+      value: true,
+    });
 
     let command = new ScreenshotCardTool(
       getService('tool-service').toolContext,
@@ -366,6 +381,75 @@ module('Integration | tools | screenshot-card', function (hooks) {
       /no session for realm/,
     );
     assert.strictEqual(captured.method, null, 'no request was made');
+  });
+
+  // Minting a session awaits the Matrix client, so on a page that never
+  // starts one the login would wait indefinitely — the tool must skip the
+  // mint entirely and fail with the clear no-session error instead.
+  test('with no Matrix client, no mint is attempted and the failure is clear', async function (assert) {
+    let realm = getService('realm');
+    let realmServer = getService('realm-server');
+    let card = await getPet();
+    realm.token = () => undefined;
+    let loginCalls = 0;
+    realm.login = async () => {
+      loginCalls++;
+    };
+    Object.defineProperty(realmServer, 'hasClient', { value: false });
+
+    let command = new ScreenshotCardTool(
+      getService('tool-service').toolContext,
+    );
+    await assert.rejects(
+      command.execute({ card, format: 'isolated' }),
+      /no session for realm/,
+    );
+    assert.strictEqual(loginCalls, 0, 'no mint was attempted');
+    assert.strictEqual(captured.method, null, 'no request was made');
+  });
+
+  test('a job that resolves un-ready surfaces its error detail', async function (assert) {
+    respondWith = async () =>
+      readyResponse({
+        status: 'error',
+        error: 'render failed: card threw during isolated render',
+        captures: [],
+      });
+
+    let command = new ScreenshotCardTool(
+      getService('tool-service').toolContext,
+    );
+    await assert.rejects(
+      command.execute({ card: await getPet(), format: 'isolated' }),
+      /Screenshot job did not produce a PNG: render failed: card threw during isolated render/,
+    );
+  });
+
+  test('a capture that could not persist fails with the unpersisted message', async function (assert) {
+    respondWith = async () =>
+      readyResponse({
+        status: 'ready',
+        width: 800,
+        height: 600,
+        contentType: 'image/png',
+        captures: [
+          {
+            name: null,
+            url: null,
+            width: 800,
+            height: 600,
+            deviceScaleFactor: 1,
+          },
+        ],
+      });
+
+    let command = new ScreenshotCardTool(
+      getService('tool-service').toolContext,
+    );
+    await assert.rejects(
+      command.execute({ card: await getPet(), format: 'isolated' }),
+      /could not be persisted .*retry once indexing completes/,
+    );
   });
 
   test('a 503 timeout surfaces as a retryable error', async function (assert) {

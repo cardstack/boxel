@@ -15,15 +15,15 @@ validated: source-proven
 - **Audit / approval trails** — capture the visible state when a workflow card transitions.
 - **AI assistant** — let the model take a screenshot of a card and fetch the served URL to inspect (and improve) the render.
 
-**The insight:** `ScreenshotCardCommand` (from `@cardstack/boxel-host/tools/screenshot-card`) is a Boxel host command that orchestrates the realm-server screenshot job end-to-end. You pass the target card (as a `linksTo` reference), a format string, and optionally a few capture-tuning primitives; you get back a `captures` array. Each capture has a served `url` you can render straight into an `<img>` or hand to another card. The realm-server enqueues the job, the worker drives a Puppeteer browser through the prerender pool, and the capture is persisted to the media cache — the tool no longer writes a PNG file into a realm. When the tool runs inside the AI assistant, the served URL is posted into the room, where it renders inline and the model can fetch it.
+**The insight:** `ScreenshotCardTool` (from `@cardstack/boxel-host/tools/screenshot-card`) is a Boxel host tool that orchestrates the realm-server screenshot job end-to-end. You pass the target card (as a `linksTo` reference), a format string, and optionally a few capture-tuning primitives; you get back a `captures` array. Each capture has a served `url` you can render straight into an `<img>` or hand to another card. The realm-server enqueues the job, the worker drives a Puppeteer browser through the prerender pool, and the capture is persisted to the media cache; nothing is written into a realm. When the tool runs inside the AI assistant, the served URL is posted into the room, where it renders inline and the model can fetch it.
 
 ## Recipe shape
 
 ```ts
-import ScreenshotCardCommand from '@cardstack/boxel-host/tools/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/tools/screenshot-card';
 
 // Inside an @action method:
-let result = await new ScreenshotCardCommand(commandContext).execute({
+let result = await new ScreenshotCardTool(toolContext).execute({
   card,                  // the linked CardDef instance to screenshot
   format: 'isolated',    // 'isolated' or 'embedded' — nothing else
 });
@@ -37,13 +37,13 @@ The full demo card (`example.gts`) wraps this in a CardDef that:
 - Holds the target via `@field card = linksTo(CardDef)`.
 - Holds the format via `@field format = contains(enumField(StringField, { options: ['isolated', 'embedded'] }))`.
 - Owns `@tracked isRunning`, `@tracked errorMessage`, `@tracked imageUrl` for UI state.
-- Disables the action button until `commandContext` is available and a card is linked.
+- Disables the action button until `toolContext` is available and a card is linked.
 
 ## API surface
 
 | Input field | Type | Required | Notes |
 |---|---|---|---|
-| `card` | `linksTo(CardDef)` | yes | Must already be saved — the command needs a card id. |
+| `card` | `linksTo(CardDef)` | yes | Must already be saved — the tool needs a card id. |
 | `format` | `'isolated' \| 'embedded'` | yes | **No other values accepted.** Fitted / atom / edit / markdown will throw. |
 | `viewportWidth` / `viewportHeight` | `number` | no | Viewport size in CSS px. Provide **both** or neither. |
 | `deviceScaleFactor` | `number` | no | Retina/hi-dpi multiplier (≤ 3). |
@@ -60,21 +60,21 @@ Every capture field is a JSON primitive, deliberately: the headless `run-command
 
 ## How the realm-server does the work
 
-1. `ScreenshotCardCommand.run()` POSTs `{ realmURL, cardId, format, includeBase64: false, captureSpec? }` to `/_screenshot-card` on the realm-server, authenticated with the card realm's JWT.
+1. `ScreenshotCardTool.run()` POSTs `{ realmURL, cardId, format, includeBase64: false, captureSpec? }` to `/_screenshot-card` on the realm-server, authenticated with the card realm's JWT.
 2. The handler (`packages/realm-server/handlers/handle-screenshot-card.ts`) answers from the media-cache ledger when the capture already exists, else enqueues a `screenshot-card` job.
 3. The worker task (`runtime-common/tasks/screenshot-card.ts`) drives Puppeteer through the prerender pool to render the card at the requested format and geometry.
 4. Puppeteer waits for the page to settle (data loads, animations, font swap, prerender hooks) before capturing.
 5. The capture — format-only or with geometry — is persisted to the media cache under its full capture identity (format + `viewport` / `deviceScaleFactor` / `fullPage` / `clip`), and the response carries its served `url`.
 
-You don't see any of this from the consumer side — `await new ScreenshotCardCommand(ctx).execute({ card, format })` returns when the capture is ready.
+You don't see any of this from the consumer side — `await new ScreenshotCardTool(ctx).execute({ card, format })` returns when the capture is ready.
 
 ## Wire as a card menu item
 
-To make "Screenshot this card" a right-click affordance on every CardDef, compose with the [`link-command-menu-item`](../link-command-menu-item/README.md) pattern. The action body calls `ScreenshotCardCommand` with `this` as the card and a fixed format (or branches on a sub-menu):
+To make "Screenshot this card" a right-click affordance on every CardDef, compose with the [`link-command-menu-item`](../link-command-menu-item/README.md) pattern. The action body calls `ScreenshotCardTool` with `this` as the card and a fixed format (or branches on a sub-menu):
 
 ```ts
 import { getCardMenuItems, type GetCardMenuItemParams, type MenuItemOptions } from '@cardstack/runtime-common';
-import ScreenshotCardCommand from '@cardstack/boxel-host/tools/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/tools/screenshot-card';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 
 class MyCard extends CardDef {
@@ -84,7 +84,7 @@ class MyCard extends CardDef {
         label: 'Screenshot isolated',
         icon: CameraIcon,
         action: async () => {
-          let result = await new ScreenshotCardCommand(params.commandContext)
+          let result = await new ScreenshotCardTool(params.toolContext)
             .execute({ card: this as any, format: 'isolated' });
           // Optionally show toast with result.captures[0]?.url
         },
@@ -93,7 +93,7 @@ class MyCard extends CardDef {
         label: 'Screenshot embedded',
         icon: CameraIcon,
         action: async () => {
-          await new ScreenshotCardCommand(params.commandContext)
+          await new ScreenshotCardTool(params.toolContext)
             .execute({ card: this as any, format: 'embedded' });
         },
       },
@@ -107,18 +107,18 @@ This gives every instance of `MyCard` two menu items that capture a settled PNG 
 
 ## Gotchas
 
-- **Format is restricted to `isolated` or `embedded`.** `fitted`, `atom`, `edit`, `markdown` will throw. The reason: only those two formats have stable browser-viewport semantics; fitted is container-driven and needs an explicit size envelope that the command doesn't expose.
-- **Target card must be saved.** The command needs a card id. If you're in a draft / pre-save flow, save first.
-- **Read access, not write.** The command reads the target card and captures it; it no longer writes a file back. If the current user can't read the target's realm, it fails fast.
+- **Format is restricted to `isolated` or `embedded`.** `fitted`, `atom`, `edit`, `markdown` will throw. The reason: only those two formats have stable browser-viewport semantics; fitted is container-driven and needs an explicit size envelope that the tool doesn't expose.
+- **Target card must be saved.** The tool needs a card id. If you're in a draft / pre-save flow, save first.
+- **Read access, not write.** The tool reads the target card and captures it; nothing is written into a realm. If the current user can't read the target's realm, it fails fast.
 - **Geometry captures are URL-served too.** Supplying `viewport*` / `deviceScaleFactor` / `fullPage` / `clip*` is part of the capture's canonical identity, so the capture persists and comes back with its own `captures[].url` (the geometry encoded in the query string) — no base64, no special-casing versus a format-only capture.
 - **Paired fields are all-or-nothing.** Provide both `viewportWidth` and `viewportHeight`, or all four `clip*` edges — a half-specified viewport or region throws with a clear message.
-- **Long renders can time out to a retry.** The realm-server waits for the job within a bounded budget; a slow render answers `503` with a `Retry-After`, which the command surfaces as a "still rendering; retry" error. A canonical capture resumes cheaply on retry (ledger hit); a custom spec re-renders.
-- **commandContext must exist.** Only available in host interact mode — the prerenderer / SSR context doesn't have a live host. Feature-detect with `this.args.context?.commandContext` before calling.
-- **`listing-create` does not use this command.** The catalog's listing-creation flow uses `GenerateThumbnailCommand` (AI-generated stylized icon, not a real screenshot). Use `ScreenshotCardCommand` when you want the actual rendered card, not an interpretation.
+- **Long renders can time out to a retry.** The realm-server waits for the job within a bounded budget; a slow render answers `503` with a `Retry-After`, which the tool surfaces as a "still rendering; retry" error. A canonical capture resumes cheaply on retry (ledger hit); a custom spec re-renders.
+- **toolContext must exist.** Only available in host interact mode — the prerenderer / SSR context doesn't have a live host. Feature-detect with `this.args.context?.toolContext` before calling.
+- **`listing-create` does not use this tool.** The catalog's listing-creation flow uses `GenerateThumbnailCommand` (AI-generated stylized icon, not a real screenshot). Use `ScreenshotCardTool` when you want the actual rendered card, not an interpretation.
 
 ## Source
 
-- Host command: `@cardstack/boxel-host/tools/screenshot-card` — `packages/host/app/tools/screenshot-card.ts` in the boxel monorepo.
+- Host tool: `@cardstack/boxel-host/tools/screenshot-card` — `packages/host/app/tools/screenshot-card.ts` in the boxel monorepo.
 - Realm-server endpoint: `POST /_screenshot-card` → `packages/realm-server/handlers/handle-screenshot-card.ts`.
 - Worker task: `packages/runtime-common/tasks/screenshot-card.ts`.
 - Capture spec (bounds + strict parse): `packages/runtime-common/capture-spec.ts`.

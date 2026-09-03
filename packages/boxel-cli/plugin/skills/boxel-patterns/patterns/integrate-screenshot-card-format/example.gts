@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import ScreenshotCardCommand from '@cardstack/boxel-host/tools/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/tools/screenshot-card';
 import { Button } from '@cardstack/boxel-ui/components';
 
 type ScreenshotFormat = 'isolated' | 'embedded';
@@ -28,8 +28,8 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked errorMessage: string | null = null;
   @tracked imageUrl: string | null = null;
 
-  get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+  get hasToolContext() {
+    return Boolean(this.args.context?.toolContext);
   }
 
   get hasLinkedCard() {
@@ -37,7 +37,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   }
 
   get isDisabled() {
-    return this.isRunning || !this.hasCommandContext || !this.hasLinkedCard;
+    return this.isRunning || !this.hasToolContext || !this.hasLinkedCard;
   }
 
   get effectiveFormat(): ScreenshotFormat {
@@ -47,11 +47,11 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
   @action
   async takeScreenshot() {
-    let commandContext = this.args.context?.commandContext;
+    let toolContext = this.args.context?.toolContext;
     let card = (this.args.model as any)?.card;
-    if (!commandContext) {
+    if (!toolContext) {
       this.errorMessage =
-        'Command context is unavailable. Open this card in host interact mode.';
+        'Tool context is unavailable. Open this card in host interact mode.';
       return;
     }
     if (!card) {
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     this.errorMessage = null;
     this.imageUrl = null;
     try {
-      let result = await new ScreenshotCardCommand(commandContext).execute({
+      let result = await new ScreenshotCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });

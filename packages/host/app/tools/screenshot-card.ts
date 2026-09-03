@@ -84,10 +84,11 @@ export default class ScreenshotCardTool extends HostBaseTool<
     if (!cardRealm) {
       throw new Error(`Cannot determine realm for card ${cardURL}.`);
     }
-    // Screenshotting reads the card; it no longer writes a file back, so read
-    // access is what it needs. The ungated POST endpoint enforces realm read
-    // itself (and the worker enforces it on the render path); this is a fast,
-    // clear local failure for a caller who plainly can't see the realm.
+    // Screenshotting reads the card and captures it; nothing is written into
+    // a realm, so read access is what it needs. The ungated POST endpoint
+    // enforces realm read itself (and the worker enforces it on the render
+    // path); this is a fast, clear local failure for a caller who plainly
+    // can't see the realm.
     if (!this.realm.canRead(cardRealm)) {
       throw new Error(
         `Cannot screenshot ${cardURL}: no read access to its realm ${cardRealm}.`,
@@ -103,13 +104,17 @@ export default class ScreenshotCardTool extends HostBaseTool<
     // realm token needs no Matrix client, so this works in headless
     // (run-command) contexts too.
     let token = this.realm.token(cardRealm);
-    if (!token) {
+    if (!token && this.realmServer.hasClient) {
       // A publicly-readable realm can be known without a session (public
       // reads need no auth), but the endpoint sits behind `jwtMiddleware`,
       // which rejects an unauthenticated POST outright. Mint a session
-      // rather than sending a request that can only 401. Headless contexts
-      // restore sessions from storage inside `token()`, so this login only
-      // runs where a Matrix client is available to serve it.
+      // rather than sending a request that can only 401. The mint is gated
+      // on a Matrix client being present: `createRealmSession` awaits the
+      // client, so without one the login would wait indefinitely instead of
+      // failing. Headless contexts get their sessions up front — the
+      // command-runner route restores them from storage before any tool
+      // runs — so a missing token with no client falls through to the clear
+      // no-session error below.
       await this.realm.login(cardRealm);
       token = this.realm.token(cardRealm);
     }
@@ -186,10 +191,15 @@ export default class ScreenshotCardTool extends HostBaseTool<
 
     let commandModule = await this.loadToolModule();
     const { ScreenshotCardOutput, ScreenshotCapture } = commandModule;
+    // The endpoint names only declared-slot captures; the canonical captures
+    // this tool requests come back unnamed. Synthesize a name from what the
+    // tool knows — it becomes the rendered image's alt text in the room.
+    let cardTitle = (card as any).cardTitle as string | undefined;
+    let fallbackName = `${cardTitle ?? cardURL} (${normalizedFormat})`;
     let captures = endpointCaptures.map(
       (capture) =>
         new ScreenshotCapture({
-          name: capture.name ?? undefined,
+          name: capture.name ?? fallbackName,
           url: capture.url ?? '',
           width: capture.width ?? undefined,
           height: capture.height ?? undefined,

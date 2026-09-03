@@ -38,6 +38,13 @@ class StubRealmService extends RealmService {
     };
   }
 
+  get defaultWritableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+
   realmOf(input: URL | string) {
     let str = input instanceof URL ? input.href : input;
     if (str.startsWith(testRealmURL)) {
@@ -109,6 +116,60 @@ module('Integration | tools | download-file-to-realm', function (hooks) {
       Array.from(sourceBytes),
       'stored bytes match the downloaded content byte-for-byte',
     );
+  });
+
+  test('an omitted realm falls back to the default writable realm', async function (assert) {
+    let sourceBytes = Uint8Array.from(atob(TINY_PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    mountSource(async (req: Request) => {
+      if (req.url === sourceURL) {
+        return new Response(sourceBytes, {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        });
+      }
+      return null;
+    });
+
+    let command = new DownloadFileToRealmTool(
+      getService('tool-service').toolContext,
+    );
+    let result = await command.execute({
+      sourceUrl: sourceURL,
+      path: 'downloads/defaulted.png',
+    });
+    assert.strictEqual(
+      result.fileIdentifier,
+      `${testRealmURL}downloads/defaulted.png`,
+      'the file lands in the default writable realm',
+    );
+  });
+
+  test('with no realm and no writable realm, the failure is clear and nothing downloads', async function (assert) {
+    let downloads = 0;
+    mountSource(async (req: Request) => {
+      if (req.url === sourceURL) {
+        downloads++;
+        return new Response('bytes', { status: 200 });
+      }
+      return null;
+    });
+    Object.defineProperty(getService('realm'), 'defaultWritableRealm', {
+      value: null,
+    });
+
+    let command = new DownloadFileToRealmTool(
+      getService('tool-service').toolContext,
+    );
+    await assert.rejects(
+      command.execute({
+        sourceUrl: sourceURL,
+        path: 'downloads/nowhere.png',
+      }),
+      /No realm provided and no writable realm is available/,
+    );
+    assert.strictEqual(downloads, 0, 'the download never started');
   });
 
   test('a failed download surfaces the status and writes nothing', async function (assert) {

@@ -5,6 +5,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import WriteBinaryFileTool from './write-binary-file';
 
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // Encode raw bytes as base64 without a text round-trip. `Buffer` when it exists
@@ -33,10 +34,11 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
   typeof BaseToolModule.DownloadFileToRealmResult
 > {
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
 
   static actionVerb = 'Download';
   description =
-    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Screenshots/card.png') — the realm infers the file type from it.";
+    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Screenshots/card.png') — the realm infers the file type from it. `realm` selects the target realm; when omitted, the default writable realm is used.";
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -55,6 +57,19 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
     }
     if (!path) {
       throw new Error('A destination path is required.');
+    }
+    // The input's documented default. Resolved here — before the download —
+    // because the binary-write path has no default of its own: handing it an
+    // undefined realm would surface as an opaque `Invalid URL` TypeError
+    // after the whole body had already been fetched.
+    if (!realm) {
+      let fallback = this.realm.defaultWritableRealm?.path;
+      if (!fallback) {
+        throw new Error(
+          'No realm provided and no writable realm is available.',
+        );
+      }
+      realm = fallback;
     }
 
     // `authedFetch` attaches the per-realm token when the URL belongs to a
