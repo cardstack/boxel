@@ -512,11 +512,15 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   }
 
   private clearThumbnail = () => {
+    // Select Image sets both the URL and the cardThumbnail link, and the
+    // link is a rung of the cardThumbnailURL fallback chain — clearing must
+    // remove both or the linked image serves straight back.
     let cardInfo = this.args.model?.cardInfo as
-      | { cardThumbnailURL: string | null }
+      | { cardThumbnailURL: string | null; cardThumbnail: unknown }
       | undefined;
     if (cardInfo) {
       cardInfo.cardThumbnailURL = null;
+      cardInfo.cardThumbnail = null;
     }
   };
 
