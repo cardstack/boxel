@@ -203,6 +203,37 @@ module('Integration | card-info | thumbnail picker edit', function (hooks) {
     assert.dom('[data-test-thumbnail-clear]').exists();
   });
 
+  test('clicking X after Select Image clears the linked image too', async function (this: RenderingTestContext, assert) {
+    let image = new ImageDef({
+      id: 'https://example.com/uploaded.png',
+      url: 'https://example.com/uploaded.png',
+      sourceUrl: 'https://example.com/uploaded.png',
+      name: 'uploaded.png',
+      contentType: 'image/png',
+    });
+    stubFileChooser(image);
+
+    class Thing extends CardDef {
+      static displayName = 'Thing';
+    }
+    let instance = new Thing({ cardInfo: new CardInfoField({ name: 'x' }) });
+    await renderCard(loader, instance, 'edit');
+    await click('[data-test-toggle-thumbnail-editor]');
+
+    await click('[data-test-thumbnail-select-image]');
+    await click('[data-test-thumbnail-clear]');
+
+    assert.notOk(
+      instance.cardInfo.cardThumbnail,
+      'the cardThumbnail link is cleared',
+    );
+    assert.notOk(
+      instance.cardThumbnailURL,
+      'the computed chain no longer serves the cleared image through the link rung',
+    );
+    assert.dom('[data-test-thumbnail-select-image]').hasText('Select Image');
+  });
+
   test('cancelling the file chooser leaves the field unchanged', async function (this: RenderingTestContext, assert) {
     stubFileChooser(undefined);
 
