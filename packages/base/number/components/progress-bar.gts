@@ -59,7 +59,7 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
     const p = this.percentage;
     if (p <= 25) {
@@ -97,7 +97,7 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
         position: relative;
         width: 100%;
         height: 0.5rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
         overflow: hidden;
       }
@@ -143,7 +143,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
     const p = this.percentage;
     // State-based colors based on progress percentage
@@ -232,7 +232,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
         position: relative;
         width: 100%;
         height: 100%;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
         overflow: hidden;
       }
@@ -259,7 +259,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
       .progress-bar-label {
         font-size: 0.625rem;
         font-weight: 600;
-        color: var(--primary-foreground, #ffffff);
+        color: var(--primary-foreground);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

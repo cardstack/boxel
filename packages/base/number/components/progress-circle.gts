@@ -59,7 +59,7 @@ export class ProgressCircleAtom extends GlimmerComponent<ProgressCircleSignature
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
     const p = this.percentage;
     if (p <= 25) {
@@ -101,7 +101,7 @@ export class ProgressCircleAtom extends GlimmerComponent<ProgressCircleSignature
         width: 2rem;
         height: 2rem;
         border-radius: 50%;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         overflow: hidden;
       }
       .progress-circle-track {
@@ -118,7 +118,7 @@ export class ProgressCircleAtom extends GlimmerComponent<ProgressCircleSignature
       .progress-circle-fill {
         position: absolute;
         inset: 0.25rem;
-        background: var(--background, #ffffff);
+        background: var(--background);
         border-radius: 50%;
       }
     </style>
@@ -154,7 +154,7 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
     const p = this.percentage;
     // State-based colors based on progress percentage
@@ -240,7 +240,7 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
         width: var(--progress-circle-size, 120px);
         height: var(--progress-circle-size, 120px);
         border-radius: 50%;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         overflow: hidden;
       }
       .progress-circle-track {
@@ -257,7 +257,7 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
       .progress-circle-fill {
         position: absolute;
         inset: var(--progress-circle-stroke-width, 10px);
-        background: var(--background, #ffffff);
+        background: var(--background);
         border-radius: 50%;
       }
       .progress-circle-content {
@@ -273,13 +273,13 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
       .progress-circle-value {
         font-size: var(--progress-circle-value-size, 1.5rem);
         font-weight: 700;
-        color: var(--foreground, #0f172a);
+        color: var(--foreground);
         line-height: 1;
       }
       .progress-circle-max {
         font-size: var(--progress-circle-max-size, 0.875rem);
         font-weight: 500;
-        color: var(--muted-foreground, #64748b);
+        color: var(--muted-foreground);
       }
     </style>
   </template>

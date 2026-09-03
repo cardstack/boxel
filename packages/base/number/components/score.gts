@@ -89,9 +89,9 @@ export class ScoreAtom extends GlimmerComponent<ScoreSignature> {
         align-items: center;
         gap: 0.375rem;
         padding: 0.25rem 0.625rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
-        border: 1px solid var(--border, #e2e8f0);
+        border: 1px solid var(--border);
       }
       .trophy-icon {
         width: 1rem;
@@ -210,12 +210,8 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
         gap: 1rem;
         padding: 1.5rem;
         border-radius: 1rem;
-        background: linear-gradient(
-          135deg,
-          var(--card, #ffffff) 0%,
-          var(--muted, #f8fafc) 100%
-        );
-        border: 2px solid var(--border, #e2e8f0);
+        background: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
+        border: 2px solid var(--border);
         box-shadow:
           0 4px 6px -1px rgb(0 0 0 / 0.05),
           0 2px 4px -1px rgb(0 0 0 / 0.03);
@@ -230,7 +226,7 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
         font-weight: 600;
         letter-spacing: 0.025em;
         text-transform: uppercase;
-        color: var(--muted-foreground, #64748b);
+        color: var(--muted-foreground);
       }
       .score-badge {
         display: inline-flex;
@@ -272,15 +268,15 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
       .score-max {
         font-size: 1.5rem;
         font-weight: 600;
-        color: var(--muted-foreground, #94a3b8);
+        color: var(--muted-foreground);
       }
       .score-percentile {
         font-size: 0.875rem;
         font-weight: 600;
         padding: 0.375rem 0.75rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 0.5rem;
-        color: var(--foreground, #0f172a);
+        color: var(--foreground);
         white-space: nowrap;
       }
     </style>

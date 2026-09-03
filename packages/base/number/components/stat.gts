@@ -55,9 +55,9 @@ export class StatAtom extends GlimmerComponent<StatSignature> {
         align-items: center;
         gap: 0.375rem;
         padding: 0.25rem 0.625rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
-        border: 1px solid var(--border, #e2e8f0);
+        border: 1px solid var(--border);
       }
       .stat-icon-pill {
         display: inline-flex;
@@ -66,14 +66,14 @@ export class StatAtom extends GlimmerComponent<StatSignature> {
         width: 1.25rem;
         height: 1.25rem;
         border-radius: 0.375rem;
-        background: var(--primary, #3b82f6);
-        color: var(--primary-foreground, #ffffff);
+        background: var(--primary);
+        color: var(--primary-foreground);
         flex-shrink: 0;
       }
       .stat-value {
         font-size: 0.875rem;
         font-weight: 700;
-        color: var(--foreground, var(--boxel-dark));
+        color: var(--foreground);
         line-height: 1;
       }
     </style>

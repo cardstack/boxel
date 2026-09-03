@@ -86,7 +86,7 @@ export class GaugeAtom extends GlimmerComponent<GaugeSignature> {
         <path
           d='M 20 100 A 80 80 0 0 1 180 100'
           fill='none'
-          stroke='var(--muted, #f1f5f9)'
+          stroke='var(--muted)'
           stroke-width='16'
           stroke-linecap='round'
         />
@@ -105,13 +105,13 @@ export class GaugeAtom extends GlimmerComponent<GaugeSignature> {
             )
           }}
         />
-        <circle cx='100' cy='100' r='6' fill='var(--foreground, #1e293b)' />
+        <circle cx='100' cy='100' r='6' fill='var(--foreground)' />
         <line
           x1='100'
           y1='100'
           x2='100'
           y2='40'
-          stroke='var(--foreground, #1e293b)'
+          stroke='var(--foreground)'
           stroke-width='3'
           stroke-linecap='round'
           style={{this.needleStyle}}
@@ -209,7 +209,7 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
           <path
             d='M 20 100 A 80 80 0 0 1 180 100'
             fill='none'
-            stroke='var(--muted, #f1f5f9)'
+            stroke='var(--muted)'
             stroke-width='16'
             stroke-linecap='round'
           />
@@ -233,7 +233,7 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
             y='115'
             text-anchor='start'
             font-size='10'
-            fill='var(--muted-foreground, #94a3b8)'
+            fill='var(--muted-foreground)'
           >
             {{this.minValue}}
           </text>
@@ -242,17 +242,17 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
             y='115'
             text-anchor='end'
             font-size='10'
-            fill='var(--muted-foreground, #94a3b8)'
+            fill='var(--muted-foreground)'
           >
             {{this.maxValue}}
           </text>
-          <circle cx='100' cy='100' r='6' fill='var(--foreground, #1e293b)' />
+          <circle cx='100' cy='100' r='6' fill='var(--foreground)' />
           <line
             x1='100'
             y1='100'
             x2='100'
             y2='40'
-            stroke='var(--foreground, #1e293b)'
+            stroke='var(--foreground)'
             stroke-width='3'
             stroke-linecap='round'
             style={{this.needleStyle}}
