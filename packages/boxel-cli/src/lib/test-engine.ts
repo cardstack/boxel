@@ -822,11 +822,13 @@ export async function startTestPageServer(
     });
   }
 
-  // Headers every mount response carries, mirroring the set a realm-server
-  // stamps via `createResponse`. A mount serves a realm's modules without
-  // being a realm, so these headers are the only thing that can name the
-  // realm a mounted module belongs to — whoever needs that owner asks the
-  // module URL for it.
+  // Headers every mount response carries. The realm-identity pair —
+  // `X-Boxel-Realm-Url` and `X-Boxel-Realm-Public-Readable` — is what a
+  // realm-server stamps via `createResponse`; the blanket allow-origin is
+  // this server's own, carried by every response it serves. A mount serves a
+  // realm's modules without being a realm, so that pair is the only thing
+  // that can name the realm a mounted module belongs to — whoever needs that
+  // owner asks the module URL for it.
   //
   // `CachingDefinitionLookup.buildLookupContext` is the consequential asker:
   // for a module outside every realm registered with it, it HEADs the module
@@ -845,8 +847,9 @@ export async function startTestPageServer(
       'Access-Control-Allow-Origin': '*',
       'X-Boxel-Realm-Url': realmUrl,
       'X-Boxel-Realm-Public-Readable': 'true',
-      // Only the custom headers need naming; `Last-Modified` is on the CORS
-      // response safelist and reaches a cross-origin reader regardless.
+      // Just the identity pair, which is all a mount adds — a realm-server
+      // names a longer list. `Last-Modified` is absent because it is on the
+      // CORS response safelist and reaches a cross-origin reader regardless.
       'Access-Control-Expose-Headers':
         'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable',
     };
