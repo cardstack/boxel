@@ -1,6 +1,13 @@
 import type Koa from 'koa';
 
-import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
+import type {
+  DBAdapter,
+  Prerenderer,
+  RealmPermissions,
+  RunCommandResponse,
+} from '@cardstack/runtime-common';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { prepareRunCommand } from '@cardstack/runtime-common/run-command-request';
 import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
 
 import {
@@ -9,15 +16,23 @@ import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware/index.ts';
-import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 /**
  * Handler for `POST /_run-command`.
  *
- * Enqueues a run-command job via the queue system, waits for the result,
- * and returns it. This is the public endpoint for executing host commands
- * through the prerenderer.
+ * Drives the prerenderer directly from the web tier and answers with the
+ * command's result. This is the public endpoint for executing host commands.
+ *
+ * Running the command here rather than from a queue job is what lets a
+ * command write cards. The realm's JSON-API card write indexes synchronously:
+ * it awaits an `incremental-index` job, which needs a worker. A command that
+ * held a worker of its own for the duration of its browser-side run would
+ * therefore wait on a job that cannot be claimed until the command releases
+ * the worker — a deadlock the command can neither observe nor recover from,
+ * since it surfaces as the enclosing job's timeout rather than as an error
+ * the command's own `try`/`catch` can see. The web tier holds no worker, so
+ * the write's index job is claimed while the command is still running.
  *
  * Request body (JSON:API):
  * ```json
@@ -37,9 +52,26 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
  */
 export default function handleRunCommand({
   dbAdapter,
-  queue,
-}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  matrixClient,
+  prerenderer,
+  createPrerenderAuth,
+}: {
+  dbAdapter: DBAdapter;
+  matrixClient: MatrixClient;
+  prerenderer?: Prerenderer;
+  createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
+}): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    if (!prerenderer) {
+      return sendResponseForSystemError(
+        ctxt,
+        'Prerenderer is not configured on this realm server',
+      );
+    }
+
     let request = await fetchRequestFromContext(ctxt);
     let body: any;
     try {
@@ -74,41 +106,52 @@ export default function handleRunCommand({
     }
     let userId = token.user;
 
+    let result: RunCommandResponse;
     try {
-      let job = await enqueueRunCommandJob(
-        {
-          realmURL,
-          realmUsername: userId,
-          runAs: userId,
-          command,
-          commandInput: commandInput ?? null,
-          dedupeKey: null,
-        },
-        queue,
+      let outcome = await prepareRunCommand({
         dbAdapter,
-        userInitiatedPriority,
-      );
-
-      let result = await job.done;
-
-      await setContextResponse(
-        ctxt,
-        new Response(
-          JSON.stringify({
-            data: {
-              type: 'run-command-result',
-              attributes: result,
-            },
-          }),
-          {
-            status: 201,
-            headers: { 'Content-Type': 'application/vnd.api+json' },
-          },
-        ),
-      );
+        matrixURL: matrixClient.matrixURL.href,
+        createPrerenderAuth,
+        realmURL,
+        runAs: userId,
+        command,
+        commandInput: commandInput ?? null,
+      });
+      // A rejected invocation is the command's result, not a transport
+      // failure: the caller asked a well-formed question and the answer is
+      // that it can't run. Reporting it in the result payload is what lets a
+      // composing command handle it.
+      result = outcome.ok
+        ? await prerenderer.runCommand({
+            userId: outcome.prepared.userId,
+            auth: outcome.prepared.auth,
+            command: outcome.prepared.command,
+            commandInput: outcome.prepared.commandInput,
+            priority: userInitiatedPriority,
+          })
+        : { status: 'error', error: outcome.error };
     } catch (error) {
-      console.error('Failed to execute run-command job:', error);
-      return sendResponseForSystemError(ctxt, 'Run command failed');
+      console.error('Failed to run command:', error);
+      return sendResponseForSystemError(
+        ctxt,
+        `Run command failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
+
+    await setContextResponse(
+      ctxt,
+      new Response(
+        JSON.stringify({
+          data: {
+            type: 'run-command-result',
+            attributes: result,
+          },
+        }),
+        {
+          status: 201,
+          headers: { 'Content-Type': 'application/vnd.api+json' },
+        },
+      ),
+    );
   };
 }

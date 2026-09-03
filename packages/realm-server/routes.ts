@@ -189,7 +189,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_run-command',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleRunCommand(args),
+    handleRunCommand({
+      dbAdapter: args.dbAdapter,
+      matrixClient: args.matrixClient,
+      prerenderer: args.prerenderer,
+      createPrerenderAuth,
+    }),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.post(

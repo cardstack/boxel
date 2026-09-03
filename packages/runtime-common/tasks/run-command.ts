@@ -2,14 +2,8 @@ import type * as JSONTypes from 'json-typescript';
 
 import type { Task } from './index.ts';
 
-import {
-  fetchRealmPermissions,
-  fetchUserPermissions,
-  jobIdentity,
-  type RunCommandResponse,
-  ensureFullMatrixUserId,
-  ensureTrailingSlash,
-} from '../index.ts';
+import { jobIdentity, type RunCommandResponse } from '../index.ts';
+import { prepareRunCommand } from '../run-command-request.ts';
 import { isEqual } from 'lodash-es';
 import {
   registerQueueJobDefinition,
@@ -73,6 +67,18 @@ registerQueueJobDefinition({
 
 export { runCommand };
 
+// Runs a command from a queue job, for publishers that need the invocation to
+// outlive the request that asked for it (a webhook delivery, a cron tick).
+//
+// A command run this way holds a worker for its whole browser-side duration,
+// so it cannot wait on anything that itself needs a worker. That rules out the
+// realm's JSON-API card write, which awaits an `incremental-index` job: with
+// no other worker free, the write completes only once this job gives up its
+// worker, which is after its timeout has already failed it — and that failure
+// lands on the job, past any `try`/`catch` the command wrote. A command that
+// persists cards belongs on `/_run-command`, which drives the prerenderer from
+// the web tier and holds no worker; a queued one can write through
+// `/_atomic`, whose writes index deferred.
 const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   reportStatus,
   log,
@@ -94,15 +100,17 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
     );
     reportStatus(jobInfo, 'start');
 
-    let normalizedRealmURL = ensureTrailingSlash(realmURL);
-    let realmPermissions = await fetchRealmPermissions(
+    let outcome = await prepareRunCommand({
       dbAdapter,
-      new URL(normalizedRealmURL),
-    );
-    let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
-    let userPermissions = realmPermissions[runAsUserId];
-    if (!userPermissions || userPermissions.length === 0) {
-      let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
+      matrixURL,
+      createPrerenderAuth,
+      realmURL,
+      runAs,
+      command,
+      commandInput,
+    });
+    if (!outcome.ok) {
+      let message = `${jobIdentity(jobInfo)} ${outcome.error}`;
       log.error(message);
       reportStatus(jobInfo, 'finish');
       return {
@@ -111,75 +119,14 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       };
     }
 
-    // Include JWTs for all realms the user has access to
-    // Cross-realm card references (e.g. linksToMany to cards in other realms)
-    // require auth when the Loader fetches modules.
-    let allUserPermissions = await fetchUserPermissions(dbAdapter, {
-      userId: runAsUserId,
-    });
-    allUserPermissions[normalizedRealmURL] = userPermissions;
-    let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
-    let accessibleRealms = Object.keys(allUserPermissions);
-
-    let normalizedCommand = normalizeCommandSpecifier(
-      command,
-      normalizedRealmURL,
-    );
-    if (!normalizedCommand) {
-      let message = `${jobIdentity(jobInfo)} invalid command specifier`;
-      log.error(message, { command, realmURL: normalizedRealmURL });
-      reportStatus(jobInfo, 'finish');
-      return {
-        status: 'error',
-        error: message,
-      };
-    }
-
-    let augmentedCommandInput = commandInput
-      ? { ...commandInput, accessibleRealms }
-      : undefined;
-
     let result = await prerenderer.runCommand({
-      userId: runAsUserId,
-      auth,
-      command: normalizedCommand,
-      commandInput: augmentedCommandInput,
+      userId: outcome.prepared.userId,
+      auth: outcome.prepared.auth,
+      command: outcome.prepared.command,
+      commandInput: outcome.prepared.commandInput,
       priority: jobInfo?.priority,
     });
 
     reportStatus(jobInfo, 'finish');
     return result;
   };
-
-function normalizeCommandSpecifier(
-  command: string,
-  realmURL: string,
-): string | undefined {
-  let specifier = command.trim();
-  if (!specifier) {
-    return undefined;
-  }
-
-  // Legacy bot command URLs can point at /commands/<name>/<export> on the
-  // realm server host. Resolve those to the target realm before prerendering.
-  let path = toPathname(specifier);
-  if (!path || !path.startsWith('/commands/')) {
-    return specifier;
-  }
-
-  let [commandName, exportName = 'default'] = path
-    .slice('/commands/'.length)
-    .split('/');
-  if (!commandName) {
-    return undefined;
-  }
-  return `${ensureTrailingSlash(realmURL)}commands/${commandName}/${exportName || 'default'}`;
-}
-
-function toPathname(commandSpecifier: string): string | undefined {
-  try {
-    return new URL(commandSpecifier).pathname;
-  } catch {
-    return undefined;
-  }
-}

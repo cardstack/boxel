@@ -1,6 +1,7 @@
 import type { Test, SuperTest } from 'supertest';
 import type { DirResult } from 'tmp';
 import type {
+  LooseSingleCardDocument,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -39,6 +40,10 @@ type ServerEndpointsTestOptions = {
   // template build. Tests that DO read the kitchen sink (e.g.
   // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
   fixture?: RealmFixtureName;
+  // Author the testRealm's contents outright, for a test whose subject is a
+  // module it needs to write itself (a realm-defined command, say). Mutually
+  // exclusive with `fixture`.
+  fileSystem?: Record<string, string | LooseSingleCardDocument>;
 };
 
 export function setupServerEndpointsTest(
@@ -74,7 +79,9 @@ export function setupServerEndpointsTest(
   }
 
   setupPermissionedRealmCached(hooks, {
-    fixture: options.fixture ?? 'blank',
+    ...(options.fileSystem
+      ? { fileSystem: options.fileSystem }
+      : { fixture: options.fixture ?? 'blank' }),
     realmURL: testRealmURL,
     permissions: {
       '*': ['read', 'write'],
