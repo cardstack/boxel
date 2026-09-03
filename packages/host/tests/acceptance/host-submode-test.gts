@@ -320,10 +320,10 @@ module('Acceptance | host submode', function (hooks) {
     hooks.beforeEach(async function () {
       // publishable lives in realm_metadata. Seed the row BEFORE
       // setupAcceptanceTestRealm so parseRealmInfo's first read (which gets
-      // cached) sees publishable: false. An absent row also reads as
-      // not-publishable, but only an explicit false is distinguishable from a
-      // realm whose metadata has yet to load, and it is the state a published
-      // realm's own copy is left in — so it is what the UI keys on.
+      // cached) sees it. An absent row also reads as not-publishable, but only
+      // a seeded row is distinguishable from a realm whose metadata has yet to
+      // load, and it is the state publishing leaves a published realm's own
+      // copy in — so it is what the UI can act on.
       let dbAdapter = await getDbAdapter();
       await query(dbAdapter, [
         `INSERT INTO realm_metadata (url, publishable) VALUES (`,
