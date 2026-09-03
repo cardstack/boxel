@@ -31,27 +31,27 @@ const AccountSwitchFailed: TemplateOnlyComponent<Signature> = <template>
         {{on 'click' @onBackToHome}}
       >Back to home</Button>
     </div>
-
-    <style scoped>
-      .centered {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        text-align: center;
-      }
-      .title {
-        font: 600 var(--boxel-font-md);
-        color: var(--foreground);
-      }
-      .message {
-        margin: 0 0 var(--boxel-sp-xs);
-        color: var(--foreground);
-        font: 500 var(--boxel-font-sm);
-        line-height: 1.4;
-      }
-    </style>
   </AuthContainer>
+
+  <style scoped>
+    .centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--boxel-sp-sm);
+      text-align: center;
+    }
+    .title {
+      font: 600 var(--boxel-font-md);
+      color: var(--foreground);
+    }
+    .message {
+      margin: 0 0 var(--boxel-sp-xs);
+      color: var(--foreground);
+      font: 500 var(--boxel-font-sm);
+      line-height: 1.4;
+    }
+  </style>
 </template>;
 
 export default AccountSwitchFailed;
