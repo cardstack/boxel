@@ -109,6 +109,17 @@ module(basename(import.meta.filename), function () {
         execute: typeof testDbAdapter.execute;
       };
 
+      // Only lookups that bind one of the fixture's link targets count. The
+      // search path issues one instance lookup of its own: assembling the
+      // result runs attachRealmInfo → getRealmInfo → parseRealmInfo, which
+      // overlays the indexed RealmConfig card through a single `i.url = $1`
+      // query the first time after indexing has cleared the realm-info cache.
+      // Counting that as a per-link lookup kept this test red from the day it
+      // was written, and the next unrelated lookup would do the same.
+      let targetPrefix = `${testRealm.href}target-`;
+      let looksUpALinkTarget = (bind: unknown[]) =>
+        bind.some((v) => typeof v === 'string' && v.startsWith(targetPrefix));
+
       try {
         dbExecute.execute = async (sql, opts) => {
           // `param('instance')` becomes a `$N` placeholder in the rendered
@@ -116,10 +127,11 @@ module(basename(import.meta.filename), function () {
           // is filtering for instance rows.
           let bind = opts?.bind ?? [];
           let normalized = sql.replace(/\s+/g, ' ');
-          let isBoxelIndexInstanceLookup =
+          let isLinkTargetInstanceLookup =
             /FROM boxel_index\b/.test(normalized) &&
-            bind.some((v) => v === 'instance');
-          if (isBoxelIndexInstanceLookup) {
+            bind.some((v) => v === 'instance') &&
+            looksUpALinkTarget(bind);
+          if (isLinkTargetInstanceLookup) {
             // Old per-link path: WHERE i.url = $1 OR i.file_alias = $1
             // New batched path:  WHERE i.url IN ($1, ..., $N) OR i.file_alias IN (...)
             if (/\bi\.url\s+IN\s*\(/.test(normalized)) {
