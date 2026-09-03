@@ -11,11 +11,15 @@ import DateField from '@cardstack/base/date';
 import TextAreaField from '@cardstack/base/text-area';
 import MarkdownField from '@cardstack/base/markdown';
 import enumField from '@cardstack/base/enum';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { Ticket } from './ticket';
 import { Account } from './account';
 import { Employee } from './employee';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 import { stateColor, type StateColor } from './utils/index';
 
 export const CASE_STATUSES = [
@@ -356,6 +360,221 @@ export class Case extends CardDef {
           }
           .fit-name {
             -webkit-line-clamp: 1;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // The form for working a case, grouped by how an investigation actually
+  // runs: what is it and how bad (identity) → who reported it and who owns
+  // it → what we know → how it ended. cardTitle is computed and never
+  // appears here. Four sections → the EditSectionNav rail (edit-card
+  // Rule 0b). This family asserts no brand token in its other formats, so
+  // the accent is the theme's own foreground (boxel-theming §4a).
+  static edit = class Edit extends Component<typeof this> {
+    // Left section nav: clicking anchors that section to the top of the
+    // form's own scroller (the root, per edit-card Rule 1 — never a nested
+    // scroller). Scoped through the event's own root so several open edit
+    // panels never cross-scroll each other.
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Case' },
+      { id: 'people', label: 'Reporter & Owner' },
+      { id: 'description', label: 'Description' },
+      { id: 'resolution', label: 'Resolution' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.case-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='case-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "identity") "focused"}}'
+              data-sect='identity'
+            >
+              <h3>Case</h3>
+              <FieldContainer @label='Subject' @vertical={{true}}>
+                <@fields.subject />
+              </FieldContainer>
+              <div class='row'>
+                <FieldContainer @label='Severity' @vertical={{true}}>
+                  <@fields.severity />
+                </FieldContainer>
+                <FieldContainer @label='Status' @vertical={{true}}>
+                  <@fields.status />
+                </FieldContainer>
+                <FieldContainer @label='Opened on' @vertical={{true}}>
+                  <@fields.openedOn />
+                </FieldContainer>
+              </div>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "people") "focused"}}'
+              data-sect='people'
+            >
+              <h3>Reporter &amp; Owner</h3>
+              <div class='row two'>
+                <FieldContainer @label='Account' @vertical={{true}}>
+                  <@fields.account />
+                </FieldContainer>
+                <FieldContainer @label='Owner' @vertical={{true}}>
+                  <@fields.owner />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Related tickets' @vertical={{true}}>
+                <@fields.relatedTickets />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect
+                {{if (eq this.activeSection "description") "focused"}}'
+              data-sect='description'
+            >
+              <h3>Description
+                <span class='sect-hint'>findings grow as the investigation
+                  does — append, don't rewrite</span></h3>
+              <FieldContainer @label='Problem statement' @vertical={{true}}>
+                <@fields.problemStatement />
+              </FieldContainer>
+              <FieldContainer @label='Findings' @vertical={{true}}>
+                <@fields.findings />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect
+                {{if (eq this.activeSection "resolution") "focused"}}'
+              data-sect='resolution'
+            >
+              <h3>Resolution
+                <span class='sect-hint'>fill in when closing the case</span></h3>
+              <FieldContainer @label='Resolution' @vertical={{true}}>
+                <@fields.resolution />
+              </FieldContainer>
+              <div class='row two'>
+                <FieldContainer @label='Resolved on' @vertical={{true}}>
+                  <@fields.resolvedOn />
+                </FieldContainer>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .case-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the case family asserts no brand hue of its own — the accent is
+             the theme's foreground (boxel-theming §4a: pin nothing) */
+          --case-ink: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top;
+           no ink knobs handed over — the rail's default is already the
+           inverted foreground/background pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state */
+        .sect.focused {
+          outline-color: var(--case-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--case-ink) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.two {
+            grid-template-columns: 1fr;
+          }
+          /* narrow panel: nav becomes a horizontal chip row above the form */
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          /* narrow: the rail flips horizontal (consumer's scope attribute
+             rides ...attributes onto the component root, so these apply) */
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

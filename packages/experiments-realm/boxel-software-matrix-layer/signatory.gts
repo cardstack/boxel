@@ -19,6 +19,10 @@ import { ContractTypeField, contractTypeLabel } from './contract-type';
 import { Employee } from './employee';
 import { StatePill } from './components/state-pill';
 import { formatMoney } from './money';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { EditSectionNav } from './components/edit-section-nav';
 
 /**
  * Who may legally bind the company, and up to what number.
@@ -138,6 +142,179 @@ export class Signatory extends CardDef {
    * router checks before sending anything, and the one that stops a $600K
    * agreement going to a $250K signer.
    */
+  /**
+   * Edit — who may sign, to what ceiling, for which kinds of agreement.
+   * Grouped by task, not schema order; EditSectionNav is the table of
+   * contents (edit-card Rule 0b, family rule: every grouped edit gets the rail).
+   */
+  static edit = class Edit extends Component<typeof Signatory> {
+    @tracked activeSection = 'who';
+
+    sections = [
+      { id: 'who', label: 'Who' },
+      { id: 'authority', label: 'Authority' },
+      { id: 'specimen', label: 'Specimen' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.signatory-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='signatory-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "who") "focused"}}'
+              data-sect='who'
+            >
+              <h3>Who</h3>
+              <div class='row cols-3'>
+                <FieldContainer @label='Person' @vertical={{true}}>
+                  <@fields.person />
+                </FieldContainer>
+                <FieldContainer @label='Signing title' @vertical={{true}}>
+                  <@fields.signingTitle />
+                </FieldContainer>
+                <FieldContainer @label='Active' @vertical={{true}}>
+                  <@fields.isActive />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "authority") "focused"}}'
+              data-sect='authority'
+            >
+              <h3>Authority
+                <span class='sect-hint'>what Request Signature and Execute Contract check</span></h3>
+              <FieldContainer @label='May bind the company up to' @vertical={{true}}>
+                <@fields.signatureAuthority />
+              </FieldContainer>
+              <FieldContainer @label='For contract types (empty = all)' @vertical={{true}}>
+                <@fields.contractTypes />
+              </FieldContainer>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "specimen") "focused"}}'
+              data-sect='specimen'
+            >
+              <h3>Specimen</h3>
+              <FieldContainer @label='Specimen signature URL' @vertical={{true}}>
+                <@fields.specimenUrl />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .signatory-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* root is the scroller, so sticky pins the rail; the legal family
+           asserts no brand ink, so the rail keeps its default fg/bg pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @container edit (width < 640px) {
+          .row.cols-2,
+          .row.cols-3,
+          .row.cols-4 {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof Signatory> {
     get cap(): string {
       return (

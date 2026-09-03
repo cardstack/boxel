@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "EditSectionNav",
+        "module": "../components/edit-section-nav"
+      },
+      "specType": "component",
+      "readMe": "## Edit Section Nav (Cb)\n\nThe sticky anchor rail for long grouped edit forms (edit-card Rule 0b). Each section renders as a numbered stop (01, 02…) on a vertical hairline rail; the active stop's number inverts into a filled brand-ink chip with a subtle scale-up, and its label sharpens to the ink colour. Clicking a stop tells the consumer which section was chosen — the component itself never scrolls anything.\n\n### Contract (render-only)\n\n- `@sections: { id, label }[]` — the stops, in form order.\n- `@activeId` — which stop is lit. The CONSUMER owns this state and updates it in `@onSelect`.\n- `@onSelect(id, event)` — the consumer scrolls its own section into view (scoped through the event's `closest()` root so several open edit panels never cross-scroll each other) and should mirror the active state on the target section itself (an outline ring in the same ink) so the rail and the form agree on where the reader is.\n- `...attributes` ride onto the `<nav>` root, so the consumer's scoped CSS can restyle it — the usual moves are `position: sticky; top: 0` in a two-column edit grid, and flipping `flex-direction: row` (or adding the built-in `.horizontal` class) below a narrow `@container edit` breakpoint.\n\n### Colour (boxel-theming)\n\nA reusable component asserts no brand of its own (§4a), so the rail exposes two published knobs — `--edit-section-nav-ink` and `--edit-section-nav-ink-fg` — for the consuming family to point at its brand pair (Vendor Profile hands it `--vp-ink`, the procurement navy declared once at its edit root). Unassigned, the knobs fall back to the theme's own `--foreground`/`--background` pair inverted — a guaranteed-contrast pairing (§2) — never to `--primary`, which the host's edit format maps to the mint highlight, exactly the wrong colour for a wayfinding rail. Zero hex literals in the component; the active chip's halo is a `color-mix(in oklch, …)` dilution of the ink itself.\n\n### Accessibility\n\nKeyboard focus gets a real `:focus-visible` outline, the active stop carries `aria-current`, and `prefers-reduced-motion` disables the chip's scale/transition.\n\n### Example\n\nThe Vendor Profile edit template: five stops (Identity, Contact, Compliance, Tax & Remittance, Notes) in a sticky 9.5rem left column; the active section shows a matching ink outline ring.\n\n### Consumers\n\nContract, Vendor Profile, Amendment, Addendum, Waiver, Clause (+3 subtypes), Contract Clause, Contract Version, Contract Template, Contract Request, Signatory, Obligation, Legal Entity — every grouped edit form in the Legal and Procurement families consumes it unchanged; family ink arrives through the two published knobs, never by overriding its internals.\n\n### Non-goals\n\nNo scrolling, no scroll-spy, no hash navigation (stack rendering breaks `#anchor` hrefs), no collapsing of sections — grouping and scroll behaviour stay with the edit template that owns the form.",
+      "cardInfo": {
+        "name": "Edit Section Nav",
+        "summary": "Sticky numbered anchor rail for long grouped edit forms — active stop inverts to a brand-ink chip; consumer owns state and scroll."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../VendorProfile/acme-supply"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

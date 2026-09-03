@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "approved",
+      "occurredAt": "2026-09-03T00:58:19.310Z",
+      "subjectTitle": "Master Services Agreement — Northwind",
+      "note": null,
+      "conditions": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "doneBy": {
+        "links": {
+          "self": "../Employee/mara-lindqvist"
+        }
+      },
+      "subject": {
+        "links": {
+          "self": "../Contract/msa-northwind"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

@@ -17,7 +17,8 @@ import BooleanField from '@cardstack/base/boolean';
 import { realmURL } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { gt } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
+import { gt, eq } from '@cardstack/boxel-ui/helpers';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { Vendor } from './vendor';
@@ -26,6 +27,7 @@ import { PaymentTermsField } from './payment-terms-field';
 import { LifecycleDatesField } from './lifecycle-dates-field';
 import OnboardVendorCommand from './commands/onboard-vendor-command';
 import { VendorWorkspace } from './components/vendor-workspace';
+import { EditSectionNav } from './components/edit-section-nav';
 import { StatePill } from './components/state-pill';
 import { stateColor, stateColorOf, type StateColor } from './utils/index';
 
@@ -902,9 +904,45 @@ export class VendorProfile extends CardDef {
   // the conversation actually goes (who are you → how do we reach you → are
   // you compliant → how do we pay you), not by schema declaration order.
   static edit = class Edit extends Component<typeof this> {
+    // Left section nav: clicking anchors that section to the top of the
+    // form's own scroller (the root, per edit-card Rule 1 — never a nested
+    // scroller). Scoped through the event's own root so several open edit
+    // panels never cross-scroll each other.
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Identity' },
+      { id: 'contact', label: 'Contact' },
+      { id: 'compliance', label: 'Compliance' },
+      { id: 'remittance', label: 'Tax & Remittance' },
+      { id: 'notes', label: 'Notes' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.profile-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
     <template>
       <div class='profile-edit'>
-        <section class='sect'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+        <EditSectionNav
+          @sections={{this.sections}}
+          @activeId={{this.activeSection}}
+          @onSelect={{this.goTo}}
+          class='sect-nav'
+        />
+        <div class='sects'>
+        <section
+          class='sect {{if (eq this.activeSection "identity") "focused"}}'
+          data-sect='identity'
+        >
           <h3>Identity</h3>
           <div class='row identity'>
             <FieldContainer @label='Company' @vertical={{true}}>
@@ -919,7 +957,10 @@ export class VendorProfile extends CardDef {
           </div>
         </section>
 
-        <section class='sect'>
+        <section
+          class='sect {{if (eq this.activeSection "contact") "focused"}}'
+          data-sect='contact'
+        >
           <h3>Contact</h3>
           <div class='row'>
             <FieldContainer @label='Contact name' @vertical={{true}}>
@@ -937,7 +978,11 @@ export class VendorProfile extends CardDef {
           </FieldContainer>
         </section>
 
-        <section class='sect compliance'>
+        <section
+          class='sect compliance
+            {{if (eq this.activeSection "compliance") "focused"}}'
+          data-sect='compliance'
+        >
           <h3>Compliance
             <span class='sect-hint'>expired credentials block RFQ awards</span></h3>
           <div class='row'>
@@ -953,7 +998,10 @@ export class VendorProfile extends CardDef {
           </FieldContainer>
         </section>
 
-        <section class='sect'>
+        <section
+          class='sect {{if (eq this.activeSection "remittance") "focused"}}'
+          data-sect='remittance'
+        >
           <h3>Tax &amp; Remittance
             <span class='sect-hint'>shown masked everywhere except here</span></h3>
           <div class='row'>
@@ -969,7 +1017,10 @@ export class VendorProfile extends CardDef {
           </FieldContainer>
         </section>
 
-        <section class='sect'>
+        <section
+          class='sect {{if (eq this.activeSection "notes") "focused"}}'
+          data-sect='notes'
+        >
           <h3>Notes</h3>
           <FieldContainer @label='Internal notes' @vertical={{true}}>
             <@fields.notes />
@@ -978,6 +1029,8 @@ export class VendorProfile extends CardDef {
             <@fields.linkedVendor />
           </FieldContainer>
         </section>
+        </div>
+        </div>
       </div>
       <style scoped>
         .profile-edit {
@@ -986,10 +1039,32 @@ export class VendorProfile extends CardDef {
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp);
-          display: grid;
-          gap: var(--boxel-sp);
           background: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE (theming
+             §1a/§4a — this family asserts the navy; a linked Theme
+             overrides via --procurement-ink) */
+          --vp-ink: var(--procurement-ink, #27306b);
+          --vp-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          /* hand the family ink pair to the rail's published knobs */
+          --edit-section-nav-ink: var(--vp-ink);
+          --edit-section-nav-ink-fg: var(--vp-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
         }
         .sect {
           border: 1px solid var(--border, var(--boxel-200));
@@ -997,9 +1072,21 @@ export class VendorProfile extends CardDef {
           padding: var(--boxel-sp);
           display: grid;
           gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state:
+           same pinned brand ink (theming §4a), diluted for the halo */
+        .sect.focused {
+          outline-color: var(--vp-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--vp-ink) 12%, transparent);
         }
         .sect.compliance {
-          border-left: 3px solid var(--procurement-ink, var(--primary, var(--boxel-dark)));
+          border-left: 3px solid var(--vp-ink);
         }
         h3 {
           margin: 0;
@@ -1032,6 +1119,20 @@ export class VendorProfile extends CardDef {
           .row,
           .identity {
             grid-template-columns: 1fr;
+          }
+          /* narrow panel: nav becomes a horizontal chip row above the form */
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          /* narrow: the rail flips horizontal (consumer's scope attribute
+             rides ...attributes onto the component root, so these apply) */
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

@@ -16,7 +16,7 @@
           "code": "USD"
         }
       },
-      "status": "out for signature",
+      "status": "signed",
       "endDate": "2026-11-14",
       "cardInfo": {
         "name": null,
@@ -24,7 +24,7 @@
         "summary": null,
         "cardThumbnailURL": null
       },
-      "signedAt": null,
+      "signedAt": "2026-09-03",
       "startDate": "2026-08-15",
       "documentUrl": null,
       "contractNumber": "PILOT-2026-0042",
@@ -62,7 +62,7 @@
       },
       "fullText": null,
       "handlesSensitiveData": false,
-      "signatureStatus": null,
+      "signatureStatus": "signed",
       "signatureRequestedAt": null,
       "signatureProvider": null,
       "executedCopyUrl": null,
@@ -70,15 +70,29 @@
       "approvalChain": {
         "steps": [
           {
-            "decision": "pending",
-            "decidedAt": null,
-            "comment": "Required by: Legal",
+            "decision": "approved",
+            "decidedAt": "2026-09-02T17:41:21.862Z",
+            "comment": "Approved after insurance certificate received.",
             "openedAt": "2026-08-19T16:34:35.922Z",
             "holdReason": null,
             "conditions": null
           }
         ],
         "startedAt": "2026-08-19T16:34:35.922Z"
+      },
+      "parties": [],
+      "signatureBlocks": [],
+      "effectivePeriod": {
+        "effectiveDate": null,
+        "endDate": null,
+        "autoRenews": false,
+        "renewalTermMonths": null,
+        "noticeDays": null
+      },
+      "governingLaw": {
+        "jurisdiction": null,
+        "venue": null,
+        "notes": null
       }
     },
     "relationships": {
@@ -94,7 +108,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/riso"
+          "self": null
         }
       },
       "approvalChain.steps.0.approver": {

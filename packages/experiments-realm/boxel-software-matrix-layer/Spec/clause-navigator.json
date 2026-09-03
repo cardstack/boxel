@@ -7,10 +7,7 @@
         "module": "../components/clause-navigator"
       },
       "specType": "component",
-      "isCard": false,
-      "isField": false,
-      "isComponent": true,
-      "readMe": "## Clause Navigator (CN)\n\nThe table of contents a reviewer needs: clauses grouped by type, each row carrying deviation severity so the eye lands on what moved away from standard language. Render-only over resolved ContractClause instances plus an open callback; mounted inside Contract Workspace.\n\n### Non-goals\n\nNo text diffing against the standard clause (deviationSeverity is recorded judgment, not computed). No editing.",
+      "readMe": "## Clause Navigator (CN)\n\nThe table of contents a reviewer needs: clauses grouped by type, each row carrying deviation severity so the eye lands on what moved away from standard language. Render-only over resolved ContractClause instances plus an open callback; mounted inside Contract Workspace.\n\n### Args\n\n`@clauses` (ContractClause[]) — already-resolved instances; the block runs no query of its own, so a consumer can feed it any subset (one contract, one clause type, a template's standard set). `@onOpen(clause)` — the consumer decides what a click does.\n\n### Consumers\n\nContract Workspace (the contract's clauses). Second consumer: Contract Template could mount it over its standard clauses — same rows, no deviations.\n\n### Non-goals\n\nNo text diffing against the standard clause (deviationSeverity is recorded judgment, not computed). No editing.",
       "cardInfo": {
         "name": "Clause Navigator",
         "summary": "A contract’s clauses grouped by type with deviation severity per row â the reviewer’s TOC."

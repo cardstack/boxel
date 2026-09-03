@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Signatory",
+        "module": "../signatory"
+      },
+      "specType": "card",
+      "readMe": "## Signatory (Si)\n\n`person` (Employee), `signingTitle`, `signatureAuthority` (Amount with Currency — the ceiling), `contractTypes` (which kinds they may sign; empty = all), `specimenUrl`, `isActive`.\n\n### The authority contract\n\n`canSign(value, contractType) → { allowed, reason }`. Refuses when inactive, when the contract type is outside `contractTypes`, when no ceiling is set, or when `value` exceeds the ceiling — and always says why, so a blocked ceremony tells the user who to route to instead of just stopping. Both arguments are supplied by the caller rather than read off a linked Contract because the check must run before anything is sent, including on a contract not yet created.\n\nConsumed by `verifyCeremony` (signature-block-field) and therefore by Request Signature (before a line goes out), Verify Signature (audit) and Execute Contract (immediately before writing `signed`). Authority is always re-checked from the current card — a signatory deactivated mid-ceremony fails execution even though the request passed.\n\n### Formats\n\nisolated (authority as the hero figure, scope, specimen), embedded, atom, fitted (attribute-only).\n\n### Example\n\nPriya Nair — General Counsel, $250,000 ceiling, vendor/NDA/partnership; signs line 2 of the Acme MSA.\n\n### Non-goals\n\nNot a Legal Entity (the party) and not a Signature Block (the line on the page). No delegation chains — a deputy is a second Signatory card.",
+      "cardInfo": {
+        "name": "Signatory",
+        "summary": "Who may bind the company, to what value, for which contract types — the authority record the signature ceremony checks; canSign() returns a verdict with a reason."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Signatory/priya-nair-gc"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Signatory/dana-kim-cfo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

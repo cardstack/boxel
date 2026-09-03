@@ -19,7 +19,7 @@ import {
   ProgressBar,
 } from '@cardstack/boxel-ui/components';
 import type { Filter } from '@cardstack/boxel-ui/components';
-import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq, or } from '@cardstack/boxel-ui/helpers';
 import {
   identifyCard,
   CardCrudFunctionsContextName,
@@ -58,6 +58,13 @@ import { CollectionPanel } from './components/collection-panel';
 import { StatePill } from './components/state-pill';
 import { Table, type TableColumn } from './table';
 import type { Hue } from './utils/index';
+import { LegalHome } from './components/legal-home';
+import { ContractWorkspace } from './components/contract-workspace';
+import { SignatureBlockView } from './components/signature-block-view';
+import RequestSignatureCommand from './commands/request-signature-command';
+import VerifySignatureCommand from './commands/verify-signature-command';
+import ExecuteContractCommand from './commands/execute-contract-command';
+import GenerateDocumentCommand from './commands/generate-document-command';
 
 /**
  * Contract Execution — the app that composes the contract blocks.
@@ -82,7 +89,14 @@ import type { Hue } from './utils/index';
  */
 
 const TABS = [
+  // The desk: notice deadlines, awaiting signature, open deviations (Legal
+  // Home block). First because it is the screen the contracts manager opens
+  // in the morning.
+  { key: 'home', label: 'Home' },
   { key: 'repository', label: 'Repository' },
+  // One contract, clause by clause, with its ceremony — Contract Workspace +
+  // Signature Block View blocks over whichever contract was picked.
+  { key: 'workspace', label: 'Workspace' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'obligations', label: 'Obligations' },
   { key: 'compliance', label: 'Compliance' },
@@ -96,6 +110,18 @@ const TABS = [
 
 /** Renewal urgency band, in days to the notice deadline. */
 const NOTICE_WINDOW_DAYS = 90;
+
+/** A person's display name: stored `name` first, computed `cardTitle` second. */
+function personLabelOrUndefined(e: any): string | undefined {
+  if (!e) return undefined;
+  let n = typeof e.name === 'string' ? e.name.trim() : '';
+  if (n) return n;
+  let t = typeof e.cardTitle === 'string' ? e.cardTitle.trim() : '';
+  return t || undefined;
+}
+function personLabel(e: any): string {
+  return personLabelOrUndefined(e) ?? 'Unnamed';
+}
 
 /**
  * Who reviews a contract that matches no rule.
@@ -440,7 +466,146 @@ interface ObligationGroup {
 }
 
 class Isolated extends Component<typeof ContractExecutionApp> {
-  @tracked tab = 'repository';
+  @tracked tab = 'home';
+
+  // ---- Workspace + ceremony (Contract Lifecycle Desk) ----------------------
+  // The contract under review. Set from Legal Home (click a deadline / a
+  // deviation), from the repository, or from the picker on the Workspace tab.
+  @tracked workspaceContract: Contract | undefined;
+  @tracked ceremonyBusy = false;
+  @tracked ceremonyNote: string | undefined;
+  @tracked ceremonyProblem: string | undefined;
+  @tracked ceremonyFindings: string[] = [];
+  @tracked signatureProvider = 'DocuSign';
+
+  @action openInWorkspace(contract: Contract) {
+    this.workspaceContract = contract;
+    this.ceremonyNote = undefined;
+    this.ceremonyProblem = undefined;
+    this.ceremonyFindings = [];
+    this.tab = 'workspace';
+  }
+
+  @action clearWorkspace() {
+    this.workspaceContract = undefined;
+  }
+
+  @action setProvider(event: Event) {
+    this.signatureProvider = (event.target as HTMLInputElement).value;
+  }
+
+  /** The live instance for the picked contract, so command writes show up. */
+  get workspaceLive(): Contract | undefined {
+    let id = this.workspaceContract?.id;
+    if (!id) return undefined;
+    return this.contracts.find((c) => c.id === id) ?? this.workspaceContract;
+  }
+
+  get workspaceBlocks() {
+    return this.workspaceLive?.signatureBlocks ?? [];
+  }
+
+  /** The picked contract's clause instances and version snapshots, from the
+   *  app's own live queries — handed to the commands so they need not search. */
+  get workspaceClauses(): ContractClause[] {
+    let id = this.workspaceLive?.id;
+    return ((this.clauseUseQuery?.instances ?? []) as ContractClause[]).filter(
+      (c) => {
+        try {
+          return Boolean(c) && c.contract?.id === id;
+        } catch {
+          return false;
+        }
+      },
+    );
+  }
+
+  get workspaceVersions(): ContractVersion[] {
+    let id = this.workspaceLive?.id;
+    return ((this.versionQuery?.instances ?? []) as ContractVersion[]).filter(
+      (v) => {
+        try {
+          return Boolean(v) && v.contract?.id === id;
+        } catch {
+          return false;
+        }
+      },
+    );
+  }
+
+  private async runCeremony(
+    label: string,
+    fn: (ctx: any, contract: Contract) => Promise<string>,
+  ) {
+    let contract = this.workspaceLive;
+    let ctx = this.args.context?.commandContext;
+    if (!contract) return;
+    if (!ctx) {
+      this.ceremonyProblem = 'No command context in this host — open the app interactively.';
+      return;
+    }
+    this.ceremonyBusy = true;
+    this.ceremonyProblem = undefined;
+    this.ceremonyNote = undefined;
+    this.ceremonyFindings = [];
+    try {
+      this.ceremonyNote = await fn(ctx, contract);
+    } catch (error: any) {
+      this.ceremonyProblem = `${label} refused — ${error?.message ?? 'unknown error'}`;
+    } finally {
+      this.ceremonyBusy = false;
+    }
+  }
+
+  requestSignature = () =>
+    this.runCeremony('Request Signature', async (ctx, contract) => {
+      let r = await new RequestSignatureCommand(ctx).execute({
+        contract,
+        provider: this.signatureProvider,
+      } as any);
+      return r.message ?? 'Requested.';
+    });
+
+  verifySignatures = () =>
+    this.runCeremony('Verify Signature', async (ctx, contract) => {
+      let r = await new VerifySignatureCommand(ctx).execute({ contract } as any);
+      this.ceremonyFindings = (r.findings ?? []).filter(Boolean) as string[];
+      return r.message ?? 'Verified.';
+    });
+
+  executeContract = () =>
+    this.runCeremony('Execute Contract', async (ctx, contract) => {
+      let realm = this.realmList[0];
+      let r = await new ExecuteContractCommand(ctx).execute({
+        contract,
+        executedBy: this.actingAs,
+        realm,
+        priorVersions: this.workspaceVersions,
+      } as any);
+      return r.message ?? 'Executed.';
+    });
+
+  generateDocument = () =>
+    this.runCeremony('Generate Document', async (ctx, contract) => {
+      let clauses = this.workspaceClauses;
+      let r = await new GenerateDocumentCommand(ctx).execute({
+        contract,
+        clauses,
+        signatories: (this.signatoryQuery?.instances ?? []).filter(Boolean),
+      } as any);
+      return r.message ?? 'Generated.';
+    });
+
+  /** True until the app's clause and version queries have published rows. */
+  get workspaceDataLoading(): boolean {
+    let c = this.clauseUseQuery as any;
+    let v = this.versionQuery as any;
+    return Boolean(c?.isLoading) || Boolean(v?.isLoading);
+  }
+
+  get ceremonyStatusLabel(): string {
+    return this.statusLabelOf(this.workspaceLive?.status);
+  }
 
   private contractQuery: ReturnType<getCards<Contract>> | undefined;
   private obligationQuery: ReturnType<getCards<Obligation>> | undefined;
@@ -975,7 +1140,7 @@ class Isolated extends Component<typeof ContractExecutionApp> {
   /** Who this step is waiting on, so the requirement is visible before acting. */
   get expectedApproverName(): string | undefined {
     let st: any = openStep(this.leadApproval);
-    return st?.delegatedTo?.cardTitle ?? st?.approver?.cardTitle;
+    return personLabelOrUndefined(st?.delegatedTo) ?? personLabelOrUndefined(st?.approver);
   }
 
   /**
@@ -1034,7 +1199,7 @@ class Isolated extends Component<typeof ContractExecutionApp> {
     return steps.map((st: any, i: number) => ({
       index: i + 1,
       total: steps.length,
-      who: st?.approver?.cardTitle ?? st?.delegatedTo?.cardTitle ?? 'Unassigned',
+      who: personLabelOrUndefined(st?.approver) ?? personLabelOrUndefined(st?.delegatedTo) ?? 'Unassigned',
       zeroIndex: i,
       // Only the step that is actually open gets an assign control. A done
       // step's approver is history and must not be editable from here; a
@@ -1336,7 +1501,7 @@ class Isolated extends Component<typeof ContractExecutionApp> {
           (end - new Date(st.openedAt).getTime()) / 86_400_000,
         );
         if (days < 0) continue;
-        let key = st.approver?.cardTitle || 'Unassigned';
+        let key = personLabelOrUndefined(st.approver) || 'Unassigned';
         byRole.set(key, [...(byRole.get(key) ?? []), days]);
       }
     }
@@ -1494,7 +1659,11 @@ class Isolated extends Component<typeof ContractExecutionApp> {
     this.actingAs = this.employees.find((e) => e.id === id);
   };
 
-  employeeLabel = (e: any): string => e?.cardTitle ?? e?.name ?? 'Unnamed';
+  // `name` first: it is a stored attribute and always present on a query row,
+  // whereas `cardTitle` is computed and read as '' on rows whose cardInfo has
+  // not resolved — which is how the approver dropdown rendered six blank
+  // options and the STEP column showed nobody.
+  employeeLabel = (e: any): string => personLabel(e);
 
   /** Free-text conditions typed into the tray before "Approve with conditions". */
   @tracked decisionNote = '';
@@ -1553,7 +1722,7 @@ class Isolated extends Component<typeof ContractExecutionApp> {
     let step: any = openStep(subject);
     let expected = step?.delegatedTo?.id ?? step?.approver?.id;
     if (expected && expected !== this.actingAs.id) {
-      let name = step?.delegatedTo?.cardTitle ?? step?.approver?.cardTitle;
+      let name = personLabelOrUndefined(step?.delegatedTo) ?? personLabelOrUndefined(step?.approver);
       this.decisionProblem =
         `This step is waiting on ${name}. Switch "Acting as" to them, or use Delegate to hand it over.`;
       return;
@@ -1597,6 +1766,9 @@ class Isolated extends Component<typeof ContractExecutionApp> {
           },
         },
       } as any);
+      // The audit entry is the record; the chain is the STATE. Both must move,
+      // or the queue shows the same step forever after it was decided.
+      await this.advanceChain(subject, action, this.decisionNote.trim());
       this.lastDecision = auditActionLabel(action);
       this.decisionNote = '';
     } catch (error: any) {
@@ -1820,38 +1992,73 @@ class Isolated extends Component<typeof ContractExecutionApp> {
    * `containsMany` patches replace the whole array, so the untouched steps are
    * rewritten as they were rather than being dropped.
    */
-  private advanceChain = async (contract: any, decision: string, note: string) => {
+  private advanceChain = async (contract: any, action: string, note: string) => {
     let store = this.args.context?.store;
     let steps = (contract?.approvalChain?.steps ?? []).filter(Boolean);
-    let idx = contract?.approvalChain?.currentStepIndex ?? -1;
+    // Derive the open step here rather than reading the chain's computed
+    // `currentStepIndex`: a live-query row does not always carry computed
+    // fields, and an `undefined` index silently skipped the write.
+    let idx = steps.findIndex((st: any) => (st?.decision ?? 'pending') === 'pending');
     if (!store || !contract?.id || idx < 0 || idx >= steps.length) return;
+    // `delegated` needs a hand-over target the tray does not collect yet; it
+    // is recorded in the audit log only (see the Delegate button's title).
+    if (action === 'delegated') return;
     let now = new Date().toISOString();
-    await store.patch(contract.id, {
-      attributes: {
-        approvalChain: {
-          startedAt: contract.approvalChain?.startedAt ?? now,
-          steps: steps.map((st: any, i: number) => {
-            let base = {
-              decision: st?.decision ?? 'pending',
-              decidedAt: st?.decidedAt ?? null,
-              openedAt: st?.openedAt ?? null,
-              comment: st?.comment ?? null,
-              conditions: st?.conditions ?? null,
-              holdReason: st?.holdReason ?? null,
+    // Every date goes out as an ISO string or null. A live-query step can
+    // carry an `Invalid Date` (a DateTimeField deserialized from a value the
+    // index never had), and passing that through `store.patch` fails the whole
+    // save with "RangeError: Invalid time value" — silently, from the tray's
+    // point of view, because the audit entry had already been written.
+    let iso = (v: any): string | null => {
+      if (v == null || v === '') return null;
+      let d = v instanceof Date ? v : new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    };
+    let decided = action === 'approved' || action === 'approved_with_conditions';
+    let isLast = idx === steps.length - 1;
+    let attributes: Record<string, any> = {
+      approvalChain: {
+        startedAt: iso(contract.approvalChain?.startedAt) ?? now,
+        steps: steps.map((st: any, i: number) => {
+          let base = {
+            decision: st?.decision ?? 'pending',
+            decidedAt: iso(st?.decidedAt),
+            openedAt: iso(st?.openedAt),
+            comment: st?.comment ?? null,
+            conditions: st?.conditions ?? null,
+            holdReason: st?.holdReason ?? null,
+          };
+          if (i === idx) {
+            if (action === 'on_hold') {
+              return { ...base, holdReason: note || 'On hold' };
+            }
+            if (action === 'rejected') {
+              return { ...base, decision: 'rejected', decidedAt: now, comment: note || base.comment, holdReason: null };
+            }
+            // approved / approved_with_conditions
+            return {
+              ...base,
+              decision: 'approved',
+              decidedAt: now,
+              comment: action === 'approved' ? note || base.comment : base.comment,
+              conditions: action === 'approved_with_conditions' ? note : base.conditions,
+              holdReason: null,
             };
-            if (i === idx) {
-              return { ...base, decision, decidedAt: now, comment: note || base.comment };
-            }
-            // The next approver's clock starts now, not when the chain began —
-            // otherwise "waiting 9 days" counts time they never had it.
-            if (i === idx + 1 && decision === 'approved') {
-              return { ...base, openedAt: now };
-            }
-            return base;
-          }),
-        },
+          }
+          if (i === idx + 1 && decided) {
+            return { ...base, openedAt: now };
+          }
+          return base;
+        }),
       },
-    });
+    };
+    // The last approval is what makes the contract `approved` — the state
+    // Request Signature requires. Only the pipeline stages move here; a
+    // signed or terminated contract keeps its status.
+    if (decided && isLast && ['draft', 'negotiating', 'in review'].includes(contract.status)) {
+      attributes.status = 'approved';
+    }
+    await store.patch(contract.id, { attributes });
   };
 
   /** Can a decision be recorded at all here? */
@@ -1977,7 +2184,146 @@ class Isolated extends Component<typeof ContractExecutionApp> {
           {{/if}}
 
           <main class='cx-panel'>
-            {{#if (eq this.tab 'repository')}}
+            {{#if (eq this.tab 'home')}}
+              <LegalHome
+                @context={{@context}}
+                @realms={{this.realmList}}
+                @onOpen={{this.openInWorkspace}}
+              />
+
+            {{else if (eq this.tab 'workspace')}}
+              {{#if this.workspaceLive}}
+                {{#let this.workspaceLive as |c|}}
+                  <section class='cx-sec cx-ws' aria-label='Contract workspace'>
+                    {{! the switcher stays visible: the reader should never
+                        wonder whether other contracts exist }}
+                    <nav class='cx-ws-switch' aria-label='Switch contract'>
+                      <span class='cx-ws-switch-label'>Contract</span>
+                      {{#each this.contracts as |other|}}
+                        <button
+                          type='button'
+                          class='cx-ws-chip {{if (eq other.id c.id) "is-active"}}'
+                          aria-current={{if (eq other.id c.id) 'true'}}
+                          title={{other.cardTitle}}
+                          {{on 'click' (fn this.openInWorkspace other)}}
+                        >
+                          <span class='cx-ws-chip-dot hue-{{this.statusHueOf other.status}}' aria-hidden='true'></span>
+                          <span class='cx-ws-chip-name'>{{other.cardTitle}}</span>
+                        </button>
+                      {{/each}}
+                    </nav>
+                    <div class='cx-ws-head'>
+                      <div class='cx-ws-id'>
+                        <h2 class='cx-h'>{{c.cardTitle}}</h2>
+                        <p class='cx-note'>{{this.statusLabelOf c.status}}
+                          {{#if c.contractNumber}}· {{c.contractNumber}}{{/if}}
+                          {{#if c.value.amount}}· {{formatMoney c.value.amount c.value.currency.code}}{{/if}}</p>
+                      </div>
+                      <div class='cx-ws-actions'>
+                        <button
+                          type='button'
+                          class='cx-submit'
+                          {{on 'click' (fn this.openCard c)}}
+                        >Open card</button>
+                        <button
+                          type='button'
+                          class='cx-submit is-quiet'
+                          {{on 'click' this.clearWorkspace}}
+                        >Pick another</button>
+                      </div>
+                    </div>
+
+                    <ContractWorkspace
+                      @contract={{c}}
+                      @context={{@context}}
+                      @onOpen={{this.openCard}}
+                    />
+
+                    <SignatureBlockView
+                      @blocks={{this.workspaceBlocks}}
+                      @contractValue={{c.value.amount}}
+                      @contractCurrency={{c.value.currency.code}}
+                      @contractType={{c.contractType}}
+                    />
+
+                    <div class='cx-ceremony-bar'>
+                      <label class='cx-provider'>
+                        <span>Provider</span>
+                        <input
+                          type='text'
+                          value={{this.signatureProvider}}
+                          {{on 'input' this.setProvider}}
+                        />
+                      </label>
+                      <button
+                        type='button'
+                        class='cx-submit'
+                        disabled={{this.ceremonyBusy}}
+                        title='approved → out for signature; sends the next line in signing order after re-checking authority'
+                        {{on 'click' this.requestSignature}}
+                      >Request signature</button>
+                      <button
+                        type='button'
+                        class='cx-submit is-quiet'
+                        disabled={{this.ceremonyBusy}}
+                        title='Re-derive every authority and order check from current data; writes nothing'
+                        {{on 'click' this.verifySignatures}}
+                      >Verify signatures</button>
+                      <button
+                        type='button'
+                        class='cx-submit is-sign'
+                        disabled={{or this.ceremonyBusy this.workspaceDataLoading}}
+                        title='out for signature → signed; refuses unless every line is signed and verification is clean; snapshots a version'
+                        {{on 'click' this.executeContract}}
+                      >Execute contract</button>
+                      <button
+                        type='button'
+                        class='cx-submit is-quiet'
+                        disabled={{or this.ceremonyBusy this.workspaceDataLoading}}
+                        title='Assemble the full agreement markdown into fullText'
+                        {{on 'click' this.generateDocument}}
+                      >Generate document</button>
+                    </div>
+                    {{#if this.ceremonyProblem}}
+                      <p class='cx-submit-msg is-err' role='alert'>{{this.ceremonyProblem}}</p>
+                    {{else if this.ceremonyNote}}
+                      <p class='cx-submit-msg is-ok' role='status'>{{this.ceremonyNote}}</p>
+                    {{/if}}
+                    {{#if this.ceremonyFindings.length}}
+                      <ul class='cx-findings'>
+                        {{#each this.ceremonyFindings as |f|}}<li>{{f}}</li>{{/each}}
+                      </ul>
+                    {{/if}}
+                  </section>
+                {{/let}}
+              {{else}}
+                <section class='cx-sec' aria-label='Pick a contract'>
+                  <h2 class='cx-h'>Workspace</h2>
+                  <p class='cx-note'>Pick a contract to review it clause by clause and run its signature ceremony. Legal Home and the repository also land here.</p>
+                  <ul class='cx-pick'>
+                    {{#each this.contracts as |c|}}
+                      <li>
+                        <button
+                          type='button'
+                          class='cx-pick-row'
+                          {{on 'click' (fn this.openInWorkspace c)}}
+                        >
+                          <span class='cx-pick-name'>{{c.cardTitle}}</span>
+                          <StatePill
+                            @label={{this.statusLabelOf c.status}}
+                            @hue={{this.statusHueOf c.status}}
+                            @dot={{true}}
+                          />
+                        </button>
+                      </li>
+                    {{else}}
+                      <li class='cx-none'>No contracts in this realm yet.</li>
+                    {{/each}}
+                  </ul>
+                </section>
+              {{/if}}
+
+            {{else if (eq this.tab 'repository')}}
               {{#if this.submitProblem}}
                 <p class='cx-submit-msg is-err' role='alert'>{{this.submitProblem}}</p>
               {{else if this.submitNote}}
@@ -2170,7 +2516,8 @@ class Isolated extends Component<typeof ContractExecutionApp> {
                         <Button
                           @kind='secondary'
                           @disabled={{this.decisionBusy}}
-                          {{on 'click' this.delegate}}
+                          title='Recorded in the audit log only — the tray has no hand-over target yet'
+                        {{on 'click' this.delegate}}
                         >Delegate</Button>
                         <Button
                           @kind='secondary'
@@ -3154,6 +3501,147 @@ class Isolated extends Component<typeof ContractExecutionApp> {
         background: color-mix(in oklch, currentColor 8%, transparent);
       }
       .cx-submit[disabled] { opacity: 0.5; cursor: not-allowed; }
+      .cx-submit.is-quiet {
+        border-color: var(--cx-border, var(--boxel-200));
+        color: var(--cx-muted-fg, var(--boxel-450));
+      }
+
+      /* ---- Workspace tab (Contract Lifecycle Desk) ---- */
+      .cx-ws {
+        display: grid;
+        gap: var(--boxel-sp);
+      }
+      .cx-ws-switch {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        flex-wrap: wrap;
+        padding-bottom: var(--boxel-sp-xs);
+        border-bottom: 1px solid var(--cx-border, var(--boxel-200));
+      }
+      .cx-ws-switch-label {
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--cx-muted-fg, var(--boxel-450));
+        margin-right: var(--boxel-sp-xxs);
+      }
+      .cx-ws-chip {
+        font: inherit;
+        font-size: var(--boxel-font-size-sm);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        max-width: 18rem;
+        min-height: 32px;
+        padding: 0 0.7rem;
+        border: 1px solid var(--cx-border, var(--boxel-200));
+        border-radius: 999px;
+        background: transparent;
+        color: var(--cx-fg, var(--boxel-dark));
+        cursor: pointer;
+      }
+      .cx-ws-chip:hover {
+        border-color: var(--cx-fg, var(--boxel-dark));
+      }
+      .cx-ws-chip.is-active {
+        background: var(--cx-fg, var(--boxel-dark));
+        border-color: var(--cx-fg, var(--boxel-dark));
+        color: var(--cx-bg, var(--boxel-light));
+        font-weight: 600;
+      }
+      .cx-ws-chip-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .cx-ws-chip-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: none;
+        background: currentColor;
+        opacity: 0.7;
+      }
+      .cx-ws-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--boxel-sp);
+        flex-wrap: wrap;
+      }
+      .cx-ws-id {
+        min-width: 0;
+      }
+      .cx-ws-actions,
+      .cx-ceremony-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex-wrap: wrap;
+      }
+      .cx-ceremony-bar {
+        padding-top: var(--boxel-sp-xs);
+        border-top: 1px solid var(--cx-border, var(--boxel-200));
+      }
+      .cx-provider {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--cx-muted-fg, var(--boxel-450));
+        margin-right: auto;
+      }
+      .cx-provider input {
+        font: inherit;
+        min-height: 44px;
+        padding: 0 var(--boxel-sp-xs);
+        border: 1px solid var(--cx-border, var(--boxel-200));
+        border-radius: var(--radius, 4px);
+        background: var(--cx-bg, var(--boxel-light));
+        color: var(--cx-fg, var(--boxel-dark));
+        width: 9rem;
+      }
+      .cx-findings {
+        margin: 0;
+        padding-left: 1.2rem;
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.5;
+        color: var(--cx-fg, var(--boxel-dark));
+      }
+      .cx-pick {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+      }
+      .cx-pick-row {
+        font: inherit;
+        width: 100%;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-sm);
+        padding: 0 var(--boxel-sp-xs);
+        border: 1px solid var(--cx-border, var(--boxel-200));
+        border-radius: var(--radius, 4px);
+        background: transparent;
+        color: var(--cx-fg, var(--boxel-dark));
+        text-align: left;
+        cursor: pointer;
+      }
+      .cx-pick-row:hover {
+        background: color-mix(in oklch, currentColor 6%, transparent);
+      }
+      .cx-pick-name {
+        font-weight: 600;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
       .cx-fig {
         font-family: var(--font-mono, ui-monospace, monospace);

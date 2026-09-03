@@ -13,12 +13,14 @@ import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { PurchaseOrder } from './purchase-order';
 import ReceiveGoodsCommand from './commands/receive-goods-command';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 import { stateColor, type StateColor } from './utils/index';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export type MatchState = 'matched' | 'short' | 'over';
 
@@ -458,6 +460,184 @@ export class GoodsReceipt extends CardDef {
             flex-direction: row;
             align-items: center;
             gap: var(--boxel-sp-xs);
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Grouped by how a receipt is recorded at the dock (who signed for it and
+  // when → against which PO → what actually arrived, line by line), not
+  // schema order. Three sections — no nav rail (edit-card Rule 0).
+  // matchResult and title are computed (computeVia) and deliberately
+  // excluded.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Receipt Identity' },
+      { id: 'purchase-order', label: 'Against Purchase Order' },
+      { id: 'lines', label: 'Received Lines' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.gr-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='gr-edit'>
+        {{! responsive grid lives on the inner wrapper — the container
+            element cannot be restyled by its own query (edit-card Rule 1) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "identity") "focused"}}'
+            data-sect='identity'
+          >
+            <h3>Receipt Identity
+              <span class='sect-hint'>posted is flipped by the Receive Goods
+                command — a posted receipt cannot be posted twice</span></h3>
+            <div class='row'>
+              <FieldContainer @label='Received on' @vertical={{true}}>
+                <@fields.receivedOn />
+              </FieldContainer>
+              <FieldContainer @label='Received by' @vertical={{true}}>
+                <@fields.receivedBy />
+              </FieldContainer>
+              <FieldContainer @label='Posted' @vertical={{true}}>
+                <@fields.posted />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect
+              {{if (eq this.activeSection "purchase-order") "focused"}}'
+            data-sect='purchase-order'
+          >
+            <h3>Against Purchase Order</h3>
+            <FieldContainer @label='Purchase order' @vertical={{true}}>
+              <@fields.purchaseOrder />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect lines {{if (eq this.activeSection "lines") "focused"}}'
+            data-sect='lines'
+          >
+            <h3>Received Lines
+              <span class='sect-hint'>ordered qty is a snapshot at receipt time
+                — the audit trail keeps saying what was ordered then</span></h3>
+            <FieldContainer
+              @label='Lines (description, ordered, received, note)'
+              @vertical={{true}}
+            >
+              <@fields.lines />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .gr-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE — a linked
+             Theme overrides via --procurement-ink */
+          --gr-ink: var(--procurement-ink, #27306b);
+          --gr-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--gr-ink);
+          --edit-section-nav-ink-fg: var(--gr-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--gr-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--gr-ink) 12%, transparent);
+        }
+        .sect.lines {
+          border-left: 3px solid var(--gr-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

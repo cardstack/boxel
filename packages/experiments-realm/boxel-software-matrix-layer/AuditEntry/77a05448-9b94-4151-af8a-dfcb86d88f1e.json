@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "delegated",
+      "occurredAt": "2026-09-03T01:05:11.173Z",
+      "subjectTitle": "Untitled Contract",
+      "note": "Delegating to Legal for review.",
+      "conditions": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "doneBy": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "subject": {
+        "links": {
+          "self": "../Contract/2bb30e2a-4c4b-4f5e-b4d4-080e6feac2aa"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "SignatureBlockView",
+        "module": "../components/signature-block-view"
+      },
+      "specType": "component",
+      "readMe": "## Signature Block View (SB)\n\nArgs: `@blocks` (SignatureBlockField[]), `@contractValue`, `@contractCurrency`, `@contractType`, optional `@title`, `@compact` (hides the verdict footer for list rows).\n\nRenders the ceremony strip: for each line in signing order — party and role, signer and title, the authority ceiling with a pass/fail mark (or \"counterparty signer — authority not ours to check\"), status pill with date, provider reference, and any findings against that line in red. Below, one verdict: \"Document value $5,880 — all authority checks pass.\" or \"N checks fail — the document cannot be executed until each is cleared.\" with the reasons.\n\nEvery check is `verifyCeremony` from signature-block-field, the same function Request Signature and Execute Contract run — so what the screen shows and what the commands enforce cannot diverge. Render-only: no buttons, no writes; the host app mounts the commands beside it.\n\nStyling: document-grade type on `--font-heading`, no motion, a navy seal rule on top, `container-type: inline-size` so lines stack under 420px. Status hues are data (green signed, red blocked) mixed toward the card's own foreground so the pairs survive a dark theme.\n\n### Example\n\nMounted on Contract's isolated view; see Contract — Acme Industries MSA 2026 (two lines, both signed, checks pass).\n\n### Consumers\n\nContract — isolated view (over `signatureBlocks`), and Contract Execution App — Workspace tab, where the four ceremony commands sit beside it. Two consumers, unchanged in both: the strip takes the document's value and type as args and asserts no contract-specific rule of its own.\n\n### Non-goals\n\nNo actions — Request / Verify / Execute are commands. No per-block editing. Not a signature capture pad.",
+      "cardInfo": {
+        "name": "Signature Block View",
+        "summary": "The signature ceremony as a document reader sees it — one card per line in signing order with authority ✓/✗, status and date, and a single verdict line; render-only over verifyCeremony."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -27,6 +27,10 @@ import { Contract } from './contract';
 import { Employee } from './employee';
 import { StatePill } from './components/state-pill';
 import type { Hue } from './utils/index';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { EditSectionNav } from './components/edit-section-nav';
 
 /**
  * A promise a contract compels, with a date and an owner.
@@ -356,6 +360,214 @@ export class Obligation extends CardDef {
    * a due date buried in row four of a definition list. Everything else on this
    * card is supporting detail and is quieter.
    */
+  /**
+   * Edit — what a contract obliges someone to do, when, and who answers for it.
+   * Grouped by task, not schema order; EditSectionNav is the table of
+   * contents (edit-card Rule 0b, family rule: every grouped edit gets the rail).
+   */
+  static edit = class Edit extends Component<typeof Obligation> {
+    @tracked activeSection = 'what';
+
+    sections = [
+      { id: 'what', label: 'What is owed' },
+      { id: 'schedule', label: 'Schedule' },
+      { id: 'people', label: 'People & reminders' },
+      { id: 'completions', label: 'Completions' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.obligation-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='obligation-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "what") "focused"}}'
+              data-sect='what'
+            >
+              <h3>What is owed</h3>
+              <FieldContainer @label='Contract' @vertical={{true}}>
+                <@fields.contract />
+              </FieldContainer>
+              <div class='row cols-2'>
+                <FieldContainer @label='Type' @vertical={{true}}>
+                  <@fields.obligationType />
+                </FieldContainer>
+                <FieldContainer @label='Amount (if a payment)' @vertical={{true}}>
+                  <@fields.amount />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Description' @vertical={{true}}>
+                <@fields.description />
+              </FieldContainer>
+              <FieldContainer @label='Consequence of missing it' @vertical={{true}}>
+                <@fields.consequence />
+              </FieldContainer>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "schedule") "focused"}}'
+              data-sect='schedule'
+            >
+              <h3>Schedule
+                <span class='sect-hint'>next due date and status are computed from these</span></h3>
+              <div class='row cols-2'>
+                <FieldContainer @label='First due' @vertical={{true}}>
+                  <@fields.firstDueDate />
+                </FieldContainer>
+                <FieldContainer @label='Closed on' @vertical={{true}}>
+                  <@fields.closedAt />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Recurrence' @vertical={{true}}>
+                <@fields.recurrence />
+              </FieldContainer>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "people") "focused"}}'
+              data-sect='people'
+            >
+              <h3>People & reminders</h3>
+              <div class='row cols-2'>
+                <FieldContainer @label='Owner' @vertical={{true}}>
+                  <@fields.owner />
+                </FieldContainer>
+                <FieldContainer @label='Escalated to' @vertical={{true}}>
+                  <@fields.escalatedTo />
+                </FieldContainer>
+              </div>
+              <div class='row cols-2'>
+                <FieldContainer @label='Remind (days before)' @vertical={{true}}>
+                  <@fields.reminderDaysBefore />
+                </FieldContainer>
+                <FieldContainer @label='Remind whom' @vertical={{true}}>
+                  <@fields.reminderRecipients />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "completions") "focused"}}'
+              data-sect='completions'
+            >
+              <h3>Completions
+                <span class='sect-hint'>one entry per period fulfilled, with evidence</span></h3>
+              <FieldContainer @label='Completions' @vertical={{true}}>
+                <@fields.completions />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .obligation-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* root is the scroller, so sticky pins the rail; the legal family
+           asserts no brand ink, so the rail keeps its default fg/bg pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @container edit (width < 640px) {
+          .row.cols-2,
+          .row.cols-3,
+          .row.cols-4 {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof Obligation> {
     get hue(): Hue {
       return OBLIGATION_STATE_HUE[this.args.model?.status ?? ''] ?? 'slate';

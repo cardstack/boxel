@@ -10,6 +10,10 @@ import DatetimeField from 'https://cardstack.com/base/datetime';
 import AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';
 import enumField from 'https://cardstack.com/base/enum';
 import CreditCardIcon from '@cardstack/boxel-icons/credit-card';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { EditSectionNav } from './components/edit-section-nav';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { Invoice } from './invoice';
 import { formatMoney } from './money';
 
@@ -411,6 +415,164 @@ export class Payment extends CardDef {
         .r-invoice {
           display: flex;
           justify-content: flex-end;
+        }
+      </style>
+    </template>
+  };
+
+  // Two-step form matching how a payment is recorded: what money arrived
+  // (amount / rail / when / reference) → what it settles. No rail — two
+  // sections don't need wayfinding.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'details';
+
+    sections = [
+      { id: 'details', label: 'Payment details' },
+      { id: 'allocation', label: 'Allocation' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.payment-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='payment-edit'>
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect details
+              {{if (eq this.activeSection "details") "focused"}}'
+            data-sect='details'
+          >
+            <h3>Payment details</h3>
+            <div class='row'>
+              <FieldContainer @label='Amount' @vertical={{true}}>
+                <@fields.amount />
+              </FieldContainer>
+              <FieldContainer @label='Method' @vertical={{true}}>
+                <@fields.method />
+              </FieldContainer>
+              <FieldContainer @label='Paid at' @vertical={{true}}>
+                <@fields.paidAt />
+              </FieldContainer>
+            </div>
+            <FieldContainer @label='Reference' @vertical={{true}}>
+              <@fields.reference />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect {{if (eq this.activeSection "allocation") "focused"}}'
+            data-sect='allocation'
+          >
+            <h3>Allocation
+              <span class='sect-hint'>the invoice this payment settles</span></h3>
+            <FieldContainer @label='Invoice' @vertical={{true}}>
+              <@fields.invoice />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .payment-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* family ink, declared ONCE */
+          --pay-ink: var(--procurement-ink, #27306b);
+          --pay-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--pay-ink);
+          --edit-section-nav-ink-fg: var(--pay-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--pay-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--pay-ink) 12%, transparent);
+        }
+        .sect.details {
+          border-left: 3px solid var(--pay-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
         }
       </style>
     </template>

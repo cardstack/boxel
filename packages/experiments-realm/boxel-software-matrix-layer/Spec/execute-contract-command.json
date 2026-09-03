@@ -7,10 +7,7 @@
         "module": "../commands/execute-contract-command"
       },
       "specType": "command",
-      "isCard": false,
-      "isField": false,
-      "isComponent": false,
-      "readMe": "## Execute Contract (EC)\n\nThe moment a contract comes into force: flips to `signed`, stamps signedAt (local calendar day) and `signatureStatus: signed`, and creates a ContractVersion snapshot (number allocated as max+1 for the contract) so \"what did we agree that day\" survives later amendments. Executing IS versioning — one command owns both writes so they can never disagree.\n\n### Example\n\nNatural target: the linked MSA — Northwind.\n\n### Non-goals\n\nNo countersignature tracking per party. No document generation — executedCopyUrl records where the signed PDF lives.",
+      "readMe": "## Execute Contract (EC)\n\nThe moment a contract comes into force: flips to `signed`, stamps signedAt (local calendar day) and `signatureStatus: signed`, and creates a ContractVersion snapshot (number allocated as max+1 for the contract) so \"what did we agree that day\" survives later amendments. Executing IS versioning — one command owns both writes so they can never disagree.\n\n### Example\n\nNatural target: the linked MSA — Northwind.\n\n### Non-goals\n\nNo countersignature tracking per party. No document generation — executedCopyUrl records where the signed PDF lives.\n\n### Desk-spec extension (2026-09-02)\n\nWhen the contract carries `signatureBlocks`, execution refuses until every line is `signed` and `verifyCeremony` (signature-block-field) re-verifies clean against the Signatory cards as they are now. Optional input `priorVersions` lets a caller that already holds the contract's ContractVersion snapshots supply them, so the version counter advances without a search (a search only reaches the current user's own realms).",
       "cardInfo": {
         "name": "Execute Contract",
         "summary": "out for signature → signed, plus a ContractVersion snapshot — one command, two writes that must agree."

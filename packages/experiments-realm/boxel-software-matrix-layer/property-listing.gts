@@ -14,10 +14,14 @@ import AmountWithCurrency from '@cardstack/base/amount-with-currency';
 import AddressField from '@cardstack/base/address';
 import enumField from '@cardstack/base/enum';
 import MultiImageSourceField from '@cardstack/catalog/fields/multi-image-source/multi-image-source';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { Employee } from './employee';
 import { StatePill } from './components/state-pill';
 import { PropertyGallery } from './components/property-gallery';
+import { EditSectionNav } from './components/edit-section-nav';
 import { formatMoney } from './money';
 import { stateColor, type StateColor } from './utils/index';
 
@@ -443,6 +447,235 @@ export class PropertyListing extends CardDef {
           }
           .fit-price {
             margin-left: auto;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // The form for writing a listing, grouped the way an agent drafts one:
+  // name it and price it → state the property's facts → where it is →
+  // show it → sell it. `isPublished` and `cardTitle` are computed and never
+  // appear here; `publishedAt` is command-written (PublishListingCommand)
+  // and only exposed with a warning hint. Five sections → the
+  // EditSectionNav rail (edit-card Rule 0b). This family asserts no brand
+  // token in its other formats, so the accent stays the theme foreground.
+  static edit = class Edit extends Component<typeof this> {
+    // Left section nav: clicking anchors that section to the top of the
+    // form's own scroller (the root, per edit-card Rule 1 — never a nested
+    // scroller). Scoped through the event's own root so several open edit
+    // panels never cross-scroll each other.
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Listing' },
+      { id: 'facts', label: 'Property Facts' },
+      { id: 'location', label: 'Location' },
+      { id: 'media', label: 'Photos' },
+      { id: 'about', label: 'Description & Agent' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.listing-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='listing-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "identity") "focused"}}'
+              data-sect='identity'
+            >
+              <h3>Listing</h3>
+              <FieldContainer @label='Headline' @vertical={{true}}>
+                <@fields.headline />
+              </FieldContainer>
+              <div class='row'>
+                <FieldContainer @label='Property type' @vertical={{true}}>
+                  <@fields.propertyType />
+                </FieldContainer>
+                <FieldContainer @label='Asking price' @vertical={{true}}>
+                  <@fields.askingPrice />
+                </FieldContainer>
+                <FieldContainer @label='Status' @vertical={{true}}>
+                  <@fields.status />
+                </FieldContainer>
+              </div>
+              <FieldContainer
+                @label='Published at (stamped by the Publish command — edit only to correct)'
+                @vertical={{true}}
+              >
+                <@fields.publishedAt />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "facts") "focused"}}'
+              data-sect='facts'
+            >
+              <h3>Property Facts</h3>
+              <div class='row four'>
+                <FieldContainer @label='Bedrooms' @vertical={{true}}>
+                  <@fields.bedrooms />
+                </FieldContainer>
+                <FieldContainer @label='Bathrooms' @vertical={{true}}>
+                  <@fields.bathrooms />
+                </FieldContainer>
+                <FieldContainer @label='Area (sqft)' @vertical={{true}}>
+                  <@fields.areaSqft />
+                </FieldContainer>
+                <FieldContainer @label='Year built' @vertical={{true}}>
+                  <@fields.yearBuilt />
+                </FieldContainer>
+              </div>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "location") "focused"}}'
+              data-sect='location'
+            >
+              <h3>Location</h3>
+              <FieldContainer @label='Address' @vertical={{true}}>
+                <@fields.address />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "media") "focused"}}'
+              data-sect='media'
+            >
+              <h3>Photos
+                <span class='sect-hint'>the first photo is the hero on the
+                  property page and every card face</span></h3>
+              <FieldContainer @label='Photo gallery' @vertical={{true}}>
+                <@fields.photos />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "about") "focused"}}'
+              data-sect='about'
+            >
+              <h3>Description &amp; Agent</h3>
+              <FieldContainer @label='About this property' @vertical={{true}}>
+                <@fields.description />
+              </FieldContainer>
+              <FieldContainer @label='Listing agent' @vertical={{true}}>
+                <@fields.agent />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .listing-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* this family asserts no brand hue in its other formats — the
+             accent is the theme's foreground (boxel-theming §4a: pin
+             nothing) */
+          --pl-ink: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top;
+           no ink knobs handed over — the rail's default is already the
+           inverted foreground/background pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state */
+        .sect.focused {
+          outline-color: var(--pl-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--pl-ink) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.four {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.four {
+            grid-template-columns: 1fr;
+          }
+          /* narrow panel: nav becomes a horizontal chip row above the form */
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          /* narrow: the rail flips horizontal (consumer's scope attribute
+             rides ...attributes onto the component root, so these apply) */
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

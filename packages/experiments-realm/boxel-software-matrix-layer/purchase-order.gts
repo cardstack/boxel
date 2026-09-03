@@ -14,7 +14,8 @@ import { realmURL } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { LineItem } from './line-item';
 import { Vendor } from './vendor';
@@ -25,6 +26,7 @@ import { ApprovalChainField } from './approval-chain-field';
 import { formatMoney, sumLineItems } from './money';
 import { StatePill } from './components/state-pill';
 import ApprovePurchaseOrderCommand from './commands/approve-purchase-order-command';
+import { EditSectionNav } from './components/edit-section-nav';
 import { stateColor, type StateColor } from './utils/index';
 
 export const PO_STATUSES = [
@@ -584,6 +586,237 @@ export class PurchaseOrder extends CardDef {
             margin-left: auto;
           }
           .fit-mid {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Grouped by how a PO is actually assembled (which order is this → what's
+  // on it → who signs off and against what money → when does it arrive and
+  // what's been received), not schema order. Four sections, so this form
+  // gets the EditSectionNav rail (edit-card Rule 0b). totalAmount and title
+  // are computed (computeVia) and deliberately excluded.
+  static edit = class Edit extends Component<typeof this> {
+    // Left section nav: clicking anchors that section to the top of the
+    // form's own scroller (the root, per edit-card Rule 1 — never a nested
+    // scroller). Scoped through the event's own root so several open edit
+    // panels never cross-scroll each other.
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Order Identity' },
+      { id: 'lines', label: 'Line Items' },
+      { id: 'approval', label: 'Approval & Budget' },
+      { id: 'delivery', label: 'Delivery & Receiving' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.po-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='po-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "identity") "focused"}}'
+              data-sect='identity'
+            >
+              <h3>Order Identity
+                <span class='sect-hint'>the PO number is stamped once at issue
+                  and never recomputed</span></h3>
+              <div class='row identity'>
+                <FieldContainer @label='PO number' @vertical={{true}}>
+                  <@fields.poNumber />
+                </FieldContainer>
+                <FieldContainer @label='Status' @vertical={{true}}>
+                  <@fields.status />
+                </FieldContainer>
+                <FieldContainer @label='Vendor' @vertical={{true}}>
+                  <@fields.vendor />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Source RFQ (optional)' @vertical={{true}}>
+                <@fields.rfq />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect lines
+                {{if (eq this.activeSection "lines") "focused"}}'
+              data-sect='lines'
+            >
+              <h3>Line Items
+                <span class='sect-hint'>the committed total is computed from
+                  these lines</span></h3>
+              <FieldContainer
+                @label='Lines (description, qty, unit price)'
+                @vertical={{true}}
+              >
+                <@fields.lineItems />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "approval") "focused"}}'
+              data-sect='approval'
+            >
+              <h3>Approval &amp; Budget
+                <span class='sect-hint'>route and chain are normally set by the
+                  approval command — edit only to correct mistakes</span></h3>
+              <div class='row two'>
+                <FieldContainer @label='Approval route' @vertical={{true}}>
+                  <@fields.approvalRoute />
+                </FieldContainer>
+                <FieldContainer @label='Budget to commit against' @vertical={{true}}>
+                  <@fields.budget />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Approval chain' @vertical={{true}}>
+                <@fields.approvalChain />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "delivery") "focused"}}'
+              data-sect='delivery'
+            >
+              <h3>Delivery &amp; Receiving
+                <span class='sect-hint'>received quantities accumulate via the
+                  Receive Goods command, index-aligned with the lines</span></h3>
+              <div class='row two'>
+                <FieldContainer @label='Expected delivery' @vertical={{true}}>
+                  <@fields.expectedDelivery />
+                </FieldContainer>
+              </div>
+              <FieldContainer
+                @label='Received so far (per line)'
+                @vertical={{true}}
+              >
+                <@fields.receivedQuantities />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .po-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE — a linked
+             Theme overrides via --procurement-ink */
+          --po-ink: var(--procurement-ink, #27306b);
+          --po-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          /* hand the family ink pair to the rail's published knobs */
+          --edit-section-nav-ink: var(--po-ink);
+          --edit-section-nav-ink-fg: var(--po-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state:
+           same pinned brand ink, diluted for the halo */
+        .sect.focused {
+          outline-color: var(--po-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--po-ink) 12%, transparent);
+        }
+        .sect.lines {
+          border-left: 3px solid var(--po-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .identity {
+          grid-template-columns: 1.4fr 1fr 1.4fr;
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.two,
+          .identity {
+            grid-template-columns: 1fr;
+          }
+          /* narrow panel: nav becomes a horizontal chip row above the form */
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          /* narrow: the rail flips horizontal (consumer's scope attribute
+             rides ...attributes onto the component root, so these apply) */
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
             display: none;
           }
         }

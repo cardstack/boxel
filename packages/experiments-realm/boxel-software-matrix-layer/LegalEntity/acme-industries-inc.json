@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "legalName": "Acme Industries, Inc.",
+      "entityType": "corporation",
+      "jurisdiction": "Illinois",
+      "registrationNumber": "IL-58201377",
+      "taxId": "36-4417720",
+      "signatoryName": "Jordan Weber",
+      "signatoryTitle": "VP Operations",
+      "signatoryEmail": "contracts@acme-industries.example",
+      "notes": "Counterparty on MSA-2026-0117. Signing authority for Acme is theirs to attest; we record the signer as named on the executed copy.",
+      "cardInfo": {
+        "name": "Acme Industries, Inc."
+      },
+      "registeredAddress": {
+        "addressLine1": "1200 Industrial Parkway",
+        "addressLine2": null,
+        "city": "Chicago",
+        "state": "IL",
+        "postalCode": "60607",
+        "poBoxNumber": null,
+        "country": {
+          "name": "United States",
+          "code": "US"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../legal-entity",
+        "name": "LegalEntity"
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "SignatureBlockField",
+        "module": "../signature-block-field"
+      },
+      "specType": "field",
+      "readMe": "## Signature Block (SB)\n\nOne line on the signature page, as a `containsMany` on the document (Contract today; Amendment, Addendum and NDA next). Fields: `party` (Legal Party Role), `signatory` (`linksTo` Signatory — our side, where authority lives), `signerName`/`signerTitle` (the counterparty's signer as we were told — their authority is theirs to attest, not ours to check), `signingOrder` (1-based, strict), `lineStatus` (pending → requested → signed | declined — named `lineStatus` because a nested field called `status` inherits the root card's status configuration), `requestedAt`, `signedAt`, `signatureRef` (envelope id or checksum). Computed: `displayName`, `displayTitle`, `entityName`, `isInternal`.\n\n`lineStatus` is the provider's word for the LINE. It never says \"executed\" — execution is a property of the whole document and belongs to Contract `status`, written only by Execute Contract.\n\n### The ceremony contract (exported pure functions)\n\n- `verifyCeremony(blocks, contractValue, contractType)` → findings: missing order/entity/name, duplicate order, authority failure via `Signatory.canSign` (inactive, type not covered, value over ceiling), declined, signed-without-reference, out-of-order signing (a later line signed while an earlier one is open, or signedAt earlier than a predecessor's).\n- `nextBlockToRequest(blocks)` → the lowest-order pending line whose predecessors are all signed; undefined when the ceremony is waiting or finished.\n- `ceremonyState(blocks)` → not started / in progress / complete / declined.\n\nSignature Block View renders these; Request Signature, Verify Signature and Execute Contract enforce them. One definition, four readers — the screen and the guards cannot disagree.\n\n### Formats\n\n- **atom** — `2. Priya Nair · Signed` with a status pill.\n- **embedded** — a document-grade block: party, signer and title, status with date, authority ceiling, reference.\n- **edit** — all stored inputs.\n\n### Example\n\nContract — Acme Industries MSA 2026 (`signatureBlocks`): line 1 the counterparty's VP Operations (named, no authority record), line 2 our General Counsel via her Signatory card; both signed in order with provider references. The inline example is line 1's attributes.\n\n### Non-goals\n\nNo e-signature provider integration — `signatureRef` is provider-agnostic. Not a Signatory (authority record) and not a Legal Entity (party record) — it links to both.",
+      "cardInfo": {
+        "name": "Signature Block",
+        "summary": "One signature line on a document: party, signer (our Signatory or the counterparty's named signer), signing order, status, dates, provider reference — plus the pure ceremony checks every command shares."
+      },
+      "containedExamples": [
+        {
+          "party": {
+            "role": "customer",
+            "definedTerm": "the Customer"
+          },
+          "signerName": "Jordan Weber",
+          "signerTitle": "VP Operations",
+          "signingOrder": 1,
+          "requestedAt": "2026-07-10T09:00:00.000Z",
+          "signedAt": "2026-07-13T15:42:00.000Z",
+          "signatureRef": "docusign:9f2c4e1a-acme-msa-2026",
+          "lineStatus": "signed"
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../signature-block-field",
+              "name": "SignatureBlockField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

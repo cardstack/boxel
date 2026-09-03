@@ -10,12 +10,32 @@
       "changedTerms": "Section 2.1 (Term) is amended to read: \"…continuing through December 31, 2026.\"",
       "cardInfo": {
         "name": "Amendment No. 1 — MSA Northwind"
-      }
+      },
+      "changedClauses": [
+        {
+          "section": "§ 2.1",
+          "pinnedRevision": "2026-03-01"
+        },
+        {
+          "section": "§ 6",
+          "pinnedRevision": "2026-01-10"
+        }
+      ]
     },
     "relationships": {
       "contract": {
         "links": {
           "self": "../Contract/msa-northwind"
+        }
+      },
+      "changedClauses.0.clause": {
+        "links": {
+          "self": "../Clause/auto-renewal-12-months"
+        }
+      },
+      "changedClauses.1.clause": {
+        "links": {
+          "self": "../Clause/payment-terms-net-30"
         }
       }
     },

@@ -19,6 +19,10 @@ import { Clause, ClauseTypeField, clauseTypeLabel } from './clause';
 import { Contract } from './contract';
 import { StatePill } from './components/state-pill';
 import type { Hue } from './utils/index';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { EditSectionNav } from './components/edit-section-nav';
 
 /**
  * What THIS contract actually says for one provision, next to what it was
@@ -150,6 +154,180 @@ export class ContractClause extends CardDef {
    * reads the summary and then checks the diff — which means the summary has to
    * be the thing that is right.
    */
+  /**
+   * Edit — one clause as it appears in a contract, and how far it departs from the playbook.
+   * Grouped by task, not schema order; EditSectionNav is the table of
+   * contents (edit-card Rule 0b, family rule: every grouped edit gets the rail).
+   */
+  static edit = class Edit extends Component<typeof ContractClause> {
+    @tracked activeSection = 'context';
+
+    sections = [
+      { id: 'context', label: 'Where it sits' },
+      { id: 'text', label: 'As agreed' },
+      { id: 'deviation', label: 'Deviation' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.cclause-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='cclause-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "context") "focused"}}'
+              data-sect='context'
+            >
+              <h3>Where it sits</h3>
+              <FieldContainer @label='Contract' @vertical={{true}}>
+                <@fields.contract />
+              </FieldContainer>
+              <div class='row cols-2'>
+                <FieldContainer @label='Library clause it is measured against' @vertical={{true}}>
+                  <@fields.standardClause />
+                </FieldContainer>
+                <FieldContainer @label='Type' @vertical={{true}}>
+                  <@fields.clauseType />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "text") "focused"}}'
+              data-sect='text'
+            >
+              <h3>As agreed
+                <span class='sect-hint'>the words in this contract — compare against the standard text</span></h3>
+              <FieldContainer @label='Actual text' @vertical={{true}}>
+                <@fields.actualText />
+              </FieldContainer>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "deviation") "focused"}}'
+              data-sect='deviation'
+            >
+              <h3>Deviation
+                <span class='sect-hint'>recorded legal judgment, not a text diff</span></h3>
+              <FieldContainer @label='Severity' @vertical={{true}}>
+                <@fields.deviationSeverity />
+              </FieldContainer>
+              <FieldContainer @label='What was conceded, why, and in exchange for what' @vertical={{true}}>
+                <@fields.deviationNotes />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .cclause-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* root is the scroller, so sticky pins the rail; the legal family
+           asserts no brand ink, so the rail keeps its default fg/bg pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @container edit (width < 640px) {
+          .row.cols-2,
+          .row.cols-3,
+          .row.cols-4 {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof ContractClause> {
     get hue(): Hue {
       return (

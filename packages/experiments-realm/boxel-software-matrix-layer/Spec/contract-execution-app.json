@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ContractExecutionApp",
+        "module": "../contract-execution-app"
+      },
+      "specType": "card",
+      "readMe": "## Contract Execution App (CE)\n\n`prefersWideFormat` app card, `practiceName` its only stored field. Everything else is live realm queries over the shared blocks: Contract, ContractClause, Clause, ContractTemplate, ContractRequest, Signatory, ApprovalRule, AuditEntry, ContractVersion, Obligation.\n\n### What it hosts\n\n- **Home** — the Legal Home block: notice deadlines ranked by days-to-notice, awaiting signature, open deviations; clicking a row lands the contract in the Workspace.\n- **Workspace** — one contract at a time: the Contract Workspace block (Clause Navigator + versions + modifications) over the picked contract, the Signature Block View ceremony strip, and the four ceremony commands as buttons (Request Signature / Verify Signatures / Execute Contract / Generate Document) with their guard messages surfaced inline.\n- **Repository / Clauses / Signatories** — CollectionPanel (query + search + grid/table + create) over the respective cards.\n- **Approvals** — the approval-chain queue with Approve / Reject / Delegate / Hold decisions written to the contract's `approvalChain`.\n- **Notices** — contracts ranked by days-to-notice (the notice deadline, not the end date).\n- **Obligations / Audit / Templates / Requests** — Table over the linked records.\n- The same ceremony strip also renders on each Contract's isolated view, so the card and the app cannot disagree.\n\n### Composition contract\n\nThe app consumes blocks unchanged (consume-don't-fork): no override CSS on a block's internals, expression only through block args. Gaps found here flow upstream into the block.\n\n### Example\n\nThe one instance in this realm — Cardstack Legal.\n\n### Non-goals\n\nNot the Contract model, not e-signature integration, not matter management. It composes; it does not own data.",
+      "cardInfo": {
+        "name": "Contract Execution App",
+        "summary": "The Contract Lifecycle Desk shell: Home (Legal Home), Workspace (Contract Workspace + signature ceremony + the four ceremony commands), repository, approvals, notices, obligations and audit over the shared Contract block."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ContractExecutionApp/northlight"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

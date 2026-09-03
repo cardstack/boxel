@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "LegalPartyRoleField",
+        "module": "../legal-party-role-field"
+      },
+      "specType": "field",
+      "readMe": "## Legal Party Role (LP)\n\nA contract is not \"between Acme and us\"; it is between Acme Industries, Inc. as **Customer** and Cardstack Inc. as **Supplier**. This field stores that pairing: `role` (a closed enum of the standard transactional roles, listed in their natural pairs) and `entity` (`linksTo` Legal Entity), plus an optional `definedTerm` for how the clauses name the party (\"the Supplier\"). `roleLabel` is computed from the two.\n\nThe same entity is Licensor on one agreement and Licensee on the next, so the capacity lives beside the link rather than on the entity.\n\n### Formats\n\n- **atom** — `Acme Industries, Inc.` with the role as muted chrome.\n- **embedded** — role header over the Legal Entity's own embedded view; an explicit \"no legal entity linked\" state so a role never floats with nobody behind it.\n- **edit** — role select + entity chooser + defined term.\n\n### Example\n\nContract — Acme Industries MSA 2026 (`parties`, two entries) and inside each Signature Block (`party`). The inline example carries the attributes; the entity link is on the linked contract.\n\n### Consumers\n\nContract (`parties`), Signature Block (`party`). Generate Document reads both to write the Parties section and the signature lines.\n\n### Non-goals\n\nNot a contact: no people, emails or phone numbers — those are on the Legal Entity and its signatories. No authority — that is Signatory's job.",
+      "cardInfo": {
+        "name": "Legal Party Role",
+        "summary": "One side of an agreement: which Legal Entity, in what capacity (Customer / Supplier / Licensor / Licensee / Discloser / Recipient / Guarantor)."
+      },
+      "containedExamples": [
+        {
+          "role": "customer",
+          "definedTerm": "the Customer"
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../legal-party-role-field",
+              "name": "LegalPartyRoleField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

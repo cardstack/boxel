@@ -19,13 +19,61 @@
       "autoRenews": true,
       "renewalNoticeDays": 60,
       "cardInfo": {
-        "name": "MSA — Northwind"
+        "name": "MSA — Northwind",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "fullText": "# Master Services Agreement — Northwind\nReference MSA-2026-011\n\n## Parties\n_No parties recorded._\n\n## Term and value\nThis agreement runs from 1 Feb 2026 to 15 Oct 2026.\nTotal contract value: **$240,000.00**.\n\n## Terms\n_No clauses attached to this agreement._\n\n## Signatures\n_No signature blocks recorded._\n\n---\n_Generated 3 Sept 2026 from the clause library and the agreement record. Deviations are marked where the wording departs from approved text._",
+      "handlesSensitiveData": false,
+      "signatureRequestedAt": null,
+      "executedCopyUrl": null,
+      "terms": null,
+      "documentUrl": null,
+      "contractType": null,
+      "risk": {
+        "criteria": [],
+        "notes": null
+      },
+      "approvalChain": {
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-09-03T00:58:19.329Z",
+            "comment": "Required by: Legal",
+            "openedAt": "2026-09-03T00:57:37.993Z",
+            "holdReason": null,
+            "conditions": null
+          }
+        ],
+        "startedAt": "2026-09-03T00:57:37.993Z"
+      },
+      "parties": [],
+      "signatureBlocks": [],
+      "effectivePeriod": {
+        "effectiveDate": null,
+        "endDate": null,
+        "autoRenews": false,
+        "renewalTermMonths": null,
+        "noticeDays": null
+      },
+      "governingLaw": {
+        "jurisdiction": null,
+        "venue": null,
+        "notes": null
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../contract",
         "name": "Contract"
+      }
+    },
+    "relationships": {
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/mara-lindqvist"
+        }
       }
     }
   }

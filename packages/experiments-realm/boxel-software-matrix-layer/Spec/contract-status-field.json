@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ContractStatusField",
+        "module": "../contract-status"
+      },
+      "specType": "field",
+      "readMe": "## Contract Status (CS)\n\nA configuration of the shared `statusField` factory — the constrained dropdown, StatePill rendering and transition graph come from the factory; this module contributes one domain's vocabulary.\n\n### The ladder\n\n`draft` → `negotiating` → `in review` → `approved` → `out for signature` → `signed` (Signed & in force). Outcomes: `expired` (term ran out; renewable) and `terminated` (ended early; terminal). Exported as `CONTRACT_STATUSES` (value, label, hue, meaning), `CONTRACT_PIPELINE` (the ordered stages, for rails and boards) and `CONTRACT_TRANSITIONS`.\n\n### Allowed transitions\n\nEvery non-terminal state may reach `terminated` (a deal can always collapse). Backward moves are legal but narrow: review → negotiating, out for signature → negotiating — but nothing returns to `draft` once the counterparty has seen it. `expired` → `signed` models renewal without a new record.\n\n### Who writes what\n\n- `approved` → `out for signature`: **Request Signature** only (one line at a time when signature blocks exist; authority re-checked each call).\n- `out for signature` → `signed`: **Execute Contract** only — the sole writer of the in-force state, and it snapshots a ContractVersion in the same write. With signature blocks present it refuses until every line is signed and Verify Signature is clean.\n- `expired` / `terminated`: set by the desk (renewal decision), never by the ceremony.\n\nHelpers: `contractStatusLabel`, `isInForce` (=== signed), `contractProgress` (0–1 along the pipeline).\n\n### Example\n\nA primitive status value cannot be held as an inline example; the linked in-use example is Contract — Acme Industries MSA 2026 (`status: signed`).\n\n### Non-goals\n\nNot a signature status — the provider's word for each line lives on Signature Block, the envelope's on Contract `signatureStatus`. Not an approval chain.",
+      "cardInfo": {
+        "name": "Contract Status",
+        "summary": "The contract lifecycle as a statusField configuration: draft → negotiating → in review → approved → out for signature → signed, with expired/terminated outcomes and an explicit transition map."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

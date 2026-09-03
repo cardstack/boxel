@@ -1637,3 +1637,4 @@ function getCardOf(row: Row): CardDef {
 function isScored(score: number): boolean {
   return score >= 0;
 }
+// touched for re-index

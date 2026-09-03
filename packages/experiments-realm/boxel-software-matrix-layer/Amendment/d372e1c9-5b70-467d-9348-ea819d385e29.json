@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amendmentNumber": null,
+      "effectiveDate": null,
+      "changesSummary": null,
+      "changedTerms": null,
+      "status": null,
+      "changedClauses": [],
+      "executedOn": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../amendment",
+        "name": "Amendment"
+      }
+    }
+  }
+}

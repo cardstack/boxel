@@ -10,9 +10,13 @@ import {
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import TextAreaField from '@cardstack/base/text-area';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { Employee } from './employee';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 
 function krProgress(kr: KeyResultField | undefined): number {
   if (!kr) {
@@ -437,6 +441,173 @@ export class Okr extends CardDef {
           }
           .fit-name {
             -webkit-line-clamp: 1;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // The form for writing an OKR, grouped the way an OKR is authored: state
+  // the objective, attach measurable key results, then note anything else.
+  // The progress numbers (progressPercent, overallProgress) are DERIVED from
+  // the KRs' start/target/current — they are computed fields and never appear
+  // here. A left anchor rail (EditSectionNav) tracks the three sections.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'objective';
+
+    sections = [
+      { id: 'objective', label: 'Objective' },
+      { id: 'key-results', label: 'Key Results' },
+      { id: 'notes', label: 'Notes' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.okr-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='okr-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — responsive rows live inside }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "objective") "focused"}}'
+            data-sect='objective'
+          >
+            <h3>Objective</h3>
+            <FieldContainer @label='Objective' @vertical={{true}}>
+              <@fields.objective />
+            </FieldContainer>
+            <div class='row'>
+              <FieldContainer @label='Period (e.g. FY2026 Q3)' @vertical={{true}}>
+                <@fields.period />
+              </FieldContainer>
+              <FieldContainer @label='Owner' @vertical={{true}}>
+                <@fields.owner />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect {{if (eq this.activeSection "key-results") "focused"}}'
+            data-sect='key-results'
+          >
+            <h3>Key Results
+              <span class='sect-hint'>progress is derived from start / target /
+                current — never typed in</span></h3>
+            <FieldContainer
+              @label='Key results (description, start, target, current, unit)'
+              @vertical={{true}}
+            >
+              <@fields.keyResults />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect {{if (eq this.activeSection "notes") "focused"}}'
+            data-sect='notes'
+          >
+            <h3>Notes</h3>
+            <FieldContainer @label='Notes' @vertical={{true}}>
+              <@fields.notes />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .okr-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state */
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 10%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

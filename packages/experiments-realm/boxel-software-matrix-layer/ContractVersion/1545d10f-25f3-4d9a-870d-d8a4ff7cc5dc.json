@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "contractTitle": "Brightleaf Studio — Pilot Terms",
+      "versionNumber": 1,
+      "effectiveDate": "2026-09-03",
+      "documentUrl": null,
+      "summary": "Original execution",
+      "valueAtVersion": {
+        "amount": 6800,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "endDateAtVersion": "2026-11-14",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/brightleaf-pilot-terms"
+        }
+      },
+      "executedBy": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-version",
+        "name": "ContractVersion"
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ import {
   contains,
   field,
   linksTo,
+  linksToMany,
   StringField,
 } from '@cardstack/base/card-api';
 import UrlField from '@cardstack/base/url';
@@ -15,6 +16,11 @@ import { SearchCardsByQueryCommand } from '@cardstack/boxel-host/commands/search
 import { Contract } from '../contract';
 import { ContractVersion } from '../contract-version';
 import { Employee } from '../employee';
+import {
+  verifyCeremony,
+  ceremonyIsClean,
+  ceremonyState,
+} from '../signature-block-field';
 
 // Execute Contract — the single writer for the moment a contract comes into
 // force: out-for-signature → signed, signatureStatus `signed`, signedAt
@@ -29,6 +35,12 @@ export class ExecuteContractInput extends CardDef {
     description: 'Link to the signed PDF, if any',
   });
   @field realm = contains(StringField);
+  /**
+   * Existing snapshots for this contract, when the caller already holds them
+   * (an app with a live ContractVersion query). Optional: absent, the command
+   * searches — which only reaches the current user's own realms.
+   */
+  @field priorVersions = linksToMany(() => ContractVersion);
 }
 
 export class ExecuteContractResult extends CardDef {
@@ -74,20 +86,68 @@ export default class ExecuteContractCommand extends Command<
       );
     }
 
+    // ---- Ceremony guard (desk spec) -----------------------------------------
+    // When the contract carries signature blocks, execution is unavailable
+    // until every line is signed AND the ceremony re-verifies clean against
+    // the Signatory cards as they are NOW — a signer deactivated after the
+    // request went out fails here. There is no path to `signed` around an
+    // open or out-of-authority line.
+    let blocks = contract.signatureBlocks ?? [];
+    if (blocks.length) {
+      let state = ceremonyState(blocks);
+      if (state !== 'complete') {
+        let open = blocks
+          .filter((b) => b && b.lineStatus !== 'signed')
+          .map((b) => `line ${b.signingOrder} (${b.displayName}): ${b.lineStatus ?? 'pending'}`);
+        throw new Error(
+          `Cannot execute — the signature ceremony is ${state}:\n  ${open.join('\n  ')}`,
+        );
+      }
+      let findings = verifyCeremony(
+        blocks,
+        contract.value?.amount,
+        contract.contractType,
+      );
+      if (!ceremonyIsClean(findings)) {
+        throw new Error(
+          'Cannot execute — signature verification failed:\n' +
+            findings
+              .filter((f) => f.level === 'block')
+              .map((f) =>
+                f.order
+                  ? `  line ${f.order} (${f.signer}): ${f.message}`
+                  : `  ${f.message}`,
+              )
+              .join('\n'),
+        );
+      }
+    }
+
     // Next version number: count existing snapshots for this contract.
     let versionNumber = 1;
+    let prior = ((input.priorVersions ?? []) as ContractVersion[]).filter(
+      (v) => {
+        try {
+          return v && (!v.contract?.id || v.contract.id === contract!.id);
+        } catch {
+          return Boolean(v);
+        }
+      },
+    );
+    if (prior.length) {
+      versionNumber = Math.max(0, ...prior.map((v) => v.versionNumber ?? 0)) + 1;
+    }
     let ref = identifyCard(ContractVersion);
-    if (ref) {
+    if (!prior.length && ref) {
       let search = new SearchCardsByQueryCommand(this.commandContext);
-      let result = await search.execute({ query: { filter: { type: ref } } });
+      // Filter on the relationship in the query: search results arrive with
+      // links unresolved, so a client-side `v.contract?.id` check drops every
+      // row and the version counter never advances past 1.
+      let result = await search.execute({
+        query: { filter: { on: ref, eq: { 'contract.id': contract.id } } },
+      });
       let versions = ((result.instances ?? []) as ContractVersion[]).filter(
-        (v) => {
-          try {
-            return v.contract?.id === contract!.id;
-          } catch {
-            return false;
-          }
-        },
+        Boolean,
       );
       versionNumber =
         Math.max(0, ...versions.map((v) => v.versionNumber ?? 0)) + 1;

@@ -7,10 +7,7 @@
         "module": "../commands/request-signature-command"
       },
       "specType": "command",
-      "isCard": false,
-      "isField": false,
-      "isComponent": false,
-      "readMe": "## Request Signature (RS)\n\nSingle writer for approved → out-for-signature, following the Contract block’s own transition map: counterparties never see unapproved text. Stamps `signatureStatus: pending`, the request date (local calendar day), and the carrying provider.\n\n### Example\n\nNatural target: the linked MSA — Northwind (already signed; running against it demonstrates the guard).\n\n### Non-goals\n\nNo e-signature API integration — this records that the request went out, so the pipeline can hold the contract accountable.",
+      "readMe": "## Request Signature (RS)\n\nSingle writer for approved → out-for-signature, following the Contract block’s own transition map: counterparties never see unapproved text. Stamps `signatureStatus: pending`, the request date (local calendar day), and the carrying provider.\n\n### Example\n\nNatural target: the linked MSA — Northwind (already signed; running against it demonstrates the guard).\n\n### Non-goals\n\nNo e-signature API integration — this records that the request went out, so the pipeline can hold the contract accountable.\n\n### Desk-spec extension (2026-09-02)\n\nWhen the contract carries `signatureBlocks`, the request goes out ONE LINE AT A TIME in `signingOrder`: from `approved` it sends line 1; from `out for signature` it sends the next pending line whose predecessors have all signed. Every call re-runs the authority check (`Signatory.canSign` via `verifyCeremony`) against current data and refuses with per-line reasons. Order violations are therefore impossible, not merely discouraged. Contracts without blocks keep the original single-step behaviour.",
       "cardInfo": {
         "name": "Request Signature",
         "summary": "approved → out for signature; stamps signatureStatus, request date, provider."

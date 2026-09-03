@@ -11,6 +11,7 @@ import DateField from '@cardstack/base/date';
 import NumberField from '@cardstack/base/number';
 import TextAreaField from '@cardstack/base/text-area';
 import BooleanField from '@cardstack/base/boolean';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { LineItem } from './line-item';
 import { Vendor } from './vendor';
@@ -18,6 +19,9 @@ import { VendorProfile } from './vendor-profile';
 import { Rfq } from './rfq';
 import { formatMoney, sumLineItems } from './money';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 function isPastDay(d?: Date | null): boolean {
   if (!d) {
@@ -373,6 +377,192 @@ export class VendorQuote extends CardDef {
             margin-top: 0;
             margin-left: auto;
             gap: var(--boxel-sp-xs);
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Grouped by how the buyer transcribes an inbound quote (whose quote for
+  // which RFQ → the priced lines → the fine print), not schema order. Three
+  // sections — no nav rail (edit-card Rule 0). totalAmount, isStale, and
+  // title are computed (computeVia) and deliberately excluded.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Quote Identity' },
+      { id: 'lines', label: 'Pricing Lines' },
+      { id: 'terms', label: 'Terms & Validity' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.vq-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='vq-edit'>
+        {{! responsive grid lives on the inner wrapper — the container
+            element cannot be restyled by its own query (edit-card Rule 1) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "identity") "focused"}}'
+            data-sect='identity'
+          >
+            <h3>Quote Identity</h3>
+            <div class='row'>
+              <FieldContainer @label='Vendor' @vertical={{true}}>
+                <@fields.vendor />
+              </FieldContainer>
+              <FieldContainer @label='Vendor profile' @vertical={{true}}>
+                <@fields.vendorProfile />
+              </FieldContainer>
+              <FieldContainer @label='In response to RFQ' @vertical={{true}}>
+                <@fields.rfq />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect lines {{if (eq this.activeSection "lines") "focused"}}'
+            data-sect='lines'
+          >
+            <h3>Pricing Lines
+              <span class='sect-hint'>the quote total is computed from these
+                lines</span></h3>
+            <FieldContainer
+              @label='Lines (description, qty, unit price)'
+              @vertical={{true}}
+            >
+              <@fields.lineItems />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect {{if (eq this.activeSection "terms") "focused"}}'
+            data-sect='terms'
+          >
+            <h3>Terms &amp; Validity</h3>
+            <div class='row two'>
+              <FieldContainer @label='Lead time (days)' @vertical={{true}}>
+                <@fields.leadTimeDays />
+              </FieldContainer>
+              <FieldContainer @label='Valid until' @vertical={{true}}>
+                <@fields.validUntil />
+              </FieldContainer>
+            </div>
+            <FieldContainer @label='Notes' @vertical={{true}}>
+              <@fields.notes />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .vq-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE — a linked
+             Theme overrides via --procurement-ink */
+          --vq-ink: var(--procurement-ink, #27306b);
+          --vq-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--vq-ink);
+          --edit-section-nav-ink-fg: var(--vq-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--vq-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--vq-ink) 12%, transparent);
+        }
+        .sect.lines {
+          border-left: 3px solid var(--vq-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.two {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

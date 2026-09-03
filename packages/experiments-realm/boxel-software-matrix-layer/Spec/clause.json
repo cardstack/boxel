@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Clause",
+        "module": "../clause"
+      },
+      "specType": "card",
+      "readMe": "## Clause (Cl)\n\nThe clause library. `name`, `clauseType` (payment / liability / indemnification / termination / confidentiality / data_protection / force_majeure / auto_renewal / other), `standardText` (the approved wording), `riskLevel` (low → critical, the same four grades as the contract's RiskRatingField so one palette serves both), `guidance` (when to use it and what must never be conceded without sign-off), `ownerRole`, `reviewedAt` (approved language goes stale — a first-class date, not metadata).\n\nA Clause is NOT a contract term: it has no parties, dates or value. It is a template fragment. The instance that appears in an agreement is **ContractClause**, which links back here and records `actualText` and `deviationSeverity`; a deviation is precisely \"actualText departs from this standardText\". Clause Reference (field) pins a document to the revision (`reviewedAt`) it relied on, so re-reviewing the library never rewrites history.\n\nTyped subclasses — Confidentiality Clause, Termination Clause, Payment Clause — adopt from this card, so the library and the Clause Navigator treat them uniformly.\n\n### Formats\n\nisolated (text, guidance, risk, where-used via query), embedded, atom, fitted (attribute-only — prerendered fitted does not resolve links).\n\n### Example\n\nLiability Cap — 12 Months Fees; the Acme MSA deviates from it.\n\n### Non-goals\n\nNo text-level diffing (deviation severity is recorded judgment). No versioning of the text itself — re-review updates `reviewedAt`; documents pin to it via Clause Reference.",
+      "cardInfo": {
+        "name": "Clause",
+        "summary": "A pre-approved piece of contract language owned by legal — the reference every ContractClause is measured against; without a library there is no such thing as a deviation."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Clause/liability-cap-12-months"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Clause/auto-renewal-12-months"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

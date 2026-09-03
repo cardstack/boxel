@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/verify-signature-command"
+      },
+      "specType": "command",
+      "readMe": "## Verify Signature (VS)\n\nInput: `contract`. Output: `clean`, `ceremonyState`, `blockingCount`, `findings[]` (one sentence each, prefixed with the signing order), `nextToRequest`, `message`.\n\nRe-fetches the contract (never trusts the caller's load state), then runs `verifyCeremony` from signature-block-field against the Signatory cards **as they are now** — authority ceiling vs contract value, contract type covered, still active, every line named and backed by a legal entity, signing order unique and respected, every signed line carrying a reference. A signatory deactivated after the request went out fails here even though it passed at request time; that is the point of re-deriving rather than caching.\n\nWrites nothing. It is the audit read; Request Signature and Execute Contract call the same function as their guard.\n\n### Example\n\nNatural target: Contract — Acme Industries MSA 2026 (two signed lines; returns clean, ceremony complete).\n\n### Non-goals\n\nNo provider callbacks or webhook ingestion. Does not mark anything signed — a line's `status` is set by the provider record (or by hand for wet ink).",
+      "cardInfo": {
+        "name": "Verify Signature",
+        "summary": "Re-derives every ceremony check from current Signatory data and returns findings; writes nothing. Run before requesting and inside Execute Contract."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

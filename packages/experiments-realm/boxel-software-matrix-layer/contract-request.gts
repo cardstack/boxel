@@ -24,6 +24,10 @@ import { StatePill } from './components/state-pill';
 import type { Hue } from './components/state-pill';
 import { formatMoney } from './money';
 import { formatDay } from './format';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { EditSectionNav } from './components/edit-section-nav';
 
 /**
  * CONTRACT REQUEST — the self-service intake the spec asks for.
@@ -108,6 +112,198 @@ export class ContractRequest extends CardDef {
    * not, and a declined request keeps its reason at the top rather than buried
    * — "what did we refuse, and why" is the thing people come back to ask.
    */
+  /**
+   * Edit — the intake form: what someone needs, how big and how soon, and what legal decided.
+   * Grouped by task, not schema order; EditSectionNav is the table of
+   * contents (edit-card Rule 0b, family rule: every grouped edit gets the rail).
+   */
+  static edit = class Edit extends Component<typeof ContractRequest> {
+    @tracked activeSection = 'ask';
+
+    sections = [
+      { id: 'ask', label: 'The ask' },
+      { id: 'scope', label: 'Scope & timing' },
+      { id: 'decision', label: 'Legal decision' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.crequest-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='crequest-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "ask") "focused"}}'
+              data-sect='ask'
+            >
+              <h3>The ask</h3>
+              <FieldContainer @label='What the contract is for' @vertical={{true}}>
+                <@fields.whatFor />
+              </FieldContainer>
+              <div class='row cols-3'>
+                <FieldContainer @label='Type' @vertical={{true}}>
+                  <@fields.contractType />
+                </FieldContainer>
+                <FieldContainer @label='Counterparty' @vertical={{true}}>
+                  <@fields.counterparty />
+                </FieldContainer>
+                <FieldContainer @label='Requested by' @vertical={{true}}>
+                  <@fields.requestedBy />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "scope") "focused"}}'
+              data-sect='scope'
+            >
+              <h3>Scope & timing</h3>
+              <div class='row cols-3'>
+                <FieldContainer @label='Estimated value' @vertical={{true}}>
+                  <@fields.estimatedValue />
+                </FieldContainer>
+                <FieldContainer @label='Needed by' @vertical={{true}}>
+                  <@fields.neededBy />
+                </FieldContainer>
+                <FieldContainer @label='Involves sensitive data' @vertical={{true}}>
+                  <@fields.involvesSensitiveData />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Background' @vertical={{true}}>
+                <@fields.background />
+              </FieldContainer>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "decision") "focused"}}'
+              data-sect='decision'
+            >
+              <h3>Legal decision
+                <span class='sect-hint'>the intake outcome; the resulting contract links once drafted</span></h3>
+              <div class='row cols-2'>
+                <FieldContainer @label='Status' @vertical={{true}}>
+                  <@fields.status />
+                </FieldContainer>
+                <FieldContainer @label='Resulting contract' @vertical={{true}}>
+                  <@fields.resultingContract />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Decision note' @vertical={{true}}>
+                <@fields.decisionNote />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .crequest-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* root is the scroller, so sticky pins the rail; the legal family
+           asserts no brand ink, so the rail keeps its default fg/bg pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @container edit (width < 640px) {
+          .row.cols-2,
+          .row.cols-3,
+          .row.cols-4 {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof ContractRequest> {
     get declined() {
       return this.args.model?.status === 'declined';

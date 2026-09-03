@@ -2,6 +2,7 @@ import {
   CardDef,
   Component,
   contains,
+  containsMany,
   field,
   linksTo,
   realmURL,
@@ -9,7 +10,10 @@ import {
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { and } from '@cardstack/boxel-ui/helpers';
+import { and, eq } from '@cardstack/boxel-ui/helpers';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { EditSectionNav } from './components/edit-section-nav';
 import { codeRef, type getCards } from '@cardstack/runtime-common';
 import type Owner from '@ember/owner';
 import StringField from 'https://cardstack.com/base/string';
@@ -29,6 +33,11 @@ import { Employee } from './employee';
 import { ApprovalChainField } from './approval-chain-field';
 import { ContractStatusField, contractStatusLabel } from './contract-status';
 import { RiskRatingField } from './contract-risk';
+import { LegalPartyRoleField } from './legal-party-role-field';
+import { SignatureBlockField } from './signature-block-field';
+import { EffectivePeriodField } from './effective-period-field';
+import { GoverningLawField } from './governing-law-field';
+import { SignatureBlockView } from './components/signature-block-view';
 
 import {
   ContractTypeField,
@@ -222,6 +231,23 @@ export class Contract extends CardDef {
   /** Set on an amendment; the lineage is walked from here to the root. */
   @field parentContract = linksTo(() => Contract);
 
+  // ---- Contract Lifecycle Desk (additive) ---------------------------------
+  // Every field below is optional, so instances written before this extension
+  // deserialize unchanged and every existing consumer keeps working.
+  //
+  // Who is bound, in what capacity — the clauses' "Supplier" and "Customer".
+  @field parties = containsMany(LegalPartyRoleField);
+  // The signature ceremony: one line per signer, in signing order. Written by
+  // Request Signature (status → requested) and read by Verify Signature and
+  // Execute Contract, which refuse while any line is unsigned or out of
+  // authority. Nothing here is a contract status — that stays on `status`.
+  @field signatureBlocks = containsMany(SignatureBlockField);
+  // Obligations window with the notice deadline computed. Coexists with the
+  // older flat startDate/endDate/autoRenews/renewalNoticeDays; when set, the
+  // structured period is the one the desk reads.
+  @field effectivePeriod = contains(EffectivePeriodField);
+  @field governingLaw = contains(GoverningLawField);
+
   @field termMonths = contains(NumberField, {
     computeVia: function (this: Contract) {
       if (!this.startDate || !this.endDate) return undefined;
@@ -244,6 +270,13 @@ export class Contract extends CardDef {
    */
   @field noticeBy = contains(StringField, {
     computeVia: function (this: Contract) {
+      // The structured Effective Period, when set, is the desk's source of
+      // truth for the deadline; the flat fields below are the legacy path.
+      let p = this.effectivePeriod;
+      if (p?.endDate && p.autoRenews) {
+        let d = p.noticeDeadline;
+        if (d) return calendarDay(new Date(d));
+      }
       if (!this.endDate || !this.autoRenews) return undefined;
       let days = this.renewalNoticeDays;
       if (typeof days !== 'number' || !Number.isFinite(days)) return undefined;
@@ -282,6 +315,324 @@ export class Contract extends CardDef {
         .join(' \u00b7 ');
     },
   });
+
+  /**
+   * Edit — grouped the way a contracts manager fills a record in, not in
+   * schema order: who and what → who is bound → when → how much and how risky
+   * → the signature page → approval → the words. Seven sections, so the
+   * EditSectionNav rail is the table of contents (edit-card Rule 0b).
+   *
+   * Command-owned fields (status, signature stamps, fullText) are still
+   * editable here — to correct a record — but each carries a hint saying
+   * which command normally writes it, so a hand edit is a deliberate act.
+   */
+  static edit = class Edit extends Component<typeof Contract> {
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Identity' },
+      { id: 'parties', label: 'Parties & Law' },
+      { id: 'term', label: 'Term' },
+      { id: 'value', label: 'Value & Risk' },
+      { id: 'signature', label: 'Signature' },
+      { id: 'approval', label: 'Approval' },
+      { id: 'text', label: 'Text' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.contract-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='contract-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "identity") "focused"}}'
+              data-sect='identity'
+            >
+              <h3>Identity</h3>
+              <FieldContainer @label='Title' @vertical={{true}}>
+                <@fields.title />
+              </FieldContainer>
+              <div class='row identity'>
+                <FieldContainer @label='Reference' @vertical={{true}}>
+                  <@fields.contractNumber />
+                </FieldContainer>
+                <FieldContainer @label='Type' @vertical={{true}}>
+                  <@fields.contractType />
+                </FieldContainer>
+                <FieldContainer
+                  @label='Status'
+                  @vertical={{true}}
+                >
+                  <@fields.status />
+                  <p class='hint'>Request Signature and Execute Contract move
+                    this; edit only to correct.</p>
+                </FieldContainer>
+              </div>
+              <div class='row'>
+                <FieldContainer @label='Account' @vertical={{true}}>
+                  <@fields.account />
+                </FieldContainer>
+                <FieldContainer @label='Deal' @vertical={{true}}>
+                  <@fields.deal />
+                </FieldContainer>
+                <FieldContainer @label='Owner' @vertical={{true}}>
+                  <@fields.owner />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Parent contract (for SOWs and renewals)' @vertical={{true}}>
+                <@fields.parentContract />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "parties") "focused"}}'
+              data-sect='parties'
+            >
+              <h3>Parties &amp; Law
+                <span class='sect-hint'>the legal persons bound, and whose law reads the words</span></h3>
+              <FieldContainer @label='Parties (entity + capacity)' @vertical={{true}}>
+                <@fields.parties />
+              </FieldContainer>
+              <FieldContainer @label='Governing law and venue' @vertical={{true}}>
+                <@fields.governingLaw />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "term") "focused"}}'
+              data-sect='term'
+            >
+              <h3>Term
+                <span class='sect-hint'>the notice deadline is computed from the period — that is the date that matters</span></h3>
+              <FieldContainer @label='Effective period' @vertical={{true}}>
+                <@fields.effectivePeriod />
+              </FieldContainer>
+              <details class='legacy'>
+                <summary>Legacy term fields (read when no effective period is set)</summary>
+                <div class='row'>
+                  <FieldContainer @label='Start date' @vertical={{true}}>
+                    <@fields.startDate />
+                  </FieldContainer>
+                  <FieldContainer @label='End date' @vertical={{true}}>
+                    <@fields.endDate />
+                  </FieldContainer>
+                  <FieldContainer @label='Renewal notice (days)' @vertical={{true}}>
+                    <@fields.renewalNoticeDays />
+                  </FieldContainer>
+                </div>
+                <FieldContainer @label='Auto-renews' @vertical={{true}}>
+                  <@fields.autoRenews />
+                </FieldContainer>
+              </details>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "value") "focused"}}'
+              data-sect='value'
+            >
+              <h3>Value &amp; Risk</h3>
+              <div class='row value'>
+                <FieldContainer @label='Contract value' @vertical={{true}}>
+                  <@fields.value />
+                </FieldContainer>
+                <FieldContainer @label='Handles sensitive data' @vertical={{true}}>
+                  <@fields.handlesSensitiveData />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Risk assessment' @vertical={{true}}>
+                <@fields.risk />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "signature") "focused"}}'
+              data-sect='signature'
+            >
+              <h3>Signature
+                <span class='sect-hint'>one block per signer, in signing order; our side links a Signatory</span></h3>
+              <FieldContainer @label='Signature blocks' @vertical={{true}}>
+                <@fields.signatureBlocks />
+              </FieldContainer>
+              <div class='row'>
+                <FieldContainer @label='Envelope status' @vertical={{true}}>
+                  <@fields.signatureStatus />
+                  <p class='hint'>command-owned — Request / Execute write it</p>
+                </FieldContainer>
+                <FieldContainer @label='Provider' @vertical={{true}}>
+                  <@fields.signatureProvider />
+                </FieldContainer>
+                <FieldContainer @label='Requested on' @vertical={{true}}>
+                  <@fields.signatureRequestedAt />
+                </FieldContainer>
+              </div>
+              <div class='row'>
+                <FieldContainer @label='Signed on' @vertical={{true}}>
+                  <@fields.signedAt />
+                  <p class='hint'>stamped by Execute Contract</p>
+                </FieldContainer>
+                <FieldContainer @label='Executed copy URL' @vertical={{true}}>
+                  <@fields.executedCopyUrl />
+                </FieldContainer>
+                <FieldContainer @label='Working document URL' @vertical={{true}}>
+                  <@fields.documentUrl />
+                </FieldContainer>
+              </div>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "approval") "focused"}}'
+              data-sect='approval'
+            >
+              <h3>Approval
+                <span class='sect-hint'>built from the approval rules; decisions are recorded on the app's Approvals tab</span></h3>
+              <FieldContainer @label='Approval chain' @vertical={{true}}>
+                <@fields.approvalChain />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "text") "focused"}}'
+              data-sect='text'
+            >
+              <h3>Text</h3>
+              <FieldContainer @label='Key terms (summary)' @vertical={{true}}>
+                <@fields.terms />
+              </FieldContainer>
+              <FieldContainer @label='Full agreement text' @vertical={{true}}>
+                <@fields.fullText />
+                <p class='hint'>Generate Document assembles this from the clauses,
+                  parties, term and signature blocks; edit only to correct.</p>
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .contract-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top; the
+           legal family asserts no brand ink, so the rail keeps its default
+           fg/bg inversion (boxel-theming §4a) */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.value {
+          grid-template-columns: 2fr 1fr;
+        }
+        .legacy {
+          border-top: 1px dashed var(--border, var(--boxel-200));
+          padding-top: var(--boxel-sp-xs);
+        }
+        .legacy summary {
+          cursor: pointer;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .legacy[open] summary {
+          margin-bottom: var(--boxel-sp-sm);
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.value,
+          .identity {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
 
   static atom = class Atom extends Component<typeof Contract> {
     <template>
@@ -531,23 +882,22 @@ export class Contract extends CardDef {
         }
         .name {
           /* Truncate at a line boundary, never mid-glyph: the reader must
-             see an ellipsis rather than half a letter. */
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          line-height: 1.25;
-          font-weight: 600;
-          font-size: 0.8125rem;
+             see an ellipsis rather than half a letter. Single line by
+             default; tall tiles relax this to a 2-line clamp below. */
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          line-height: 1.25;
+          font-weight: 600;
+          font-size: 0.8125rem;
+          flex-shrink: 0;
         }
         .figure {
           white-space: nowrap;
           line-height: 1.25;
           font-weight: 700;
           font-variant-numeric: tabular-nums;
+          flex-shrink: 0;
         }
         .meta {
           line-height: 1.25;
@@ -556,6 +906,7 @@ export class Contract extends CardDef {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          flex-shrink: 0;
         }
         .line-account,
         .line-expiry,
@@ -563,9 +914,51 @@ export class Contract extends CardDef {
         .line-deal {
           display: none;
         }
+        /* Short cells — the edit-form link pill, strips, badges. A column
+           cannot fit here, and flex would shear the one shrinkable row
+           mid-glyph (Rule 1: hide whole rows, never shrink one into a
+           clip). Below 90px the card re-lays as ONE centered row:
+           icon · name · figure · status. */
+        @container fitted-card (max-height: 90px) {
+          .fitted {
+            flex-direction: row;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+          }
+          .top {
+            display: contents;
+          }
+          .status {
+            margin-left: 0;
+            order: 4;
+          }
+          .name {
+            flex: 0 1 auto;
+            min-width: 0;
+          }
+          .figure {
+            margin-left: auto;
+            font-size: 0.8125rem;
+          }
+        }
+        /* Narrow badge: the name is the sole survivor (data is
+           all-or-nothing — a hidden figure beats a truncated one). */
+        @container fitted-card (max-height: 90px) and (max-width: 220px) {
+          .figure,
+          .status {
+            display: none;
+          }
+        }
         /* Each taller tier adds a line rather than just unhiding one, so a
            tile-sized render fills its box instead of trailing off. */
         @container fitted-card (min-height: 170px) {
+          .name {
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+          }
           .line-account,
           .line-expiry {
             display: block;
@@ -638,6 +1031,11 @@ export class Contract extends CardDef {
     // so it must not flash "Loading clauses and obligations…" on every page
     // view. The CLM markers are what say this contract is managed here and is
     // therefore worth waiting on.
+    get hasEffectivePeriod(): boolean {
+      let p = this.args.model?.effectivePeriod;
+      return Boolean(p?.effectiveDate || p?.endDate);
+    }
+
     get isClmManaged(): boolean {
       let m = this.args.model;
       return Boolean(
@@ -753,12 +1151,41 @@ export class Contract extends CardDef {
               <dt>Owner</dt>
               <dd><@fields.owner @format='atom' /></dd>
             {{/if}}
+            {{#if @model.governingLaw.label}}
+              <dt>Governing law</dt>
+              <dd><@fields.governingLaw @format='atom' /></dd>
+            {{/if}}
             {{#if @model.documentUrl}}
               <dt>Executed copy</dt>
               <dd><@fields.documentUrl /></dd>
             {{/if}}
           </dl>
+          {{#if this.hasEffectivePeriod}}
+            <div class='period'>
+              <@fields.effectivePeriod @format='embedded' />
+            </div>
+          {{/if}}
         </section>
+
+        {{#if @model.parties.length}}
+          <section class='panel'>
+            <h2>Parties</h2>
+            <ul class='parties'>
+              {{#each @fields.parties as |Party|}}
+                <li><Party @format='embedded' /></li>
+              {{/each}}
+            </ul>
+          </section>
+        {{/if}}
+
+        {{#if @model.signatureBlocks.length}}
+          <SignatureBlockView
+            @blocks={{@model.signatureBlocks}}
+            @contractValue={{@model.value.amount}}
+            @contractCurrency={{@model.value.currency.code}}
+            @contractType={{@model.contractType}}
+          />
+        {{/if}}
 
         {{#if @model.riskGrade}}
           <section class='panel'>
@@ -954,6 +1381,19 @@ export class Contract extends CardDef {
           border-radius: 8px;
           padding: 1rem 1.125rem;
           background: var(--card, #ffffff);
+        }
+        .period {
+          margin-top: 0.9rem;
+          padding-top: 0.9rem;
+          border-top: 1px solid var(--border, #e5e7eb);
+        }
+        .parties {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1rem;
         }
         h2 {
           margin: 0 0 0.75rem;

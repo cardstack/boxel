@@ -20,6 +20,10 @@ import { Contract } from './contract';
 import { StatePill } from './components/state-pill';
 import { formatMoney } from './money';
 import { formatDay } from './format';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { EditSectionNav } from './components/edit-section-nav';
 
 /**
  * CONTRACT VERSION — an amendment record, so "version history" is a history
@@ -80,6 +84,193 @@ export class ContractVersion extends CardDef {
    * came for and the one they cannot get from the live contract — the contract
    * has since been edited and only shows today.
    */
+  /**
+   * Edit — an append-only snapshot of a contract at execution.
+   * Grouped by task, not schema order; EditSectionNav is the table of
+   * contents (edit-card Rule 0b, family rule: every grouped edit gets the rail).
+   */
+  static edit = class Edit extends Component<typeof ContractVersion> {
+    @tracked activeSection = 'snapshot';
+
+    sections = [
+      { id: 'snapshot', label: 'Snapshot' },
+      { id: 'terms', label: 'Terms at this version' },
+      { id: 'record', label: 'Record' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.cversion-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='cversion-edit'>
+        {{! root is the container + only scroller; the responsive grid lives
+            on this inner wrapper (edit-card Rule 1 corollary) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "snapshot") "focused"}}'
+              data-sect='snapshot'
+            >
+              <h3>Snapshot
+                <span class='sect-hint'>written by Execute Contract / Amend Contract — edit only to correct</span></h3>
+              <FieldContainer @label='Contract' @vertical={{true}}>
+                <@fields.contract />
+              </FieldContainer>
+              <div class='row cols-3'>
+                <FieldContainer @label='Version' @vertical={{true}}>
+                  <@fields.versionNumber />
+                </FieldContainer>
+                <FieldContainer @label='Effective' @vertical={{true}}>
+                  <@fields.effectiveDate />
+                </FieldContainer>
+                <FieldContainer @label='Executed by' @vertical={{true}}>
+                  <@fields.executedBy />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "terms") "focused"}}'
+              data-sect='terms'
+            >
+              <h3>Terms at this version</h3>
+              <div class='row cols-2'>
+                <FieldContainer @label='Value' @vertical={{true}}>
+                  <@fields.valueAtVersion />
+                </FieldContainer>
+                <FieldContainer @label='End date' @vertical={{true}}>
+                  <@fields.endDateAtVersion />
+                </FieldContainer>
+              </div>
+            </section>
+            <section
+              class='sect {{if (eq this.activeSection "record") "focused"}}'
+              data-sect='record'
+            >
+              <h3>Record</h3>
+              <FieldContainer @label='What changed in this version' @vertical={{true}}>
+                <@fields.summary />
+              </FieldContainer>
+              <div class='row cols-2'>
+                <FieldContainer @label='Executed copy URL' @vertical={{true}}>
+                  <@fields.documentUrl />
+                </FieldContainer>
+                <FieldContainer @label='Title as executed' @vertical={{true}}>
+                  <@fields.contractTitle />
+                  <p class='hint'>kept so the history reads even if the contract is renamed</p>
+                </FieldContainer>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .cversion-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* root is the scroller, so sticky pins the rail; the legal family
+           asserts no brand ink, so the rail keeps its default fg/bg pair */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--foreground, var(--boxel-dark));
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--foreground, var(--boxel-dark)) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .hint {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .row {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @container edit (width < 640px) {
+          .row.cols-2,
+          .row.cols-3,
+          .row.cols-4 {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof ContractVersion> {
     get money(): string {
       return (

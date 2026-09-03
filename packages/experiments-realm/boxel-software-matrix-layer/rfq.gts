@@ -18,9 +18,11 @@ import { Vendor } from './vendor';
 import { VendorQuote } from './vendor-quote';
 import { PurchaseRequisition } from './purchase-requisition';
 import { on } from '@ember/modifier';
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 import { RfqComparisonBoard } from './components/rfq-comparison-board';
 import AwardRfqCommand from './commands/award-rfq-command';
 import SendRfqCommand from './commands/send-rfq-command';
@@ -586,6 +588,193 @@ export class Rfq extends CardDef {
           }
           .fit-name {
             -webkit-line-clamp: 1;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Grouped by the RFQ lifecycle (where does it stand → what are we asking
+  // for → who's bidding and what came back), not schema order. Three
+  // sections — no nav rail (edit-card Rule 0). The awarded quote and status
+  // are normally driven by SendRfqCommand/AwardRfqCommand; they're editable
+  // here only to correct mistakes.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'basics';
+
+    sections = [
+      { id: 'basics', label: 'RFQ Basics' },
+      { id: 'lines', label: 'Requested Lines' },
+      { id: 'vendors-quotes', label: 'Vendors & Quotes' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.rfq-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='rfq-edit'>
+        {{! responsive grid lives on the inner wrapper — the container
+            element cannot be restyled by its own query (edit-card Rule 1) }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "basics") "focused"}}'
+            data-sect='basics'
+          >
+            <h3>RFQ Basics</h3>
+            <div class='row'>
+              <FieldContainer @label='Status' @vertical={{true}}>
+                <@fields.status />
+              </FieldContainer>
+              <FieldContainer @label='Response deadline' @vertical={{true}}>
+                <@fields.responseDeadline />
+              </FieldContainer>
+            </div>
+            <FieldContainer
+              @label='Source requisition (optional)'
+              @vertical={{true}}
+            >
+              <@fields.requisition />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect lines {{if (eq this.activeSection "lines") "focused"}}'
+            data-sect='lines'
+          >
+            <h3>Requested Lines
+              <span class='sect-hint'>usually copied from the requisition —
+                these are the lines vendors quote against</span></h3>
+            <FieldContainer
+              @label='Lines (description, qty, unit price)'
+              @vertical={{true}}
+            >
+              <@fields.lineItems />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect
+              {{if (eq this.activeSection "vendors-quotes") "focused"}}'
+            data-sect='vendors-quotes'
+          >
+            <h3>Vendors &amp; Quotes
+              <span class='sect-hint'>the awarded quote is normally set by the
+                Award command</span></h3>
+            <FieldContainer @label='Invited vendors' @vertical={{true}}>
+              <@fields.invitedVendors />
+            </FieldContainer>
+            <FieldContainer @label='Quotes received' @vertical={{true}}>
+              <@fields.quotes />
+            </FieldContainer>
+            <FieldContainer @label='Awarded quote' @vertical={{true}}>
+              <@fields.awardedQuote />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .rfq-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE — a linked
+             Theme overrides via --procurement-ink */
+          --rq-ink: var(--procurement-ink, #27306b);
+          --rq-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--rq-ink);
+          --edit-section-nav-ink-fg: var(--rq-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--rq-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--rq-ink) 12%, transparent);
+        }
+        .sect.lines {
+          border-left: 3px solid var(--rq-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

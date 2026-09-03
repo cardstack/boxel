@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "EffectivePeriodField",
+        "module": "../effective-period-field"
+      },
+      "specType": "field",
+      "readMe": "## Effective Period (EP)\n\nThe obligations window of an agreement — `effectiveDate`, `endDate`, `autoRenews`, `renewalTermMonths`, `noticeDays` — with the one date that matters computed from them: **`noticeDeadline` = endDate − noticeDays**. A renewal \"nobody chose\" was missed on the notice deadline, not the end date, so the deadline is a first-class value here rather than something read off a calendar.\n\nAlso computes `daysToNotice`, `daysToEnd`, `termMonths` (a 15 Jul – 14 Jul term reads as 12 months, not 11) and `periodState` (not started / in force / notice window / notice passed / ended). Wall-clock values are fresh on render and only as fresh as the last reindex in a query — sort a loaded board by them, never filter the index on them. All dates are calendar days built from local parts; `toISOString()` is deliberately never used because it shifts a deadline a day early east of UTC.\n\n### Formats\n\n- **atom** — `15 Jul 2026 – 14 Jul 2027` plus a `notice by …` pill coloured by state.\n- **embedded** — effective / ends / term / state on one row, the notice deadline on the next, turning amber inside the 30-day window and red once passed.\n- **edit** — the five stored inputs; computed values are never editable.\n\n### Example\n\nCarried by Contract — Acme Industries MSA 2026 (`effectivePeriod`), auto-renewing annually with 60 days' notice; the inline example below is the same period.\n\n### Consumers\n\nContract (`effectivePeriod`). Legal Home ranks its Notice Deadlines panel by `noticeDeadline`. Any lease, licence or policy card is the second consumer.\n\n### Non-goals\n\nNot a status — the document's lifecycle stays on its own `statusField`. Not an Obligation: the notice itself, once due, is an Obligation card owned by someone. No renewal history — each roll of the term is a new ContractVersion.",
+      "cardInfo": {
+        "name": "Effective Period",
+        "summary": "Obligations window with the notice deadline computed (endDate − noticeDays) — the date a contracts manager is actually judged on."
+      },
+      "containedExamples": [
+        {
+          "effectiveDate": "2026-07-15",
+          "endDate": "2027-07-14",
+          "autoRenews": true,
+          "renewalTermMonths": 12,
+          "noticeDays": 60
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../effective-period-field",
+              "name": "EffectivePeriodField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

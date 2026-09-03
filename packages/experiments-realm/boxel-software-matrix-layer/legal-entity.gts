@@ -5,12 +5,16 @@ import {
   contains,
   StringField,
 } from '@cardstack/base/card-api';
+import { tracked } from '@glimmer/tracking';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import EmailField from '@cardstack/base/email';
 import TextAreaField from '@cardstack/base/text-area';
 import AddressField from '@cardstack/base/address';
 import enumField from '@cardstack/base/enum';
 
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 
 export const LEGAL_ENTITY_TYPES = [
   'corporation',
@@ -326,6 +330,221 @@ export class LegalEntity extends CardDef {
           }
           .fit-name {
             -webkit-line-clamp: 1;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Edit grouped the way the record gets filled in: who is this entity →
+  // where and how is it registered → who signs for it → anything else.
+  // 4 real sections, so the EditSectionNav rail applies (edit-card Rule 0b).
+  // Computed fields (maskedTaxId, cardTitle) are deliberately excluded.
+  static edit = class Edit extends Component<typeof this> {
+    // Left section nav: clicking anchors that section to the top of the
+    // form's own scroller (the root, per edit-card Rule 1 — never a nested
+    // scroller). Scoped through the event's own root so several open edit
+    // panels never cross-scroll each other.
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Identity' },
+      { id: 'registration', label: 'Registration' },
+      { id: 'signatory', label: 'Signatory' },
+      { id: 'notes', label: 'Notes' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.entity-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='entity-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+            <section
+              class='sect {{if (eq this.activeSection "identity") "focused"}}'
+              data-sect='identity'
+            >
+              <h3>Entity Identity</h3>
+              <div class='row identity'>
+                <FieldContainer @label='Registered legal name' @vertical={{true}}>
+                  <@fields.legalName />
+                </FieldContainer>
+                <FieldContainer @label='Entity type' @vertical={{true}}>
+                  <@fields.entityType />
+                </FieldContainer>
+              </div>
+            </section>
+
+            <section
+              class='sect
+                {{if (eq this.activeSection "registration") "focused"}}'
+              data-sect='registration'
+            >
+              <h3>Registration &amp; Jurisdiction</h3>
+              <div class='row three'>
+                <FieldContainer @label='Jurisdiction' @vertical={{true}}>
+                  <@fields.jurisdiction />
+                </FieldContainer>
+                <FieldContainer @label='Registration number' @vertical={{true}}>
+                  <@fields.registrationNumber />
+                </FieldContainer>
+                <FieldContainer @label='Tax ID' @vertical={{true}}>
+                  <@fields.taxId />
+                </FieldContainer>
+              </div>
+              <FieldContainer @label='Registered address' @vertical={{true}}>
+                <@fields.registeredAddress />
+              </FieldContainer>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "signatory") "focused"}}'
+              data-sect='signatory'
+            >
+              <h3>Authorized Signatory
+                <span class='sect-hint'>the person who signs contracts on
+                  this entity's behalf</span></h3>
+              <div class='row three'>
+                <FieldContainer @label='Name' @vertical={{true}}>
+                  <@fields.signatoryName />
+                </FieldContainer>
+                <FieldContainer @label='Title' @vertical={{true}}>
+                  <@fields.signatoryTitle />
+                </FieldContainer>
+                <FieldContainer @label='Email' @vertical={{true}}>
+                  <@fields.signatoryEmail />
+                </FieldContainer>
+              </div>
+            </section>
+
+            <section
+              class='sect {{if (eq this.activeSection "notes") "focused"}}'
+              data-sect='notes'
+            >
+              <h3>Notes</h3>
+              <FieldContainer @label='Internal notes' @vertical={{true}}>
+                <@fields.notes />
+              </FieldContainer>
+            </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .entity-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the legal family asserts no brand hue in CSS — the theme's own
+             foreground/background pair is the accent (boxel-theming §4a) */
+          --le-ink: var(--foreground, var(--boxel-dark));
+          --le-ink-fg: var(--background, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        /* the root is the scroller, so sticky pins the nav to its top */
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          /* hand the family ink pair to the rail's published knobs */
+          --edit-section-nav-ink: var(--le-ink);
+          --edit-section-nav-ink-fg: var(--le-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        /* the section the rail points at mirrors the rail's active state,
+           same ink, diluted for the halo */
+        .sect.focused {
+          outline-color: var(--le-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--le-ink) 12%, transparent);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.three {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .identity {
+          grid-template-columns: 2fr 1fr;
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.three,
+          .identity {
+            grid-template-columns: 1fr;
+          }
+          /* narrow panel: nav becomes a horizontal chip row above the form */
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          /* narrow: the rail flips horizontal (consumer's scope attribute
+             rides ...attributes onto the component root, so these apply) */
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

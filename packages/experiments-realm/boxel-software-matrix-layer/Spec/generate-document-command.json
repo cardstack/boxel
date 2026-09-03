@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../commands/generate-document-command"
+      },
+      "specType": "command",
+      "readMe": "## Generate Document (GD)\n\nInput: `contract`, optional `clauses` (the contract's ContractClause instances, when the caller already holds them — an app with a live query passes them so the command need not search; a search only reaches the current user's own realms), optional `signatories` (our Signatory cards with `person` resolved, so signer names print — the name is two links from the contract, which a command-side load does not reach), optional `previewOnly`. Output: `markdown`, `clauseCount`, `deviationCount`, `written`, `message`.\n\nDeterministic, not generative. The point of a clause playbook is that the document IS the clauses: every section is either the library's approved text or a recorded deviation from it, and the parties, term, governing law and signature lines are structured fields. There is nothing for a model to invent — anything it did invent would be a deviation nobody approved. So this is a template assembler, not a prompt.\n\nSections, in the conventional order of a commercial agreement: title and reference → **Parties** (from `parties`) → **Term and value** (from `effectivePeriod`, with the notice deadline stated) → **Terms** (the contract's ContractClause instances, found by query since they link up to the contract, grouped in the order legal reads them — payment, liability, indemnification, confidentiality, data protection, termination, renewal, force majeure; each deviation flagged in the margin with its severity and notes) → **Governing law and disputes** → **Signatures** (one block per signature line, in order, with signed lines ticked and dated). Writes the result to Contract `fullText` unless `previewOnly`.\n\n### Example\n\nNatural target: Contract — Acme Industries MSA 2026 (4 clauses, 2 deviations, 2 signature lines).\n\n### Non-goals\n\nNo PDF, no DOCX, no redlining, no LLM. Does not change any clause text — it renders what was agreed.",
+      "cardInfo": {
+        "name": "Generate Document",
+        "summary": "Assembles the full agreement markdown — parties, term, clauses with deviations marked, governing law, signature lines — from the contract record and its clauses, and writes it to fullText."
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

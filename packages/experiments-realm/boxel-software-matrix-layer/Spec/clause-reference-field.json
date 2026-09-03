@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ClauseReferenceField",
+        "module": "../clause-reference-field"
+      },
+      "specType": "field",
+      "readMe": "## Clause Reference (CR)\n\n`clause` (`linksTo` Clause), `section` (\"§ 8.2\", \"Schedule 3, para 4\") and `pinnedRevision` — the library clause's `reviewedAt` that was in force when the reference was made. The pin is the point: a library clause is re-reviewed over time, and an amendment that says \"§ 4 is replaced\" must record which § 4 it was looking at, or the library rewrites history every time it improves.\n\nComputes `isSuperseded` (the linked clause's `reviewedAt` is later than the pin — the standard moved under the document; a prompt to re-read, not a defect) and `label` (`§ 2.1 · Auto-Renewal — 12 Months`).\n\n### Formats\n\n- **atom** — mono section number + clause name, with a `superseded` pill when the library has moved.\n- **embedded** — section, name, clause type as chrome, the pin date, and a one-line explanation when superseded.\n- **edit** — clause chooser, section, pinned revision date.\n\n### Example\n\nAmendment No. 1 — MSA Northwind (`changedClauses`): two references, one of which is pinned before the library's last review and therefore renders as superseded.\n\n### Consumers\n\nAmendment (`changedClauses`). A playbook citation, a deviation approval, or a Generate Document footnote are the next consumers.\n\n### Non-goals\n\nNot the clause text — that is Clause (library) and ContractClause (as agreed). No diffing between revisions.",
+      "cardInfo": {
+        "name": "Clause Reference",
+        "summary": "A pointer from a document into the clause library: which approved Clause, at which section, pinned to which reviewed revision; flags when the library has moved since."
+      },
+      "containedExamples": [
+        {
+          "section": "§ 2.1",
+          "pinnedRevision": "2026-03-01"
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Amendment/msa-northwind-amendment-1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../clause-reference-field",
+              "name": "ClauseReferenceField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

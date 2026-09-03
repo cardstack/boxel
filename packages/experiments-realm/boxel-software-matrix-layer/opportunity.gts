@@ -305,11 +305,14 @@ export class Opportunity extends CardDef {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          flex-shrink: 0;
         }
         .figure {
           font-weight: 700;
           font-variant-numeric: tabular-nums;
           font-size: 0.9375rem;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
         .meta {
           font-size: 0.6875rem;
@@ -317,6 +320,7 @@ export class Opportunity extends CardDef {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          flex-shrink: 0;
         }
         .stage {
           font-size: 0.625rem;
@@ -366,6 +370,44 @@ export class Opportunity extends CardDef {
            the badge tier where the age line itself is hidden. */
         .fitted.stuck {
           box-shadow: inset 3px 0 0 var(--state-overdue-fg);
+        }
+        /* Short cells (strips, badges, the edit-form link pill): a column
+           cannot fit, and flex would shear the one shrinkable row mid-glyph
+           (Rule 1: hide whole rows, never shrink one into a clip). Below
+           90px the card re-lays as ONE centered row. */
+        @container fitted-card (max-height: 90px) {
+          .fitted {
+            flex-direction: row;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+          }
+          .top {
+            display: contents;
+          }
+          .name {
+            flex: 0 1 auto;
+            min-width: 0;
+          }
+          .figure {
+            margin-left: auto;
+            font-size: 0.8125rem;
+          }
+          .stage {
+            order: 4;
+          }
+          .stuck-flag {
+            order: 5;
+            margin-left: 0;
+          }
+        }
+        /* Narrow badge: name (and the stalled alert) are the survivors —
+           data is all-or-nothing, a hidden figure beats a truncated one. */
+        @container fitted-card (max-height: 90px) and (max-width: 220px) {
+          .figure,
+          .stage {
+            display: none;
+          }
         }
         @container fitted-card (min-height: 170px) {
           .line-account {

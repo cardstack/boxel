@@ -11,12 +11,16 @@ import DateField from '@cardstack/base/date';
 import NumberField from '@cardstack/base/number';
 import TextAreaField from '@cardstack/base/text-area';
 import enumField from '@cardstack/base/enum';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import { LineItem } from './line-item';
 import { ProcurementBudget } from './procurement-budget';
 import { formatMoney, sumLineItems } from './money';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
 import { stateColor, type StateColor } from './utils/index';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export const REQUISITION_STATUSES = [
   'draft',
@@ -433,6 +437,190 @@ export class PurchaseRequisition extends CardDef {
           }
           .fit-name {
             -webkit-line-clamp: 1;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Grouped by how a requisition is actually captured (who needs what by
+  // when → the items themselves → why and against which budget), not by
+  // schema order. Three sections — no nav rail needed (edit-card Rule 0).
+  // estimatedTotal and title are computed (computeVia) and deliberately
+  // excluded from the form.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'whats-needed';
+
+    sections = [
+      { id: 'whats-needed', label: "What's Needed" },
+      { id: 'line-items', label: 'Line Items' },
+      { id: 'justification', label: 'Justification & Budget' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.req-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='req-edit'>
+        {{! the container element cannot be restyled by its own query
+            (edit-card Rule 1 corollary) — the responsive grid lives on
+            this inner wrapper instead }}
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "whats-needed") "focused"}}'
+            data-sect='whats-needed'
+          >
+            <h3>What's Needed</h3>
+            <div class='row'>
+              <FieldContainer @label='Requester' @vertical={{true}}>
+                <@fields.requester />
+              </FieldContainer>
+              <FieldContainer @label='Department' @vertical={{true}}>
+                <@fields.department />
+              </FieldContainer>
+              <FieldContainer @label='Needed by' @vertical={{true}}>
+                <@fields.neededBy />
+              </FieldContainer>
+              <FieldContainer @label='Status' @vertical={{true}}>
+                <@fields.status />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect items
+              {{if (eq this.activeSection "line-items") "focused"}}'
+            data-sect='line-items'
+          >
+            <h3>Line Items
+              <span class='sect-hint'>the estimated total is computed from
+                these lines</span></h3>
+            <FieldContainer
+              @label='Items (description, qty, unit price)'
+              @vertical={{true}}
+            >
+              <@fields.lineItems />
+            </FieldContainer>
+          </section>
+
+          <section
+            class='sect
+              {{if (eq this.activeSection "justification") "focused"}}'
+            data-sect='justification'
+          >
+            <h3>Justification &amp; Budget</h3>
+            <FieldContainer @label='Business justification' @vertical={{true}}>
+              <@fields.justification />
+            </FieldContainer>
+            <FieldContainer @label='Budget to draw against' @vertical={{true}}>
+              <@fields.budget />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .req-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* the procurement family's brand ink, declared ONCE — a linked
+             Theme overrides via --procurement-ink */
+          --pr-ink: var(--procurement-ink, #27306b);
+          --pr-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--pr-ink);
+          --edit-section-nav-ink-fg: var(--pr-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--pr-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--pr-ink) 12%, transparent);
+        }
+        .sect.items {
+          border-left: 3px solid var(--pr-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

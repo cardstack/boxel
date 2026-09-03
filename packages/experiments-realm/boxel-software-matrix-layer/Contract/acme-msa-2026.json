@@ -24,14 +24,9 @@
         "summary": null,
         "cardThumbnailURL": null
       },
-      "isSigned": true,
       "signedAt": "2026-07-14",
-      "cardTitle": "Acme Industries — Master Services Agreement 2026",
       "startDate": "2026-07-15",
       "documentUrl": "https://example.com/contracts/acme-msa-2026.pdf",
-      "daysToExpiry": 330,
-      "cardDescription": null,
-      "cardThumbnailURL": null,
       "contractNumber": "MSA-2026-0117",
       "contractType": "vendor",
       "autoRenews": true,
@@ -72,15 +67,77 @@
           {
             "decision": "approved",
             "decidedAt": "2026-07-08T15:20:00.000Z",
+            "comment": "Liability carve-out accepted on the stated trade-off.",
             "openedAt": "2026-07-06T09:00:00.000Z",
-            "comment": "Liability carve-out accepted on the stated trade-off."
+            "holdReason": null,
+            "conditions": null
           },
           {
             "decision": "pending",
-            "openedAt": "2026-07-08T15:20:00.000Z"
+            "decidedAt": null,
+            "comment": null,
+            "openedAt": "2026-07-08T15:20:00.000Z",
+            "holdReason": null,
+            "conditions": null
           }
         ]
-      }
+      },
+      "parties": [
+        {
+          "role": "customer",
+          "definedTerm": "the Customer"
+        },
+        {
+          "role": "supplier",
+          "definedTerm": "the Supplier"
+        }
+      ],
+      "effectivePeriod": {
+        "effectiveDate": "2026-07-15",
+        "endDate": "2027-07-14",
+        "autoRenews": true,
+        "renewalTermMonths": 12,
+        "noticeDays": 60
+      },
+      "governingLaw": {
+        "jurisdiction": "Delaware",
+        "venue": "Delaware Court of Chancery",
+        "notes": "Executives to meet within 15 business days of a written dispute notice before either party files. Proceedings in English."
+      },
+      "signatureBlocks": [
+        {
+          "party": {
+            "role": "customer",
+            "definedTerm": "the Customer"
+          },
+          "signerName": "Jordan Weber",
+          "signerTitle": "VP Operations",
+          "signingOrder": 1,
+          "requestedAt": "2026-07-10T09:00:00.000Z",
+          "signedAt": "2026-07-13T15:42:00.000Z",
+          "signatureRef": "docusign:9f2c4e1a-acme-msa-2026",
+          "lineStatus": "signed"
+        },
+        {
+          "party": {
+            "role": "supplier",
+            "definedTerm": "the Supplier"
+          },
+          "signerName": null,
+          "signerTitle": null,
+          "signingOrder": 2,
+          "requestedAt": "2026-07-13T15:45:00.000Z",
+          "signedAt": "2026-07-14T10:05:00.000Z",
+          "signatureRef": "docusign:9f2c4e1a-cardstack-msa-2026",
+          "lineStatus": "signed"
+        }
+      ],
+      "signatureStatus": "signed",
+      "signatureProvider": "DocuSign",
+      "signatureRequestedAt": "2026-07-10",
+      "fullText": "# Acme Industries — Master Services Agreement 2026\nReference MSA-2026-0117\nVendor / Supplier agreement\n\n## Parties\n1. **Acme Industries, Inc.** (Illinois, IL-58201377) — \"the Customer\"\n2. **Cardstack Inc.** (Delaware, DE-7241188) — \"the Supplier\"\n\n## Term and value\nThis agreement is effective from 15 Jul 2026 and ends on 14 Jul 2027 (12 months).\nIt renews automatically for successive terms of 12 months unless either party gives written notice of non-renewal at least 60 days before the end of the then-current term — for the current term, by **15 May 2027**.\nTotal contract value: **$5,880.00**.\n\n## Terms\n### 1. Payment Terms — Net 30\nInvoices are payable within thirty (30) days of receipt of a valid invoice.\n\n### 2. Liability Cap — 12 Months' Fees\n> **Deviation from playbook** (major) — Counterparty refused the cap for data-breach claims. Conceded in exchange for Net-30 and a 12-month term rather than 24. Raises composite risk and adds an executive approval step.\nSupplier's aggregate liability shall be unlimited in respect of any breach of clause 9 (Data Protection), and otherwise capped at the fees paid in the twelve (12) months preceding the claim.\n\n### 3. Data protection\n> **Deviation from playbook** (bespoke) — No approved standard covers a pre-authorised sub-processor list. Flagged for legal review before the next renewal.\nSupplier may engage the sub-processors listed at Schedule 4 without further authorisation, provided it remains liable for their acts and omissions.\n\n### 4. Auto-Renewal — 12 Months, 60-Day Notice\nThis Agreement renews automatically for successive twelve (12) month terms unless either party gives not less than sixty (60) days' written notice before the end of the then-current term.\n\n## Governing law and disputes\nThis agreement is governed by the law of **Delaware**; disputes are submitted to **Delaware Court of Chancery**. (Delaware / Delaware Court of Chancery)\nExecutives to meet within 15 business days of a written dispute notice before either party files. Proceedings in English.\n\n## Signatures\nSigned for and on behalf of the parties, in the order below.\n\n**Acme Industries, Inc.** (the Customer)\n\nSigned: ✓\nName: Jordan Weber\nTitle: VP Operations\nDate: 13 Jul 2026\nRef: `docusign:9f2c4e1a-acme-msa-2026`\n\n**Cardstack Inc.** (the Supplier)\n\nSigned: ✓\nName: General Counsel\nDate: 14 Jul 2026\nRef: `docusign:9f2c4e1a-cardstack-msa-2026`\n\n---\n_Generated 3 Sept 2026 from the clause library and the agreement record. Deviations are marked where the wording departs from approved text._",
+      "handlesSensitiveData": false,
+      "executedCopyUrl": null
     },
     "relationships": {
       "deal": {
@@ -111,6 +168,31 @@
       "approvalChain.steps.1.approver": {
         "links": {
           "self": "../Employee/marcus-webb"
+        }
+      },
+      "parties.0.entity": {
+        "links": {
+          "self": "../LegalEntity/acme-industries-inc"
+        }
+      },
+      "parties.1.entity": {
+        "links": {
+          "self": "../LegalEntity/cardstack-inc"
+        }
+      },
+      "signatureBlocks.0.party.entity": {
+        "links": {
+          "self": "../LegalEntity/acme-industries-inc"
+        }
+      },
+      "signatureBlocks.1.party.entity": {
+        "links": {
+          "self": "../LegalEntity/cardstack-inc"
+        }
+      },
+      "signatureBlocks.1.signatory": {
+        "links": {
+          "self": "../Signatory/priya-nair-gc"
         }
       }
     }

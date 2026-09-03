@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "approved",
+      "occurredAt": "2026-09-02T17:41:21.818Z",
+      "subjectTitle": "Brightleaf Studio — Pilot Terms",
+      "note": "Approved after insurance certificate received.",
+      "conditions": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "doneBy": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      },
+      "subject": {
+        "links": {
+          "self": "../Contract/brightleaf-pilot-terms"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

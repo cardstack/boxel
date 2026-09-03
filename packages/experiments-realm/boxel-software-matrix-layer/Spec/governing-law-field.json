@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "GoverningLawField",
+        "module": "../governing-law-field"
+      },
+      "specType": "field",
+      "readMe": "## Governing Law (GL)\n\nTwo questions a term sheet conflates, stored as two fields: `jurisdiction` (whose law reads the words — \"Germany\", \"Delaware\", \"England & Wales\") and `venue` (whose court or tribunal hears a dispute — a seat or an institution such as \"ICC Paris\"). \"English law, Singapore arbitration\" is an ordinary pairing, which is why they are not one string. `notes` carries the escalation ladder and procedural rules. `label` is the computed `jurisdiction / venue`.\n\nDeliberately plain strings rather than a Country link: jurisdictions are sub-national and venues are often institutions, not places.\n\n### Formats\n\n- **atom** — a compact chip `Delaware / Delaware Court of Chancery` with a gavel glyph; the notes ride on the title attribute.\n- **embedded** — a two-row definition list plus the notes paragraph.\n- **edit** — the three inputs.\n\n### Example\n\nContract — Acme Industries MSA 2026 (`governingLaw`), and the inline example below.\n\n### Non-goals\n\nNo legal-system taxonomy (common/civil law), no conflict-of-laws logic. It records what the parties chose; it does not advise.",
+      "cardInfo": {
+        "name": "Governing Law",
+        "summary": "Which law reads the contract and where a dispute is heard — jurisdiction, venue, notes; atom renders as a compact “Delaware / Chancery” chip."
+      },
+      "containedExamples": [
+        {
+          "jurisdiction": "Delaware",
+          "venue": "Delaware Court of Chancery",
+          "notes": "Executives to meet within 15 business days of a written dispute notice before either party files."
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../governing-law-field",
+              "name": "GoverningLawField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

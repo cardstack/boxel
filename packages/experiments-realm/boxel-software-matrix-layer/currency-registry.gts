@@ -12,6 +12,10 @@ import DateField from '@cardstack/base/date';
 
 import { StatePill } from './components/state-pill';
 import { MoneyDisplay } from './components/money-display';
+import { EditSectionNav } from './components/edit-section-nav';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export function rateAgeDays(asOf?: Date | null, now: Date = new Date()): number {
   if (!asOf) {
@@ -297,6 +301,162 @@ export class CurrencyRegistry extends CardDef {
             flex-direction: row;
             align-items: center;
             gap: var(--boxel-sp-xs);
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // The book's policy first (base currency + how old a rate may be), then
+  // the rate rows themselves. Two sections, no rail. Computed cardTitle is
+  // excluded.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'identity';
+
+    sections = [
+      { id: 'identity', label: 'Registry identity' },
+      { id: 'rates', label: 'Rates' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.registry-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='registry-edit'>
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect policy
+              {{if (eq this.activeSection "identity") "focused"}}'
+            data-sect='identity'
+          >
+            <h3>Registry identity</h3>
+            <div class='row'>
+              <FieldContainer @label='Base currency (ISO)' @vertical={{true}}>
+                <@fields.baseCurrency />
+              </FieldContainer>
+              <FieldContainer @label='Stale after (days)' @vertical={{true}}>
+                <@fields.staleAfterDays />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect {{if (eq this.activeSection "rates") "focused"}}'
+            data-sect='rates'
+          >
+            <h3>Rates
+              <span class='sect-hint'>rates older than the staleness policy
+                make Resolve Currency refuse to convert</span></h3>
+            <FieldContainer
+              @label='Dated rates (1 unit → base)'
+              @vertical={{true}}
+            >
+              <@fields.rates />
+            </FieldContainer>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .registry-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* family ink, declared ONCE */
+          --cr-ink: var(--procurement-ink, #27306b);
+          --cr-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--cr-ink);
+          --edit-section-nav-ink-fg: var(--cr-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--cr-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--cr-ink) 12%, transparent);
+        }
+        .sect.policy {
+          border-left: 3px solid var(--cr-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        @container edit (width < 640px) {
+          .row {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
+            display: none;
           }
         }
       </style>

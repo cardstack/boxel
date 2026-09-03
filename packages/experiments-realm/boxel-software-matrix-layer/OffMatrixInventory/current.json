@@ -15,7 +15,8 @@
       "adoptsFrom": {
         "module": "../off-matrix-inventory",
         "name": "OffMatrixInventory"
-      }
+      },
+      "_touched": 1788359340228
     }
   }
 }

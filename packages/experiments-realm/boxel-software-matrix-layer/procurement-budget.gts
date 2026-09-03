@@ -14,6 +14,10 @@ import {
 } from './budget-utilization-field';
 import { formatMoney } from './money';
 import { StatePill } from './components/state-pill';
+import { EditSectionNav } from './components/edit-section-nav';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 // A department's spending envelope for one period, tracked with commitment
 // accounting: `committed` is money promised by approved-but-unreceived POs,
@@ -290,6 +294,178 @@ export class ProcurementBudget extends CardDef {
             gap: var(--boxel-sp-xs);
           }
           .fit-sub {
+            display: none;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  // Envelope first (who / which period / how much), then the commitment
+  // ledger — which is command-maintained, so it carries a warning. Two
+  // sections, no rail. Computed utilization/title are display-only and
+  // excluded.
+  static edit = class Edit extends Component<typeof this> {
+    @tracked activeSection = 'envelope';
+
+    sections = [
+      { id: 'envelope', label: 'Budget envelope' },
+      { id: 'ledger', label: 'Commitment ledger' },
+    ];
+
+    goTo = (id: string, event: Event) => {
+      this.activeSection = id;
+      let root = (event.currentTarget as HTMLElement).closest('.budget-edit');
+      root
+        ?.querySelector(`[data-sect='${id}']`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+
+    <template>
+      <div class='budget-edit'>
+        <div class='edit-body'>
+          <EditSectionNav
+            @sections={{this.sections}}
+            @activeId={{this.activeSection}}
+            @onSelect={{this.goTo}}
+            class='sect-nav'
+          />
+          <div class='sects'>
+          <section
+            class='sect {{if (eq this.activeSection "envelope") "focused"}}'
+            data-sect='envelope'
+          >
+            <h3>Budget envelope</h3>
+            <div class='row'>
+              <FieldContainer @label='Department' @vertical={{true}}>
+                <@fields.department />
+              </FieldContainer>
+              <FieldContainer @label='Period' @vertical={{true}}>
+                <@fields.period />
+              </FieldContainer>
+              <FieldContainer @label='Budget amount' @vertical={{true}}>
+                <@fields.budgetAmount />
+              </FieldContainer>
+            </div>
+          </section>
+
+          <section
+            class='sect ledger
+              {{if (eq this.activeSection "ledger") "focused"}}'
+            data-sect='ledger'
+          >
+            <h3>Commitment ledger
+              <span class='sect-hint'>maintained by Approve PO / Receive Goods
+                — edit only to correct</span></h3>
+            <div class='row two'>
+              <FieldContainer
+                @label='Committed (approved POs)'
+                @vertical={{true}}
+              >
+                <@fields.committed />
+              </FieldContainer>
+              <FieldContainer
+                @label='Actual (goods received)'
+                @vertical={{true}}
+              >
+                <@fields.actual />
+              </FieldContainer>
+            </div>
+          </section>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .budget-edit {
+          container-type: inline-size;
+          container-name: edit;
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp);
+          background: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          /* family ink, declared ONCE */
+          --pb-ink: var(--procurement-ink, #27306b);
+          --pb-ink-fg: var(--procurement-ink-fg, var(--boxel-light));
+        }
+        .edit-body {
+          display: grid;
+          grid-template-columns: 9.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: var(--boxel-sp);
+        }
+        .sect-nav {
+          position: sticky;
+          top: 0;
+          --edit-section-nav-ink: var(--pb-ink);
+          --edit-section-nav-ink-fg: var(--pb-ink-fg);
+        }
+        .sects {
+          display: grid;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+        .sect {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          padding: var(--boxel-sp);
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          transition:
+            outline-color 160ms ease,
+            box-shadow 160ms ease;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+        }
+        .sect.focused {
+          outline-color: var(--pb-ink);
+          box-shadow: 0 0 0 4px
+            color-mix(in oklch, var(--pb-ink) 12%, transparent);
+        }
+        .sect.ledger {
+          border-left: 3px solid var(--pb-ink);
+        }
+        h3 {
+          margin: 0;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+          display: flex;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+        }
+        .sect-hint {
+          text-transform: none;
+          letter-spacing: normal;
+          font-size: 0.75rem;
+          font-weight: 400;
+          font-style: italic;
+        }
+        .row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp-sm);
+          align-items: start;
+        }
+        .row.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        @container edit (width < 640px) {
+          .row,
+          .row.two {
+            grid-template-columns: 1fr;
+          }
+          .edit-body {
+            grid-template-columns: 1fr;
+          }
+          .sect-nav {
+            position: static;
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .sect-nav::before {
             display: none;
           }
         }

@@ -7,10 +7,7 @@
         "module": "../components/contract-workspace"
       },
       "specType": "component",
-      "isCard": false,
-      "isField": false,
-      "isComponent": true,
-      "readMe": "## Contract Workspace (CW)\n\nOne contract’s whole paper trail on one surface: signature state, the Clause Navigator, executed version history, and modification papers — live-queried so paper created anywhere shows up without manual wiring.\n\n### Non-goals\n\nNot a contract EDITOR — every action routes through the commands (Request Signature, Execute, Amend). Not mounted into the shared contract.gts isolated in v1 (additive follow-up on that block).",
+      "readMe": "## Contract Workspace (CW)\n\nOne contract’s whole paper trail on one surface: signature state, the Clause Navigator, executed version history, and modification papers — live-queried so paper created anywhere shows up without manual wiring.\n\n### Args (the consumer declares the domain; the block only renders)\n\n`@contract` (Contract) — the one card under review; `@context` — for live queries over ContractClause / ContractVersion / Amendment / Addendum / Waiver in the contract's own realm; `@onOpen(card)` — the consumer decides how a clicked row opens (stack, panel, nothing).\n\n### Consumers\n\nContract Execution App — Workspace tab (over the picked contract). Second consumer: any Contract detail surface that wants the clause navigator and paper trail without the app shell.\n\n### Non-goals\n\nNot a contract EDITOR — every action routes through the commands (Request Signature, Execute, Amend). Not mounted into the shared contract.gts isolated in v1 (additive follow-up on that block).",
       "cardInfo": {
         "name": "Contract Workspace",
         "summary": "Everything hanging off one contract: clauses, versions, amendments, addenda, waivers, signature state."
