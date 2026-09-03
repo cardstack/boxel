@@ -7,6 +7,7 @@ import {
   BrokenLinkTemplate,
   CopyButton,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
 } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -104,6 +105,8 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  fileNameFromUrl,
+  referenceNamesFile,
   isDeclaredScreenshotFormat,
   isValidScreenshotName,
   DECLARED_SCREENSHOT_FORMATS,
@@ -1747,7 +1750,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
-                  @displayName={{cardTypeName broken.reference}}
+                  @itemType={{brokenLinkItemType linksToField}}
+                  @displayName={{brokenLinkDisplayName
+                    linksToField
+                    broken.reference
+                  }}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
@@ -2403,6 +2410,29 @@ export function brokenLinkFormat(
     default:
       return 'embedded';
   }
+}
+
+// What the placeholder says is missing. A `linksTo(FileDef)` slot holds a file,
+// so its failure reads as a missing file rather than a missing card.
+export function brokenLinkItemType(
+  field: Field<LinkableDefConstructor>,
+): BrokenLinkItemType {
+  return isFileDef(field.card) ? 'file' : 'card';
+}
+
+// The label the placeholder shows next to the link-off icon. The two reference
+// shapes name themselves in different segments: a card instance url is
+// `<Type>/<id>`, whose readable name is the type; a file url is a path, whose
+// readable name is the file name. Reading a file url as a card reference names
+// the directory that happens to sit second-to-last — `images` for a missing
+// `images/photo.jpg` — which points a reader at nothing.
+export function brokenLinkDisplayName(
+  field: Field<LinkableDefConstructor>,
+  reference: string,
+): string {
+  return isFileDef(field.card)
+    ? fileNameFromUrl(reference)
+    : cardTypeName(reference);
 }
 
 function fieldComponent(
@@ -4194,8 +4224,17 @@ function lazilyLoadLink(
         (isCardError(error) && error.status === 404) ||
         (typeof error?.message === 'string' &&
           /not found/i.test(error.message));
+      // The realm file the broken reference stands for: a card instance is
+      // served out of `<id>.json`, while a reference that names a file is
+      // already the file. The field's own type settles it when the field is
+      // declared to hold a file; otherwise the reference's shape does, judged
+      // by a registered extension rather than by a dot, so a card id that
+      // carries one keeps the `.json` its row is keyed on. This string is both
+      // what the reader is told is missing and the dep invalidation watches, so
+      // a `.json` appended to a file path names a row that can never appear and
+      // the mended link never reaches this consumer.
       let referenceForMissingFile =
-        isFileLink || reference.endsWith('.json')
+        isFileLink || referenceNamesFile(reference)
           ? reference
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &
