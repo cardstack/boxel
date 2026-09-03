@@ -3266,6 +3266,9 @@ importers:
       '@types/ms':
         specifier: 'catalog:'
         version: 2.1.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
