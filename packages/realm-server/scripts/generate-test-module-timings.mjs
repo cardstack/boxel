@@ -186,6 +186,26 @@ for (const file of onDisk) {
   }
 }
 
+if (ambiguous.length) {
+  console.warn(
+    `Skipped ${ambiguous.length} suite name(s) matching more than one file: ${ambiguous.join(', ')}`,
+  );
+}
+
+// A file that no run has ever measured is packed at DEFAULT_WEIGHT, so a
+// genuinely slow one distorts a shard for as long as it stays invisible. Above
+// the coverage floor that is easy to miss, hence the list — printed ahead of
+// the drift gate, because the gate asks whether a rebalance is worth a commit,
+// not whether every file has been seen, and the runs it declines are the
+// common case.
+const unmeasured = onDisk.filter((file) => merged[file] === undefined);
+if (unmeasured.length) {
+  console.warn(
+    `${unmeasured.length} file(s) have no recorded duration and will be packed at the ` +
+      `default weight: ${unmeasured.sort().join(', ')}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Drift gate. Predict the slowest shard under the committed weights and under
 // the regenerated ones, both scored against the regenerated ones as the better
@@ -229,19 +249,3 @@ console.log(
   `Wrote ${relative(process.cwd(), timingsPath)}: ${fresh} files measured, ` +
     `${kept} kept from the previous file, ${(coverage * 100).toFixed(1)}% of ${total.toFixed(0)}s attributed.`,
 );
-if (ambiguous.length) {
-  console.warn(
-    `Skipped ${ambiguous.length} suite name(s) matching more than one file: ${ambiguous.join(', ')}`,
-  );
-}
-
-// A file that no run has ever measured is packed at DEFAULT_WEIGHT, so a
-// genuinely slow one distorts a shard for as long as it stays invisible. Above
-// the coverage floor that is easy to miss, hence the list.
-const unmeasured = onDisk.filter((file) => merged[file] === undefined);
-if (unmeasured.length) {
-  console.warn(
-    `${unmeasured.length} file(s) have no recorded duration and will be packed at the ` +
-      `default weight: ${unmeasured.sort().join(', ')}`,
-  );
-}

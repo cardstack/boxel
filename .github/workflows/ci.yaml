@@ -756,6 +756,10 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      # Three places carry the shard count and must move together: this list,
+      # `shardTotal` below, and `--shard-count` on the timings generator in
+      # realm-server-shard-timings-update, which decides whether a rebalance
+      # is worth committing by predicting the slowest shard.
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6]
         shardTotal: [6]
