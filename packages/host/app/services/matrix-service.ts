@@ -175,6 +175,18 @@ const realmEventsLogger = logger('realm:events');
 // even a re-entrant boot; keeping the most recent dozen is ample.
 const MAX_POST_LOGIN_TRANSITIONS = 12;
 
+// Thrown by switchAccount so the caller can tell a non-destructive redemption
+// failure (the outgoing account is untouched) from a boot failure that happens
+// after the outgoing account has already been torn down and revoked.
+export class AccountSwitchError extends Error {
+  constructor(
+    readonly phase: 'redeem' | 'boot',
+    readonly originalError: unknown,
+  ) {
+    super(`account switch failed during ${phase}`);
+  }
+}
+
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private loggerService: LoggerService;
@@ -803,7 +815,15 @@ export default class MatrixService extends Service {
         `switchAccount requires a persisted session to switch away from`,
       );
     }
-    let auth = await this.loginWithSsoToken(loginToken);
+    let auth: LoginResponse;
+    try {
+      auth = await this.loginWithSsoToken(loginToken);
+    } catch (e) {
+      // Redemption failed before any teardown, so the current account is still
+      // intact and recoverable. Tagged 'redeem' so the caller can show a
+      // non-destructive failure page rather than falling to the login form.
+      throw new AccountSwitchError('redeem', e);
+    }
     await this.logout({
       skipIndexTransition: true,
       serverLogoutAuth: previousAuth,
@@ -814,7 +834,14 @@ export default class MatrixService extends Service {
     // to (a 403 that fails the boot). setClient() during start() re-reads these
     // keys, so clearing them here is enough.
     this.forgetRealmSessionTokens();
-    await this.start({ auth, refreshRoutes: true });
+    try {
+      await this.start({ auth, refreshRoutes: true });
+    } catch (e) {
+      // Boot failed after the previous account was already torn down and
+      // revoked, so it is gone — tagged 'boot' so the caller falls through to
+      // the login form rather than offering "back to your account".
+      throw new AccountSwitchError('boot', e);
+    }
   }
 
   get isInitializingNewUser() {

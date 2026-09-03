@@ -159,7 +159,7 @@ test.describe('login_via_existing_session', () => {
     });
   });
 
-  test('a failed token exchange while logged in stays signed in as the current account', async ({
+  test('a failed token exchange while logged in shows the account-switch failure page', async ({
     page,
   }) => {
     let userA = await createSubscribedUserAndLogin(
@@ -171,17 +171,23 @@ test.describe('login_via_existing_session', () => {
       userId: userA.credentials.userId,
     });
 
-    // The token is validated before any teardown, so a dead token (expired,
-    // spent, or bogus) leaves the current session intact rather than logging
-    // the user out.
+    // A dead token (expired, spent, or bogus) is validated before any teardown,
+    // so instead of switching or logging the user out, the app shows a failure
+    // page — the current session stays intact behind it.
     await page.goto(`${appURL}?loginToken=not-a-real-token`);
 
+    await expect(page.locator('[data-test-account-switch-failed]')).toHaveCount(
+      1,
+    );
+    // The single-use token is still stripped so a refresh can't re-attempt it.
+    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
+
+    // Back to home recovers into the still-valid current account.
+    await page.locator('[data-test-account-switch-back-home]').click();
     await assertLoggedIn(page, {
       displayName: userA.username,
       userId: userA.credentials.userId,
     });
-    // The single-use token is still stripped so a refresh can't re-attempt it.
-    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
   });
 
   test('a ?loginToken switches accounts even when the stored session is revoked server-side', async ({

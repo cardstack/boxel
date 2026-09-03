@@ -23,6 +23,7 @@ import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import { AccountSwitchError } from '@cardstack/host/services/matrix-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -142,6 +143,8 @@ export default class Card extends Route {
     if (loginToken && this.matrixService.persistedUserId) {
       consumeLoginTokenFromUrl(); // single-use: strip up front so a refresh can't retry
       let didStart = this.didMatrixServiceStart;
+      let controller = this.operatorModeStateService.operatorModeController;
+      controller.accountSwitchFailed = false;
       try {
         // switchAccount boots the new account with refreshRoutes, which
         // re-enters this hook; set the one-shot flag first so that re-run skips
@@ -150,13 +153,21 @@ export default class Card extends Route {
         await this.matrixService.switchAccount(loginToken);
         return;
       } catch (e) {
-        // A redemption failure throws before any teardown, so the current
-        // account is intact. A later failure (logout/start) has already torn
-        // that account down and persisted the incoming one. Either way, restore
-        // the flag and fall through: the boot below re-establishes whichever
-        // account is persisted now — recovering the switch or landing on the
-        // login form.
         this.didMatrixServiceStart = didStart;
+        if (e instanceof AccountSwitchError && e.phase === 'redeem') {
+          // The token was bad/expired and nothing was torn down, so the current
+          // account is intact. Show the "couldn't switch accounts" page instead
+          // of booting; its "Back to home" recovers into the current account.
+          controller.accountSwitchFailed = true;
+          console.error(
+            'Account switch failed before teardown; showing failure page',
+            e,
+          );
+          return;
+        }
+        // A post-teardown (boot) or unknown failure means the previous account
+        // is already gone. Fall through: the boot below re-establishes whichever
+        // account is persisted now — recovering the switch or landing on login.
         console.error('Error consuming loginToken; falling back to boot', e);
       }
     }
@@ -186,6 +197,13 @@ export default class Card extends Route {
         );
       }
     }
+
+    // Any path that reaches the boot has moved past a prior failed switch (the
+    // failure return is above this point), so clear the flag. "Back to home"
+    // relies on this: it navigates here without clearing the flag itself, so the
+    // failure page stays up through the boot (the loading template covers it)
+    // rather than flashing the login form, and clears only once we're booted.
+    this.operatorModeStateService.operatorModeController.accountSwitchFailed = false;
 
     if (!this.matrixService.isLoggedIn) {
       if (isTesting()) {
