@@ -117,7 +117,21 @@ export interface DemoEntry {
    * call the stage makes itself. Those opt out.
    */
   slowmo: boolean;
+  /**
+   * Whether the stage is a film, and so has a theater to enter: the
+   * player brought to the front of this page at the window's full
+   * height, on `#theater`. See app/services/theater.ts.
+   */
+  theater?: boolean;
   title: string;
+  /**
+   * A walkthrough of the key concepts, under the usage example: the data
+   * that actually drives the demo, quoted rather than described.
+   * Optional — most demos are one idea and the sample above says it. The
+   * films have one because a film IS a table, and the table is the thing
+   * worth reading.
+   */
+  walkthrough?: { label: string; note: string; source: string }[];
 }
 
 export const catalog: DemoEntry[] = [
@@ -569,6 +583,58 @@ shot = (pose) => {
   <c.Perform @action='lap' />
 </c.Sequence>`,
     slowmo: false,
+    theater: true,
+    walkthrough: [
+      {
+        label: 'The shot list — one entry',
+        note: `A film is a table. Every field here is a FACT about the shot rather than a keyframe, which is what lets an agent direct the film by editing data and a person direct it by dragging one number. Only five members are required — id, ch, cam, mode, ticks — and the other forty-seven are the direction.`,
+        source: `{
+  id: 'ishigaki',            // the beat's name IS its place in the script
+  ch: 2,                     // which chapter it belongs to
+  ticks: 7,                  // how long it runs: one tick is two seconds
+  mode: 'lower',             // how the front layer is set
+  cut: true,                 // SPLICE the camera path, do not travel
+  join: 'dip',               // and take the seam through black
+  cam:   { dolly: 0.72, lookY: -2.2, ox: -0.1, pitch: 6, yaw: 44 },
+  toCam: { dolly: 0.66, lookY: -1.4, ox: -0.1, pitch: 9, yaw: 62 },
+  build: [tAt(1576), tAt(1579)],   // the construction clock, as a range
+  kanji: '石垣',
+  romaji: 'ISHIGAKI',
+  gloss: 'the stone base',
+  says: [
+    'No mortar. None.',
+    '扇の勾配 — the fan’s incline',
+    'The wall sheds the shock',
+  ],
+  vo: 'Ishigaki. No mortar anywhere in it…',
+}`,
+      },
+      {
+        label: 'The chapters',
+        note: `Five rows, and the whole grade of the film. A beat names a chapter by index and inherits its mood and its film stock unless it overrides them — so a colourist's pass is five lines, not four hundred.`,
+        source: `const CHAPTERS = [
+  { n: '01', title: 'CONTEXT',      grade: 'amber', lut: 'sandstone' },
+  { n: '02', title: 'HISTORY',      grade: 'iron',  lut: 'iron' },
+  { n: '03', title: 'CONSTRUCTION', grade: 'chalk', lut: 'chalk' },
+  { n: '04', title: 'DETAIL',       grade: 'ink',   lut: 'ink' },
+  { n: '05', title: 'COMPARISON',   grade: 'plate', lut: 'plate' },
+];`,
+      },
+      {
+        label: 'A mood, as numbers',
+        note: `A grade is not a filter name, it is the numbers the glass takes. The film hands the construct a table of them and a beat wears one by name; the shader interpolates between whichever two are in force across a seam.`,
+        source: `const GRADES = {
+  // the film's one night shot: a night that has been LIFTED is dusk, so
+  // this one pulls the black down and leaves the rim light to draw
+  night: {
+    sat: 0.78, con: 1.12, bri: 0.7, sep: 0, hue: 0,
+    warm: hex('#c9c2b4'),
+    cool: hex('#6f7f9e'),
+    gradeA: 0.6, vigA: 0,
+  },
+};`,
+      },
+    ],
     title: 'Towers',
   },
   {
@@ -1353,6 +1419,49 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
 run.time = t;              // the score
 plate.time = t - beatStart(i);  // and the type, on the same clock`,
     slowmo: false,
+    theater: true,
+    walkthrough: [
+      {
+        label: 'The shot list — one entry',
+        note: `The same table Towers uses, written in years. Every field is a fact about the shot; the build clock is authored through the film's own year-to-seconds map, so the number on screen and the state of the stone can never disagree.`,
+        source: `{
+  id: 'gaudi',
+  ch: 2,
+  ticks: 8,
+  mode: 'plate',
+  join: 'dip',               // the architect dies: the seam goes to black
+  grade: 'ash',
+  lut: 'plate',
+  cam:   { dolly: 0.86, lookY: 14, pitch: 6, yaw: 214 },
+  toCam: { dolly: 0.92, lookY: 18, pitch: 9, yaw: 226 },
+  build: tAt(1926),          // where the stone stands, in film time
+  stamp: { at: 0.03, y: 1926 },   // the year, enormous, in the scene
+  vo: 'On the seventh of June 1926, Gaudí is hit by a tram.',
+}`,
+      },
+      {
+        label: 'The clock, in years',
+        note: `Hand the construct one of these and the rail under the picture stops being a progress bar and becomes a date rule: the head rides it, the chapters are doors on it, and the readout says the year rather than the minute. Towers has no clock, so its rail is time.`,
+        source: `const CLOCK = {
+  span: [1882, 2034],
+  tAt:    (year) => …,   // the film's unit  →  page seconds
+  yearAt: (t)    => …,   // and back, for the readout on the rail
+};`,
+      },
+      {
+        label: 'The record the script is held to',
+        note: `Dates follow the published history, and the film says so out loud when it runs past it: the record ends at the centenary and what follows is the plan. This is the table the beats are authored against.`,
+        source: `const RECORD = [
+  { year: 1882,      what: 'Cripta',            en: 'CRYPT' },
+  { year: 1883,      what: 'Gaudí pren l’obra', en: 'GAUDÍ TAKES OVER' },
+  { year: 1926,      what: 'Mor Gaudí',         en: 'GAUDÍ DIES' },
+  { year: 1936,      what: 'Guerra Civil',      en: 'WORKS HALTED' },
+  { year: [1954, 76], what: 'Façana de la Passió', en: 'PASSION FAÇADE' },
+  { year: 2021,      what: 'L’estel s’encén',  en: 'THE STAR OF MARY LIT' },
+  { year: 2026,      what: 'Centenari de Gaudí', en: 'CENTENARY MASS' },
+];`,
+      },
+    ],
     title: 'Sagrada Família',
   },
   {

@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import {
   type Beat,
@@ -13,8 +12,6 @@ import {
   type Pt3,
   RAD,
 } from 'glimmer-motion/film';
-import { ChoreoMark } from 'test-app/components/choreo-mark';
-import SagradaNotes from 'test-app/components/notes/sagrada';
 import config from 'test-app/config/environment';
 
 /**
@@ -1793,14 +1790,6 @@ export default class SagradaFilm extends Component<{
         </p>
       </:gate>
 
-      {{! THE MARK — over the frame, because the film route hides the
-      app's chrome and takes the brand with it }}
-      <:brand>
-        <ChoreoMark />
-        <LinkTo @route="demo" @model="sagrada" class="cf-brand-link">How this is
-          built</LinkTo>
-      </:brand>
-
       {{! BACK MATTER — the same package in reverse order of importance }}
       <:end as |f|>
         <i class="cf-mg-rule" aria-hidden="true"></i>
@@ -1823,23 +1812,6 @@ export default class SagradaFilm extends Component<{
         </div>
       </:end>
 
-      {{! THE CUTTING ROOM — the wall plate under the exhibit, in the
-      house dive template like every other demo's deep dive, and set the
-      way Towers sets its own. The film hands it one thing: the live
-      junction trigger, which is the only part of this dive that cannot
-      be read on the demo page. }}
-      <:default as |f|>
-        {{#unless this.embed}}
-          <div id="cutting-room" class="cf-notes">
-            <p class="cf-notes-link"><LinkTo
-                @route="demo"
-                @model="sagrada"
-                class="cf-link"
-              >How This Is Built</LinkTo></p>
-            <SagradaNotes @preview={{f.preview}} />
-          </div>
-        {{/unless}}
-      </:default>
     </Film>
 
     {{! THE IDENTITY. The construct sets the film in the basilica's own
@@ -1851,66 +1823,6 @@ export default class SagradaFilm extends Component<{
     keeps its own, and the only thing over the picture is the mark. }}
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap");
-
-      /* ---- the cutting room ------------------------------------------ *
-         The dive itself is the app's own template (.dive/.dd, app.css);
-         this wrapper seats it on the app's page ground below the film,
-         set exactly as tower-film sets its own so the two films read as
-         one exhibit. The joins strip is the film-only element. */
-      .cf-notes {
-        background: var(--bg-page);
-        border-top: 1px solid var(--line);
-        padding: 10px clamp(20px, 5vw, 60px) 80px;
-      }
-
-      .cf-notes .dive {
-        max-width: 1080px;
-        margin: 0 auto;
-      }
-
-      .cf-notes-link {
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 14px 0 0;
-      }
-
-      .cf-link {
-        color: var(--ink);
-        text-decoration: none;
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        white-space: nowrap;
-      }
-
-      .cf-link:hover {
-        text-decoration: underline;
-        text-underline-offset: 3px;
-      }
-
-      .dd-joins {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 12px 0 0;
-      }
-
-      .dd-joins button {
-        padding: 7px 13px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: transparent;
-        color: var(--ink);
-        font-family: inherit;
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        cursor: pointer;
-      }
-
-      .dd-joins button:hover {
-        border-color: var(--ink);
-      }
     </style>
   </template>
 }

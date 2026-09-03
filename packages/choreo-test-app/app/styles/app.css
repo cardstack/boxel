@@ -13692,3 +13692,126 @@ html[data-gm-dragging] * {
   border-color: rgba(230, 163, 90, 0.5);
   color: var(--copper-ink);
 }
+
+/* ── Theater mode ──────────────────────────────────────────────────────
+   A film's page with the player brought to the front and given the whole
+   window. The player NEVER MOVES IN THE DOM — re-parenting an iframe
+   reloads it, and a film that restarts when you ask to see it bigger is
+   not a film you can watch — so the body becomes a flex column and the
+   stage is re-ORDERED to the top. Everything else keeps its order and
+   sits below, which is what makes the mode a scroll rather than a
+   destination. See app/services/theater.ts. */
+
+/* usually not there at all: no box, no layout effect */
+.demo-body {
+  display: contents;
+}
+
+.demo-body.is-theater {
+  display: flex;
+  flex-direction: column;
+}
+
+.demo-body.is-theater .stage-row {
+  order: -1;
+  /* out of the page's gutter: the picture takes the window's full width */
+  margin-inline: calc(50% - 50vw);
+}
+
+/* THE WELL'S ASPECT IS FOR A WELL. On the page the film's frame takes
+   16/9 so the composition is not cropped by a letterbox; in theater the
+   frame IS the window, and an aspect ratio there would put bars around
+   a picture that already reframes itself to whatever it is given. */
+.demo-body.is-theater .stage-wrap,
+.demo-body.is-theater .stage-wrap:has(.tw-face),
+.demo-body.is-theater .stage-wrap:has(.sg-face) {
+  height: 100vh;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+/* the app's own bar carries the mark at the top left; in theater it is
+   gone and the mark is drawn over the picture instead, so the two are
+   never on screen at once */
+body.is-theater .topbar {
+  display: none;
+}
+
+/* ...and the gutter the bar used to sit above goes with it. The page
+   opens on the picture, not on a band of ground above it. */
+body.is-theater .page {
+  padding-top: 0;
+}
+
+.theater-mark {
+  position: absolute;
+  top: clamp(12px, 2vw, 22px);
+  right: clamp(14px, 2.2vw, 26px);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.62;
+  transition: opacity 260ms ease;
+}
+
+.theater-mark:hover {
+  opacity: 1;
+}
+
+.theater-mark svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.theater-built {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  text-shadow: 0 0 6px var(--bg-page);
+}
+
+.theater-built:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* a phone frame has no room for a byline beside the mark */
+@media (max-width: 700px) {
+  .theater-built {
+    display: none;
+  }
+}
+
+/* ── The walkthrough ───────────────────────────────────────────────────
+   The data that drives a demo, quoted under the usage example. Only the
+   films carry one: a film is a table, and the table is the thing worth
+   reading. Each step is a sentence of why, then the code it is about —
+   the note above the box rather than inside it, so the code stays
+   copyable. */
+.walk {
+  margin-top: 26px;
+}
+
+.walk-note {
+  max-width: 68ch;
+  margin: 26px 0 10px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.walk-note:first-child {
+  margin-top: 0;
+}

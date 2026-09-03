@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import {
   type Beat,
@@ -11,8 +10,6 @@ import {
   type Pt3,
   RAD,
 } from 'glimmer-motion/film';
-import { ChoreoMark } from 'test-app/components/choreo-mark';
-import TowersNotes from 'test-app/components/notes/towers';
 import config from 'test-app/config/environment';
 
 /**
@@ -1292,29 +1289,6 @@ export default class TowerFilm extends Component<{
         </div>
       </:end>
 
-      {{! THE MARK — over the frame, because the film route hides the
-      app's chrome and takes the brand with it }}
-      <:brand>
-        <ChoreoMark />
-        <LinkTo @route="demo" @model="towers" class="cf-brand-link">How this is
-          built</LinkTo>
-      </:brand>
-
-      {{! THE CUTTING ROOM — the wall plate under the exhibit, set in the
-      house dive template like every other demo's deep dive. The film hands
-      it one thing: the live junction trigger. }}
-      <:default as |f|>
-        {{#unless this.embed}}
-          <div id="cutting-room" class="cf-notes">
-            <p class="cf-notes-link"><LinkTo
-                @route="demo"
-                @model="towers"
-                class="cf-link"
-              >How This Is Built</LinkTo></p>
-            <TowersNotes @preview={{f.preview}} />
-          </div>
-        {{/unless}}
-      </:default>
     </Film>
 
     {{! THE IDENTITY. The construct's default is the second film's voice;

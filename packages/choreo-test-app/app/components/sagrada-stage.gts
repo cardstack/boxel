@@ -1,4 +1,3 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -8,6 +7,7 @@ import { modifier } from 'ember-modifier';
 import { motion, viewTransition } from 'glimmer-motion';
 import { FilmTile } from 'test-app/components/film-tile';
 import config from 'test-app/config/environment';
+import type TheaterService from 'test-app/services/theater';
 
 /**
  * The Sagrada Família film's catalog faces, on the Towers pattern
@@ -151,6 +151,9 @@ export class SagradaStage extends Component {
   };
 
   @service declare private router: RouterService;
+  /* the player is already on this page; theater brings it to the
+     front of it rather than opening anything */
+  @service declare private theater: TheaterService;
 
   private place = modifier((el: HTMLElement) => {
     if (this.context !== 'boot') {
@@ -168,10 +171,18 @@ export class SagradaStage extends Component {
     return this.context === 'stage';
   }
 
-  /** the same bitmap-morph crossing Sylva's theater button takes */
-  private cross = (route: string) => {
+  /**
+   * THE POSTER OPENS THE THEATER; the type under it opens the page.
+   * A tile is a poster outside a cinema and a caption beside it, and
+   * they promise different things: pressing the picture means "show me
+   * the film", reading the caption means "tell me about it". So the
+   * ring goes straight to `sagrada#theater` and the meta below — the
+   * card's own link — goes to the page.
+   */
+  private openTheater = () => {
     void viewTransition(async () => {
-      await this.router.transitionTo(route);
+      await this.router.transitionTo('sagrada');
+      this.theater.enter(true);
     });
   };
 
@@ -196,8 +207,8 @@ export class SagradaStage extends Component {
           <button
             type="button"
             class="sg-theater-btn"
-            {{on "click" (fn this.cross "sagrada")}}
-          >⛶ Theater</button>
+            {{on "click" this.theater.toggle}}
+          >⛶ Theater mode</button>
           {{#if this.size}}
             <button
               type="button"
@@ -229,7 +240,7 @@ export class SagradaStage extends Component {
           @label="Watch Sagrada Família"
           @line="A hundred and forty-four years, in four minutes"
           @name="Sagrada"
-          @open={{fn this.cross "sagrada"}}
+          @open={{this.openTheater}}
           @focus="38% 50%"
           @palette={{PALETTE}}
           @poster={{POSTER}}
@@ -303,9 +314,14 @@ export class SagradaStage extends Component {
         opacity: 1;
       }
 
+      body.is-theater .sg-theater-btn {
+        display: none;
+      }
+
+      /* opposite the way-in button, which is now on the left */
       .sg-reset-btn {
-        right: auto;
-        left: 14px;
+        left: auto;
+        right: 14px;
       }
 
       .sg-size {
@@ -331,10 +347,14 @@ export class SagradaStage extends Component {
         transform-origin: 50% 60%;
       }
 
+      /* UPPER LEFT, and out of the way of the mark. In theater the
+         picture's top right belongs to the Choreo mark and the way
+         back out; this button is the way IN, and it is gone once you
+         are through it. */
       .sg-theater-btn {
         position: absolute;
         top: 14px;
-        right: 14px;
+        left: 14px;
         padding: 8px 16px;
         border-radius: 999px;
         border: 1px solid rgba(168, 98, 31, 0.45);

@@ -154,8 +154,9 @@ Chris's notes, in the order they came, and what each became:
 ## Cut 7 — the new voice (2026-09-02)
 
 Chris rejected the José Bionada read and chose **Cedric M** from six
-auditions (two British, two American, two Castilian; the takes are kept in
-`test-app/public/sagrada/vo-audition/`, with a page at its `index.html`).
+auditions (two British, two American, two Castilian). The takes are in
+git history rather than in `public/`: 2.5 MB of casting was being shipped
+to every visitor for a decision that had already been made.
 All seventeen lines re-recorded, `VO_SECS` re-measured, and nine beats
 widened a tick — the apse two — so every read still finishes with 1.6 s of
 air. `VO_GAIN` recomputed to meet at -28 dB mean.

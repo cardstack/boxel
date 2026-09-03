@@ -10,7 +10,8 @@ regenerate, or the narration and the shot list drift apart.
 
 Cedric M — Engaging Documentary Narrator (`VvVVKaa2nHZpbZdtSRSX`), a deep
 British documentary voice. Chris auditioned six narrators across three
-accents on 2026-09-02 (see `test-app/public/sagrada/vo-audition/`) after
+accents on 2026-09-02 (the takes are in this commit's history, not in
+the build — they were casting, not the film) after
 rejecting the first two passes — Steven, deep American, and José Bionada,
 Castilian reading English — and chose this one. `eleven_multilingual_v2`,
 one take per line, recorded 2026-09-02 on ElevenLabs flow
