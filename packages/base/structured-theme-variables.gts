@@ -1257,54 +1257,6 @@ export default class ThemeVarField extends FieldDef {
           {{/if}}
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
             <FieldContainer
-              @label='X Offset'
-              @vertical={{true}}
-              data-test-field='shadowX'
-            >
-              <@fields.shadowX />
-            </FieldContainer>
-            <FieldContainer
-              @label='Y Offset'
-              @vertical={{true}}
-              data-test-field='shadowY'
-            >
-              <@fields.shadowY />
-            </FieldContainer>
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer
-              @label='Blur'
-              @vertical={{true}}
-              data-test-field='shadowBlur'
-            >
-              <@fields.shadowBlur />
-            </FieldContainer>
-            <FieldContainer
-              @label='Spread'
-              @vertical={{true}}
-              data-test-field='shadowSpread'
-            >
-              <@fields.shadowSpread />
-            </FieldContainer>
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer
-              @label='Opacity'
-              @vertical={{true}}
-              data-test-field='shadowOpacity'
-            >
-              <@fields.shadowOpacity />
-            </FieldContainer>
-            <FieldContainer
-              @label='Color'
-              @vertical={{true}}
-              data-test-field='shadowColor'
-            >
-              <@fields.shadowColor />
-            </FieldContainer>
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer
               @label='2xs'
               @vertical={{true}}
               data-test-field='shadow2xs'
@@ -1367,6 +1319,60 @@ export default class ThemeVarField extends FieldDef {
               <@fields.shadow2xl />
             </FieldContainer>
           </div>
+          <h5 class='theme-var-edit-subheading'>Imported shadow primitives</h5>
+          <p class='theme-var-edit-hint'>
+            Kept so a tweakcn export round-trips. The shadow scale above is not
+            derived from them, so editing these has no effect on rendered
+            shadows.
+          </p>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='X Offset'
+              @vertical={{true}}
+              data-test-field='shadowX'
+            >
+              <@fields.shadowX />
+            </FieldContainer>
+            <FieldContainer
+              @label='Y Offset'
+              @vertical={{true}}
+              data-test-field='shadowY'
+            >
+              <@fields.shadowY />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Blur'
+              @vertical={{true}}
+              data-test-field='shadowBlur'
+            >
+              <@fields.shadowBlur />
+            </FieldContainer>
+            <FieldContainer
+              @label='Spread'
+              @vertical={{true}}
+              data-test-field='shadowSpread'
+            >
+              <@fields.shadowSpread />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Opacity'
+              @vertical={{true}}
+              data-test-field='shadowOpacity'
+            >
+              <@fields.shadowOpacity />
+            </FieldContainer>
+            <FieldContainer
+              @label='Color'
+              @vertical={{true}}
+              data-test-field='shadowColor'
+            >
+              <@fields.shadowColor />
+            </FieldContainer>
+          </div>
         </section>
 
         <section class='theme-var-edit-section'>
@@ -1425,6 +1431,14 @@ export default class ThemeVarField extends FieldDef {
           letter-spacing: 0.04em;
           padding-bottom: var(--boxel-sp-xs);
           border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        }
+        .theme-var-edit-subheading {
+          margin: var(--boxel-sp-sm) 0 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-400));
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
         }
         .theme-var-edit-row {
           display: flex;
