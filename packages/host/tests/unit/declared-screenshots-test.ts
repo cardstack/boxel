@@ -664,6 +664,42 @@ module('Unit | declared screenshots', function (hooks) {
     );
   });
 
+  test('an empty-string authored URL falls through to the capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        tile: {
+          url: 'http://example.com/r/_screenshot/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+    // A text edit can leave '' in the authored URL (only the picker's clear
+    // button writes null); '' is never a meaningful URL, so it must not mask
+    // the rungs below it.
+    instance.cardInfo.cardThumbnailURL = '';
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/r/_screenshot/card-1?name=tile',
+      'an emptied authored URL does not mask the capture',
+    );
+  });
+
   test('a card without a useAsThumbnail declaration ignores captured slots', function (assert) {
     class Product extends cardApi.CardDef {
       static screenshots: Screenshots = {

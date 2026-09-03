@@ -3847,14 +3847,17 @@ export class CardDef extends BaseDef {
   // ImageDef link, then the capture the card's `static screenshots` flags
   // `useAsThumbnail` — so every opted-in card gets a live preview with no
   // template edits (the default fitted template already renders this field).
-  // Nullish past all three rungs is the absence signal consumers use to fall
+  // Falsy past all three rungs is the absence signal consumers use to fall
   // through to the icon default, which is why the capture rung reads
-  // `undefined` (never a placeholder) until a capture exists.
+  // `undefined` (never a placeholder) until a capture exists. `||` rather
+  // than `??`: a text edit can leave `''` in the authored URL (only the
+  // picker's clear button writes `null`), and `''` is never a meaningful
+  // URL — it must not mask the rungs below it.
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
       return (
-        this.cardInfo.cardThumbnailURL ??
-        this.cardInfo.cardThumbnail?.url ??
+        this.cardInfo.cardThumbnailURL ||
+        this.cardInfo.cardThumbnail?.url ||
         thumbnailScreenshotURL(this)
       );
     },
