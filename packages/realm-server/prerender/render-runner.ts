@@ -1,4 +1,5 @@
 import {
+  type DeclaredScreenshotVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
@@ -33,6 +34,7 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
+  captureDeclaredScreenshots,
   captureScreenshot,
   isRenderError,
   renderAncestors,
@@ -882,6 +884,7 @@ export class RenderRunner {
     cardTypes,
     priority,
     jobId,
+    screenshots,
     renderScope,
     signal,
     onTabAcquired,
@@ -1619,6 +1622,82 @@ export class RenderRunner {
           }
         }
 
+        // Declared screenshots capture on the same warm tab, after the
+        // format renders (the hydrated card and its images are already
+        // settled and cached). Only the prerender-html half captures — the
+        // caller opts in by sending `screenshots` when it has a MediaCache
+        // to persist into. Deliberately NOT a runTimedStep: that helper
+        // promotes a step failure into the card error, but a failed capture
+        // is an absent screenshot, not an errored row (the broken-links
+        // model) — only an evicted page or an auth failure escalates, since
+        // the page itself is then unusable for anyone.
+        if (
+          !cardShortCircuit &&
+          runHtmlSteps &&
+          !runIndexSteps &&
+          screenshots
+        ) {
+          let stepStart = Date.now();
+          let stepResult = await this.#step(
+            affinityKey,
+            'visit card declared screenshots',
+            () =>
+              withTimeout(
+                page,
+                () =>
+                  captureDeclaredScreenshots(page, screenshots, captureOptions),
+                opts?.timeoutMs,
+                this.#profileContext(
+                  affinityKey,
+                  url,
+                  'visit card declared screenshots',
+                  jobId,
+                ),
+                signal,
+              ),
+          );
+          recordFormatMs('card', 'screenshots', Date.now() - stepStart);
+          let allSlotsErrored = (error: RenderError) => {
+            response.screenshots = {
+              entries: [],
+              errors: [
+                {
+                  name: '*',
+                  message:
+                    error.error?.message ??
+                    'declared screenshot capture failed',
+                },
+              ],
+            };
+          };
+          if (!stepResult.ok) {
+            if (stepResult.evicted || this.#isAuthError(stepResult.error)) {
+              applyStepError(stepResult.error, stepResult.evicted);
+            }
+            allSlotsErrored(stepResult.error);
+          } else {
+            response.screenshots =
+              stepResult.value as DeclaredScreenshotVisitResult;
+          }
+          if (!cardShortCircuit) {
+            // The settle-time deps snapshot read after the isolated render
+            // predates the captures above — a capture-only component's loads
+            // (linked cards, their images) land in the tracker only during
+            // its render.screenshot render. Re-snapshot now so those loads
+            // fan into the row's deps and edits to that data invalidate the
+            // screenshot. Best-effort like the initial read: a null refresh
+            // (stale host build, dead page) keeps the settle-time deps.
+            let refreshedDeps = await abortable(signal, () =>
+              this.#refreshCapturedDeps(page),
+            );
+            if (refreshedDeps) {
+              capturedDeps = [
+                ...new Set([...(capturedDeps ?? []), ...refreshedDeps]),
+              ].sort();
+            }
+          }
+        }
+
         // The fused visit runs meta last, after the format renders above
         // marked the linksTo / linksToMany fields they read as "used"; the
         // index visit ran meta as its entry instead.
@@ -2145,6 +2224,32 @@ export class RenderRunner {
         () =>
           (globalThis as { __boxelRenderCapturedDeps?: unknown })
             .__boxelRenderCapturedDeps ?? null,
+      );
+      if (!Array.isArray(deps)) {
+        return null;
+      }
+      return deps.filter((dep): dep is string => typeof dep === 'string');
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  // Post-settle re-snapshot via the render route's refresh hook: the card's
+  // tracking session accumulates through child-route renders (capture-only
+  // screenshot components), so a late snapshot is a superset of the
+  // settle-time one. Best-effort like #readCapturedDeps; null when the hook
+  // is absent (stale host build) or the page died mid-call.
+  async #refreshCapturedDeps(page: Page): Promise<string[] | null> {
+    try {
+      let deps = await page.evaluate(() =>
+        (globalThis as { __boxelRenderRefreshCapturedDeps?: unknown })
+          .__boxelRenderRefreshCapturedDeps instanceof Function
+          ? (
+              globalThis as unknown as {
+                __boxelRenderRefreshCapturedDeps: () => unknown;
+              }
+            ).__boxelRenderRefreshCapturedDeps()
+          : null,
       );
       if (!Array.isArray(deps)) {
         return null;

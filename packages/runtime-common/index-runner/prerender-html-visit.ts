@@ -2,17 +2,24 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
+  delay,
   flattenPrerenderHtmlVisitMeta,
   hasCardExtension,
   isBrowserTestEnv,
   isCardResource,
   jobIdentity,
   logger,
+  param,
+  query,
   modulesConsumedInMeta,
   RealmPaths,
   renderScopeFor,
   type Batch,
+  type DeclaredScreenshotError,
+  type DeclaredScreenshotVisitArgs,
+  type DeclaredScreenshotVisitResult,
   type DefinitionLookup,
+  type Diagnostics,
   type IndexWriter,
   type JobInfo,
   type LooseCardResource,
@@ -23,6 +30,12 @@ import {
   type RenderVisitResponse,
   type Stats,
 } from '../index.ts';
+import { putMedia, type MediaCacheAdapter } from '../media-cache.ts';
+import type {
+  ScreenshotManifest,
+  ScreenshotManifestEntry,
+} from '../capture-spec.ts';
+import type { DBAdapter } from '../db.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import {
@@ -33,6 +46,12 @@ import {
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
+
+// Ceiling on holding a prerender-html job's visits for its spawning pass's
+// commit. Incremental commits land in well under a second of the enqueue; a
+// from-scratch pass can hold this for its whole remaining runtime, so the
+// ceiling sits at the same scale as the passes themselves.
+const SPAWNING_GENERATION_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
   preWarmModulesTable,
@@ -49,10 +68,13 @@ export interface PrerenderHtmlPassArgs {
   // every row this pass writes; the monotonic swap guard uses it to reject
   // out-of-order zombie writes.
   generation: number;
-  // The queue job of the index pass that spawned this one. Both halves of that
-  // pass present a prerender tab with the same render scope, so a tab serving
-  // them does not discard what it loaded when they alternate. Null for a job
-  // enqueued without a spawning pass.
+  // The queue job of the index pass that spawned this one. Serves two
+  // mechanisms: both halves of that pass present a prerender tab with the
+  // same render scope, so a tab serving them does not discard what it loaded
+  // when they alternate; and the spawning-generation gate waits for that
+  // pass's commit only while the job is still running. Null for a job
+  // enqueued without a spawning pass — its render scope keys off this job's
+  // own id and the gate's watermark check answers on its first probe.
   spawningJobId: number | null;
   // The realm's loader epoch the spawning pass renders under. Threaded on
   // every visit so each prerender tab this pass touches resets its loader
@@ -77,6 +99,12 @@ export interface PrerenderHtmlPassArgs {
   jobInfo: JobInfo;
   jobPriority?: number;
   onProgress?: (event: IndexingProgressEvent) => void;
+  // Declared-screenshot persistence. Both must be present for the pass to
+  // request captures; a worker without a MediaCache configured (or a caller
+  // without a direct DB handle) renders HTML exactly as before and writes
+  // null manifests.
+  dbAdapter?: DBAdapter;
+  mediaCacheAdapter?: MediaCacheAdapter;
 }
 
 export interface PrerenderHtmlPassResult {
@@ -119,6 +147,8 @@ export async function runPrerenderHtmlPass({
   jobInfo,
   jobPriority,
   onProgress,
+  dbAdapter,
+  mediaCacheAdapter,
 }: PrerenderHtmlPassArgs): Promise<PrerenderHtmlPassResult> {
   let log = logger('prerender-html-runner');
   let perfLog = logger('index-perf');
@@ -256,6 +286,74 @@ export async function runPrerenderHtmlPass({
     preWarmMs = Date.now() - preWarmStart;
   }
 
+  // Hold the visits until the spawning pass's generation is committed. A
+  // visit's own card + source come from the reader, but anything its renders
+  // load lazily — a linked card only a capture-only screenshot component
+  // reads is the canonical case — is served from `boxel_index`, which the
+  // spawning pass swaps only at its commit. This job is enqueued as soon as
+  // the invalidation set is known (deliberately, so queue latency and the
+  // module pre-warm above overlap the tail of the index pass), so ungated
+  // visits can read pre-edit documents and persist superseded linked data
+  // under the new generation.
+  //
+  // The wait's true bound is the spawning job's liveness, not wall clock: a
+  // spawner that reached a terminal status without advancing the watermark
+  // (its commit failed, or the realm was wiped out from under it — deletion
+  // and unpublish do this legitimately) will never advance it, and
+  // production then still serves exactly what these renders would read, so
+  // proceeding renders a consistent state. Holding a worker on wall clock
+  // instead starves every job queued behind this one for the full ceiling
+  // in exactly those flows. The ceiling below is a backstop against
+  // pathological job-row states only. A job with no spawner recorded spawns
+  // from committed state (reconcile, legacy enqueuers) and its watermark
+  // check passes on the first probe.
+  if (dbAdapter) {
+    let gateStart = Date.now();
+    let committed = false;
+    while (Date.now() - gateStart < SPAWNING_GENERATION_WAIT_MS) {
+      let [row] = (await query(dbAdapter, [
+        'SELECT current_generation FROM realm_generations WHERE realm_url =',
+        param(realmURL.href),
+      ])) as { current_generation: number | string }[];
+      if (row != null && Number(row.current_generation) >= generation) {
+        committed = true;
+        break;
+      }
+      if (spawningJobId == null) {
+        break;
+      }
+      let [spawner] = (await query(dbAdapter, [
+        `SELECT status FROM jobs WHERE id =`,
+        param(spawningJobId),
+      ])) as { status: string }[];
+      if (!spawner || spawner.status !== 'unfulfilled') {
+        // The spawner commits its batch and only then resolves, so a
+        // terminal status read here may postdate a commit the watermark
+        // probe above predates — give the watermark one last read.
+        let [finalRow] = (await query(dbAdapter, [
+          'SELECT current_generation FROM realm_generations WHERE realm_url =',
+          param(realmURL.href),
+        ])) as { current_generation: number | string }[];
+        committed =
+          finalRow != null && Number(finalRow.current_generation) >= generation;
+        break;
+      }
+      await delay(250);
+    }
+    let gateMs = Date.now() - gateStart;
+    if (committed) {
+      if (gateMs > 1000) {
+        perfLog.debug(
+          `${jobTag} spawning-generation gate held the visits ${gateMs} ms`,
+        );
+      }
+    } else {
+      log.warn(
+        `${jobTag} generation ${generation} is not committed and its spawning job ${spawningJobId ?? '(none)'} is not running; rendering against the committed index`,
+      );
+    }
+  }
+
   // One batched read of every rendered URL's content hash/size so the
   // per-visit getContentMeta lookups are served from memory rather than a DB
   // round-trip each. Deletes aren't visited, so they're excluded; URLs outside
@@ -305,6 +403,8 @@ export async function runPrerenderHtmlPass({
             loaderEpoch,
             stats,
             log,
+            dbAdapter,
+            mediaCacheAdapter,
           });
         } catch (err) {
           await handleVisitFailure({
@@ -374,6 +474,115 @@ export async function runPrerenderHtmlPass({
   };
 }
 
+// Persist the visit's declared-screenshot captures into the MediaCache and
+// assemble the row's manifest. Fresh captures putMedia under the 'declared'
+// lane; carry-forwards copy the prior manifest entry (their ledger row from
+// the earlier generation stays live — a 'declared' entry ages out only when
+// superseded, and no supersession happens without a re-capture). A persist
+// failure is a per-slot error, never a visit failure — the manifest omits
+// the name and diagnostics.screenshotErrors records why, mirroring
+// brokenLinks.
+export async function persistDeclaredScreenshots({
+  result,
+  priorManifest,
+  dbAdapter,
+  mediaCacheAdapter,
+  realmURL,
+  sourceURL,
+  sourceGeneration,
+  contentHash,
+  jobInfo,
+  log,
+}: {
+  result: DeclaredScreenshotVisitResult | undefined;
+  priorManifest: ScreenshotManifest | null;
+  dbAdapter: DBAdapter;
+  mediaCacheAdapter: MediaCacheAdapter;
+  realmURL: URL;
+  sourceURL: string;
+  sourceGeneration: number;
+  contentHash: string | undefined;
+  jobInfo: JobInfo;
+  log: ReturnType<typeof logger>;
+}): Promise<{
+  manifest: ScreenshotManifest | null;
+  errors: DeclaredScreenshotError[];
+}> {
+  // The prerenderer didn't run the capture step (an implementation without
+  // it, e.g. the in-browser twin): no manifest, not an error.
+  if (!result) {
+    return { manifest: null, errors: [] };
+  }
+  let manifest: ScreenshotManifest = {};
+  let errors: DeclaredScreenshotError[] = [...(result.errors ?? [])];
+  for (let entry of result.entries) {
+    if (entry.carriedForward) {
+      let prior = priorManifest?.[entry.name];
+      if (prior) {
+        manifest[entry.name] = prior;
+      } else {
+        errors.push({
+          name: entry.name,
+          message: `capture engine carried "${entry.name}" forward but the prior manifest has no such entry`,
+        });
+      }
+      continue;
+    }
+    if (!entry.base64) {
+      errors.push({
+        name: entry.name,
+        message: `capture engine returned no bytes for "${entry.name}"`,
+      });
+      continue;
+    }
+    try {
+      let binaryString = atob(entry.base64);
+      let bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      let { objectKey } = await putMedia(dbAdapter, mediaCacheAdapter, {
+        bytes,
+        contentType: entry.contentType,
+        realmURL: realmURL.href,
+        sourceURL,
+        captureSpecHash: entry.specHash,
+        sourceGeneration,
+        sourceContentHash:
+          entry.keyBy === 'file-content' ? (contentHash ?? null) : null,
+        lane: 'declared',
+        width: entry.width,
+        height: entry.height,
+      });
+      let manifestEntry: ScreenshotManifestEntry = {
+        specHash: entry.specHash,
+        objectKey,
+        contentType: entry.contentType,
+        width: entry.width,
+        height: entry.height,
+        deviceScaleFactor: entry.deviceScaleFactor,
+        ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
+        ...(entry.keyBy === 'file-content' && contentHash
+          ? { sourceContentHash: contentHash }
+          : {}),
+      };
+      manifest[entry.name] = manifestEntry;
+    } catch (e: any) {
+      log.warn(
+        `${jobIdentity(jobInfo)} failed to persist declared screenshot "${entry.name}" of ${sourceURL}: ${e?.message ?? e}`,
+      );
+      errors.push({
+        name: entry.name,
+        message: `failed to persist capture: ${e?.message ?? String(e)}`,
+      });
+    }
+  }
+  return {
+    manifest: Object.keys(manifest).length > 0 ? manifest : null,
+    errors,
+  };
+}
+
 async function visitForPrerenderedHtml({
   url,
   realmURL,
@@ -390,6 +599,8 @@ async function visitForPrerenderedHtml({
   loaderEpoch,
   stats,
   log,
+  dbAdapter,
+  mediaCacheAdapter,
 }: {
   url: URL;
   realmURL: URL;
@@ -406,6 +617,8 @@ async function visitForPrerenderedHtml({
   loaderEpoch: string;
   stats: Stats;
   log: ReturnType<typeof logger>;
+  dbAdapter?: DBAdapter;
+  mediaCacheAdapter?: MediaCacheAdapter;
 }): Promise<void> {
   let localPath: string;
   try {
@@ -478,6 +691,23 @@ async function visitForPrerenderedHtml({
     fileCreatedAt,
   };
 
+  // Declared-screenshot capture rides the visit only when this pass can
+  // persist the bytes (both adapters present) and the URL has a card
+  // rendering to capture from. The prior manifest + current content hash go
+  // along so file-content-keyed slots can carry forward in-engine.
+  let captureScreenshots = Boolean(
+    parsedCardResource && dbAdapter && mediaCacheAdapter,
+  );
+  let priorManifest: ScreenshotManifest | null = null;
+  let screenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
+  if (captureScreenshots) {
+    priorManifest = await batch.priorScreenshotManifest(url, 'instance');
+    screenshotVisitArgs = {
+      ...(priorManifest ? { priorManifest } : {}),
+      ...(contentHash !== undefined ? { contentHash } : {}),
+    };
+  }
+
   let response: RenderVisitResponse = await prerenderer.prerenderVisit({
     affinityType: 'realm',
     affinityValue: realmURL.href,
@@ -503,6 +733,7 @@ async function visitForPrerenderedHtml({
     renderOptions,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
+    ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),
   });
 
   // The visit's render diagnostics (launch/wait timings, render elapsed,
@@ -539,6 +770,30 @@ async function visitForPrerenderedHtml({
       });
       stats.instanceErrors++;
     } else {
+      let screenshotOutcome =
+        captureScreenshots && dbAdapter && mediaCacheAdapter
+          ? await persistDeclaredScreenshots({
+              result: response.screenshots,
+              priorManifest,
+              dbAdapter,
+              mediaCacheAdapter,
+              realmURL,
+              // The extensionless card-id form the ledger keys on (matches
+              // boxel_index.file_alias).
+              sourceURL: fileURL.replace(/\.json$/, ''),
+              sourceGeneration: batch.currentGeneration,
+              contentHash,
+              jobInfo,
+              log,
+            })
+          : undefined;
+      let instanceDiagnostics: Diagnostics | undefined =
+        screenshotOutcome && screenshotOutcome.errors.length > 0
+          ? {
+              ...(diagnostics ?? {}),
+              screenshotErrors: screenshotOutcome.errors,
+            }
+          : diagnostics;
       await batch.updatePrerenderedHtmlEntry(url, {
         type: 'instance',
         isolatedHtml: card.isolatedHTML,
@@ -550,7 +805,8 @@ async function visitForPrerenderedHtml({
         // The render route's settle-time dependency snapshot — what the
         // format renders actually pulled in (scoped-CSS URLs included).
         deps: card.deps ?? [],
-        ...(diagnostics ? { diagnostics } : {}),
+        ...(instanceDiagnostics ? { diagnostics: instanceDiagnostics } : {}),
+        screenshots: screenshotOutcome?.manifest ?? null,
       });
       stats.instancesIndexed++;
     }
