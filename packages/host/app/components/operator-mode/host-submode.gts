@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -12,7 +12,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { Alert, BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
@@ -74,6 +74,23 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   get realmURL() {
     return this.hostModeService.realmURL;
+  }
+
+  // A workspace can only be published while its realm_metadata row says
+  // `publishable: true`; the publish endpoint rejects anything else outright.
+  // Publishing flips the flag to false on the *published* copy, so opening a
+  // published site's own workspace is the ordinary way to land in this state.
+  //
+  // Keyed on an explicit `false` rather than `!== true`: the realm service
+  // answers `publishable: null` from a placeholder while a realm's metadata is
+  // still in flight, and treating that as a refusal would flash the warning on
+  // every load. A realm with no metadata row at all is likewise `null` — it
+  // cannot be published either, but the submode switcher already withholds
+  // host mode from it, so there is nothing to contradict here.
+  get isUnpublishable() {
+    return (
+      this.operatorModeStateService.currentRealmInfo?.publishable === false
+    );
   }
 
   get isPublishing() {
@@ -209,6 +226,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             <BoxelButton
               @kind='primary'
               @size='tall'
+              @disabled={{this.isUnpublishable}}
               class='publish-realm-button'
               {{on 'click' this.openPublishRealmModal}}
               data-test-publish-realm-button
@@ -257,14 +275,34 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       </:topBar>
       <:default as |layout|>
-        <HostModeContent
-          @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
-          @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
-          @removeCardFromStack={{this.removeCardFromStack}}
-          @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
-          @viewCard={{this.viewCard}}
-          class='host-submode-content'
-        />
+        <div class='host-submode-body'>
+          {{#if this.isUnpublishable}}
+            <Alert
+              @type='warning'
+              class='unpublishable-alert'
+              data-test-unpublishable-realm-warning
+              as |Alert|
+            >
+              <Alert.Messages
+                @messages={{array
+                  'This workspace is not publishable, so these pages cannot be put on the web. Host mode still previews how they would look.'
+                }}
+              />
+              <Alert.Action
+                @actionName='View in Interact mode'
+                @action={{fn layout.updateSubmode 'interact'}}
+              />
+            </Alert>
+          {{/if}}
+          <HostModeContent
+            @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
+            @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
+            @removeCardFromStack={{this.removeCardFromStack}}
+            @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
+            @viewCard={{this.viewCard}}
+            class='host-submode-content'
+          />
+        </div>
       </:default>
     </SubmodeLayout>
 
@@ -313,8 +351,27 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         );
       }
 
+      /* Column that splits the submode's body between the warning, which
+         takes its natural height, and the preview, which fills the rest.
+         min-height: 0 keeps the preview's own overflow scrolling rather than
+         growing this column past the viewport. */
+      .host-submode-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+
       .host-submode-content {
         flex: 1;
+        min-height: 0;
+      }
+
+      .unpublishable-alert {
+        margin: 0 var(--operator-mode-spacing) var(--operator-mode-spacing);
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        flex-shrink: 0;
       }
 
       .publish-realm-button-container {

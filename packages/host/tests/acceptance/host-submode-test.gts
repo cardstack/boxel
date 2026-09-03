@@ -318,6 +318,20 @@ module('Acceptance | host submode', function (hooks) {
     setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
+      // publishable lives in realm_metadata. Seed the row BEFORE
+      // setupAcceptanceTestRealm so parseRealmInfo's first read (which gets
+      // cached) sees publishable: false. An absent row also reads as
+      // not-publishable, but only an explicit false is distinguishable from a
+      // realm whose metadata has yet to load, and it is the state a published
+      // realm's own copy is left in — so it is what the UI keys on.
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(false),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = false`,
+      ]);
       // Each of these nested modules builds the same realm for every one of its
       // tests, so the indexed result is cached per module and restored instead
       // of being rebuilt. The seeded realm_metadata row above is part of what
@@ -356,6 +370,41 @@ module('Acceptance | host submode', function (hooks) {
 
       assert.dom('[data-test-submode-switcher]').hasText('Interact');
       assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
+    });
+
+    test('a rendered card still warns that the workspace cannot be published', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert
+        .dom('[data-test-host-mode-card]')
+        .hasText(
+          'Title: A B',
+          'the card renders — the warning accompanies it rather than replacing it',
+        );
+      assert
+        .dom('[data-test-unpublishable-realm-warning]')
+        .containsText(
+          'not publishable',
+          'the warning names the workspace-level reason publishing is unavailable',
+        );
+      assert
+        .dom('[data-test-publish-realm-button]')
+        .isDisabled(
+          'publishing is withheld, since the publish endpoint rejects the realm outright',
+        );
+    });
+
+    test('the warning offers a way back to interact submode', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-alert-action-button="View in Interact mode"]');
+
+      assert.dom('[data-test-submode-switcher]').hasText('Interact');
     });
   });
 
@@ -414,6 +463,34 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       assert.dom('[data-test-open-search-field]').doesNotExist();
+    });
+
+    test('no unpublishability warning is shown', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
+      assert.dom('[data-test-publish-realm-button]').isNotDisabled();
+    });
+
+    test('an empty selection reports itself as empty, not as unpublishable', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom('[data-test-host-mode-empty]')
+        .containsText('No card selected');
+      assert
+        .dom('[data-test-host-mode-empty]')
+        .doesNotContainText(
+          'publishable',
+          'having nothing to render is not a publishability problem',
+        );
+      assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
     });
 
     test('entering from interact mode stays on the same card', async function (assert) {
