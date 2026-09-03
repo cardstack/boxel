@@ -134,16 +134,21 @@
   --boxel-button-disabled-foreground: var(--boxel-450);
 }
 
-/* Themed-card boundary reset. The --theme-* typography knobs are deliberately
-   NOT reset here: a nested theme that omits them inherits the ambient
-   typography, and one that wants its own simply sets them — whereas a reset
-   would make inheriting impossible to express. */
+/* ── Themed-card boundary reset ─────────────────────────────────────────────
+
+  Which values: ONLY those that are set to default values by the light or dark
+  blocks in this file (and are not meant to be inherited) need to be reset here.
+
+  Deliberately NOT reset: the --theme-* typography knobs, --success and
+  --warning colors.
+
+  Why: A theme that omits them inherits the defaults, unless it wants its own,
+  in which case it simply sets them in its theme file. Resetting them would
+  make inheriting impossible to express.
+*/
 :where([data-boxel-theme-scope]) {
-  --boxel-switch-background: initial;
   --boxel-switch-thumb: initial;
-  --boxel-switch-active-thumb: initial;
   --boxel-switch-thumb-icon: initial;
-  --boxel-switch-active-thumb-icon: initial;
   --boxel-button-default-border: initial;
   --boxel-button-default-active-background: initial;
   --boxel-button-default-active-foreground: initial;
@@ -158,11 +163,6 @@
   --boxel-button-disabled-background: initial;
   --boxel-button-disabled-border: initial;
   --boxel-button-disabled-foreground: initial;
-  /* Status tokens sit outside the shadcn contract, so a theme may omit them.
-     Fall back to the fixed Boxel status palette rather than leaking the ambient
-     theme's value; a theme that sets them still wins on specificity. */
-  --success: var(--boxel-success);
-  --warning: var(--boxel-warning);
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────
