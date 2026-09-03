@@ -6,8 +6,8 @@
   "devDependencies": {
     "@babel/core": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
-    "@cardstack/local-types": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.0.4",
