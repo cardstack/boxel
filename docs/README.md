@@ -20,8 +20,6 @@ The following are important concepts:
 - [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
 - [Boxel rendering protocol](boxel-rendering-protocol.md): the render contract every execution tier owes a card — what authored code may rely on, what crosses an execution boundary, and how a card is routed to a trust tier. Status **DRAFT**: it states `main`'s observed rendering behavior in normative language, and becomes binding when the Direct equivalence oracle is green. Each statement carries an `RP-x.y` id, and `pnpm lint:rp-bijection` holds statements and conformance tests to each other.
-- [Execution runtime wild corpus](boxel-execution-runtime-wild-corpus.md): the 50-card breadth lane for the execution runtime — real persisted cards compared through a reference Host and a candidate Host, rendered from the executable manifest the smoke runner reads. The corpus validates; a red card opens a conformance test rather than an adapter exception.
-- [Execution runtime render baseline](boxel-execution-runtime-render-baseline.md): the method, environment, and recorded cold/warm render timings that later execution-runtime performance claims are measured against. Local development numbers are diagnostic, not objectives.
 
 ## Operations
 
