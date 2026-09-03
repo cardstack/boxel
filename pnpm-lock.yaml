@@ -229,7 +229,7 @@ catalogs:
       specifier: ^2.1.0
       version: 2.1.0
     '@types/node':
-      specifier: ^24.13.2
+      specifier: ^24.3.0
       version: 24.13.2
     '@types/pg':
       specifier: ^8.11.5
