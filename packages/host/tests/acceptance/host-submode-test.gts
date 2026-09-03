@@ -372,7 +372,27 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
     });
 
-    test('a rendered card still warns that the workspace cannot be published', async function (assert) {
+    test('the publish modal warns that the workspace cannot be published', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+
+      assert
+        .dom('[data-test-unpublishable-realm-warning]')
+        .containsText(
+          'not publishable',
+          'the warning states the workspace cannot be published',
+        );
+      assert
+        .dom('[data-test-publish-button]')
+        .isDisabled(
+          'publishing is withheld rather than left to fail against the endpoint',
+        );
+    });
+
+    test('host submode itself carries no unpublishability warning', async function (assert) {
       await visitOperatorMode({
         submode: 'host',
         trail: [`${testRealmURL}Person/1.json`],
@@ -380,36 +400,12 @@ module('Acceptance | host submode', function (hooks) {
 
       assert
         .dom('[data-test-host-mode-card]')
-        .hasText(
-          'Title: A B',
-          'the card renders — the warning accompanies it rather than replacing it',
-        );
+        .hasText('Title: A B', 'the preview renders as usual');
       assert
         .dom('[data-test-unpublishable-realm-warning]')
-        .containsText(
-          'not publishable',
-          'the warning names the workspace-level reason publishing is unavailable',
+        .doesNotExist(
+          'the warning belongs to the publish flow, not the submode chrome',
         );
-      assert
-        .dom('[data-test-publish-realm-button]')
-        .isDisabled(
-          'publishing is withheld, since the publish endpoint rejects the realm outright',
-        );
-    });
-
-    test('the warning offers a way back to interact submode', async function (assert) {
-      // Both trail and stack carry the card, the way entering host submode
-      // from interact leaves them, so switching back lands on that card
-      // rather than on the empty workspace chooser.
-      await visitOperatorMode({
-        submode: 'host',
-        trail: [`${testRealmURL}Person/1.json`],
-        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
-      });
-      await click('[data-test-alert-action-button="View in Interact mode"]');
-
-      assert.dom('[data-test-submode-switcher]').hasText('Interact');
-      assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
     });
   });
 
@@ -470,14 +466,14 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-open-search-field]').doesNotExist();
     });
 
-    test('no unpublishability warning is shown', async function (assert) {
+    test('the publish modal shows no unpublishability warning', async function (assert) {
       await visitOperatorMode({
         submode: 'host',
         trail: [`${testRealmURL}Person/1.json`],
       });
+      await click('[data-test-publish-realm-button]');
 
       assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
-      assert.dom('[data-test-publish-realm-button]').isNotDisabled();
     });
 
     test('an empty selection reports itself as empty, not as unpublishable', async function (assert) {
@@ -495,7 +491,6 @@ module('Acceptance | host submode', function (hooks) {
           'publishable',
           'having nothing to render is not a publishability problem',
         );
-      assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
     });
 
     test('entering from interact mode stays on the same card', async function (assert) {

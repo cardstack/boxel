@@ -155,8 +155,32 @@ export default class PublishRealmModal extends Component<Signature> {
     return (
       !this.hasSelectedPublishedRealmURLs ||
       this.isUnpublishingAnyRealms ||
-      this.isPublishing
+      this.isPublishing ||
+      this.isRealmUnpublishable
     );
+  }
+
+  // The publish endpoint accepts a workspace only while its realm_metadata
+  // row says publishable, and 422s otherwise — so the answer is known before
+  // the request and belongs next to the other pre-publish checks, rather than
+  // arriving as a per-domain failure after the attempt. Publishing clears the
+  // flag on the published copy, so a workspace that is itself a published site
+  // is the ordinary way to reach this state.
+  //
+  // Nullish is "not known yet", not "refused": the realm service answers a
+  // placeholder with `publishable: null` while a realm's metadata is in
+  // flight, and treating that as a refusal would block publishing every time
+  // the dialog opened ahead of its own realm info. Tested for falsiness
+  // rather than `=== false` because the flag arrives as whichever shape its
+  // realm's adapter yields for a boolean column: real booleans from
+  // postgres-backed realms, 0/1 from SQLite-backed ones.
+  get isRealmUnpublishable() {
+    let publishable = this.realm.info(this.currentRealmURL)?.publishable as
+      | boolean
+      | number
+      | null
+      | undefined;
+    return publishable != null && !publishable;
   }
 
   get shouldShowPrivateDependencyWarning() {
@@ -984,6 +1008,27 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
+        {{#if this.isRealmUnpublishable}}
+          <div
+            class='publish-warning warning'
+            data-test-unpublishable-realm-warning
+          >
+            <WarningIcon
+              class='publish-warning-icon'
+              width='20'
+              height='20'
+              role='presentation'
+            />
+            <div class='publish-warning-body'>
+              <div>
+                This workspace is not publishable, so it cannot be published to
+                any domain. Publishing a workspace marks the published copy
+                itself unpublishable, so a workspace that is already a published
+                site cannot be published again.
+              </div>
+            </div>
+          </div>
+        {{/if}}
         {{#if this.privateDependencyCheckError}}
           <div class='publish-warning error' data-test-private-dependency-error>
             {{this.privateDependencyCheckError}}
