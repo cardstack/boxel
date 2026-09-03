@@ -264,7 +264,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight, 600);
 
-      /* letter-spacing per slot; body and label follow the theme's base tracking */
+      /* letter-spacing per slot; body, caption, and label follow the theme's base tracking */
       --boxel-heading-letter-spacing: var(
         --theme-heading-letter-spacing,
         normal
@@ -300,6 +300,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       font-size: var(--boxel-body-font-size);
       font-weight: var(--boxel-body-font-weight);
       line-height: var(--boxel-body-line-height);
+      letter-spacing: var(--boxel-body-letter-spacing);
     }
 
     /* Element reset + typography roles, contained to card content: bare
@@ -319,18 +320,21 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         font-size: var(--boxel-heading-font-size);
         font-weight: var(--boxel-heading-font-weight);
         line-height: var(--boxel-heading-line-height);
+        letter-spacing: var(--boxel-heading-letter-spacing);
       }
       :global(.boxel-card-container h2) {
         font-family: var(--boxel-section-heading-font-family);
         font-size: var(--boxel-section-heading-font-size);
         font-weight: var(--boxel-section-heading-font-weight);
         line-height: var(--boxel-section-heading-line-height);
+        letter-spacing: var(--boxel-section-heading-letter-spacing);
       }
       :global(.boxel-card-container h3) {
         font-family: var(--boxel-subheading-font-family);
         font-size: var(--boxel-subheading-font-size);
         font-weight: var(--boxel-subheading-font-weight);
         line-height: var(--boxel-subheading-line-height);
+        letter-spacing: var(--boxel-subheading-letter-spacing);
       }
       :global(.boxel-card-container :is(h4, h5, h6)) {
         font-size: inherit;
@@ -338,6 +342,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       :global(.boxel-card-container small) {
         font-size: var(--boxel-caption-font-size);
         line-height: var(--boxel-caption-line-height);
+        letter-spacing: var(--boxel-caption-letter-spacing);
       }
     }
   </style>

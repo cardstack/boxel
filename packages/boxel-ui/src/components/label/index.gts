@@ -37,7 +37,7 @@ const Label: TemplateOnlyComponent<Signature> = <template>
         font-size: var(--boxel-label-font-size, var(--boxel-body-font-size));
         font-weight: var(--boxel-label-font-weight, 500);
         line-height: var(--boxel-label-line-height, 1.1);
-        font-family: inherit;
+        font-family: var(--boxel-label-font-family, inherit);
         letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
       }
       .boxel-label--small {
