@@ -79,7 +79,12 @@ const prerenderServerURL = `http://127.0.0.1:${prerenderPort}`;
 // client and would poison the cached fixture template if one aborted —
 // while staying below the server's own per-step render timeout, so the
 // client abort, not the server timeout, is what ends the wedged visit.
-const PRERENDER_CLIENT_TIMEOUT_MS = 25_000;
+// Census runs shrink the server render timeout so a stuck pass fails fast;
+// keep this test's client abort below it in that case too.
+const PRERENDER_CLIENT_TIMEOUT_MS = Math.min(
+  25_000,
+  prerenderRenderTimeoutMs - 1_000,
+);
 if (PRERENDER_CLIENT_TIMEOUT_MS >= prerenderRenderTimeoutMs) {
   throw new Error(
     `PRERENDER_CLIENT_TIMEOUT_MS (${PRERENDER_CLIENT_TIMEOUT_MS}) must stay below ` +
