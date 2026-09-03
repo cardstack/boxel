@@ -12,12 +12,13 @@
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "stripe": "catalog:",
-    "@sentry/node": "catalog:"
+    "@sentry/node": "catalog:",
+    "stripe": "catalog:"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
     "concurrently": "catalog:"
   },
   "scripts": {
