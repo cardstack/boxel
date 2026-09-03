@@ -173,6 +173,29 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  // The splitter partitions the files on disk, but tests/index.ts loads a
+  // hand-maintained list. A file in the first and not the second is assigned
+  // to a shard that never loads it, so it passes CI by never running. Three
+  // files were in that position when this was written — this one among them —
+  // and the only signal was the weights generator listing them as unmeasured.
+  test('tests/index.ts loads every test file the shards are packed from', function (assert) {
+    const source = readFileSync(join(testsDir, 'index.ts'), 'utf8');
+    const loaded = new Set(
+      [...source.matchAll(/^\s*'\.\/(.+?)',$/gm)].map(
+        ([, file]) => `${file}.ts`,
+      ),
+    );
+    assert.true(
+      loaded.size > 0,
+      'read the ALL_TEST_FILES list out of index.ts',
+    );
+    assert.deepEqual(
+      discoverTestFiles().filter((file: string) => !loaded.has(file)),
+      [],
+      'every test file on disk is in ALL_TEST_FILES',
+    );
+  });
+
   // The drift gate in scripts/generate-test-module-timings.mjs decides whether
   // fresh measurements are worth a commit by asking what the committed packing
   // costs at the fresh weights. Packing and costing use different weights, and
