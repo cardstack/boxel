@@ -27,15 +27,30 @@
 // Usage:
 //   gh run download <ci-run-id> --name realm-server-test-report-merged -D /tmp/rs
 //   node scripts/generate-test-module-timings.mjs /tmp/rs/realm-server.xml
+//
+// Options:
+//   --min-drift-seconds <n>  Only rewrite the weights when doing so improves
+//                            the predicted slowest shard by at least n
+//                            seconds. Without it every run rewrites the file,
+//                            which on a per-push CI job means a commit per
+//                            push recording nothing but jitter.
+//   --shard-count <n>        The shard count that prediction packs into.
+//                            Required with --min-drift-seconds and with no
+//                            default: "the slowest shard" is meaningless until
+//                            you say how many there are. Keep it equal to the
+//                            realm-server matrix in .github/workflows/ci.yaml.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+import shardTestModules from './shard-test-modules.cjs';
 import {
   createResolver,
   discoverTestFiles,
   testsDir,
 } from './test-module-names.mjs';
+
+const { assignByWeight, weightFor } = shardTestModules;
 
 const timingsPath = join(testsDir, 'test-module-timings.json');
 
@@ -45,10 +60,43 @@ const timingsPath = join(testsDir, 'test-module-timings.json');
 // so refuse instead.
 const MIN_ATTRIBUTED = 0.9;
 
-const junitPath = process.argv[2];
-if (!junitPath) {
+const args = process.argv.slice(2);
+let junitPath;
+let minDriftSeconds = 0;
+let shardCount;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--min-drift-seconds') {
+    minDriftSeconds = Number(args[++i]);
+  } else if (args[i] === '--shard-count') {
+    shardCount = Number(args[++i]);
+  } else if (!junitPath) {
+    junitPath = args[i];
+  } else {
+    console.error(`Unexpected argument: ${args[i]}`);
+    process.exit(1);
+  }
+}
+
+if (
+  !junitPath ||
+  !Number.isFinite(minDriftSeconds) ||
+  minDriftSeconds < 0 ||
+  (shardCount !== undefined &&
+    !(Number.isInteger(shardCount) && shardCount > 0))
+) {
   console.error(
-    'Usage: node scripts/generate-test-module-timings.mjs <merged-junit-xml>',
+    'Usage: node scripts/generate-test-module-timings.mjs <merged-junit-xml> ' +
+      '[--min-drift-seconds n] [--shard-count n]',
+  );
+  process.exit(1);
+}
+
+// Silently defaulting the shard count would compare slowest-shard times for a
+// suite nobody runs, and the gate would open and close on that fiction.
+if (minDriftSeconds > 0 && shardCount === undefined) {
+  console.error(
+    '--min-drift-seconds requires --shard-count: the prediction is a ' +
+      'slowest-shard time, which depends on how many shards there are.',
   );
   process.exit(1);
 }
@@ -116,11 +164,18 @@ if (coverage < MIN_ATTRIBUTED) {
   process.exit(1);
 }
 
+// Absent is the first run and means there is nothing to preserve. Present but
+// unparseable is a broken file, and swallowing it would drop every weight the
+// current report does not cover — quietly, since the result still looks like a
+// well-formed refresh. shard-test-modules.cjs draws the same distinction.
 let prior = {};
 try {
   prior = JSON.parse(readFileSync(timingsPath, 'utf8'));
-} catch {
-  // First run: nothing to preserve.
+} catch (err) {
+  if (err.code !== 'ENOENT') {
+    console.error(`${timingsPath} exists but could not be read as JSON.`);
+    throw err;
+  }
 }
 
 const merged = {};
@@ -128,6 +183,41 @@ for (const file of onDisk) {
   const value = timings[file] ?? prior[file];
   if (value !== undefined) {
     merged[file] = value;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Drift gate. Predict the slowest shard under the committed weights and under
+// the regenerated ones, both scored against the regenerated ones as the better
+// estimate of true duration, and only rewrite if the difference is worth a
+// commit. The packing comes from shard-test-modules.cjs itself rather than a
+// copy of it, so the prediction cannot drift from the assignment it predicts.
+// ---------------------------------------------------------------------------
+
+function slowestShardSeconds(packWeights, trueWeights) {
+  let slowest = 0;
+  for (let shard = 1; shard <= shardCount; shard++) {
+    const load = assignByWeight(onDisk, packWeights, shard, shardCount).reduce(
+      (sum, file) => sum + weightFor(file, trueWeights),
+      0,
+    );
+    slowest = Math.max(slowest, load);
+  }
+  return slowest;
+}
+
+if (minDriftSeconds > 0 && Object.keys(prior).length > 0) {
+  const staleCost = slowestShardSeconds(prior, merged);
+  const freshCost = slowestShardSeconds(merged, merged);
+  const improvement = staleCost - freshCost;
+  console.log(
+    `Predicted slowest shard of ${shardCount}: ${staleCost.toFixed(0)}s with the ` +
+      `committed weights, ${freshCost.toFixed(0)}s with the regenerated ones ` +
+      `(improvement ${improvement.toFixed(0)}s, threshold ${minDriftSeconds}s).`,
+  );
+  if (improvement < minDriftSeconds) {
+    console.log('Within the threshold — leaving the weights unchanged.');
+    process.exit(0);
   }
 }
 

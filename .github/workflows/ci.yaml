@@ -715,7 +715,7 @@ jobs:
 
             if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
                git log --format="%s" "$WORKFLOW_SHA..origin/main" \
-                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings)"; then
+                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
               echo "main has advanced past $WORKFLOW_SHA — skipping (a newer CI run will publish the timings)."
               exit 0
             fi
@@ -939,6 +939,113 @@ jobs:
           name: pr-comment-slot-realm-tests
           path: slot/
           retention-days: 7
+
+  realm-server-shard-timings-update:
+    name: Update Realm Server Shard Timings
+    # Push-to-main only, like its two siblings: this is a job holding
+    # `contents: write`, so it must not run from a ref an untrusted branch can
+    # rewrite.
+    #
+    # Maintains packages/realm-server/tests/test-module-timings.json, the
+    # per-file durations that decide which shard each test file runs on (see
+    # packages/realm-server/scripts/shard-test-modules.cjs). Without this the
+    # weights only change when someone remembers to regenerate them by hand,
+    # and every file added in between packs at DEFAULT_WEIGHT no matter what it
+    # actually costs.
+    #
+    # Runs off the merge job rather than the shards, because that is what
+    # produces the merged report — and it runs whether or not the shards
+    # passed. Files missing from a failed shard's report keep their committed
+    # values, and skipping red runs would leave the weights to rot through a
+    # flaky week.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && needs.realm-server-merge-reports.result == 'success' }}
+    needs: [realm-server-merge-reports]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: realm-server-shard-timings-update-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # History past the triggering SHA, so the staleness check below can
+          # see what landed on main while this run was going.
+          fetch-depth: 0
+
+      # mise alone, not `./.github/actions/init`. The generator imports node
+      # builtins and two local scripts and nothing else, so the frozen-lockfile
+      # install that init performs would be several minutes spent on packages
+      # this job never loads. .mise.toml still pins the node version.
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: true
+
+      - name: Download the merged JUnit report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: realm-server-test-report-merged
+          path: merged-realm-server-report
+
+      - name: Update shard timings
+        # Retry from the latest main: another PR may merge while this workflow
+        # is running, causing `git push` to be rejected. Each retry fetches and
+        # hard-resets to the freshest tip-of-main, then regenerates against it.
+        #
+        # Staleness guard: if a commit other than an automated measurement
+        # update landed on main since this workflow was triggered, skip — that
+        # newer push triggered its own run, which will publish weights derived
+        # from its own code.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORKFLOW_SHA="${{ github.sha }}"
+          REPORT="$PWD/merged-realm-server-report/realm-server.xml"
+
+          if [ ! -f "$REPORT" ]; then
+            echo "No merged report at $REPORT — leaving the weights unchanged."
+            exit 0
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+
+            if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" \
+                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
+              echo "main has advanced past $WORKFLOW_SHA — skipping (a newer CI run will publish the weights)."
+              exit 0
+            fi
+
+            git reset --hard origin/main
+
+            # Gated on drift: the weights are only rewritten when doing so
+            # improves the predicted slowest shard by over a minute, so
+            # run-to-run jitter doesn't produce a commit per main push. The
+            # shard count must match `shardIndex` on realm-server-test above.
+            #
+            # A nonzero exit — the attribution floor, an unreadable report —
+            # fails the job rather than committing degraded weights.
+            node packages/realm-server/scripts/generate-test-module-timings.mjs "$REPORT" \
+              --min-drift-seconds 60 --shard-count 6
+
+            if git diff --quiet packages/realm-server/tests/test-module-timings.json; then
+              echo "Shard timings unchanged — nothing to commit."
+              exit 0
+            fi
+            git add packages/realm-server/tests/test-module-timings.json
+            git commit -m "Update realm-server shard timings [skip ci]"
+
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push shard timings after 5 attempts"
+          exit 1
 
   amd-transpile-bench:
     name: AMD Transpile Bench
