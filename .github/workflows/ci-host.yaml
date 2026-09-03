@@ -318,8 +318,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # The stack runs in the background for the rest of the job. Its start
+      # time and pid let `ci:wait-for-realms` budget its wait against the
+      # stack's own start-server-and-test deadline and stop the moment the
+      # stack is gone. `$!` is tee's pid, the last process in the pipeline:
+      # it exits when the stack's output stream closes, i.e. when nothing in
+      # the stack is left running.
       - name: Start test services (icons + host dist + realm servers)
-        run: mise run test-services:host | tee -a /tmp/server.log &
+        run: |
+          date +%s > /tmp/test-services.started
+          mise run test-services:host | tee -a /tmp/server.log &
+          echo $! > /tmp/test-services.pid
 
       # Register the matrix users (realm_server, base_realm, …) the
       # realm-server logs in as. Without this the worker's `_mtimes`
@@ -334,94 +343,31 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
 
-      # Block until base + skills realms are fully indexed and publicly
-      # readable. `_readiness-check` returns 200 only after the realm's
-      # from-scratch index finishes (which itself waits for the prerender
-      # standby pool the index depends on). The subsequent settle pause
-      # lets the prerender's standby pool finish populating before the
-      # test runner launches its own chrome instance — concurrent chrome
-      # lifecycle events otherwise trip NetworkChangeNotifier and abort
-      # the still-loading standby pages.
+      # Block until every realm the live tests read is fully indexed and
+      # publicly readable. `_readiness-check` returns 200 only after the
+      # realm's boot index finishes (which itself waits for the prerender
+      # standby pool the index depends on), so nothing starts against a
+      # half-indexed realm. base, skills and openrouter index in sequence in
+      # the one realm-server process; openrouter carries the model-cost
+      # banding live test, whose *.test.gts the live-test runner discovers,
+      # so it must be indexed and publicly readable before testem launches.
+      #
+      # icons.<slug>.localhost serves a static dist via http-server behind
+      # Traefik with no readiness endpoint, so a stable file is probed
+      # instead.
+      #
+      # `ci:wait-for-realms` fails fast, with Traefik diagnostics, when the
+      # service stack exits or a route disappears mid-wait, instead of
+      # polling a torn-down environment until its own budget runs out.
       - name: Wait for realms and assert public-read parity
         run: |
-          set -u
-          accept='application/vnd.api+json'
-          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
-          info='_info'
-          base_ready="https://realm-server.ci.localhost/base/${ready}"
-          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
-          openrouter_ready="https://realm-server.ci.localhost/openrouter/${ready}"
-          skills_info="https://realm-server.ci.localhost/skills/${info}"
-          base_info="https://realm-server.ci.localhost/base/${info}"
-          openrouter_info="https://realm-server.ci.localhost/openrouter/${info}"
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: base/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-          # openrouter carries the model-cost banding live test; the live-test
-          # runner discovers its *.test.gts, so it must be indexed and publicly
-          # readable before testem launches, same as skills.
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/openrouter_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$openrouter_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: openrouter/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::openrouter/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
-          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
-          openrouter_code=$(curl -sS -o /tmp/openrouter_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$openrouter_info" || echo 000)
-          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ] || [ "$openrouter_code" != "200" ]; then
-            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code openrouter=$openrouter_code)"
-            exit 1
-          fi
-
-          # icons.<slug>.localhost serves a static dist via http-server
-          # behind Traefik; there's no _readiness-check, so probe a stable
-          # file. A failure here means either the Traefik route isn't
-          # registered yet or http-server hasn't bound its port.
-          icons_probe="https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js"
-          ok=0
-          for i in $(seq 1 30); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$icons_probe" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: icons probe -> $code (waiting)"
-            sleep 2
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::icons probe did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          echo "::notice::Environment-mode public-read parity confirmed"
+          mise run ci:wait-for-realms \
+            realm=https://realm-server.ci.localhost/base/ \
+            realm=https://realm-server.ci.localhost/skills/ \
+            realm=https://realm-server.ci.localhost/openrouter/ \
+            icons=https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js \
+            stack-pid-file=/tmp/test-services.pid \
+            stack-started-file=/tmp/test-services.started
 
       - name: Live test suite
         run: dbus-run-session -- pnpm test:live
@@ -613,8 +559,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # The stack runs in the background for the rest of the job. Its start
+      # time and pid let `ci:wait-for-realms` budget its wait against the
+      # stack's own start-server-and-test deadline and stop the moment the
+      # stack is gone. `$!` is tee's pid, the last process in the pipeline:
+      # it exits when the stack's output stream closes, i.e. when nothing in
+      # the stack is left running.
       - name: Start test services (icons + host dist + realm servers)
-        run: mise run test-services:host | tee -a /tmp/server.log &
+        run: |
+          date +%s > /tmp/test-services.started
+          mise run test-services:host | tee -a /tmp/server.log &
+          echo $! > /tmp/test-services.pid
 
       # Register the matrix users (realm_server, base_realm, …) the
       # realm-server logs in as. Without this the worker's `_mtimes`
@@ -631,115 +586,39 @@ jobs:
 
       # Block until base + skills realms are fully indexed and publicly
       # readable. `_readiness-check` returns 200 only after the realm's
-      # from-scratch index finishes (which itself waits for the
-      # prerender standby pool the index depends on). The subsequent
-      # settle pause lets the prerender's standby pool finish
-      # populating before the test runner launches its own chrome
-      # instance — concurrent chrome lifecycle events otherwise trip
-      # NetworkChangeNotifier and abort the still-loading standby pages.
+      # boot index finishes (which itself waits for the prerender standby
+      # pool the index depends on) — the full from-scratch index when the
+      # per-slug Postgres started empty, or just the files this checkout
+      # changed when a cached index was imported (see check-index-cache).
+      # skills indexes after base in the same realm-server process; the
+      # AI-assistant tests fetch Skill/boxel-environment, so skills must be
+      # indexed before testem launches its chrome or those tests 404.
+      #
+      # icons.<slug>.localhost serves a static dist via http-server behind
+      # Traefik with no readiness endpoint, so a stable file is probed
+      # instead. A miss there means the Traefik route isn't registered or
+      # http-server hasn't bound its port.
+      #
+      # The live test realm-server's `/test/` realm holds the source for
+      # the `testModuleRealm` URLs the host tests load (hassan, mango, …).
+      # `start-server-and-test` releases it when `/node-test/` is ready,
+      # but node-test and test index sequentially in that process, so
+      # `/test/` can still be indexing. Without waiting on it, fast tests
+      # race the indexer and render "Card Error: Not Found" into Percy
+      # snapshots.
+      #
+      # `ci:wait-for-realms` fails fast, with Traefik diagnostics, when the
+      # service stack exits or a route disappears mid-wait, instead of
+      # polling a torn-down environment until its own budget runs out.
       - name: Wait for realms and assert public-read parity
         run: |
-          set -u
-          accept='application/vnd.api+json'
-          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
-          info='_info'
-          base_ready="https://realm-server.ci.localhost/base/${ready}"
-          skills_ready="https://realm-server.ci.localhost/skills/${ready}"
-          skills_info="https://realm-server.ci.localhost/skills/${info}"
-          base_info="https://realm-server.ci.localhost/base/${info}"
-
-          # base/_readiness-check returns 200 only after the base realm's
-          # boot index finishes — the ~60s from-scratch index when the
-          # per-slug Postgres started empty, or just the files this checkout
-          # changed when a cached index was imported (see check-index-cache).
-          # It awaits the in-flight index either way, so tests never start
-          # against a half-reconciled realm. Tests that load base cards block
-          # on this being indexed.
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: base/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          # skills/_readiness-check is the parallel gate for the skills
-          # realm. The realm-server boots base and skills in sequence, so
-          # skills indexing only starts after base finishes; the AI-assistant
-          # skills tests fetch Skill/boxel-environment, which requires skills
-          # to be indexed before testem launches its chrome. Without this
-          # wait the test would 404 on skills cards even though base is ready.
-          ok=0
-          for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/skills_ready.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$skills_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: skills/_readiness-check -> $code (waiting)"
-            sleep 10
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          # Public-read parity: must be 200 unauthenticated.
-          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
-          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
-            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
-          echo "skills/_info -> $skills_code"
-          echo "base/_info   -> $base_code"
-          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
-            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
-            exit 1
-          fi
-
-          # icons.<slug>.localhost serves a static dist via http-server
-          # behind Traefik; there's no _readiness-check, so probe a stable
-          # file. A failure here means either the Traefik route isn't
-          # registered yet or http-server hasn't bound its port.
-          icons_probe="https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js"
-          ok=0
-          for i in $(seq 1 30); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$icons_probe" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: icons probe -> $code (waiting)"
-            sleep 2
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::icons probe did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          # The live test realm-server's `/test/` realm contains the
-          # source for `testModuleRealm` URLs the host tests load
-          # (hassan, mango, etc.). `start-server-and-test` releases when
-          # `/node-test/_readiness-check` 200s, but node-test and test
-          # index sequentially in the same realm-server process — so
-          # `/node-test/` can be ready while `/test/` is still
-          # indexing. Without this wait, fast tests race the indexer
-          # and see the realm-server's notFound response (rendered as
-          # "Card Error: Not Found" in Percy snapshots).
-          test_realm_ready="https://realm-test.ci.localhost/test/${ready}"
-          ok=0
-          for i in $(seq 1 60); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 15 "$test_realm_ready" || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: realm-test/test/_readiness-check -> $code (waiting)"
-            sleep 5
-          done
-          if [ "$ok" != "1" ]; then
-            echo "::error::realm-test/test/_readiness-check did not return 200 within timeout (last $code)"
-            exit 1
-          fi
-
-          echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
+          mise run ci:wait-for-realms \
+            realm=https://realm-server.ci.localhost/base/ \
+            realm=https://realm-server.ci.localhost/skills/ \
+            icons=https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js \
+            ready=https://realm-test.ci.localhost/test/ \
+            stack-pid-file=/tmp/test-services.pid \
+            stack-started-file=/tmp/test-services.started
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
