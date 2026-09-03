@@ -77,20 +77,24 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   // A workspace can only be published while its realm_metadata row says
-  // `publishable: true`; the publish endpoint rejects anything else outright.
-  // Publishing flips the flag to false on the *published* copy, so opening a
-  // published site's own workspace is the ordinary way to land in this state.
+  // publishable; the publish endpoint rejects anything else outright.
+  // Publishing clears the flag on the *published* copy, so opening a published
+  // site's own workspace is the ordinary way to land in this state.
   //
-  // Keyed on an explicit `false` rather than `!== true`: the realm service
-  // answers `publishable: null` from a placeholder while a realm's metadata is
-  // still in flight, and treating that as a refusal would flash the warning on
-  // every load. A realm with no metadata row at all is likewise `null` — it
-  // cannot be published either, but the submode switcher already withholds
-  // host mode from it, so there is nothing to contradict here.
+  // Nullish is "not known yet", not "refused": the realm service answers a
+  // placeholder with `publishable: null` while a realm's metadata is in
+  // flight, and warning on that would flash the notice on every load. A realm
+  // with no metadata row reads the same way — it cannot be published either,
+  // but the submode switcher already withholds host mode from it, so there is
+  // nothing to contradict here.
+  //
+  // Tested for falsiness rather than `=== false` because the flag reaches this
+  // getter as whichever shape its realm's adapter yields for a boolean column:
+  // real booleans from postgres-backed realms, 0/1 from SQLite-backed ones.
   get isUnpublishable() {
-    return (
-      this.operatorModeStateService.currentRealmInfo?.publishable === false
-    );
+    let publishable = this.operatorModeStateService.currentRealmInfo
+      ?.publishable as boolean | number | null | undefined;
+    return publishable != null && !publishable;
   }
 
   get isPublishing() {

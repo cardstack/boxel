@@ -398,13 +398,18 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     test('the warning offers a way back to interact submode', async function (assert) {
+      // Both trail and stack carry the card, the way entering host submode
+      // from interact leaves them, so switching back lands on that card
+      // rather than on the empty workspace chooser.
       await visitOperatorMode({
         submode: 'host',
         trail: [`${testRealmURL}Person/1.json`],
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
       });
       await click('[data-test-alert-action-button="View in Interact mode"]');
 
       assert.dom('[data-test-submode-switcher]').hasText('Interact');
+      assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
     });
   });
 
