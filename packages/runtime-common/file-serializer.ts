@@ -115,6 +115,10 @@ export default async function serialize({
   delete result.data.meta.realmURL;
   delete result.data.meta.lastModified;
   delete result.data.meta.resourceCreatedAt;
+  // Serve-time join output (the durable screenshot URLs of whatever instance
+  // the doc was GET from) — persisting an echo would pin a copied card's
+  // source file to the original's captures.
+  delete result.data.meta.screenshots;
   delete result.included;
   delete result.data.links;
   result.data.type = 'card';
