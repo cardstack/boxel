@@ -8,12 +8,15 @@
 //
 // Two event types cover the pipeline's processes:
 //
-//   - `request` — emitted by a serving surface (the GET `_screenshot/` DSL
-//     route in `realm.ts`, or `POST /_screenshot-card`) when a
+//   - `request` — emitted by a serving surface (the GET `_screenshot/`
+//     route in `realm.ts` — `get-dsl` for capture-spec params, `get-named`
+//     for `?name=` manifest addressing — or `POST /_screenshot-card`) when a
 //     capture-relevant request completes: what the caller experienced
 //     (ledger hit / rendered / 503 / 403) and where its wall-clock went.
 //     Plain uncaptured-miss 404s and request-shape 400s do not emit — they
-//     are addressing noise, not capture work.
+//     are addressing noise, not capture work. On `get-named` events the
+//     `generationLookupMs` slot carries the manifest lookup (its liveness
+//     read plays the same role).
 //
 //   - `capture` — emitted by the worker's `screenshot-card` task when a job
 //     finishes: queue wait, the prerender stage breakdown, and the persist
@@ -33,7 +36,7 @@
 import { logger } from './log.ts';
 import type { MediaCacheLane } from './media-cache.ts';
 
-export type ScreenshotRequestSurface = 'get-dsl' | 'post';
+export type ScreenshotRequestSurface = 'get-dsl' | 'get-named' | 'post';
 
 export type ScreenshotRequestOutcome =
   // Ledger hit: served with zero Chrome work.
