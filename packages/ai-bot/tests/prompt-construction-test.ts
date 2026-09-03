@@ -222,7 +222,6 @@ module('buildPromptForModel', (hooks) => {
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -321,7 +320,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -406,7 +404,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -477,7 +474,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -565,7 +561,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -645,7 +640,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       await buildPromptForModel(
         history,
         '@aibot@localhost',
-        undefined,
         undefined,
         [],
         fakeMatrixClient,
@@ -1085,7 +1079,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -1421,7 +1414,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -1741,7 +1733,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
   });
 
-  test('Adds the "unable to edit cards" note only when no card-patch tool is in the request', async () => {
+  test('Never tells the model it cannot edit cards; the skills index carries the SEARCH/REPLACE rule', async () => {
     // What grants card editing is a card-patch tool in the request
     // (patch-fields from a skill, or a legacy patchCardInstance in an old
     // room's history) — interactive messages carry no tools themselves, so
@@ -1820,84 +1812,28 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    let nonEditableCardsMessage = 'You are unable to edit any cards:';
-
-    let userContextMessage = messages?.[messages.length - 1];
-    assert.ok(
-      messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The note appears when cards are attached but no card-patch tool is in the request, but was ' +
-        userContextMessage?.content,
+    // Every room carries the skills index, which says every file — instance
+    // JSON included — is written with SEARCH/REPLACE. Nothing in the request
+    // (attached cards, open cards, absent patch tools) may contradict that.
+    let contextMessage = messageText(messages?.[messages.length - 1]);
+    assert.notOk(
+      contextMessage.includes('unable to edit'),
+      'no card-editing prohibition when a card is attached and no patch tool is in the request',
     );
 
-    // An open card grants nothing by itself — no tool, no edit path.
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
     cardMessageContent.data.context.openCardIds = [
       rri('http://localhost:4201/drafts/Author/1'),
     ];
-
     const { messages: messages2 } = await getPromptParts(
       historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
-
-    assert.ok(
-      messageText(messages2?.[messages2.length - 1]).includes(
-        nonEditableCardsMessage,
-      ),
-      'The note stays when a card is open but the request still carries no card-patch tool',
-    );
-
-    // A card-patch tool in the request is the grant.
-    cardMessageContent.data.context.tools = [
-      {
-        type: 'function',
-        function: {
-          name: 'patchFields',
-          description: 'Patch fields on a card',
-          parameters: { type: 'object', properties: {} },
-        },
-      } as Tool,
-    ];
-
-    const { messages: messages3 } = await getPromptParts(
-      historyWithStringifiedData(eventList),
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-
-    assert.ok(
-      !messageText(messages3?.[messages3.length - 1]).includes(
-        nonEditableCardsMessage,
-      ),
-      'The note is suppressed when the request carries a card-patch tool',
-    );
-
-    // Now remove the tool and add an attached file
-    cardMessageContent.data.context.openCardIds = [];
-    cardMessageContent.data.context.tools = [];
-    cardMessageContent.data.attachedFiles = [
-      {
-        url: 'https://example.com/file.txt',
-        sourceUrl: 'https://example.com/file.txt',
-        name: 'file.txt',
-        contentType: 'text/plain',
-        content: 'Hello, world!',
-      },
-    ];
-
-    const { messages: messages4 } = await getPromptParts(
-      historyWithStringifiedData(eventList),
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-
-    assert.ok(
-      !messageText(messages4?.[messages4.length - 1]).includes(
-        nonEditableCardsMessage,
-      ),
-      'The note is suppressed when there is an attached file',
+    assert.notOk(
+      messageText(messages2?.[messages2.length - 1]).includes('unable to edit'),
+      'no card-editing prohibition when a card is open either',
     );
   });
 
@@ -2766,16 +2702,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
         status: EventStatus.SENT,
       },
     ];
-    const tools = await getTools(
-      history,
-      [],
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      tools,
       [],
       [],
       fakeMatrixClient,
@@ -2876,7 +2805,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       [],
       [],
-      [],
       fakeMatrixClient,
     );
     let toolMessages = result.filter((m) => m.role === 'tool');
@@ -2963,7 +2891,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
@@ -5549,7 +5476,6 @@ new
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       skillCards,
       [],
       fakeMatrixClient,
@@ -5644,7 +5570,6 @@ new
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
@@ -5785,13 +5710,11 @@ new
       '@aibot:localhost',
       [],
       [],
-      [],
       fakeMatrixClient,
     );
     const promptTwo = await buildPromptForModel(
       turnTwo,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
@@ -5839,7 +5762,6 @@ new
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
@@ -5927,7 +5849,6 @@ new
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6032,7 +5953,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -6116,7 +6036,6 @@ new
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6226,7 +6145,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -6299,7 +6217,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6388,7 +6305,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6485,7 +6401,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -6550,7 +6465,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6661,7 +6575,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -6725,7 +6638,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6801,7 +6713,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -6882,7 +6793,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -6962,7 +6872,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -7071,7 +6980,6 @@ new
       history,
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -7164,7 +7072,6 @@ new
       [firstMessage],
       '@aibot:localhost',
       undefined,
-      undefined,
       [],
       fakeMatrixClient,
     );
@@ -7181,7 +7088,6 @@ new
         ),
       ],
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -7329,7 +7235,6 @@ new
     let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      undefined,
       undefined,
       [],
       fakeMatrixClient,
@@ -7489,7 +7394,6 @@ module('set model in prompt', (hooks) => {
       '@aibot:localhost',
       [],
       [],
-      [],
       fakeMatrixClient,
     );
 
@@ -7589,7 +7493,6 @@ module('set model in prompt', (hooks) => {
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
@@ -7804,7 +7707,6 @@ module('set model in prompt', (hooks) => {
     const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
-      [],
       [],
       [],
       fakeMatrixClient,
