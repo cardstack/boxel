@@ -216,10 +216,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(schema?.attributes, 'schema has attributes');
     });
 
-    // A card write indexes synchronously, so the command waits on an
-    // `incremental-index` job. Running the command from a worker job would
-    // starve that job of the only worker and fail the invocation at its
-    // timeout, past any `try`/`catch` the command wrote.
+    // Pins that a command can persist a card and that the card is durable
+    // afterwards. The harness runs a single worker and a single prerender
+    // pool, so a write that waited on indexing would have nothing left to
+    // run it and the invocation would fail at its timeout.
     test('a command that saves a card completes and the card is durable', async function (assert) {
       let matrixUserId = commandWriterUserId;
 
@@ -285,10 +285,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    // The ask behind the deadlock fix was that a command's failure be
-    // reachable: a throw inside the command body has to come back as a
-    // reported result the invoking code can branch on, not as a transport
-    // error manufactured outside the browser.
+    // Pins that a throw inside the command body comes back as a reported
+    // result the invoking code can branch on, rather than as a transport
+    // error manufactured outside the browser where no `try`/`catch` in the
+    // command can see it.
     test('a command that throws reports a catchable error result', async function (assert) {
       let response = await context.request
         .post('/_run-command')

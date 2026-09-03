@@ -69,8 +69,9 @@ export { runCommand };
 
 // Runs a command from a queue job. Publishers reach this either because the
 // invocation must outlive the request that asked for it (a webhook delivery, a
-// cron tick) or because they want the queue's per-realm serialization while
-// waiting on the result (`bot-runner`'s command runner awaits `job.done`).
+// scheduled sync) or because they want the queue's serialization while waiting
+// on the result — `bot-runner`'s command runner awaits `job.done` under a
+// concurrency group it chooses itself.
 //
 // A command run this way holds a worker for its whole browser-side duration,
 // so it must not wait on anything that itself needs a worker: with no other

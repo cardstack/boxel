@@ -40,9 +40,9 @@ export type PrepareRunCommandResult =
  * The auth bundle spans every realm the runner has permissions in, not just
  * the realm the command runs against: a card the command touches can link
  * across realms, and the Loader needs auth for each realm it fetches a
- * module from. The realm the command names is folded in explicitly so a
- * caller whose permissions come from a realm-level grant is covered even
- * when the per-user lookup doesn't list it.
+ * module from. The realm the command names is folded in explicitly because
+ * the per-user enumeration omits published and archived realms, either of
+ * which a command can legitimately be run against.
  */
 export async function prepareRunCommand({
   dbAdapter,

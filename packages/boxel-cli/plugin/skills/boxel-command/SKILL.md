@@ -64,7 +64,9 @@ Returns `{ status: 'ready' | 'error' | 'unusable', result?: string | null, error
 
 `/_run-command` hands the command to the prerenderer (which has the host app, the realm's Loader, the CardAPI, and all field serializers loaded) and answers with the result. The command module is imported in a headless tab, called with the input, and its result is serialized back to the HTTP response.
 
-A command may persist cards. A write it makes is durable by the time the write returns, but it is indexed in the background — so a card the command just created is not immediately readable through search or a card GET. A caller that needs to read one back should wait for the realm to report ready (`boxel realm wait-for-ready`) rather than reading straight after the command returns.
+A command may persist cards. A write it makes is durable by the time the write returns, but it is indexed in the background, so a card the command just created is not immediately visible to search. Read it back with `boxel realm wait-for-ready` first rather than straight after the command returns.
+
+The same applies inside a command: reading a card it just wrote waits for indexing to catch up, and a command invoked through the queue (a webhook delivery, or the bot) holds the worker that indexing needs, so such a read stalls until the job's timeout fails it. A command that has to see its own writes indexed belongs on `/_run-command`, which holds no worker.
 
 Three failure modes you'll see:
 
@@ -72,7 +74,7 @@ Three failure modes you'll see:
 - `status: 'error'` with `error: "module URL not found"` — the realm's in-memory module map hasn't indexed the file yet. Common right after a `/_atomic` write; caller can retry briefly or use `client.sync(..., { waitForIndex: true })` upstream.
 - `status: 'error'` with any other message — the command threw inside the prerender. The `error` is the thrown error's message; the original stack is in the prerender server's logs.
 
-The realm server itself enforces auth (server JWT via `BoxelCLIClient`); the prerender executes inside the realm's sandbox with the realm's permissions.
+The realm server itself enforces auth (server JWT via `BoxelCLIClient`); the prerender executes with the permissions of the user the command runs as.
 
 ## What this skill is **not** for
 

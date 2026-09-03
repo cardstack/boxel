@@ -828,9 +828,10 @@ export interface WriteOptions {
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
   // it, the next instance's serialization would fail. This flag governs
-  // only the final indexing await. Every caller that passes it writes a
-  // single file, or instances only, so the intermediate-flush path is not
-  // exercised by any of them.
+  // only the final indexing await. `/_atomic` does write mixed batches and
+  // so does reach that intermediate flush; the per-file `+source` POST and
+  // the JSON-API card handlers do not, writing a single file and instances
+  // respectively.
   waitForIndex?: boolean | null;
 }
 
@@ -5579,9 +5580,14 @@ export class Realm {
     //
     // A prerender-originated write skips the drain: the job it would wait on
     // needs the render slot (and, on the queued-command path, the worker) the
-    // caller is holding, so waiting deadlocks. Such a caller runs a module it
-    // already imported, so the definition its serialization needs is indexed
-    // by the time it writes.
+    // caller is holding, so waiting deadlocks. Serialization still resolves a
+    // definition it has never seen — `lookupDefinition` reads through to
+    // `prerenderModule`, which serves the module off disk rather than out of
+    // the index. What the drain did cover and this path does not is a module
+    // the same caller just rewrote: the cached definition stays authoritative
+    // until the deferred index job invalidates it, so a serialization run in
+    // that window is against the previous schema and `fileSerialization`
+    // drops attributes whose fields it doesn't know.
     if (!duringPrerender) {
       let pending = this.incrementalIndexing();
       if (pending) {

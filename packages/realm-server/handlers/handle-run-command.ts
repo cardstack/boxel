@@ -115,19 +115,26 @@ export default function handleRunCommand({
         command,
         commandInput: commandInput ?? null,
       });
-      // A rejected invocation is the command's result, not a transport
-      // failure: the caller asked a well-formed question and the answer is
-      // that it can't run. Reporting it in the result payload is what lets a
-      // composing command handle it.
-      result = outcome.ok
-        ? await prerenderer.runCommand({
-            userId: outcome.prepared.userId,
-            auth: outcome.prepared.auth,
-            command: outcome.prepared.command,
-            commandInput: outcome.prepared.commandInput,
-            priority: userInitiatedPriority,
-          })
-        : { status: 'error', error: outcome.error };
+      if (outcome.ok) {
+        result = await prerenderer.runCommand({
+          userId: outcome.prepared.userId,
+          auth: outcome.prepared.auth,
+          command: outcome.prepared.command,
+          commandInput: outcome.prepared.commandInput,
+          priority: userInitiatedPriority,
+        });
+      } else {
+        // A rejected invocation is the command's result, not a transport
+        // failure: the caller asked a well-formed question and the answer is
+        // that it can't run. Reporting it in the result payload is what lets
+        // a composing command handle it — and logging it keeps a rejection
+        // legible server-side, since a 201 leaves no other trace.
+        console.error(
+          `run-command rejected: ${outcome.error}`,
+          outcome.context,
+        );
+        result = { status: 'error', error: outcome.error };
+      }
     } catch (error) {
       // The prerenderer's own errors quote the internal manager endpoint and
       // its raw response body, so the message stays server-side. Sentry is

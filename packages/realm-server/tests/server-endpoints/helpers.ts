@@ -45,12 +45,15 @@ type ServerEndpointsTestOptions = {
   // module it needs to write itself (a realm-defined command, say). Mutually
   // exclusive with `fixture`.
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
-  // Replace the testRealm's permission map. The default makes the realm
-  // world-writable, which is what keeps most endpoint tests from needing to
-  // mint anything — but it also means a write short-circuits before the
-  // Authorization header is read (see Realm#assertPermissions). A test whose
-  // subject is an authenticated write has to narrow `'*'` to `['read']` and
-  // grant the writing user explicitly, or it proves nothing about auth.
+  // Replaces the testRealm's permission map outright, realm-owner grant
+  // included — a caller that still wants one restates it.
+  //
+  // The default makes the realm world-writable, which is what keeps most
+  // endpoint tests from needing to mint anything. It also means a write
+  // short-circuits before the Authorization header is read (see
+  // `Realm#checkPermission`), so a test whose subject is an authenticated
+  // write has to narrow `'*'` to `['read']` and grant the writing user
+  // explicitly, or it proves nothing about auth.
   permissions?: RealmPermissions;
 };
 
