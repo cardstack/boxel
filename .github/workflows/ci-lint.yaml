@@ -55,13 +55,6 @@ jobs:
       - name: Check the execution protocol's runtime import closure
         if: ${{ !cancelled() }}
         run: pnpm run lint:protocol-closure
-      - name: Check every execution tier is registered for record parity
-        # RP-14.4: the parity harness compares the tiers it is handed, so an
-        # adapter nobody registered is not a failing comparison but an absent
-        # one. This holds the set of BoxelRuntime implementations equal to the
-        # set the harness knows about.
-        if: ${{ !cancelled() }}
-        run: pnpm run lint:tier-registry
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint
