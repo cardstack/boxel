@@ -321,6 +321,18 @@ export class Loader {
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
     // entry can't outlive the spelling it was keyed under.
     this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
+      // TEMPORARY DIAGNOSTIC — remove before merging. A clear here is what
+      // turns one module into two class objects: instances already built hold
+      // the old classes while the next import evaluates fresh ones.
+      let discarded = [...this.modules.keys()].filter((k) =>
+        /(^|\/)(@cardstack\/base|base)\/(spec|card-api)$/.test(k),
+      );
+      if (discarded.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[dup-diag] mapping change discarding ${this.modules.size} modules, including ${JSON.stringify(discarded)}`,
+        );
+      }
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
@@ -1366,7 +1378,17 @@ export class Loader {
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(this.moduleCacheKey(moduleIdentifier), module);
+    let key = this.moduleCacheKey(moduleIdentifier);
+    // TEMPORARY DIAGNOSTIC — remove before merging. Records every caching of a
+    // base `spec`/`card-api` module with the key it lands under, so a second
+    // evaluation of the same key (two class objects, one module) is visible.
+    if (/(^|\/)(@cardstack\/base|base)\/(spec|card-api)$/.test(key)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[dup-diag] setModule state=${module.state} key=${key} id=${moduleIdentifier}`,
+      );
+    }
+    this.modules.set(key, module);
   }
 
   private setCanonicalModuleURL(
