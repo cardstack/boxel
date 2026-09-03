@@ -33,6 +33,114 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     function (hooks) {
       let context = setupServerEndpointsTest(hooks);
 
+      module('POST /_create-realm README seeding', function (hooks) {
+        let originalFlag: string | undefined;
+
+        hooks.beforeEach(function () {
+          originalFlag = process.env.SEED_REALM_README;
+        });
+        hooks.afterEach(function () {
+          if (originalFlag === undefined) {
+            delete process.env.SEED_REALM_README;
+          } else {
+            process.env.SEED_REALM_README = originalFlag;
+          }
+        });
+
+        async function postCreateRealm(endpoint: string, owner: string) {
+          let ownerUserId = `@${owner}:localhost`;
+          return context.request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  // Only name + endpoint: spreading testRealmInfo would send
+                  // backgroundURL/iconURL as null, which the endpoint rejects
+                  // as non-strings (400).
+                  attributes: { name: testRealmInfo.name, endpoint },
+                },
+              }),
+            );
+        }
+
+        function realmPathFor(owner: string, endpoint: string) {
+          return join(context.dir.name, 'realm_server_1', owner, endpoint);
+        }
+
+        test('seeds a Home README into the personal realm when the flag is on', async function (assert) {
+          process.env.SEED_REALM_README = 'true';
+          // random owner isolates matrix/permission state; the endpoint must be
+          // exactly 'personal' to exercise the gate, so it can't be randomized.
+          let owner = `user-${uuidv4()}`;
+          let response = await postCreateRealm('personal', owner);
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+          let realmPath = realmPathFor(owner, 'personal');
+          assert.ok(
+            existsSync(join(realmPath, 'README.md')),
+            'README.md is seeded into the personal realm',
+          );
+          let indexCard = readJSONSync(join(realmPath, 'index.json'));
+          assert.deepEqual(
+            indexCard.data.relationships,
+            {
+              readme: {
+                links: { self: './README.md' },
+                data: { type: 'file-meta', id: './README.md' },
+              },
+            },
+            'index.json links the seeded README via the Workspace readme field',
+          );
+        });
+
+        test('does not seed a README for a non-personal realm even when the flag is on', async function (assert) {
+          process.env.SEED_REALM_README = 'true';
+          let owner = `user-${uuidv4()}`;
+          let endpoint = `workspace-${uuidv4()}`;
+          let response = await postCreateRealm(endpoint, owner);
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+          let realmPath = realmPathFor(owner, endpoint);
+          assert.notOk(
+            existsSync(join(realmPath, 'README.md')),
+            'no README.md for a non-personal realm',
+          );
+          let indexCard = readJSONSync(join(realmPath, 'index.json'));
+          assert.notOk(
+            indexCard.data.relationships,
+            'index.json has no readme relationship for a non-personal realm',
+          );
+        });
+
+        test('does not seed a README when the flag is off', async function (assert) {
+          delete process.env.SEED_REALM_README;
+          let owner = `user-${uuidv4()}`;
+          let response = await postCreateRealm('personal', owner);
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+          let realmPath = realmPathFor(owner, 'personal');
+          assert.notOk(
+            existsSync(join(realmPath, 'README.md')),
+            'no README.md seeded when SEED_REALM_README is unset',
+          );
+          let indexCard = readJSONSync(join(realmPath, 'index.json'));
+          assert.notOk(
+            indexCard.data.relationships,
+            'index.json has no readme relationship when the flag is off',
+          );
+        });
+      });
+
       test('POST /_create-realm', async function (assert) {
         // we randomize the realm and owner names so that we can isolate matrix
         // test state--there is no "delete user" matrix API
