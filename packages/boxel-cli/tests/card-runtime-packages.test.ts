@@ -106,34 +106,79 @@ const ALIASED_WITHOUT_A_LITERAL_SHIM = [
  * can import either kind, so both bind parse.
  */
 function readShimmedSpecifiers(): string[] {
-  let specifiers = new Set(extractSpecifiers());
+  let specifiers = new Set(
+    readShimCallSites()
+      .map((site) => site.specifier)
+      .filter((specifier): specifier is string => specifier !== undefined),
+  );
   return [...specifiers].sort();
 }
 
-/**
- * Specifiers in source order, duplicates kept, so the count can be
- * compared against the call sites they were read from.
- */
-function extractSpecifiers(): string[] {
-  let source = readFileSync(EXTERNALS_PATH, 'utf8');
-  let specifiers: string[] = [];
-  let patterns = [
-    /\.shimModule\(\s*['"]([^'"]+)['"]/g,
-    /\.shimAsyncModule\(\s*\{\s*id:\s*['"]([^'"]+)['"]/g,
-  ];
-  for (let pattern of patterns) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(source))) {
-      specifiers.push(match[1]);
-    }
-  }
-  return specifiers;
+interface ShimCallSite {
+  /** The module id, when it is written as a plain string literal. */
+  specifier: string | undefined;
+  /** Source text, to name the call site in a failure. */
+  text: string;
 }
 
-/** Every shim call site, however its specifier is written. */
-function countShimCallSites(): number {
-  let source = readFileSync(EXTERNALS_PATH, 'utf8');
-  return (source.match(/\.shim(?:Async)?Module\(/g) ?? []).length;
+/**
+ * Walk `externals.ts` for calls to `shimModule` / `shimAsyncModule`,
+ * reading each one's module id.
+ *
+ * This reads the AST rather than the source text because prose in this
+ * file discusses these very calls — `loader.shimModule('qunit', QUnit)`
+ * appears in a comment explaining how live tests override the network
+ * shim. A textual scan takes that for a real shim, which both inflates
+ * the call-site count and can demand a dependency for a package nothing
+ * actually shims.
+ */
+function readShimCallSites(): ShimCallSite[] {
+  let source = ts.createSourceFile(
+    EXTERNALS_PATH,
+    readFileSync(EXTERNALS_PATH, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  let sites: ShimCallSite[] = [];
+  let visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ['shimModule', 'shimAsyncModule'].includes(node.expression.name.text)
+    ) {
+      sites.push({
+        specifier: readModuleId(node),
+        text: node.getText().split('\n')[0],
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return sites;
+}
+
+/**
+ * `shimModule` takes the id positionally; `shimAsyncModule` takes a
+ * descriptor carrying it as `id`. Undefined for any other shape — an
+ * identifier, a template literal, or the `{ prefix }` descriptor form,
+ * none of which this file can follow to a package name.
+ */
+function readModuleId(call: ts.CallExpression): string | undefined {
+  let [first] = call.arguments;
+  if (!first) return undefined;
+  if (ts.isStringLiteral(first)) return first.text;
+  if (!ts.isObjectLiteralExpression(first)) return undefined;
+
+  let id = first.properties.find(
+    (property): property is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(property) &&
+      ts.isIdentifier(property.name) &&
+      property.name.text === 'id',
+  );
+  return id && ts.isStringLiteral(id.initializer)
+    ? id.initializer.text
+    : undefined;
 }
 
 /**
@@ -195,12 +240,21 @@ function resolvesToDeclarations(specifier: string): boolean {
 }
 
 describe('card-facing packages the host shims', () => {
-  it('parses a specifier out of every shim call site', () => {
-    // The specifier patterns only read string literals. A shim written
-    // any other way — an identifier, a template literal, a `{ prefix }`
-    // descriptor, a loop — would otherwise go unseen, and this suite
-    // would keep passing while checking less than it claims.
-    expect(extractSpecifiers().length).toBe(countShimCallSites());
+  it('reads a module id out of every shim call site', () => {
+    // Only string-literal ids can be followed to a package name. A shim
+    // written any other way — an identifier, a template literal, a
+    // `{ prefix }` descriptor — would otherwise go unseen, and this
+    // suite would keep passing while checking less than it claims.
+    let unreadable = readShimCallSites().filter(
+      (site) => site.specifier === undefined,
+    );
+    expect(
+      unreadable.map((site) => site.text),
+      `These shims do not name their module with a string literal, so ` +
+        `the checks below cannot tell what card code may import. Give the ` +
+        `id as a literal, or teach \`readModuleId\` the shape and record ` +
+        `how the specifier is covered.`,
+    ).toEqual([]);
   });
 
   it('finds the shims it is meant to be checking', () => {
