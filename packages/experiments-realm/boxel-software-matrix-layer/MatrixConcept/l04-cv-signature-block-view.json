@@ -7,10 +7,10 @@
       "lane": "Components & Views",
       "concept": "Signature Block View",
       "symbol": "SB",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: components/signature-block-view.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/signature-block-view",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -34,7 +34,13 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm",
+      "specKind": "component",
+      "specExampleCount": 1,
+      "specReadmeChars": 1740,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\"]",
+      "verifiedAt": "2026-09-03T03:29:10.000Z"
     },
     "meta": {
       "adoptsFrom": {

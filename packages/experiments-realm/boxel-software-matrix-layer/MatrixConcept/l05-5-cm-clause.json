@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/clause",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": "matrix-realm"
+      "source": "matrix-realm",
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 1536,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Clause/liability-cap-12-months\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Clause/auto-renewal-12-months\"]",
+      "verifiedAt": "2026-09-03T03:29:10.000Z"
     },
     "meta": {
       "adoptsFrom": {

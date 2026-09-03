@@ -7,10 +7,10 @@
       "lane": "Fields & Types",
       "concept": "Legal Party Role",
       "symbol": "LP",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: legal-party-role-field.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/legal-party-role-field",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -34,7 +34,13 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm",
+      "specKind": "field",
+      "specExampleCount": 2,
+      "specReadmeChars": 1386,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\"]",
+      "verifiedAt": "2026-09-03T03:29:10.000Z"
     },
     "meta": {
       "adoptsFrom": {

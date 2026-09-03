@@ -7,10 +7,10 @@
       "lane": "Tools & Commands",
       "concept": "Generate Document",
       "symbol": "GD",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: commands/generate-document-command.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Generate",
@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/generate-document-command",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -34,7 +34,13 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm",
+      "specKind": "command",
+      "specExampleCount": 1,
+      "specReadmeChars": 1888,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\"]",
+      "verifiedAt": "2026-09-03T03:29:10.000Z"
     },
     "meta": {
       "adoptsFrom": {

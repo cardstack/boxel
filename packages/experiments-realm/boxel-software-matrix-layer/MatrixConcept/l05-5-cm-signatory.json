@@ -18,7 +18,7 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/signatory",
       "specTarget": null,
       "consumers": null,
       "consumerExamples": null,
@@ -35,7 +35,12 @@
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "source": "matrix-realm"
+      "source": "matrix-realm",
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 1418,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Signatory/priya-nair-gc\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Signatory/dana-kim-cfo\"]",
+      "verifiedAt": "2026-09-03T03:29:10.000Z"
     },
     "meta": {
       "adoptsFrom": {

@@ -38,7 +38,7 @@
       "source": "matrix-realm",
       "specKind": "command",
       "specExampleCount": 1,
-      "specReadmeChars": 526,
+      "specReadmeChars": 1065,
       "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/msa-northwind\"]",
       "verifiedAt": "2026-09-02T09:09:24.000Z"
     },
