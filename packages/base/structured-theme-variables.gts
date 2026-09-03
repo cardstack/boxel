@@ -540,12 +540,12 @@ export default class ThemeVarField extends FieldDef {
   });
   @field success = contains(ColorField, {
     description: describeColor(
-      'Success/positive feedback color. Not standard shadcn: falls back to primary when unset.',
+      'Success/positive feedback color. Not standard shadcn: falls back to the fixed Boxel status palette green (--boxel-success) when unset.',
     ),
   });
   @field warning = contains(ColorField, {
     description: describeColor(
-      'Warning/caution feedback color. Not standard shadcn: falls back to destructive when unset.',
+      'Warning/caution feedback color. Not standard shadcn: falls back to the fixed Boxel status palette yellow (--boxel-warning) when unset.',
     ),
   });
   @field border = contains(ColorField, {
