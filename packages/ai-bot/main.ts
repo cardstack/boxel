@@ -10,7 +10,6 @@ import OpenAI from 'openai';
 import {
   logger,
   aiBotUsername,
-  DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -38,12 +37,12 @@ import {
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
-  readRealmFileTool,
   classifyToolCalls,
   READ_REALM_FILE_TOOL_NAME,
 } from './lib/read-realm-file.ts';
 import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
+import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
   shouldSetRoomTitle,
   setTitle,
@@ -54,7 +53,6 @@ import * as Sentry from '@sentry/node';
 
 import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
-import type { ChatCompletionMessageParam } from 'openai/resources';
 import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
@@ -115,72 +113,15 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    // Whether to offer the bot-fulfilled readRealmFile tool. The caller decides
-    // (delegation configured + a single-human room); the bot never advertises
-    // a tool it won't run.
     offerRealmFileRead = false,
   ) {
-    if (!prompt.model) {
-      throw new Error('Model is required');
-    }
-
-    let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
-      model: this.getModel(prompt),
-      messages: prompt.messages as ChatCompletionMessageParam[],
-      // A streamed response reports no token counts unless asked. With this
-      // the provider delivers a usage block at the end of the stream — on a
-      // trailing chunk whose `choices` is empty or carries no finish_reason,
-      // which is why the Responder's end-of-stream detection must never
-      // un-set itself on a later chunk (see onChunk).
-      stream_options: { include_usage: true },
-    };
-    // OpenRouter's usage accounting. On top of the OpenAI-shaped counts above
-    // it adds `prompt_tokens_details.cached_tokens` (the prompt-cache split)
-    // and an inline `cost` to the same trailing usage payload. The inline
-    // cost also lets the chunk handler's preferred billing path run instead
-    // of the slower generation-API fallback. Not in the OpenAI types, hence
-    // the cast.
-    (request as Record<string, unknown>).usage = { include: true };
-
-    // Prompt caches live per provider, and the router is otherwise free to
-    // spread a room's requests across providers — which turns a warm cache
-    // prefix into a full-price miss mid-conversation. Bias Anthropic-model
-    // requests to Anthropic itself, keeping fallbacks for availability.
-    if (this.getModel(prompt).startsWith('anthropic/')) {
-      (request as Record<string, unknown>).provider = {
-        order: ['anthropic'],
-        allow_fallbacks: true,
-      };
-    }
-
-    if (prompt.reasoningEffort !== undefined) {
-      request.reasoning_effort = prompt.reasoningEffort;
-    }
-
-    if (
-      prompt.toolsSupported === true &&
-      prompt.tools &&
-      prompt.tools.length > 0
-    ) {
-      request.tools = prompt.tools;
-      request.tool_choice = prompt.toolChoice;
-    }
-
-    // Offer the bot-executed readRealmFile tool when the caller allows it, even
-    // in rooms that carry no other tools.
-    if (prompt.toolsSupported === true && offerRealmFileRead) {
-      request.tools = [...(request.tools ?? []), readRealmFileTool];
-    }
-
-    if (senderMatrixUserId) {
-      request.user = senderMatrixUserId;
-    }
-
-    return this.openai.chat.completions.stream(request);
-  }
-
-  getModel(prompt: PromptParts) {
-    return prompt.model ?? DEFAULT_FALLBACK_MODEL_ID;
+    return this.openai.chat.completions.stream(
+      buildChatCompletionRequest(
+        prompt,
+        senderMatrixUserId,
+        offerRealmFileRead,
+      ),
+    );
   }
 
   async handleDebugCommands(
