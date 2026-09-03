@@ -169,6 +169,7 @@ import {
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
+import stableStringify from 'safe-stable-stringify';
 import {
   captureSpecHash,
   captureSpecOverrides,
@@ -176,6 +177,7 @@ import {
   parseCaptureSpecParams,
   screenshotsMetaFromManifest,
   type CaptureSpec,
+  type ScreenshotManifest,
 } from './capture-spec.ts';
 import {
   findMediaCacheEntry,
@@ -392,16 +394,19 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 const READINESS_REQUEST_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
-// per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
-// validators and split the cache key. Two inputs feed the base:
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
+// — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
+// validators and split the cache key. Three inputs feed the base:
 //   - `indexed_at` on the primary card's index row, which bumps on
 //     direct writes AND dependency-triggered re-writes (so the deps
 //     graph carries cascading invalidations forward through it);
 //   - md5 of the cached `RealmInfo`, since `attachRealmInfo()`
 //     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
 //     into the assembled response at request time and that field
-//     can change without any card being re-indexed.
+//     can change without any card being re-indexed;
+//   - a fingerprint of the joined screenshot manifest, which lands on
+//     the prerendered_html channel without moving `indexed_at` (see
+//     `screenshotsEtagFingerprint`).
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
@@ -612,23 +617,46 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>:card"`. The value
-// is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<screenshotsFingerprint>]:card"`.
+// The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
 // would fail strict-validator parsing in some intermediaries.
 // `indexedAt` captures direct + dep-cascaded writes; the
 // `realmInfoHash` captures `attachRealmInfo()`'s request-time
 // injection of `meta.realmInfo` (which can flip without re-indexing
-// any card). A null `indexedAt` suppresses ETag emission entirely.
+// any card); the screenshots fingerprint captures the joined
+// `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
+// `indexedAt` suppresses ETag emission entirely.
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
+  screenshotsFingerprint?: string,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
   }
-  let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
+  let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
+    .filter(Boolean)
+    .join('-');
   return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+}
+
+// The joined `meta.screenshots` travels on the prerendered_html channel,
+// which publishes after — and independently of — the index row: `indexed_at`
+// does not move when a capture lands, so a validator built from it alone
+// would 304 a cached document past its own screenshots forever (the same
+// two-channel trap `buildEntryEtag` documents below). Folding a fingerprint
+// of the manifest in rotates the validator exactly when the served
+// `meta.screenshots` changes — objectKeys are content hashes, so a re-render
+// whose captures are byte-identical keeps its fingerprint. Absent manifest
+// contributes no component, so cards without captures keep their validators.
+function screenshotsEtagFingerprint(
+  manifest: ScreenshotManifest | null | undefined,
+): string | undefined {
+  if (!manifest) {
+    return undefined;
+  }
+  return computeContentHash(stableStringify(manifest) ?? '').slice(0, 8);
 }
 
 // The card+html / file-meta+html GET's composite validator. It encodes both
@@ -4156,16 +4184,21 @@ export class Realm {
       if (!manifestEntry) {
         return mediaCacheMissResponse({ requestContext });
       }
-      // The manifest names the capture identity (`specHash`); the ledger
-      // row is looked up at its newest generation — a carried-forward
-      // capture's row keeps an older generation than the instance's, and a
-      // re-capture that landed after this manifest was written should serve
-      // (durable URLs never lie about identity, only lag in freshness).
+      // The manifest names both the capture identity (`specHash`) and the
+      // exact artifact (`objectKey`), and the lookup pins both — so what
+      // this URL serves always matches the `hash` the joined
+      // `meta.screenshots` advertises for it, whatever newer ledger rows
+      // exist (media persists before its manifest publishes, and a
+      // carried-forward capture's row keeps an older generation). A fresher
+      // capture serves once its own manifest publishes moments later; a
+      // pinned object whose row is gone is an uncaptured miss that the
+      // short max-age self-heals.
       let ledgerLookupStart = Date.now();
       let entry = await findMediaCacheEntry(this.#dbAdapter, {
         realmURL: this.url,
         sourceURL: instanceURL.href,
         captureSpecHash: manifestEntry.specHash,
+        objectKey: manifestEntry.objectKey,
       });
       if (!entry) {
         return mediaCacheMissResponse({ requestContext });
@@ -5837,6 +5870,20 @@ export class Realm {
           let createdAt = await this.getCreatedTime(
             this.paths.local(url) + '.json',
           );
+          // The PATCH echo is the same served representation as a GET —
+          // including the joined `meta.screenshots` (the store replaces an
+          // instance's meta wholesale from a save response, so an echo
+          // without it would wipe the key client-side until the next GET)
+          // and the same validator components.
+          if (entry.screenshots) {
+            existingDoc.data.meta = {
+              ...existingDoc.data.meta,
+              screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+                realmURL: this.url,
+                instanceLocalPath: this.paths.local(url),
+              }),
+            };
+          }
           // entry.doc came from cardDocument(), which already called
           // attachRealmInfo() and (re)populated the realm-info cache —
           // so the cached hash is current as of this response.
@@ -5844,7 +5891,11 @@ export class Realm {
           let foreignDeps = this.hasForeignRealmDeps(entry.deps);
           let etag = foreignDeps
             ? undefined
-            : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+            : buildCardJsonEtag(
+                entry.indexedAt,
+                this.getCachedRealmInfoHash(),
+                screenshotsEtagFingerprint(entry.screenshots),
+              );
           this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
@@ -5972,6 +6023,19 @@ export class Realm {
             meta: { lastModified },
           },
         });
+        // The PATCH echo carries the joined `meta.screenshots` like a GET
+        // does — the store replaces an instance's meta wholesale from a
+        // save response, so an echo without it would wipe the key
+        // client-side until the next GET.
+        if (entry.screenshots) {
+          doc.data.meta = {
+            ...doc.data.meta,
+            screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+              realmURL: this.url,
+              instanceLocalPath: this.paths.local(url),
+            }),
+          };
+        }
       }
       // Same rationale as the no-op short-circuit branch above:
       // cardDocument() above primed the realm-info cache via
@@ -5984,7 +6048,11 @@ export class Realm {
           : false;
       let etag =
         entry && entry.type !== 'error' && !foreignDeps
-          ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
+          ? buildCardJsonEtag(
+              entry.indexedAt,
+              this.getCachedRealmInfoHash(),
+              screenshotsEtagFingerprint(entry.screenshots),
+            )
           : undefined;
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
@@ -6179,7 +6247,11 @@ export class Realm {
           instanceEntry.type === 'instance' &&
           instanceEntry.indexedAt != null
         ) {
-          let etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
+          let etag = buildCardJsonEtag(
+            instanceEntry.indexedAt,
+            realmInfoHash,
+            screenshotsEtagFingerprint(instanceEntry.screenshots),
+          );
           if (etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
             return createResponse({
               requestContext,
@@ -6325,6 +6397,7 @@ export class Realm {
         : buildCardJsonEtag(
             maybeError.indexedAt,
             this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(maybeError.screenshots),
           );
       return createResponse({
         body: JSON.stringify(card, null, 2),

@@ -994,6 +994,61 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a name serves the exact object its manifest advertises, not a newer ledger row', async function (assert) {
+      await seedInstanceRow('card-1');
+      let olderBytes = PNG_BYTES;
+      let newerBytes = new TextEncoder().encode('newer-png-bytes');
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: olderBytes,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let older = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+      }))!;
+      // A fresher capture has persisted (media lands before its manifest
+      // publishes), but the manifest still names the older artifact.
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 2,
+        bytes: newerBytes,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: older.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let response = await get('_screenshot/card-1?name=hero');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.headers.get('etag'),
+        `"${older.objectKey}"`,
+        'the served ETag is exactly the hash meta.screenshots advertises',
+      );
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...olderBytes],
+        'the served bytes are the manifest-pinned artifact',
+      );
+    });
+
     test('an unknown or not-yet-captured name is an uncaptured miss', async function (assert) {
       await seedInstanceRow('card-1');
 
@@ -1145,6 +1200,72 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(bare.status, 200);
       let bareJson = await bare.json();
       assert.strictEqual(bareJson.data.meta.screenshots, undefined);
+    });
+
+    test('the card+json validator rotates when the manifest changes, without any index write', async function (assert) {
+      await seedInstanceRow('card-1');
+      // A null `indexed_at` suppresses ETag emission entirely; a validator
+      // needs a real index stamp to build on.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET indexed_at = ${Date.now()} WHERE url = '${REALM_URL}card-1.json'`,
+      ]);
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: 'object-a',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let first = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+      });
+      assert.strictEqual(first.status, 200);
+      let etag = first.headers.get('etag')!;
+      assert.ok(etag, 'the response carries a validator');
+
+      let revalidated = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+        'if-none-match': etag,
+      });
+      assert.strictEqual(
+        revalidated.status,
+        304,
+        'an unchanged manifest revalidates as a 304',
+      );
+
+      // A re-capture repoints the manifest — a prerendered_html write that
+      // moves neither `indexed_at` nor the realm info. The old validator
+      // must stop matching or a cached document 304s past its own
+      // screenshots forever.
+      await query(dbAdapter, [
+        `UPDATE prerendered_html
+           SET screenshots = '{"hero":{"specHash":"declared-hero-spec","objectKey":"object-b","contentType":"image/png","width":800,"height":600,"deviceScaleFactor":2}}'::jsonb
+         WHERE url = '${REALM_URL}card-1.json'`,
+      ]);
+      let recaptured = await get('card-1', 'GET', {
+        Accept: 'application/vnd.card+json',
+        'if-none-match': etag,
+      });
+      assert.strictEqual(
+        recaptured.status,
+        200,
+        'a changed manifest fails the old validator',
+      );
+      let json = await recaptured.json();
+      assert.strictEqual(
+        json.data.meta.screenshots.hero.hash,
+        'object-b',
+        'the full response carries the fresh manifest',
+      );
+      assert.notStrictEqual(
+        recaptured.headers.get('etag'),
+        etag,
+        'the new response carries a rotated validator',
+      );
     });
 
     test('a missing instance is an uncaptured miss, not a capture attempt', async function (assert) {
