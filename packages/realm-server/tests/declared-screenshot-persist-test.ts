@@ -15,7 +15,10 @@ import {
   shouldCarryForwardDeclaredEntry,
   type ScreenshotManifest,
 } from '@cardstack/runtime-common';
-import { persistDeclaredScreenshots } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
+import {
+  declaredScreenshotTimingsMs,
+  persistDeclaredScreenshots,
+} from '@cardstack/runtime-common/index-runner/prerender-html-visit';
 
 import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { setupDB } from './helpers/index.ts';
@@ -68,12 +71,16 @@ module(basename(import.meta.filename), function (hooks) {
   function persist(args: {
     result: Parameters<typeof persistDeclaredScreenshots>[0]['result'];
     priorManifest?: ScreenshotManifest | null;
+    priorScreenshotErrors?: Parameters<
+      typeof persistDeclaredScreenshots
+    >[0]['priorScreenshotErrors'];
     contentHash?: string;
     sourceGeneration?: number;
   }) {
     return persistDeclaredScreenshots({
       result: args.result,
       priorManifest: args.priorManifest ?? null,
+      priorScreenshotErrors: args.priorScreenshotErrors ?? null,
       dbAdapter,
       mediaCacheAdapter: adapter,
       realmURL,
@@ -268,6 +275,120 @@ module(basename(import.meta.filename), function (hooks) {
     let { manifest, errors } = await persist({ result: undefined });
     assert.strictEqual(manifest, null);
     assert.deepEqual(errors, []);
+  });
+
+  test('a first failure starts a consecutive-failure run of one', async function (assert) {
+    let { errors } = await persist({
+      result: {
+        entries: [],
+        errors: [
+          { name: 'hero', message: 'render never painted', captureMs: 800 },
+        ],
+      },
+    });
+    assert.deepEqual(errors, [
+      {
+        name: 'hero',
+        message: 'render never painted',
+        captureMs: 800,
+        consecutiveFailures: 1,
+      },
+    ]);
+  });
+
+  test('a repeat failure of the same slot extends the prior run; other slots start their own', async function (assert) {
+    let { errors } = await persist({
+      result: {
+        entries: [],
+        errors: [
+          { name: 'hero', message: 'render never painted' },
+          { name: 'poster', message: 'image paint timed out' },
+        ],
+      },
+      priorScreenshotErrors: [
+        {
+          name: 'hero',
+          message: 'render never painted',
+          consecutiveFailures: 2,
+        },
+        // A slot that failed before but succeeded since (its error entry is
+        // gone from this render) contributes nothing; only same-name runs
+        // extend.
+        { name: 'banner', message: 'stale failure', consecutiveFailures: 2 },
+      ],
+    });
+    assert.deepEqual(
+      errors.map(({ name, consecutiveFailures }) => ({
+        name,
+        consecutiveFailures,
+      })),
+      [
+        { name: 'hero', consecutiveFailures: 3 },
+        { name: 'poster', consecutiveFailures: 1 },
+      ],
+    );
+  });
+
+  test('a prior failure recorded without a run count reads as a run of one', async function (assert) {
+    let { errors } = await persist({
+      result: {
+        entries: [],
+        errors: [{ name: 'hero', message: 'render never painted' }],
+      },
+      priorScreenshotErrors: [
+        { name: 'hero', message: 'render never painted' },
+      ],
+    });
+    assert.strictEqual(errors[0].consecutiveFailures, 2);
+  });
+
+  test('persist-step failures join the bookkeeping too', async function (assert) {
+    adapter.failNextPut = true;
+    let { errors } = await persist({
+      result: { entries: [captureResult()] },
+      priorScreenshotErrors: [
+        {
+          name: 'card',
+          message: 'failed to persist capture: disk full',
+          consecutiveFailures: 1,
+        },
+      ],
+    });
+    assert.strictEqual(errors.length, 1);
+    assert.strictEqual(errors[0].name, 'card');
+    assert.strictEqual(errors[0].consecutiveFailures, 2);
+  });
+
+  module('declaredScreenshotTimingsMs', function () {
+    test('collects per-slot timings from captures and failed attempts alike', function (assert) {
+      assert.deepEqual(
+        declaredScreenshotTimingsMs({
+          entries: [
+            captureResult({ captureMs: 1200 }),
+            // A carry-forward rendered nothing, so it records no time.
+            captureResult({
+              name: 'poster',
+              carriedForward: true,
+              base64: undefined,
+            }),
+          ],
+          errors: [
+            { name: 'hero', message: 'render never painted', captureMs: 900 },
+            // A never-attempted slot (roster failure, cap overflow) has none.
+            { name: 'banner', message: 'over the capture cap' },
+          ],
+        }),
+        { card: 1200, hero: 900 },
+      );
+    });
+
+    test('is undefined when nothing recorded a time', function (assert) {
+      assert.strictEqual(declaredScreenshotTimingsMs(undefined), undefined);
+      assert.strictEqual(
+        declaredScreenshotTimingsMs({ entries: [] }),
+        undefined,
+      );
+    });
   });
 
   // The engine-side carry-forward decision (`captureDeclaredScreenshots`

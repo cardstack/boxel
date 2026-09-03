@@ -44,7 +44,7 @@ import type { DBAdapter } from './db.ts';
 import type { ScreenshotManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
-import type { Diagnostics } from './index.ts';
+import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -1559,19 +1559,24 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot manifest the previous pass published for this
-  // row, read from production `prerendered_html` — the carry-forward input
-  // for `keyBy: 'file-content'` slots (skip re-rendering when the source
-  // bytes are unchanged). Null when no prior row exists or it carried no
-  // manifest.
-  async priorScreenshotManifest(
+  // The declared-screenshot state the previous pass published for this row,
+  // read from production `prerendered_html`: the manifest is the
+  // carry-forward input for `keyBy: 'file-content'` slots (skip re-rendering
+  // when the source bytes are unchanged), and the recorded capture failures
+  // seed this pass's consecutive-failure bookkeeping (a slot that fails
+  // again extends its run; the reconcile sweep's bounded retry lane reads
+  // the count). Both null when no prior row exists or it carried none.
+  async priorScreenshotState(
     url: URL,
     type: PrerenderedHtmlTable['type'],
-  ): Promise<ScreenshotManifest | null> {
-    // This runs once per instance visit, so it selects only the manifest —
+  ): Promise<{
+    manifest: ScreenshotManifest | null;
+    screenshotErrors: DeclaredScreenshotError[] | null;
+  }> {
+    // This runs once per instance visit, so it selects only what it needs —
     // the row's HTML columns are large and irrelevant here.
     let [row] = (await this.#query([
-      `SELECT screenshots FROM prerendered_html WHERE`,
+      `SELECT screenshots, diagnostics FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
@@ -1580,8 +1585,19 @@ export class Batch {
         ]),
         ['type =', param(type)],
       ]),
-    ] as Expression)) as unknown as Pick<PrerenderedHtmlTable, 'screenshots'>[];
-    return (row?.screenshots as ScreenshotManifest | null) ?? null;
+    ] as Expression)) as unknown as Pick<
+      PrerenderedHtmlTable,
+      'screenshots' | 'diagnostics'
+    >[];
+    let priorErrors = (row?.diagnostics as Diagnostics | null)
+      ?.screenshotErrors;
+    return {
+      manifest: (row?.screenshots as ScreenshotManifest | null) ?? null,
+      screenshotErrors:
+        Array.isArray(priorErrors) && priorErrors.length > 0
+          ? priorErrors
+          : null,
+    };
   }
 
   private async getPrerenderedHtmlProductionVersion(

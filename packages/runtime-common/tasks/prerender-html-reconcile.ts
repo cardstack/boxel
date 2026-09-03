@@ -70,8 +70,11 @@ registerQueueJobDefinition({
 // failure retries a few times a day instead of burning a render batch every
 // scan), and an individual URL whose visit requests keep failing is retried
 // only up to its consecutive-failure cap before its recorded error stands
-// (see `findStalePrerenderedHtmlRows`). Purely additive: a sweep over a
-// healthy system finds nothing and enqueues nothing.
+// (see `findStalePrerenderedHtmlRows`). The same scan also retries healthy
+// rows whose declared-screenshot captures failed (recorded on
+// `diagnostics.screenshotErrors`, never as an error row), under that lane's
+// own per-slot cap. Purely additive: a sweep over a healthy system finds
+// nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
   PrerenderHtmlReconcileResult

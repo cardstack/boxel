@@ -49,6 +49,18 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP = 3;
 // sweep tick that lands just after the failure immediately re-rendering it.
 export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
+// The declared-screenshot twin of the visit-failure bounds. A capture
+// failure never errors its row — the row publishes with the manifest
+// omitting the failed name and `diagnostics.screenshotErrors` recording why
+// (the broken-links model) — so the retry lane keys off that diagnostics
+// record rather than an `error_doc`. Same shape as the visit-failure lane:
+// each slot's consecutive-failure run is capped, and a failed row waits out
+// a minimum age between attempts. At the cap, the absence is the recorded
+// outcome — the card stays fully served and searchable, the screenshot
+// simply stays missing until the URL's next invalidation re-renders it.
+export const DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP = 3;
+export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
+
 // Index rows whose prerendered HTML is behind the search-doc index, or absent
 // entirely, restricted to live, non-errored rows:
 //   - `is_deleted` rows are tombstones — a deletion's tombstone-render is not
@@ -65,10 +77,23 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // repairable even at a current generation — the failure describes the
 // request rather than the content — until its consecutive-failure run
 // reaches `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`, after which it reads as
-// terminal exactly like a deterministic render error. The jsonb operators
-// here are Postgres-only, like the `jobs`-table scans in this module: the
-// reconcile task that issues this query runs solely behind the Postgres
-// queue.
+// terminal exactly like a deterministic render error.
+//
+// A fourth arm admits the declared-screenshot retry lane: a *healthy*
+// published row (no `error_doc`) whose `diagnostics.screenshotErrors`
+// records capture failures is repairable while any recorded slot's
+// consecutive-failure run is below `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP`
+// (an entry without a count is a legacy row — read as a run of one, so it
+// still gets its retries). The repair is a plain re-render of the URL; the
+// capture rides the prerender-html visit, and a slot already at its cap
+// that happens to recapture successfully along the way just heals early. A
+// row every one of whose recorded slots has reached the cap is terminal —
+// the screenshots stay absent (thumbnail consumers fall through their
+// chain) until the URL's next invalidation.
+//
+// The jsonb operators here are Postgres-only, like the `jobs`-table scans
+// in this module: the reconcile task that issues this query runs solely
+// behind the Postgres queue.
 export async function findStalePrerenderedHtmlRows(
   dbAdapter: DBAdapter,
 ): Promise<StalePrerenderedHtmlRow[]> {
@@ -87,7 +112,17 @@ export async function findStalePrerenderedHtmlRows(
              < ${PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP}
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS}))`,
+               - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS})
+         OR (ph.error_doc IS NULL
+           AND jsonb_typeof(ph.diagnostics->'screenshotErrors') = 'array'
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(ph.diagnostics->'screenshotErrors') se
+             WHERE COALESCE((se->>'consecutiveFailures')::int, 1)
+               < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP})
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;

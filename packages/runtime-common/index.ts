@@ -247,6 +247,15 @@ export interface PrerenderMetaDiagnostics {
   // the manifest simply omits the name, so this is the only indexed signal
   // that a declared capture is missing. Omitted when every slot captured.
   screenshotErrors?: DeclaredScreenshotError[];
+  // Per-slot wall-clock of the declared-screenshot captures this visit
+  // performed, keyed by slot name — the per-name decomposition of the
+  // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
+  // attributable to its slot. Failed attempts appear here too (their time
+  // was spent all the same); carried-forward slots don't (nothing
+  // rendered). Slots captured from one shared format render each record
+  // that render's whole elapsed time, so entries can exceed the aggregate
+  // when summed. Omitted when the visit captured nothing.
+  screenshotTimingsMs?: Record<string, number>;
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -925,6 +934,20 @@ export type DeclaredScreenshotVisitArgs = {
 export type DeclaredScreenshotError = {
   name: string;
   message: string;
+  // Wall-clock the engine spent on the render/capture attempt that failed
+  // this slot. Absent when the failure never reached a render (the roster
+  // read failed, the slot overflowed the capture cap, or the persist step
+  // failed after a successful capture — the capture's own time then rides
+  // the sibling timing entry).
+  captureMs?: number;
+  // How many consecutive prerender-html renders have failed this slot's
+  // capture, maintained by the persist path from the prior row's recorded
+  // errors. The reconcile sweep's bounded retry lane reads this: a slot
+  // below `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP` gets its row re-rendered
+  // (spaced by `DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS`), at the cap
+  // the absence stands until the URL's next invalidation. A successful
+  // capture of the slot ends the run by dropping its error entry outright.
+  consecutiveFailures?: number;
 };
 
 // One declared slot's outcome from the visit's capture step. A fresh capture
@@ -944,6 +967,12 @@ export type DeclaredScreenshotCaptureResult = {
   useAsThumbnail?: boolean;
   base64?: string;
   carriedForward?: boolean;
+  // Wall-clock of the render + capture that produced this slot's bytes.
+  // Slots captured from one shared format render each carry that render's
+  // whole elapsed time (an upper bound on their own share); a render-based
+  // slot's time is entirely its own. Absent on carry-forwards — nothing
+  // rendered.
+  captureMs?: number;
 };
 
 export interface DeclaredScreenshotVisitResult {

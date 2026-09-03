@@ -12,6 +12,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   asExpressions,
+  DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
   insert,
   insertPermissions,
@@ -138,6 +139,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation,
     isDeleted = false,
     errorDoc = null,
+    diagnostics = null,
     renderedMinutesAgo,
   }: {
     url: string;
@@ -146,6 +148,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation: number;
     isDeleted?: boolean;
     errorDoc?: Record<string, unknown> | null;
+    diagnostics?: Record<string, unknown> | null;
     renderedMinutesAgo?: number;
   }) {
     let { nameExpressions, valueExpressions } = asExpressions(
@@ -157,11 +160,12 @@ module(basename(import.meta.filename), function (hooks) {
         generation,
         is_deleted: isDeleted,
         error_doc: errorDoc,
+        diagnostics,
         ...(renderedMinutesAgo !== undefined
           ? { rendered_at: Date.now() - renderedMinutesAgo * 60 * 1000 }
           : {}),
       },
-      { jsonFields: ['error_doc'] },
+      { jsonFields: ['error_doc', 'diagnostics'] },
     );
     await query(
       dbAdapter,
@@ -1075,6 +1079,217 @@ module(basename(import.meta.filename), function (hooks) {
       result,
       { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'a just-recorded failure waits out the minimum age before its retry',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('a healthy row with a screenshot-capture failure below the cap is re-rendered once it ages past the minimum', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-retry/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5, 'epoch-a');
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    // The row published normally — no error_doc, current generation — but a
+    // declared slot's capture failed and its run is below the cap.
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [
+          {
+            name: 'hero',
+            message: 'render never painted',
+            consecutiveFailures: 1,
+          },
+        ],
+      },
+      renderedMinutesAgo: 60,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the failed capture gets another attempt',
+    );
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1);
+    assert.ok(
+      jobs[0].args.changes.some(
+        (change) =>
+          change.url === `${realmURL}mango.json` &&
+          change.operation === 'update',
+      ),
+      'the retry re-renders the URL whose capture failed',
+    );
+  });
+
+  test('a screenshot-failure entry recorded without a run count reads as a run of one', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-legacy/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [{ name: '*', message: 'roster read failed' }],
+      },
+      renderedMinutesAgo: 60,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'a pre-bookkeeping row still gets its retries',
+    );
+  });
+
+  test('a row whose every recorded slot has reached the capture-retry cap is terminal', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [
+          {
+            name: 'hero',
+            message: 'render never painted',
+            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+          },
+          {
+            name: 'poster',
+            message: 'capture engine returned no bytes for "poster"',
+            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP + 1,
+          },
+        ],
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the recorded absences stand — the card stays served without the screenshots',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('one slot below the cap keeps a row retryable even when another slot is capped', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-mixed/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [
+          {
+            name: 'hero',
+            message: 'render never painted',
+            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+          },
+          {
+            name: 'poster',
+            message: 'image paint timed out',
+            consecutiveFailures: 1,
+          },
+        ],
+      },
+      renderedMinutesAgo: 60,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the below-cap slot earns the row its re-render',
+    );
+  });
+
+  test('a screenshot-capture failure younger than the minimum age is not retried yet', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [
+          {
+            name: 'hero',
+            message: 'render never painted',
+            consecutiveFailures: 1,
+          },
+        ],
+      },
+      renderedMinutesAgo: 5,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a just-recorded capture failure waits out the minimum age',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('a healthy row with capture timings but no capture failures is not residue', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-healthy/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotTimingsMs: { hero: 1200 },
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'successful captures leave nothing to repair',
     );
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
