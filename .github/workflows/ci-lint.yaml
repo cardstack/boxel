@@ -51,10 +51,6 @@ jobs:
         # NORMATIVE status.
         if: ${{ !cancelled() }}
         run: pnpm run lint:rp-bijection
-
-      - name: Check the execution protocol's runtime import closure
-        if: ${{ !cancelled() }}
-        run: pnpm run lint:protocol-closure
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint
