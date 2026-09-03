@@ -75,6 +75,22 @@ function makeFileSystem() {
         @field name = contains(StringField);
       }
 
+      // Default fitted template + a content-bearing capture flagged
+      // useAsThumbnail: the persisted tile HTML must carry the capture's
+      // durable URL through the cardThumbnailURL fallback chain, with no
+      // template edits.
+      export class Gallery extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Gallery: <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          tile: { format: 'isolated', width: 170, height: 250, useAsThumbnail: true },
+        };
+      }
+
       // Consumes its own declared capture in a display format — pins the
       // render context's declaration-derived meta.screenshots: the durable
       // URL must land in persisted HTML on the instance's very first
@@ -356,6 +372,40 @@ module(basename(import.meta.filename), function (hooks) {
         `${testRealm}_screenshot/self-promo-1?name=card`,
       ),
       `the very first persisted isolated_html embeds the durable URL (render-context declaration-derived meta); got: ${row!.isolated_html}`,
+    );
+  });
+
+  test('a useAsThumbnail capture feeds the default fitted tile with no template edits', async function (assert) {
+    await writeAndSettle(
+      'gallery-1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'First' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Gallery' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}gallery-1.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.tile, 'the thumbnail capture landed');
+    assert.true(
+      manifest!.tile.useAsThumbnail,
+      'the manifest carries the thumbnail flag',
+    );
+
+    let fittedHtml = Object.values(
+      (row!.fitted_html ?? {}) as Record<string, string>,
+    ).join('\n');
+    assert.true(
+      fittedHtml.includes(`${testRealm}_screenshot/gallery-1?name=tile`),
+      `the default fitted tile renders the capture through the cardThumbnailURL chain; got: ${fittedHtml.slice(0, 2000)}`,
     );
   });
 

@@ -573,6 +573,122 @@ module('Unit | declared screenshots', function (hooks) {
     );
   });
 
+  test('cardThumbnailURL falls back to the useAsThumbnail capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    let instance = new Product();
+    assert.notOk(
+      instance.cardThumbnailURL,
+      'nullish until a capture exists — the absence signal the icon default engages on',
+    );
+
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        hero: {
+          url: 'http://example.com/r/_screenshot/card-1?name=hero',
+          hash: 'aaa',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+        tile: {
+          url: 'http://example.com/r/_screenshot/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/r/_screenshot/card-1?name=tile',
+      'the declared useAsThumbnail slot feeds the thumbnail, not other captures',
+    );
+  });
+
+  test('author-set thumbnails win over the capture', function (assert) {
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        tile: {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+          useAsThumbnail: true,
+        },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        tile: {
+          url: 'http://example.com/r/_screenshot/card-1?name=tile',
+          hash: 'bbb',
+          contentType: 'image/png',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+      },
+    };
+
+    let img = new cardApi.ImageDef({
+      id: 'http://example.com/authored.png',
+      url: 'http://example.com/authored.png',
+    });
+    instance.cardInfo.cardThumbnail = img;
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/authored.png',
+      'an authored ImageDef link outranks the capture',
+    );
+
+    instance.cardInfo.cardThumbnailURL = 'http://example.com/explicit.png';
+    assert.strictEqual(
+      instance.cardThumbnailURL,
+      'http://example.com/explicit.png',
+      'an explicit URL outranks everything',
+    );
+  });
+
+  test('a card without a useAsThumbnail declaration ignores captured slots', function (assert) {
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    let instance = new Product();
+    (instance as any)[cardApi.meta] = {
+      screenshots: {
+        hero: {
+          url: 'http://example.com/r/_screenshot/card-1?name=hero',
+          hash: 'aaa',
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      },
+    };
+    assert.notOk(
+      instance.cardThumbnailURL,
+      'no declared thumbnail slot means no capture rung',
+    );
+  });
+
   test('the @field decorator refuses the reserved screenshotURLs name', function (assert) {
     class Bad extends cardApi.CardDef {}
     assert.throws(

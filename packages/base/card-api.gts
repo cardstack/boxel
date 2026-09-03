@@ -2896,8 +2896,26 @@ export type ScreenshotSpec = {
   // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
   // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
-  // Feed this capture to `cardThumbnailURL`. At most one entry across a
-  // card's merged declarations may set this.
+  // Feed this capture to `cardThumbnailURL` (its fallback chain prefers an
+  // author-set URL, then an authored ImageDef link, then this capture). At
+  // most one entry across a card's merged declarations may set this.
+  //
+  // Recommended (not enforced) box: 170×250 — the CardsGrid tile — at the
+  // default deviceScaleFactor of 2, so the capture crops predictably under
+  // consumers' `object-fit`/`background-size`. The declared width×height is
+  // the capture envelope, used exactly as given; for a format-based capture
+  // the rendered variant is emergent from the template's own container-query
+  // breakpoints, deterministic per box. Preview a candidate box with
+  // `?format=fitted&envelope=WxH` via the `_screenshot/` DSL on a dev realm,
+  // then codify it here. A box declared near one of the template's
+  // breakpoints can flip variants when those breakpoints are tuned — the
+  // same fragility any responsive design has.
+  //
+  // Point the capture at content: a capture-only `render` component, an
+  // isolated/embedded format, or a fitted template that does not itself
+  // render `cardThumbnailURL`. A fitted capture of the default fitted
+  // template would capture the tile chrome — including its own thumbnail
+  // slot, which shows the previous capture.
   useAsThumbnail?: boolean;
   // What invalidates the capture: the instance's index generation (any
   // edit), or — for file-backed defs — the file's content hash, so a
@@ -3210,6 +3228,30 @@ function composeScreenshotURLs(
     }
   }
   return urls;
+}
+
+// The durable URL of the capture feeding `cardThumbnailURL`: the declared
+// slot flagged `useAsThumbnail` (at most one across the merged declarations,
+// enforced by `getScreenshots`), read with `screenshotURLs`' semantics — a
+// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise,
+// so the fallback chain's terminal rung (the icon default) still engages.
+// Same render-safety posture as `composeScreenshotURLs`: an invalid
+// declaration reads as "no thumbnail capture".
+function thumbnailScreenshotURL(
+  instance: CardDef | FileDef,
+): string | undefined {
+  let name: string | undefined;
+  try {
+    name = Object.entries(
+      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+    ).find(([, spec]) => spec.useAsThumbnail)?.[0];
+  } catch {
+    return undefined;
+  }
+  if (!name) {
+    return undefined;
+  }
+  return getCardMeta(instance, 'screenshots')?.[name]?.url;
 }
 
 export class FieldDef extends BaseDef {
@@ -3801,12 +3843,20 @@ export class CardDef extends BaseDef {
       return this.cardInfo.theme;
     },
   });
-  // TODO: this will probably be an image or image url field card when we have it
-  // UPDATE: we now have a Base64ImageField card. we can probably refactor this
-  // to use it directly now (or wait until a better image field comes along)
+  // The thumbnail fallback chain: an author-set URL wins, then an authored
+  // ImageDef link, then the capture the card's `static screenshots` flags
+  // `useAsThumbnail` — so every opted-in card gets a live preview with no
+  // template edits (the default fitted template already renders this field).
+  // Nullish past all three rungs is the absence signal consumers use to fall
+  // through to the icon default, which is why the capture rung reads
+  // `undefined` (never a placeholder) until a capture exists.
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.cardThumbnailURL;
+      return (
+        this.cardInfo.cardThumbnailURL ??
+        this.cardInfo.cardThumbnail?.url ??
+        thumbnailScreenshotURL(this)
+      );
     },
   });
   static displayName = 'Card';
