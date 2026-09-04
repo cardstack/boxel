@@ -1323,10 +1323,16 @@ export class PreviewPills extends GlimmerComponent<{
 
 // The tokens that decide a theme's look, excerpted from the generated CSS so a
 // reader does not have to scan the full variable dump for them
+// Chosen by counting: these are the contract tokens boxel-ui components read
+// most, plus the ones other theme.css defaults are mixed from (--foreground
+// alone feeds thirteen), plus the knobs the spacing and radius scales derive
+// from. Re-count before adding to it.
 const RECIPE_TOKENS = [
   '--background',
   '--foreground',
   '--card',
+  '--muted',
+  '--muted-foreground',
   '--primary',
   '--primary-foreground',
   '--secondary',
@@ -1337,9 +1343,7 @@ const RECIPE_TOKENS = [
   '--radius',
   '--spacing',
   '--font-sans',
-  '--font-serif',
   '--font-mono',
-  '--shadow',
 ];
 
 export class ThemeRecipe extends GlimmerComponent<{
@@ -1385,6 +1389,11 @@ export class ThemeRecipe extends GlimmerComponent<{
           <h4>Key tokens{{if @isDarkMode ' (dark)'}}</h4>
           <CopyButton @textToCopy={{this.text}} />
         </div>
+        <p class='theme-recipe-description'>
+          The variables components read most and that other defaults are derived
+          from. Pulled from the generated CSS so you can read or copy them
+          without scanning the full list.
+        </p>
         <pre class='theme-recipe-pre' data-test-theme-recipe>{{this.text}}</pre>
       </div>
     {{/if}}
@@ -1401,6 +1410,11 @@ export class ThemeRecipe extends GlimmerComponent<{
         }
         .theme-recipe-header h4 {
           margin: 0;
+        }
+        .theme-recipe-description {
+          margin: var(--boxel-sp-4xs) 0 0;
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
         }
         .theme-recipe-pre {
           margin: var(--boxel-sp-xs) 0 0;
@@ -1481,8 +1495,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
     this.selected = option;
   }
 
-  private panelId = (id: string) => `${guidFor(this)}-${id}`;
-
   <template>
     <div class='specimens' ...attributes>
       <div class='specimen-tabs' role='tablist' aria-label='Theme specimens'>
@@ -1495,7 +1507,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
             }}
             role='tab'
             aria-selected={{if (this.isActive tab.id) 'true' 'false'}}
-            aria-controls={{this.panelId tab.id}}
             {{on 'click' (fn this.selectTab tab.id)}}
             data-test-specimen-tab={{tab.id}}
           >
@@ -1506,7 +1517,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Surfaces & Ink }}
       <section
-        id={{this.panelId 'surfaces'}}
         class='specimen-panel'
         role='tabpanel'
         hidden={{this.isHidden 'surfaces'}}
@@ -1523,16 +1533,17 @@ export class ThemeSpecimens extends GlimmerComponent<{
               <TokenPill @name='--card' />
             </header>
             <div class='sp-inset'>
-              <label class='sp-field-label' for={{this.panelId 'field'}}>
-                Field at rest in an inset well
-                <TokenPill @name='--inset' />
-                <TokenPill @name='--field' />
-                <TokenPill @name='--subtle-foreground' />
+              {{! wrapping label: no id, so cached prerendered copies of this
+                  dashboard can share a document without colliding }}
+              <label class='sp-field-label'>
+                <span class='sp-field-label-text'>
+                  Field at rest in an inset well
+                  <TokenPill @name='--inset' />
+                  <TokenPill @name='--field' />
+                  <TokenPill @name='--subtle-foreground' />
+                </span>
+                <BoxelInput @placeholder='Placeholder in subtle ink' />
               </label>
-              <BoxelInput
-                @id={{this.panelId 'field'}}
-                @placeholder='Placeholder in subtle ink'
-              />
             </div>
             <div class='sp-table-scroll'>
               <table class='sp-table'>
@@ -1614,7 +1625,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Controls }}
       <section
-        id={{this.panelId 'controls'}}
         class='specimen-panel'
         role='tabpanel'
         hidden={{this.isHidden 'controls'}}
@@ -1695,7 +1705,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Dashboard }}
       <section
-        id={{this.panelId 'dashboard'}}
         class='specimen-panel'
         role='tabpanel'
         hidden={{this.isHidden 'dashboard'}}
@@ -1732,7 +1741,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Reading }}
       <section
-        id={{this.panelId 'reading'}}
         class='specimen-panel'
         role='tabpanel'
         hidden={{this.isHidden 'reading'}}
@@ -1868,10 +1876,15 @@ export class ThemeSpecimens extends GlimmerComponent<{
         }
         .sp-field-label {
           display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
+        }
+        .sp-field-label-text {
+          display: flex;
           flex-wrap: wrap;
           align-items: center;
           gap: var(--boxel-sp-4xs);
-          font-size: var(--boxel-font-size-sm);
         }
         .sp-table-scroll {
           overflow-x: auto;
