@@ -832,7 +832,6 @@ export default class StoreService extends Service implements StoreInterface {
       } as CardResourceMeta;
     }
 
-    // A caller that asked the prerender app to persist gets an error rather
     // A headless command running while the prerender app's persistence block
     // is still raised is an impossible state, and the only one this path
     // reports rather than absorbs. The command route drops the block on entry
@@ -840,8 +839,7 @@ export default class StoreService extends Service implements StoreInterface {
     // save resolves to an instance carrying no id, `SaveCardTool` returns it
     // as saved, and every caller downstream — `boxel run-command` included —
     // reads a card that does not exist as a success. `create` already throws
-    // on the same state. Raised before the instance is registered, so a
-    // failed `add` leaves nothing resident.
+    // on the same state.
     //
     // A card render is deliberately NOT an error. The prerenderer is not an
     // avenue for mutations, and a card whose template or computed writes to
