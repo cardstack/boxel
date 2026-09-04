@@ -1457,7 +1457,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
-    opts?: GetSearchResourceFuncOpts,
+    opts?: GetSearchResourceFuncOpts<T>,
   ) {
     if (!this.#storeHooks?.getSearchResource) {
       return {

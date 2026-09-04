@@ -975,6 +975,19 @@ export class SearchResource<
           return type !== 'card-error';
         }) as unknown as T[];
       }
+      // Another seed has been handed over since this one, and it is the set the
+      // resource reports holding. This task runs unbounded — two documents
+      // arriving close together resolve their rows concurrently — so applying
+      // this one now would leave the resource holding the older answer under
+      // the newer identity, whichever of the two happens to finish last. The
+      // check is inert for a producer that supplies no identity, whose seeds
+      // are indistinguishable by design.
+      if (seed.identity !== this.#appliedSeedIdentity) {
+        this.#log.info(
+          `abandon seed superseded while resolving; searchURL=${seed.searchURL}`,
+        );
+        return;
+      }
       // The row count stands in for the total only when the seed didn't report
       // one AND didn't say the count is unknowable. A producer that withheld
       // the count deliberately sets `totalUnknown`, and inferring it from the

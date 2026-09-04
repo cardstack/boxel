@@ -125,9 +125,16 @@ module('Integration | query-field relationship status', function (hooks) {
   // contradicting itself.
   function spliceThirdMember(hostDoc: any): void {
     let relationships = hostDoc.data.relationships;
-    let template = hostDoc.included.find((resource: { id: string }) =>
+    let template = hostDoc.included?.find((resource: { id: string }) =>
       resource.id.endsWith('Person/one'),
     );
+    if (!template) {
+      throw new Error(
+        `expected the host document to carry Person/one as a resolved member of 'matches'; included ids were ${JSON.stringify(
+          (hostDoc.included ?? []).map((r: { id: string }) => r.id),
+        )}`,
+      );
+    }
     let spliced = JSON.parse(JSON.stringify(template));
     spliced.id = template.id.replace('Person/one', 'Person/three');
     hostDoc.included.push(spliced);

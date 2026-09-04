@@ -580,17 +580,17 @@ export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
   totalUnknown?: boolean;
 };
 
-export type GetSearchResourceFuncOpts = {
+export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: StoreSearchSeed;
+  seed?: StoreSearchSeed<T>;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: GetSearchResourceFuncOpts,
+  opts?: GetSearchResourceFuncOpts<T>,
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
