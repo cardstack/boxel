@@ -271,7 +271,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           response.status,
           200,
-          'the pre-rewrite schema serialized an instance, warming its definition',
+          `the pre-rewrite schema serialized an instance, warming its definition — ${JSON.stringify(response.body)}`,
         );
       }
 
@@ -307,7 +307,11 @@ module(basename(import.meta.filename), function () {
           })
           .set('Accept', 'application/vnd.card+json');
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 status — ${JSON.stringify(response.body)}`,
+        );
         assert.strictEqual(
           response.body.data.attributes?.lastName,
           'Tangle',
@@ -335,14 +339,24 @@ module(basename(import.meta.filename), function () {
               type: 'card',
               attributes: { firstName: 'Van Gogh', lastName: 'Tangle' },
               meta: {
-                adoptsFrom: { module: rri('./person'), name: 'Person' },
+                adoptsFrom: {
+                  // Absolute: `createCard` serializes relative to the new
+                  // instance's own directory, so a relative ref would resolve
+                  // under `Person/` rather than the realm root.
+                  module: rri(`${realmURL.href}person`),
+                  name: 'Person',
+                },
               },
             },
           })
           .set('Accept', 'application/vnd.card+json')
           .set(DURING_PRERENDER_HEADER, 'true');
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(
+          response.status,
+          201,
+          `HTTP 201 status — ${JSON.stringify(response.body)}`,
+        );
         // A prerender-originated write indexes deferred, so its response is
         // echoed straight from the serialization that lands on disk — the
         // same document the stale schema would have stripped the field from.
@@ -378,14 +392,21 @@ module(basename(import.meta.filename), function () {
               type: 'card',
               attributes: { nickname: 'Mango' },
               meta: {
-                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+                adoptsFrom: {
+                  module: rri(`${realmURL.href}pet`),
+                  name: 'Pet',
+                },
               },
             },
           })
           .set('Accept', 'application/vnd.card+json')
           .set(DURING_PRERENDER_HEADER, 'true');
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(
+          response.status,
+          201,
+          `HTTP 201 status — ${JSON.stringify(response.body)}`,
+        );
         assert.strictEqual(
           response.body.data.attributes?.nickname,
           'Mango',

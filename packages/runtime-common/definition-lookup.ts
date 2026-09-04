@@ -91,6 +91,17 @@ const COALESCE_NOTIFY_WAIT_MS = 180_000; // 180 seconds
 // principle cycle the loser indefinitely; capping at a small number and
 // throwing surfaces it instead of silently hanging.
 const COALESCE_MAX_ITERATIONS = 4;
+// How many times `lookupDefinition` re-runs a populate whose result an
+// invalidation discarded out from under it. A populate that loses this race
+// returns the post-invalidate cache state — `undefined` once the invalidation
+// has deleted the row — which is indistinguishable at the call site from "this
+// module does not exist" even though the module is on disk and readable. A
+// module write invalidates and then indexes, and the index job invalidates
+// again, so any serialization that follows a module write can land inside that
+// second invalidation's window. Retrying re-snapshots the generation and
+// converges as soon as no invalidation lands mid-populate; the cap keeps an
+// invalidation storm from spinning on prerenders instead of surfacing.
+const POPULATE_RACE_MAX_ATTEMPTS = 3;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -770,6 +781,25 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     };
   }
 
+  // Narrower than `generationChanged`: true only when THIS module was
+  // invalidated, ignoring realm-wide and global wipes. `invalidate()` says
+  // "these bytes changed, re-derive them", so a populate it discarded is
+  // worth re-running. `clearRealmDefinitions` / `clearAllDefinitions` say
+  // "drop this realm's (or every) definition now" — re-populating into one of
+  // those would refill rows the caller just cleared, so a populate they
+  // discard stays discarded.
+  private moduleGenerationChanged(
+    resolvedRealmURL: string,
+    moduleURL: string,
+    snapshot: { module: number; realm: number; global: number },
+  ): boolean {
+    return (
+      (this.#moduleGenerations.get(
+        moduleGenerationKey(resolvedRealmURL, moduleURL),
+      ) ?? 0) !== snapshot.module
+    );
+  }
+
   private generationChanged(
     resolvedRealmURL: string,
     moduleURL: string,
@@ -926,15 +956,40 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
     } = context;
 
-    let moduleEntry = await this.loadDefinitionCacheEntry({
-      moduleURL: canonicalModuleURL,
-      realmURL,
-      resolvedRealmURL,
-      cacheScope,
-      cacheUserId,
-      prerenderUserId,
-      priority: contextOpts?.priority,
-    });
+    // An empty result means one of two things, and only the generation
+    // separates them: the module genuinely has no definition to load, or a
+    // populate ran and an invalidation discarded its result before it could
+    // persist. Retry only the second — the module is on disk, and the next
+    // populate reads it under the post-invalidate generation.
+    let moduleEntry: DefinitionCacheEntry | undefined;
+    for (let attempt = 0; attempt < POPULATE_RACE_MAX_ATTEMPTS; attempt++) {
+      let snapshot = this.snapshotGeneration(
+        resolvedRealmURL,
+        canonicalModuleURL,
+      );
+      moduleEntry = await this.loadDefinitionCacheEntry({
+        moduleURL: canonicalModuleURL,
+        realmURL,
+        resolvedRealmURL,
+        cacheScope,
+        cacheUserId,
+        prerenderUserId,
+        priority: contextOpts?.priority,
+      });
+      if (
+        moduleEntry ||
+        !this.moduleGenerationChanged(
+          resolvedRealmURL,
+          canonicalModuleURL,
+          snapshot,
+        )
+      ) {
+        break;
+      }
+      log.debug(
+        `definition populate for ${canonicalModuleURL} was discarded by a concurrent invalidation; retrying (attempt ${attempt + 1} of ${POPULATE_RACE_MAX_ATTEMPTS})`,
+      );
+    }
 
     if (!moduleEntry) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {

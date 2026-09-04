@@ -1795,8 +1795,19 @@ module(basename(import.meta.filename), function () {
         },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersist', []);
+          // Only the first prerender parks; the retry after the discard
+          // runs straight through. `deps` tags which call produced a row,
+          // so the assertions below can tell the discarded pre-invalidate
+          // result apart from the post-invalidate one.
+          if (calls === 1) {
+            await gate;
+            return buildModuleResponse(args.url, 'StalePersist', [
+              'pre-invalidate',
+            ]);
+          }
+          return buildModuleResponse(args.url, 'StalePersist', [
+            'post-invalidate',
+          ]);
         },
       };
 
@@ -1831,25 +1842,34 @@ module(basename(import.meta.filename), function () {
       // invalidate just deleted.
       releaseGate();
       let result = await Promise.allSettled([pA]);
+      // The module is on disk, so the invalidation means "re-derive it", not
+      // "it does not exist". A re-populates under the post-invalidate
+      // generation and answers from that.
       assert.strictEqual(
         result[0].status,
-        'rejected',
-        'A rejects because the post-skip readFromDatabaseCache misses (row was deleted)',
+        'fulfilled',
+        'A resolves from a populate that ran after the invalidation',
       );
       assert.strictEqual(
         calls,
-        1,
-        'prerenderModule was still called once (no double-prerender)',
+        2,
+        'the discarded populate was re-run exactly once',
       );
 
       let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
+        `SELECT deps FROM modules WHERE url = $1`,
         { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        0,
-        'invalidate is honored — no zombie row from A persist',
+      )) as { deps: string[] | string }[];
+      assert.strictEqual(rows.length, 1, 'exactly one row for the module');
+      let deps =
+        typeof rows[0].deps === 'string'
+          ? (JSON.parse(rows[0].deps) as string[])
+          : rows[0].deps;
+      // deps are persisted resolved against the realm.
+      assert.deepEqual(
+        deps,
+        [`${realmURL}post-invalidate`],
+        'invalidate is honored — the row came from the post-invalidate populate, not the discarded one',
       );
     });
 
@@ -2162,9 +2182,11 @@ module(basename(import.meta.filename), function () {
         'C coalesced into B without adding a prerender',
       );
 
-      // Settle A. Its .finally must NOT delete B's entry.
+      // Release A's prerender. The invalidation discarded its result, so A
+      // re-populates — and finds B already in-flight under the same key, so
+      // it joins B rather than starting a third prerender. A therefore
+      // settles with B, not before it.
       gates[0].release();
-      await Promise.allSettled([pA]);
 
       // D should STILL coalesce into B. If A's finally deleted B's entry,
       // D would create a third prerender here.
@@ -2181,10 +2203,16 @@ module(basename(import.meta.filename), function () {
 
       // Release B; everyone converges.
       gates[1].release();
-      let [rB, rC, rD] = await Promise.allSettled([pB, pC, pD]);
+      let [rA, rB, rC, rD] = await Promise.allSettled([pA, pB, pC, pD]);
+      assert.strictEqual(rA.status, 'fulfilled');
       assert.strictEqual(rB.status, 'fulfilled');
       assert.strictEqual(rC.status, 'fulfilled');
       assert.strictEqual(rD.status, 'fulfilled');
+      assert.strictEqual(
+        calls,
+        2,
+        "A's retry joined B's in-flight populate instead of prerendering again",
+      );
     });
 
     test('in-flight prerender persists normally when no invalidate runs', async function (assert) {
