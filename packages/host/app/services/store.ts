@@ -339,6 +339,11 @@ export default class StoreService extends Service implements StoreInterface {
     // store on __boxelRenderContext alone breaks it: card-prerender sets that
     // global around every test-realm index render, silently dropping app saves
     // that coincide with one.
+    //
+    // The command-runner route is the one place in the prerender app that
+    // drops `__boxelPrerenderApp`, because a command is expected to write and
+    // its writes index deferred rather than waiting on the worker the tab is
+    // holding.
     if ((globalThis as any).__boxelPrerenderApp) {
       return true;
     }
@@ -825,6 +830,33 @@ export default class StoreService extends Service implements StoreInterface {
         ...instance[meta],
         ...{ realmURL: opts.realm },
       } as CardResourceMeta;
+    }
+
+    // A headless command running while the prerender app's persistence block
+    // is still raised is an impossible state, and the only one this path
+    // reports rather than absorbs. The command route drops the block on entry
+    // precisely so a command's writes can land; with the block still up the
+    // save resolves to an instance carrying no id, `SaveCardTool` returns it
+    // as saved, and every caller downstream — `boxel run-command` included —
+    // reads a card that does not exist as a success. `create` already throws
+    // on the same state.
+    //
+    // A card render is deliberately NOT an error. The prerenderer is not an
+    // avenue for mutations, and a card whose template or computed writes to
+    // the store is doing what it was designed to do — it just cannot have
+    // that write here, because it would aim at a realm whose sole indexing
+    // worker this render is occupying. Dropping the write renders the card;
+    // throwing would fail the render and index the card as an error.
+    if (
+      !opts?.doNotPersist &&
+      (globalThis as any).__boxelPrerenderApp &&
+      (globalThis as any).__boxelHeadlessCommand
+    ) {
+      throw new Error(
+        `cannot persist instance ${
+          instance.id ?? instance[localIdSymbol]
+        }: a headless command is running with the prerender app's persistence block still raised`,
+      );
     }
 
     let maybeOldInstance = instance.id
@@ -2054,6 +2086,10 @@ export default class StoreService extends Service implements StoreInterface {
   // deliberately not part of the test — card-prerender sets it around index
   // renders that run alongside an interactive app, whose own query fields must
   // keep resolving through those windows.
+  //
+  // A command runs with `__boxelPrerenderApp` dropped, so its query fields do
+  // resolve eagerly — matching what a command gets on a tab that has never
+  // served a render.
   protected resolvesQueryFieldsEagerly(): boolean {
     if ((globalThis as any).__boxelPrerenderApp) {
       return false;
