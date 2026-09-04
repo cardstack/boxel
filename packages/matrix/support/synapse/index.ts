@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as net from 'net';
+import * as childProcess from 'child_process';
 import fse from 'fs-extra';
 import { request } from '@playwright/test';
 import {
@@ -20,8 +21,11 @@ import {
   registerSynapseWithTraefik,
 } from '../environment-config.ts';
 
-export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
+
+// Synapse containers are named after the temp config directory they are given,
+// which `cfgDirFromTemplate` creates with this prefix.
+const TEST_SYNAPSE_CONTAINER_PREFIX = 'sf-test-synapse-';
 
 // Synapse's listeners bind to "::" (IPv6 dual-stack) by default. Hosts whose
 // kernel lacks IPv6 (some minimal cloud VMs / containers) can't bind it and
@@ -165,7 +169,7 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  const host = options?.host ?? SYNAPSE_IP_ADDRESS;
+  const host = options?.host ?? '127.0.0.1';
   const port = options?.port ?? SYNAPSE_PORT;
   const baseUrl = options?.publicBaseUrl ?? `http://${host}:${port}`;
 
@@ -219,6 +223,97 @@ interface StartOptions {
   dynamicHostPort?: true;
 }
 
+// Build the `docker run` flags for a Synapse container.
+//
+// The container joins the shared `boxel` network without asking for an address
+// on it. Everything that reaches Synapse addresses it either from the host
+// through the published port, or — for containers on the same network, such as
+// a local Prometheus scraping `boxel-synapse:9001` — by container name through
+// Docker's embedded DNS. Requesting a fixed address instead would make startup
+// depend on how many other containers already hold the low addresses in the
+// range, since Docker hands those out in the order containers join.
+export function synapseDockerParams(args: {
+  configDir: string;
+  hostPort: number;
+  runAsRoot?: boolean;
+}): string[] {
+  return [
+    '--rm',
+    '-v',
+    `${args.configDir}:/data`,
+    '-v',
+    `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
+    '-v',
+    `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
+    '-e',
+    'PYTHONPATH=/custom/modules',
+    // When the host runs as root (e.g. the Claude-web cloud VM), the synapse
+    // image would otherwise drop privileges to its default uid 991, which
+    // cannot write the root-owned config dir mounted at /data. Telling the
+    // image to stay as root (UID/GID=0) keeps it able to create media_store.
+    ...(args.runAsRoot ? ['-e', 'UID=0', '-e', 'GID=0'] : []),
+    '-p',
+    `${args.hostPort}:8008/tcp`,
+    '--network=boxel',
+  ];
+}
+
+function dockerCapture(params: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    childProcess.execFile(
+      'docker',
+      params,
+      { encoding: 'utf8' },
+      (err, stdout) => resolve(err ? '' : stdout.trim()),
+    );
+  });
+}
+
+// Docker reports a refused bind as "Address already in use" without saying
+// which address it means, which reads equally like the published host port and
+// like the container's address on the network. Name the port and whatever
+// already publishes it, so the message points at something actionable.
+export async function describeHostPortConflict(
+  hostPort: number,
+): Promise<string> {
+  let holders = await dockerCapture([
+    'ps',
+    '--filter',
+    `publish=${hostPort}`,
+    '--format',
+    '{{.Names}} ({{.Image}})',
+  ]);
+  if (holders) {
+    return (
+      `Host port ${hostPort} is already published by: ` +
+      `${holders.split('\n').join(', ')}.`
+    );
+  }
+  return (
+    `Host port ${hostPort} is already bound, and no container publishes it — ` +
+    `a process on this host is listening on it.`
+  );
+}
+
+// Synapse containers are named after the temp config directory they are given,
+// so a run killed before its teardown leaves one behind under a name no later
+// run can predict. Such a container keeps holding the host port the next run
+// needs, so clearing the way means sweeping by name prefix rather than by an
+// individual name.
+async function removeAbandonedTestSynapseContainers(): Promise<void> {
+  let ids = await dockerCapture([
+    'ps',
+    '-aq',
+    '--filter',
+    `name=${TEST_SYNAPSE_CONTAINER_PREFIX}`,
+  ]);
+  let containerIds = ids.split(/\s+/).filter(Boolean);
+  if (containerIds.length === 0) {
+    return;
+  }
+  await dockerCapture(['rm', '-f', ...containerIds]);
+}
+
 async function resolveHostPort(synapseId: string): Promise<number> {
   let { execSync } = await import('child_process');
   let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
@@ -241,6 +336,10 @@ export async function synapseStart(
       stopPromises.push(synapseStop(id));
     }
     await Promise.allSettled(stopPromises);
+    // `stopExisting` means this Synapse is to be the only one on the host, so
+    // it also covers containers abandoned by a run that never reached its
+    // teardown. Callers that share the host with other harnesses pass false.
+    await removeAbandonedTestSynapseContainers();
   }
   let useDynamicHostPort = Boolean(
     isEnvironmentMode() || opts?.dynamicHostPort,
@@ -256,7 +355,6 @@ export async function synapseStart(
   for (let attempt = 1; attempt <= attempts; attempt++) {
     hostPort = useDynamicHostPort ? await findAvailablePort() : SYNAPSE_PORT;
     synCfg = await cfgDirFromTemplate(opts?.template ?? 'test', opts?.dataDir, {
-      host: useDynamicHostPort ? '127.0.0.1' : SYNAPSE_IP_ADDRESS,
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
     });
@@ -284,36 +382,11 @@ export async function synapseStart(
       `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
     );
 
-    let dockerParams: string[] = [
-      '--rm',
-      '-v',
-      `${synCfg.configDir}:/data`,
-      '-v',
-      `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
-      '-v',
-      `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
-      '-e',
-      'PYTHONPATH=/custom/modules',
-    ];
-    // When the host runs as root (e.g. the Claude-web cloud VM), the synapse
-    // image would otherwise drop privileges to its default uid 991, which
-    // cannot write the root-owned config dir mounted at /data. Telling the
-    // image to stay as root (UID/GID=0) keeps it able to create media_store.
-    if (process.getuid?.() === 0) {
-      dockerParams.push('-e', 'UID=0', '-e', 'GID=0');
-    }
-    if (useDynamicHostPort) {
-      // In dynamic-host-port mode multiple harnesses may run concurrently, so
-      // we must not claim the shared fixed Synapse container IP.
-      dockerParams.push('-p', `${hostPort}:8008/tcp`, '--network=boxel');
-    } else {
-      dockerParams.push(
-        `--ip=${synCfg.host}`,
-        '-p',
-        `${synCfg.port}:8008/tcp`,
-        '--network=boxel',
-      );
-    }
+    let dockerParams = synapseDockerParams({
+      configDir: synCfg.configDir,
+      hostPort,
+      runAsRoot: process.getuid?.() === 0,
+    });
 
     try {
       synapseId = await dockerRun({
@@ -334,7 +407,12 @@ export async function synapseStart(
         !isPortBindError(error) ||
         attempt === attempts
       ) {
-        throw error;
+        throw isPortBindError(error)
+          ? new Error(
+              `Could not start Synapse: ${await describeHostPortConflict(hostPort)} ` +
+                `Docker reported: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          : error;
       }
       console.warn(
         `Synapse host port ${hostPort} was claimed before Docker bound it; retrying (${attempt}/${attempts})...`,
