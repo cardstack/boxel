@@ -1372,40 +1372,46 @@ async function setupTestRealm({
     createPrerenderAuth,
   });
 
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    secretSeed: testRealmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    matrixClient: new MatrixClient({
-      matrixURL: baseTestMatrix.url,
-      username: testRealmServerMatrixUsername,
-      seed: testRealmSecretSeed,
-    }),
-    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
-    definitionLookup,
-    cardSizeLimitBytes: Number(
-      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
-    ),
-    fileSizeLimitBytes:
-      fileSizeLimitBytes ??
-      Number(
-        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      secretSeed: testRealmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      matrixClient: new MatrixClient({
+        matrixURL: baseTestMatrix.url,
+        username: testRealmServerMatrixUsername,
+        seed: testRealmSecretSeed,
+      }),
+      realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
+      definitionLookup,
+      cardSizeLimitBytes: Number(
+        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
       ),
-    ...(skipBootIndex ? { skipBootIndex } : {}),
-    audioSizeLimitBytes:
-      audioSizeLimitBytes ??
-      Number(
-        process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
-      ),
-    videoSizeLimitBytes:
-      videoSizeLimitBytes ??
-      Number(
-        process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
-      ),
-  });
+      fileSizeLimitBytes:
+        fileSizeLimitBytes ??
+        Number(
+          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+        ),
+      audioSizeLimitBytes:
+        audioSizeLimitBytes ??
+        Number(
+          process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+        ),
+      videoSizeLimitBytes:
+        videoSizeLimitBytes ??
+        Number(
+          process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+        ),
+    },
+    // Realm reads its behavioural options from this second argument. Spreading
+    // one into the first argument type-checks — object spreads bypass
+    // excess-property checking — and is then dropped by a destructuring that
+    // never names it, so the option silently does nothing.
+    { ...(skipBootIndex ? { skipBootIndex } : {}) },
+  );
 
   // Register the realm early so realm-server mock _info lookups can resolve
   // without falling back to real network fetches.
