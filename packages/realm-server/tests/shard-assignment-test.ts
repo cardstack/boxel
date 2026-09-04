@@ -105,12 +105,12 @@ module(basename(import.meta.filename), function () {
     }
   });
 
-  // The other half of the same failure. A shard gets its file list through
-  // TEST_MODULES and turns it into a QUnit name filter, so a module whose title
-  // the filter cannot express runs nowhere — silently, since a filter that
-  // matches nothing is indistinguishable from a file with no tests. That is
-  // what the ` | qualifier` form did before the filter learned to admit it: two
-  // files and five modules stopped running, and CI stayed green.
+  // A shard gets its file list through TEST_MODULES and turns it into a QUnit
+  // name filter, so a module whose title the filter cannot express runs
+  // nowhere — silently, since a filter that matches nothing is
+  // indistinguishable from a file with no tests. The ` | qualifier` form is
+  // the shape most easily left out: a file's second top-level module is
+  // followed by neither `:` nor ` > `.
   test('the module filter matches every declared top-level module', function (assert) {
     for (const file of discoverTestFiles()) {
       const filter = buildModuleFilter([file]);

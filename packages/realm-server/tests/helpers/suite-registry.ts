@@ -31,7 +31,7 @@ export function parseModules(value: string): string[] {
 //   ` | `    the file declares several top-level modules, distinguished by a
 //            qualifier (`node-realm-test.ts | file stat probing`)
 //
-// Omitting the third silently dropped every qualified module from CI.
+// Without the third, a qualified module matches nothing and runs nowhere.
 export function buildModuleFilter(modulesToMatch: string[]): string {
   const escaped = modulesToMatch.map((moduleName) => escapeRegex(moduleName));
   const pattern = `^(?:${escaped.join('|')})(?:\\s>\\s|:|\\s\\|\\s)`;

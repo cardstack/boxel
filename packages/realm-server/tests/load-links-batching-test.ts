@@ -81,11 +81,11 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
-// CS-11038 regression test: loadLinks must batch in-realm link resolution
-// rather than issuing one DB round-trip per relationship. With 50 source
-// cards each linking to 5 targets, the original implementation would have
-// fired 250 sequential `WHERE i.url = $1` lookups. The new BFS path issues
-// one batched `WHERE i.url IN (...)` per recursion depth.
+// loadLinks resolves in-realm links in batches rather than one DB round-trip
+// per relationship: each BFS layer issues a single `WHERE i.url IN (...)`
+// lookup for every link it has to follow. Resolved per link with
+// `WHERE i.url = $1`, 50 source cards with 5 links each would cost 250
+// sequential queries.
 module(basename(import.meta.filename), function () {
   module('loadLinks batching', function (hooks) {
     let realm: Realm;
@@ -114,8 +114,8 @@ module(basename(import.meta.filename), function () {
       // result runs attachRealmInfo → getRealmInfo → parseRealmInfo, which
       // overlays the indexed RealmConfig card through a single `i.url = $1`
       // query the first time after indexing has cleared the realm-info cache.
-      // Counting that as a per-link lookup kept this test red from the day it
-      // was written, and the next unrelated lookup would do the same.
+      // That query resolves no link, and neither would any other lookup the
+      // search path grows; counting by shape alone would fail on all of them.
       let targetPrefix = `${testRealm.href}target-`;
       let looksUpALinkTarget = (bind: unknown[]) =>
         bind.some((v) => typeof v === 'string' && v.startsWith(targetPrefix));
