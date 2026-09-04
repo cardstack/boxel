@@ -38,11 +38,8 @@ delete process.env.REALM_SERVER_TLS_KEY_FILE;
 import QUnit from 'qunit';
 import { createRequire } from 'module';
 
-import {
-  ALL_TEST_FILES,
-  buildModuleFilter,
-  parseModules,
-} from './helpers/suite-registry.ts';
+import { discoverTestFiles } from '../scripts/test-module-names.mjs';
+import { buildModuleFilter, parseModules } from './helpers/suite-registry.ts';
 
 // `require` doesn't exist in ESM scope; recreate it so the synchronous,
 // order-preserving test-file loader and the lazy cleanup requires below keep
@@ -233,6 +230,13 @@ QUnit.done(() => {
 import 'decorator-transforms/globals';
 import '../setup-logger.ts'; // This should be first
 
+// Every `*-test.ts` under this directory is loaded, found by the same walk that
+// assigns files to CI shards (scripts/shard-test-modules.cjs), so a file the
+// sharder assigns is by construction a file the runner parses. Load order is
+// alphabetical by path. QUnit runs modules in registration order under Node,
+// and the shards run disjoint subsets of the files, so no test can rely on
+// another file's tests having run before it.
+//
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful
 // when measuring a single file's wall time or peak RSS in isolation —
 // TEST_MODULES only filters which modules *run*, while every file still gets
@@ -241,7 +245,7 @@ import '../setup-logger.ts'; // This should be first
 const testFilesEnv = process.env.TEST_FILES?.trim();
 const filesToLoad = testFilesEnv
   ? parseTestFiles(testFilesEnv)
-  : ALL_TEST_FILES;
+  : discoverTestFiles().map((file: string) => `./${file.replace(/\.ts$/, '')}`);
 
 if (testFilesEnv) {
   console.log(

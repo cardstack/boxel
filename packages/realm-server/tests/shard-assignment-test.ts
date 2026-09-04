@@ -11,7 +11,7 @@ import {
   discoverTestFiles,
   testsDir,
 } from '../scripts/test-module-names.mjs';
-import { ALL_TEST_FILES, buildModuleFilter } from './helpers/suite-registry.ts';
+import { buildModuleFilter } from './helpers/suite-registry.ts';
 
 const {
   DEFAULT_WEIGHT,
@@ -104,33 +104,6 @@ module(basename(import.meta.filename), function () {
         );
       }
     }
-  });
-
-  // Sharding decides which files a shard *runs*; this list decides which files
-  // exist as far as the runner is concerned. A file missing here is assigned a
-  // shard, packed with a weight, and never parsed — it reports nothing, and
-  // nothing reports that it reported nothing. Three files were in that state
-  // when this test was written, one of them the file you are reading.
-  test('every test file is registered in ALL_TEST_FILES', function (assert) {
-    const onDisk = new Set<string>(discoverTestFiles());
-    const registered = new Set(
-      ALL_TEST_FILES.map((entry) => `${entry.replace(/^\.\//, '')}.ts`),
-    );
-    assert.strictEqual(
-      ALL_TEST_FILES.length,
-      registered.size,
-      'ALL_TEST_FILES lists the same file twice',
-    );
-    assert.deepEqual(
-      [...onDisk].filter((file) => !registered.has(file)),
-      [],
-      'test files on disk that ALL_TEST_FILES does not load',
-    );
-    assert.deepEqual(
-      [...registered].filter((file) => !onDisk.has(file)),
-      [],
-      'ALL_TEST_FILES entries with no file on disk',
-    );
   });
 
   // The other half of the same failure. A shard gets its file list through
