@@ -160,12 +160,31 @@ export interface FilmSignature {
      * integrator in the pose path, the beat in force derived from the
      * time, the seams driven by it, the type's run seeked to it. Scrub
      * anywhere and the frame is correct; `renderAt(t)` on a fresh page is
-     * the same frame as playing there. The price is the hand: the lens
-     * follows the spline with a deterministic breath instead of a spring,
-     * and every seam holds a still of the outgoing frame (a read-back per
-     * cut) because the page's own dissolves run on their own clock.
+     * the same frame as playing there. It used to cost the hand — the
+     * spring was the only thing softening the spline, and an exact film
+     * could not have one. `@settle` is that hand written as a function of
+     * the clock, so it no longer does.
+     *
+     * What `exact` still costs is a read-back per cut: every seam holds a
+     * still of the outgoing frame, because the page's own dissolves run
+     * on their own clock.
      */
     seek?: 'cut' | 'exact';
+    /**
+     * THE OPERATOR'S SECOND HAND, in seconds.
+     *
+     * The camera path is a spline through every shot's pose, and a spline
+     * crosses its control points with a step in curvature — a tick, on
+     * every waypoint, for the whole running time. A spring chasing the
+     * pose hides it and cannot be seeked; this is an average of the path
+     * over a window this wide, which is the same cure written as a pure
+     * function of the clock (`settleThrough`). Zero turns it off.
+     *
+     * Keep it well under the gap between waypoints — a film that holds a
+     * pose for two seconds wants a fraction of a second here, not two —
+     * or the lens stops visiting the poses the score wrote.
+     */
+    settle?: number;
     /** the level each line was mixed to (0..1) */
     voGain?: Record<string, number>;
   };
@@ -1738,6 +1757,31 @@ export class Film extends Component<FilmSignature> {
   /** a fresh name per lap: an edited score replays, a restarted one fights */
   get filmName(): string {
     return `film-${this.lap}`;
+  }
+
+  /**
+   * HOW MUCH HAND, in seconds — see `@settle`.
+   *
+   * The default is a QUARTER OF THE GAP BETWEEN WAYPOINTS, because that
+   * is the only number that means the same thing to two different films.
+   * A window is smoothing relative to the spacing of the kinks it
+   * smooths: a quarter takes the curvature step off every pose change
+   * and is far too little to stop the lens visiting the poses. Both
+   * films that ship here spend two seconds a waypoint, so both get half
+   * a second; a score that cuts four times as fast gets a quarter of
+   * that without being asked, and half a second imposed on it would have
+   * flattened its shots.
+   *
+   * Capped at half a second so a very slow film does not drift, and
+   * floored at nothing: `@settle={{0}}` gives the raw spline.
+   */
+  get settle(): number {
+    const said = this.args.settle;
+    if (said !== undefined) {
+      return said;
+    }
+    const points = this.path.length;
+    return points > 0 ? Math.min(0.5, this.filmSeconds / points / 4) : 0;
   }
 
   /**
@@ -4909,6 +4953,7 @@ export class Film extends Component<FilmSignature> {
                   @through={{this.path}}
                   @duration={{this.filmSeconds}}
                   @ease='linear'
+                  @settle={{this.settle}}
                   @tension={{0.34}}
                 />
                 {{! the type, the insert and the clip ride the score's clock:

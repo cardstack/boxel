@@ -537,6 +537,8 @@ export class Camera3D extends StepComponent<
     look?: { x: number; y: number; z: number };
     of?: Query | Query[];
     pitch?: number;
+    /** smoothing window for a path, seconds — see Camera3DStep.settle */
+    settle?: number;
     spring?: SpringSpec;
     /** the path's grip, 0 lively .. 1 linear — see Camera3DStep.tension */
     tension?: number;
@@ -556,6 +558,7 @@ export class Camera3D extends StepComponent<
       ease,
       look,
       pitch,
+      settle,
       spring,
       tension,
       through,
@@ -575,6 +578,7 @@ export class Camera3D extends StepComponent<
       name: this.args.name,
       of: this.args.of ?? {},
       pitch,
+      settle,
       spring,
       tension,
       through,

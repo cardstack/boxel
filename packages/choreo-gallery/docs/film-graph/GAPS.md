@@ -232,3 +232,48 @@ a closed-form settle (a function of time since the goal moved) rather
 than an integrator, which would make it seekable and would let an exact
 film have the hand as well. The second is the better answer and the
 harder one.
+
+### CLOSED — `c.Camera3D @settle`, 2026-09-04
+
+The second answer, and it is not a chaser at all. The tick both filters
+were hiding is a property of the PATH, not of the frame rate: a cardinal
+spline crosses its waypoints with continuous velocity and a step in
+curvature, so every pose change is an impulse of jerk. A filter that
+runs on the path instead of on the frame does not need state.
+
+`c.Camera3D @settle={{seconds}}` reports a Hann-weighted average of the
+same spline, sampled fifteen times around the current progress
+(`settleThrough`, `packages/glimmer-motion/src/choreo/path.ts`). It is
+centred, so unlike a spring it has NO lag. It is an average of one pure
+function of progress, so it is still a pure function of progress: play,
+scrub and `renderAt` agree, and the exact film gets the hand it was told
+it could not have.
+
+The window tapers to nothing at a `cut` and at either end of the path —
+by `tanh`, not by a `min`, because a hard taper has a corner in it and a
+filter whose width has a corner puts a tick back into what it filters.
+So cuts stay cuts, the landing is exact, and the pose handed to the next
+cue is the waypoint rather than an average of one.
+
+Measured on the two reference films' own paths at 60 fps, with a 1.5 s
+guard around every splice so the cuts do not mask the shots:
+
+| film    | peak jerk, no settle | at 0.5 s    | peak pan speed    |
+| ------- | -------------------- | ----------- | ----------------- |
+| sagrada | 2267 °/s³            | 281 (0.12×) | 71.18 → 70.84 °/s |
+| towers  | 270 °/s³             | 36 (0.14×)  | 6.03 → 6.01 °/s   |
+
+Eight times less jerk for half a percent of the move — which is the test
+that matters, because a filter that flattened the pan would have taken
+the shot away with the tick. Past about a second it gets WORSE again
+(0.14× at 0.5 s, 0.15× at 1 s): the window starts to rival the two
+seconds between waypoints. `<Film>` therefore defaults to a QUARTER OF
+THE GAP between waypoints rather than to a constant — the same 0.5 s for
+these two films, and a quarter of that for a score that cuts four times
+as fast — capped at half a second, and `@settle={{0}}` gives the raw
+spline.
+
+What is still not unified is the film's own `Film.chase` spring and the
+picture page's exponential chase behind it — the settle makes the path
+smooth enough that the cascade may not be earning its keep, but that is
+a separate measurement.

@@ -75,6 +75,40 @@ const AIM = { x: 100, y: 50, z: -20 };
 /** three waypoints; pitch appears at the second and must carry to the third */
 const PATH = [{ yaw: 30 }, { pitch: 10, yaw: 60 }, { yaw: 90 }];
 
+/**
+ * A path with corners in it: the pan stops while the tilt runs, then the
+ * tilt stops while the pan runs. A cardinal spline crosses every one of
+ * these with continuous velocity and a STEP in curvature — which is the
+ * tick `@settle` exists to take out.
+ */
+const CORNER = [
+  { pitch: 0, yaw: 40 },
+  { pitch: 30, yaw: 40 },
+  { pitch: 30, yaw: 80 },
+];
+
+/** the same idea across a cut, which must survive any amount of smoothing */
+const SPLICE = [{ yaw: 20 }, { cut: true, yaw: 200 }, { yaw: 220 }];
+
+/**
+ * The worst JERK in a series — its largest third difference.
+ *
+ * Acceleration is the wrong measure here: a settle is not supposed to
+ * flatten the move, and one that halved the acceleration would have
+ * taken the shot away with the tick. What a spline's waypoint puts in
+ * the picture is a STEP in acceleration, which is an impulse of jerk,
+ * and that is exactly what an average over the waypoint removes.
+ */
+const jerk = (series: number[]): number => {
+  let worst = 0;
+  for (let i = 0; i < series.length - 3; i += 1) {
+    const d =
+      -series[i]! + 3 * series[i + 1]! - 3 * series[i + 2]! + series[i + 3]!;
+    worst = Math.max(worst, Math.abs(d));
+  }
+  return worst;
+};
+
 /** the pose the host last received */
 const latest = (): Camera3DState =>
   shots[shots.length - 1] ?? { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
@@ -322,6 +356,150 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
     assert.ok(
       Math.abs(again.yaw - 60) < 0.9,
       `a seek into the path reconstructs it: ${again.yaw.toFixed(2)}`
+    );
+  });
+
+  test('@settle smooths the path without moving where it ends', async function (assert) {
+    /** walk one 4s path and report the tilt at even steps */
+    const walk = async (): Promise<number[]> => {
+      await roll();
+      const out: number[] = [];
+      for (let i = 0; i < 31; i += 1) {
+        out.push((await at(0.3 + i * 0.11)).pitch);
+      }
+      return out;
+    };
+
+    await render(
+      <template>
+        <Shot @seize={{seize}} as |take|>
+          <Choreo @onCamera3D={{watch}} as |c|>
+            {{grab c}}
+            <div
+              data-box
+              style="width:{{take}}0px;height:20px"
+              {{motion id="box"}}
+            ></div>
+            <c.Sequence>
+              <c.Camera3D @through={{CORNER}} @duration={{4}} @ease="linear" />
+            </c.Sequence>
+          </Choreo>
+        </Shot>
+      </template>
+    );
+    const plain = await walk();
+    const landed = await at(4);
+    assert.ok(
+      Math.abs(landed.pitch - 30) < 0.01,
+      `the plain path lands on its last waypoint: ${landed.pitch.toFixed(3)}`
+    );
+
+    shots = [];
+    ctx = undefined;
+    host = undefined;
+    await render(
+      <template>
+        <Shot @seize={{seize}} as |take|>
+          <Choreo @onCamera3D={{watch}} as |c|>
+            {{grab c}}
+            <div
+              data-box
+              style="width:{{take}}0px;height:20px"
+              {{motion id="box"}}
+            ></div>
+            <c.Sequence>
+              <c.Camera3D
+                @through={{CORNER}}
+                @settle={{0.7}}
+                @duration={{4}}
+                @ease="linear"
+              />
+            </c.Sequence>
+          </Choreo>
+        </Shot>
+      </template>
+    );
+    const settled = await walk();
+
+    const before = jerk(plain);
+    const after = jerk(settled);
+    assert.ok(
+      after < before * 0.55,
+      `the corner is softer: jerk ${before.toFixed(3)} -> ${after.toFixed(3)}`
+    );
+
+    /* and it is still the same shot: the tilt goes the same way, to the
+       same place, in about the same time */
+    assert.ok(
+      settled[0]! < 4 && settled[settled.length - 1]! > 26,
+      `it still makes the move: ${settled[0]!.toFixed(2)} -> ${settled[
+        settled.length - 1
+      ]!.toFixed(2)}`
+    );
+
+    /* the window tapers to nothing at the end, so the landing is exact
+       rather than an average of the last waypoint and its approach */
+    const end = await at(4);
+    assert.ok(
+      Math.abs(end.pitch - 30) < 0.01,
+      `a settled path still lands exactly: ${end.pitch.toFixed(3)}`
+    );
+    assert.ok(
+      Math.abs(end.yaw - 80) < 0.01,
+      `on every axis: ${end.yaw.toFixed(3)}`
+    );
+
+    /* still a pure function of the clock */
+    const mid = await at(2);
+    const again = await at(2);
+    assert.ok(
+      Math.abs(mid.pitch - again.pitch) < 1e-6,
+      'a seek into a settled path reconstructs it exactly'
+    );
+  });
+
+  test('@settle never smooths across a cut', async function (assert) {
+    await render(
+      <template>
+        <Shot @seize={{seize}} as |take|>
+          <Choreo @onCamera3D={{watch}} as |c|>
+            {{grab c}}
+            <div
+              data-box
+              style="width:{{take}}0px;height:20px"
+              {{motion id="box"}}
+            ></div>
+            <c.Sequence>
+              <c.Camera3D
+                @through={{SPLICE}}
+                @settle={{1.5}}
+                @duration={{3}}
+                @ease="linear"
+              />
+            </c.Sequence>
+          </Choreo>
+        </Shot>
+      </template>
+    );
+    await roll();
+
+    /* the seam is at 2/3 of the clock; a smoothing window wide enough to
+       swallow it must not, or the cut becomes a very fast pan */
+    const before = await at(1.98);
+    const after = await at(2.02);
+    assert.ok(
+      after.yaw - before.yaw > 150,
+      `the cut is still a cut: ${before.yaw.toFixed(1)} -> ${after.yaw.toFixed(
+        1
+      )}`
+    );
+    assert.ok(
+      before.yaw < 40,
+      `the outgoing shot is not dragged forward: ${before.yaw.toFixed(1)}`
+    );
+    assert.ok(
+      after.yaw > 190 && after.yaw < 210,
+      `and the incoming one opens on its own waypoint: ${after.yaw.toFixed(1)}`
     );
   });
 

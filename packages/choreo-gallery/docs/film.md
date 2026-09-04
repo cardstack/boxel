@@ -140,6 +140,7 @@ adjustments; the film never sees the difference.
 | Arg                 | Default      | What it does                                   |
 | ------------------- | ------------ | ---------------------------------------------- |
 | `@seek`             | `'cut'`      | the fork — see §4                              |
+| `@settle`           | ¼ of a slot  | seconds of hand on the camera path — see §4.2a |
 | `@join`             | `'dip'`      | the seam a beat gets when it names none        |
 | `@rail`             | `true`       | the one-line transport on the picture          |
 | `@clock`            | —            | a `FilmClock`; turns the rail into a date rule |
@@ -313,6 +314,31 @@ total _is_ the ending — which used to bring the end card up under a hand
 that wanted the last shot. `barSecs` clamps every bar seek to
 `totalSecs − 2`. The ending is reached by playing to it.
 
+### 4.2a `@settle` — the hand, as a function of the clock
+
+Both forks share one smoother, and it runs on the PATH rather than on
+the frame. A cardinal spline crosses each waypoint with continuous
+velocity and a **step in curvature**, which the eye reads as a tick — at
+two seconds per waypoint, that is most of a minute's worth per chapter.
+`@settle` reports a Hann-weighted average of the same spline around the
+current progress instead of the spline itself. It defaults to a quarter
+of the gap between waypoints, which is the only number that means the
+same thing to two films with different pace; both films here spend two
+seconds a waypoint, so both get half a second.
+
+Being centred it has no lag, which is what separates it from a chaser;
+being an average of a pure function of progress it is still a pure
+function of progress, which is what lets `@seek='exact'` have it. The
+window tapers to nothing at a `cut` and at either end of the path, by
+`tanh` rather than by a hard `min` — a filter whose width has a corner
+in it puts a tick back into what it filters.
+
+On both reference films' own paths at 60 fps, measured away from the
+splices: peak jerk falls about eight times (sagrada 2267 → 281 °/s³,
+towers 270 → 36) while peak pan speed moves by half a percent. Past
+about a second it gets worse again, the window rivalling the gap between
+waypoints. `@settle={{0}}` gives the raw spline.
+
 ### 4.3 `@seek='cut'` — the hand-held film
 
 The default. The score authors a pose and the lens **chases** it: one
@@ -341,10 +367,12 @@ the picture at the _previous_ beat's tail — its style, its clock, its
 pose, snapped — takes one `snapshot()`, and plays the seam from its
 middle exactly as it would have played into it.
 
-The price is the hand: the lens follows the spline with a deterministic
-breath instead of a spring. (A seek into a seam once also paid a read-back
-to re-make the outgoing still; it now stands at the seam's end instead —
-§5.4.)
+This used to cost the hand: the lens followed the spline with a
+deterministic breath instead of a spring, because a spring cannot be
+seeked. `@settle` is that hand written as a function of the clock —
+an average of the spline rather than a chase of it — so an exact film
+now has one. (A seek into a seam once also paid a read-back to re-make
+the outgoing still; it now stands at the seam's end instead — §5.4.)
 
 ---
 
@@ -401,7 +429,8 @@ animation, no `viewTransition`, no private API.
 
   <c.Sequence @name={{this.filmName}}>
     <c.Camera3D @name='film' @through={{this.path}}
-      @duration={{this.filmSeconds}} @ease='linear' @tension={{0.34}} />
+      @duration={{this.filmSeconds}} @ease='linear'
+      @settle={{this.settle}} @tension={{0.34}} />
 
     {{#each this.cues as |cue|}}
       <c.Perform @at={{at 'film'}} @delay={{cue.delay}}
@@ -422,6 +451,16 @@ construct makes rests on them:
   rather than travelling between them. The ease is `linear` on purpose:
   the shape belongs to the spline and the pace belongs to the chaser and
   to each shot's own head and tail.
+- **`@settle`** — the operator's second hand, in seconds. A spline
+  crosses every waypoint with a step in curvature, and the eye reads that
+  step as a tick about once every two seconds for the whole running time.
+  The reported pose is a Hann-weighted average of the same spline around
+  the current progress: centred, so no lag; an average of a pure function
+  of the clock, so still a pure function of the clock. The window tapers
+  to nothing at a `cut` and at either end, so cuts stay hard and a path
+  still lands exactly on its last waypoint. `<Film>` defaults to 0.5 s,
+  which takes eight times the jerk out of both reference films' paths and
+  moves their peak pan speed by half a percent.
 - **`c.Perform` + `at('film')`** — one cue per beat, anchored to the
   start of the named camera step, so cues and waypoints share one origin.
   A `Perform` target is a _name_, and a beat's name is its place in the
