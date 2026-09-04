@@ -383,7 +383,7 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
-async function removeAbandonedTestSynapseContainers(): Promise<void> {
+export async function removeAbandonedTestSynapseContainers(): Promise<void> {
   let containerIds = abandonedContainerIds(
     await dockerCapture(abandonedSynapseQuery()),
     processIsAlive,

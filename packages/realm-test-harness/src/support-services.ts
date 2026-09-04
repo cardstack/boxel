@@ -9,7 +9,6 @@ import { logger } from './logger.ts';
 import {
   boxelIconsDir,
   browserPassword,
-  cleanupStaleSynapseContainers,
   DEFAULT_ICONS_PROBE_URL,
   DEFAULT_MATRIX_BROWSER_USERNAME,
   DEFAULT_MATRIX_SERVER_USERNAME,
@@ -144,6 +143,7 @@ async function loadSynapseModule() {
       admin?: boolean,
       displayName?: string,
     ) => Promise<unknown>;
+    removeAbandonedTestSynapseContainers: () => Promise<void>;
     synapseStart: (
       opts?: {
         suppressRegistrationSecretFile?: true;
@@ -993,9 +993,14 @@ export async function startFactorySupportServices(): Promise<{
 }> {
   return await logTimed(supportLog, 'startFactorySupportServices', async () => {
     await ensurePgReady();
-    cleanupStaleSynapseContainers();
-    let { synapseStart, synapseStop } = await loadSynapseModule();
+    let { removeAbandonedTestSynapseContainers, synapseStart, synapseStop } =
+      await loadSynapseModule();
     let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
+
+    // Clear Synapse containers left by harness runs that never reached their
+    // teardown. Containers whose owning process is still alive are a live run,
+    // not debris, and are left alone.
+    await removeAbandonedTestSynapseContainers();
 
     // stopExisting: false — the test harness uses a dynamic port, so it
     // doesn't conflict with the dev Synapse (boxel-synapse on port 8008).
