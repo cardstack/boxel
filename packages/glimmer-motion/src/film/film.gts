@@ -213,6 +213,13 @@ const EMPTY_BEAT: Beat = {
 };
 const EMPTY_CHAPTER: Chapter = { n: '', title: '' };
 
+/**
+ * How long a render may wait for the scene to arrive and for the score's
+ * second pass to land (`openTheDoor`). Frames rather than milliseconds,
+ * because what it is waiting for is a render.
+ */
+const BOOT_FRAMES = 240;
+
 /** one lane's clip, as the template needs it */
 interface ClipRow {
   freeze: string;
@@ -737,11 +744,30 @@ export class Film extends Component<FilmSignature> {
   /** a frame is being rendered rather than scrubbed to: seams play */
   private rendering = false;
 
+  /**
+   * A RENDER OPENS THE DOOR ITSELF.
+   *
+   * `?from=0` puts the title card up and leaves the film unbooted — and
+   * an unbooted film HAS NO SCORE, because the whole `<Choreo>` sits
+   * behind `{{#if this.booted}}` (the rig has to be an insertion before
+   * the camera step has a subject). So `fold`'s `run.time = t` wrote to
+   * a null run, `onCamera3D` never fired, `goal` stayed wherever the
+   * load path's `snap` seated it, and exact mode copied that one pose
+   * forward on every frame. Measured on towers, a stepped render swept
+   * half a degree of yaw across 273 seconds where the compiled path
+   * sweeps 380 — a whole render of a frozen lens, and `film-render.mjs`
+   * hit it every time, because its default `--from` is 0.
+   *
+   * A render is a request for the film, not for the lobby. So it opens
+   * the door itself, MUTED — nothing was clicked, and no browser hands
+   * out audio for a gesture nobody made.
+   */
   private renderAt = async (seconds: number) => {
     if (!this.exact) {
       this.seek(seconds);
       return;
     }
+    await this.openTheDoor();
     this.playing = false;
     this.rendering = true;
     try {
@@ -755,6 +781,39 @@ export class Film extends Component<FilmSignature> {
       this.rendering = false;
     }
   };
+
+  /**
+   * THE DOOR, OPENED BY A SCRIPT. Two waits, and neither is optional.
+   *
+   * The handle publishes itself from the mount modifier, a frame before
+   * the iframe's load seats the port — so a renderer that polls for
+   * `__choreo[name]` can call in before there is a picture to begin
+   * against, and `begin` would only pocket the choice. And `begin`
+   * itself DEFERS the lap bump that buys the score region its second
+   * render pass: until that pass lands the run does not exist, and a
+   * seek against a missing run is exactly the frozen lens this avoids.
+   *
+   * Both waits are bounded. A render against a film that never arrives
+   * degrades to the frame it would have drawn before, rather than
+   * hanging the worker on a promise that will not settle.
+   */
+  private async openTheDoor() {
+    if (this.booted) {
+      return;
+    }
+    const frame = () =>
+      new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    for (let i = 0; i < BOOT_FRAMES && !this.film; i += 1) {
+      await frame();
+    }
+    if (!this.film) {
+      return;
+    }
+    this.begin(false);
+    for (let i = 0; i < BOOT_FRAMES && !this.scoreCtx?.run; i += 1) {
+      await frame();
+    }
+  }
 
   /**
    * THE FOLD (exact mode): the beat in force is the one whose window
@@ -5142,13 +5201,62 @@ export class Film extends Component<FilmSignature> {
         display: flex;
         flex-direction: column;
         transition: background 900ms ease;
+        /* TYPE IS MEASURED AGAINST THE FILM, NOT THE WINDOW. Every size
+           below was written in vw, which is right only when the film
+           IS the window: put the same film in a 384px frame on a 1440px
+           page and every line is sized for the page it is sitting on.
+           An inline-size container makes cqw mean "a hundredth of this
+           film's own width" wherever it is mounted — the demo well, the
+           theater, a phone — so one set of numbers serves all of them.
+           Inline-size only: the height stays the stage's business, and
+           the stage below is its own container for exactly that. */
+        container-name: film;
+        container-type: inline-size;
       }
 
+      /* THE STAGE NEVER GOES TALLER THAN IT IS WIDE, and on a phone that
+         is the whole difference between a film and a mess.
+
+         Every layout inside this box is written for a frame that is not
+         portrait: the type sets in a column beside the subject, the mark
+         draws a line across to it, the sky word runs off the right edge,
+         the rail is a rule. Handed a 9:16 viewport none of that has
+         anywhere to go — the picture crops to a slot, the column has no
+         room beside anything, and the shot the score composed is not the
+         shot on screen. Square is enough to hold all of it; the film
+         does not need a cinema ratio, it needs to not be a column.
+
+         The height is therefore capped at the width. That has to come
+         from the viewport rather than a percentage, because a percentage
+         max-height resolves against the parent's HEIGHT. Nothing changes
+         on a landscape screen, where 100cqw is comfortably taller than
+         the viewport and the cap never binds; on a phone the film plays
+         as a square, letterboxed on the film's own paper. */
       .cf-stage {
         position: relative;
         height: 100svh;
+        /* the 1:1 floor, measured against the film's own width rather
+           than the window's — the same number, and right in a frame */
+        max-height: 100cqw;
         flex: none;
         overflow: hidden;
+        /* AND THE SHOT IS ITS OWN CONTAINER, on both axes. The rules
+           that compress the gate and stand the rail down were written
+           as max-height media queries, which ask about the WINDOW —
+           and the window is not the film. A square film in an 844px
+           phone is 390px tall and needed every one of them; it got
+           none, and the door's stack ran straight through its own
+           buttons. Size containment is legal here because the height
+           above is definite, and it is what lets a height query mean
+           "this shot is short" rather than "this phone is short". */
+        container-name: shot;
+        container-type: size;
+      }
+
+      /* embedded there is nothing under the stage to hold it up, so the
+         letterbox is split evenly rather than all falling below */
+      .cf-page.is-embed {
+        justify-content: center;
       }
 
       .cf-live {
@@ -5861,194 +5969,13 @@ export class Film extends Component<FilmSignature> {
          ================================================================ */
 
       /* a laptop, or a window shared with something else */
-      @media (max-width: 1180px) {
-        .cf-block {
-          max-width: min(38ch, 56vw);
-        }
-
-        .cf-block.is-plate {
-          max-width: min(46ch, 52vw);
-        }
-
-        .is-plate .cf-kanji.is-latin {
-          --cf-fit: 28vw;
-          max-width: 30vw;
-        }
-
-        .cf-say {
-          max-width: min(28ch, 42vw);
-        }
-      }
 
       /* a tablet, or a phone held the long way */
-      @media (max-width: 860px) {
-        /* the plate stops being two columns: the word goes over the cues,
-           and the rule that separated them becomes the rule under it */
-        .cf-block.is-plate {
-          top: auto;
-          bottom: 12%;
-          right: 5.5%;
-          left: 5.5%;
-          display: block;
-          transform: none;
-          max-width: none;
-        }
-
-        .is-plate .cf-plane.is-glyph {
-          border-right: 0;
-          border-bottom: 2px solid var(--cf-chap);
-          padding-right: 0;
-          padding-bottom: 8px;
-          margin-bottom: 14px;
-        }
-
-        /* stacked under the word, the cues read from the left again */
-        .is-plate .cf-plane:not(.is-glyph) {
-          align-items: flex-start;
-          text-align: left;
-        }
-
-        .is-plate .cf-read {
-          justify-content: flex-start;
-        }
-
-        .is-plate .cf-kanji.is-latin {
-          --cf-fit: 84vw;
-          max-width: none;
-        }
-
-        .cf-block.is-title,
-        .cf-block.is-lower,
-        .cf-block.is-point {
-          left: 5.5%;
-          right: 5.5%;
-          top: auto;
-          bottom: 13%;
-          max-width: none;
-          text-align: left;
-        }
-
-        .is-title .cf-read {
-          justify-content: flex-start;
-        }
-
-        .is-title .cf-kicker {
-          flex-direction: row;
-        }
-
-        .cf-kanji.is-latin,
-        .is-title .cf-kanji.is-latin,
-        .is-point .cf-kanji.is-latin {
-          --cf-fit: 84vw;
-        }
-
-        .cf-say {
-          max-width: min(32ch, 84vw);
-        }
-
-        /* a numeral three-quarters of the screen wide behind two columns
-           of type is a texture; behind one column it is a mess */
-        .cf-ghost,
-        .cf-plate .cf-ghost {
-          display: none;
-        }
-
-        .cf-photo figure {
-          width: min(46vw, 260px);
-        }
-
-        /* a narrow frame: the rule drops under the title again */
-        .cf-rail {
-          flex-wrap: wrap;
-        }
-
-        .cf-years {
-          flex-basis: 100%;
-          width: clamp(200px, 56vw, 420px);
-          margin-left: 0;
-          margin-top: 8px;
-        }
-
-        .cf-subs {
-          font-size: 15px;
-          max-width: 88vw;
-        }
-      }
 
       /* a phone */
-      @media (max-width: 560px) {
-        .cf-kicker {
-          font-size: 10px;
-          letter-spacing: 0.09em;
-        }
-
-        .cf-say {
-          font-size: 15px;
-          margin-bottom: 8px;
-        }
-
-        .cf-read {
-          margin-bottom: 12px;
-        }
-
-        .cf-kanji {
-          margin-bottom: 12px;
-        }
-
-        .cf-gate-index,
-        .cf-rail {
-          display: none;
-        }
-
-        .cf-gate-in.cf-matter {
-          margin-right: 0;
-          padding-inline: 20px;
-        }
-
-        .cf-gate-vert {
-          display: none;
-        }
-
-        .cf-mg-seal {
-          position: static;
-          margin: 14px auto 0;
-        }
-
-        .cf-photo {
-          display: none;
-        }
-
-        .cf-subs {
-          font-size: 14px;
-          bottom: 10%;
-        }
-      }
 
       /* a short window: the film is 16:9 in a letterbox and the vertical
          rhythm, not the width, is what runs out */
-      @media (max-height: 620px) {
-        .cf-kanji.is-latin {
-          font-size: min(
-            clamp(30px, 8vh, 64px),
-            calc(var(--cf-fit, 42vw) / (var(--cf-glyphs, 4) * 0.56))
-          );
-        }
-
-        .cf-say {
-          font-size: clamp(13px, 2.4vh, 18px);
-          margin-bottom: 7px;
-        }
-
-        .cf-block.is-lower,
-        .cf-block.is-title {
-          bottom: 8%;
-        }
-
-        .has-subs .cf-block.is-lower,
-        .has-subs .cf-block.is-title {
-          bottom: 17%;
-        }
-      }
 
       /* someone who has asked for less movement gets the film without the
          drift, the sway and the entrances — and still gets the film */
@@ -6090,7 +6017,7 @@ export class Film extends Component<FilmSignature> {
 
       .cf-block {
         position: absolute;
-        max-width: min(46vw, 660px);
+        max-width: min(46cqw, 660px);
       }
 
       /* a kicker rides a rule that draws itself out of the type — the
@@ -6105,7 +6032,7 @@ export class Film extends Component<FilmSignature> {
 
       .cf-kicker {
         font-family: var(--cf-ui);
-        font-size: clamp(11px, 0.9vw, 14px);
+        font-size: clamp(11px, 0.9cqw, 14px);
         font-weight: 700;
         letter-spacing: 0.11em;
         color: var(--cf-chap);
@@ -6158,7 +6085,7 @@ export class Film extends Component<FilmSignature> {
         font-family:
           'Hiragino Mincho ProN', 'Yu Mincho', YuMincho, 'Noto Serif JP',
           'Songti SC', serif;
-        font-size: clamp(56px, 8.4vw, 132px);
+        font-size: min(132px, 8.4cqw);
         line-height: 0.94;
         letter-spacing: 0.04em;
         margin: 0 0 18px;
@@ -6181,17 +6108,17 @@ export class Film extends Component<FilmSignature> {
       /* on a marked beat the reading is the largest thing in the block,
          because the term itself is out in the scene */
       .cf-block:not(:has(.is-glyph)) .cf-romaji {
-        font-size: clamp(17px, 1.5vw, 24px);
+        font-size: clamp(17px, 1.5cqw, 24px);
         letter-spacing: 0.2em;
       }
 
       .cf-block:not(:has(.is-glyph)) .cf-gloss {
-        font-size: clamp(15px, 1.2vw, 19px);
+        font-size: clamp(15px, 1.2cqw, 19px);
       }
 
       .cf-romaji {
         font-family: var(--cf-ui);
-        font-size: clamp(11px, 0.94vw, 14px);
+        font-size: clamp(11px, 0.94cqw, 14px);
         font-weight: 700;
         letter-spacing: 0.11em;
         color: var(--cf-chap);
@@ -6199,7 +6126,7 @@ export class Film extends Component<FilmSignature> {
 
       .cf-gloss {
         font-family: var(--cf-ui);
-        font-size: clamp(12px, 0.98vw, 15px);
+        font-size: clamp(12px, 0.98cqw, 15px);
         font-weight: 400;
         letter-spacing: 0.01em;
         color: var(--cf-ink3);
@@ -6219,7 +6146,7 @@ export class Film extends Component<FilmSignature> {
         /* set in the identity's capitals, but a cue is still a caption:
            at 30px in heavy caps three of them fill a frame and the
            picture becomes the background to a poster */
-        font-size: clamp(14px, 1.28vw, 22px);
+        font-size: clamp(14px, 1.28cqw, 22px);
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.012em;
@@ -6231,7 +6158,7 @@ export class Film extends Component<FilmSignature> {
            to pretty, because balance moves the break around as the
            string changes, which is the flicker between a one-line and a
            two-line setting. */
-        max-width: min(38ch, 34vw);
+        max-width: min(38ch, 34cqw);
         text-wrap: pretty;
       }
 
@@ -6294,7 +6221,7 @@ export class Film extends Component<FilmSignature> {
         right: 6%;
         bottom: 15%;
         text-align: right;
-        max-width: min(48vw, 700px);
+        max-width: min(48cqw, 700px);
         /* poster size at the start, the house size once the lens has
            arrived: the same lean as every block, times the title's own
            scale, from the corner it hangs from */
@@ -6320,19 +6247,19 @@ export class Film extends Component<FilmSignature> {
       }
 
       .is-title .cf-romaji {
-        font-size: clamp(15px, 1.3vw, 23px);
+        font-size: clamp(15px, 1.3cqw, 23px);
         letter-spacing: 0.3em;
       }
 
       .is-title .cf-gloss {
-        font-size: clamp(15px, 1.25vw, 22px);
+        font-size: clamp(15px, 1.25cqw, 22px);
       }
 
       .is-title .cf-say {
         max-width: 30ch;
         margin-bottom: 6px;
         color: var(--cf-ink2);
-        font-size: clamp(19px, 1.95vw, 34px);
+        font-size: min(34px, 1.95cqw);
       }
 
       .is-title .cf-kicker {
@@ -6344,7 +6271,7 @@ export class Film extends Component<FilmSignature> {
       }
 
       .is-title .cf-kanji {
-        font-size: clamp(72px, 11vw, 190px);
+        font-size: min(190px, 11cqw);
       }
 
       .cf-block.is-lower {
@@ -6390,13 +6317,13 @@ export class Film extends Component<FilmSignature> {
         /* minmax(0,…) or the cue column cannot shrink and the word wins */
         grid-template-columns: minmax(0, auto) auto;
         justify-content: end;
-        column-gap: clamp(16px, 1.8vw, 30px);
+        column-gap: min(30px, 1.8cqw);
         align-items: start;
         /* the word takes a column of its own, so the block has to be wide
            enough for both it and a cue line that is not two words per row
            — and no wider: at two thirds of the frame the cue column began
            over the subject, and a plate is a label beside the thing */
-        max-width: min(50vw, 760px);
+        max-width: min(50cqw, 760px);
       }
 
       .is-plate .cf-plane {
@@ -6425,7 +6352,7 @@ export class Film extends Component<FilmSignature> {
         grid-column: 2;
         grid-row: 1 / -1;
         border-right: 2px solid var(--cf-accent);
-        padding-right: clamp(14px, 1.5vw, 26px);
+        padding-right: min(26px, 1.5cqw);
         transform-origin: top center;
         animation: cf-rule-down 820ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
       }
@@ -6449,10 +6376,7 @@ export class Film extends Component<FilmSignature> {
         /* the column never grows past the frame: whichever is smaller,
            the designed size or the height each glyph can have and still
            leave the set inside the picture */
-        font-size: min(
-          clamp(44px, 5.4vw, 88px),
-          calc(62svh / var(--cf-glyphs, 3))
-        );
+        font-size: min(min(88px, 5.4cqw), calc(62svh / var(--cf-glyphs, 3)));
         letter-spacing: 0.1em;
         line-height: 1;
       }
@@ -6507,7 +6431,7 @@ export class Film extends Component<FilmSignature> {
         top: 50%;
         transform: translateY(-50%);
         font-family: var(--cf-ui);
-        font-size: clamp(180px, 30vw, 460px);
+        font-size: min(460px, 30cqw);
         font-weight: 700;
         line-height: 0.8;
         letter-spacing: -0.04em;
@@ -6520,11 +6444,11 @@ export class Film extends Component<FilmSignature> {
       .cf-block.is-point {
         left: 5.5%;
         top: 18%;
-        max-width: min(36vw, 520px);
+        max-width: min(36cqw, 520px);
       }
 
       .is-point .cf-kanji {
-        font-size: clamp(48px, 6.6vw, 104px);
+        font-size: min(104px, 6.6cqw);
       }
 
       /* ---- clips ------------------------------------------------------ *
@@ -6603,7 +6527,7 @@ export class Film extends Component<FilmSignature> {
         right: 5.5%;
         top: 12%;
         margin: 0;
-        width: min(30vw, 340px);
+        width: min(30cqw, 340px);
         background: var(--cf-paper);
         padding: 10px 10px 8px;
         border: 1px solid var(--cf-rule);
@@ -6661,7 +6585,7 @@ export class Film extends Component<FilmSignature> {
 
       .cf-photo figure {
         margin: 0;
-        width: min(30vw, 340px);
+        width: min(30cqw, 340px);
         background: var(--cf-paper);
         padding: 10px 10px 8px;
         border: 1px solid var(--cf-rule);
@@ -6773,7 +6697,7 @@ export class Film extends Component<FilmSignature> {
         flex: none;
         height: 34px;
         margin-left: 34px;
-        width: clamp(260px, 42vw, 620px);
+        width: min(620px, 42cqw);
       }
 
       .cf-years-rule,
@@ -6988,8 +6912,8 @@ export class Film extends Component<FilmSignature> {
         background: var(--cf-paper);
         border: 1px solid var(--cf-rule);
         padding: 34px 40px 26px;
-        min-width: min(460px, 84vw);
-        max-width: min(640px, 92vw);
+        min-width: min(460px, 84cqw);
+        max-width: min(640px, 92cqw);
         box-shadow: 0 30px 70px rgba(30, 22, 8, 0.34);
         font-family: var(--cf-ui);
       }
@@ -7398,7 +7322,7 @@ export class Film extends Component<FilmSignature> {
         border-radius: 4px;
         cursor: pointer;
         white-space: nowrap;
-        max-width: min(34ch, 26vw);
+        max-width: min(34ch, 26cqw);
         transition: color 120ms ease;
       }
 
@@ -7551,7 +7475,7 @@ export class Film extends Component<FilmSignature> {
       /* the chapter title cannot be allowed to widen the control row */
       .cf-time em {
         display: inline-block;
-        max-width: min(28ch, 22vw);
+        max-width: min(28ch, 22cqw);
         overflow: hidden;
         text-overflow: ellipsis;
         vertical-align: bottom;
@@ -7641,6 +7565,23 @@ export class Film extends Component<FilmSignature> {
         );
       }
 
+      /* THE DOOR SCALES, IT DOES NOT RE-LAY.
+      
+         A poster is a fixed composition: the wordmark sits hard right of
+         the building, the rule hangs above it, the seal stamps below. At
+         735 x 551 — the size it was drawn at — every number here is a
+         pixel. Smaller than that, all of them shrink together and the
+         composition survives; a breakpoint would instead have re-laid it
+         at two or three widths and been wrong at every width between.
+      
+         --gu is that one number: 1px at the design size and less below
+         it, driven by whichever of the two axes is scarcer, so a short
+         wide shot compresses exactly as a narrow tall one does. It never
+         exceeds 1px, so the door never grows past the poster it is. */
+      .cf-gate {
+        --gu: min(1px, 0.136cqw, 0.181cqh);
+      }
+
       .cf-gate-in {
         position: relative;
         text-align: center;
@@ -7649,14 +7590,14 @@ export class Film extends Component<FilmSignature> {
         /* hard right: the poster is a two-column composition — building
            in one half, wordmark in the other — and the wordmark drifting
            toward the middle closes the gap that makes it one */
-        margin-right: clamp(34px, 7vw, 132px);
+        margin-right: calc(132 * var(--gu));
       }
 
       /* the museum frame: hairline, inset like a mat, above the scene
          and under the type */
       .cf-gate-frame {
         position: absolute;
-        inset: clamp(14px, 2.4vw, 30px);
+        inset: min(30px, 2.4cqw);
         border: 1px solid rgba(247, 240, 224, 0.34);
         pointer-events: none;
         animation: cf-mg-fade 1200ms ease-out both;
@@ -7666,13 +7607,13 @@ export class Film extends Component<FilmSignature> {
       .cf-gate-vert {
         position: absolute;
         top: 50%;
-        left: clamp(30px, 4.6vw, 58px);
+        left: min(58px, 4.6cqw);
         transform: translateY(-50%);
         writing-mode: vertical-rl;
         white-space: nowrap;
         font-family: var(--cf-ui);
         font-weight: 600;
-        font-size: clamp(10px, 0.95vw, 13px);
+        font-size: clamp(10px, 0.95cqw, 13px);
         letter-spacing: 0.3em;
         color: rgba(247, 240, 224, 0.66);
         animation: cf-mg-fade 900ms ease-out both;
@@ -7684,7 +7625,7 @@ export class Film extends Component<FilmSignature> {
         margin: 0;
         font-family: var(--cf-display);
         font-weight: 800;
-        font-size: clamp(64px, min(20vh, 15vw), 260px);
+        font-size: min(calc(260 * var(--gu)), 15cqw);
         letter-spacing: -0.03em;
         white-space: nowrap;
         line-height: 1.02;
@@ -7723,16 +7664,16 @@ export class Film extends Component<FilmSignature> {
       /* the index strip along the foot of the frame */
       .cf-gate-index {
         position: absolute;
-        left: clamp(40px, 7vw, 90px);
-        right: clamp(40px, 7vw, 90px);
+        left: min(90px, 7cqw);
+        right: min(90px, 7cqw);
         bottom: clamp(30px, 5.4vh, 56px);
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 6px clamp(12px, 2.2vw, 36px);
+        gap: 6px min(36px, 2.2cqw);
         margin: 0;
         font-family: var(--cf-ui);
-        font-size: clamp(9px, 0.8vw, 11px);
+        font-size: clamp(9px, 0.8cqw, 11px);
         font-weight: 700;
         letter-spacing: 0.22em;
         color: rgba(247, 240, 224, 0.62);
@@ -7745,16 +7686,16 @@ export class Film extends Component<FilmSignature> {
       }
 
       .cf-gate-t {
-        margin: 10px 0 0;
-        font-size: 15px;
+        margin: calc(10 * var(--gu)) 0 0;
+        font-size: calc(15 * var(--gu));
         font-weight: 800;
         letter-spacing: 0.5em;
         text-indent: 0.5em;
       }
 
       .cf-gate-s {
-        margin: 6px 0 30px;
-        font-size: 12px;
+        margin: calc(6 * var(--gu)) 0 calc(30 * var(--gu));
+        font-size: calc(12 * var(--gu));
         letter-spacing: 0.14em;
         color: rgba(247, 240, 224, 0.72);
       }
@@ -7762,10 +7703,10 @@ export class Film extends Component<FilmSignature> {
       /* the claim under the subtitle: the display serif, italic, a step
          back in the ink; and under it the four words, tiny and wide */
       .cf-gate-live {
-        margin: 14px 0 0;
+        margin: calc(14 * var(--gu)) 0 0;
         font-family: var(--cf-display);
         font-style: italic;
-        font-size: clamp(15px, 1.25vw, 20px);
+        font-size: calc(16 * var(--gu));
         line-height: 1.4;
         letter-spacing: 0.01em;
         color: rgba(247, 240, 224, 0.78);
@@ -7774,9 +7715,9 @@ export class Film extends Component<FilmSignature> {
       }
 
       .cf-gate-live-k {
-        margin: 8px 0 22px;
+        margin: calc(8 * var(--gu)) 0 calc(22 * var(--gu));
         font-family: var(--cf-ui);
-        font-size: 10px;
+        font-size: calc(10 * var(--gu));
         letter-spacing: 0.22em;
         text-transform: uppercase;
         color: rgba(247, 240, 224, 0.5);
@@ -7784,7 +7725,7 @@ export class Film extends Component<FilmSignature> {
 
       .cf-gate-row {
         display: flex;
-        gap: 12px;
+        gap: calc(12 * var(--gu));
         justify-content: center;
       }
 
@@ -7792,11 +7733,11 @@ export class Film extends Component<FilmSignature> {
         appearance: none;
         font: inherit;
         font-family: var(--cf-ui);
-        font-size: 13px;
+        font-size: calc(13 * var(--gu));
         font-weight: 600;
         letter-spacing: 0.14em;
         cursor: pointer;
-        padding: 14px 30px;
+        padding: calc(14 * var(--gu)) calc(30 * var(--gu));
         border-radius: 999px;
         border: 1px solid #f2e9d2;
         background: #f2e9d2;
@@ -7929,7 +7870,7 @@ export class Film extends Component<FilmSignature> {
         flex-direction: column;
         align-items: center;
         white-space: nowrap;
-        max-width: 88vw;
+        max-width: 88cqw;
         gap: 4px;
         margin: 0 auto 22px;
         font-size: 11px;
@@ -7978,17 +7919,19 @@ export class Film extends Component<FilmSignature> {
          box, which is exactly the kind of thing you cannot stop seeing.
          Horizontal, tracked from the centre (text-indent pays the
          trailing space back), on a round stamp. */
+      /* the stamp is part of the poster, so it scales with the poster —
+         every number here is in the door's own unit (see --gu) */
       .cf-mg-seal {
         position: absolute;
-        top: 4px;
-        right: -76px;
+        top: calc(4 * var(--gu, 1px));
+        right: calc(-76 * var(--gu, 1px));
         display: grid;
         place-items: center;
-        width: 64px;
-        height: 64px;
+        width: calc(64 * var(--gu, 1px));
+        height: calc(64 * var(--gu, 1px));
         font-family: var(--cf-ui);
         font-weight: 700;
-        font-size: 15px;
+        font-size: calc(15 * var(--gu, 1px));
         letter-spacing: 0.12em;
         text-indent: 0.12em;
         text-transform: uppercase;
@@ -8038,9 +7981,9 @@ export class Film extends Component<FilmSignature> {
         margin: 0;
         font-family: var(--cf-display);
         font-weight: 800;
-        /* '1882 —' is six characters, not four: at 19vw it was six times
+        /* '1882 —' is six characters, not four: at 19cqw it was six times
            the viewport wide and it set the width of the whole card */
-        font-size: clamp(44px, min(15vh, 9vw), 150px);
+        font-size: min(150px, min(15vh, 9cqw));
         letter-spacing: -0.03em;
         white-space: nowrap;
         line-height: 1;
@@ -8078,7 +8021,7 @@ export class Film extends Component<FilmSignature> {
         pointer-events: none;
         font-family: var(--cf-display);
         font-weight: 700;
-        font-size: min(24vh, 16vw);
+        font-size: min(24vh, 16cqw);
         letter-spacing: 0.04em;
         color: var(--cf-mark);
         mix-blend-mode: multiply;
@@ -8125,35 +8068,234 @@ export class Film extends Component<FilmSignature> {
         writing-mode: horizontal-tb;
         white-space: nowrap;
         font-size: min(
-          clamp(40px, 6.2vw, 104px),
-          calc(var(--cf-fit, 42vw) / (var(--cf-glyphs, 4) * 0.56))
+          min(104px, 6.2cqw),
+          calc(var(--cf-fit, 42cqw) / (var(--cf-glyphs, 4) * 0.56))
         );
         letter-spacing: -0.02em;
         line-height: 0.92;
       }
       .is-title .cf-kanji.is-latin {
-        --cf-fit: 46vw;
+        --cf-fit: 46cqw;
         font-size: min(
-          clamp(52px, 8.6vw, 142px),
+          min(142px, 8.6cqw),
           calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
         );
       }
       .is-plate .cf-kanji.is-latin {
-        --cf-fit: 24vw;
+        --cf-fit: 24cqw;
         writing-mode: horizontal-tb;
         font-size: min(
-          clamp(34px, 4.8vw, 76px),
+          min(76px, 4.8cqw),
           calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
         );
         letter-spacing: -0.01em;
-        max-width: 26vw;
+        max-width: 26cqw;
       }
       .is-point .cf-kanji.is-latin {
-        --cf-fit: 32vw;
+        --cf-fit: 32cqw;
         font-size: min(
-          clamp(36px, 5.2vw, 82px),
+          min(82px, 5.2cqw),
           calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
         );
+      }
+      /* ---- THE RESPONSIVE OVERRIDES, LAST ON PURPOSE ------------- *
+
+         These are overrides, and an override that appears before the
+         rule it overrides does nothing at equal specificity. They sat
+         a thousand lines ABOVE the gate and the rail they were written
+         to compress, so none of them has ever applied: the door kept
+         its full stack at every width and ran through its own buttons
+         on anything narrow. Moving them to the foot of the sheet is
+         the whole fix — nothing here changed except where it is.
+
+         They ask the FILM and the SHOT rather than the window, so a
+         film in a small frame gets the same compact layout a phone
+         does. See the container declarations on .cf-page and
+         .cf-stage above. */
+
+      @container film (max-width: 1180px) {
+        .cf-block {
+          max-width: min(38ch, 56cqw);
+        }
+
+        .cf-block.is-plate {
+          max-width: min(46ch, 52cqw);
+        }
+
+        .is-plate .cf-kanji.is-latin {
+          --cf-fit: 28cqw;
+          max-width: 30cqw;
+        }
+
+        .cf-say {
+          max-width: min(28ch, 42cqw);
+        }
+      }
+
+      @container film (max-width: 860px) {
+        /* the plate stops being two columns: the word goes over the cues,
+           and the rule that separated them becomes the rule under it */
+        .cf-block.is-plate {
+          top: auto;
+          bottom: 12%;
+          right: 5.5%;
+          left: 5.5%;
+          display: block;
+          transform: none;
+          max-width: none;
+        }
+
+        .is-plate .cf-plane.is-glyph {
+          border-right: 0;
+          border-bottom: 2px solid var(--cf-chap);
+          padding-right: 0;
+          padding-bottom: 8px;
+          margin-bottom: 14px;
+        }
+
+        /* stacked under the word, the cues read from the left again */
+        .is-plate .cf-plane:not(.is-glyph) {
+          align-items: flex-start;
+          text-align: left;
+        }
+
+        .is-plate .cf-read {
+          justify-content: flex-start;
+        }
+
+        .is-plate .cf-kanji.is-latin {
+          --cf-fit: 84cqw;
+          max-width: none;
+        }
+
+        .cf-block.is-title,
+        .cf-block.is-lower,
+        .cf-block.is-point {
+          left: 5.5%;
+          right: 5.5%;
+          top: auto;
+          bottom: 13%;
+          max-width: none;
+          text-align: left;
+        }
+
+        .is-title .cf-read {
+          justify-content: flex-start;
+        }
+
+        .is-title .cf-kicker {
+          flex-direction: row;
+        }
+
+        .cf-kanji.is-latin,
+        .is-title .cf-kanji.is-latin,
+        .is-point .cf-kanji.is-latin {
+          --cf-fit: 84cqw;
+        }
+
+        .cf-say {
+          max-width: min(32ch, 84cqw);
+        }
+
+        /* a numeral three-quarters of the screen wide behind two columns
+           of type is a texture; behind one column it is a mess */
+        .cf-ghost,
+        .cf-plate .cf-ghost {
+          display: none;
+        }
+
+        .cf-photo figure {
+          width: min(46cqw, 260px);
+        }
+
+        /* a narrow frame: the rule drops under the title again */
+        .cf-rail {
+          flex-wrap: wrap;
+        }
+
+        .cf-years {
+          flex-basis: 100%;
+          width: min(420px, 56cqw);
+          margin-left: 0;
+          margin-top: 8px;
+        }
+
+        .cf-subs {
+          font-size: 15px;
+          max-width: 88cqw;
+        }
+      }
+
+      @container film (max-width: 560px) {
+        .cf-kicker {
+          font-size: 10px;
+          letter-spacing: 0.09em;
+        }
+
+        .cf-say {
+          font-size: 15px;
+          margin-bottom: 8px;
+        }
+
+        .cf-read {
+          margin-bottom: 12px;
+        }
+
+        .cf-kanji {
+          margin-bottom: 12px;
+        }
+
+        .cf-gate-index,
+        .cf-rail {
+          display: none;
+        }
+
+        .cf-gate-in.cf-matter {
+          margin-right: 0;
+          padding-inline: 20px;
+        }
+
+        .cf-gate-vert {
+          display: none;
+        }
+
+        .cf-mg-seal {
+          position: static;
+          margin: 14px auto 0;
+        }
+
+        .cf-photo {
+          display: none;
+        }
+
+        .cf-subs {
+          font-size: 14px;
+          bottom: 10%;
+        }
+      }
+
+      @container shot (max-height: 620px) {
+        .cf-kanji.is-latin {
+          font-size: min(
+            clamp(30px, 8vh, 64px),
+            calc(var(--cf-fit, 42cqw) / (var(--cf-glyphs, 4) * 0.56))
+          );
+        }
+
+        .cf-say {
+          font-size: clamp(13px, 2.4vh, 18px);
+          margin-bottom: 7px;
+        }
+
+        .cf-block.is-lower,
+        .cf-block.is-title {
+          bottom: 8%;
+        }
+
+        .has-subs .cf-block.is-lower,
+        .has-subs .cf-block.is-title {
+          bottom: 17%;
+        }
       }
     </style>
   </template>

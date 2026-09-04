@@ -581,9 +581,33 @@ shot = (pose) => {
     derives the beat in force from the number, which is what makes it a
     pure function of its clock and what lets it be rendered frame by
     frame rather than recorded. }}
+
+{{! THE CONSTRUCT, first: <Film> is the editor, and everything below is
+    what it runs. The picture is a component rather than fourteen
+    arguments — it declares the adjustments a shot may hold on it,
+    f.picture.* — and the score is the graph in the default block. }}
+<Film @name='towers' @menuTitle='TOWERS' @join='wipe'
+  @rail={{false}} @seek={{this.seek}} @settle={{0.5}}>
+  <:picture as |register|>
+    <IframePicture @register={{register}}
+      @src={{this.src}} @assets={{this.assets}} @standing={{STANDING}} />
+  </:picture>
+  <:default as |f|>
+    <f.Spine>…chapters, shots and the joins between them…</f.Spine>
+  </:default>
+  <:gate as |f|>…the door: the title package, in the film's own type…</:gate>
+  <:end as |f|>…the back matter…</:end>
+</Film>
+
+{{! AND THIS IS WHAT <Film> COMPILES ITS SCORE INTO — one region, three
+    kinds of step. The film writes this; a score never does. }}
 <c.Sequence @name={{this.filmName}}>
+  {{! @settle averages the spline around the clock instead of chasing it:
+      the curvature step at every waypoint goes, the cuts and the landing
+      do not, and it stays a pure function of the clock }}
   <c.Camera3D @name='film' @through={{this.path}}
-    @duration={{this.filmSeconds}} @ease='linear' @tension={{0.34}} />
+    @duration={{this.filmSeconds}} @ease='linear'
+    @settle={{this.settle}} @tension={{0.34}} />
 
   {{! driven, never played — and @end says what happens past the window:
       taken off, held on its last sample, or frozen }}

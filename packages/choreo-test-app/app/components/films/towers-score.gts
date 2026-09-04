@@ -757,7 +757,7 @@ export const TowersScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
           @read={{get VO_SECS "noki"}}
         />
         <@f.picture.Look @grade="wet" />
-        <@f.picture.Weather @haze={{0.62}} @rain={{1.15}} @wx={{1}} />
+        <@f.picture.Weather @haze={{0.62}} @rain={{1.15}} @wx={{2}} />
         <@f.picture.Build @clock={{4.4}} />
         <@f.Trace @pts={{RING_EAVE1}} @wide={{true}} />
         <@f.Trace @pts={{RING_EAVE2}} />
