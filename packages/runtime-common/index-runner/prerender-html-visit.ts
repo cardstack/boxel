@@ -512,12 +512,17 @@ export function declaredScreenshotTimingsMs(
 // recorded run for the same slot name, extended by one — or a run of one
 // where the prior row had no failure under that name (a roster-level
 // failure records under '*', so it starts its own run rather than
-// extending per-name ones). The reconcile sweep's bounded retry lane keys
-// off this count.
+// extending per-name ones). Because a name absent from this render's
+// errors has its run dropped, per-name runs alone cannot bound retries
+// when the failing name shifts between renders — so any failure also
+// extends the row-level `captureFailureRenders` counter (the prior row's
+// count plus one, regardless of which names failed), and the reconcile
+// sweep's bounded retry lane caps on that.
 export async function persistDeclaredScreenshots({
   result,
   priorManifest,
   priorScreenshotErrors,
+  priorCaptureFailureRenders,
   dbAdapter,
   mediaCacheAdapter,
   realmURL,
@@ -530,6 +535,7 @@ export async function persistDeclaredScreenshots({
   result: DeclaredScreenshotVisitResult | undefined;
   priorManifest: ScreenshotManifest | null;
   priorScreenshotErrors?: DeclaredScreenshotError[] | null;
+  priorCaptureFailureRenders?: number | null;
   dbAdapter: DBAdapter;
   mediaCacheAdapter: MediaCacheAdapter;
   realmURL: URL;
@@ -541,6 +547,9 @@ export async function persistDeclaredScreenshots({
 }): Promise<{
   manifest: ScreenshotManifest | null;
   errors: DeclaredScreenshotError[];
+  // Present exactly when `errors` is non-empty: the row's consecutive
+  // capture-failure render count, for `screenshotCaptureFailureRenders`.
+  captureFailureRenders?: number;
 }> {
   // The prerenderer didn't run the capture step (an implementation without
   // it, e.g. the in-browser twin): no manifest, not an error.
@@ -611,6 +620,7 @@ export async function persistDeclaredScreenshots({
       });
     }
   }
+  let captureFailureRenders: number | undefined;
   if (errors.length > 0) {
     let priorRunByName = new Map(
       (priorScreenshotErrors ?? []).map((error) => [
@@ -624,10 +634,16 @@ export async function persistDeclaredScreenshots({
       ...error,
       consecutiveFailures: (priorRunByName.get(error.name) ?? 0) + 1,
     }));
+    captureFailureRenders =
+      (priorCaptureFailureRenders ??
+        // A prior row with recorded failures but no counter is a legacy
+        // row — one failing render, same default the sweep's scan applies.
+        (priorScreenshotErrors?.length ? 1 : 0)) + 1;
   }
   return {
     manifest: Object.keys(manifest).length > 0 ? manifest : null,
     errors,
+    ...(captureFailureRenders !== undefined ? { captureFailureRenders } : {}),
   };
 }
 
@@ -738,10 +754,14 @@ async function visitForPrerenderedHtml({
   );
   let priorManifest: ScreenshotManifest | null = null;
   let priorScreenshotErrors: DeclaredScreenshotError[] | null = null;
+  let priorCaptureFailureRenders: number | null = null;
   let screenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
   if (captureScreenshots) {
-    ({ manifest: priorManifest, screenshotErrors: priorScreenshotErrors } =
-      await batch.priorScreenshotState(url, 'instance'));
+    ({
+      manifest: priorManifest,
+      screenshotErrors: priorScreenshotErrors,
+      captureFailureRenders: priorCaptureFailureRenders,
+    } = await batch.priorScreenshotState(url, 'instance'));
     screenshotVisitArgs = {
       ...(priorManifest ? { priorManifest } : {}),
       ...(contentHash !== undefined ? { contentHash } : {}),
@@ -816,6 +836,7 @@ async function visitForPrerenderedHtml({
               result: response.screenshots,
               priorManifest,
               priorScreenshotErrors,
+              priorCaptureFailureRenders,
               dbAdapter,
               mediaCacheAdapter,
               realmURL,
@@ -837,7 +858,11 @@ async function visitForPrerenderedHtml({
           ? {
               ...(diagnostics ?? {}),
               ...(screenshotOutcome && screenshotOutcome.errors.length > 0
-                ? { screenshotErrors: screenshotOutcome.errors }
+                ? {
+                    screenshotErrors: screenshotOutcome.errors,
+                    screenshotCaptureFailureRenders:
+                      screenshotOutcome.captureFailureRenders,
+                  }
                 : {}),
               ...(screenshotTimingsMs ? { screenshotTimingsMs } : {}),
             }

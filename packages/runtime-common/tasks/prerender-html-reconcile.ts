@@ -72,9 +72,9 @@ registerQueueJobDefinition({
 // only up to its consecutive-failure cap before its recorded error stands
 // (see `findStalePrerenderedHtmlRows`). The same scan also retries healthy
 // rows whose declared-screenshot captures failed (recorded on
-// `diagnostics.screenshotErrors`, never as an error row), under that lane's
-// own per-slot cap. Purely additive: a sweep over a healthy system finds
-// nothing and enqueues nothing.
+// `diagnostics.screenshotErrors`, never as an error row), capped on that
+// lane's row-level failing-render counter. Purely additive: a sweep over a
+// healthy system finds nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
   PrerenderHtmlReconcileResult

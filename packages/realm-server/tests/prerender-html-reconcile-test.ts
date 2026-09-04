@@ -1106,6 +1106,7 @@ module(basename(import.meta.filename), function (hooks) {
             consecutiveFailures: 1,
           },
         ],
+        screenshotCaptureFailureRenders: 1,
       },
       renderedMinutesAgo: 60,
     });
@@ -1194,6 +1195,45 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
+  test('a row whose failing-render counter is at the cap is terminal even when per-slot runs are not', async function (assert) {
+    const realmURL = 'http://example.com/screenshot-row-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    // The alternating-failure shape: the failing name changed between
+    // renders (a '*' step failure trading places with a per-name one), so
+    // every per-slot run sits at one while the row-level counter has
+    // reached the cap. The counter is what keeps the lane bounded here.
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        screenshotErrors: [
+          {
+            name: '*',
+            message: 'declared screenshot capture failed',
+            consecutiveFailures: 1,
+          },
+        ],
+        screenshotCaptureFailureRenders: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a shifting failure name cannot reset the retry budget',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
   test('one slot below the cap keeps a row retryable even when another slot is capped', async function (assert) {
     const realmURL = 'http://example.com/screenshot-mixed/';
     await seedOwner(realmURL);
@@ -1207,6 +1247,8 @@ module(basename(import.meta.filename), function (hooks) {
       url: `${realmURL}mango.json`,
       realmURL,
       generation: 5,
+      // No row-level counter recorded (a legacy row) — it reads as one
+      // failing render, so the per-slot term decides here.
       diagnostics: {
         screenshotErrors: [
           {

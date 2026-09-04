@@ -74,6 +74,7 @@ module(basename(import.meta.filename), function (hooks) {
     priorScreenshotErrors?: Parameters<
       typeof persistDeclaredScreenshots
     >[0]['priorScreenshotErrors'];
+    priorCaptureFailureRenders?: number | null;
     contentHash?: string;
     sourceGeneration?: number;
   }) {
@@ -81,6 +82,7 @@ module(basename(import.meta.filename), function (hooks) {
       result: args.result,
       priorManifest: args.priorManifest ?? null,
       priorScreenshotErrors: args.priorScreenshotErrors ?? null,
+      priorCaptureFailureRenders: args.priorCaptureFailureRenders ?? null,
       dbAdapter,
       mediaCacheAdapter: adapter,
       realmURL,
@@ -278,7 +280,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a first failure starts a consecutive-failure run of one', async function (assert) {
-    let { errors } = await persist({
+    let { errors, captureFailureRenders } = await persist({
       result: {
         entries: [],
         errors: [
@@ -294,6 +296,11 @@ module(basename(import.meta.filename), function (hooks) {
         consecutiveFailures: 1,
       },
     ]);
+    assert.strictEqual(
+      captureFailureRenders,
+      1,
+      'the row-level failing-render counter starts at one too',
+    );
   });
 
   test('a repeat failure of the same slot extends the prior run; other slots start their own', async function (assert) {
@@ -330,7 +337,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a prior failure recorded without a run count reads as a run of one', async function (assert) {
-    let { errors } = await persist({
+    let { errors, captureFailureRenders } = await persist({
       result: {
         entries: [],
         errors: [{ name: 'hero', message: 'render never painted' }],
@@ -340,6 +347,53 @@ module(basename(import.meta.filename), function (hooks) {
       ],
     });
     assert.strictEqual(errors[0].consecutiveFailures, 2);
+    assert.strictEqual(
+      captureFailureRenders,
+      2,
+      'a legacy row with recorded failures but no counter reads as one failing render',
+    );
+  });
+
+  test('the row-level counter extends across renders whose failing names differ', async function (assert) {
+    // Per-name runs cannot see this shape — the prior hero run drops because
+    // hero is absent from this render's errors, and the '*' run starts at
+    // one — so the row counter is what keeps the retry lane bounded.
+    let { errors, captureFailureRenders } = await persist({
+      result: {
+        entries: [],
+        errors: [{ name: '*', message: 'roster read failed' }],
+      },
+      priorScreenshotErrors: [
+        {
+          name: 'hero',
+          message: 'render never painted',
+          consecutiveFailures: 2,
+        },
+      ],
+      priorCaptureFailureRenders: 2,
+    });
+    assert.strictEqual(errors[0].consecutiveFailures, 1);
+    assert.strictEqual(captureFailureRenders, 3);
+  });
+
+  test('a render with no capture failures returns no row-level counter', async function (assert) {
+    let { errors, captureFailureRenders } = await persist({
+      result: { entries: [captureResult()] },
+      priorScreenshotErrors: [
+        {
+          name: 'card',
+          message: 'render never painted',
+          consecutiveFailures: 2,
+        },
+      ],
+      priorCaptureFailureRenders: 2,
+    });
+    assert.deepEqual(errors, []);
+    assert.strictEqual(
+      captureFailureRenders,
+      undefined,
+      'a healing render drops the counter along with the error entries',
+    );
   });
 
   test('persist-step failures join the bookkeeping too', async function (assert) {

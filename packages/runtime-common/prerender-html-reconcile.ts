@@ -54,10 +54,17 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // omitting the failed name and `diagnostics.screenshotErrors` recording why
 // (the broken-links model) — so the retry lane keys off that diagnostics
 // record rather than an `error_doc`. Same shape as the visit-failure lane:
-// each slot's consecutive-failure run is capped, and a failed row waits out
-// a minimum age between attempts. At the cap, the absence is the recorded
-// outcome — the card stays fully served and searchable, the screenshot
-// simply stays missing until the URL's next invalidation re-renders it.
+// consecutive-failure runs are capped, and a failed row waits out a minimum
+// age between attempts. The cap is enforced against the row-level
+// `screenshotCaptureFailureRenders` counter (renders that recorded any
+// capture failure), not only the per-slot runs: a per-slot run resets
+// whenever the failing name changes, which is exactly the shape a
+// struggling row takes (a roster-level '*' failure alternating with a
+// per-name one, format groups failing on alternating renders), and the
+// row counter is the term no name change can reset. At the cap, the
+// absence is the recorded outcome — the card stays fully served and
+// searchable, the screenshot simply stays missing until the URL's next
+// invalidation re-renders it.
 export const DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP = 3;
 export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
@@ -81,13 +88,19 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 //
 // A fourth arm admits the declared-screenshot retry lane: a *healthy*
 // published row (no `error_doc`) whose `diagnostics.screenshotErrors`
-// records capture failures is repairable while any recorded slot's
-// consecutive-failure run is below `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP`
-// (an entry without a count is a legacy row — read as a run of one, so it
-// still gets its retries). The repair is a plain re-render of the URL; the
-// capture rides the prerender-html visit, and a slot already at its cap
-// that happens to recapture successfully along the way just heals early. A
-// row every one of whose recorded slots has reached the cap is terminal —
+// records capture failures is repairable while its row-level
+// `screenshotCaptureFailureRenders` counter AND some recorded slot's
+// consecutive-failure run are both below
+// `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP`. The row counter is what makes
+// the lane converge — a per-slot run resets whenever the failing name
+// changes, and per-slot runs alone would retry such a row forever — while
+// the per-slot term stops retrying a stable failure set once every name
+// in it is capped. A value missing from a legacy row reads as one (a
+// count-less error entry as a run of one, an absent counter as one
+// failing render), so legacy rows still get their retries. The repair is
+// a plain re-render of the URL; the capture rides the prerender-html
+// visit, and a slot already at its cap that happens to recapture
+// successfully along the way just heals early. A capped row is terminal —
 // the screenshots stay absent (thumbnail consumers fall through their
 // chain) until the URL's next invalidation.
 //
@@ -115,6 +128,8 @@ export async function findStalePrerenderedHtmlRows(
                - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS})
          OR (ph.error_doc IS NULL
            AND jsonb_typeof(ph.diagnostics->'screenshotErrors') = 'array'
+           AND COALESCE((ph.diagnostics->>'screenshotCaptureFailureRenders')::int, 1)
+             < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP}
            AND EXISTS (
              SELECT 1
              FROM jsonb_array_elements(ph.diagnostics->'screenshotErrors') se

@@ -247,6 +247,15 @@ export interface PrerenderMetaDiagnostics {
   // the manifest simply omits the name, so this is the only indexed signal
   // that a declared capture is missing. Omitted when every slot captured.
   screenshotErrors?: DeclaredScreenshotError[];
+  // How many consecutive prerender-html renders of this row have recorded
+  // at least one declared-capture failure, under any name. The row-level
+  // companion to each entry's `consecutiveFailures`: a per-name run resets
+  // whenever the failing name changes (a roster-level '*' failure
+  // alternating with a per-name one, format groups failing on alternating
+  // renders), so the reconcile sweep's retry cap is enforced against this
+  // counter, which no name change can reset. A render that records no
+  // capture errors drops it along with `screenshotErrors`.
+  screenshotCaptureFailureRenders?: number;
   // Per-slot wall-clock of the declared-screenshot captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
@@ -935,18 +944,20 @@ export type DeclaredScreenshotError = {
   name: string;
   message: string;
   // Wall-clock the engine spent on the render/capture attempt that failed
-  // this slot. Absent when the failure never reached a render (the roster
-  // read failed, the slot overflowed the capture cap, or the persist step
-  // failed after a successful capture — the capture's own time then rides
-  // the sibling timing entry).
+  // this slot. On a roster-level '*' entry (the capture step failed as a
+  // unit — the roster read errored, or the step lost its timeout race)
+  // this is the whole step's elapsed time, not one slot's share. Absent
+  // when nothing rendered for the failure: the slot overflowed the capture
+  // cap, or the persist step failed after a successful capture — the
+  // capture's own time then rides the sibling timing entry.
   captureMs?: number;
   // How many consecutive prerender-html renders have failed this slot's
   // capture, maintained by the persist path from the prior row's recorded
-  // errors. The reconcile sweep's bounded retry lane reads this: a slot
-  // below `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP` gets its row re-rendered
-  // (spaced by `DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS`), at the cap
-  // the absence stands until the URL's next invalidation. A successful
-  // capture of the slot ends the run by dropping its error entry outright.
+  // errors. A successful capture of the slot ends the run by dropping its
+  // error entry outright — which means a run also resets when the failing
+  // name changes, so this is the per-name diagnostic term of the reconcile
+  // sweep's bounded retry lane; the lane's convergence bound is the
+  // row-level `screenshotCaptureFailureRenders` counter alongside it.
   consecutiveFailures?: number;
 };
 

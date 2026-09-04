@@ -1563,15 +1563,17 @@ export class Batch {
   // read from production `prerendered_html`: the manifest is the
   // carry-forward input for `keyBy: 'file-content'` slots (skip re-rendering
   // when the source bytes are unchanged), and the recorded capture failures
-  // seed this pass's consecutive-failure bookkeeping (a slot that fails
-  // again extends its run; the reconcile sweep's bounded retry lane reads
-  // the count). Both null when no prior row exists or it carried none.
+  // seed this pass's consecutive-failure bookkeeping — per-slot runs (a slot
+  // that fails again extends its run) plus the row-level failing-render
+  // counter the reconcile sweep's bounded retry lane caps on. All null when
+  // no prior row exists or it carried none.
   async priorScreenshotState(
     url: URL,
     type: PrerenderedHtmlTable['type'],
   ): Promise<{
     manifest: ScreenshotManifest | null;
     screenshotErrors: DeclaredScreenshotError[] | null;
+    captureFailureRenders: number | null;
   }> {
     // This runs once per instance visit, so it selects only what it needs —
     // the row's HTML columns are large and irrelevant here.
@@ -1589,14 +1591,17 @@ export class Batch {
       PrerenderedHtmlTable,
       'screenshots' | 'diagnostics'
     >[];
-    let priorErrors = (row?.diagnostics as Diagnostics | null)
-      ?.screenshotErrors;
+    let priorDiagnostics = row?.diagnostics as Diagnostics | null;
+    let priorErrors = priorDiagnostics?.screenshotErrors;
+    let priorFailureRenders = priorDiagnostics?.screenshotCaptureFailureRenders;
     return {
       manifest: (row?.screenshots as ScreenshotManifest | null) ?? null,
       screenshotErrors:
         Array.isArray(priorErrors) && priorErrors.length > 0
           ? priorErrors
           : null,
+      captureFailureRenders:
+        typeof priorFailureRenders === 'number' ? priorFailureRenders : null,
     };
   }
 
