@@ -320,6 +320,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-routing-test',
   './module-cache-invalidation-listener-test',
   './pg-adapter-connection-error-test',
+  './host-shell-generation-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/archived-seal-test',
