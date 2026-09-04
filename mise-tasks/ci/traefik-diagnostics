@@ -80,8 +80,9 @@ docker logs boxel-traefik > "$all" 2>&1
 grep -F '"RequestHost"' "$all" > "$access" || true
 grep -vF '"RequestHost"' "$all" > "$process" || true
 
-# Provider start-up, each dynamic-configuration reload, TLS and upstream
-# errors. Short, so the tail is generous.
+# Provider start-up, warnings, and TLS or upstream errors (traefik.yml sets
+# INFO). Short, so the tail is generous. Route arrivals are not in here: the
+# mtimes in the dynamic-directory listing above date those.
 section "traefik process log (last 200 of $(wc -l < "$process" | tr -d ' ') lines)"
 tail -200 "$process"
 

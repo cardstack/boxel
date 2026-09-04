@@ -15,8 +15,11 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
 
-# INFO shows each dynamic-configuration reload, which is what dates a route
-# file's arrival or removal against the services' own logs.
+# INFO adds provider start-up and warnings to the default ERROR-only log.
+# Dynamic-configuration reloads are logged only at DEBUG, which also logs two
+# lines for every proxied request — tens of thousands per test run — so they
+# stay off; a route file's arrival is dated by its mtime in the dynamic
+# directory instead.
 log:
   level: INFO
 
