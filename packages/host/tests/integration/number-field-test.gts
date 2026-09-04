@@ -252,4 +252,53 @@ module('Integration | number field configuration', function (hooks) {
       .hasAttribute('min', '0', 'Extracts min from options')
       .hasAttribute('max', '100', 'Extracts max from options');
   });
+
+  // ============================================
+  // Status Ramp Tests
+  // ============================================
+
+  test('progress fill follows the four-band status ramp with inclusive thresholds', async function (assert) {
+    const mix = 'color-mix(in oklch, var(--warning), var(--success))';
+    const bands: [number, string][] = [
+      [10, 'var(--destructive)'],
+      [25, 'var(--warning)'],
+      [30, 'var(--warning)'],
+      [50, mix],
+      [60, mix],
+      [75, 'var(--success)'],
+      [90, 'var(--success)'],
+    ];
+    for (const [value, color] of bands) {
+      await renderConfiguredField(
+        NumberField,
+        value,
+        { presentation: 'progress-bar', options: { min: 0, max: 100 } },
+        'embedded',
+      );
+      // the token string itself, not the computed color: the point is which
+      // band the value lands in
+      assert
+        .dom('[data-test-field-container] [data-test-progress-bar-fill]')
+        .hasAttribute(
+          'style',
+          `width: ${value}%; background: ${color};`,
+          `${value}% fills with ${color}`,
+        );
+    }
+  });
+
+  test('score badge uses the same status ramp as the progress fill', async function (assert) {
+    await renderConfiguredField(
+      NumberField,
+      60,
+      { presentation: 'score', options: { min: 0, max: 100 } },
+      'embedded',
+    );
+    assert
+      .dom('[data-test-field-container] [data-test-score-badge]')
+      .hasAttribute(
+        'style',
+        'background: color-mix(in oklch, var(--warning), var(--success))',
+      );
+  });
 });

@@ -112,7 +112,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         --_switch-bg-color: var(--boxel-switch-background, var(--input));
         --_switch-active-color: var(
           --boxel-switch-active-background,
-          var(--success, var(--primary))
+          var(--primary)
         );
         --_switch-thumb-color: var(--boxel-switch-thumb, var(--background));
         --_switch-active-thumb-color: var(

@@ -916,6 +916,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common

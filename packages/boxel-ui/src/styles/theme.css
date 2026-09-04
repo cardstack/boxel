@@ -134,16 +134,23 @@
   --boxel-button-disabled-foreground: var(--boxel-450);
 }
 
-/* Themed-card boundary reset. The --theme-* typography knobs are deliberately
-   NOT reset here: a nested theme that omits them inherits the ambient
-   typography, and one that wants its own simply sets them — whereas a reset
-   would make inheriting impossible to express. */
+/* ── Themed-card boundary reset ─────────────────────────────────────────────
+
+  Which values: the component knobs the light or dark block above sets, so
+  they can't inherit into a themed card.
+
+  Not listed here, for two different reasons:
+  - --success and --warning are already declared with the rest of the contract
+    on the scope selector above. Do not re-declare them `initial` here: same
+    selector, later in the file, so `initial` would win and blank the token
+    inside every themed card.
+  - the --theme-* typography knobs are left undeclared on purpose, so a nested
+    theme that omits them inherits the ambient typography; one that wants its
+    own simply sets them.
+*/
 :where([data-boxel-theme-scope]) {
-  --boxel-switch-background: initial;
   --boxel-switch-thumb: initial;
-  --boxel-switch-active-thumb: initial;
   --boxel-switch-thumb-icon: initial;
-  --boxel-switch-active-thumb-icon: initial;
   --boxel-button-default-border: initial;
   --boxel-button-default-active-background: initial;
   --boxel-button-default-active-foreground: initial;
@@ -158,8 +165,6 @@
   --boxel-button-disabled-background: initial;
   --boxel-button-disabled-border: initial;
   --boxel-button-disabled-foreground: initial;
-  --success: initial;
-  --warning: initial;
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────
