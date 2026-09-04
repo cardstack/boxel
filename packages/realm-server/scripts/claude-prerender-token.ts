@@ -70,11 +70,13 @@ function usage(): void {
       `                         DEFAULT_PERMISSIONS from runtime-common — the same shape new\n` +
       `                         realms grant their owner ('${DEFAULT_PERMISSIONS.join(',')}').\n` +
       `                         The realm-server requires this to EXACTLY match the user's\n` +
-      `                         row in realm_user_permissions — not a subset. If the default\n` +
-      `                         fails with PermissionMismatch (401), query the DB:\n` +
-      `                           SELECT read, write, realm_owner FROM realm_user_permissions\n` +
-      `                           WHERE realm_url = '<url>' AND username = '<user>';\n` +
-      `                         and pass exactly those columns as the list.\n` +
+      `                         effective permissions — their own row unioned with the realm's\n` +
+      `                         '*' row and, for a registered matrix user, its 'users' row —\n` +
+      `                         not a subset. If the default fails with PermissionMismatch\n` +
+      `                         (401), query the DB for every row that contributes:\n` +
+      `                           SELECT username, read, write, realm_owner FROM realm_user_permissions\n` +
+      `                           WHERE realm_url = '<url>' AND username IN ('<user>', '*', 'users');\n` +
+      `                         and pass their union as the list.\n` +
       `  --output <path>        Override output path. Default: ${DEFAULT_OUTPUT_PATH}.\n` +
       `  --no-output            Don't write the JSON artifact (stdout only).\n` +
       `  --help                 Show this help.\n`,
