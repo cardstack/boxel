@@ -168,10 +168,21 @@ export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
 // established, so the request cannot have been received, let alone acted on.
 // A reset or a timeout proves nothing: either can land after the peer read the
 // request and started work on it.
+//
+// Membership turns on the phase an error can be raised in, not on how it
+// reads. Routing failures (`EHOSTUNREACH`, `ENETUNREACH`) are deliberately
+// absent even though they usually do come from a failed `connect`: undici
+// forwards a socket error raw from an established connection too, so a route
+// that dies while the request is in flight surfaces under the same code as one
+// that died before the SYN. `UND_ERR_CONNECT_TIMEOUT` is included because it
+// carries the distinction itself — undici raises it only from the timer it
+// clears once the socket connects, so it cannot describe a request that was
+// already written.
 const UNDELIVERED_ERROR_CODES = new Set([
   'ECONNREFUSED', // the peer refused the connection
   'ENOTFOUND', // DNS resolved to nothing
   'EAI_AGAIN', // DNS resolution failed
+  'UND_ERR_CONNECT_TIMEOUT', // the connection was never established
 ]);
 
 // Node's fetch wraps network errors in a TypeError carrying the underlying

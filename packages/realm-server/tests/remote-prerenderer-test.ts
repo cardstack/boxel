@@ -676,6 +676,67 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('retries a connect-phase timeout', async function (assert) {
+      // undici raises this only from the timer it clears once the socket
+      // connects, so it cannot describe a request that was already written.
+      let manager = makeCommandServer((res) => succeed(res));
+      let originalFetch = globalThis.fetch;
+      let timedOutOnce = false;
+
+      try {
+        (globalThis as any).fetch = (...args: Parameters<typeof fetch>) => {
+          if (!timedOutOnce) {
+            timedOutOnce = true;
+            let err: any = new TypeError('fetch failed');
+            err.cause = Object.assign(new Error('Connect Timeout Error'), {
+              name: 'ConnectTimeoutError',
+              code: 'UND_ERR_CONNECT_TIMEOUT',
+            });
+            return Promise.reject(err);
+          }
+          return originalFetch(...args);
+        };
+
+        let prerenderer = createRemotePrerenderer(manager.url());
+        let result = await prerenderer.runCommand(commandArgs);
+
+        assert.strictEqual(result.status, 'ready', 'the caller gets a result');
+        assert.strictEqual(manager.runs(), 1, 'the command ran once');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+        await manager.stop();
+      }
+    });
+
+    test('does not retry a routing failure', async function (assert) {
+      // A route can die while the request is in flight, and undici forwards
+      // the socket error raw, so the code alone cannot tell that case from a
+      // `connect` that never left the host.
+      let originalFetch = globalThis.fetch;
+      let attempts = 0;
+
+      try {
+        (globalThis as any).fetch = () => {
+          attempts++;
+          let err: any = new TypeError('fetch failed');
+          err.cause = Object.assign(new Error('connect EHOSTUNREACH'), {
+            code: 'EHOSTUNREACH',
+          });
+          return Promise.reject(err);
+        };
+
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /fetch failed/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(attempts, 1, 'made a single attempt');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    });
+
     test('does not retry a connection reset', async function (assert) {
       // A reset can land after the server read the request and started the
       // command, so it proves nothing about whether the command ran.
