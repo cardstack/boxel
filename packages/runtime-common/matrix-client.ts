@@ -274,17 +274,7 @@ export class MatrixClient {
   async getProfile(
     userId: string,
   ): Promise<{ displayname: string } | undefined> {
-    let response = await this.request(
-      `_matrix/client/v3/profile/${encodeURIComponent(userId)}`,
-      'GET',
-      undefined,
-      false,
-    );
-    if (!response.ok) {
-      return undefined;
-    }
-    let json = await response.json();
-    return json;
+    return await fetchMatrixProfile(this.matrixURL, userId);
   }
 
   async sendEvent<T>(roomId: string, type: string, content: T) {
@@ -451,6 +441,24 @@ export class MatrixClient {
     }
     return `${now}-${this.txnSequence}`;
   }
+}
+
+// Profile lookup is unauthenticated on the matrix client-server API, so it is
+// reachable from a homeserver URL alone. `MatrixClient#getProfile` is the entry
+// point for a caller that holds a client; this one serves the callers that hold
+// only a URL — a worker child process has no matrix client, but still has to
+// answer "is this a registered matrix user?" to resolve a realm's `users` grant.
+export async function fetchMatrixProfile(
+  matrixURL: URL,
+  userId: string,
+): Promise<{ displayname: string } | undefined> {
+  let response = await fetch(
+    `${matrixURL.href}_matrix/client/v3/profile/${encodeURIComponent(userId)}`,
+  );
+  if (!response.ok) {
+    return undefined;
+  }
+  return await response.json();
 }
 
 export function getMatrixUsername(userId: string) {

@@ -1,7 +1,7 @@
 import type Koa from 'koa';
 
 import {
-  fetchRealmPermissions,
+  fetchEffectiveRealmPermissions,
   type DBAdapter,
   type RealmPermissions,
   type Prerenderer,
@@ -21,11 +21,15 @@ export default function handlePrerenderProxy({
   kind,
   prerenderer,
   dbAdapter,
+  matrixURL,
   createPrerenderAuth,
 }: {
   kind: 'card' | 'module' | 'file-extract';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
+  // Resolves the realm's `users` grant, which is keyed on whether the caller
+  // has a matrix account.
+  matrixURL: string;
   createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -80,12 +84,18 @@ export default function handlePrerenderProxy({
       return;
     }
 
-    let permissionsByUser = await fetchRealmPermissions(
+    // The effective set the realm itself enforces: its `users` and `*` grants
+    // unioned with the caller's own row. A session token is rejected when its
+    // permissions claim differs from that union in either direction, so on a
+    // realm that carries a shared grant the caller's row alone is not a
+    // mintable set.
+    let userPermissions = await fetchEffectiveRealmPermissions(
       dbAdapter,
       new URL(attrs.realm),
+      token.user,
+      matrixURL,
     );
-    let userPermissions = permissionsByUser[token.user];
-    if (!userPermissions?.length) {
+    if (!userPermissions.length) {
       await sendResponseForForbiddenRequest(
         ctxt,
         `${token.user} does not have permissions in ${attrs.realm}`,

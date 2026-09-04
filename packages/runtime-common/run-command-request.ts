@@ -3,7 +3,7 @@ import type * as JSONTypes from 'json-typescript';
 import {
   ensureFullMatrixUserId,
   ensureTrailingSlash,
-  fetchRealmPermissions,
+  fetchEffectiveRealmPermissions,
   fetchUserPermissions,
   type DBAdapter,
   type RealmPermissions,
@@ -66,13 +66,19 @@ export async function prepareRunCommand({
 }): Promise<PrepareRunCommandResult> {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
   let context = { command, realmURL: normalizedRealmURL };
-  let realmPermissions = await fetchRealmPermissions(
+  let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
+  // The effective set the realm itself enforces: its `users` and `*` grants
+  // unioned with the runner's own row. A session token is rejected when its
+  // permissions claim differs from that union in either direction, so on a
+  // realm that carries a shared grant the runner's row alone is not a mintable
+  // set.
+  let userPermissions = await fetchEffectiveRealmPermissions(
     dbAdapter,
     new URL(normalizedRealmURL),
+    runAsUserId,
+    matrixURL,
   );
-  let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
-  let userPermissions = realmPermissions[runAsUserId];
-  if (!userPermissions || userPermissions.length === 0) {
+  if (userPermissions.length === 0) {
     return {
       ok: false,
       error: `${runAs} does not have permissions in ${normalizedRealmURL}`,

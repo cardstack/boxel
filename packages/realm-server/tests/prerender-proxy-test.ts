@@ -17,6 +17,9 @@ import { verifyJWT } from '../jwt.ts';
 module(basename(import.meta.filename), function () {
   module('prerender proxy', function () {
     let createPrerenderAuth = buildCreatePrerenderAuth(realmSecretSeed);
+    // Only consulted to resolve a realm's `users` grant; the tests that
+    // exercise one stub the profile lookup, so it is never dialed for real.
+    let matrixURL = 'http://localhost:8008/';
 
     function makeDbAdapter(rows: any[]): DBAdapter {
       return {
@@ -141,6 +144,7 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -231,6 +235,7 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer: undefined,
           dbAdapter: makeDbAdapter([]),
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -264,6 +269,7 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]),
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -299,6 +305,7 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]), // no permissions
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -349,6 +356,7 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -359,6 +367,7 @@ module(basename(import.meta.filename), function () {
           kind: 'module',
           prerenderer,
           dbAdapter,
+          matrixURL,
           createPrerenderAuth,
         }),
       );
@@ -429,6 +438,188 @@ module(basename(import.meta.filename), function () {
           },
         ],
         'forwards requests to prerenderer with derived auth info',
+      );
+    });
+
+    // The realm verifies a session token by comparing its permissions claim
+    // against the union of the realm's `users` and `*` grants with the
+    // caller's own row, and rejects any difference as a PermissionMismatch.
+    // These cover the mint side of that contract.
+    async function mintedPermissions(
+      rows: any[],
+      user: string,
+      realm: string,
+    ): Promise<string[] | undefined> {
+      let { prerenderer, renderCalls } = makePrerenderer();
+      let dbAdapter = makeDbAdapter(rows);
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        '/_prerender-card',
+        jwtMiddleware(realmSecretSeed, dbAdapter),
+        handlePrerenderProxy({
+          kind: 'card',
+          prerenderer,
+          dbAdapter,
+          matrixURL,
+          createPrerenderAuth,
+        }),
+      );
+      app.use(router.routes());
+
+      let token = createJWT(
+        { user, sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let response = await supertest(app.callback())
+        .post('/_prerender-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ data: { attributes: { realm, url: `${realm}card` } } });
+      if (response.status !== 201) {
+        return undefined;
+      }
+      let sessions = JSON.parse(renderCalls[0]!.args.auth);
+      return verifyJWT(sessions[realm], realmSecretSeed).permissions;
+    }
+
+    test('mints the union of the wildcard grant and the caller row', async function (assert) {
+      let realm = 'http://example.test/';
+      let permissions = await mintedPermissions(
+        [
+          { username: '*', read: true, write: false, realm_owner: false },
+          {
+            username: '@someone:localhost',
+            read: false,
+            write: true,
+            realm_owner: false,
+          },
+        ],
+        '@someone:localhost',
+        realm,
+      );
+
+      assert.deepEqual(
+        permissions?.sort(),
+        ['read', 'write'],
+        "wildcard read is unioned with the row's write",
+      );
+    });
+
+    test('mints the wildcard grant for a caller with no row of their own', async function (assert) {
+      let realm = 'http://example.test/';
+      let permissions = await mintedPermissions(
+        [{ username: '*', read: true, write: false, realm_owner: false }],
+        '@nobody:localhost',
+        realm,
+      );
+
+      assert.deepEqual(
+        permissions,
+        ['read'],
+        'a public realm is reachable without an explicit grant',
+      );
+    });
+
+    test('mints the union of the users grant and the caller row for a registered matrix user', async function (assert) {
+      let realm = 'http://example.test/';
+      let profileRequests: string[] = [];
+      let realFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: any, init?: any) => {
+        let url = typeof input === 'string' ? input : input.url;
+        if (url.includes('/_matrix/client/v3/profile/')) {
+          profileRequests.push(url);
+          return new Response(JSON.stringify({ displayname: 'Someone' }), {
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return realFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        let permissions = await mintedPermissions(
+          [
+            { username: 'users', read: true, write: false, realm_owner: false },
+            {
+              username: '@someone:localhost',
+              read: false,
+              write: true,
+              realm_owner: false,
+            },
+          ],
+          '@someone:localhost',
+          realm,
+        );
+
+        assert.deepEqual(
+          permissions?.sort(),
+          ['read', 'write'],
+          "the users grant is unioned with the row's write",
+        );
+        assert.strictEqual(
+          profileRequests.length,
+          1,
+          'resolves the users grant against the homeserver once',
+        );
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    });
+
+    test('withholds the users grant from an unregistered matrix user', async function (assert) {
+      let realm = 'http://example.test/';
+      let realFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: any, init?: any) => {
+        let url = typeof input === 'string' ? input : input.url;
+        if (url.includes('/_matrix/client/v3/profile/')) {
+          return new Response('{}', { status: 404 });
+        }
+        return realFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        let permissions = await mintedPermissions(
+          [
+            { username: 'users', read: true, write: false, realm_owner: false },
+            {
+              username: '@someone:localhost',
+              read: false,
+              write: true,
+              realm_owner: false,
+            },
+          ],
+          '@someone:localhost',
+          realm,
+        );
+
+        assert.deepEqual(
+          permissions,
+          ['write'],
+          "only the caller's own row survives",
+        );
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    });
+
+    test('mints the caller row verbatim when the realm has no shared grants', async function (assert) {
+      let realm = 'http://example.test/';
+      let permissions = await mintedPermissions(
+        [
+          {
+            username: '@someone:localhost',
+            read: true,
+            write: true,
+            realm_owner: false,
+          },
+        ],
+        '@someone:localhost',
+        realm,
+      );
+
+      assert.deepEqual(
+        permissions,
+        ['read', 'write'],
+        'the union of a lone row is the row itself',
       );
     });
   });
