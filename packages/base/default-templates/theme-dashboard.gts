@@ -364,7 +364,7 @@ export class CardContainerCss extends GlimmerComponent<{
       '--boxel-subheading',
       '--boxel-section-heading',
       '--boxel-caption',
-      '--boxel-label',
+      '--boxel-ui-label',
       '--boxel-eyebrow',
     ]);
   }
@@ -1205,9 +1205,6 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
         .theme-dashboard-header-title {
           margin-bottom: var(--boxel-sp-sm);
           color: var(--foreground);
-        }
-        .theme-dashboard-header-tagline {
-          max-width: 48rem;
         }
         .theme-dashboard-version-edit-field {
           margin-top: var(--boxel-sp);

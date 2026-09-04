@@ -445,6 +445,9 @@ class Embedded extends Component<typeof ThemeVarField> {
   <template>
     {{#each @model.fieldGroups as |group|}}
       <h4 class='field-group-title'>{{group.title}}</h4>
+      {{#if group.description}}
+        <p class='field-group-description'>{{group.description}}</p>
+      {{/if}}
       <FieldGrid class='field-group-grid' @fields={{group.fields}} />
     {{/each}}
     <style scoped>
@@ -454,6 +457,11 @@ class Embedded extends Component<typeof ThemeVarField> {
           color: var(--muted-foreground);
           font-weight: 500;
           font-size: var(--boxel-font-size);
+        }
+        .field-group-description {
+          margin: calc(-1 * var(--boxel-sp-xs)) 0 var(--boxel-sp);
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
         }
         .field-group-grid {
           margin-bottom: var(--boxel-sp-2xl);
@@ -1170,6 +1178,8 @@ export default class ThemeVarField extends FieldDef {
       },
       {
         title: 'Surface Colors',
+        description:
+          'Neutral backgrounds beyond the card: the workspace ground, sunken wells, hover and selected states, zebra rows, and tooltips.',
         fields: getFieldGroup(this.surfaceColors, this),
       },
       {
@@ -1178,6 +1188,8 @@ export default class ThemeVarField extends FieldDef {
       },
       {
         title: 'Ink Colors',
+        description:
+          "Each hue used as text or icon color on a neutral surface, as opposed to the -foreground color used on the hue's own fill.",
         fields: getFieldGroup(this.inkColors, this),
       },
       {
@@ -1416,6 +1428,10 @@ export default class ThemeVarField extends FieldDef {
 
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Surfaces</h4>
+          <p class='theme-var-edit-hint'>
+            Neutral backgrounds beyond the card: the workspace ground, sunken
+            wells, hover and selected states, zebra rows, and tooltips.
+          </p>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
             <FieldContainer
               @label='Canvas'
