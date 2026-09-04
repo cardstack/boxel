@@ -7,7 +7,7 @@ import {
   createDrainSubscriber,
   decideHostShellRecycle,
   raceAgainstDrain,
-  shouldRerenderForShellChange,
+  shouldRerenderForStaleShell,
   stampHostShellTokens,
 } from '../prerender/prerender-app.ts';
 
@@ -60,7 +60,23 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('shouldRerenderForShellChange', function () {
+  module('shouldRerenderForStaleShell', function () {
+    // A pool on the current shell for the whole render, and one that is not.
+    // Most cases below differ only in which of these they pass, because that
+    // is the only thing the decision reads besides the error itself.
+    const CURRENT = 'b778fe76';
+    const OUTGOING = 'babf3612';
+    const onCurrentShell = {
+      warmedAtStart: CURRENT,
+      warmedAtCompletion: CURRENT,
+      reportedAtCompletion: CURRENT,
+    };
+    const poolBehind = {
+      warmedAtStart: OUTGOING,
+      warmedAtCompletion: OUTGOING,
+      reportedAtCompletion: CURRENT,
+    };
+
     // The message a page throws when it resolves current realm source against
     // a bundle that predates the export — the shape both production poisonings
     // took, minted in `package-shim-handler`.
@@ -79,69 +95,104 @@ module(basename(import.meta.filename), function () {
 
     test('a module error under a changed shell is re-rendered', function (assert) {
       assert.true(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: visitResponse(MISSING_EXPORT),
-          shellAtStart: 'babf3612',
-          shellAtCompletion: 'b778fe76',
+          ...poolBehind,
         }),
       );
     });
 
-    test("the same error under a steady shell is the card's own", function (assert) {
+    test("the same error on a pool that is current is the card's own", function (assert) {
       assert.false(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: visitResponse(MISSING_EXPORT),
-          shellAtStart: 'b778fe76',
-          shellAtCompletion: 'b778fe76',
+          ...onCurrentShell,
         }),
-        'nothing moved under the render, so the failure describes the card',
+        'the bundle that rendered it is the one being served, so the failure describes the card',
       );
     });
 
-    test('a changed shell alone does not re-render', function (assert) {
+    // The case a token-move test cannot express, and the one that poisons
+    // rows: the token moved before this render began, so nothing moves under
+    // it, while the recycle it triggered is still running or has failed. The
+    // page is on the outgoing bundle for the whole render.
+    test('a pool that never caught up is stale even though nothing moved', function (assert) {
+      assert.true(
+        shouldRerenderForStaleShell({
+          response: visitResponse(MISSING_EXPORT),
+          ...poolBehind,
+        }),
+      );
+    });
+
+    test('a recycle landing mid-render leaves the render suspect', function (assert) {
+      assert.true(
+        shouldRerenderForStaleShell({
+          response: visitResponse(MISSING_EXPORT),
+          warmedAtStart: OUTGOING,
+          warmedAtCompletion: CURRENT,
+          reportedAtCompletion: CURRENT,
+        }),
+        'the page it started on was the outgoing one, however current the pool is by the end',
+      );
+    });
+
+    test('a token learned mid-render outruns the pool', function (assert) {
+      assert.true(
+        shouldRerenderForStaleShell({
+          response: visitResponse(MISSING_EXPORT),
+          warmedAtStart: CURRENT,
+          warmedAtCompletion: CURRENT,
+          reportedAtCompletion: 'c0ffee00',
+        }),
+        'a newly reported token the pool has not been re-warmed against is a stale pool',
+      );
+    });
+
+    test('a stale pool alone does not re-render', function (assert) {
       assert.false(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: visitResponse(),
-          shellAtStart: 'babf3612',
-          shellAtCompletion: 'b778fe76',
+          ...poolBehind,
         }),
-        'a render that straddled a deploy and succeeded is left alone',
+        'a render on a stale pool that succeeded is left alone',
       );
       assert.false(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: visitResponse('Card is not found at http://example/x'),
-          shellAtStart: 'babf3612',
-          shellAtCompletion: 'b778fe76',
+          ...poolBehind,
         }),
-        'only module resolution is suspect when the bundle changes',
+        'only module resolution is suspect when the pool is behind',
       );
     });
 
     // The deploy shape this exists for: the train restarts prerender before the
     // realm server, so a server booting mid-train warms against the outgoing
-    // bundle and the first token it hears is the new one. On such a server
-    // there is no `X -> Y` to observe, so excluding `undefined -> X` excluded
-    // the whole boot window — the same transition `decideHostShellRecycle`
-    // treats as a definite change.
-    test('the first token learned mid-render counts as a change', function (assert) {
+    // bundle and the first token it hears is the new one. Until the recycle
+    // that token triggers completes, the pool has not been re-warmed against
+    // anything this server has heard — the same transition
+    // `decideHostShellRecycle` treats as a definite change.
+    test('a pool never re-warmed against a known token is stale', function (assert) {
       assert.true(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: visitResponse(MISSING_EXPORT),
-          shellAtStart: undefined,
-          shellAtCompletion: 'b778fe76',
+          warmedAtStart: undefined,
+          warmedAtCompletion: undefined,
+          reportedAtCompletion: CURRENT,
         }),
       );
     });
 
     test('a server that has heard no token at all is left alone', function (assert) {
-      for (let atStart of [undefined, 'babf3612']) {
+      for (let warmed of [undefined, OUTGOING]) {
         assert.false(
-          shouldRerenderForShellChange({
+          shouldRerenderForStaleShell({
             response: visitResponse(MISSING_EXPORT),
-            shellAtStart: atStart,
-            shellAtCompletion: undefined,
+            warmedAtStart: warmed,
+            warmedAtCompletion: warmed,
+            reportedAtCompletion: undefined,
           }),
-          `(${atStart} -> undefined) says nothing about which bundle rendered`,
+          `warmed=${warmed} with nothing reported says nothing about which bundle rendered`,
         );
       }
     });
@@ -153,22 +204,20 @@ module(basename(import.meta.filename), function () {
     test('the error counts from any sub-response that gets persisted', function (assert) {
       for (let key of ['fileRender', 'fileExtract'] as const) {
         assert.true(
-          shouldRerenderForShellChange({
+          shouldRerenderForStaleShell({
             response: {
               [key]: { error: { error: { message: MISSING_EXPORT } } },
             } as unknown as RenderVisitResponse,
-            shellAtStart: 'babf3612',
-            shellAtCompletion: 'b778fe76',
+            ...poolBehind,
           }),
           `${key}.error is checked`,
         );
         assert.false(
-          shouldRerenderForShellChange({
+          shouldRerenderForStaleShell({
             response: {
               [key]: { error: { error: { message: 'Card is not found' } } },
             } as unknown as RenderVisitResponse,
-            shellAtStart: 'babf3612',
-            shellAtCompletion: 'b778fe76',
+            ...poolBehind,
           }),
           `${key} is still only suspect for module resolution`,
         );
@@ -177,12 +226,11 @@ module(basename(import.meta.filename), function () {
 
     test('the error also counts when it made the page unusable', function (assert) {
       assert.true(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: {
             pageUnusableError: { error: { message: MISSING_EXPORT } },
           } as unknown as RenderVisitResponse,
-          shellAtStart: 'babf3612',
-          shellAtCompletion: 'b778fe76',
+          ...poolBehind,
         }),
       );
     });
@@ -192,7 +240,7 @@ module(basename(import.meta.filename), function () {
     // `additionalErrors` — and the row is persisted with it either way.
     test('the error counts when it is only among the merged console errors', function (assert) {
       assert.true(
-        shouldRerenderForShellChange({
+        shouldRerenderForStaleShell({
           response: {
             card: {
               error: {
@@ -203,8 +251,7 @@ module(basename(import.meta.filename), function () {
               },
             },
           } as unknown as RenderVisitResponse,
-          shellAtStart: 'babf3612',
-          shellAtCompletion: 'b778fe76',
+          ...poolBehind,
         }),
       );
     });
