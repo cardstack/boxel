@@ -142,6 +142,9 @@ cpSync(
 );
 cpSync(join(packageRoot, 'public/icon.svg'), join(outputRoot, 'icon.svg'));
 cpSync(iframeBuild, join(outputRoot, 'iframe'), { recursive: true });
+// This target is the unlisted comparison site, not the public Pages build.
+// Override the canonical site's permissive policy after copying its assets.
+writeFileSync(join(outputRoot, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
 // Native browser modules must not pass through Boxel's realm-module compiler,
 // which rewrites fetch to import.meta.loader.fetch. .mjs is served verbatim
 // with a JavaScript MIME type; keep Vite's chunk graph intact when renaming.

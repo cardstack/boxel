@@ -12,6 +12,13 @@ const realm = join(packageRoot, 'dist-realm');
 const readJson = (path) => JSON.parse(readFileSync(join(realm, path), 'utf8'));
 const manifest = readJson('gallery-manifest.generated');
 
+test('the unlisted comparison realm asks crawlers not to index it', () => {
+  assert.equal(
+    readFileSync(join(realm, 'robots.txt'), 'utf8'),
+    'User-agent: *\nDisallow: /\n',
+  );
+});
+
 test('the generated realm covers the canonical 45-demo catalog exactly once', () => {
   assert.equal(manifest.demoCount, 45);
   assert.equal(new Set(manifest.ids).size, 45);
