@@ -607,6 +607,31 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('adding an instance for persistence errors while persistence is blocked', async function (assert) {
+    // The prerender app raises `__boxelPrerenderApp` to block every store's
+    // writes. An instance handed back from that block carries no id, which is
+    // indistinguishable from a saved one to every caller — so a caller that
+    // asked for persistence gets an error instead, and only a `doNotPersist`
+    // caller gets the in-memory instance it asked for.
+    (globalThis as any).__boxelPrerenderApp = true;
+    try {
+      await assert.rejects(
+        storeService.add(new PersonDef({ name: 'Andrea' })),
+        /persistence is blocked/,
+        'a persisting add reports the blocked write',
+      );
+
+      let instance = new PersonDef({ name: 'Mango' });
+      assert.strictEqual(
+        await storeService.add(instance, { doNotPersist: true }),
+        instance,
+        'a memory-only add is served as asked',
+      );
+    } finally {
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
+  });
+
   test('restoring sessions from storage skips the re-walk when the session blob is unchanged', function (assert) {
     // `restoreSessionsFromStorage` is synchronous, so the walk-count delta
     // measured immediately around each call is exactly that call's work — other

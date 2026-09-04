@@ -838,6 +838,19 @@ export default class StoreService extends Service implements StoreInterface {
     await this.startAutoSaving(instance);
 
     if (this.renderContextBlocksPersistence()) {
+      // A caller that asked for persistence gets an error rather than the
+      // unpersisted instance. An instance handed back with no id is
+      // indistinguishable from a saved one — `SaveCardTool` reports it as a
+      // success — so returning it turns a blocked write into a wrong answer
+      // instead of a failure. Only `doNotPersist` callers wanted the
+      // in-memory instance, and they still get it.
+      if (!opts?.doNotPersist) {
+        throw new Error(
+          `cannot persist instance ${
+            instance.id ?? instance[localIdSymbol]
+          }: persistence is blocked in this render context`,
+        );
+      }
       return instance;
     }
 
