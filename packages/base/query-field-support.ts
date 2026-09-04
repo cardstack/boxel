@@ -68,6 +68,11 @@ interface QueryFieldState {
   // against the identity the search resource holds is what lets a document
   // fetched after the resource started hand it a fresher result set.
   seedIdentity?: string;
+  // The index generation the owner's document was serialized at, off
+  // `meta.generation`. What the resource compares against its own result set to
+  // order the two, so a document read before a search that has since completed
+  // does not overwrite it.
+  seedGeneration?: number;
   // A document has been captured that no resource has been offered yet. Set by
   // every capture and cleared the first time a read acts on it, so a running
   // resource is offered a result set once per document fetched for the owner.
@@ -704,6 +709,14 @@ export function captureQueryFieldSeedData(
       ? seedTotal
       : undefined;
   fieldState.seedIdentity = seedIdentityFor(fieldState);
+  // The generation the row this document was serialized from was written at.
+  // Absent where the serialization did not come off the index — a freshly built
+  // resource that was never persisted — in which case the field's result set is
+  // ordered by identity alone, as it was before any generation was available.
+  let generation = (resource.meta as { generation?: unknown } | undefined)
+    ?.generation;
+  fieldState.seedGeneration =
+    typeof generation === 'number' ? generation : undefined;
   fieldState.seedHandoverPending = true;
 }
 
@@ -754,6 +767,7 @@ function queryFieldSeed(fieldState: QueryFieldState) {
   return {
     cards: seedRecords,
     identity: fieldState.seedIdentity,
+    generation: fieldState.seedGeneration,
     searchURL: seedSearchURL ?? undefined,
     realms: fieldState.seedRealms,
     queryErrors: fieldState.seedErrors,

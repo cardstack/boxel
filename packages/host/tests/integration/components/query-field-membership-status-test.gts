@@ -315,24 +315,38 @@ module('Integration | query-field relationship status', function (hooks) {
       'the field resolves to the two cards the query matches',
     );
 
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      2,
+      'and reports the count the indexer resolved it under',
+    );
+
     // Start from the document the realm actually serves — the server resolves
     // query fields at read time, so this carries `matches` already resolved —
-    // and splice in a third member. The spliced card claims a name the query
-    // matches, while the copy the realm indexed does not, so a search can never
-    // return it: the field can only hold it if this document put it there. (It
-    // has to claim a matching name because the resource reconciles its result
-    // set against the filter and drops rows that fail it.)
+    // and splice in a third member.
     let hostDoc = await fetchHostDoc();
     spliceThirdMember(hostDoc);
 
     await updateFromSerialized(host as any, hostDoc);
     await settled();
 
+    // The count is what proves the document reached the resource. Membership
+    // cannot: deserializing the document deposits the spliced member in the
+    // store, and a live search's result set is reconciled against store
+    // residency, so the client-side merge adds a resident matching card to the
+    // displayed set whether or not anything superseded the result set. The
+    // match count comes off the resource's own meta, which only an applied
+    // result set moves.
     let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.totalMatchCount,
+      3,
+      'the newer document supersedes the result set the resource was holding',
+    );
     assert.strictEqual(
       matches.membership?.length,
       3,
-      'the newer document supersedes the result set the resource was holding',
+      'and the field surfaces all three members',
     );
     assert.true(
       matches.membership?.some(
@@ -340,7 +354,7 @@ module('Integration | query-field relationship status', function (hooks) {
           member.kind === 'present' &&
           member.reference.endsWith('Person/three'),
       ),
-      'including the card no live search for this query could return',
+      'including the one the document introduced',
     );
   });
 
@@ -384,6 +398,45 @@ module('Integration | query-field relationship status', function (hooks) {
     );
   });
 
+  test('a document resolved before the result set the field holds is declined', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    // Derived from whatever the realm stamped, so the two documents order
+    // against each other and against the one the field already resolved from,
+    // whether or not this harness stamps a generation at all.
+    let hostDoc = await fetchHostDoc();
+    let newerGeneration = (hostDoc.data.meta.generation ?? 0) + 10;
+    hostDoc.data.meta.generation = newerGeneration;
+    spliceThirdMember(hostDoc);
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      3,
+      'the field holds the set that document resolved',
+    );
+
+    // A read that was already in flight when the newer one landed. It is not
+    // news, and taking it would walk the field backwards — the failure the
+    // handover has to avoid, because it has no other way to tell a document
+    // that arrived late from one that resolved late.
+    let staleDoc = await fetchHostDoc();
+    staleDoc.data.meta.generation = newerGeneration - 1;
+
+    await updateFromSerialized(host as any, staleDoc);
+    await settled();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      3,
+      'the older document does not displace it',
+    );
+  });
+
+  // Guards the gate rather than the handover: it holds trivially where nothing
+  // is handed over at all, and its job is to catch a gate that stops requiring
+  // an indexer-resolved umbrella.
   test('a document that did not resolve the field cannot displace a result set', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
     let host = await loadHost();

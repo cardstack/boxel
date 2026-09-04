@@ -556,6 +556,13 @@ export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
   // field whose match count moved holds the same row and a different
   // answer.
   identity?: string;
+  // The index generation this set was resolved at. Separate from the identity
+  // and doing a different job: the identity says whether two sets differ, this
+  // says which of them is newer. Keeping the generation out of the identity is
+  // deliberate — a realm generation moves on every write anywhere in the realm,
+  // so folding it in would make every set look different from every other and
+  // re-apply answers that had not changed.
+  generation?: number;
   searchURL?: string;
   realms?: string[];
   queryErrors?: Array<{

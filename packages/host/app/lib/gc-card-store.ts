@@ -98,6 +98,12 @@ type StoreHooks = {
             // so a hop that forwards the seed field by field rather than whole
             // would drop it and restore exactly the inference it prevents.
             totalUnknown?: boolean;
+            // Here for the same reason: the identity is what stops a result set
+            // being re-applied over one the resource already holds, and a hop
+            // that dropped it would put that back. The generation is what
+            // orders the two when they do differ.
+            identity?: string;
+            generation?: number;
           }
         | undefined;
     },
