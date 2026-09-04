@@ -93,6 +93,14 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     // tests also raise around in-browser index renders that run alongside an
     // interactive app whose saves must keep their indexed echo.
     (globalThis as any).__boxelHeadlessCommand = true;
+    // A command writes, so the prerender app's blanket persistence block must
+    // not be in force on this route. The pool can retag a tab that has served
+    // a card render onto a command affinity, and the render route is left by
+    // an in-app transition whose exit hooks run *after* this hook — so this
+    // route drops the flag itself rather than relying on the departing route's
+    // teardown to have already run. Writes from here stay deadlock-safe
+    // through `__boxelHeadlessCommand`, which indexes them deferred.
+    (globalThis as any).__boxelPrerenderApp = undefined;
     registerDestructor(this, () => {
       (globalThis as any).__boxelHeadlessCommand = undefined;
       if (isTesting()) {

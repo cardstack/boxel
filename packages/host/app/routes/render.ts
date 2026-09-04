@@ -199,6 +199,14 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderStageSetAt = undefined;
     (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
+    // `__boxelPrerenderApp` lives exactly as long as this route is entered.
+    // `beforeModel` raises it again ahead of every visit's model work, so no
+    // render ever runs without the persistence block in force; bounding it
+    // here is what keeps a tab that leaves the render tree from carrying the
+    // block into work that must write. A prerender pool tab can be retagged
+    // from a realm affinity onto a command affinity, and a store still
+    // holding this flag discards every write it is handed.
+    (globalThis as any).__boxelPrerenderApp = undefined;
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
@@ -986,6 +994,7 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__renderModel = undefined;
       (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
+      (globalThis as any).__boxelPrerenderApp = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
       (globalThis as any).__boxelLastAttemptedRenderCardId = undefined;
     });
