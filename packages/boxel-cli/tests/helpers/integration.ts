@@ -7,6 +7,7 @@ import {
   DRAIN_BUDGET_MS,
   DB_CLOSE_BUDGET_MS,
 } from './fixture-budgets.ts';
+import { withBudget } from './with-budget.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import { runBoxel } from './run-boxel.ts';
 import {
@@ -388,35 +389,6 @@ export function getTestDbAdapter(): PgAdapter | undefined {
 // throwaway test cluster, in exchange for ports that are free when the next
 // suite starts.
 
-// Resolves true if the step finished, false if the budget expired or it threw.
-// Never rejects: a teardown failure must not replace whatever the suite was
-// reporting, and the timer is unref'd so a step still running cannot be the
-// reason the process stays up.
-async function withBudget(
-  label: string,
-  step: Promise<unknown>,
-  budgetMs: number,
-): Promise<boolean> {
-  let timer: NodeJS.Timeout | undefined;
-  let finished = await Promise.race([
-    step.then(
-      () => true,
-      (e: unknown) => {
-        console.warn(`[teardown] ${label} failed: ${String(e)}`);
-        return false;
-      },
-    ),
-    new Promise<false>((resolve) => {
-      timer = setTimeout(() => resolve(false), budgetMs);
-      timer.unref();
-    }),
-  ]);
-  if (timer) {
-    clearTimeout(timer);
-  }
-  return finished;
-}
-
 export async function stopTestRealmServer(): Promise<void> {
   // A boot whose caller stopped waiting for it is still going to publish a
   // listening server into the module state below, so teardown waits for it
@@ -437,32 +409,47 @@ export async function stopTestRealmServer(): Promise<void> {
     publisher = undefined;
   }
   if (runner) {
-    let drained = await withBudget(
+    let drain = await withBudget(
       'queue runner drain',
       runner.destroy(),
       DRAIN_BUDGET_MS,
     );
     runner = undefined;
-    if (!drained) {
+    // Same consequence either way — a job may still be running against this
+    // file's database — but not the same cause, and the log is the only place
+    // that distinction survives. An expired budget is the mechanism working;
+    // a rejection is a shutdown path that broke.
+    if (drain === 'expired') {
       console.warn(
         `[teardown] a claimed job outlived its ${DRAIN_BUDGET_MS / 1000}s drain ` +
           `budget and is left running against ${process.env.PGDATABASE}. Queue or ` +
           `database errors logged past this point belong to the suite that just ended.`,
       );
+    } else if (drain === 'failed') {
+      console.warn(
+        `[teardown] the queue runner did not shut down cleanly, so a job may ` +
+          `still be running against ${process.env.PGDATABASE}. Queue or database ` +
+          `errors logged past this point belong to the suite that just ended.`,
+      );
     }
   }
   if (dbAdapter) {
-    let closed = await withBudget(
+    let close = await withBudget(
       'database pool close',
       dbAdapter.close(),
       DB_CLOSE_BUDGET_MS,
     );
     dbAdapter = undefined;
-    if (!closed) {
+    if (close === 'expired') {
       console.warn(
         `[teardown] the pool for ${process.env.PGDATABASE} still had clients ` +
           `checked out after ${DB_CLOSE_BUDGET_MS / 1000}s; its connections are ` +
           `left to the process exit.`,
+      );
+    } else if (close === 'failed') {
+      console.warn(
+        `[teardown] the pool for ${process.env.PGDATABASE} did not close; its ` +
+          `connections are left to the process exit.`,
       );
     }
   }
