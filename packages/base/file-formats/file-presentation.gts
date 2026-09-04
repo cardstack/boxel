@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import FileIcon from '@cardstack/boxel-icons/file';
 
 import type { ComponentLike } from '@glint/template';
+import { now } from '../helpers/clock';
 
 // Structurally the same as card-api's `CardOrFieldTypeIcon`, restated here so
 // the shells need nothing from card-api — not even a type. card-api imports the
@@ -129,32 +130,12 @@ export function shortDate(value?: Date | string | number | null): string {
   });
 }
 
-// The instant `relativeDate` measures from. Unset, it is the real clock.
-//
-// A test pins it so that what a card renders is a function of the file's
-// timestamp alone, rather than of when the suite happened to run. Without
-// that, a fixed timestamp still walks through the thresholds below as real
-// time passes — daily while a file is under a month old — so two Percy builds
-// of identical code disagree, and the snapshot has to be hidden from
-// comparison to keep the peace. Pinning the clock keeps the value visible, so
-// a change in how it is formatted still shows up as a diff.
-//
-// Read off `globalThis` rather than taken as an argument because it has to
-// reach card code through whichever loader instance rendered it, which the
-// call site does not know about.
-function currentTime(): number {
-  let pinned = (globalThis as { __boxelNow?: unknown }).__boxelNow;
-  return typeof pinned === 'number' && Number.isFinite(pinned)
-    ? pinned
-    : Date.now();
-}
-
 export function relativeDate(value?: Date | string | number | null): string {
   let d = toDate(value);
   if (!d || Number.isNaN(d.getTime())) {
     return '';
   }
-  let days = Math.floor((currentTime() - d.getTime()) / 86400000);
+  let days = Math.floor((now() - d.getTime()) / 86400000);
   if (days < 0) {
     return shortDate(d);
   }

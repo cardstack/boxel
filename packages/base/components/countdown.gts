@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { and, not } from '@cardstack/boxel-ui/helpers';
+import { now } from '../helpers/clock';
 
 interface CountdownConfiguration {
   countdownOptions?: {
@@ -19,7 +20,7 @@ interface CountdownSignature {
 }
 
 export class Countdown extends GlimmerComponent<CountdownSignature> {
-  @tracked currentTime = Date.now();
+  @tracked currentTime = now();
   @tracked isRunning = true;
   private intervalId: number | null = null;
 
@@ -37,7 +38,7 @@ export class Countdown extends GlimmerComponent<CountdownSignature> {
     if (this.intervalId) return;
     this.intervalId = window.setInterval(() => {
       if (this.isRunning) {
-        this.currentTime = Date.now();
+        this.currentTime = now();
       }
     }, 1000);
   }
@@ -56,7 +57,7 @@ export class Countdown extends GlimmerComponent<CountdownSignature> {
 
   @action
   resetTimer() {
-    this.currentTime = Date.now();
+    this.currentTime = now();
     this.isRunning = true;
   }
 

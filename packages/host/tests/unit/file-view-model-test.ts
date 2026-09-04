@@ -24,6 +24,8 @@ module('Unit | file-formats', function (hooks) {
   let fileViewModel: typeof FileViewModelModule.fileViewModel;
   let shortDate: typeof FilePresentationModule.shortDate;
   let relativeDate: typeof FilePresentationModule.relativeDate;
+  let now: () => number;
+  let nowDate: () => Date;
   let FITTED_TEXT_CHARACTER_BUDGET: number;
   let FITTED_TEXT_LINE_BUDGET: number;
   let FITTED_WAVEFORM_BAR_BUDGET: number;
@@ -41,6 +43,11 @@ module('Unit | file-formats', function (hooks) {
     );
     ({ profileForFile, contentTypeForFile, extensionOfFile } = profileModule);
     ({ shortDate, relativeDate } = presentationModule);
+    let clockModule = await loader.import<{
+      now: () => number;
+      nowDate: () => Date;
+    }>('@cardstack/base/helpers/clock');
+    ({ now, nowDate } = clockModule);
     ({
       fileViewModel,
       FITTED_TEXT_CHARACTER_BUDGET,
@@ -443,6 +450,22 @@ module('Unit | file-formats', function (hooks) {
           relativeDate(PINNED + 10 * DAY),
           shortDate(PINNED + 10 * DAY),
         );
+      });
+
+      test('is the same instant every card-side reader sees', function (assert) {
+        assert.strictEqual(now(), PINNED * 1000, 'now() reports the pin');
+        assert.strictEqual(
+          nowDate().getTime(),
+          PINNED * 1000,
+          'nowDate() reports the same instant',
+        );
+        // The property the whole seam exists for: two reads separated by real
+        // work agree, so anything rendered from them can be compared.
+        let first = now();
+        for (let i = 0; i < 1e5; i++) {
+          /* burn enough wall-clock that an unpinned clock would move */
+        }
+        assert.strictEqual(now(), first, 'repeated reads do not advance');
       });
 
       test('falls back to the real clock when the pin is not a number', function (assert) {

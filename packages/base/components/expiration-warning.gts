@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Button } from '@cardstack/boxel-ui/components';
 import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';
+import { now } from '../helpers/clock';
 
 interface ExpirationConfiguration {
   expirationOptions?: {
@@ -17,13 +18,13 @@ interface ExpirationSignature {
 }
 
 export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
-  @tracked currentTime = Date.now();
+  @tracked currentTime = now();
   private intervalId: number | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
     this.intervalId = window.setInterval(() => {
-      this.currentTime = Date.now();
+      this.currentTime = now();
     }, 60000); // Update every minute
   }
 
