@@ -21,6 +21,7 @@ import {
   retryPolicyForPath,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
+  type PrerenderEndpoint,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity.ts';
@@ -975,7 +976,7 @@ export function buildPrerenderManagerApp(options?: {
 
   async function proxyPrerenderRequest(
     ctxt: Koa.Context,
-    pathSuffix: string,
+    pathSuffix: PrerenderEndpoint,
     label: string,
   ) {
     // Same source as the client's own retry loop: the two enforce different
@@ -1198,8 +1199,18 @@ export function buildPrerenderManagerApp(options?: {
           return;
         }
         const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
+        // Only a request that can still be retried somewhere is worth
+        // abandoning to shorten a drain. A dispatched command has no retry
+        // left on either layer, so aborting it here would not defer the work —
+        // it would cancel a command that may already be creating cards and
+        // hand the caller a failure nothing will pick up. The proxy timeout
+        // still bounds how long this can hold the drain open, and the manager
+        // keeps its listener alive after the signal rather than racing to
+        // close (see `shutdown` in manager-server.ts).
         const drainPoll =
-          options?.isDraining && proxyTimeoutMs > 50
+          retryPolicy === 'any-failure' &&
+          options?.isDraining &&
+          proxyTimeoutMs > 50
             ? setInterval(
                 () => {
                   if (options.isDraining!()) {

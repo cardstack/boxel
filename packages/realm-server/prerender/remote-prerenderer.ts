@@ -22,6 +22,7 @@ import {
   resolvePrerenderManagerRequestTimeoutMs,
   retryPolicyForPath,
   sanitizePrerenderJobId,
+  type PrerenderEndpoint,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
@@ -71,7 +72,7 @@ export function createRemotePrerenderer(
   const requestTimeoutMs = resolvePrerenderManagerRequestTimeoutMs();
 
   async function requestWithRetry<T>(
-    path: string,
+    path: PrerenderEndpoint,
     type: string,
     attributes: {
       affinityType: AffinityType;

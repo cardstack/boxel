@@ -2120,6 +2120,56 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('lets a dispatched command finish when draining begins mid-flight', async function (assert) {
+      // The counterpart of the render case below. A render aborted at drain is
+      // deferred — some layer retries it. A dispatched command is not: neither
+      // layer will retry it, so abandoning it cancels work that may already
+      // have created cards and hands the caller a failure nobody picks up.
+      let draining = false;
+      let { app } = buildPrerenderManagerApp({ isDraining: () => draining });
+      let request: SuperTest<Test> = supertest(app.callback());
+      // Handshake rather than sleeps: the command must provably be running on
+      // the server before draining starts, or the request is turned away
+      // before dispatch and the test proves nothing about the in-flight case.
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+      let completed = 0;
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        started.fulfill();
+        await release.promise;
+        completed++;
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({
+          data: { attributes: { status: 'ready' } },
+        });
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      // `.then` is what dispatches a supertest request.
+      let resPromise = request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'))
+        .then((r) => r);
+
+      await started.promise;
+      draining = true;
+      // Long enough that a drain poll, were it armed, would have aborted this
+      // several times over at its <=100ms interval.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      release.fulfill();
+
+      let res = await resPromise;
+      assert.strictEqual(res.status, 201, 'the caller gets the result');
+      assert.strictEqual(completed, 1, 'the command ran to completion');
+    });
+
     test('returns draining when manager starts draining during an in-flight proxy', async function (assert) {
       let draining = false;
       let { app } = buildPrerenderManagerApp({ isDraining: () => draining });

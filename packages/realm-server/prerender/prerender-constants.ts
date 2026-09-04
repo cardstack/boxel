@@ -164,18 +164,33 @@ export const PRERENDER_DISPATCH_DELIVERED = 'delivered';
 // never reached a prerender server.
 export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
 
-// The policy for each prerender endpoint, read by both layers that retry —
-// the client's per-request loop and the manager's failover across servers.
-// They enforce different halves of the same guarantee, so a request type
-// listed on one side and forgotten on the other would keep retrying through
-// the other half in silence; naming it once is what makes that impossible.
-// An endpoint absent here is a pure read.
-const RETRY_POLICY_BY_PATH: Record<string, PrerenderRetryPolicy> = {
+// Every endpoint that either retrying layer can address. Both take this as
+// their path parameter, so the map below is exhaustive over it and a new
+// endpoint does not compile until it has declared a policy — the alternative,
+// defaulting an unlisted endpoint, makes forgetting to list one mean "retry
+// everything", which is the single outcome this table exists to prevent.
+export type PrerenderEndpoint =
+  | 'prerender-module'
+  | 'prerender-visit'
+  | 'prerender-screenshot'
+  | 'run-command';
+
+// The policy for each endpoint, read by both layers that retry — the client's
+// per-request loop and the manager's failover across servers. They enforce
+// different halves of the same guarantee, so an endpoint given one policy on
+// one side and another on the other would keep retrying through the remaining
+// half in silence; naming it once is what makes that impossible.
+const RETRY_POLICY_BY_PATH: Record<PrerenderEndpoint, PrerenderRetryPolicy> = {
+  'prerender-module': 'any-failure',
+  'prerender-visit': 'any-failure',
+  'prerender-screenshot': 'any-failure',
   'run-command': 'only-when-undelivered',
 };
 
-export function retryPolicyForPath(path: string): PrerenderRetryPolicy {
-  return RETRY_POLICY_BY_PATH[path] ?? 'any-failure';
+export function retryPolicyForPath(
+  path: PrerenderEndpoint,
+): PrerenderRetryPolicy {
+  return RETRY_POLICY_BY_PATH[path];
 }
 
 // Network error codes that mean no connection to the peer was ever
