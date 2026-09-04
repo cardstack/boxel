@@ -3,6 +3,13 @@ import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { ChatCompletionStreamParams } from 'openai/lib/ChatCompletionStream';
 import { readRealmFileTool } from './read-realm-file.ts';
 
+// The OpenAI request shape plus the OpenRouter-only options we set. OpenRouter
+// accepts and ignores unknown fields, and the OpenAI client forwards them.
+export type ChatCompletionRequest = ChatCompletionStreamParams & {
+  usage?: { include: boolean };
+  provider?: { order: string[]; allow_fallbacks: boolean };
+};
+
 // Builds the OpenRouter chat-completion request for one turn from the
 // room-derived prompt parts. Pure: no client, no network, so the exact wire
 // shape is unit-testable.
@@ -13,13 +20,13 @@ export function buildChatCompletionRequest(
   // (delegation configured + a single-human room); the bot never advertises
   // a tool it won't run.
   offerRealmFileRead = false,
-): ChatCompletionStreamParams {
+): ChatCompletionRequest {
   if (!prompt.model) {
     throw new Error('Model is required');
   }
   let model = prompt.model;
 
-  let request: ChatCompletionStreamParams = {
+  let request: ChatCompletionRequest = {
     model,
     messages: prompt.messages as ChatCompletionMessageParam[],
     // A streamed response reports no token counts unless asked. With this
@@ -28,30 +35,30 @@ export function buildChatCompletionRequest(
     // which is why the Responder's end-of-stream detection must never
     // un-set itself on a later chunk (see onChunk).
     stream_options: { include_usage: true },
+    // OpenRouter's usage accounting. On top of the OpenAI-shaped counts above
+    // it adds `prompt_tokens_details.cached_tokens` (the prompt-cache split)
+    // and an inline `cost` to the same trailing usage payload. The inline
+    // cost also lets the chunk handler's preferred billing path run instead
+    // of the slower generation-API fallback.
+    usage: { include: true },
   };
-  // OpenRouter's usage accounting. On top of the OpenAI-shaped counts above
-  // it adds `prompt_tokens_details.cached_tokens` (the prompt-cache split)
-  // and an inline `cost` to the same trailing usage payload. The inline
-  // cost also lets the chunk handler's preferred billing path run instead
-  // of the slower generation-API fallback. Not in the OpenAI types, hence
-  // the cast.
-  (request as Record<string, unknown>).usage = { include: true };
 
   // Prompt caches live per provider, and the router is otherwise free to
   // spread a room's requests across providers — which turns a warm cache
   // prefix into a full-price miss mid-conversation. Bias Anthropic-model
   // requests to Anthropic itself, keeping fallbacks for availability.
   if (model.startsWith('anthropic/')) {
-    (request as Record<string, unknown>).provider = {
+    request.provider = {
       order: ['anthropic'],
       allow_fallbacks: true,
     };
   }
 
-  // The reasoning effort is the room's choice, carried on the active-llm
-  // event from the model's ModelConfiguration card. Models that think by
-  // default get a bounded effort through that card; nothing is invented here,
-  // so models that do not think by default keep thinking off.
+  // Forward whatever reasoning effort the room's active-llm event carries
+  // (sourced from the model's ModelConfiguration card). Nothing is invented
+  // here: when the room carries no effort the parameter is omitted and the
+  // model runs at the provider's default, which for a thinking model means
+  // thinking. Only an explicit null turns reasoning off at the provider.
   if (prompt.reasoningEffort !== undefined) {
     request.reasoning_effort = prompt.reasoningEffort;
   }

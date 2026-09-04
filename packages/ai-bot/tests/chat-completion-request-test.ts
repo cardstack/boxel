@@ -3,7 +3,10 @@ const { module, test, assert } = QUnit;
 
 import type { PromptParts } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
-import { buildChatCompletionRequest } from '../lib/chat-completion-request.ts';
+import {
+  buildChatCompletionRequest,
+  type ChatCompletionRequest,
+} from '../lib/chat-completion-request.ts';
 
 function promptParts(overrides: Partial<PromptParts> = {}): PromptParts {
   return {
@@ -15,9 +18,23 @@ function promptParts(overrides: Partial<PromptParts> = {}): PromptParts {
     toolChoice: 'auto',
     toolsSupported: true,
     reasoningEffort: undefined,
-    pendingCodePatchCorrectnessChecks: [],
     ...overrides,
-  } as PromptParts;
+  };
+}
+
+let tool: Tool = {
+  type: 'function',
+  function: {
+    name: 'doThing',
+    description: 'Does the thing',
+    parameters: { type: 'object', properties: {} },
+  },
+};
+
+function toolNames(request: ChatCompletionRequest) {
+  return request.tools?.map(
+    (t) => (t as { function: { name: string } }).function.name,
+  );
 }
 
 module('chat completion request', () => {
@@ -48,10 +65,7 @@ module('chat completion request', () => {
   });
 
   test('biases anthropic models to the anthropic provider and requests usage', () => {
-    let request = buildChatCompletionRequest(promptParts()) as Record<
-      string,
-      unknown
-    >;
+    let request = buildChatCompletionRequest(promptParts());
     assert.deepEqual(request.provider, {
       order: ['anthropic'],
       allow_fallbacks: true,
@@ -61,48 +75,60 @@ module('chat completion request', () => {
 
     let other = buildChatCompletionRequest(
       promptParts({ model: 'openai/gpt-5.5' }),
-    ) as Record<string, unknown>;
-    assert.strictEqual(other.provider, undefined);
+    );
+    assert.false('provider' in other);
   });
 
-  test('omits tools unless the model supports them and stamps the sender as user', () => {
-    let tool: Tool = {
-      type: 'function',
-      function: {
-        name: 'doThing',
-        description: 'Does the thing',
-        parameters: { type: 'object', properties: {} },
-      },
-    };
+  test('sends the room tools only when the model supports them', () => {
     let withTools = buildChatCompletionRequest(
       promptParts({ tools: [tool], toolChoice: 'auto' }),
-      '@user:localhost',
     );
     assert.deepEqual(withTools.tools, [tool]);
     assert.strictEqual(withTools.tool_choice, 'auto');
-    assert.strictEqual(withTools.user, '@user:localhost');
 
     let unsupported = buildChatCompletionRequest(
       promptParts({ tools: [tool], toolsSupported: false }),
     );
-    assert.strictEqual(unsupported.tools, undefined);
-    assert.strictEqual(unsupported.user, undefined);
+    assert.false('tools' in unsupported);
+    assert.false('tool_choice' in unsupported);
+  });
+
+  test('stamps the sender as user only when one is given', () => {
+    let stamped = buildChatCompletionRequest(promptParts(), '@user:localhost');
+    assert.strictEqual(stamped.user, '@user:localhost');
+
+    let anonymous = buildChatCompletionRequest(promptParts());
+    assert.false('user' in anonymous);
   });
 
   test('offers the readRealmFile tool only when the caller allows it', () => {
     let offered = buildChatCompletionRequest(promptParts(), undefined, true);
-    assert.deepEqual(
-      offered.tools?.map(
-        (t) => (t as { function: { name: string } }).function.name,
-      ),
-      ['readRealmFile'],
-    );
+    assert.deepEqual(toolNames(offered), ['readRealmFile']);
 
     let notOffered = buildChatCompletionRequest(
       promptParts(),
       undefined,
       false,
     );
-    assert.strictEqual(notOffered.tools, undefined);
+    assert.false('tools' in notOffered);
+  });
+
+  test('appends the readRealmFile offer to the room tools', () => {
+    let both = buildChatCompletionRequest(
+      promptParts({ tools: [tool] }),
+      undefined,
+      true,
+    );
+    assert.deepEqual(toolNames(both), ['doThing', 'readRealmFile']);
+    assert.strictEqual(both.tool_choice, 'auto');
+  });
+
+  test('withholds the readRealmFile offer from models without tool support', () => {
+    let unsupported = buildChatCompletionRequest(
+      promptParts({ toolsSupported: false }),
+      undefined,
+      true,
+    );
+    assert.false('tools' in unsupported);
   });
 });
