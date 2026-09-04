@@ -1263,6 +1263,7 @@ export * from './matrix-constants.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './queue.ts';
+export * from './host-shell-generation.ts';
 export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
