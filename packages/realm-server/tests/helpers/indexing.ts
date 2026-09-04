@@ -10,10 +10,24 @@ import type {
 } from '@cardstack/base/matrix-event';
 import { validate as uuidValidate } from 'uuid';
 
+// The expectation for a write whose handler never reads the
+// `X-Boxel-Client-Request-Id` header — the delete path, whose event omits the
+// key. It is satisfied by an absent key and by an explicit `null` alike, so it
+// stays a true statement about that path whichever way the field is spelled.
+export const ABSENT_OR_NULL_CLIENT_REQUEST_ID: unique symbol = Symbol(
+  'absent-or-null-client-request-id',
+);
+
 interface IncrementalIndexEventTestContext {
   assert: Assert;
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
   realm: string;
+  // What the incremental event must carry as `clientRequestId`: a string is
+  // the write's `X-Boxel-Client-Request-Id` echoed back verbatim, `null` is a
+  // handler that read the header and found none, and the sentinel above is a
+  // handler that never reads it. Required, so each caller states which of the
+  // three the write it makes produces.
+  clientRequestId: string | null | typeof ABSENT_OR_NULL_CLIENT_REQUEST_ID;
   type?: string;
   timeout?: number;
 }
@@ -67,7 +81,8 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, type, timeout } = opts;
+  let { assert, getMessagesSince, realm, clientRequestId, type, timeout } =
+    opts;
 
   type = type ?? 'CardDef';
 
@@ -149,6 +164,22 @@ export async function expectIncrementalIndexEvent(
   };
 
   let actualContent = { ...incrementalEventContent };
+  if (clientRequestId === ABSENT_OR_NULL_CLIENT_REQUEST_ID) {
+    assert.ok(
+      actualContent.clientRequestId == null,
+      `incremental event carries no client request id (got ${JSON.stringify(
+        actualContent.clientRequestId,
+      )})`,
+    );
+  } else {
+    assert.strictEqual(
+      actualContent.clientRequestId,
+      clientRequestId,
+      `incremental event carries clientRequestId ${JSON.stringify(
+        clientRequestId,
+      )}`,
+    );
+  }
   delete actualContent.clientRequestId;
   // The committed realm generation varies with the fixture's indexing
   // history; assert its shape and compare the rest exactly.

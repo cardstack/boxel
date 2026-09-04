@@ -35,7 +35,10 @@ import {
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+  expectIncrementalIndexEvent,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -921,6 +924,65 @@ module(basename(import.meta.filename), function () {
           assert.ok(response.get('etag'), '200 response still carries an ETag');
         });
 
+        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept, so caches key on the negotiated type',
+          );
+        });
+
+        test('a 304 answers with no body and still varies on Accept', async function (assert) {
+          let firstResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(firstResponse.status, 200, 'first GET succeeds');
+          let etag = firstResponse.get('etag') ?? '';
+          assert.ok(etag, 'first response carries an ETag');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(response.status, 304, 'HTTP 304 status');
+          // `response.body` can be `{}` when supertest cannot decode an empty
+          // buffer, so the body check reads `response.text`.
+          assert.notOk(response.text, 'the 304 carries no body');
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the 304 varies on Accept',
+          );
+        });
+
+        test('an Accept the realm serves no route for falls through to the module/file fallback and 404s', async function (assert) {
+          // Content negotiation has no 406 arm: an unmatched Accept leaves the
+          // router with no route, and the request lands on the fallback that
+          // serves modules and raw files. `person-1` names a card, and neither
+          // that name nor any executable-extension form of it is a file on
+          // disk, so the fallback reports it missing.
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/x-unknown');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `an unsupported Accept 404s rather than 406ing: ${response.text}`,
+          );
+        });
+
         // A write lands on the realm's file system before it is indexed, so
         // "no index row" and "no card" are different situations. Writing
         // straight to disk (rather than through `realm.write`) leaves a file
@@ -1387,6 +1449,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               timeout: 5000,
             },
           );
@@ -1444,6 +1507,131 @@ module(basename(import.meta.filename), function () {
               },
             },
             'file contents are correct',
+          );
+        });
+
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          // The writing client recognizes its own event by this id and skips
+          // reloading over its own fresher local edits, so the echo is part of
+          // the wire contract, not a diagnostic.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'post-client-request-id');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+          await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'post-client-request-id',
+              timeout: 5000,
+            },
+          );
+        });
+
+        test('a 201 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 201 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('Content-Type routes the request when Accept matches no route', async function (assert) {
+          // The router's second chance: an unmatched Accept falls back to
+          // Content-Type, which is what makes a body-bearing POST route on the
+          // type of what it is sending rather than the type it wants back.
+          let response = await request
+            .post('/')
+            .set('Accept', 'application/x-unknown')
+            .set('Content-Type', 'application/vnd.card+json')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('@cardstack/base/card-api'),
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the create route still runs: ${response.text}`,
+          );
+        });
+
+        test('a POST to an existing card URL is not a create route and 404s', async function (assert) {
+          // Create matches the realm root and directory paths only, so a POST
+          // aimed at a card 404s through the module/file fallback instead of
+          // replacing the card.
+          let response = await request
+            .post('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `POST to a card URL 404s: ${response.text}`,
           );
         });
 
@@ -1565,6 +1753,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -1663,6 +1852,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -4006,6 +4196,201 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'patch-client-request-id');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'patch-client-request-id',
+            },
+          );
+        });
+
+        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('a no-op patch answers as card+json too', async function (assert) {
+          // A patch that changes nothing skips the file rewrite, and it still
+          // answers on the same wire contract as one that writes.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture may rewrite it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the no-op 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the no-op response varies on Accept',
+          );
+        });
+
+        test('a PATCH of the .json form of a card URL does not patch the card', async function (assert) {
+          // The patch route excludes the `.json` form, so the canonical
+          // no-extension URL is the only one that patches a card. The request
+          // lands on the module/file fallback instead, which finds the stored
+          // instance file and serves it back verbatim.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let before = readJSONSync(cardFile);
+
+          let response = await request
+            .patch('/person-1.json')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/json',
+            'the fallback types the response as the stored file, not card+json',
+          );
+          assert.deepEqual(
+            readJSONSync(cardFile),
+            before,
+            'the stored card is untouched',
+          );
+
+          let getResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.body.data.attributes?.firstName,
+            'Mango',
+            'the served card still carries its pre-request value',
+          );
+        });
+
+        test('a read issued straight after a write serves the written state', async function (assert) {
+          // Reads drain any in-flight incremental indexing before consulting
+          // the index, so a client never has to poll for its own write to
+          // become visible.
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patchResponse.status, 200, 'the PATCH succeeds');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Van Gogh',
+            'the read serves the state the write just produced',
+          );
+        });
+
         test('broadcasts realm events', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -4034,6 +4419,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -4514,7 +4900,51 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
+          );
+        });
+
+        test('the incremental index event carries no client request id, even when the request sends one', async function (assert) {
+          // Delete never reads `X-Boxel-Client-Request-Id`, so a client cannot
+          // recognize its own delete event the way it recognizes its own
+          // create or update.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'delete-client-request-id');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+            },
+          );
+        });
+
+        test('a 204 answers with no content type and varies on Accept', async function (assert) {
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            undefined,
+            'the 204 carries no content type',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
           );
         });
 
@@ -4618,6 +5048,119 @@ module(basename(import.meta.filename), function () {
             );
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+        });
+      });
+    });
+
+    // HEAD is how a client discovers which realm serves a URL: it reads the
+    // realm-identity headers off the response and never looks at the body or
+    // the status of the resource itself. That makes the contract deliberately
+    // path- and existence-blind, and it answers before any permission check so
+    // discovery works against a realm the caller cannot read.
+    module('card HEAD request', function (_hooks) {
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('answers 200 with the realm-identity headers for a card that exists', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'the response reports the realm as public readable',
+          );
+        });
+
+        test('answers 200 with the same headers for a path that does not exist', async function (assert) {
+          let response = await request
+            .head('/no-such-card')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'a missing path is still a realm-identity answer, not a 404',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'the response reports the realm as public readable',
+          );
+        });
+
+        test('answers the same for a nested directory path and for the realm root', async function (assert) {
+          for (let path of ['/', '/some/nested/path']) {
+            let response = await request
+              .head(path)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, `HTTP 200 for ${path}`);
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              `the response for ${path} names the realm serving the URL`,
+            );
+            assert.strictEqual(
+              response.get('X-boxel-realm-public-readable'),
+              'true',
+              `the response for ${path} reports the realm as public readable`,
+            );
+          }
+        });
+      });
+
+      module('permissioned realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('answers 200 without a JWT, and reports the realm as not public readable', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'discovery does not require authentication',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            undefined,
+            'the realm is not public readable',
+          );
         });
       });
     });

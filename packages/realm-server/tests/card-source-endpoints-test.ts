@@ -28,6 +28,7 @@ import {
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
   expectIncrementalIndexEvent,
   maxPrerenderHtmlJobId,
   settlePrerenderHtmlJobs,
@@ -674,6 +675,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
           );
         });
@@ -805,6 +807,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -1550,6 +1553,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });

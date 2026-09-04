@@ -877,6 +877,7 @@ module(basename(import.meta.filename), function () {
           assert,
           getMessagesSince,
           realm: testRealmHref,
+          clientRequestId: null,
         },
       );
 
