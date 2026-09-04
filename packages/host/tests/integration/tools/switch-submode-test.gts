@@ -8,7 +8,9 @@ import { localId } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
+import SwitchSubmodeTool, {
+  cleanCodePath,
+} from '@cardstack/host/tools/switch-submode';
 
 import {
   setupIntegrationTestRealm,
@@ -190,6 +192,95 @@ module('Integration | tools | switch-submode', function (hooks) {
     );
     assert.strictEqual(status, 200);
     assert.strictEqual(content, '');
+  });
+
+  test('a codePath carrying the SEARCH/REPLACE new-file marker is cleaned before use', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeTool(toolService.toolContext);
+    let fileUrl = `${testRealmURL}marked-file.gts`;
+
+    await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: `${fileUrl} (new)`,
+      createFile: true,
+    });
+
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    let { status, content } = await cardService.getSource(new URL(fileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+  });
+
+  test('a codePath that is not a file URL is rejected', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      switchSubmodeCommand.execute({
+        submode: 'code',
+        codePath: 'Wedding card def — SEARCH/REPLACE (new)',
+      }),
+      /codePath must be a single file URL/,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'interact',
+      'the tab stays where it was',
+    );
+
+    assert.strictEqual(cleanCodePath(undefined), undefined);
+    assert.strictEqual(cleanCodePath('  '), undefined);
+    assert.strictEqual(
+      cleanCodePath('@cardstack/base/card-api.gts (new)'),
+      '@cardstack/base/card-api.gts',
+    );
+  });
+
+  test('switching to the file already open in code mode is a no-op', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeTool(toolService.toolContext);
+    let fileUrl = `${testRealmURL}already-open.gts`;
+
+    await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+    await cardService.saveSource(new URL(fileUrl), 'export {};', 'editor');
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.notOk(result, 'no result card for a no-op');
+    assert.strictEqual(operatorModeStateService.state?.submode, 'code');
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    let { content } = await cardService.getSource(new URL(fileUrl));
+    assert.strictEqual(content, 'export {};', 'the file was not touched');
+    let sibling = await cardService.getSource(
+      new URL(`${testRealmURL}already-open-1.gts`),
+    );
+    assert.strictEqual(sibling.status, 404, 'no sibling file was created');
   });
 
   test('createFile reuses an existing blank file', async function (assert) {
