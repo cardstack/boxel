@@ -54,6 +54,50 @@ export class Clip extends Component<ClipSignature> {
     return this.args.spec.fit === 'pip';
   }
 
+  /**
+   * THE LOOK THIS CLIP IS WEARING, as a CSS filter — composed in the same
+   * order the picture's own shader composes its grade (saturate, then
+   * contrast, then brightness, then sepia and hue), because filter order
+   * is not commutative and the two should agree about what a number
+   * means. Blur goes last, where a lens would put it.
+   *
+   * It rides the MEDIA, not the figure, so an inset's caption and its card
+   * are not graded with the footage.
+   */
+  get look(): string {
+    const l = this.args.spec.look;
+    if (!l) {
+      return '';
+    }
+    const f: string[] = [];
+    if (l.sat !== undefined) {
+      f.push(`saturate(${l.sat})`);
+    }
+    if (l.con !== undefined) {
+      f.push(`contrast(${l.con})`);
+    }
+    if (l.bri !== undefined) {
+      f.push(`brightness(${l.bri})`);
+    }
+    if (l.sepia !== undefined) {
+      f.push(`sepia(${l.sepia})`);
+    }
+    if (l.gray !== undefined) {
+      f.push(`grayscale(${l.gray})`);
+    }
+    if (l.hue !== undefined) {
+      f.push(`hue-rotate(${l.hue}deg)`);
+    }
+    if (l.blur !== undefined) {
+      f.push(`blur(${l.blur}px)`);
+    }
+    const out = f.length ? [`filter:${f.join(' ')}`] : [];
+    if (l.opacity !== undefined) {
+      out.push(`opacity:${l.opacity}`);
+    }
+    return out.join(';');
+  }
+
   /** seconds a pip takes to arrive and to go */
   get fade(): number {
     return this.args.spec.fade ?? 0.4;
@@ -78,16 +122,22 @@ export class Clip extends Component<ClipSignature> {
           {{#if (eq @spec.kind 'video')}}
             <video
               src={{@src}}
+              style={{this.look}}
               muted={{this.muted}}
               playsinline
               preload='auto'
               {{@mount @lane}}
             ></video>
           {{else if (eq @spec.kind 'image')}}
-            <img src={{@src}} alt='' {{@mount @lane}} />
+            <img src={{@src}} style={{this.look}} alt='' {{@mount @lane}} />
           {{else}}
             {{#if @freeze}}
-              <img src={{@freeze}} alt='' {{@mount @lane}} />
+              <img
+                src={{@freeze}}
+                style={{this.look}}
+                alt=''
+                {{@mount @lane}}
+              />
             {{/if}}
           {{/if}}
           {{#if @spec.caption}}

@@ -8,6 +8,7 @@ export {
   type ClipEnd,
   type ClipKind,
   clipLanes,
+  type ClipLook,
   type ClipSpec,
   type ClipState,
   clipWindow,

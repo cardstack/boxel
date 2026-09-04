@@ -68,6 +68,8 @@ export interface ClipSpec {
    * beside it.
    */
   lane?: number;
+  /** a look held on this clip alone (`f.clip.Look`) */
+  look?: ClipLook;
   /** the source's out point, seconds (video); with `in`, sets the window */
   out?: number;
   /** a pip's corner radius, in percent of its width */
@@ -84,6 +86,41 @@ export interface ClipSpec {
   x?: number;
   /** a pip's top edge, percent of the frame (default 10) */
   y?: number;
+}
+
+/**
+ * A LOOK HELD ON A CLIP — the first adjustment that belongs to something
+ * other than the picture.
+ *
+ * `f.picture.Look` reaches the WebGL page's own grade; a clip is a DOM
+ * element and has never had one, so a video inset over a graded picture
+ * was ungraded and there was no way to say otherwise. These are the
+ * operations a browser can do to an element without a texture, composed
+ * in the order the film's own shader composes them (saturate, contrast,
+ * brightness, then sepia and hue) — because filter order is not
+ * commutative and the two should agree.
+ *
+ * What this is NOT is the whole filter stack: curves, secondaries and a
+ * LUT need the pixels, which needs the clip through a texture. This is
+ * the half a browser gives for free.
+ */
+export interface ClipLook {
+  /** gaussian blur, pixels */
+  blur?: number;
+  /** exposure, 1 is unchanged */
+  bri?: number;
+  /** contrast, 1 is unchanged */
+  con?: number;
+  /** to grey, 0..1 */
+  gray?: number;
+  /** hue rotation, degrees */
+  hue?: number;
+  /** the whole layer's opacity, 0..1 */
+  opacity?: number;
+  /** saturation, 1 is unchanged, 0 is monochrome */
+  sat?: number;
+  /** to sepia, 0..1 */
+  sepia?: number;
 }
 
 export type ClipState = 'absent' | 'active' | 'frozen' | 'held';

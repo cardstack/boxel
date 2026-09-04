@@ -18,7 +18,7 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
-import type { ClipSpec } from '../clips.ts';
+import type { ClipLook, ClipSpec } from '../clips.ts';
 import type { PresentationComponent } from '../joins.gts';
 import type {
   Beat,
@@ -35,6 +35,7 @@ import type {
   GraphNode,
   GroupNode,
   JoinNode,
+  LookNode,
   Patch,
   PatchNode,
   ShotNode,
@@ -89,6 +90,18 @@ export function collectGraph(el: Element): GraphNode[] {
         const media = inner.find((n) => n.kind === 'attach')?.media;
         if (media) {
           node.media = media;
+        }
+        /* a look under a clip is the CLIP's, not the beat's — the first
+           adjustment in this vocabulary that belongs to something other
+           than the picture */
+        const look = inner
+          .filter((n): n is LookNode => n.kind === 'look')
+          .reduce<ClipLook | undefined>(
+            (all, n) => ({ ...all, ...n.look }),
+            undefined,
+          );
+        if (look && node.media && node.media.kind !== 'photo') {
+          node.media = { ...node.media, look };
         }
       }
       out.push(node);
@@ -514,6 +527,37 @@ export class Freeze extends GraphNodeComponent<{
     return {
       kind: 'attach',
       media: tidy({ caption, credit, fit, kind: 'freeze' as const }),
+    };
+  }
+}
+
+/**
+ * A LOOK HELD ON A CLIP — `f.clip.Look`. The clip actor's own adjustment,
+ * declared by the film because the film draws the clip layer, in the same
+ * shape as `f.picture.Look`: a value held on an actor for the window it
+ * is attached to, applying to everything under it.
+ *
+ * ```hbs
+ * <f.Inset @src="b-roll.mp4" @x={{62}} @y={{14}} @w={{30}}>
+ *   <f.clip.Look @sat={{0.15}} @con={{1.2}} @blur={{1}} />
+ * </f.Inset>
+ * ```
+ */
+export class ClipLookNode extends GraphNodeComponent<ClipLook> {
+  node(): LookNode {
+    const a = this.args;
+    return {
+      kind: 'look',
+      look: tidy({
+        blur: a.blur,
+        bri: a.bri,
+        con: a.con,
+        gray: a.gray,
+        hue: a.hue,
+        opacity: a.opacity,
+        sat: a.sat,
+        sepia: a.sepia,
+      }),
     };
   }
 }

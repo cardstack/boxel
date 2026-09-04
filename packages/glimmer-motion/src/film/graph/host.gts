@@ -12,7 +12,7 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
-import { IFRAME_PICTURE, SOUND } from './adjust.gts';
+import { CLIP_LOOK, IFRAME_PICTURE, SOUND } from './adjust.gts';
 import { type CompiledGraph, compileGraph, type GroupNode } from './compile.ts';
 import {
   Attach,
@@ -61,6 +61,7 @@ export interface FilmVocabulary {
   Video: typeof Video;
   Voice: typeof Voice;
   /** the picture's adjustments, as the picture declares them */
+  clip: typeof CLIP_LOOK;
   picture: typeof IFRAME_PICTURE;
   /** the sound actor's */
   sound: typeof SOUND;
@@ -86,6 +87,7 @@ export const VOCABULARY: FilmVocabulary = {
   Type,
   Video,
   Voice,
+  clip: CLIP_LOOK,
   picture: IFRAME_PICTURE,
   sound: SOUND,
 };
