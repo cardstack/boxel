@@ -164,6 +164,20 @@ export const PRERENDER_DISPATCH_DELIVERED = 'delivered';
 // never reached a prerender server.
 export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
 
+// The policy for each prerender endpoint, read by both layers that retry —
+// the client's per-request loop and the manager's failover across servers.
+// They enforce different halves of the same guarantee, so a request type
+// listed on one side and forgotten on the other would keep retrying through
+// the other half in silence; naming it once is what makes that impossible.
+// An endpoint absent here is a pure read.
+const RETRY_POLICY_BY_PATH: Record<string, PrerenderRetryPolicy> = {
+  'run-command': 'only-when-undelivered',
+};
+
+export function retryPolicyForPath(path: string): PrerenderRetryPolicy {
+  return RETRY_POLICY_BY_PATH[path] ?? 'any-failure';
+}
+
 // Network error codes that mean no connection to the peer was ever
 // established, so the request cannot have been received, let alone acted on.
 // A reset or a timeout proves nothing: either can land after the peer read the

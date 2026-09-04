@@ -18,6 +18,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants.ts';
 import { toAffinityKey } from '../prerender/affinity.ts';
+import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import { Deferred } from '@cardstack/runtime-common';
 import { testCreatePrerenderAuth } from './helpers/index.ts';
 
@@ -2380,6 +2381,95 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(renders, 2, 'both servers were tried');
     });
 
+    test('does not fail over a command to a second server on a drain', async function (assert) {
+      // A prerender server reaches its `/run-command` handler while draining
+      // and can only report the drain from inside the race, by which time the
+      // command is running. So a drain is no more evidence than a 500 that the
+      // command did not run.
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      let runs = 0;
+      let drainAfterRunning = (ctxt: Koa.Context) => {
+        runs++;
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = JSON.stringify({
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'draining',
+            },
+          ],
+        });
+      };
+      mockPrerenderA?.setResponder(drainAfterRunning);
+      mockPrerenderB?.setResponder(drainAfterRunning);
+
+      let res = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'reports the drain to the caller',
+      );
+      assert.strictEqual(runs, 1, 'only one server received the command');
+      assert.strictEqual(
+        res.headers[PRERENDER_DISPATCH_HEADER],
+        PRERENDER_DISPATCH_DELIVERED,
+        'tells the caller a server may have run the command',
+      );
+    });
+
+    test('keeps the undispatched report across refused connections', async function (assert) {
+      // The upgrade to `delivered` is one-way, so a request that never reached
+      // any of several dead servers must still come back retryable.
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+      await mockPrerenderA?.stop();
+      await mockPrerenderB?.stop();
+
+      let res = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+
+      assert.strictEqual(res.status, 503, 'reports the failure to the caller');
+      assert.strictEqual(
+        res.headers[PRERENDER_DISPATCH_HEADER],
+        PRERENDER_DISPATCH_NONE,
+        'a command no server received stays retryable',
+      );
+    });
+
     test('reports whether a failed request reached a prerender server', async function (assert) {
       process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '0';
       let { app } = buildPrerenderManagerApp();
@@ -2410,6 +2500,113 @@ module(basename(import.meta.filename), function () {
         PRERENDER_DISPATCH_DELIVERED,
         'a proxied request is reported as delivered',
       );
+    });
+
+    // The manager's failover and the client's retry loop enforce different
+    // halves of the same guarantee. These wire the two together, since each
+    // half looks correct in isolation while the pair still repeats a command.
+    module('client and manager together', function (hooks) {
+      let managerServer: http.Server | undefined;
+      let managerRequests = 0;
+
+      hooks.beforeEach(function () {
+        process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '2';
+        process.env.PRERENDER_MANAGER_RETRY_DELAY_MS = '1';
+        managerRequests = 0;
+      });
+      hooks.afterEach(async function () {
+        delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+        delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
+        if (managerServer) {
+          let server = managerServer;
+          managerServer = undefined;
+          await new Promise<void>((resolve) => server.close(() => resolve()));
+        }
+      });
+
+      // Serves the manager over a real port so the client reaches it the way
+      // it does in production, and counts what arrives so a client-side retry
+      // is visible even when the manager answers identically each time.
+      function listenManager(
+        app: ReturnType<typeof buildPrerenderManagerApp>['app'],
+      ) {
+        let handler = app.callback();
+        managerServer = createServer((req, res) => {
+          managerRequests++;
+          handler(req, res);
+        }).listen(0);
+        return `http://127.0.0.1:${(managerServer.address() as any).port}`;
+      }
+
+      test('runs a command once when every server fails after running it', async function (assert) {
+        let { app } = buildPrerenderManagerApp();
+        let request: SuperTest<Test> = supertest(app.callback());
+        await request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 1, url: serverUrlA },
+          },
+        });
+        await request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 1, url: serverUrlB },
+          },
+        });
+
+        let runs = 0;
+        let failAfterRunning = (ctxt: Koa.Context) => {
+          runs++;
+          ctxt.status = 500;
+          ctxt.body = JSON.stringify({
+            errors: [
+              { status: 500, message: 'Protocol error (Target closed)' },
+            ],
+          });
+        };
+        mockPrerenderA?.setResponder(failAfterRunning);
+        mockPrerenderB?.setResponder(failAfterRunning);
+
+        let prerenderer = createRemotePrerenderer(listenManager(app));
+        await assert.rejects(
+          prerenderer.runCommand({
+            userId: '@user:localhost',
+            auth: makeAuth('https://realm.example/cmd'),
+            command: 'create-card',
+            commandInput: null,
+          }),
+          /status 503/,
+          'the caller is told the command failed',
+        );
+
+        assert.strictEqual(runs, 1, 'the command ran exactly once');
+        assert.strictEqual(managerRequests, 1, 'the client did not retry');
+      });
+
+      test('retries a command the manager never dispatched', async function (assert) {
+        // No servers registered, so the manager turns the request away without
+        // dispatching and the client is free to try again.
+        process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '0';
+        let { app } = buildPrerenderManagerApp();
+
+        let prerenderer = createRemotePrerenderer(listenManager(app));
+        await assert.rejects(
+          prerenderer.runCommand({
+            userId: '@user:localhost',
+            auth: makeAuth('https://realm.example/cmd'),
+            command: 'create-card',
+            commandInput: null,
+          }),
+          /status 503/,
+          'the caller is told the command failed',
+        );
+
+        assert.strictEqual(
+          managerRequests,
+          2,
+          'the client spent its retry budget',
+        );
+      });
     });
 
     test('maintenance reset clears realm assignments', async function (assert) {

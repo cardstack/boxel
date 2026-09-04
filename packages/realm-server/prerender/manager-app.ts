@@ -18,9 +18,9 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
+  retryPolicyForPath,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
-  type PrerenderRetryPolicy,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity.ts';
@@ -977,8 +977,10 @@ export function buildPrerenderManagerApp(options?: {
     ctxt: Koa.Context,
     pathSuffix: string,
     label: string,
-    retryPolicy: PrerenderRetryPolicy = 'any-failure',
   ) {
+    // Same source as the client's own retry loop: the two enforce different
+    // halves of one guarantee and must not disagree about an endpoint.
+    let retryPolicy = retryPolicyForPath(pathSuffix);
     // CS-10872: honor caller-supplied correlation ID; mint one if
     // absent (direct curl, test harnesses). Echo on every subsequent
     // log line so a single grep surfaces the full proxy story.
@@ -1173,6 +1175,28 @@ export function buildPrerenderManagerApp(options?: {
           ac.abort();
           return;
         }
+        // Answer a drain that began since the check at the top of the handler
+        // before dispatching rather than by aborting mid-flight. Both produce
+        // the same status, but only this one can still say no prerender server
+        // received the request: once the fetch is out, an abort cannot
+        // distinguish a connection that was never made from one whose server
+        // had already read the request.
+        if (options?.isDraining?.()) {
+          ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+          ctxt.set(
+            PRERENDER_SERVER_STATUS_HEADER,
+            PRERENDER_SERVER_STATUS_DRAINING,
+          );
+          ctxt.body = {
+            errors: [
+              {
+                status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+                message: 'Prerender manager draining',
+              },
+            ],
+          };
+          return;
+        }
         const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
         const drainPoll =
           options?.isDraining && proxyTimeoutMs > 50
@@ -1219,9 +1243,11 @@ export function buildPrerenderManagerApp(options?: {
         clearTimeout(timer as any);
         if (drainPoll) clearInterval(drainPoll as any);
         // Whether this target can be ruled out as having acted on the request.
-        // Only a connection that was never established rules it out: a
-        // response of any status, and an abort of a connected request alike,
-        // leave the server free to have read the request and run it.
+        // Only an error code confined to connection setup rules it out. A
+        // response of any status leaves the server free to have read the
+        // request and run it, and so does an abort — it carries no code, and
+        // nothing here can tell one raised before the connect from one raised
+        // with the request already in the server's hands.
         let undeliveredToTarget =
           !res && isUndeliveredRequestError(upstreamError);
         if (!undeliveredToTarget) {
@@ -1348,16 +1374,8 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/prerender-visit', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-visit', 'visit'),
   );
-  // A command is not idempotent — it creates cards, matrix rooms and outbound
-  // calls, and the queue declines to collapse two identical invocations — so
-  // it never fails over to a second server once a server may have received it.
   router.post('/run-command', (ctxt) =>
-    proxyPrerenderRequest(
-      ctxt,
-      'run-command',
-      'command',
-      'only-when-undelivered',
-    ),
+    proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
   router.post('/prerender-screenshot', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-screenshot', 'screenshot'),

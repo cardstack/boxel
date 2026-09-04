@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { createServer, type ServerResponse } from 'http';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import {
+  PRERENDER_DISPATCH_DELIVERED,
   PRERENDER_DISPATCH_HEADER,
   PRERENDER_DISPATCH_NONE,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
@@ -581,8 +582,9 @@ module(basename(import.meta.filename), function (hooks) {
     }
 
     test('does not retry a 5xx that may be a lost response', async function (assert) {
-      // The manager answers 502 for a request whose command already ran to
-      // completion — the response is what was lost, not the work.
+      // A proxy in front of the manager answers 502 for a request whose
+      // command already ran to completion — the response is what was lost,
+      // not the work.
       let manager = makeCommandServer((res) => {
         res.statusCode = 502;
         res.end('Upstream error');
@@ -767,6 +769,28 @@ module(basename(import.meta.filename), function (hooks) {
         assert.strictEqual(attempts, 1, 'made a single attempt');
       } finally {
         (globalThis as any).fetch = originalFetch;
+      }
+    });
+
+    test('does not retry a 5xx that reports itself as delivered', async function (assert) {
+      // The header is what the client reads; a failure naming itself
+      // `delivered` is refused as firmly as one that says nothing.
+      let manager = makeCommandServer((res) => {
+        res.statusCode = 500;
+        res.setHeader(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_DELIVERED);
+        res.end('Upstream error');
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /status 500/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
+      } finally {
+        await manager.stop();
       }
     });
 

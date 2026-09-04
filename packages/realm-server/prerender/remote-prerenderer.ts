@@ -20,8 +20,8 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
+  retryPolicyForPath,
   sanitizePrerenderJobId,
-  type PrerenderRetryPolicy,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
@@ -82,9 +82,9 @@ export function createRemotePrerenderer(
       renderOptions?: RenderRouteOptions;
       [key: string]: any;
     },
-    retryPolicy: PrerenderRetryPolicy = 'any-failure',
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
+    let retryPolicy = retryPolicyForPath(path);
 
     let endpoint = new URL(path, prerenderURL);
     // jobId is request metadata, not part of the validated body — strip
@@ -308,11 +308,6 @@ export function createRemotePrerenderer(
         },
       );
     },
-    // Commands are not idempotent — they create cards, matrix rooms and
-    // outbound calls, and the queue declines to collapse two identical
-    // invocations — so this request is retried only on a failure that proves
-    // no prerender server ever received it. Every other prerender call is a
-    // pure read and keeps the full retry budget.
     async runCommand({ userId, auth, command, commandInput, priority }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
@@ -325,7 +320,6 @@ export function createRemotePrerenderer(
           commandInput,
           ...(priority !== undefined ? { priority } : {}),
         },
-        'only-when-undelivered',
       );
     },
     async prerenderScreenshot({
