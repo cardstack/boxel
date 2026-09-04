@@ -207,7 +207,7 @@ export function createRemotePrerenderer(
         // underlying error (ECONNREFUSED, ECONNRESET, etc.) in e.cause.
         // Check both e.code and e.cause.code to catch these.
         let code = e?.code ?? e?.cause?.code;
-        let transportFailure =
+        let retryableUnderAnyFailure =
           e instanceof RetryablePrerenderError ||
           code === 'ECONNREFUSED' ||
           code === 'ETIMEDOUT' ||
@@ -226,9 +226,13 @@ export function createRemotePrerenderer(
         let retryable =
           retryPolicy === 'only-when-undelivered'
             ? undelivered
-            : transportFailure;
+            : retryableUnderAnyFailure;
         if (!retryable || attempts >= maxAttempts) {
-          if (transportFailure && !retryable && attempts < maxAttempts) {
+          if (
+            retryableUnderAnyFailure &&
+            !retryable &&
+            attempts < maxAttempts
+          ) {
             log.warn(
               `Prerender request to ${endpoint.href} failed and is not retryable ` +
                 `(requestId=${requestId}, affinity=${affinityTag}): the request may ` +

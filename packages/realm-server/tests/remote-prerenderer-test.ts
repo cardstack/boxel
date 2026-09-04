@@ -550,20 +550,21 @@ module(basename(import.meta.filename), function (hooks) {
       commandInput: null,
     } as const;
 
-    // Stands in for the manager: `runs` counts the invocations that reached a
-    // prerender server, which is the number the command's side effects would
-    // be repeated by.
+    // Stands in for the manager: `requests` counts what it received. What a
+    // request stands for is the responder's to say — a 5xx answered after the
+    // command ran to completion, or a rejection that never reached a prerender
+    // server — so each assertion reads the count against its own responder.
     function makeCommandServer(
-      respond: (res: ServerResponse, runs: number) => void | 'ran',
+      respond: (res: ServerResponse, requestCount: number) => void,
     ) {
-      let runs = 0;
+      let requests = 0;
       let server = createServer((_req, res) => {
-        runs++;
-        respond(res, runs);
+        requests++;
+        respond(res, requests);
       }).listen(0);
       return {
         url: () => `http://127.0.0.1:${(server.address() as any).port}`,
-        runs: () => runs,
+        requests: () => requests,
         stop: () =>
           new Promise<void>((resolve) => server.close(() => resolve())),
       };
@@ -594,7 +595,7 @@ module(basename(import.meta.filename), function (hooks) {
           /status 502/,
           'surfaces the failure to the caller',
         );
-        assert.strictEqual(manager.runs(), 1, 'the command ran once');
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
       } finally {
         await manager.stop();
       }
@@ -615,7 +616,11 @@ module(basename(import.meta.filename), function (hooks) {
           /status 503/,
           'surfaces the failure to the caller',
         );
-        assert.strictEqual(manager.runs(), 1, 'the command ran at most once');
+        assert.strictEqual(
+          manager.requests(),
+          1,
+          'the command ran at most once',
+        );
       } finally {
         await manager.stop();
       }
@@ -637,7 +642,7 @@ module(basename(import.meta.filename), function (hooks) {
         let result = await prerenderer.runCommand(commandArgs);
         assert.strictEqual(result.status, 'ready', 'the caller gets a result');
         assert.strictEqual(
-          manager.runs(),
+          manager.requests(),
           2,
           'retried the request the manager never handed to a server',
         );
@@ -669,7 +674,7 @@ module(basename(import.meta.filename), function (hooks) {
 
         assert.strictEqual(result.status, 'ready', 'the caller gets a result');
         assert.true(refusedOnce, 'the first attempt was refused');
-        assert.strictEqual(manager.runs(), 1, 'the command ran once');
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
       } finally {
         (globalThis as any).fetch = originalFetch;
         await manager.stop();
@@ -701,7 +706,7 @@ module(basename(import.meta.filename), function (hooks) {
         let result = await prerenderer.runCommand(commandArgs);
 
         assert.strictEqual(result.status, 'ready', 'the caller gets a result');
-        assert.strictEqual(manager.runs(), 1, 'the command ran once');
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
       } finally {
         (globalThis as any).fetch = originalFetch;
         await manager.stop();
@@ -789,7 +794,7 @@ module(basename(import.meta.filename), function (hooks) {
           auth: '{}',
         });
         assert.true((result as any).ok, 'succeeds on the retry');
-        assert.strictEqual(manager.runs(), 2, 'retried the render');
+        assert.strictEqual(manager.requests(), 2, 'retried the render');
       } finally {
         await manager.stop();
       }
