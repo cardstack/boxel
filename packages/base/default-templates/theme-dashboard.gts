@@ -1465,6 +1465,13 @@ const CHART_BARS = [62, 84, 45, 91, 70].map((height, index) => ({
   style: sanitizeHtmlSafe(`height: ${height}%`),
 }));
 
+// Ids in this markup end up in cached prerendered HTML, and several copies can
+// share one document, so a process-local counter like guidFor() is not unique
+// enough. A random token per instance is.
+function instanceId(): string {
+  return `specimens-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // Realistic scenes built from boxel-ui, so a theme is judged on a page rather
 // than on isolated swatches. Every panel stays in the DOM (inactive ones are
 // hidden) so tests and prerender see the full set.
@@ -1472,6 +1479,8 @@ export class ThemeSpecimens extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   @tracked private activeTab: SpecimenTabId = 'surfaces';
+  private uid = instanceId();
+  private panelId = (id: string) => `${this.uid}-${id}`;
   @tracked private switchOn = true;
   @tracked private selected: string | null = SELECT_OPTIONS[1];
   private selectOptions = SELECT_OPTIONS;
@@ -1507,6 +1516,7 @@ export class ThemeSpecimens extends GlimmerComponent<{
             }}
             role='tab'
             aria-selected={{if (this.isActive tab.id) 'true' 'false'}}
+            aria-controls={{this.panelId tab.id}}
             {{on 'click' (fn this.selectTab tab.id)}}
             data-test-specimen-tab={{tab.id}}
           >
@@ -1517,8 +1527,10 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Surfaces & Ink }}
       <section
+        id={{this.panelId 'surfaces'}}
         class='specimen-panel'
         role='tabpanel'
+        aria-label='Surfaces & Ink'
         hidden={{this.isHidden 'surfaces'}}
         data-test-specimen-panel='surfaces'
       >
@@ -1625,8 +1637,10 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Controls }}
       <section
+        id={{this.panelId 'controls'}}
         class='specimen-panel'
         role='tabpanel'
+        aria-label='Controls'
         hidden={{this.isHidden 'controls'}}
         data-test-specimen-panel='controls'
       >
@@ -1705,8 +1719,10 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Dashboard }}
       <section
+        id={{this.panelId 'dashboard'}}
         class='specimen-panel'
         role='tabpanel'
+        aria-label='Dashboard'
         hidden={{this.isHidden 'dashboard'}}
         data-test-specimen-panel='dashboard'
       >
@@ -1741,8 +1757,10 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Reading }}
       <section
+        id={{this.panelId 'reading'}}
         class='specimen-panel'
         role='tabpanel'
+        aria-label='Reading'
         hidden={{this.isHidden 'reading'}}
         data-test-specimen-panel='reading'
       >
