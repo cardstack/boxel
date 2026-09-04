@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  abandonedSynapseQuery,
   describeHostPortConflict,
   synapseDockerParams,
 } from '../support/synapse/index.ts';
@@ -49,6 +50,19 @@ test.describe('Synapse container networking', () => {
 
     expect(params).toContain('UID=0');
     expect(params).toContain('GID=0');
+  });
+
+  test('sweeps abandoned containers only on the port being claimed', () => {
+    const query = abandonedSynapseQuery(8008);
+
+    // A container carrying this harness's name prefix is debris only while it
+    // holds the port this launch is about to claim. A harness that published a
+    // dynamically chosen port is a live tenant sharing the host, so the name
+    // prefix alone must never be enough to select a container for removal.
+    expect(query).toContain('name=sf-test-synapse-');
+    expect(query).toContain('publish=8008');
+    // `-a` would also list exited containers, which hold no port at all.
+    expect(query).not.toContain('-aq');
   });
 
   test('names the port in a bind conflict rather than leaving it unstated', async () => {

@@ -297,16 +297,29 @@ export async function describeHostPortConflict(
 
 // Synapse containers are named after the temp config directory they are given,
 // so a run killed before its teardown leaves one behind under a name no later
-// run can predict. Such a container keeps holding the host port the next run
-// needs, so clearing the way means sweeping by name prefix rather than by an
-// individual name.
-async function removeAbandonedTestSynapseContainers(): Promise<void> {
-  let ids = await dockerCapture([
+// run can predict — which rules out clearing it by name.
+//
+// What separates debris from a live tenant is the port. A container still
+// publishing the fixed Synapse port is holding the one this launch is about to
+// claim; a harness that chose its port dynamically is deliberately sharing the
+// host (it starts with `stopExisting: false` precisely so it can coexist with a
+// dev Synapse) and is left alone. So the sweep is the intersection: this
+// harness's own containers, on the port being claimed.
+export function abandonedSynapseQuery(hostPort: number): string[] {
+  return [
     'ps',
-    '-aq',
+    '-q',
     '--filter',
     `name=${TEST_SYNAPSE_CONTAINER_PREFIX}`,
-  ]);
+    '--filter',
+    `publish=${hostPort}`,
+  ];
+}
+
+async function removeAbandonedTestSynapseContainers(
+  hostPort: number,
+): Promise<void> {
+  let ids = await dockerCapture(abandonedSynapseQuery(hostPort));
   let containerIds = ids.split(/\s+/).filter(Boolean);
   if (containerIds.length === 0) {
     return;
@@ -327,6 +340,9 @@ export async function synapseStart(
   opts?: StartOptions,
   stopExisting = true,
 ): Promise<SynapseInstance> {
+  let useDynamicHostPort = Boolean(
+    isEnvironmentMode() || opts?.dynamicHostPort,
+  );
   if (stopExisting) {
     // Stop the main server if it's running
     let defaultContainerName = getSynapseContainerName();
@@ -336,14 +352,12 @@ export async function synapseStart(
       stopPromises.push(synapseStop(id));
     }
     await Promise.allSettled(stopPromises);
-    // `stopExisting` means this Synapse is to be the only one on the host, so
-    // it also covers containers abandoned by a run that never reached its
-    // teardown. Callers that share the host with other harnesses pass false.
-    await removeAbandonedTestSynapseContainers();
+    // Only a fixed-port launch has a port to be blocked out of: the dynamic
+    // path picks one nothing holds.
+    if (!useDynamicHostPort) {
+      await removeAbandonedTestSynapseContainers(SYNAPSE_PORT);
+    }
   }
-  let useDynamicHostPort = Boolean(
-    isEnvironmentMode() || opts?.dynamicHostPort,
-  );
   await dockerCreateNetwork({ networkName: 'boxel' });
 
   let hostPort = SYNAPSE_PORT;
