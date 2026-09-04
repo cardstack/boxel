@@ -61,8 +61,50 @@ else
   lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -Ei 'node|traefik|docker' | head -60 || echo "(lsof unavailable)"
 fi
 
-# Traefik writes its process log to stderr and the access log to stdout; both
-# land in `docker logs`. The tail is generous because the access log only
-# records failures, so a long run still produces a short log.
-section "traefik log (last 400 lines)"
-docker logs --tail 400 boxel-traefik 2>&1 || echo "no boxel-traefik container"
+# Traefik writes its own log and the access log to the same standard output,
+# so `docker logs` returns them interleaved. They are split here rather than
+# read together: the access log records every 4xx (traefik/traefik.yml), and a
+# realm-server that resolves a module import by probing each extension in turn
+# produces hundreds of legitimate 404s in seconds, enough to push every line
+# of the process log out of any shared tail. An access-log entry is a JSON
+# object carrying RequestHost; nothing in the process log is.
+if ! docker inspect boxel-traefik >/dev/null 2>&1; then
+  section "traefik log"
+  echo "no boxel-traefik container"
+  exit 0
+fi
+all="$(mktemp)"
+access="$(mktemp)"
+process="$(mktemp)"
+docker logs boxel-traefik > "$all" 2>&1
+grep -F '"RequestHost"' "$all" > "$access" || true
+grep -vF '"RequestHost"' "$all" > "$process" || true
+
+# Provider start-up, each dynamic-configuration reload, TLS and upstream
+# errors. Short, so the tail is generous.
+section "traefik process log (last 200 of $(wc -l < "$process" | tr -d ' ') lines)"
+tail -200 "$process"
+
+# `OriginStatus` is what the upstream answered, so an entry without a router,
+# or with an origin status of 0, is a response Traefik produced itself: no
+# route matched the host, or the routed upstream never answered. Those are the
+# entries no service log can show, and they are listed in full; everything
+# else is only counted.
+section "traefik access log (4xx/5xx responses)"
+total="$(wc -l < "$access" | tr -d ' ')"
+echo "${total} entries"
+if [ "$total" -gt 0 ]; then
+  if command -v jq >/dev/null 2>&1; then
+    echo "--- by status, host and router; '(no router)' means Traefik answered itself"
+    jq -r '[.DownstreamStatus, .RequestHost, (.RouterName // "(no router)")] | @tsv' "$access" 2>/dev/null \
+      | sort | uniq -c | sort -rn | head -40
+    echo "--- responses Traefik produced itself (no router matched, or the upstream never answered), oldest first, first 200"
+    jq -r 'select((.RouterName == null) or ((.OriginStatus // 0) == 0))
+             | [.time, .DownstreamStatus, .RequestHost, .RequestPath, (.RouterName // "(no router)")] | @tsv' "$access" 2>/dev/null \
+      | head -200
+  else
+    echo "(jq not installed; last 100 entries)"
+    tail -100 "$access"
+  fi
+fi
+rm -f "$all" "$access" "$process"
