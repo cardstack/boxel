@@ -1733,13 +1733,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
   });
 
-  test('Never tells the model it cannot edit cards; the skills index carries the SEARCH/REPLACE rule', async () => {
-    // What grants card editing is a card-patch tool in the request
-    // (patch-fields from a skill, or a legacy patchCardInstance in an old
-    // room's history) — interactive messages carry no tools themselves, so
-    // neither an open card nor an attached one implies edit access. The
-    // note keys off the tools array; an attached file also suppresses it
-    // (files are editable through SEARCH/REPLACE patches).
+  test('Never tells the model it cannot edit cards', async () => {
+    // Fixture: a card attached to the message, no patch tool in the request,
+    // no room-skills state (so no skills index in the prompt either).
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1812,9 +1808,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    // Every room carries the skills index, which says every file — instance
-    // JSON included — is written with SEARCH/REPLACE. Nothing in the request
-    // (attached cards, open cards, absent patch tools) may contradict that.
+    // The edit path is SEARCH/REPLACE blocks parsed out of the assistant's
+    // own text (extractCodePatchBlocks). No tool in the request grants it and
+    // none can withhold it, and SYSTEM_MESSAGE, present in every prompt, says
+    // all code and data changes are applied immediately. A sentence telling
+    // the model it cannot edit was therefore false, not merely stale, so
+    // nothing in the request (attached cards, open cards, absent patch tools)
+    // may produce one.
     let contextMessage = messageText(messages?.[messages.length - 1]);
     assert.notOk(
       contextMessage.includes('unable to edit'),
