@@ -78,7 +78,13 @@ await esbuild.build({
   target: 'es2022',
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
-  minify,
+  // Syntax minification rewrites `strictMode: true` to `!0` inside the
+  // precompileTemplate options, which the realm's template-compilation
+  // plugin rejects ("can only accept static options"). Whitespace and
+  // identifier minification carry almost all of the size win.
+  minifyWhitespace: minify,
+  minifyIdentifiers: minify,
+  minifySyntax: false,
   // keepNames wraps `scope: () => ({…})` as `__name(() => ({…}), "scope")`,
   // which the realm's precompileTemplate plugin rejects.
   keepNames: false,
