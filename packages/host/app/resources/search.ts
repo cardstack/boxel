@@ -139,6 +139,10 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     seed?:
       | {
           cards: T[];
+          // What this result set is, as against any other the same query could
+          // produce. A resource already holding a seed with this identity
+          // ignores the seed rather than re-applying it.
+          identity?: string;
           searchURL?: string;
           realms?: string[];
           meta?: QueryResultsMeta;
@@ -216,6 +220,15 @@ export class SearchResource<
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
+  // Identity of the seeded result set this resource holds, cleared once a
+  // search completes and re-derives that set for itself. Deliberately
+  // untracked: it is read
+  // from the query-field getter, which then hands over a seed that writes it in
+  // the same render, and a tracked write there would trip the backtracking
+  // assertion. The read is safe untracked because the getter also consumes
+  // `instances`, so a search that clears this has already dirtied what brought
+  // the reader here.
+  #appliedSeedIdentity: string | undefined;
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -466,6 +479,7 @@ export class SearchResource<
     if (seed && !this.#seedApplied) {
       this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
       this.#seedApplied = true;
+      this.#appliedSeedIdentity = seed.identity;
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
       if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
@@ -592,11 +606,20 @@ export class SearchResource<
   // events for the realms the query targets, so a session that never received
   // one — a dropped subscription, a tab resumed after a gap, or a write to a
   // realm outside the query's own set — is behind until something hands it a
-  // fresher answer. The search is suppressed the same way the initial seed
-  // suppresses it, which keeps this free: the document already paid for the
-  // resolution.
+  // fresher answer. A result set the producer resolved in full costs nothing to
+  // take: the query is suppressed the same way the initial seed suppresses it,
+  // because the document already paid for the resolution. Only a set a realm
+  // failure cut short sends the field back to a live query (below).
+  //
+  // A seed asserting what this resource already holds is dropped here rather
+  // than at the call site, so the comparison is against the resource's own
+  // state and not a caller's memory of it.
   reseed(seed: NonNullable<Args<T>['named']['seed']>): void {
+    if (seed.identity && seed.identity === this.#appliedSeedIdentity) {
+      return;
+    }
     this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
+    this.#appliedSeedIdentity = seed.identity;
     let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
     if (seed.searchURL && !hasQueryErrors) {
       let { query: seedQuery } = parseSearchURL(seed.searchURL);
@@ -605,6 +628,25 @@ export class SearchResource<
     if (seed.realms) {
       this.#previousRealms = seed.realms;
     }
+    // A producer that could not reach every realm resolved a set that is short
+    // by what the failure withheld, so its rows are a floor and not an answer.
+    // The initial seed reaches a live query for exactly this case by leaving
+    // the query signature unset and falling through to `modify`'s search; run
+    // that query directly here, because nothing brings a running resource back
+    // through that fall-through — its query and realms are unchanged, so the
+    // next `modify` skips, and the field would stay short until an unrelated
+    // event.
+    //
+    // Live only, matching the initial seed: a prerender treats the document's
+    // relationships as the authoritative cardinality and runs no query at all,
+    // and a query per field per loaded card is the cascade that rules out.
+    if (this.#isLive && hasQueryErrors && this.#previousQuery) {
+      this.trackStoreLoad(this.search.perform(this.#previousQuery), 'search');
+    }
+  }
+
+  get appliedSeedIdentity() {
+    return this.#appliedSeedIdentity;
   }
 
   // Both routes to a result set count as loading. A seeded resource commonly
@@ -978,6 +1020,11 @@ export class SearchResource<
         // A completed search reports its own count, which supersedes a seed
         // that had none.
         this.seedTotalUnknown = false;
+        // This set is the search's own, so no seed describes it any more.
+        // Keeping the last-applied identity here would go on claiming a set
+        // that has been replaced, and would then turn away a document
+        // restoring the very set the search moved off.
+        this.#appliedSeedIdentity = undefined;
         this._meta = meta;
         this._errors = undefined;
         await this.updateInstances(instances, dependencyTrackingContext);
@@ -1004,6 +1051,11 @@ export class SearchResource<
         // signal exists to prevent.
         this.seedTotalUnknown = true;
         this._meta = { page: { total: 0 }, incomplete: true };
+        // The applied seed identity deliberately survives a failure, unlike a
+        // completed search above. A failed search computed nothing, so what a
+        // document last asserted about this field is still the last thing
+        // anyone asserted; clearing it here would let the next read reinstate
+        // those rows and, with them, clear the error this failure is reporting.
         if (this._instances.length > 0) {
           try {
             await this.updateInstances([], dependencyTrackingContext);
@@ -1045,6 +1097,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
     seed?:
       | {
           cards: T[];
+          identity?: string;
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];

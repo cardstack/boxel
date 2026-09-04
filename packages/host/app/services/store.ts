@@ -1755,6 +1755,11 @@ export default class StoreService extends Service implements StoreInterface {
       getDefaultRealm?: () => string | undefined;
       seed?: {
         cards: T[];
+        // Declared on this hop too, for the reason `totalUnknown` is below:
+        // the identity is what stops a seed being re-applied over a set a
+        // search has since re-derived, and a field-by-field forward that
+        // dropped it would restore that re-application silently.
+        identity?: string;
         searchURL?: string;
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];

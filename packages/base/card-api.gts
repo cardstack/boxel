@@ -536,6 +536,12 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // carries. Optional: a store whose resources hold no state worth superseding
   // implements no supersession.
   reseed?(seed: StoreSearchSeed<T>): void;
+  // The identity of the seeded result set the resource holds, and `undefined`
+  // once a search has re-derived that set for itself. Read it to decide whether
+  // a seed is worth handing over: a remembered "last seed applied" would go on
+  // claiming a set the resource has since replaced, and would then skip a
+  // document restoring the earlier one.
+  readonly appliedSeedIdentity?: string;
 }
 
 // A result set a producer already resolved, handed to a search resource in
@@ -543,6 +549,13 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
 // seeds with file-meta rows rather than being narrowed to `CardDef`.
 export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
   cards: T[];
+  // What this result set is, as against any other the same query could
+  // produce: two seeds sharing an identity assert the same thing, so a
+  // resource already holding one ignores the other. It has to cover
+  // everything the seed asserts and not just its rows — a page-clamped
+  // field whose match count moved holds the same row and a different
+  // answer.
+  identity?: string;
   searchURL?: string;
   realms?: string[];
   queryErrors?: Array<{

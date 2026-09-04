@@ -337,6 +337,46 @@ module('Integration | query-field relationship status', function (hooks) {
     );
   });
 
+  test('a document reporting a higher match count refreshes a page-clamped field', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    let before = getRelationshipMembershipState(host, 'firstMatch');
+    assert.strictEqual(before.totalMatchCount, 2, 'two matches are reported');
+
+    // `firstMatch` holds one row whatever its query matches, so a match count
+    // that moves leaves its rows and its query URL untouched — the count is the
+    // only thing that changed, and it is what says the rows fall short.
+    let hostDoc = await fetchHostDoc();
+    hostDoc.data.relationships.firstMatch.meta = { total: 3 };
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    let after = getRelationshipMembershipState(host, 'firstMatch');
+    assert.strictEqual(
+      after.membership?.length,
+      1,
+      'the field still holds the one row its page allowed',
+    );
+    assert.strictEqual(
+      after.totalMatchCount,
+      3,
+      'against the count the newer document reports',
+    );
+    assert.true(after.isPartial, 'so the shortfall is still reported');
+
+    // The field tracks whichever document arrived last rather than latching on
+    // the identities it has seen, so a count that moves back is applied too.
+    await updateFromSerialized(host as any, await fetchHostDoc());
+    await settled();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'firstMatch').totalMatchCount,
+      2,
+      'and a document restoring the earlier count is applied in turn',
+    );
+  });
+
   test('a document that did not resolve the field cannot displace a result set', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
     let host = await loadHost();
@@ -361,6 +401,56 @@ module('Integration | query-field relationship status', function (hooks) {
       2,
       'the field keeps the result set the indexer resolved',
     );
+  });
+
+  test('a document reporting an unreachable realm sends the field back to a live query', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let network = getService('network');
+    let host = await loadHost();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field resolves from the document without querying',
+    );
+
+    let searchRequests: string[] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        searchRequests.push(request.url);
+      }
+      // Fall through to the realm-server mock.
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    try {
+      // A realm that failed contributes its error and no rows, so what this
+      // document carries is a floor rather than an answer. Resolving from it
+      // and stopping there would leave the field short with nothing scheduled
+      // to correct it.
+      let hostDoc = await fetchHostDoc();
+      let matches = hostDoc.data.relationships.matches;
+      matches.meta = {
+        ...matches.meta,
+        errors: [
+          {
+            realm: 'http://unreachable-realm/test/',
+            type: 'realm-unreachable',
+            message: 'realm did not answer',
+          },
+        ],
+      };
+
+      await updateFromSerialized(host as any, hostDoc);
+      await settled();
+
+      assert.strictEqual(
+        searchRequests.length,
+        1,
+        'the field runs the query the failed realm left unanswered',
+      );
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
   });
 
   test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {
