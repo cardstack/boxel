@@ -29,8 +29,11 @@ const TEST_SYNAPSE_CONTAINER_PREFIX = 'sf-test-synapse-';
 
 // Records which process started a container, so a later run can tell a
 // container whose owner is still running from one left behind by an owner that
-// is gone.
+// is gone. A pid is only meaningful alongside the machine it was issued on —
+// two processes in different pid namespaces against the same Docker daemon
+// number their processes independently — so the host is recorded with it.
 const SYNAPSE_OWNER_LABEL = 'boxel.synapse-owner-pid';
+const SYNAPSE_OWNER_HOST_LABEL = 'boxel.synapse-owner-host';
 
 // Synapse's listeners bind to "::" (IPv6 dual-stack) by default. Hosts whose
 // kernel lacks IPv6 (some minimal cloud VMs / containers) can't bind it and
@@ -237,12 +240,15 @@ export function synapseDockerParams(args: {
   configDir: string;
   hostPort: number;
   ownerPid: number;
+  ownerHost: string;
   runAsRoot?: boolean;
 }): string[] {
   return [
     '--rm',
     '--label',
     `${SYNAPSE_OWNER_LABEL}=${args.ownerPid}`,
+    '--label',
+    `${SYNAPSE_OWNER_HOST_LABEL}=${args.ownerHost}`,
     '-v',
     `${args.configDir}:/data`,
     '-v',
@@ -332,9 +338,9 @@ export async function describeHostPortConflict(
 // either: an abandoned Synapse is running and healthy, on the same port and
 // under the same name shape as one whose suite is mid-run. The owning process
 // is the only signal that separates them, so each container carries its
-// owner's pid and only those whose owner has exited are swept. The dev Synapse
-// is excluded by name — it outlives the process that starts it, and callers
-// meaning to replace it stop it explicitly.
+// owner's pid and host, and only those whose owner has exited are swept. The
+// dev Synapse is excluded by name — it outlives the process that starts it,
+// and callers meaning to replace it stop it explicitly.
 export function abandonedSynapseQuery(): string[] {
   return [
     'ps',
@@ -342,26 +348,31 @@ export function abandonedSynapseQuery(): string[] {
     `name=${TEST_SYNAPSE_CONTAINER_PREFIX}`,
     '--filter',
     `label=${SYNAPSE_OWNER_LABEL}`,
+    '--filter',
+    `label=${SYNAPSE_OWNER_HOST_LABEL}`,
     '--format',
-    `{{.ID}} {{.Label "${SYNAPSE_OWNER_LABEL}"}}`,
+    `{{.ID}} {{.Label "${SYNAPSE_OWNER_LABEL}"}} {{.Label "${SYNAPSE_OWNER_HOST_LABEL}"}}`,
   ];
 }
 
 // Select the containers in that listing whose owning process is gone.
 //
-// Every unreadable answer fails toward leaving the container alone: an owner
-// that does not parse, and a pid that is alive only because it was reused, both
-// read as live. Declining to sweep costs a clear port-conflict message on the
-// next start, while sweeping a container whose run is still going destroys it.
+// A pid can only be asked about from the machine that issued it, so a container
+// labelled with another host is not answerable here and is left alone. Every
+// other unreadable answer resolves the same way: an owner that does not parse,
+// and a pid that is alive only because it was reused, both read as live.
+// Declining to sweep costs a clear port-conflict message on the next start,
+// while sweeping a container whose run is still going destroys it.
 export function abandonedContainerIds(
   listing: string | undefined,
+  sweeperHost: string,
   isOwnerAlive: (pid: number) => boolean,
 ): string[] {
   return (listing ?? '')
     .split('\n')
     .map((line) => line.trim().split(/\s+/))
-    .filter(([id, ownerPid]) => {
-      if (!id) {
+    .filter(([id, ownerPid, ownerHost]) => {
+      if (!id || ownerHost !== sweeperHost) {
         return false;
       }
       let pid = Number(ownerPid);
@@ -386,6 +397,7 @@ function processIsAlive(pid: number): boolean {
 export async function removeAbandonedTestSynapseContainers(): Promise<void> {
   let containerIds = abandonedContainerIds(
     await dockerCapture(abandonedSynapseQuery()),
+    os.hostname(),
     processIsAlive,
   );
   if (containerIds.length === 0) {
@@ -463,6 +475,7 @@ export async function synapseStart(
       configDir: synCfg.configDir,
       hostPort,
       ownerPid: process.pid,
+      ownerHost: os.hostname(),
       runAsRoot: process.getuid?.() === 0,
     });
 

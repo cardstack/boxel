@@ -11,6 +11,7 @@ test.describe('Synapse container networking', () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
       ownerPid: 4242,
+      ownerHost: 'build-box',
       hostPort: 8008,
     });
 
@@ -27,6 +28,7 @@ test.describe('Synapse container networking', () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
       ownerPid: 4242,
+      ownerHost: 'build-box',
       hostPort: 34567,
     });
 
@@ -38,6 +40,7 @@ test.describe('Synapse container networking', () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
       ownerPid: 4242,
+      ownerHost: 'build-box',
       hostPort: 8008,
     });
 
@@ -49,6 +52,7 @@ test.describe('Synapse container networking', () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
       ownerPid: 4242,
+      ownerHost: 'build-box',
       hostPort: 8008,
       runAsRoot: true,
     });
@@ -61,25 +65,30 @@ test.describe('Synapse container networking', () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
       ownerPid: 4242,
+      ownerHost: 'build-box',
       hostPort: 8008,
     });
 
     // Debris and a live tenant are indistinguishable from the outside — both
     // are running, healthy, and named alike — so the owning process is what a
-    // later run reads to tell them apart.
+    // later run reads to tell them apart. The pid travels with its host,
+    // because it means nothing on any other one.
     expect(params).toContain('boxel.synapse-owner-pid=4242');
+    expect(params).toContain('boxel.synapse-owner-host=build-box');
   });
 
-  test('the sweep asks only about this harness own containers', () => {
+  test('the sweep asks only about containers this harness started', () => {
     const query = abandonedSynapseQuery();
 
     expect(query).toContain('name=sf-test-synapse-');
     expect(query).toContain('label=boxel.synapse-owner-pid');
+    expect(query).toContain('label=boxel.synapse-owner-host');
   });
 
   test('sweeps containers whose owner has exited', () => {
     const ids = abandonedContainerIds(
-      'aaa111 4242\nbbb222 9999',
+      'aaa111 4242 build-box\nbbb222 9999 build-box',
+      'build-box',
       (pid) => pid === 9999,
     );
 
@@ -90,14 +99,32 @@ test.describe('Synapse container networking', () => {
     // The case that matters most: a suite mid-run looks exactly like debris,
     // and removing it kills someone's test run rather than costing them a
     // legible error.
-    const ids = abandonedContainerIds('aaa111 4242', () => true);
+    const ids = abandonedContainerIds(
+      'aaa111 4242 build-box',
+      'build-box',
+      () => true,
+    );
+
+    expect(ids).toEqual([]);
+  });
+
+  test('spares a container owned from another pid namespace', () => {
+    // A pid issued on another host — a container sharing this Docker daemon
+    // through a mounted socket — numbers its processes independently, so
+    // asking about it here answers for an unrelated process, or none.
+    const ids = abandonedContainerIds(
+      'aaa111 4242 devcontainer\nbbb222 4242',
+      'build-box',
+      () => false,
+    );
 
     expect(ids).toEqual([]);
   });
 
   test('spares a container whose owner cannot be read', () => {
     const ids = abandonedContainerIds(
-      'aaa111 not-a-pid\nbbb222 -1\nccc333',
+      'aaa111 not-a-pid build-box\nbbb222 -1 build-box\nccc333',
+      'build-box',
       () => false,
     );
 
@@ -105,8 +132,10 @@ test.describe('Synapse container networking', () => {
   });
 
   test('reads no containers out of an unavailable listing', () => {
-    expect(abandonedContainerIds(undefined, () => false)).toEqual([]);
-    expect(abandonedContainerIds('', () => false)).toEqual([]);
+    expect(abandonedContainerIds(undefined, 'build-box', () => false)).toEqual(
+      [],
+    );
+    expect(abandonedContainerIds('', 'build-box', () => false)).toEqual([]);
   });
 
   test('a bind conflict names the port and the containers holding it', () => {
