@@ -7,6 +7,10 @@ import {
 } from '../../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import {
+  encodeLintFilename,
+  LINT_FILENAME_HEADER,
+} from '@cardstack/runtime-common/lint-headers';
 import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
@@ -37,7 +41,8 @@ export interface LintCommandOptions {
 /**
  * Lint a single file's source code via the realm's `_lint` endpoint.
  *
- * Sends the source to `POST <realmUrl>/_lint` with `X-Filename` and
+ * Sends the source to `POST <realmUrl>/_lint` with `X-Filename`
+ * (percent-encoded, so a name outside Latin-1 survives the header) and
  * `X-HTTP-Method-Override: QUERY` headers. Returns the lint result
  * containing messages and optionally auto-fixed output.
  *
@@ -72,7 +77,7 @@ export async function lint(
       headers: {
         Accept: 'application/json',
         'Content-Type': SupportedMimeType.CardSource,
-        'X-Filename': filename,
+        [LINT_FILENAME_HEADER]: encodeLintFilename(filename),
         'X-HTTP-Method-Override': 'QUERY',
       },
       body: source,
