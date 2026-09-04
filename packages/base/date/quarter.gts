@@ -10,6 +10,7 @@ import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
+import { nowDate } from '../helpers/clock';
 
 class QuarterFieldEdit extends Component<typeof QuarterField> {
   @tracked quarter = 1;
@@ -18,7 +19,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
   constructor(owner: any, args: any) {
     super(owner, args);
     this.quarter = this.args.model?.quarter || 1;
-    this.year = this.args.model?.year || new Date().getFullYear();
+    this.year = this.args.model?.year || nowDate().getFullYear();
   }
 
   get quarterOptions() {
@@ -37,7 +38,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
   }
 
   get years() {
-    const currentYear = new Date().getFullYear();
+    const currentYear = nowDate().getFullYear();
     return Array.from({ length: 10 }, (_, i) => currentYear - 4 + i);
   }
 
@@ -57,7 +58,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
 
   @action
   updateYear(option: { value: number; label: string } | null) {
-    this.year = option?.value || new Date().getFullYear();
+    this.year = option?.value || nowDate().getFullYear();
     this.args.model.year = this.year;
   }
 

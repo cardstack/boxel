@@ -80,6 +80,7 @@ import {
 import { MarkdownDef } from './markdown-file-def'; // realm README
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
+import { now as clockNow, nowDate } from './helpers/clock';
 
 // This file is always loaded through the Boxel loader, which supplies
 // `import.meta`. When type-checking, tsc sees the file as CommonJS output and
@@ -124,7 +125,7 @@ export interface EtaJob {
 
 export function etaMinutes(
   job: EtaJob,
-  now: number = Date.now(),
+  now: number = clockNow(),
 ): number | undefined {
   let done = job.progressDone ?? 0;
   let total = job.progressTotal ?? 0;
@@ -380,7 +381,7 @@ function toMs(value: unknown): number | undefined {
 }
 
 function dayLabelFor(ms: number): string {
-  let now = new Date();
+  let now = nowDate();
   let startOfToday = new Date(
     now.getFullYear(),
     now.getMonth(),
@@ -403,7 +404,7 @@ function relativeTime(value: unknown): string | undefined {
   if (ms === undefined) {
     return undefined;
   }
-  let diff = Math.max(0, Date.now() - ms);
+  let diff = Math.max(0, clockNow() - ms);
   let minutes = Math.floor(diff / 60000);
   if (minutes < 1) {
     return 'just now';

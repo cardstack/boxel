@@ -37,6 +37,7 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
-    "lint:no-isused-option": "node scripts/check-no-isused-option.mjs"
+    "lint:no-isused-option": "node scripts/check-no-isused-option.mjs",
+    "lint:ambient-clock": "node scripts/check-ambient-clock.mjs"
   }
 }
