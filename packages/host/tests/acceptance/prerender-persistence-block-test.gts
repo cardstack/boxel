@@ -29,16 +29,18 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-// `__boxelPrerenderApp` is the prerender app's blanket persistence block: while
-// it is raised, every store in the app drops writes rather than aiming them at
-// a realm whose sole indexing worker the render is occupying. The render route
-// raises it, and its lifetime is bounded by that route being entered.
+// `__boxelPrerenderApp` marks the dedicated prerender app for its whole
+// lifetime, and blocks persistence on every store in it: a write from a render
+// would aim at a realm whose sole indexing worker that render is occupying.
+// The command route is the one place that drops the block, because a command is
+// expected to write and its writes index deferred.
 //
-// A prerender pool tab can be retagged from a realm affinity onto a user
-// affinity, and it enters the command route through an in-app transition — so
-// the app carries across whatever globals the render left behind. Commands
-// write, which makes that hand-off the case worth pinning: a command running
-// under the block answers with a card that was never saved.
+// Dropping it matters — rather than simply never raising it — because a pool
+// tab that has served a card render carries the flag, and the pool can retag
+// that tab from its realm affinity onto the user affinity commands run on. The
+// tab then enters the command route through an in-app transition, so the app
+// keeps whatever globals the render left behind, and a command running under
+// the block answers with a card that was never saved.
 //
 // Outside tests the render route raises the flag itself. Here it is raised by
 // hand, because these tests also run an interactive app whose own saves the
@@ -58,20 +60,18 @@ module('Acceptance | prerender | persistence block', function (hooks) {
     JSON.stringify({ clearCache: true } as RenderRouteOptions),
   );
 
+  // The prerender driver always hands the render route the card's `.json` file
+  // URL, so render against that rather than the extensionless id.
   async function renderCard(id: string) {
     await visit(
       `/render/${encodeURIComponent(
-        id,
+        `${id}.json`,
       )}/0/${RENDER_OPTIONS_SEGMENT}/html/isolated/0`,
     );
     return await capturePrerenderResult('textContent');
   }
 
-  function setCommandRunnerRequest(
-    requestId: string,
-    nonce: string,
-    command: string,
-  ) {
+  function runCommand(requestId: string, nonce: string, command: string) {
     window.localStorage.setItem(
       `boxel-command-request:${requestId}`,
       JSON.stringify({
@@ -81,6 +81,7 @@ module('Acceptance | prerender | persistence block', function (hooks) {
         createdAt: Date.now(),
       }),
     );
+    return visit(`/command-runner/${requestId}/${nonce}`);
   }
 
   function raisePersistenceBlock() {
@@ -143,31 +144,31 @@ module('Acceptance | prerender | persistence block', function (hooks) {
     delete (globalThis as any).__boxelPrerenderApp;
   });
 
-  test('the block does not outlive the render route', async function (assert) {
+  test('entering the command route drops the block', async function (assert) {
     raisePersistenceBlock();
-    let { value } = await renderCard(`${testRealmURL}Pet/mango`);
-    assert.true(value.includes('Mango'), 'the card rendered');
+    await runCommand(
+      'prerender-persistence-block-drop',
+      '1',
+      `${testRealmURL}save-pet-command/default`,
+    );
 
-    await visit('/_standby');
     assert.strictEqual(
       (globalThis as any).__boxelPrerenderApp,
       undefined,
-      'leaving the render route drops the persistence block',
+      'the command route drops the persistence block on entry',
     );
   });
 
   test('a command saves a durable card on a tab that has served a card render', async function (assert) {
     raisePersistenceBlock();
-    await renderCard(`${testRealmURL}Pet/mango`);
+    let { value } = await renderCard(`${testRealmURL}Pet/mango`);
+    assert.true(value.includes('Mango'), 'the card rendered');
 
-    let requestId = 'prerender-persistence-block-save';
-    let nonce = '1';
-    setCommandRunnerRequest(
-      requestId,
-      nonce,
+    await runCommand(
+      'prerender-persistence-block-save',
+      '1',
       `${testRealmURL}save-pet-command/default`,
     );
-    await visit(`/command-runner/${requestId}/${nonce}`);
     await waitFor('[data-prerender][data-prerender-status="ready"]');
 
     let savedId =
@@ -177,16 +178,19 @@ module('Acceptance | prerender | persistence block', function (hooks) {
       savedId.startsWith(testRealmURL),
       `the save came back with a realm id: ${savedId || '<empty>'}`,
     );
-
     // Read the realm's own source rather than the store, so a card that only
-    // ever existed in memory cannot satisfy this.
-    let source = await getService('card-service').getSource(
-      new URL(`${savedId}.json`),
-    );
-    assert.strictEqual(source.status, 200, 'the saved card is durable');
-    assert.true(
-      source.content.includes('Ringo'),
-      'the durable document holds what the command wrote',
-    );
+    // ever existed in memory cannot satisfy this. Guarded on a non-empty id:
+    // a blocked save yields none, and the read would then fail on URL parsing
+    // instead of on the assertion above that explains why.
+    if (savedId) {
+      let source = await getService('card-service').getSource(
+        new URL(`${savedId}.json`),
+      );
+      assert.strictEqual(source.status, 200, 'the saved card is durable');
+      assert.true(
+        source.content.includes('Ringo'),
+        'the durable document holds what the command wrote',
+      );
+    }
   });
 });

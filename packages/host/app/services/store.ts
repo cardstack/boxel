@@ -339,6 +339,11 @@ export default class StoreService extends Service implements StoreInterface {
     // store on __boxelRenderContext alone breaks it: card-prerender sets that
     // global around every test-realm index render, silently dropping app saves
     // that coincide with one.
+    //
+    // The command-runner route is the one place in the prerender app that
+    // drops `__boxelPrerenderApp`, because a command is expected to write and
+    // its writes index deferred rather than waiting on the worker the tab is
+    // holding.
     if ((globalThis as any).__boxelPrerenderApp) {
       return true;
     }
@@ -827,6 +832,28 @@ export default class StoreService extends Service implements StoreInterface {
       } as CardResourceMeta;
     }
 
+    // A caller that asked the prerender app to persist gets an error rather
+    // than the unpersisted instance. An instance handed back with no id is
+    // indistinguishable from a saved one — `SaveCardTool` reports it as a
+    // success — so returning it makes a blocked write a wrong answer instead
+    // of a failure, which is what lets a mis-marked tab answer a card-saving
+    // command with a card that does not exist. `create` already throws on the
+    // same state; `patch` reports a blocked write as `undefined`, which its
+    // callers already branch on. Thrown before the instance is registered so
+    // a failed `add` leaves nothing resident.
+    //
+    // Scoped to the prerender app rather than to every blocked context: host
+    // tests and the interactive app run in-browser index renders whose render
+    // store is blocked too, and a card that writes while rendering there has
+    // always had that write dropped rather than failing its render.
+    if (!opts?.doNotPersist && (globalThis as any).__boxelPrerenderApp) {
+      throw new Error(
+        `cannot persist instance ${
+          instance.id ?? instance[localIdSymbol]
+        }: persistence is blocked in the prerender app`,
+      );
+    }
+
     let maybeOldInstance = instance.id
       ? this.store.getCard(instance.id)
       : undefined;
@@ -838,19 +865,6 @@ export default class StoreService extends Service implements StoreInterface {
     await this.startAutoSaving(instance);
 
     if (this.renderContextBlocksPersistence()) {
-      // A caller that asked for persistence gets an error rather than the
-      // unpersisted instance. An instance handed back with no id is
-      // indistinguishable from a saved one — `SaveCardTool` reports it as a
-      // success — so returning it turns a blocked write into a wrong answer
-      // instead of a failure. Only `doNotPersist` callers wanted the
-      // in-memory instance, and they still get it.
-      if (!opts?.doNotPersist) {
-        throw new Error(
-          `cannot persist instance ${
-            instance.id ?? instance[localIdSymbol]
-          }: persistence is blocked in this render context`,
-        );
-      }
       return instance;
     }
 
@@ -2067,6 +2081,10 @@ export default class StoreService extends Service implements StoreInterface {
   // deliberately not part of the test — card-prerender sets it around index
   // renders that run alongside an interactive app, whose own query fields must
   // keep resolving through those windows.
+  //
+  // A command runs with `__boxelPrerenderApp` dropped, so its query fields do
+  // resolve eagerly — matching what a command gets on a tab that has never
+  // served a render.
   protected resolvesQueryFieldsEagerly(): boolean {
     if ((globalThis as any).__boxelPrerenderApp) {
       return false;
