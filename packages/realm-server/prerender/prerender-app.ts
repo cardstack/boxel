@@ -1238,8 +1238,15 @@ export function buildPrerenderApp(options: {
         // server distrusts. A recycle is exactly when a visit is most likely
         // to reject, so this is the expected path rather than a corner.
         let discardedMs = Date.now() - start;
+        // Sampled inside the retry, after the recycle and immediately before
+        // the render it describes. Carrying the pre-recycle sample forward as
+        // the retry's start would report a pool that had just been replaced as
+        // still stale, and the re-check below would then refuse a failure the
+        // retry earned honestly on a current pool.
+        let retryWarmedAtStart: string | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
+          retryWarmedAtStart = options.getWarmedHostShellHash?.();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1263,7 +1270,7 @@ export function buildPrerenderApp(options: {
         start = Date.now();
         shellAtStart = shellAtCompletion;
         shellAtCompletion = options.getHostShellHash?.();
-        warmedAtStart = warmedAtCompletion;
+        warmedAtStart = retryWarmedAtStart;
         warmedAtCompletion = options.getWarmedHostShellHash?.();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
@@ -1280,6 +1287,13 @@ export function buildPrerenderApp(options: {
         // answer retryably instead: `remote-prerenderer` treats a 500 as a
         // retryable error and the visit is tried again elsewhere, later, or
         // on a pool that has caught up.
+        //
+        // The 500 is not free — the manager prunes a server that returns one
+        // from its registry — so this must fire only for a pool that really
+        // cannot reach the current shell, never for a render that was on the
+        // current pool and simply found a broken card. That is why both warmed
+        // samples describe the render being judged, and why the retry's start
+        // is sampled after its recycle rather than carried forward.
         //
         // Loudly, because a pool that cannot reach the current shell no longer
         // fails quietly by poisoning rows — it fails visibly by refusing to

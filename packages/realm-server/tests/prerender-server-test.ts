@@ -1164,6 +1164,60 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
+      // The retry is judged on its own pool, not on the one the discarded
+      // attempt ran against. A recycle that succeeds between the two renders
+      // leaves the pool current, so a missing export the retry finds there is
+      // the card's — and answering 500 for it would be worse than the bug
+      // this path prevents: the manager prunes a server that returns 500, so
+      // a healthy server would be dropped from the registry over a broken
+      // card, and the visit would be retried until it ran out of servers.
+      test('a genuine failure after a successful recycle is returned, not refused', async function (assert) {
+        // The pool is behind when the first render runs and current once the
+        // recycle resolves, which is what a working recycle looks like.
+        let warmed = 'babf3612';
+        let recycleDeferred = new Deferred<void>();
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => warmed,
+          awaitHostShellRecycle: () =>
+            recycleDeferred.promise.then(() => {
+              warmed = 'b778fe76';
+            }),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        let firstRenderEntered = new Deferred<void>();
+        (built.prerenderer as any).prerenderVisit = async () => {
+          if (++calls === 1) {
+            firstRenderEntered.fulfill();
+          }
+          // Both attempts fail the same way: the card really is broken.
+          return moduleFailure();
+        };
+
+        let resPromise = inFlight(() =>
+          visitRequest(request, `${realmURL.href}genuinely-broken`, authFor()),
+        );
+        await firstRenderEntered.promise;
+        recycleDeferred.fulfill();
+
+        let res = await resPromise;
+        assert.strictEqual(calls, 2, 'the re-render happened');
+        assert.strictEqual(
+          res.status,
+          201,
+          'the failure is returned rather than refused, so no healthy server is pruned',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          "the caller gets the card's own failure to persist",
+        );
+        await built.prerenderer.stop();
+      });
+
       // The shape that poisoned rows, and the one a token-move test cannot
       // reach: the token moved before this render began, so nothing moves
       // under it, and the recycle it triggered has failed — `warmedHostShellHash`
