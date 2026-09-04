@@ -1223,6 +1223,7 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  skipBootIndex,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1232,6 +1233,15 @@ export async function setupIntegrationTestRealm({
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  // Mount and serve without a from-scratch boot index. A realm's boot index
+  // costs ~676ms regardless of how little it has to index, so a test that
+  // never reads the search index — one that renders a card it constructed, or
+  // exercises a component — need not pay for one. Definitions still resolve,
+  // lazily through the prerenderer on first lookup.
+  //
+  // Not the default: a test that queries, or that reads a card by id through
+  // the store, needs the index populated and fails without it.
+  skipBootIndex?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1247,6 +1257,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    skipBootIndex,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -1282,6 +1293,7 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  skipBootIndex,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1292,6 +1304,7 @@ async function setupTestRealm({
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  skipBootIndex?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1359,39 +1372,46 @@ async function setupTestRealm({
     createPrerenderAuth,
   });
 
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    secretSeed: testRealmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    matrixClient: new MatrixClient({
-      matrixURL: baseTestMatrix.url,
-      username: testRealmServerMatrixUsername,
-      seed: testRealmSecretSeed,
-    }),
-    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
-    definitionLookup,
-    cardSizeLimitBytes: Number(
-      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
-    ),
-    fileSizeLimitBytes:
-      fileSizeLimitBytes ??
-      Number(
-        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      secretSeed: testRealmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      matrixClient: new MatrixClient({
+        matrixURL: baseTestMatrix.url,
+        username: testRealmServerMatrixUsername,
+        seed: testRealmSecretSeed,
+      }),
+      realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
+      definitionLookup,
+      cardSizeLimitBytes: Number(
+        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
       ),
-    audioSizeLimitBytes:
-      audioSizeLimitBytes ??
-      Number(
-        process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
-      ),
-    videoSizeLimitBytes:
-      videoSizeLimitBytes ??
-      Number(
-        process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
-      ),
-  });
+      fileSizeLimitBytes:
+        fileSizeLimitBytes ??
+        Number(
+          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+        ),
+      audioSizeLimitBytes:
+        audioSizeLimitBytes ??
+        Number(
+          process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+        ),
+      videoSizeLimitBytes:
+        videoSizeLimitBytes ??
+        Number(
+          process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+        ),
+    },
+    // Realm reads its behavioural options from this second argument. Spreading
+    // one into the first argument type-checks — object spreads bypass
+    // excess-property checking — and is then dropped by a destructuring that
+    // never names it, so the option silently does nothing.
+    { ...(skipBootIndex ? { skipBootIndex } : {}) },
+  );
 
   // Register the realm early so realm-server mock _info lookups can resolve
   // without falling back to real network fetches.
