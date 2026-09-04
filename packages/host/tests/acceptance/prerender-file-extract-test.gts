@@ -300,6 +300,55 @@ boxel:
     );
   });
 
+  test('stamps the provided timestamps onto the resource meta', async function (assert) {
+    // The indexer forwards the timestamps it writes to the file's index row,
+    // so the resource the fileRender pass hydrates carries the same
+    // `meta.lastModified` / `meta.resourceCreatedAt` the realm serves on a
+    // live file-meta read. The FileDef shells render the modified time from
+    // them; a resource without them prerenders HTML that omits it.
+    let url = fileURL('sample.txt');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: fileDefCodeRef('filedef-success', 'SuccessDef'),
+        fileLastModified: 1_633_516_195,
+        fileCreatedAt: 1_537_321_980,
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.resource?.meta.lastModified,
+      1_633_516_195,
+      'the provided lastModified lands in meta',
+    );
+    assert.strictEqual(
+      result.resource?.meta.resourceCreatedAt,
+      1_537_321_980,
+      'the provided createdAt lands in meta as resourceCreatedAt',
+    );
+  });
+
+  test('reads the timestamps off the file response when none are provided', async function (assert) {
+    // The interactive extract paths (the store's in-render fallback, a room
+    // attachment) have no index row to forward from. The base extractor
+    // fetches the file, and the realm stamps `last-modified` on that response.
+    let url = fileURL('sample.txt');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: fileDefCodeRef('filedef-passthrough', 'PassthroughDef'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      typeof result.resource?.meta.lastModified,
+      'number',
+      'lastModified is read off the file response',
+    );
+  });
+
   test('falls back when the FileDef module is missing extractAttributes', async function (assert) {
     let url = fileURL('sample.txt');
     await visit(
