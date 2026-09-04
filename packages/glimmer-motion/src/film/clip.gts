@@ -12,8 +12,10 @@ export interface ClipSignature {
     freeze?: string;
     /** a new element per clip window, so the entrance replays */
     key: string;
+    /** which lane this clip is on: the film's own handle is per lane */
+    lane: number;
     /** the film's handle on the media element, for the per-frame sync */
-    mount: ElementModifier<HTMLElement>;
+    mount: ElementModifier<HTMLElement, [number]>;
     spec: ClipSpec;
     /** the resolved source, under `assets` */
     src: string;
@@ -79,13 +81,13 @@ export class Clip extends Component<ClipSignature> {
               muted={{this.muted}}
               playsinline
               preload='auto'
-              {{@mount}}
+              {{@mount @lane}}
             ></video>
           {{else if (eq @spec.kind 'image')}}
-            <img src={{@src}} alt='' {{@mount}} />
+            <img src={{@src}} alt='' {{@mount @lane}} />
           {{else}}
             {{#if @freeze}}
-              <img src={{@freeze}} alt='' {{@mount}} />
+              <img src={{@freeze}} alt='' {{@mount @lane}} />
             {{/if}}
           {{/if}}
           {{#if @spec.caption}}

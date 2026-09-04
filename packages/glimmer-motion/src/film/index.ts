@@ -7,10 +7,12 @@ export { Clip } from './clip.gts';
 export {
   type ClipEnd,
   type ClipKind,
+  clipLanes,
   type ClipSpec,
   type ClipState,
   clipWindow,
   resolveClip,
+  resolveClips,
   type ResolvedClip,
 } from './clips.ts';
 export { Film, type FilmContext, type FilmSignature, TICK } from './film.gts';

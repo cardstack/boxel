@@ -51,6 +51,23 @@ export interface ClipSpec {
   /** the source's in point, seconds (video) */
   in?: number;
   kind: ClipKind;
+  /**
+   * WHICH LANE THIS CLIP IS ON, and it is the whole reason a beat can
+   * carry more than one.
+   *
+   * Within a lane the rule is what it always was: the newest clip wins,
+   * an older one is never reached past it, and an end policy decides
+   * whether the lane empties or holds. Across lanes clips coexist, which
+   * is what a picture-in-picture over a full-frame video needs and what a
+   * single slot could not do — a second clip on a beat used to overwrite
+   * the first silently.
+   *
+   * Defaults to the clip's own position among its beat's clips, so two
+   * insets on one shot are two lanes without anybody saying so; name it
+   * when a later beat should REPLACE an earlier clip rather than sit
+   * beside it.
+   */
+  lane?: number;
   /** the source's out point, seconds (video); with `in`, sets the window */
   out?: number;
   /** a pip's corner radius, in percent of its width */
@@ -111,9 +128,10 @@ export function resolveClip(
   film: number,
   index: number,
   total: number,
+  lane = 0,
 ): ResolvedClip | null {
   for (let i = Math.min(index, beats.length - 1); i >= 0; i -= 1) {
-    const spec = beats[i]!.clip;
+    const spec = laneOf(beats[i]!, lane);
     if (!spec) {
       continue;
     }
@@ -150,4 +168,54 @@ export function resolveClip(
     };
   }
   return null;
+}
+
+/** a beat's clip on one lane; a clip with no lane takes its own position */
+function laneOf(beat: Beat, lane: number): ClipSpec | undefined {
+  const list = beat.clips;
+  if (!list?.length) {
+    return undefined;
+  }
+  for (let i = 0; i < list.length; i += 1) {
+    if ((list[i]!.lane ?? i) === lane) {
+      return list[i];
+    }
+  }
+  return undefined;
+}
+
+/** every lane any beat up to `index` puts a clip on, in order */
+export function clipLanes(beats: readonly Beat[], index: number): number[] {
+  const seen = new Set<number>();
+  for (let i = Math.min(index, beats.length - 1); i >= 0; i -= 1) {
+    beats[i]!.clips?.forEach((spec, n) => seen.add(spec.lane ?? n));
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+/**
+ * EVERY CLIP ON SCREEN AT A FILM TIME, one per lane, in lane order — which
+ * is also paint order, so a score decides what sits over what by which
+ * lane it puts a thing on.
+ *
+ * A beat used to carry one clip and a second on the same shot overwrote
+ * the first without saying so. Lanes are the smallest thing that fixes
+ * that without inventing a track model: the resolver below is the old
+ * one, run once per lane.
+ */
+export function resolveClips(
+  beats: readonly Beat[],
+  beatStart: (i: number) => number,
+  film: number,
+  index: number,
+  total: number,
+): ResolvedClip[] {
+  const out: ResolvedClip[] = [];
+  for (const lane of clipLanes(beats, index)) {
+    const found = resolveClip(beats, beatStart, film, index, total, lane);
+    if (found) {
+      out.push(found);
+    }
+  }
+  return out;
 }

@@ -5,13 +5,21 @@
  * the three end policies, and a clip that outlives its beat.
  */
 import type { FilmBeat } from 'glimmer-motion';
-import { clipWindow, resolveClip } from 'glimmer-motion/film';
+import type { ClipSpec } from 'glimmer-motion/film';
+import { clipWindow, resolveClip, resolveClips } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 
 const cam = { dolly: 1, lookY: 0, pitch: 10, yaw: 30 };
 
-function beat(id: string, ticks: number, clip?: FilmBeat['clip']): FilmBeat {
-  return { cam, ch: 0, clip, id, mode: 'lower', ticks };
+function beat(id: string, ticks: number, clip?: ClipSpec): FilmBeat {
+  return {
+    cam,
+    ch: 0,
+    clips: clip ? [clip] : undefined,
+    id,
+    mode: 'lower',
+    ticks,
+  };
 }
 
 /* three beats of 4, 6 and 4 seconds; the second carries the clip */
@@ -76,7 +84,7 @@ module('Unit | film | clips', function () {
       beat('c', 2),
     ];
     assert.strictEqual(
-      clipWindow(beats[1]!.clip!, 4, 10),
+      clipWindow(beats[1]!.clips![0]!, 4, 10),
       4,
       'the rest of the beat'
     );
@@ -114,6 +122,92 @@ module('Unit | film | clips', function () {
       resolveClip(beats, start, 6, 1, TOTAL),
       null,
       'the newer clip is removed; the held older one is not reached'
+    );
+  });
+});
+
+module('Unit | film | clips on lanes', function () {
+  const start = (i: number) => [0, 4, 10][i]!;
+
+  test('a beat carries as many clips as it declares', function (assert) {
+    /* two clips on one beat: the second used to overwrite the first */
+    const both: FilmBeat = {
+      cam,
+      ch: 0,
+      clips: [
+        { for: 3, kind: 'video', src: 'a.mp4' },
+        { for: 3, kind: 'image', src: 'b.png' },
+      ],
+      id: 'both',
+      mode: 'lower',
+      ticks: 3,
+    };
+    const list = [beat('one', 2), both, beat('three', 2)];
+    const on = resolveClips(list, start, 5, 1, 14);
+    assert.strictEqual(on.length, 2, 'both are on screen');
+    assert.deepEqual(
+      on.map((c) => c.spec.src),
+      ['a.mp4', 'b.png'],
+      'in the order they were declared, which is paint order'
+    );
+    assert.deepEqual(
+      on.map((c) => c.state),
+      ['active', 'active'],
+      'and both are running'
+    );
+  });
+
+  test('a lane is what a later clip replaces; other lanes are left alone', function (assert) {
+    const first: FilmBeat = {
+      cam,
+      ch: 0,
+      clips: [
+        /* a short window with an end policy: past it, this lane HOLDS */
+        { end: 'hold', for: 3, kind: 'image', src: 'under.png' },
+        { for: 2, kind: 'image', lane: 1, src: 'over.png' },
+      ],
+      id: 'first',
+      mode: 'lower',
+      ticks: 2,
+    };
+    /* a clip on lane 1 replaces the one that was there; lane 0 holds */
+    const later: FilmBeat = {
+      cam,
+      ch: 0,
+      clips: [{ for: 4, kind: 'image', lane: 1, src: 'next.png' }],
+      id: 'later',
+      mode: 'lower',
+      ticks: 3,
+    };
+    const list = [first, later, beat('end', 2)];
+    const on = resolveClips(list, start, 5, 1, 14);
+    assert.deepEqual(
+      on.map((c) => c.spec.src),
+      ['under.png', 'next.png'],
+      'lane 0 is still held, lane 1 has moved on'
+    );
+    assert.strictEqual(on[0]!.state, 'held', 'the one underneath is held');
+    assert.strictEqual(on[1]!.state, 'active', 'the one over it is live');
+  });
+
+  test('an emptied lane leaves the others on screen', function (assert) {
+    const b: FilmBeat = {
+      cam,
+      ch: 0,
+      clips: [
+        { end: 'hold', for: 20, kind: 'image', src: 'under.png' },
+        { for: 1, kind: 'image', src: 'brief.png' },
+      ],
+      id: 'b',
+      mode: 'lower',
+      ticks: 4,
+    };
+    const list = [beat('a', 1), b, beat('c', 2)];
+    const on = resolveClips(list, start, 8, 1, 14);
+    assert.deepEqual(
+      on.map((c) => c.spec.src),
+      ['under.png'],
+      'the brief one is gone and the held one is not'
     );
   });
 });

@@ -264,6 +264,7 @@ function row(
     }
   }
   const traces: NonNullable<Beat['trace']> = [];
+  const clips: NonNullable<Beat['clips']> = [];
   for (const node of shot.children) {
     switch (node.kind) {
       case 'patch':
@@ -296,20 +297,27 @@ function row(
           merge({ photo });
         } else if (node.media) {
           const { kind, ...rest } = node.media;
-          merge({
-            clip: tidy({
+          /* ACCUMULATED, not merged. A beat used to carry one clip, so a
+             second attachment on the same shot overwrote the first
+             silently; they are lanes now, and a clip that names none takes
+             its own position among them. */
+          clips.push(
+            tidy({
               ...rest,
               at: node.at,
               end: node.end,
               for: node.for,
               kind,
             }),
-          });
+          );
         }
         break;
       default:
         break;
     }
+  }
+  if (clips.length) {
+    merge({ clips });
   }
   if (traces.length) {
     merge({ trace: traces });

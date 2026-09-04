@@ -10,9 +10,10 @@ import type { PerformCommand } from '../choreo/types.ts';
 import motion from '../motion.ts';
 import { Clip } from './clip.gts';
 import {
+  type ClipSpec,
   type ClipState,
   clipWindow,
-  resolveClip,
+  resolveClips,
   type ResolvedClip,
 } from './clips.ts';
 import type { CompiledGraph } from './graph/compile.ts';
@@ -192,6 +193,39 @@ const EMPTY_BEAT: Beat = {
   ticks: 1,
 };
 const EMPTY_CHAPTER: Chapter = { n: '', title: '' };
+
+/** one lane's clip, as the template needs it */
+interface ClipRow {
+  freeze: string;
+  key: string;
+  lane: number;
+  spec: ClipSpec;
+  src: string;
+  state: ClipState;
+}
+
+/** which lane a resolved clip sits on: its own, or its position in the beat */
+function laneOfClip(beat: Beat, clip: ResolvedClip): number {
+  const list = beat.clips ?? [];
+  const at = list.indexOf(clip.spec);
+  return clip.spec.lane ?? (at >= 0 ? at : 0);
+}
+
+/** the rows are rebuilt every frame; only a real change should re-render */
+function sameRows(a: readonly ClipRow[], b: readonly ClipRow[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((row, i) => {
+    const other = b[i]!;
+    return (
+      row.key === other.key &&
+      row.state === other.state &&
+      row.freeze === other.freeze &&
+      row.src === other.src
+    );
+  });
+}
 
 export class Film extends Component<FilmSignature> {
   /* ---- what the film was handed ------------------------------------ */
@@ -413,31 +447,25 @@ export class Film extends Component<FilmSignature> {
    * frame; the DOM changes only when the state does; the media element
    * is driven to its source time, never left to its own clock.
    * ------------------------------------------------------------------ */
-  /** the clip on screen: which beat's, and how it stands */
-  @tracked private clipKey = '';
-  @tracked private clipState: ClipState = 'absent';
-  /** the picture read back, for a freeze */
-  @tracked private clipFreeze = '';
-  private clipNow: ResolvedClip | null = null;
-  private clipMedia?: HTMLElement;
+  /**
+   * THE CLIPS ON SCREEN, one row per lane, in lane order — which is also
+   * paint order. There used to be one of these and a beat that declared
+   * two clips kept the second one only.
+   */
+  @tracked private clipRows: ClipRow[] = [];
+  /** the picture read back, per lane, for a freeze */
+  private clipFreezes = new Map<number, string>();
+  private clipNow = new Map<number, ResolvedClip>();
+  private clipMedia = new Map<number, HTMLElement>();
 
-  private clipEl = modifier((el: HTMLElement) => {
-    this.clipMedia = el;
+  private clipEl = modifier((el: HTMLElement, [lane]: [number]) => {
+    this.clipMedia.set(lane, el);
     return () => {
-      if (this.clipMedia === el) {
-        this.clipMedia = undefined;
+      if (this.clipMedia.get(lane) === el) {
+        this.clipMedia.delete(lane);
       }
     };
   });
-
-  get clipSrc(): string {
-    const src = this.clipNow?.spec.src;
-    return src ? `${this.assets}${src}` : '';
-  }
-
-  get clipSpec() {
-    return this.clipNow?.spec ?? { kind: 'image' as const };
-  }
 
   /**
    * THE CLIP, EVERY FRAME. Resolve what should be on screen at this film
@@ -449,45 +477,86 @@ export class Film extends Component<FilmSignature> {
    * on a seek into it, after the page has been stood at that moment.
    */
   private clips(film: Picture, filmTime: number, jumped: boolean) {
-    const found = resolveClip(
+    const found = resolveClips(
       this.all,
       (i) => this.beatStart(i),
       filmTime,
       this.absoluteIndex,
       this.totalSecs,
     );
-    const key = found ? `${this.all[found.index]!.id}` : '';
-    const was = this.clipNow;
-    this.clipNow = found;
-    if (key !== this.clipKey) {
-      this.clipKey = key;
-      this.clipFreeze = '';
-      if (found?.spec.kind === 'freeze') {
-        /* the picture as it stands at the window's head. A seek into the
-           window lands after the head: stand the page there first */
-        if (jumped || found.since > 0.1) {
-          this.freezeClipAt(found, filmTime);
+    const lanes = new Set<number>();
+    const rows: ClipRow[] = [];
+    for (const clip of found) {
+      const lane = clip.spec.lane ?? laneOfClip(this.all[clip.index]!, clip);
+      lanes.add(lane);
+      const key = `${this.all[clip.index]!.id}:${lane}`;
+      const was = this.clipNow.get(lane);
+      this.clipNow.set(lane, clip);
+      const wasKey = was ? `${this.all[was.index]!.id}:${lane}` : '';
+      if (key !== wasKey) {
+        this.clipFreezes.delete(lane);
+        if (clip.spec.kind === 'freeze') {
+          /* the picture as it stands at the window's head. A seek into the
+             window lands after the head: stand the page there first */
+          if (jumped || clip.since > 0.1) {
+            this.freezeClipAt(clip, filmTime);
+          }
+          const shot = film.snapshot();
+          if (shot.length > 64) {
+            this.clipFreezes.set(lane, shot);
+          }
         }
-        const shot = film.snapshot();
-        this.clipFreeze = shot.length > 64 ? shot : '';
       }
+      rows.push({
+        freeze: this.clipFreezes.get(lane) ?? '',
+        key,
+        lane,
+        spec: clip.spec,
+        src: clip.spec.src ? `${this.assets}${clip.spec.src}` : '',
+        state: clip.state,
+      });
+      this.driveClip(lane, clip, was, jumped);
     }
-    const state = found?.state ?? 'absent';
-    if (state !== this.clipState) {
-      this.clipState = state;
-    }
-    /* A CLIP'S SOUND NEVER STEPS. The element arrives at zero and is
-       eased up to its level, and when its window closes it is eased back
-       down before the exit fade takes the element away — a source that
-       starts or stops at level is a click, whatever it is playing. */
-    if (!found || found.spec.kind !== 'video') {
-      const gone = this.clipMedia;
+    /* a lane that emptied: fade its sound out and forget it */
+    for (const lane of [...this.clipNow.keys()]) {
+      if (lanes.has(lane)) {
+        continue;
+      }
+      this.clipNow.delete(lane);
+      this.clipFreezes.delete(lane);
+      const gone = this.clipMedia.get(lane);
       if (gone instanceof HTMLVideoElement && gone.volume > 0.001) {
         gone.volume = Math.max(0, gone.volume - 0.12);
       }
+    }
+    if (!sameRows(this.clipRows, rows)) {
+      this.clipRows = rows;
+    }
+  }
+
+  /**
+   * ONE LANE'S MEDIA, every frame. A playing video is left to run and
+   * corrected when it drifts, a paused or scrubbed one is seeked, a held
+   * one stands at its out point, a frozen one is left alone.
+   *
+   * A CLIP'S SOUND NEVER STEPS. The element arrives at zero and is eased
+   * up to its level, and when its window closes it is eased back down
+   * before the exit fade takes the element away — a source that starts or
+   * stops at level is a click, whatever it is playing.
+   */
+  private driveClip(
+    lane: number,
+    found: ResolvedClip,
+    was: ResolvedClip | undefined,
+    jumped: boolean,
+  ) {
+    const v = this.clipMedia.get(lane);
+    if (found.spec.kind !== 'video') {
+      if (v instanceof HTMLVideoElement && v.volume > 0.001) {
+        v.volume = Math.max(0, v.volume - 0.12);
+      }
       return;
     }
-    const v = this.clipMedia;
     if (!(v instanceof HTMLVideoElement) || found.source === null) {
       return;
     }
@@ -1768,14 +1837,14 @@ export class Film extends Component<FilmSignature> {
           start,
         });
       }
-      if (b.clip) {
+      b.clips?.forEach((c) => {
         out.push({
           end: 'hold',
-          length: clipWindow(b.clip, start, next),
+          length: clipWindow(c, start, next),
           region: 'clip',
-          start: start + (b.clip.at ?? 0),
+          start: start + (c.at ?? 0),
         });
-      }
+      });
     });
     return out;
   }
@@ -4503,10 +4572,9 @@ export class Film extends Component<FilmSignature> {
     this.endSeam();
     this.airedFor = -1;
     this.scoreRun = null;
-    this.clipNow = null;
-    this.clipKey = '';
-    this.clipState = 'absent';
-    this.clipFreeze = '';
+    this.clipNow.clear();
+    this.clipRows = [];
+    this.clipFreezes.clear();
     if (film) {
       film.modelFade(1);
       film.rain(null);
@@ -4777,16 +4845,17 @@ export class Film extends Component<FilmSignature> {
 
           <Stamp @step={{this.cycleStep}} @word={{this.stamp}} />
 
-          {{#if this.clipKey}}
+          {{#each this.clipRows key='lane' as |row|}}
             <Clip
-              @key={{this.clipKey}}
-              @spec={{this.clipSpec}}
-              @src={{this.clipSrc}}
-              @freeze={{this.clipFreeze}}
-              @state={{this.clipState}}
+              @key={{row.key}}
+              @spec={{row.spec}}
+              @src={{row.src}}
+              @freeze={{row.freeze}}
+              @state={{row.state}}
+              @lane={{row.lane}}
               @mount={{this.clipEl}}
             />
-          {{/if}}
+          {{/each}}
 
           {{#if (if this.rolling this.hasPhoto false)}}
             <Insert

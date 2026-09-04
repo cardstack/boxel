@@ -14,11 +14,18 @@ import type { ClipSpec } from './clips.ts';
 export type Pt3 = [number, number, number];
 
 /** a film's handle on one of its own elements, passed to a sub-component */
-export type ElementModifier<E extends Element = HTMLElement> =
-  FunctionBasedModifier<{
-    Args: { Named: object; Positional: unknown[] };
-    Element: E;
-  }>;
+/**
+ * A HANDLE THE FILM PUTS ON AN ELEMENT SOMEBODY ELSE RENDERS. The
+ * positionals are the caller's: a clip passes its lane, because the film
+ * keeps one handle per lane and the element cannot say which it is.
+ */
+export type ElementModifier<
+  E extends Element = HTMLElement,
+  P extends unknown[] = unknown[],
+> = FunctionBasedModifier<{
+  Args: { Named: object; Positional: P };
+  Element: E;
+}>;
 
 /** the pose the film speaks in — an orbit rig with a focus on the ground */
 export interface Cam {
@@ -123,7 +130,8 @@ export interface Beat {
   /** the surroundings: frosted glass (the default), solid, or gone */
   city?: 'glass' | 'off' | 'on';
   /** a video, a still or a freeze of the picture, over the frame for a window on the film's clock */
-  clip?: ClipSpec;
+  /** the clips this beat puts on screen, one per lane (`ClipSpec.lane`) */
+  clips?: ClipSpec[];
   /** CUT to this pose rather than travel to it */
   cut?: boolean;
   /**

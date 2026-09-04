@@ -557,56 +557,105 @@ shot = (pose) => {
   },
   {
     Example: TowerStage,
-    apis: ['<Film>', '@through', 'cut: true', 'c.Perform'],
+    apis: ['<Film>', 'f.Spine', '@through', 'c.Attach', 'c.Perform'],
     group: 'Film',
     id: 'towers',
     lede: 'Not a video. A four-minute museum film composited live in the browser — a 3D scene, motion graphics and a score, cut in real time at any size, with interactive chapters and its own audio mixer.',
     notes: TowersNotes,
     route: 'towers',
-    sample: `{{! THE WHOLE FILM IS ONE CAMERA STEP: every beat contributes
-    waypoints to one spline — a hold breathes, a cut waypoint SPLICES the
-    path into clamped shots — and every cue in the film is a delay into
-    the same clock. The score is the editor. }}
+    sample: `{{! THE SCORE IS THE EDITOR — and it is three things in one
+    region, which is the whole of how a film composes with Choreo.
+
+    ONE CAMERA STEP for the entire film. Every beat contributes waypoints
+    to a single spline: a hold breathes, and a cut waypoint SPLICES the
+    path so the shots either side are clamped rather than travelled
+    between. Nothing else moves the lens — there is no per-shot camera.
+
+    ONE ATTACHED WINDOW PER BEAT. The type, the insert and the clip are
+    their own regions with their own steps, and the film does not PLAY
+    them: it opens a window on its own clock and drives them through it.
+    That is why a scrub lands every one of them where the clock says
+    rather than where they had got to.
+
+    AND, IN A CUT FILM, A CUE PER EDIT. An exact film has none at all: it
+    derives the beat in force from the number, which is what makes it a
+    pure function of its clock and what lets it be rendered frame by
+    frame rather than recorded. }}
 <c.Sequence @name={{this.filmName}}>
   <c.Camera3D @name='film' @through={{this.path}}
     @duration={{this.filmSeconds}} @ease='linear' @tension={{0.34}} />
 
-  {{! one cue per beat: the narration, the type, the stage marks, the
-      traces, the grade and the weather all enter on these }}
-  {{#each this.cues as |cue|}}
-    <c.Perform @at={{at 'film'}} @delay={{cue.delay}}
-      @action='beat' @target={{cue.index}} />
+  {{! driven, never played — and @end says what happens past the window:
+      taken off, held on its last sample, or frozen }}
+  {{#each this.windows as |w|}}
+    <c.Attach @region={{w.region}} @at={{at 'film'}}
+      @delay={{w.start}} @duration={{w.length}}
+      @end={{w.end}} @exact={{this.exact}} />
   {{/each}}
 
-  {{! the last cue does not loop — a film that laps past its own coda
-      never meant any of it. The run stops and the end card rises. }}
-  <c.Perform @action='lap' />
+  {{#unless this.exact}}
+    {{! the narration, the type, the stage marks, the traces, the grade
+        and the weather all enter on these. A beat with a LEAD emits two:
+        an 'air' cue a tick early, so the sky turns while the lens is
+        still travelling, and then the 'beat' itself. }}
+    {{#each this.cues as |cue|}}
+      <c.Perform @at={{at 'film'}} @delay={{cue.delay}}
+        @action={{cue.action}} @target={{cue.index}} />
+    {{/each}}
+
+    {{! and the last cue does not loop — a film that laps past its own
+        coda never meant any of it. The run stops, the end card rises. }}
+    <c.Perform @action='lap' />
+  {{/unless}}
 </c.Sequence>`,
     slowmo: false,
     theater: true,
     walkthrough: [
       {
-        label: 'The shot list — one entry',
-        note: `A film is a table. Every field here is a FACT about the shot rather than a keyframe, which is what lets an agent direct the film by editing data and a person direct it by dragging one number. Only five members are required — id, ch, cam, mode, ticks — and the other forty-seven are the direction.`,
+        label: 'One shot, as the score writes it',
+        note: `A film is a GRAPH — a spine of chapters and shots, with everything else attached to a shot — and it COMPILES to a table of beats the engine runs. Both are here on purpose: this is the source, the next panel is what it becomes. Every field is a FACT about the shot rather than a keyframe, which is what lets an agent direct the film by editing the score and a person direct it by dragging one number. Order inside a shot does not matter; a Join is a sibling BETWEEN two shots, because a seam belongs to neither.`,
+        source: `<f.Join @presentation="dip" />
+<f.Shot
+  @name="ishigaki"       {{! the shot's name IS its place in the script }}
+  @ticks={{7}}           {{! how long it runs: one tick is two seconds }}
+  @cut={{true}}          {{! SPLICE the camera path, do not travel to it }}
+  @dolly={{1.24}} @lookY={{-4.4}} @ox={{-0.12}} @pitch={{-1}} @yaw={{72}}
+  @to={{array 2.8 1.6 0.6}}        {{! what the callouts point at }}
+>
+  {{! the tail pose: the shot travels here over its seven ticks }}
+  <f.To @dolly={{1.12}} @lookY={{-3.2}} @ox={{-0.12}}
+    @pitch={{1}} @yaw={{84}} />
+
+  <f.Type @mode="lower" @kicker="STAGE ONE"
+    @word="石垣" @reading="ISHIGAKI" @gloss="the stone base"
+    @says={{array "No mortar. None." "The wall sheds the shock"}} />
+
+  <f.Voice @line="Ishigaki. Dry stone, no mortar, stacked into a curve."
+    @read={{get VO_SECS "ishigaki"}} />
+
+  {{! adjustments the PICTURE declares, held for this shot only }}
+  <f.picture.Build @clock={{array (tAt 1576) (tAt 1579)}} />
+</f.Shot>`,
+      },
+      {
+        label: 'The same shot, compiled',
+        note: `What the graph above becomes: one row the engine reads. Five members are required — id, ch, cam, mode, ticks — and the other forty-odd are the direction. The compiler is pure and the rows are pinned by golden fixtures, so a change to the score that was not meant to move the film shows up as a diff rather than as a surprise four minutes in.`,
         source: `{
-  id: 'ishigaki',            // the beat's name IS its place in the script
-  ch: 2,                     // which chapter it belongs to
-  ticks: 7,                  // how long it runs: one tick is two seconds
-  mode: 'lower',             // how the front layer is set
-  cut: true,                 // SPLICE the camera path, do not travel
-  join: 'dip',               // and take the seam through black
-  cam:   { dolly: 0.72, lookY: -2.2, ox: -0.1, pitch: 6, yaw: 44 },
-  toCam: { dolly: 0.66, lookY: -1.4, ox: -0.1, pitch: 9, yaw: 62 },
-  build: [tAt(1576), tAt(1579)],   // the construction clock, as a range
+  id: 'ishigaki',            // from @name
+  ch: 2,                     // from the enclosing chapter
+  ticks: 7,
+  mode: 'lower',             // from the Type
+  cut: true,
+  join: 'dip',               // from the Join before it
+  cam:   { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
+  toCam: { dolly: 1.12, lookY: -3.2, ox: -0.12, pitch: 1,  yaw: 84 },
+  to: [2.8, 1.6, 0.6],
+  build: [tAt(1576), tAt(1579)],
   kanji: '石垣',
   romaji: 'ISHIGAKI',
   gloss: 'the stone base',
-  says: [
-    'No mortar. None.',
-    '扇の勾配 — the fan’s incline',
-    'The wall sheds the shock',
-  ],
-  vo: 'Ishigaki. No mortar anywhere in it…',
+  says: ['No mortar. None.', 'The wall sheds the shock'],
+  vo: 'Ishigaki. Dry stone, no mortar, stacked into a curve.',
 }`,
       },
       {
