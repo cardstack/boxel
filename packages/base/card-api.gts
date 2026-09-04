@@ -532,43 +532,72 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // the server's own result set rather than the reconciled one, so a locally
   // edited or created card can't be mistaken for a short page.
   readonly isPartial: boolean;
+  // Hand a running resource the result set a document fetched since it started
+  // carries. Optional: a store whose resources hold no state worth superseding
+  // implements no supersession.
+  reseed?(seed: StoreSearchSeed<T>): void;
+  // The identity of the seeded result set the resource holds, and `undefined`
+  // once a search has re-derived that set for itself. Read it to decide whether
+  // a seed is worth handing over: a remembered "last seed applied" would go on
+  // claiming a set the resource has since replaced, and would then skip a
+  // document restoring the earlier one.
+  readonly appliedSeedIdentity?: string;
 }
 
-export type GetSearchResourceFuncOpts = {
+// A result set a producer already resolved, handed to a search resource in
+// place of running the query. Generic in the row type so a `FileDef` search
+// seeds with file-meta rows rather than being narrowed to `CardDef`.
+export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
+  cards: T[];
+  // What this result set is, as against any other the same query could
+  // produce: two seeds sharing an identity assert the same thing, so a
+  // resource already holding one ignores the other. It has to cover
+  // everything the seed asserts and not just its rows — a page-clamped
+  // field whose match count moved holds the same row and a different
+  // answer.
+  identity?: string;
+  // The index generation this set was resolved at. Separate from the identity
+  // and doing a different job: the identity says whether two sets differ, this
+  // says which of them is newer. Keeping the generation out of the identity is
+  // deliberate — a realm generation moves on every write anywhere in the realm,
+  // so folding it in would make every set look different from every other and
+  // re-apply answers that had not changed.
+  generation?: number;
+  searchURL?: string;
+  realms?: string[];
+  queryErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
+  // IDs the parent doc named in `relationships.{field}.data`. Used
+  // by the SearchResource when `cards` is empty and the parent
+  // skipped query-backed expansion — the resource loads each ID by
+  // URL instead of running a live re-query.
+  cardURLs?: string[];
+  // The result meta the seed was resolved under, chiefly `page.total` —
+  // the query's match count, which exceeds `cards.length` when the page
+  // ceiling clamped the expansion. Absent it, the resource takes the
+  // record count for the total and a truncated seed reads as complete.
+  meta?: QueryResultsMeta;
+  // The seed's match count is not knowable and must not be inferred from its
+  // rows — the producer resolved the field but deliberately reported no
+  // total, as a query-backed field does when one of its realms failed.
+  totalUnknown?: boolean;
+};
+
+export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: {
-    cards: CardDef[];
-    searchURL?: string;
-    realms?: string[];
-    queryErrors?: Array<{
-      realm: string;
-      type: string;
-      message: string;
-      status?: number;
-    }>;
-    // IDs the parent doc named in `relationships.{field}.data`. Used
-    // by the SearchResource when `cards` is empty and the parent
-    // skipped query-backed expansion — the resource loads each ID by
-    // URL instead of running a live re-query.
-    cardURLs?: string[];
-    // The result meta the seed was resolved under, chiefly `page.total` —
-    // the query's match count, which exceeds `cards.length` when the page
-    // ceiling clamped the expansion. Absent it, the resource takes the
-    // record count for the total and a truncated seed reads as complete.
-    meta?: QueryResultsMeta;
-    // The seed's match count is not knowable and must not be inferred from its
-    // rows — the producer resolved the field but deliberately reported no
-    // total, as a query-backed field does when one of its realms failed.
-    totalUnknown?: boolean;
-  };
+  seed?: StoreSearchSeed<T>;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: GetSearchResourceFuncOpts,
+  opts?: GetSearchResourceFuncOpts<T>,
 ) => StoreSearchResource<T>;
 
 export interface CardStore {

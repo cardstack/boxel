@@ -62,6 +62,27 @@ interface QueryFieldState {
     message: string;
     status?: number;
   }>;
+  // Identity of the result set the owner's most recent document carried. Only
+  // an indexer-resolved umbrella gets one — a raw source document carries no
+  // authoritative answer, so it can never supersede one — and comparing it
+  // against the identity the search resource holds is what lets a document
+  // fetched after the resource started hand it a fresher result set.
+  seedIdentity?: string;
+  // The index generation the owner's document was serialized at, off
+  // `meta.generation`. What the resource compares against its own result set to
+  // order the two, so a document read before a search that has since completed
+  // does not overwrite it.
+  seedGeneration?: number;
+  // A document has been captured that no resource has been offered yet. Set by
+  // every capture and cleared the first time a read acts on it, so a running
+  // resource is offered a result set once per document fetched for the owner.
+  //
+  // This is what keeps the offer tied to a document arriving rather than to a
+  // field being read: a search re-derives the set for itself and reports no
+  // seeded identity afterwards, and without this gate the next read would hand
+  // the last document's answer straight back over the fresher one the search
+  // just produced.
+  seedHandoverPending?: boolean;
   searchResource?: StoreSearchResource;
   renderCycleBarrier?: Promise<void>;
   // The sentinel `surfaceSearchResourceErrorState` planted on the most
@@ -140,6 +161,38 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
+    // A document fetched after the resource started carries this field resolved
+    // as of that read, which supersedes what the resource holds: the resource's
+    // own refresh is driven by realm events for the realms its query targets,
+    // so it is behind for a write it never heard about — a subscription gap, or
+    // a query whose realms don't include the one the owner was written to.
+    // Handing that result set over costs nothing, because the document already
+    // paid for the resolution.
+    //
+    // Two gates, and both are needed. The outer one spends the document: the
+    // offer belongs to a document arriving, so a plain read never hands an
+    // answer back over a search that has since produced a fresher one. The
+    // inner one declines an offer the resource is already holding, asking the
+    // resource rather than remembering the last identity handed over — a
+    // memory would go on claiming a set a search had replaced, and would then
+    // turn away the document that corrects it.
+    if (fieldState.seedHandoverPending) {
+      fieldState.seedHandoverPending = false;
+      let seedIdentity = fieldState.seedIdentity;
+      if (
+        seedIdentity &&
+        searchResource.reseed &&
+        seedIdentity !== searchResource.appliedSeedIdentity
+      ) {
+        let seed = queryFieldSeed(fieldState);
+        if (seed) {
+          log.info(
+            `ensureQueryFieldSearchResource: applying refreshed seed for field=${field.name}; count=${seed.cards.length}`,
+          );
+          searchResource.reseed(seed);
+        }
+      }
+    }
     surfaceSearchResourceErrorState(
       fieldState,
       instance,
@@ -149,8 +202,7 @@ export function ensureQueryFieldSearchResource(
     return searchResource;
   }
 
-  let seedRecords = fieldState?.seedRecords;
-  let seedSearchURL = fieldState?.seedSearchURL;
+  let seedRecords = fieldState.seedRecords;
   let args = () => {
     return resolveQueryAndRealm(store, instance, field, fieldDefinition);
   };
@@ -204,45 +256,12 @@ export function ensureQueryFieldSearchResource(
     {
       isLive,
       dependencyTracking: trackingContext,
-      seed: seedRecords
-        ? {
-            cards: seedRecords,
-            searchURL: seedSearchURL ?? undefined,
-            realms: fieldState?.seedRealms,
-            queryErrors: fieldState?.seedErrors,
-            cardURLs: fieldState?.seedCardURLs,
-            // What the resource is allowed to believe about the match count,
-            // in order of how much is known. A count the indexer reported
-            // passes through as the count. Where it reported none but recorded
-            // a realm failure, the rows in hand are labelled a floor — that
-            // says both that the count is unknown and why, which is what turns
-            // into the field's shortfall signal. Where it reported none and no
-            // realm failed, the count is simply unknowable and says so.
-            //
-            // The ordering matters because the fallback is inference: absent
-            // any of these the resource takes the total from the record count,
-            // and a set short by a realm nobody could count would read as the
-            // whole of it — a confident number over an incomplete set, which is
-            // the failure this field's status exists to report rather than
-            // reproduce. An ordinary seed reaches that inference legitimately,
-            // because there nothing was withheld.
-            ...(fieldState?.seedTotal != null
-              ? { meta: { page: { total: fieldState.seedTotal } } }
-              : fieldState?.seedErrors?.length
-                ? {
-                    meta: {
-                      page: { total: seedRecords.length },
-                      incomplete: true,
-                    },
-                  }
-                : seedSearchURL != null
-                  ? { totalUnknown: true }
-                  : {}),
-          }
-        : undefined,
+      seed: queryFieldSeed(fieldState),
     },
   );
   fieldState.searchResource = searchResource;
+  // The document's result set went in with the resource, so it is spent.
+  fieldState.seedHandoverPending = false;
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
@@ -689,6 +708,97 @@ export function captureQueryFieldSeedData(
     Number.isFinite(seedTotal)
       ? seedTotal
       : undefined;
+  fieldState.seedIdentity = seedIdentityFor(fieldState);
+  // The generation the row this document was serialized from was written at.
+  // Absent where the serialization did not come off the index — a freshly built
+  // resource that was never persisted — in which case the field's result set is
+  // ordered by identity alone, as it was before any generation was available.
+  let generation = (resource.meta as { generation?: unknown } | undefined)
+    ?.generation;
+  fieldState.seedGeneration =
+    typeof generation === 'number' ? generation : undefined;
+  fieldState.seedHandoverPending = true;
+}
+
+// The identity of an authoritative result set. An unauthoritative one has no
+// identity, so it can never be mistaken for a fresher answer than the one a
+// resource holds.
+//
+// It covers every part of the answer `queryFieldSeed` builds, not just the
+// rows: a page-clamped field gains a match it cannot surface and reports the
+// same row against a higher count, and a realm that stops answering leaves the
+// rows it did contribute while turning the count into a floor. Identifying a
+// result set by its rows alone would call both of those the answer already in
+// hand and leave the field reporting a shortfall of none.
+function seedIdentityFor(fieldState: QueryFieldState): string | undefined {
+  if (!fieldState.seedSearchURL) {
+    return undefined;
+  }
+  let ids =
+    fieldState.seedCardURLs ??
+    (fieldState.seedRecords ?? [])
+      .map((card) => card.id)
+      .filter((id) => Boolean(id));
+  let unreachableRealms = (fieldState.seedErrors ?? [])
+    .map((error) => error.realm)
+    .sort();
+  return [
+    fieldState.seedSearchURL,
+    ids.join(','),
+    fieldState.seedTotal ?? '',
+    unreachableRealms.join(','),
+  ].join('\n');
+}
+
+// The result set the owner's most recent document produced, in the shape the
+// search resource consumes. `undefined` when the document resolved nothing for
+// this field, which is the resource's signal to answer from a live query.
+//
+// Shared by resource creation and supersession so both describe the same set
+// the same way: the count semantics below are what the field's shortfall signal
+// reads, and a supersession that inferred a different count would report a
+// shortfall the document never claimed.
+function queryFieldSeed(fieldState: QueryFieldState) {
+  let seedRecords = fieldState.seedRecords;
+  if (!seedRecords) {
+    return undefined;
+  }
+  let seedSearchURL = fieldState.seedSearchURL;
+  return {
+    cards: seedRecords,
+    identity: fieldState.seedIdentity,
+    generation: fieldState.seedGeneration,
+    searchURL: seedSearchURL ?? undefined,
+    realms: fieldState.seedRealms,
+    queryErrors: fieldState.seedErrors,
+    cardURLs: fieldState.seedCardURLs,
+    // What the resource is allowed to believe about the match count, in order
+    // of how much is known. A count the indexer reported passes through as the
+    // count. Where it reported none but recorded a realm failure, the rows in
+    // hand are labelled a floor — that says both that the count is unknown and
+    // why, which is what turns into the field's shortfall signal. Where it
+    // reported none and no realm failed, the count is simply unknowable and
+    // says so.
+    //
+    // The ordering matters because the fallback is inference: absent any of
+    // these the resource takes the total from the record count, and a set short
+    // by a realm nobody could count would read as the whole of it — a confident
+    // number over an incomplete set, which is the failure this field's status
+    // exists to report rather than reproduce. An ordinary seed reaches that
+    // inference legitimately, because there nothing was withheld.
+    ...(fieldState.seedTotal != null
+      ? { meta: { page: { total: fieldState.seedTotal } } }
+      : fieldState.seedErrors?.length
+        ? {
+            meta: {
+              page: { total: seedRecords.length },
+              incomplete: true,
+            },
+          }
+        : seedSearchURL != null
+          ? { totalUnknown: true }
+          : {}),
+  };
 }
 
 function resolveQueryAndRealm(
