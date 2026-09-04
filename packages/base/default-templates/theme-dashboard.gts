@@ -1571,6 +1571,7 @@ export class ThemeDashboard extends GlimmerComponent<{
         data-theme-dashboard
         data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
         ...attributes
+        data-test-theme-dashboard
       >
         {{#if @themeCss}}
           {{! template-lint-disable require-scoped-style }}
