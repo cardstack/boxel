@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   abandonedSynapseQuery,
-  describeHostPortConflict,
+  formatHostPortConflict,
   synapseDockerParams,
 } from '../support/synapse/index.ts';
 
@@ -65,12 +65,32 @@ test.describe('Synapse container networking', () => {
     expect(query).not.toContain('-aq');
   });
 
-  test('names the port in a bind conflict rather than leaving it unstated', async () => {
-    // The port no container publishes is the case a reader is most likely to
-    // misread as a Docker-internal problem, so the message has to be explicit
-    // that a host process holds it.
-    const message = await describeHostPortConflict(8008);
+  test('a bind conflict names the port and the containers holding it', () => {
+    const message = formatHostPortConflict(
+      8008,
+      'boxel-synapse (matrixdotorg/synapse:v1.126.0)\nother (alpine:3)',
+    );
 
     expect(message).toContain('8008');
+    expect(message).toContain('boxel-synapse (matrixdotorg/synapse:v1.126.0)');
+    expect(message).toContain('other (alpine:3)');
+  });
+
+  test('a bind conflict no container explains points at a host process', () => {
+    const message = formatHostPortConflict(8008, '');
+
+    expect(message).toContain('8008');
+    expect(message).toContain('a process on this host');
+  });
+
+  test('a bind conflict Docker could not be asked about says so', () => {
+    // An unavailable daemon and a port no container publishes are different
+    // answers. Reporting the first as the second sends a reader looking for a
+    // host process that does not exist.
+    const message = formatHostPortConflict(8008, undefined);
+
+    expect(message).toContain('8008');
+    expect(message).toContain('Docker could not be asked');
+    expect(message).not.toContain('a process on this host');
   });
 });

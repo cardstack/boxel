@@ -258,13 +258,15 @@ export function synapseDockerParams(args: {
   ];
 }
 
-function dockerCapture(params: string[]): Promise<string> {
+// Trimmed stdout of a docker command, or undefined when it could not be run —
+// which is distinct from running and producing nothing.
+function dockerCapture(params: string[]): Promise<string | undefined> {
   return new Promise((resolve) => {
     childProcess.execFile(
       'docker',
       params,
       { encoding: 'utf8' },
-      (err, stdout) => resolve(err ? '' : stdout.trim()),
+      (err, stdout) => resolve(err ? undefined : stdout.trim()),
     );
   });
 }
@@ -273,16 +275,21 @@ function dockerCapture(params: string[]): Promise<string> {
 // which address it means, which reads equally like the published host port and
 // like the container's address on the network. Name the port and whatever
 // already publishes it, so the message points at something actionable.
-export async function describeHostPortConflict(
+//
+// `holders` is the `docker ps` listing of containers publishing the port:
+// undefined when Docker could not be asked, empty when it was asked and named
+// nobody. Those are different answers and the message says which it is, so a
+// failed query is never reported as a host process.
+export function formatHostPortConflict(
   hostPort: number,
-): Promise<string> {
-  let holders = await dockerCapture([
-    'ps',
-    '--filter',
-    `publish=${hostPort}`,
-    '--format',
-    '{{.Names}} ({{.Image}})',
-  ]);
+  holders: string | undefined,
+): string {
+  if (holders === undefined) {
+    return (
+      `Host port ${hostPort} is already bound, and Docker could not be asked ` +
+      `what holds it.`
+    );
+  }
   if (holders) {
     return (
       `Host port ${hostPort} is already published by: ` +
@@ -292,6 +299,21 @@ export async function describeHostPortConflict(
   return (
     `Host port ${hostPort} is already bound, and no container publishes it — ` +
     `a process on this host is listening on it.`
+  );
+}
+
+export async function describeHostPortConflict(
+  hostPort: number,
+): Promise<string> {
+  return formatHostPortConflict(
+    hostPort,
+    await dockerCapture([
+      'ps',
+      '--filter',
+      `publish=${hostPort}`,
+      '--format',
+      '{{.Names}} ({{.Image}})',
+    ]),
   );
 }
 
@@ -320,7 +342,7 @@ async function removeAbandonedTestSynapseContainers(
   hostPort: number,
 ): Promise<void> {
   let ids = await dockerCapture(abandonedSynapseQuery(hostPort));
-  let containerIds = ids.split(/\s+/).filter(Boolean);
+  let containerIds = (ids ?? '').split(/\s+/).filter(Boolean);
   if (containerIds.length === 0) {
     return;
   }
