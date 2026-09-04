@@ -98,7 +98,12 @@ jobs:
         # be a missing codec or tofu boxes rather than a browser that cannot
         # launch — reinstate the deps step for that, ideally cached.
         timeout-minutes: 10
-        run: pnpm exec playwright install
+        # Chromium only. Bare `playwright install` fetches Firefox and WebKit
+        # too, which these specs never launch — and it is those browsers'
+        # libraries (libgtk-4, libgst*, libflite*) that Playwright's host
+        # validation then warns are missing, which reads alarmingly like a
+        # broken install rather than two unused browsers.
+        run: pnpm exec playwright install chromium
         working-directory: packages/software-factory
       - name: Run Node tests
         if: ${{ matrix.shard.index == 1 }}
