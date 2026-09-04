@@ -104,6 +104,7 @@
     "@types/js-string-escape": "catalog:",
     "@types/mime-types": "catalog:",
     "@types/ms": "catalog:",
+    "@types/node": "catalog:",
     "@types/qunit": "catalog:",
     "@types/statuses": "catalog:",
     "concurrently": "catalog:",

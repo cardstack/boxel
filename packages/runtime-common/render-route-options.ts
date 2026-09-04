@@ -15,6 +15,14 @@ export interface RenderRouteOptions {
   fileDefCodeRef?: ResolvedCodeRef;
   fileContentHash?: string;
   fileContentSize?: number;
+  // The file's server-side timestamps (epoch seconds), so the extract's
+  // resource carries the same `meta.lastModified` / `meta.resourceCreatedAt`
+  // the realm stamps on a served file-meta document. The fileRender pass
+  // hydrates its FileDef from that resource, and the FileDef shells render
+  // the modified time from `meta` — without these the prerendered HTML omits
+  // a segment that a live render of the same file shows.
+  fileLastModified?: number;
+  fileCreatedAt?: number;
 }
 
 export function parseRenderRouteOptions(
@@ -45,6 +53,12 @@ export function parseRenderRouteOptions(
       }
       if (typeof parsed.fileContentSize === 'number') {
         options.fileContentSize = parsed.fileContentSize;
+      }
+      if (typeof parsed.fileLastModified === 'number') {
+        options.fileLastModified = parsed.fileLastModified;
+      }
+      if (typeof parsed.fileCreatedAt === 'number') {
+        options.fileCreatedAt = parsed.fileCreatedAt;
       }
     }
     if (parsed.fileRender) {
@@ -82,6 +96,12 @@ export function serializeRenderRouteOptions(
     }
     if (options.fileContentSize !== undefined) {
       serialized.fileContentSize = options.fileContentSize;
+    }
+    if (options.fileLastModified !== undefined) {
+      serialized.fileLastModified = options.fileLastModified;
+    }
+    if (options.fileCreatedAt !== undefined) {
+      serialized.fileCreatedAt = options.fileCreatedAt;
     }
   }
   if (options.fileRender) {

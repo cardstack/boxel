@@ -916,6 +916,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -3362,6 +3365,9 @@ importers:
       '@types/ms':
         specifier: 'catalog:'
         version: 2.1.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14

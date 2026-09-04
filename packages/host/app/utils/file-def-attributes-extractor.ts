@@ -3,6 +3,7 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
+  fileMetaTimestamps,
   FRONTMATTER_DIAGNOSTICS_SYMBOL,
   FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
@@ -10,6 +11,7 @@ import {
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
+  unixTime,
   type CodeRef,
   type Diagnostics,
   type FileMetaResource,
@@ -73,6 +75,12 @@ export class FileDefAttributesExtractor {
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
   #contentSize: number | undefined;
+  #lastModified: number | undefined;
+  #createdAt: number | undefined;
+  // Timestamps read off the file response when this extractor fetched the
+  // bytes itself; the fallback for a caller that supplied none.
+  #headerLastModified: number | undefined;
+  #headerCreatedAt: number | undefined;
   #fileSizeLimitBytes: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
@@ -89,6 +97,8 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef,
     contentHash,
     contentSize,
+    lastModified,
+    createdAt,
     fileSizeLimitBytes,
     fileBytes,
     buildError,
@@ -102,6 +112,14 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
     contentSize: number | undefined;
+    // The file's server-side timestamps (epoch seconds), stamped onto the
+    // resource's `meta` so a FileDef hydrated from it reports them the way
+    // one hydrated from a served file-meta document does. The indexing path
+    // supplies the values its index row carries; a caller without them gets
+    // the file response's `last-modified` / `x-created` headers instead, when
+    // the extract fetched the file.
+    lastModified?: number;
+    createdAt?: number;
     // The realm's configured file-size ceiling. Threaded through to each leaf
     // `extractAttributes` so a format that parses bytes at index time (the 3D
     // model defs) caps that work at the same limit the write path enforces,
@@ -125,6 +143,8 @@ export class FileDefAttributesExtractor {
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
     this.#contentSize = contentSize;
+    this.#lastModified = lastModified;
+    this.#createdAt = createdAt;
     this.#fileSizeLimitBytes = fileSizeLimitBytes;
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
@@ -287,6 +307,10 @@ export class FileDefAttributesExtractor {
           adoptsFrom,
           queryFieldDefs,
           fieldsMeta,
+          {
+            lastModified: this.#lastModified ?? this.#headerLastModified,
+            createdAt: this.#createdAt ?? this.#headerCreatedAt,
+          },
         );
         if (fileMetaFrontmatter) {
           (resource.attributes as Record<string, unknown>).frontmatter =
@@ -399,6 +423,15 @@ export class FileDefAttributesExtractor {
       });
       throw await CardError.fromFetchResponse(this.#fileURL, response);
     }
+    // A file response carries the realm's `last-modified` (and, when the
+    // realm knows it, `x-created`) header. Keep them as the fallback
+    // timestamps for the resource, in the epoch-seconds form the index holds.
+    this.#headerLastModified = headerEpochSeconds(
+      response.headers.get('last-modified'),
+    );
+    this.#headerCreatedAt = headerEpochSeconds(
+      response.headers.get('x-created'),
+    );
     return response;
   }
 
@@ -491,12 +524,27 @@ export function getDisplayNames(klass: FileDefConstructor): string[] {
   return displayNames;
 }
 
+// An RFC 7231 date header as epoch seconds — the form every producer of a
+// file-meta resource stamps — or undefined when absent or unparseable.
+function headerEpochSeconds(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  let ms = Date.parse(value);
+  return Number.isNaN(ms) ? undefined : unixTime(ms);
+}
+
 export function buildFileResource(
   fileURL: string,
   attributes: Record<string, any>,
   adoptsFrom: CodeRef,
   queryFieldDefs?: Record<string, QueryFieldMeta>,
   fieldsMeta?: NonNullable<FileMetaResource['meta']['fields']>,
+  // Stamped through `fileMetaTimestamps` like every other file-meta producer,
+  // so a FileDef hydrated from this resource reads them through the same
+  // `meta` keys as one hydrated from a served document. Left off entirely
+  // when neither is known.
+  timestamps?: { lastModified?: number; createdAt?: number },
 ): FileMetaResource {
   let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
   let baseAttributes = {
@@ -517,6 +565,10 @@ export function buildFileResource(
     attributes: mergedAttributes,
     meta: {
       adoptsFrom,
+      ...(timestamps?.lastModified !== undefined ||
+      timestamps?.createdAt !== undefined
+        ? fileMetaTimestamps(timestamps.lastModified, timestamps.createdAt)
+        : {}),
       // Per-field subclass overrides for nested polymorphic fields (e.g.
       // `frontmatter` → SkillFrontmatterField). Without this the field rehydrates
       // as its declared base type. Supplied by `extractAttributes` (see below).
