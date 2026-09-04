@@ -910,6 +910,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -931,6 +934,12 @@ importers:
       '@types/lodash-es':
         specifier: 'catalog:'
         version: 4.17.12
+      '@typescript-eslint/eslint-plugin':
+        specifier: 'catalog:'
+        version: 8.67.0(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 8.67.0(eslint@8.57.1)(typescript@5.9.3)
       awesome-phonenumber:
         specifier: 'catalog:'
         version: 7.8.0
@@ -946,6 +955,9 @@ importers:
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.7)
@@ -955,6 +967,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
