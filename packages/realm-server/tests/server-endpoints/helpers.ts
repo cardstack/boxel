@@ -1,7 +1,9 @@
 import type { Test, SuperTest } from 'supertest';
 import type { DirResult } from 'tmp';
 import type {
+  LooseSingleCardDocument,
   QueuePublisher,
+  RealmPermissions,
   QueueRunner,
   Realm,
   VirtualNetwork,
@@ -39,6 +41,20 @@ type ServerEndpointsTestOptions = {
   // template build. Tests that DO read the kitchen sink (e.g.
   // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
   fixture?: RealmFixtureName;
+  // Author the testRealm's contents outright, for a test whose subject is a
+  // module it needs to write itself (a realm-defined command, say). Mutually
+  // exclusive with `fixture`.
+  fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  // Replaces the testRealm's permission map outright, realm-owner grant
+  // included — a caller that still wants one restates it.
+  //
+  // The default makes the realm world-writable, which is what keeps most
+  // endpoint tests from needing to mint anything. It also means a write
+  // short-circuits before the Authorization header is read (see
+  // `Realm#checkPermission`), so a test whose subject is an authenticated
+  // write has to narrow `'*'` to `['read']` and grant the writing user
+  // explicitly, or it proves nothing about auth.
+  permissions?: RealmPermissions;
 };
 
 export function setupServerEndpointsTest(
@@ -74,9 +90,11 @@ export function setupServerEndpointsTest(
   }
 
   setupPermissionedRealmCached(hooks, {
-    fixture: options.fixture ?? 'blank',
+    ...(options.fileSystem
+      ? { fileSystem: options.fileSystem }
+      : { fixture: options.fixture ?? 'blank' }),
     realmURL: testRealmURL,
-    permissions: {
+    permissions: options.permissions ?? {
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],
     },

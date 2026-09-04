@@ -101,6 +101,7 @@ import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 import {
   consumingRealmHeader,
   duringPrerenderHeaders,
+  headlessCommandWriteHeaders,
   jobIdHeader,
   loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
@@ -3266,6 +3267,12 @@ export default class StoreService extends Service implements StoreInterface {
       body: JSON.stringify(doc, null, 2),
       headers: {
         'Content-Type': SupportedMimeType.CardJson,
+        // Marks a write issued by a headless command, which makes the realm
+        // index it deferred and answer from the document it serialized rather
+        // than from the index. The command's tab holds a prerender render slot
+        // until it returns, and the index read the realm would otherwise do
+        // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
+        ...headlessCommandWriteHeaders(),
       },
       clientRequestId: opts?.clientRequestId,
     });
