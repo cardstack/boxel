@@ -25,10 +25,10 @@ import { easingDefinitionToFunction } from 'motion-utils';
 
 import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
+import { sampleThrough, settleThrough } from './path.ts';
 import { choreoHostById } from './registry.ts';
 import type {
   Camera3DState,
-  Camera3DWaypoint,
   CameraState,
   ChoreoNode,
   Compiled,
@@ -41,155 +41,6 @@ import type {
   Rect,
   Sprite,
 } from './types.ts';
-
-/**
- * One cardinal-spline component: Hermite through p1 and p2, tangents off
- * p0 and p3 scaled by `k = (1 - tension) / 2`. Tension 0 is the classic
- * Catmull-Rom — lively, and loose enough to overshoot between waypoints
- * that change direction; 1 collapses the tangents and the path goes
- * piecewise-linear. The default (0.5) is the steady hand: it still crosses
- * every waypoint with continuous velocity, but it does not sway on the way.
- */
-function crVal(
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number,
-  u: number,
-  k: number,
-) {
-  const m1 = k * (p2 - p0);
-  const m2 = k * (p3 - p1);
-  const u2 = u * u;
-  const u3 = u2 * u;
-  return (
-    (2 * u3 - 3 * u2 + 1) * p1 +
-    (u3 - 2 * u2 + u) * m1 +
-    (-2 * u3 + 3 * u2) * p2 +
-    (u3 - u2) * m2
-  );
-}
-
-/**
- * Resolve a `@through` path's control points: the pose in force first, then
- * each waypoint with its omissions carried forward. If ANY point carries a
- * look, every point gets one (the origin, when unstated), so the aim is
- * splined by the same arithmetic as the pose.
- */
-function resolveThrough(
-  from: Camera3DState,
-  through: Camera3DWaypoint[],
-): Camera3DState[] {
-  const aimed = !!from.look || through.some((w) => w.look);
-  const seed: Camera3DState = {
-    ...from,
-    look: aimed ? (from.look ?? { x: 0, y: 0, z: 0 }) : undefined,
-  };
-  const pts = [seed];
-  let prev = seed;
-  for (const w of through) {
-    const p: Camera3DState = {
-      dolly: w.dolly ?? prev.dolly,
-      look: aimed ? (w.look ?? prev.look) : undefined,
-      pitch: w.pitch ?? prev.pitch,
-      x: w.x ?? prev.x,
-      y: w.y ?? prev.y,
-      yaw: w.yaw ?? prev.yaw,
-    };
-    pts.push(p);
-    prev = p;
-  }
-  return pts;
-}
-
-/**
- * Sample the spline at overall progress p ∈ [0, 1] (uniform segments).
- *
- * SPLICES (docs/choreo-splices.md): a waypoint marked `cut` starts a new
- * SHOT. Each shot is a clamped spline of its own points — endpoint
- * tangents one-sided, so no shot's velocity crosses a seam — and each
- * shot's window runs from its first slot to the next seam, its points
- * spread uniformly across it. The outgoing shot therefore plays through
- * the seam instant (its motion stretches by one slot rather than
- * parking), the incoming one begins exactly on it, and the sampled pose
- * is a step function at the seam. Waypoints keep their uniform slots, so
- * cues anchored to waypoint moments keep their clock. A cut on the first
- * waypoint drops the pose-in-force seed: the score opens inside its
- * first shot.
- */
-function sampleThrough(
-  from: Camera3DState,
-  through: Camera3DWaypoint[],
-  progress: number,
-  tension?: number,
-): Camera3DState {
-  const k = (1 - (tension ?? 0.5)) / 2;
-  const pts = resolveThrough(from, through);
-  const segs = pts.length - 1;
-  const s = Math.min(segs - 1e-9, Math.max(0, progress * segs));
-  /* the seams, in point indices (+1: the seed sits at 0) */
-  let seams: number[] | undefined;
-  for (const [n, w] of through.entries()) {
-    if (w.cut) {
-      (seams ??= []).push(n + 1);
-    }
-  }
-  /* the shot containing s: points [a, e), window [w0, w1) in slot units */
-  let a = 0;
-  let e = pts.length;
-  let w0 = 0;
-  let w1 = segs;
-  if (seams) {
-    if (seams[0] === 1) {
-      /* a leading cut: the seed never plays */
-      a = 1;
-      seams = seams.slice(1);
-    }
-    for (const seam of seams) {
-      if (s < seam) {
-        e = seam;
-        w1 = seam;
-        break;
-      }
-      a = seam;
-      w0 = seam;
-    }
-  }
-  const m = e - a;
-  const lam =
-    m === 1 ? 0 : Math.max(0, Math.min(1 - 1e-9, (s - w0) / (w1 - w0)));
-  const ss = lam * (m - 1);
-  const i = a + Math.floor(ss);
-  const u = m === 1 ? 0 : ss - Math.floor(ss);
-  /* clamped to the SHOT: the far side of a seam does not exist here */
-  const P = (j: number) => pts[Math.max(a, Math.min(e - 1, j))]!;
-  const p0 = P(i - 1);
-  const p1 = P(i);
-  const p2 = P(i + 1);
-  const p3 = P(i + 2);
-  const v = (key: 'dolly' | 'pitch' | 'x' | 'y' | 'yaw') =>
-    crVal(p0[key], p1[key], p2[key], p3[key], u, k);
-  const out: Camera3DState = {
-    dolly: v('dolly'),
-    pitch: v('pitch'),
-    x: v('x'),
-    y: v('y'),
-    yaw: v('yaw'),
-  };
-  if (p1.look && p2.look) {
-    const l = (a: 'x' | 'y' | 'z') =>
-      crVal(
-        (p0.look ?? p1.look)![a],
-        p1.look![a],
-        p2.look![a],
-        (p3.look ?? p2.look)![a],
-        u,
-        k,
-      );
-    out.look = { x: l('x'), y: l('y'), z: l('z') };
-  }
-  return out;
-}
 
 /** the properties whose mid-flight drive means a sprite is IN SPACE — a
  *  replacement pass must carry these on, never snap them (§3.1) */
@@ -1299,7 +1150,18 @@ export class ChoreoRun implements Run {
             shot = from;
           } else {
             const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
-            shot = sampleThrough(from, through, p, cue.camera3d.tension);
+            const settle = cue.camera3d.settle;
+            const span = t.end - t.start;
+            shot =
+              settle && span > 0
+                ? settleThrough(
+                    from,
+                    through,
+                    p,
+                    cue.camera3d.tension,
+                    (settle * 1000) / span,
+                  )
+                : sampleThrough(from, through, p, cue.camera3d.tension);
           }
           continue;
         }

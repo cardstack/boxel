@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>a picture that only remembers</title>
+<!--
+  A PICTURE FOR A TEST. The real one is a WebGL page that answers the
+  `Picture` port through `window.__film`; this answers the same port and
+  draws nothing, keeping only what it was asked to draw. `__poses` is
+  every `pose()` in order, which is the film's camera path as the film
+  actually wrote it — the one thing a frozen lens cannot fake.
+
+  It lives in `public/` rather than in a `srcdoc` because the film mounts
+  its picture by `src`, and only a same-origin page lets the test read
+  the port back.
+-->
+<style>
+  html,
+  body {
+    background: #0d0905;
+    height: 100%;
+    margin: 0;
+  }
+</style>
+<script>
+  window.__poses = [];
+  const value = {
+    dissolve: () => false,
+    dur: 0,
+    height: () => 12,
+    looks: () => [],
+    palette: () => ({
+      accent: "#c98b3a",
+      ink: "#f4efe6",
+      ink2: "#cfc6b8",
+      ink3: "#9b9184",
+      paper: "#0d0905",
+      rule: "#3a332a",
+      time: "#cfc6b8",
+    }),
+    perf: () => ({ cap: 60, dpr: 1, frameMs: 8, pinned: null }),
+    pose: (p) => void window.__poses.push(p),
+    project: () => ({ on: false, x: 0, y: 0, z: 0 }),
+    rising: () => null,
+    snapshot: () => "",
+    speaking: () => false,
+    style: () => 0,
+    styleIndex: () => 0,
+    sun: () => ({ h: 800, on: false, w: 1280, x: 640, y: 200 }),
+    view: () => ({ az: 0, el: 0, fov: 40, h: 800, w: 1280, zoom: 1 }),
+  };
+  const noop = () => {};
+  window.__film = new Proxy(value, {
+    get: (t, k) => (k in t ? t[k] : noop),
+    has: () => true,
+  });
+</script>

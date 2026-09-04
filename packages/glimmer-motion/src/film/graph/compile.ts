@@ -13,7 +13,7 @@
  * Pure: a tree of plain nodes in, rows out. The components in
  * `nodes.gts` build the tree from the template; nothing here knows Ember.
  */
-import type { ClipSpec } from '../clips.ts';
+import type { ClipLook, ClipSpec } from '../clips.ts';
 import type { PresentationComponent } from '../joins.gts';
 import type { Beat, Cam, Chapter, Join, JoinName, Over } from '../types.ts';
 
@@ -25,6 +25,7 @@ export type GraphNode =
   | EyeNode
   | GroupNode
   | JoinNode
+  | LookNode
   | PatchNode
   | ShotNode
   | ToNode
@@ -49,6 +50,12 @@ export interface GroupNode {
 }
 
 /** a sibling between two shots: the seam INTO the next one */
+/** a look a clip holds: collected by its clip, never by the beat */
+export interface LookNode {
+  kind: 'look';
+  look: ClipLook;
+}
+
 export interface JoinNode {
   dipTo?: string;
   join: JoinName;
@@ -115,6 +122,7 @@ export interface AttachNode {
         fit?: ClipSpec['fit'];
         in?: number;
         kind: 'freeze' | 'image' | 'video';
+        look?: ClipLook;
         out?: number;
         /** a pip's corner radius, percent of its width */
         radius?: number;
@@ -264,6 +272,7 @@ function row(
     }
   }
   const traces: NonNullable<Beat['trace']> = [];
+  const clips: NonNullable<Beat['clips']> = [];
   for (const node of shot.children) {
     switch (node.kind) {
       case 'patch':
@@ -296,20 +305,27 @@ function row(
           merge({ photo });
         } else if (node.media) {
           const { kind, ...rest } = node.media;
-          merge({
-            clip: tidy({
+          /* ACCUMULATED, not merged. A beat used to carry one clip, so a
+             second attachment on the same shot overwrote the first
+             silently; they are lanes now, and a clip that names none takes
+             its own position among them. */
+          clips.push(
+            tidy({
               ...rest,
               at: node.at,
               end: node.end,
               for: node.for,
               kind,
             }),
-          });
+          );
         }
         break;
       default:
         break;
     }
+  }
+  if (clips.length) {
+    merge({ clips });
   }
   if (traces.length) {
     merge({ trace: traces });

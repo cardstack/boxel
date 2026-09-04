@@ -13741,12 +13741,15 @@ html[data-gm-dragging] * {
 
 /* THE WELL'S ASPECT IS FOR A WELL. On the page the film's frame takes
    16/9 so the composition is not cropped by a letterbox; in theater the
-   frame IS the window, and an aspect ratio there would put bars around
-   a picture that already reframes itself to whatever it is given. */
+   frame follows the window, capped at a square so a portrait phone does
+   not turn the film into a tall strip. The picture reframes to this box;
+   do not force a fixed aspect ratio or re-parent its live iframe. */
 .demo-body.is-theater .stage-wrap,
 .demo-body.is-theater .stage-wrap:has(.tw-face),
 .demo-body.is-theater .stage-wrap:has(.sg-face) {
-  height: 100vh;
+  height: min(100vh, 100vw);
+  /* Follow the visible viewport as mobile browser chrome opens/closes. */
+  height: min(100dvh, 100vw);
   min-height: 0;
   max-height: none;
   aspect-ratio: auto;

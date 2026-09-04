@@ -302,6 +302,10 @@ export default class ReelFilm extends Component<{
               />
               {{! THE PICTURE IN THE PICTURE: a layer, placed in percent of
               the frame, with its own fade in and out }}
+              {{! AND THE LAYER IS GRADED, not just placed. `f.clip.Look`
+              is the clip actor's own adjustment — the first in this
+              vocabulary that belongs to something other than the
+              picture. }}
               <f.Inset
                 @src="xstress-loop.mp4"
                 @x={{62}}
@@ -311,7 +315,9 @@ export default class ReelFilm extends Component<{
                 @fade={{0.5}}
                 @at={{0.6}}
                 @for={{4.4}}
-              />
+              >
+                <f.clip.Look @sat={{0.15}} @con={{1.25}} @bri={{0.92}} />
+              </f.Inset>
             </f.Shot>
           </f.Chapter>
 
@@ -354,7 +360,9 @@ export default class ReelFilm extends Component<{
                 @fade={{0.6}}
                 @at={{1.8}}
                 @for={{5}}
-              />
+              >
+                <f.clip.Look @sepia={{0.5}} @bri={{1.1}} @blur={{0.6}} />
+              </f.Inset>
             </f.Shot>
           </f.Chapter>
         </f.Spine>

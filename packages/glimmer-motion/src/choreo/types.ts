@@ -453,6 +453,17 @@ export interface Camera3DStep extends StepBase {
   look?: { x: number; y: number; z: number };
   ms?: number;
   pitch?: number;
+  /**
+   * SMOOTHING, in seconds of the cue's own clock: the reported pose is a
+   * centred average of the path over a window this wide, which takes the
+   * curvature step out of every waypoint without a spring and without
+   * lag. It stays a pure function of the clock, so a scrub and a render
+   * agree with a play. The window tapers to nothing at a `cut` and at
+   * either end of the path, so cuts stay hard and the landing is exact.
+   * A quarter of the gap between waypoints is a good starting point;
+   * much more and the path stops visiting them.
+   */
+  settle?: number;
   spring?: SpringSpec;
   /**
    * A PATH, not a pair: the shot runs from the pose in force THROUGH these
@@ -693,6 +704,8 @@ export interface Cue {
   /** camera3d: hand an orbit pose to the host, every frame it changes */
   camera3d?: {
     by?: boolean;
+    /** smoothing window for a `through` path, seconds — see Camera3DStep */
+    settle?: number;
     tension?: number;
     through?: Camera3DWaypoint[];
     to: {
