@@ -383,6 +383,40 @@ export class Perform extends StepComponent<
  * `<c.Scroll />` — animate the sprite's scroll container so the sprite lands
  * at `@align`; occupies the sequence like any step (§6.1).
  */
+/**
+ * `<c.Attach @region @duration />` — drive another region's run over a
+ * window of this one's clock. Positioned like any step (sequence order,
+ * `@at`, `@delay`); `@in` and `@rate` map the window onto the child's own
+ * seconds; `@end` says what happens past it; `@exact` refuses a child
+ * that cannot be driven exactly (a spring, a follow).
+ */
+export class Attach extends StepComponent<
+  StepArgsBase & {
+    duration: number;
+    end?: 'hold' | 'remove';
+    exact?: boolean;
+    in?: number;
+    rate?: number;
+    region: string;
+  }
+> {
+  node(): TimelineNode {
+    const { delay, duration, end, exact, rate, region } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      end,
+      exact,
+      in: this.args.in,
+      kind: 'attach',
+      ms: duration * 1000,
+      name: this.args.name,
+      rate,
+      region,
+    };
+  }
+}
+
 export class Scroll extends StepComponent<
   StepArgs & { align?: 'center' | 'end' | 'start'; duration?: number }
 > {

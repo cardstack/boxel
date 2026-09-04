@@ -152,6 +152,24 @@ every duration in the language is **seconds**, as in Motion.
 | `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                                                                            |
 | `c.Crossing` | the canned route transition: `@spring` (or `@duration` + `@ease`), `@leave`, `@arrive`, `@overlap`, `@swap`                                                                                                                                              |
 
+### 3.4a Attach — a driven run
+
+`<c.Attach @region @duration @in @rate @end @exact>` places a **window** on
+this run's clock over another region's run, named by that region's `@id`.
+While the window is open the child's run is paused and told the time,
+`in + (now − start) × rate`, on every evaluate; before it the child stands
+at its head; past it, `@end='hold'` stands it at its tail and `'remove'`
+leaves it to whoever unmounts it. Several windows may name one region (a
+film's every beat names the plate): the run resolves one governing window
+per region per evaluate — the one in force, else the latest past one that
+holds, else the earliest future one. Under `@exact`, a child whose score
+integrates (a spring, a follow) is refused once, loudly, and never driven:
+an integrator's state is its history, and a driven clock has none. This is
+the first of the two constructs the film graph needs
+(docs/film-graph/CONSTRUCTS.md); `<Film>` uses it for the type, the
+insert and the clip, and it is what makes a whole film a pure function of
+one number.
+
 ### 3.5 Timing
 
 Block order and `@delay`; `@name` / `@at` with `at()` / `after()`

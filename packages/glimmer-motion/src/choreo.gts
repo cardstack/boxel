@@ -38,10 +38,15 @@ import {
   measure,
   type Snapshot,
 } from './choreo/measure.ts';
-import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
+import {
+  type ChoreoHost,
+  type ChoreoProvider,
+  setChoreoHost,
+} from './choreo/registry.ts';
 import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
   Aim,
+  Attach,
   Camera,
   Camera3D,
   collect,
@@ -73,6 +78,7 @@ import type {
   Query,
   Sprite,
   SpriteType,
+  TimelineNode,
 } from './choreo/types.ts';
 import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
@@ -90,6 +96,7 @@ const selector = (type?: Query['type']): Selector =>
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
   Aim: typeof Aim;
+  Attach: typeof Attach;
   Camera: typeof Camera;
   Camera3D: typeof Camera3D;
   Crossing: typeof Crossing;
@@ -142,6 +149,7 @@ export interface ChoreoContext {
 function contextFor(region: Choreo): ChoreoContext {
   return {
     Aim,
+    Attach,
     Camera,
     Camera3D,
     Crossing,
@@ -422,6 +430,26 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   /* ---- ChoreoHost ---- */
 
+  /** SPIKE (Lane): providers from outside the markup, appended to every collected tree */
+  private contributors = new Set<ChoreoProvider>();
+  contribute(provider: ChoreoProvider) {
+    this.contributors.add(provider);
+    return () => {
+      this.contributors.delete(provider);
+    };
+  }
+  /** the run an attachment drives: the one playing or holding, none between runs */
+  currentRun(): ChoreoRun | null {
+    return this.run ?? null;
+  }
+  /** the region's own steps in document order, then whatever was contributed from outside */
+  private collectTree(root: Element): TimelineNode[] {
+    const tree = collect(root);
+    for (const provider of this.contributors) {
+      tree.push(provider.node());
+    }
+    return tree;
+  }
   register(node: ChoreoNode) {
     this.participants.add(node);
     this.arrived.add(node);
@@ -704,7 +732,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // the share badge, the hot wire — a Hold with a lifetime fired by an
     // event that inserts, removes and moves nothing. Steps that select
     // change (inserted / removed / moved) produce no cues on such a pass.
-    const tree = firstRender ? [] : collect(root);
+    const tree = firstRender ? [] : this.collectTree(root);
     const compiled = tree.length
       ? compile(tree, changeset)
       : { cues: [], gates: [] };
@@ -1065,7 +1093,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     return (
-      treePrint(collect(root)) === this.scorePrint &&
+      treePrint(this.collectTree(root)) === this.scorePrint &&
       this.layoutOf() === this.layoutPrint
     );
   }

@@ -334,21 +334,38 @@ The mapping from three.js to CSS is **85 lines** (`test-app/app/lib/css3d.ts`): 
 Two films were cut by hand on the same engine before the construct was written — **Towers** (`/towers`) and **Sagrada Família** (`/sagrada`) — and 69% of the second was the first. `<Film>` is that 69%, lifted: a headless cutting room in which a 3D page takes the place of the video track, and everything else is a component reading one clock — the chased lens, the joins (wipe, dip, blend, iris, melt, blur, luma, flash, defocus), the lower third and the plate on Choreo, the timeline, the voice with its measured reads, the transport, the front door and the end card.
 
 ```gts
-import { Film } from 'glimmer-motion/film';
+import { Film, IframePicture } from 'glimmer-motion/film';
 
-<Film @name='sagrada' @src={{this.src}} @assets={{this.assets}}
-  @beats={{BEATS}} @chapters={{CHAPTERS}} @grades={{GRADES}}
-  @voSecs={{VO_SECS}} @clock={{CLOCK}} @standing={{T_TODAY}}>
+<Film @name='sagrada' @seek='exact' @clock={{CLOCK}} @over='everything'>
+  <:picture as |register|>
+    <IframePicture @register={{register}} @src={{this.src}}
+      @assets={{this.assets}} @standing={{T_TODAY}} @grades={{GRADES}} />
+  </:picture>
+  <:default as |f|>
+    <f.Spine @join='dip'>
+      <f.Chapter @n='01' @title='The site'>
+        <f.Shot @name='apse' @ticks={{5}} @dolly={{1.4}} @yaw={{18}} …>
+          <f.Type @kicker='THE SITE' @kanji='NAIXEMENT' />
+          <f.Voice @read={{VO_SECS.apse}} />
+        </f.Shot>
+        <f.Join @presentation='wipe' />
+        …
+      </f.Chapter>
+    </f.Spine>
+  </:default>
   <:gate as |f|>…the front matter, f.begin…</:gate>
   <:end as |f|>…the back matter, f.restart…</:end>
 </Film>
 ```
 
-A film is its shot list (data an agent edits), its script with the reads measured by ffprobe, its chapters, the geometry sampled off its model, and an identity block. The one-task behaviours — walk up the street and only then put your head back, follow the part being built, no line on a thing still going up — are beat fields with their handles exposed. The picture is a port (`Picture`), so a third film can hand in something other than an iframe.
+A film is a GRAPH: a spine of chapters and shots with everything else
+attached to a shot, compiled to the shot list the engine runs. Its script
+carries the reads measured by ffprobe, the geometry sampled off its
+model, and an identity block. The one-task behaviours — walk up the street and only then put your head back, follow the part being built, no line on a thing still going up — are beat fields with their handles exposed. The picture is a port (`Picture`), so a third film can hand in something other than an iframe.
 
 [docs/film.md](docs/film.md) is the **as-built reference**: every argument and block, the beat table, the clock and its one-tick cue offset, the two seek modes, the `Picture` port — and the section that matters most for the rest of the library, how `<Film>` composes with the other constructs rather than replacing them. It is an ordinary consumer of `<Choreo>`: one `c.Camera3D @through` for the entire picture, one `c.Perform` per beat anchored with `at('film')`, the lower third on its own region, and — in exact mode — two Choreo runs the film drives by writing `run.time` instead of playing them.
 
-[notes/film-construct.md](notes/film-construct.md) is the design record behind it: the two reference films, the duplication measured, the fork between a seekable film and a chased one, and what was built.
+[docs/film-graph/](docs/film-graph/) is the design record for the graph — the memo, the constructs, the revisions log and the plan — and [notes/film-construct.md](notes/film-construct.md) is the record behind the construct itself: the two reference films, the duplication measured, the fork between a seekable film and a chased one, and what was built.
 
 ---
 

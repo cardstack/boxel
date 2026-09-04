@@ -35,8 +35,17 @@ export interface ClipSpec {
   credit?: string;
   /** past its window: taken off (default), held on its last sample, or frozen */
   end?: ClipEnd;
-  /** full frame over the picture, or an inset in the corner the type is not using */
-  fit?: 'cover' | 'inset';
+  /** a pip's own fade, seconds in and out (default 0.4) */
+  fade?: number;
+  /**
+   * `cover` is the full frame over the picture; `inset` is the editorial
+   * photograph, a paper card in the corner the type is not using; `pip`
+   * is a LAYER — placed, sized and faded by the score, with nothing
+   * around it. A pip is what a picture-in-picture actually is, and the
+   * card is what an inset actually is; they were one thing and should
+   * not have been.
+   */
+  fit?: 'cover' | 'inset' | 'pip';
   /** seconds it stays; default: to the end of the beat, or the source's own length */
   for?: number;
   /** the source's in point, seconds (video) */
@@ -44,12 +53,20 @@ export interface ClipSpec {
   kind: ClipKind;
   /** the source's out point, seconds (video); with `in`, sets the window */
   out?: number;
+  /** a pip's corner radius, in percent of its width */
+  radius?: number;
   /** source seconds per film second (video) */
   rate?: number;
   /** under `assets`; a freeze needs none */
   src?: string;
   /** the clip's own sound, 0..1; 0 (the default) keeps the film's voice in charge */
   volume?: number;
+  /** a pip's width, percent of the frame (default 30) */
+  w?: number;
+  /** a pip's left edge, percent of the frame (default 66) */
+  x?: number;
+  /** a pip's top edge, percent of the frame (default 10) */
+  y?: number;
 }
 
 export type ClipState = 'absent' | 'active' | 'frozen' | 'held';

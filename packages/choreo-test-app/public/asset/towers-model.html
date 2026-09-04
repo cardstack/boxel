@@ -8514,6 +8514,26 @@
               uGradeA: { value: 0 },
               uVigA: { value: 0 },
               uAspect: { value: 1 },
+              /* THE WASH AND THE CLOUD, both of which used to be CSS layers
+                 laid over this canvas by the film (.cf-scrim, .cf-cloud).
+                 They are in the pass now for one reason: the freeze is
+                 captured FROM this pass, so a wash that changes with the
+                 shot crossfades with the picture instead of snapping on the
+                 cut frame. A transition applies to what its own container
+                 renders, and this is the container. */
+              uWashCol: { value: new T.Vector3(0.925, 0.863, 0.737) },
+              uWashC: { value: new T.Vector2(0, 1.12) },
+              uWashR: { value: new T.Vector2(1.28, 0.82) },
+              uWashS: { value: new T.Vector2(0.36, 0.72) },
+              uWashOn: { value: 0 },
+              uCloud: { value: 0 },
+              uCloudRake: { value: 0.61 },
+              uDim: { value: 0 },
+              /* THE SEAM, as two numbers the host writes per frame: how
+                 much of the held frame is over the live one, and how much
+                 of a colour is over both. See uMix below. */
+              uVeil: { value: 0 },
+              uVeilCol: { value: new T.Vector3(0.051, 0.035, 0.02) },
               /* THE FREEZE, kept in the glass: the outgoing frame is copied
                  into a target the moment the seam is called, and the
                  dissolve is one mix() at the end of this pass. It replaces
@@ -8535,6 +8555,9 @@
               "uniform float uTime,uGrain,uCA,uVig,uLift;" +
               "uniform float uSat,uCon,uBri,uSep,uHue,uRake,uGradeA,uVigA,uAspect;" +
               "uniform vec3 uWarm,uCool;" +
+              "uniform vec3 uWashCol;uniform vec2 uWashC,uWashR,uWashS;" +
+              "uniform float uWashOn,uCloud,uCloudRake,uDim,uVeil;" +
+              "uniform vec3 uVeilCol;" +
               "uniform sampler2D tLutA,tLutB;uniform float uLutNA,uLutNB,uLutK,uLutOn,uTone;" +
               "vec3 aces(vec3 x){return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0);}" +
               "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
@@ -8606,12 +8629,86 @@
               /* the dream: a milk lift into the blacks, faintly warm, the
          way halation fogs a print — nothing ever reaches true dark */
               "  c.rgb+=uLift*(1.0-c.rgb)*vec3(1.0,0.985,0.955);" +
-              /* the freeze was captured already graded, so it goes on after
-                 everything: the outgoing frame, pushed about the centre by
-                 uPush, mixed over the live one */
+              /* THE PAPER WASH: the film's scrim, which is a radial gradient
+                 in the scene's own paper anchored off one corner and chosen
+                 by the shot's mode. Two ellipse radii, a centre and two
+                 stops, all in frame uv — the stylesheet's four
+                 `radial-gradient(128% 82% at 0% 112%, …)` rules as numbers
+                 the host eases between over 700 ms, the way the CSS
+                 transition did. Source-over, above the picture. */
+              /* CSS COORDINATES, ONCE. This quad's `vUv` runs bottom-up, and
+                 both of the layers below were written as stylesheets — `at
+                 0% 112%` means 112% DOWN from the top. The vignette above
+                 hard-codes the flip (its 0.54 is the CSS's 46%); these two
+                 carry far more numbers than that, so the flip is named and
+                 every figure below is the one the stylesheet had. */
+              "  vec2 tuv=vec2(vUv.x,1.0-vUv.y);" +
+              "  if(uWashOn>0.0009){" +
+              "    float wt=length((tuv-uWashC)/uWashR);" +
+              "    float wa=wt<uWashS.x" +
+              "      ?mix(0.94,0.76,wt/max(uWashS.x,1e-4))" +
+              "      :(wt<uWashS.y?mix(0.76,0.0,(wt-uWashS.x)/max(uWashS.y-uWashS.x,1e-4)):0.0);" +
+              "    c.rgb=mix(c.rgb,uWashCol,wa*uWashOn);" +
+              "  }" +
+              /* THE CLOUD: a cast shadow, not a filter — two soft blobs on a
+                 plate 1.32 x 1.24 of the frame, turned by 0.4 of the sun's
+                 rake and pushed along it as it thickens, multiplied over the
+                 picture. The stylesheet's transform is inverted here to take
+                 a frame pixel back into the plate's own coordinates. */
+              "  if(uCloud>0.002){" +
+              "    vec2 S=vec2(1.32*uAspect,1.24);" +
+              "    vec2 q=vec2((tuv.x-0.5)*uAspect,tuv.y-0.5);" +
+              "    float ka=uCloudRake*0.4,kcs=cos(ka),ksn=sin(ka);" +
+              "    vec2 qr=vec2(kcs*q.x+ksn*q.y,kcs*q.y-ksn*q.x);" +
+              "    vec2 l=(qr-vec2(uCloud*-0.16*S.x,uCloud*0.07*S.y))/S+0.5;" +
+              "    float t1=length((l-vec2(0.32,0.44))/vec2(0.62,0.40));" +
+              "    float t2=length((l-vec2(0.68,0.58))/vec2(0.48,0.32));" +
+              "    float a1=t1<0.46?mix(0.40,0.24,t1/0.46)" +
+              "      :(t1<0.84?mix(0.24,0.0,(t1-0.46)/0.38):0.0);" +
+              "    float a2=t2<0.52?mix(0.30,0.16,t2/0.52)" +
+              "      :(t2<0.90?mix(0.16,0.0,(t2-0.52)/0.38):0.0);" +
+              "    vec3 k1=t1<0.46" +
+              "      ?mix(vec3(0.4392,0.3922,0.3137),vec3(0.4706,0.4235,0.3451),t1/0.46)" +
+              "      :mix(vec3(0.4706,0.4235,0.3451),vec3(0.5020,0.4627,0.3922),clamp((t1-0.46)/0.38,0.0,1.0));" +
+              "    vec3 k2=t2<0.52" +
+              "      ?mix(vec3(0.4157,0.3765,0.3059),vec3(0.4784,0.4314,0.3529),t2/0.52)" +
+              "      :mix(vec3(0.4784,0.4314,0.3529),vec3(0.5020,0.4627,0.3922),clamp((t2-0.52)/0.38,0.0,1.0));" +
+              "    float ac=a1+a2*(1.0-a1);" +
+              "    vec3 kk=ac>1e-4?(k1*a1+k2*a2*(1.0-a1))/ac:vec3(1.0);" +
+              "    float af=ac*uCloud*0.32;" +
+              "    c.rgb*=af*kk+(1.0-af);" +
+              "  }" +
+              /* THE DIM: the wash a lecturer puts on the plate when the
+                 annotation goes up. It is a grade on the PICTURE, so it
+                 belongs here beside the other two rather than as a layer
+                 over the canvas — a seam that covers the furniture would
+                 otherwise sweep an undimmed still over a dimmed frame. */
+              "  if(uDim>0.001){" +
+              "    float dt=clamp(length((tuv-vec2(0.5,0.48))/vec2(0.76,0.66)),0.0,1.0);" +
+              "    c.rgb=mix(c.rgb,vec3(0.0941,0.0706,0.0314),mix(0.16,0.34,dt)*uDim);" +
+              "  }" +
+              /* THE SEAM, AND IT MIXES IN LIGHT.
+                 The freeze was captured already graded, so it goes on
+                 after everything: the outgoing frame, pushed about the
+                 centre by uPush, over the live one. But a crossfade of two
+                 DISPLAY values is not a crossfade of two pictures — sRGB
+                 is a curve, so averaging encoded numbers sags in the
+                 middle, about 4.6 of 255 on a measured blend. Both sides
+                 go back to light, mix there, and come back. That is what
+                 an optical printer does, and it is the reason this seam
+                 is in the glass rather than an <img> in the parent, whose
+                 compositing space is not ours to choose. */
               "  if(uMix>0.0){" +
               "    vec2 fu=(vUv-0.5)/uPush+0.5;" +
-              "    c.rgb=mix(c.rgb,texture2D(tFreeze,fu).rgb,uMix);" +
+              "    vec3 fz=texture2D(tFreeze,fu).rgb;" +
+              "    c.rgb=pow(mix(pow(max(c.rgb,0.0),vec3(2.2))," +
+              "      pow(max(fz,0.0),vec3(2.2)),uMix),vec3(1.0/2.2));" +
+              "  }" +
+              /* and the veil a dip passes through, over both of them, in
+                 light as well — the shutter, not a sheet of grey glass */
+              "  if(uVeil>0.0){" +
+              "    c.rgb=pow(mix(pow(max(c.rgb,0.0),vec3(2.2))," +
+              "      pow(max(uVeilCol,0.0),vec3(2.2)),uVeil),vec3(1.0/2.2));" +
               "  }" +
               "  gl_FragColor=c;" +
               "}",
@@ -8663,6 +8760,80 @@
           cool: new T.Vector3(1, 1, 1),
         };
         let filmGradeAt = 0;
+        /* ---- the wash and the cloud ------------------------------------ *
+         * The four scrim geometries, lifted straight off the stylesheet the
+         * film used to carry: an ellipse's radii and centre in frame uv, and
+         * the two colour stops along its ray. A change of mode (or of the
+         * palette's paper) is eased over 700 ms here, because that is what
+         * `transition: background 700ms ease` on `.cf-scrim` did. */
+        const FILM_WASH = {
+          lower: { c: [0.0, 1.12], r: [1.28, 0.82], s: [0.36, 0.72] },
+          title: { c: [1.12, 1.16], r: [1.12, 1.08], s: [0.34, 0.7] },
+          plate: { c: [1.1, 0.5], r: [0.84, 1.04], s: [0.34, 0.72] },
+          point: { c: [-0.1, 0.26], r: [0.88, 0.92], s: [0.38, 0.74] },
+        };
+        const FILM_WASH_MS = 700;
+        let filmWashFrom = null,
+          filmWashTo = null,
+          filmWashT0 = 0,
+          filmWashKey = "";
+        let filmCloudK = 0,
+          filmCloudRake = 0.61,
+          filmDimK = 0;
+        function filmWashRgb(hex) {
+          const h = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+          if (!h) return [0.925, 0.863, 0.737];
+          const v = parseInt(h[1], 16);
+          return [
+            ((v >> 16) & 255) / 255,
+            ((v >> 8) & 255) / 255,
+            (v & 255) / 255,
+          ];
+        }
+        function filmWashSet(mode, paper) {
+          const key = mode + "|" + paper;
+          if (key === filmWashKey) return;
+          filmWashKey = key;
+          const g = FILM_WASH[mode];
+          const next = {
+            c: g ? g.c : [0.5, 0.5],
+            r: g ? g.r : [1, 1],
+            s: g ? g.s : [0.36, 0.72],
+            on: g ? 1 : 0,
+            col: filmWashRgb(paper),
+          };
+          /* the first wash of a session stands where it is asked to; every
+             one after it travels from where the last one got to */
+          filmWashFrom = filmWashTo;
+          filmWashTo = next;
+          filmWashT0 = performance.now();
+        }
+        function filmWashStep(u) {
+          if (!filmWashTo) return;
+          const B = filmWashTo,
+            A = filmWashFrom || filmWashTo;
+          const p = filmWashFrom
+            ? Math.min(1, (performance.now() - filmWashT0) / FILM_WASH_MS)
+            : 1;
+          const e = p * p * (3.0 - 2.0 * p);
+          const L = (a, b) => a + (b - a) * e;
+          u.uWashC.value.set(L(A.c[0], B.c[0]), L(A.c[1], B.c[1]));
+          u.uWashR.value.set(
+            Math.max(0.001, L(A.r[0], B.r[0])),
+            Math.max(0.001, L(A.r[1], B.r[1])),
+          );
+          u.uWashS.value.set(L(A.s[0], B.s[0]), L(A.s[1], B.s[1]));
+          u.uWashCol.value.set(
+            L(A.col[0], B.col[0]),
+            L(A.col[1], B.col[1]),
+            L(A.col[2], B.col[2]),
+          );
+          u.uWashOn.value = L(A.on, B.on);
+          u.uCloud.value = filmCloudK;
+          u.uCloudRake.value = filmCloudRake;
+          u.uDim.value = filmDimK;
+          if (p >= 1) filmWashFrom = null;
+        }
         function filmGradeStep(u) {
           const now = performance.now();
           const dt = filmGradeAt
@@ -8718,15 +8889,37 @@
              dissolve is still running when the next seam comes, the held
              frame is what was on screen, mid-fade, which is right */
           u.tDiffuse.value = P.rt.texture;
+          /* AND NOTHING MAY SAMPLE THE TARGET WE ARE ABOUT TO WRITE.
+             `tFreeze` still points at filmFreezeRT from the last capture,
+             and a bound texture whose framebuffer is the draw target is a
+             feedback loop — GL_INVALID_OPERATION, the draw rejected, the
+             target left on its clear. Whether the shader takes the
+             `uMix > 0` branch is irrelevant: the sampler is bound either
+             way. So the first seam of a session captured a real frame and
+             every seam after it dissolved against an empty target, which
+             read black on a GPU and white under SwiftShader: every blend
+             and melt became a dip. Unbind it, capture, put it back. */
+          u.tFreeze.value = null;
           renderer.setRenderTarget(filmFreezeRT);
           _render(P.sc2, P.cam2);
           renderer.setRenderTarget(null);
           u.tFreeze.value = filmFreezeRT.texture;
         }
+        /* the host holds the frame while a seam's still is being decoded,
+           or drives a seam itself frame by frame (`seam`, below) */
+        let filmPinned = false;
+        let filmDriven = false;
         function filmDissolveStep(u) {
           const D = filmDissolve;
+          if (filmDriven) {
+            /* the host owns uMix and uVeil this frame; leave them alone */
+            u.uPush.value = 1 + 0.055 * (1 - u.uMix.value);
+            filmAB = null;
+            return;
+          }
           if (!D) {
-            u.uMix.value = 0;
+            u.uMix.value = filmPinned ? 1 : 0;
+            u.uVeil.value = 0;
             u.uPush.value = 1;
             filmAB = null;
             return;
@@ -8823,6 +9016,10 @@
           const u = P.mat.uniforms;
           const mix = u.uMix.value;
           u.uMix.value = 0;
+          /* and unbind the target we are about to write: see
+             filmFreezeCapture. Zeroing uMix is not enough — the feedback
+             loop is about the BINDING, not the branch. */
+          u.tFreeze.value = null;
           u.tDiffuse.value = P.rt.texture;
           renderer.setRenderTarget(filmFreezeRT);
           _render(P.sc2, P.cam2);
@@ -8900,6 +9097,7 @@
             P.mat.uniforms.tDiffuse.value = P.rt.texture;
             P.mat.uniforms.uTime.value = performance.now() / 1000;
             P.mat.uniforms.uAspect.value = w / Math.max(1, h);
+            filmWashStep(P.mat.uniforms);
             filmGradeStep(P.mat.uniforms);
             filmLutStep(P.mat.uniforms);
             filmDissolveStep(P.mat.uniforms);
@@ -9346,6 +9544,83 @@
           /* the score sets the goal; the page's own exponential chase still
      smooths it, which makes the parent's chaser the FIRST stage of a
      cascade and this one the second */
+          /* the frame's paper wash and the cloud crossing it: the film's
+             two CSS layers, taken into the glass so a seam dissolves them */
+          wash(mode, paper) {
+            filmWashSet(mode || "", paper || "");
+          },
+          cloud(k, rakeDeg) {
+            filmCloudK = Math.max(0, Math.min(1, k || 0));
+            filmCloudRake = ((rakeDeg || 0) * Math.PI) / 180;
+          },
+          dim(k) {
+            filmDimK = Math.max(0, Math.min(1, k || 0));
+          },
+          /**
+           * THE SEAM, HALF ONE. The film owns the clock and the shape; the
+           * picture owns the compositing. Two numbers per frame — how much
+           * of the held frame is over the live one, and how much of a
+           * colour is over both — and both mixes happen in light. The
+           * film's other half is the furniture, revealed by the same two
+           * numbers in the parent document.
+           *
+           * `freeze(true)` first, to take the frame this holds.
+           */
+          seam(spec) {
+            const P = filmPost;
+            if (!P || !filmPostOn || !filmActive) return;
+            const u = P.mat.uniforms;
+            /* this picture declares no seams of its own, so it only ever
+               runs the film's law: a mix and a veil, both in light */
+            if (!spec) {
+              filmDriven = false;
+              filmPinned = false;
+              u.uMix.value = 0;
+              u.uVeil.value = 0;
+              u.uPush.value = 1;
+              return;
+            }
+            const m = Math.max(0, Math.min(1, spec.mix || 0));
+            const v = Math.max(0, Math.min(1, spec.veil || 0));
+            const color = spec.color;
+            if (m <= 0 && v <= 0) {
+              filmDriven = false;
+              filmPinned = false;
+              u.uMix.value = 0;
+              u.uVeil.value = 0;
+              u.uPush.value = 1;
+              return;
+            }
+            filmDriven = true;
+            u.uMix.value = m;
+            u.uVeil.value = v;
+            if (color) {
+              const h = /^#?([0-9a-f]{6})$/i.exec(String(color).trim());
+              if (h) {
+                const n = parseInt(h[1], 16);
+                u.uVeilCol.value.set(
+                  ((n >> 16) & 255) / 255,
+                  ((n >> 8) & 255) / 255,
+                  (n & 255) / 255,
+                );
+              }
+            }
+          },
+          /* hold the frame on screen: the parent's seam has a still to
+             decode, and the beat's world lands before it is ready */
+          freeze(on) {
+            const P = filmPost;
+            if (!P || !filmPostOn || !filmActive) return;
+            if (on) {
+              filmFreezeEnsure(P);
+              filmFreezeCapture(P);
+              filmPinned = true;
+              P.mat.uniforms.uMix.value = 1;
+            } else {
+              filmPinned = false;
+              if (!filmDissolve) P.mat.uniforms.uMix.value = 0;
+            }
+          },
           pose(p) {
             filmActive = true;
             if (p.az !== undefined) orbAz = p.az;

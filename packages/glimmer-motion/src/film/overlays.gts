@@ -24,7 +24,7 @@ export interface InsertSignature {
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export class Insert extends Component<InsertSignature> {
   <template>
-    <Choreo class='cf-photo' as |g|>
+    <Choreo @id='insert' class='cf-photo' as |g|>
       {{#each (array @beat) key='id' as |b|}}
         <figure class='is-{{b.mode}}' {{motion id='photo' role='shot'}}>
           <img src={{@src}} alt='' {{on 'error' @missing}} />

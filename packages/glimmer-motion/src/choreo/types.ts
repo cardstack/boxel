@@ -552,7 +552,36 @@ export interface FollowStep extends StepBase {
   to: Query | Query[];
 }
 
+/**
+ * ATTACH — drive another region's run over a window of this one's clock
+ * (docs/film-graph/CONSTRUCTS.md, construct 1). The child is named by its
+ * `@id`; while the window is open its run is paused and told the time,
+ * `in + (now − start) × rate`, on every evaluate — so the child is a pure
+ * function of the parent's clock and a seek into the window lands it
+ * where playing there would. Past the window the end policy holds it at
+ * its tail (`hold`) or leaves it to whoever unmounts it (`remove`).
+ * Under `exact`, a child whose score integrates (a spring, a follow) is
+ * refused: an integrator's state is its history, and a driven clock has
+ * none.
+ */
+export interface AttachStep extends SubjectlessBase {
+  /** past the window: stand the child at its tail, or leave it alone */
+  end?: 'hold' | 'remove';
+  /** refuse a child that cannot be driven exactly */
+  exact?: boolean;
+  /** seconds into the child's run at the window's head */
+  in?: number;
+  kind: 'attach';
+  /** the window on this run's clock, ms */
+  ms: number;
+  /** the child's seconds per parent second */
+  rate?: number;
+  /** the region to drive: its `@id` */
+  region: string;
+}
+
 export type Step =
+  | AttachStep
   | Camera3DStep
   | CameraStep
   | FollowStep
@@ -643,6 +672,13 @@ export interface Cue {
    * uses this: the solid it paints mid-flight is handed back to the real
    * alpha blend on landing.
    */
+  attach?: {
+    end: 'hold' | 'remove';
+    exact: boolean;
+    in: number;
+    rate: number;
+    region: string;
+  };
   borrow?: boolean;
   /** camera: drive the region's frame */
   camera?: {

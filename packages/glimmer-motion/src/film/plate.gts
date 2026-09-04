@@ -1,8 +1,7 @@
 import { array, concat, get } from '@ember/helper';
 import Component from '@glimmer/component';
-import { modifier } from 'ember-modifier';
 
-import { Choreo, type ChoreoContext } from '../choreo.gts';
+import { Choreo } from '../choreo.gts';
 import motion from '../motion.ts';
 import type { Beat, ElementModifier } from './types.ts';
 
@@ -16,8 +15,6 @@ export interface PlateSignature {
     glyphFit: string;
     /** 'is-latin' | 'is-tall' | '' — the script's own setting */
     glyphTone: string;
-    /** the region's context, handed up so an exact film can drive its run */
-    grab?: (ctx: ChoreoContext | null) => void;
     /** the film's own handle on the block, for the parallax and the fade */
     mount: ElementModifier;
     /** one pass behind the boot: content mounts on this so its entrance is a real insertion */
@@ -41,21 +38,10 @@ export interface PlateSignature {
  * the plane and the film's loop drifts it, the paragraph inside is the
  * type and Motion delivers it. One writer each.
  */
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export class Plate extends Component<PlateSignature> {
-  /** the region's context, for the film that owns the clock */
-  wire = modifier(
-    (
-      _el: Element,
-      [ctx, grab]: [ChoreoContext, PlateSignature['Args']['grab']],
-    ) => {
-      grab?.(ctx);
-      return () => grab?.(null);
-    },
-  );
-
   <template>
-    <Choreo class='cf-type cf-{{@beat.mode}}' as |n|>
-      <i hidden {{this.wire n @grab}}></i>
+    <Choreo @id='plate' class='cf-type cf-{{@beat.mode}}' as |n|>
       <span class='cf-ghost' aria-hidden='true'>{{@chapterN}}</span>
       {{#if @rolling}}
         {{#each (array @beat) key='id' as |b|}}

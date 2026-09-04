@@ -9,13 +9,39 @@ import type { ChoreoRun } from '../choreo/run.ts';
 import type { PerformCommand } from '../choreo/types.ts';
 import motion from '../motion.ts';
 import { Clip } from './clip.gts';
-import { type ClipState, resolveClip, type ResolvedClip } from './clips.ts';
-import { JOIN_SECS, Joins, STILL_JOINS } from './joins.gts';
+import {
+  type ClipState,
+  clipWindow,
+  resolveClip,
+  type ResolvedClip,
+} from './clips.ts';
+import type { CompiledGraph } from './graph/compile.ts';
+import { FilmGraph, type FilmVocabulary, VOCABULARY } from './graph/host.gts';
+import {
+  inGlass,
+  Joins,
+  type Presentation,
+  PRESENTATIONS,
+  seamShape,
+} from './joins.gts';
 import { lerp, luminance, RAD, rgba, smooth, wrapAngle } from './math.ts';
 import { Captions, Insert, Stamp, Track } from './overlays.gts';
+import type { PictureSpec } from './picture.gts';
 import { Plate } from './plate.gts';
 import { Burst, Menu, Player } from './player.gts';
 import { Rail, type RailMark } from './rail.gts';
+import {
+  beatStart as beatStartOf,
+  chapterHeads as chapterHeadsOf,
+  contents as contentsOf,
+  cues as cuesOf,
+  secsBefore as secsBeforeOf,
+  tailFor as tailForOf,
+  TICK,
+  totalSecs as totalSecsOf,
+  waypoints,
+} from './schedule.ts';
+import { Seam } from './seam.ts';
 import { EndCard, Gate } from './titles.gts';
 import type {
   Beat,
@@ -25,7 +51,9 @@ import type {
   FilmGrade,
   FilmHandle,
   Join,
+  JoinName,
   LookFx,
+  Over,
   Picture,
   ShotState,
 } from './types.ts';
@@ -65,7 +93,7 @@ import type {
  * path — and a beat that wants to HOLD contributes the same pose several
  * times over, which a Catmull-Rom spline comes smoothly to rest on.
  */
-export const TICK = 2;
+export { TICK };
 
 /**
  * `?awake` keeps the loops running in a document that reports itself
@@ -85,33 +113,14 @@ const GRADE_LUM: Record<string, number> = {
 
 export interface FilmSignature {
   Args: {
-    /** the editorial accent on a dark frame, and on a light one (the scene's own palette when unset) */
-    accent?: { dark: string; light?: string };
-    /** where the film's own files live: `vo/<id>.mp3`, `luts/*.cube`, photographs */
-    assets: string;
-    /** the shot list */
-    beats: Beat[];
     /** which cut of the film this is: logged at boot, shown under `?debug` */
     build?: string;
-    chapters: Chapter[];
-    /** how much of a frosted city a film frame can carry (the page's own is 0.30) */
-    cityGlass?: number;
     /** the film's own clock, when the picture keeps one (years) */
     clock?: FilmClock;
-    /** how much a passing cloud thickens the air */
-    cloudHaze?: number;
     /** mounted in a page's iframe: the door still opens it, but no transport and no plate */
     embed?: boolean;
-    /** how much each mood brightens the frame — see `wear` */
-    gradeLum?: Record<string, number>;
-    /** the moods, as numbers the glass can take */
-    grades?: Record<string, FilmGrade>;
     /** the seam a beat gets when it names none */
     join?: Join;
-    /** how each named look is worn */
-    lookFx?: Record<string, LookFx>;
-    /** how much of a stock the picture wears when a beat names one */
-    lutAmount?: number;
     /** the chapter menu's second line */
     menuSub?: string;
     /** the film's name, as the menu heads it */
@@ -122,8 +131,14 @@ export interface FilmSignature {
     onAir?: (beat: Beat, picture: Picture, hard: boolean) => void;
     /** a beat has landed — a hook for what the construct does not know */
     onBeat?: (beat: Beat, picture: Picture) => void;
-    /** how the door is lit: the hour and the key light, degrees */
-    poster?: { light?: { az: number; el: number }; theme?: number };
+    /**
+     * HOW DEEP THE FILM'S SEAMS GO, when a beat does not say. `picture`
+     * (the default) transitions the picture and makes the incoming type
+     * wait for the seam; `everything` puts the seam above the type, the
+     * insert and the clip, so the incoming setting is already under way
+     * when the sweep reveals it. See `Over`.
+     */
+    over?: Over;
     /**
      * THE RAIL — the film on one line, on the picture: chapters as dots
      * on a rule, the head riding it, the year when the rule is a clock.
@@ -132,10 +147,6 @@ export interface FilmSignature {
      * keeps the floating player alone.
      */
     rail?: boolean;
-    /** the rig's mid-height: `lookY` is world height minus this */
-    rigMid?: number;
-    /** told once when the picture arrives, before the door: what it should show */
-    seat?: (picture: Picture) => void;
     /**
      * HOW THE FILM SEEKS — the fork everything hangs on.
      *
@@ -154,106 +165,207 @@ export interface FilmSignature {
      * cut) because the page's own dissolves run on their own clock.
      */
     seek?: 'cut' | 'exact';
-    /** the picture's page, mounted in an iframe */
-    src: string;
-    /** the page's clock at which the subject stands whole */
-    standing: number;
-    /** the iframe's accessible name */
-    title: string;
     /** the level each line was mixed to (0..1) */
     voGain?: Record<string, number>;
-    /** what each read actually runs, seconds, measured — never estimated */
-    voSecs?: Record<string, number>;
-    /** how type standing out in the world is set */
-    worldType?: { family?: string; track?: number; weight?: number };
   };
   Blocks: {
     /** under the stage, outside the picture: a wall plate, a cutting room */
-    default: [FilmHandle];
+    default: [FilmContext];
     /** the back matter, inside the end card */
     end: [FilmHandle];
     /** the front matter, on the door */
     gate: [FilmHandle];
+    /** the picture: a component that registers what it is (`IframePicture`), and declares `f.picture.*` */
+    picture: [(spec: PictureSpec | null) => void];
   };
 }
 
+/** what the blocks are given: the handle, and the vocabulary a film's score is written in */
+export type FilmContext = FilmHandle & FilmVocabulary;
+
+/** the row a film stands on before it has any: the door, with nothing behind it */
+const EMPTY_BEAT: Beat = {
+  cam: { dolly: 1, lookY: 0, pitch: 0, yaw: 0 },
+  ch: 0,
+  id: '',
+  mode: 'clear',
+  ticks: 1,
+};
+const EMPTY_CHAPTER: Chapter = { n: '', title: '' };
+
 export class Film extends Component<FilmSignature> {
   /* ---- what the film was handed ------------------------------------ */
-  /** the whole shot list */
+  /**
+   * THE GRAPH, compiled. A film written as `f.Spine` / `f.Chapter` /
+   * `f.Shot` in the default block compiles to the same rows a table would
+   * hand in (`graph/compile.ts`); the table arguments, when given, win.
+   */
+  @tracked private graph: CompiledGraph | null = null;
+  private takeGraph = (graph: CompiledGraph | null) => {
+    this.graph = graph;
+  };
+
+  /**
+   * THE PICTURE, as it registered itself from the `<:picture>` block: the
+   * page, its files, how it is seated, its rig, its moods. Nothing here
+   * is about the edit, which is why none of it is an argument any more.
+   */
+  @tracked private picture: PictureSpec | null = null;
+  private takePicture = (spec: PictureSpec | null) => {
+    this.picture = spec;
+  };
+  private get assets(): string {
+    return this.picture?.assets ?? '';
+  }
+  private get standing(): number {
+    return this.picture?.standing ?? 0;
+  }
+  private get frameTitle(): string {
+    return this.picture?.title ?? this.args.name;
+  }
+
+  /**
+   * THE WHOLE SHOT LIST, and there is only one place it comes from: the
+   * score in the default block, compiled. The film used to take a
+   * `Beat[]` as an argument as well, which is how both films were fed
+   * until Phase 2 migrated them; the table path is gone now that nothing
+   * hands one in, and the graph is the only way to write a film.
+   */
   private get all(): Beat[] {
-    return this.args.beats;
+    return this.graph?.beats ?? [];
   }
 
   private get chapters(): Chapter[] {
-    return this.args.chapters;
+    return this.graph?.chapters ?? [];
   }
 
   private get voSecs(): Record<string, number> {
-    return this.args.voSecs ?? {};
+    return this.graph?.voSecs ?? {};
   }
 
   private get voGain(): Record<string, number> {
-    return this.args.voGain ?? {};
+    return this.args.voGain ?? this.graph?.voGain ?? {};
   }
 
   private get grades(): Record<string, FilmGrade> {
-    return this.args.grades ?? {};
+    return this.picture?.grades ?? {};
   }
 
   private get lookFx(): Record<string, LookFx> {
-    return this.args.lookFx ?? {};
+    return this.picture?.lookFx ?? {};
   }
 
   private get lutAmount(): number {
-    return this.args.lutAmount ?? 0.52;
+    return this.picture?.lutAmount ?? 0.52;
   }
 
   private get defaultJoin(): Join {
-    return this.args.join ?? 'dip';
+    return this.args.join ?? this.graph?.defaultJoin ?? 'dip';
+  }
+  /**
+   * WHERE THIS SEAM IS PLAYED. A seam the PICTURE declares by name is
+   * played in its glass with that name; the three the film knows how to
+   * mix are played there under the film's own law; everything else is an
+   * overlay in this document. The name is the only thing that decides,
+   * which is what makes the vocabulary open: a picture that declares
+   * `ridged-burn` gets `<f.Join @presentation="ridged-burn" />` for free,
+   * and the film learns nothing about it but its length.
+   */
+  private glassFor(join: JoinName): { name?: string } | null {
+    if (!this.film?.seam || !this.film.freeze) {
+      return null;
+    }
+    if (this.picture?.seams?.includes(join)) {
+      return { name: join };
+    }
+    return inGlass(join) ? {} : null;
+  }
+
+  /** how deep a seam goes when nothing says: the film's own default */
+  private get defaultOver(): Over {
+    return this.args.over ?? this.graph?.defaultOver ?? 'picture';
+  }
+  /**
+   * HOW DEEP THIS BEAT'S SEAM GOES. The row says, or the presentation
+   * says, or the film does. A seam that covers the furniture is always a
+   * seam with a still in the DOM: the picture's own glass is inside the
+   * canvas and cannot cover anything outside it.
+   */
+  private overOf(beat: Beat): Over {
+    const join = beat.join ?? this.defaultJoin;
+    return beat.over ?? this.presentations[join]?.over ?? this.defaultOver;
+  }
+
+  /** every seam the film can play: its own twelve, and any the score brought */
+  private get presentations(): Record<string, Presentation> {
+    const brought = this.graph?.presentations ?? {};
+    const out: Record<string, Presentation> = { ...PRESENTATIONS };
+    for (const [name, p] of Object.entries(brought)) {
+      /* a seam the score merely RETIMED, or one the picture runs, brings
+         no component — it keeps whatever the film already knew about it */
+      out[name] = {
+        ...out[name],
+        component: p.component ?? out[name]?.component,
+        over: p.over ?? out[name]?.over,
+        secs: p.secs,
+        still: p.component ? true : (out[name]?.still ?? false),
+      };
+    }
+    return out;
+  }
+  /** seconds a seam holds the picture; nothing, for one the film does not know */
+  private secsOf(join: JoinName | undefined): number {
+    return join ? (this.presentations[join]?.secs ?? 0) : 0;
+  }
+  /** does the seam paint a still of the outgoing frame over the incoming one */
+  private holdsStill(join: JoinName | undefined): boolean {
+    return !!join && !!this.presentations[join]?.still;
   }
 
   /** how much of a frosted city a film frame can carry */
   private get cityGlass(): number {
-    return this.args.cityGlass ?? 0.16;
+    return this.picture?.cityGlass ?? 0.16;
   }
 
   /** the rig's mid-height: `lookY` is world height minus this */
   private get rigMid(): number {
-    return this.args.rigMid ?? 6.6;
+    return this.picture?.rigMid ?? 6.6;
   }
 
   /** how much the passing cloud thickens the air */
   private get cloudHaze(): number {
-    return this.args.cloudHaze ?? 0.09;
+    return this.picture?.cloudHaze ?? 0.09;
   }
 
   /** the face type in the world is set in; a film that names none of it
    *  leaves the page's own */
   private get worldFamily(): string | undefined {
-    const w = this.args.worldType;
+    const w = this.picture?.worldType;
     return w
       ? w.family
       : 'Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif';
   }
 
   private get worldWeight(): number | undefined {
-    const w = this.args.worldType;
+    const w = this.picture?.worldType;
     return w ? w.weight : 800;
   }
 
   private get worldTrack(): number {
-    return this.args.worldType?.track ?? 0.02;
+    return this.picture?.worldType?.track ?? 0.02;
   }
 
   /** the editorial accent: the film's own, or the scene's palette by day */
   private accentFor(dark: boolean, scene?: string): string {
-    const a = this.args.accent ?? { dark: '#d9b44a', light: '#8f6b1f' };
+    const a = this.picture?.accent ?? { dark: '#d9b44a', light: '#8f6b1f' };
     return dark ? a.dark : (a.light ?? scene ?? '#8f6b1f');
   }
 
   /** the film's handles, as the door and the card are given them */
-  get handle(): FilmHandle {
+  get handle(): FilmContext {
     return {
+      ...VOCABULARY,
+      picture: this.picture?.adjustments ?? VOCABULARY.picture,
       beat: this.beat,
       begin: this.begin,
       chapter: this.chapter,
@@ -285,9 +397,6 @@ export class Film extends Component<FilmSignature> {
   /** the score region's context, read every frame for its current run */
   private scoreCtx: ChoreoContext | null = null;
   private scoreRun: ChoreoRun | null = null;
-  /** the type region's context, handed up by the Plate */
-  private plateCtx: ChoreoContext | null = null;
-  private plateRun: ChoreoRun | null = null;
   /** the element the seam overlays live in, so their animations can be seeked */
   private joinsEl?: HTMLElement;
   /** where the seam on screen began, film seconds, and how long it plays */
@@ -323,7 +432,7 @@ export class Film extends Component<FilmSignature> {
 
   get clipSrc(): string {
     const src = this.clipNow?.spec.src;
-    return src ? `${this.args.assets}${src}` : '';
+    return src ? `${this.assets}${src}` : '';
   }
 
   get clipSpec() {
@@ -468,10 +577,7 @@ export class Film extends Component<FilmSignature> {
    * with the cut film to the frame.
    */
   private beatStart(i: number): number {
-    if (i <= 0) {
-      return 0;
-    }
-    return this.secsBefore(i) + (this.all[i]!.lead ?? 0) * TICK + TICK;
+    return beatStartOf(this.all, i);
   }
 
   /** the beat in force at a film time */
@@ -492,11 +598,6 @@ export class Film extends Component<FilmSignature> {
       }
     };
   });
-
-  /** the type's region, handed up by the Plate */
-  private grabPlate = (ctx: ChoreoContext | null) => {
-    this.plateCtx = ctx;
-  };
 
   private joinsWrap = modifier((el: HTMLElement) => {
     this.joinsEl = el;
@@ -545,18 +646,26 @@ export class Film extends Component<FilmSignature> {
    * of the loop against a zero step, and give the page two frames to
    * draw it. The same code path as playing there — that is the claim.
    */
+  /** a frame is being rendered rather than scrubbed to: seams play */
+  private rendering = false;
+
   private renderAt = async (seconds: number) => {
     if (!this.exact) {
       this.seek(seconds);
       return;
     }
     this.playing = false;
-    this.seek(seconds);
-    const now = performance.now();
-    this.lastTick = now;
-    this.tick(now);
-    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
-    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    this.rendering = true;
+    try {
+      this.seek(seconds);
+      const now = performance.now();
+      this.lastTick = now;
+      this.tick(now);
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    } finally {
+      this.rendering = false;
+    }
   };
 
   /**
@@ -597,14 +706,36 @@ export class Film extends Component<FilmSignature> {
       }
       const join =
         beat.cut || beat.join ? (beat.join ?? this.defaultJoin) : null;
-      const len = join ? (JOIN_SECS[join] ?? 0) : 0;
+      const len = this.secsOf(join ?? undefined);
       this.seamAt = -1;
       this.seamLen = 0;
-      const inSeam = !!join && since < len && i > 0;
-      let frozen = false;
-      if (inSeam && jumped) {
-        frozen = this.refreeze(i - 1);
-      }
+      /* A SEEK LANDS PAST THE SEAM. A seam is played forward, over a
+         still of the frame that was actually on screen; a seek has no
+         such frame, and re-making one (stand the picture at the previous
+         tail, read it back) bought a read-back per scrub for a transition
+         nobody asked to watch. So a jump into a seam's window stands at
+         the seam's END: the incoming shot, whole. */
+      /**
+       * A SCRUB IS NOT A RENDER.
+       *
+       * A jump into a seam's window stands at the seam's END: a seam is
+       * played forward over a still of the frame that was actually on
+       * screen, a scrub has no such frame, and re-making one bought a
+       * read-back per drag for a transition nobody asked to watch.
+       *
+       * But `renderAt` is a jump too, and a film rendered frame by frame
+       * is a jump on EVERY frame — so with that rule alone an exact film
+       * rendered deterministically had no seams in it at all. Which
+       * breaks the promise the mode is named for: the same frame whether
+       * you played there or rendered there. Measured on the reel, five of
+       * its twelve seams came out as hard cuts in the render and worked
+       * when played.
+       *
+       * So a render says so, and gets its seams.
+       */
+      const inSeam =
+        !!join && since < len && i > 0 && (!jumped || this.rendering);
+      const frozen = false;
       if (inSeam) {
         this.seamAt = this.beatStart(i);
         this.seamLen = len;
@@ -628,8 +759,10 @@ export class Film extends Component<FilmSignature> {
         this.joinKind = '';
       }
     }
-    /* the runs are driven, not played: the score's to the film's clock,
-       the type's to the beat's */
+    /* the score's run is driven, not played, and everything ATTACHED to
+       the score — the type, the insert, the clip — is driven by it in
+       turn (`c.Attach`): one write, and every window on the film's clock
+       stands where the clock says */
     const run = this.scoreCtx?.run ?? null;
     if (run !== this.scoreRun) {
       this.scoreRun = run;
@@ -638,55 +771,9 @@ export class Film extends Component<FilmSignature> {
     if (run) {
       run.time = t;
     }
-    const plate = this.plateCtx?.run ?? null;
-    if (plate !== this.plateRun) {
-      this.plateRun = plate;
-      plate?.pause();
-    }
-    if (plate) {
-      plate.time = Math.max(0, t - this.beatStart(i));
-    }
     if (t >= this.totalSecs && !this.ended) {
       this.end();
     }
-  }
-
-  /**
-   * THE OUTGOING FRAME, RE-MADE. A seek into a seam has no still of the
-   * shot before it, so the page is stood at that shot's tail — its clock,
-   * its hour, its weather, its pose — and read back once, before the
-   * incoming beat is applied over it.
-   */
-  private refreeze(prev: number): boolean {
-    const film = this.film;
-    const b = this.all[prev];
-    if (!film || !b) {
-      return false;
-    }
-    this.settleAir(prev);
-    if (film.style && film.styleIndex && film.styleIndex() !== (b.style ?? 0)) {
-      film.style(b.style ?? 0);
-    }
-    film.time(
-      Array.isArray(b.build) ? b.build[1] : (b.build ?? this.args.standing),
-    );
-    film.modelFade(b.dissolve ? 0 : 1);
-    const tail = this.tailFor(prev);
-    film.pose({
-      az: tail.yaw * RAD,
-      el: tail.pitch * RAD,
-      fov: null,
-      fx: tail.fx ?? 0,
-      fz: tail.fz ?? 0,
-      lookY: tail.lookY,
-      near: null,
-      ox: tail.ox ?? 0,
-      snap: true,
-      zoom: tail.dolly,
-    });
-    const shot = film.snapshot();
-    this.freeze = shot.length > 64 ? shot : '';
-    return !!this.freeze;
   }
 
   /** a line, from the middle: what a seek owes the voice */
@@ -706,6 +793,15 @@ export class Film extends Component<FilmSignature> {
   }
 
   /**
+   * THE SEAM'S GATE (`film/seam.ts`). A join's still is a JPEG the
+   * browser has not decoded yet on the frame it is handed over, and the
+   * lens moves on that frame — so every cut used to show three frames of
+   * the incoming shot before the outgoing one was on screen. The gate
+   * decodes first and holds the cut; a seam with no still runs at once.
+   */
+  private seam = new Seam();
+
+  /**
    * THE SEAM, EXACT. Every join that carries the outgoing frame carries it
    * as a still in the DOM — the page's own dissolves run on the page's
    * clock and cannot be stood at a time — and the whip, which is the
@@ -714,42 +810,83 @@ export class Film extends Component<FilmSignature> {
   private seamExact(
     film: Picture,
     beat: Beat,
-    join: Join,
+    join: JoinName,
     seam?: { frozen: boolean; seam: boolean; since: number },
   ) {
     const wants = seam ? seam.seam : true;
-    const stills =
-      join !== 'cut' && join !== 'flash' && join !== 'sweep' && join !== 'whip';
+    /* the glass holds a mix seam here too, and an exact film gets the
+       better half of the bargain: the seam is a function of the clock, so
+       a scrub through it needs nothing stood at a time */
+    const glass = wants ? this.glassFor(join) : null;
+    if (glass) {
+      if (this.glassKind !== join) {
+        film.freeze?.(true);
+        this.glassKind = join;
+        this.glassName = glass.name ?? '';
+        this.glassLen = this.secsOf(join);
+        this.glassColor = beat.dipTo ?? '#0d0905';
+        this.freeze = '';
+        this.joinKind = '';
+      }
+      if (beat.cut) {
+        this.snap(beat.cam);
+      }
+      return;
+    }
+    const stills = this.holdsStill(join);
+    let held = this.freeze;
     if (wants && stills && !seam?.frozen) {
       const shot = film.snapshot();
-      this.freeze = shot.length > 64 ? shot : '';
+      held = shot.length > 64 ? shot : '';
     }
     if (!wants) {
+      held = '';
       this.freeze = '';
     }
+    /* the lens does not move until the still can be painted, and the
+       picture holds the outgoing frame while it waits */
+    if (held) {
+      film.freeze?.(true);
+    }
+    this.seam.hold(held, () => {
+      film.freeze?.(false);
+      this.seamPlay(film, beat, join, wants, held);
+    });
+  }
+
+  /** the seam itself: the still on screen, the lens on the incoming shot */
+  private seamPlay(
+    film: Picture,
+    beat: Beat,
+    join: JoinName,
+    wants: boolean,
+    held: string,
+  ) {
+    this.freeze = held;
     if (beat.cut || join === 'wipe' || join === 'whip') {
       this.snap(beat.cam);
     }
     if (!wants) {
       return;
     }
+    const deep = this.overOf(beat);
     switch (join) {
       case 'cut':
       case 'whip':
         break;
       case 'dip':
         this.dipColor = beat.dipTo ?? '#0d0905';
-        this.play('dip');
+        this.play('dip', deep);
         break;
       case 'flash':
-        this.play('flash');
+        this.play('flash', deep);
         break;
       case 'sweep':
         this.lightSweep(film, beat);
         break;
       case 'defocus':
         if (this.freeze) {
-          this.play('defocus');
+          this.play('defocus', deep);
         }
         break;
       case 'iris': {
@@ -761,12 +898,12 @@ export class Film extends Component<FilmSignature> {
         const cx = p ? Math.max(12, Math.min(88, (p.x / v.w) * 100)) : 50;
         const cy = p ? Math.max(12, Math.min(88, (p.y / v.h) * 100)) : 50;
         this.irisAt = `--ix:${cx.toFixed(1)}%;--iy:${cy.toFixed(1)}%`;
-        this.play('iris');
+        this.play('iris', deep);
         break;
       }
       default:
         if (this.freeze) {
-          this.play(join);
+          this.play(join, deep);
         }
     }
   }
@@ -797,8 +934,24 @@ export class Film extends Component<FilmSignature> {
   @tracked private lap = 0;
   @tracked private booted = false;
   /** which seam is playing, and a key that replays it: bumped on every cut */
-  @tracked private joinKind: '' | Join = '';
+  @tracked private joinKind: '' | JoinName = '';
   @tracked private joinStamp = 0;
+  /** the seam on screen covers the furniture, not only the picture */
+  @tracked private joinOver = false;
+  private overTimer = 0;
+  /**
+   * THE SEAM IN THE GLASS. Its kind, how long it has and the colour it
+   * passes through — and `reveal`, how much of the incoming frame is NOT
+   * covered by it, which is the film's other half: the type, the stamp
+   * and the inserts wear it, so a caption is uncovered by the same
+   * gesture that uncovers the picture.
+   */
+  private glassKind: '' | JoinName = '';
+  /** the picture's own name for it, when the picture declared this seam */
+  private glassName = '';
+  private glassLen = 0;
+  private glassColor = '';
+  private reveal = 1;
   /** the captured outgoing frame every freeze-based join plays with */
   @tracked private freeze = '';
   /** the 'dip' join's veil colour */
@@ -808,10 +961,75 @@ export class Film extends Component<FilmSignature> {
   /** dev beacon: the first uncaught error, worn on the sleeve */
   @tracked private fault = '';
 
-  /** run a seam's overlay: a new element per cut, from its own first frame */
-  private play(kind: Join) {
+  /**
+   * THE SEAM, DRIVEN. Half of it is the picture, which is handed two
+   * numbers and composites them in light; half is the furniture, which
+   * wears what is left over. Both come from one progress, and that
+   * progress is a function of the clock — so a seek through a seam needs
+   * nothing stood at a time, which is what the DOM overlay always did.
+   */
+  /** take a driven seam off: the picture back to live, the furniture whole */
+  private endSeam() {
+    if (!this.glassKind) {
+      return;
+    }
+    this.glassKind = '';
+    this.glassName = '';
+    this.reveal = 1;
+    this.film?.seam?.(null);
+  }
+
+  private driveSeam(film: Picture, t: number) {
+    if (!this.glassKind) {
+      return;
+    }
+    const len = Math.max(0.001, this.glassLen);
+    const p = this.exact
+      ? this.seamAt >= 0
+        ? (t - this.seamAt) / len
+        : 1
+      : (performance.now() - this.beatAt) / 1000 / len;
+    if (p >= 1) {
+      this.endSeam();
+      return;
+    }
+    if (this.glassName) {
+      /* a seam the picture declared: it owns the shape, so the film hands
+         it the progress and takes the progress back as the reveal — the
+         furniture arrives with the transition it cannot see inside */
+      film.seam?.({ mix: 0, name: this.glassName, p, veil: 0 });
+      this.reveal = p;
+      return;
+    }
+    const { mix, veil } = seamShape(this.glassKind, p);
+    film.seam?.({ color: this.glassColor, mix, p, veil });
+    this.reveal = 1 - Math.max(mix, veil);
+  }
+
+  /**
+   * Run a seam's overlay: a new element per cut, from its own first
+   * frame. A seam played `everything` is lifted above the type, the
+   * insert and the clip for as long as it runs, and put back after — an
+   * empty layer left standing over the furniture would swallow the next
+   * shot's pointer events, and there is no event for a CSS animation the
+   * film did not start.
+   */
+  private play(kind: JoinName, over: Over = 'picture') {
     this.joinKind = kind;
     this.joinStamp += 1;
+    this.joinOver = over === 'everything';
+    window.clearTimeout(this.overTimer);
+    if (this.joinOver) {
+      const stamp = this.joinStamp;
+      this.overTimer = window.setTimeout(
+        () => {
+          if (this.joinStamp === stamp) {
+            this.joinOver = false;
+          }
+        },
+        this.secsOf(kind) * 1000 + 80,
+      );
+    }
   }
   /**
    * THE ENDING. A film that laps back to its own first frame has no
@@ -895,6 +1113,25 @@ export class Film extends Component<FilmSignature> {
   @tracked private cycleStep = -1;
 
   private film?: Picture;
+  /**
+   * THE FRAME'S DRESSING, WHERE THE PICTURE CAN TAKE IT.
+   *
+   * The wash and the cloud were CSS layers over the canvas, which meant a
+   * seam could not touch them: the picture dissolved and the paper behind
+   * the type snapped on the cut frame — two edits at once. A transition
+   * applies to what its own container renders, so they belong in the
+   * container, and the container is the picture's post pass (where the
+   * vignette, the grain, the split tone and the grade already live). A
+   * picture that offers `wash`/`cloud` gets them and the film stops
+   * drawing its own; one that does not keeps the CSS layers.
+   */
+  @tracked private washInGlass = false;
+  @tracked private cloudInGlass = false;
+  @tracked private dimInGlass = false;
+  /** the palette's paper, as `wear` last read it, for the wash */
+  private paperNow = '';
+  /** the last wash the picture was told about: mode and paper, told on change */
+  private washSent = '';
   private frameEl?: HTMLElement;
   private lineEl?: SVGLineElement;
   private dotEl?: SVGCircleElement;
@@ -966,21 +1203,11 @@ export class Film extends Component<FilmSignature> {
 
   /** the whole film, in seconds, leads included */
   private get totalSecs(): number {
-    return (
-      this.all.reduce(
-        (n, b, i) => n + b.ticks + (i === 0 ? 0 : (b.lead ?? 0)),
-        0,
-      ) * TICK
-    );
+    return totalSecsOf(this.all);
   }
 
   private secsBefore(index: number): number {
-    return (
-      this.all
-        .slice(0, index)
-        .reduce((n, b, i) => n + b.ticks + (i === 0 ? 0 : (b.lead ?? 0)), 0) *
-      TICK
-    );
+    return secsBeforeOf(this.all, index);
   }
 
   /** one segment per chapter, sized and placed in whole-film fractions */
@@ -1261,14 +1488,26 @@ export class Film extends Component<FilmSignature> {
   private hazeBase: number | null = null;
 
   /* the score's goal, and the two stages that chase it */
-  private goal: Cam = { ...this.all[0]!.cam };
-  private mid: Cam = { ...this.all[0]!.cam };
+  private goal: Cam = { ...(this.all[0] ?? EMPTY_BEAT).cam };
+  private mid: Cam = { ...(this.all[0] ?? EMPTY_BEAT).cam };
   private midV = { dolly: 0, fx: 0, fz: 0, lookY: 0, ox: 0, pitch: 0, yaw: 0 };
-  private now: Cam = { ...this.all[0]!.cam };
+  private now: Cam = { ...(this.all[0] ?? EMPTY_BEAT).cam };
   private nowV = { dolly: 0, fx: 0, fz: 0, lookY: 0, ox: 0, pitch: 0, yaw: 0 };
 
   /** the world-layer plane's own fade, so a chapter's type breathes in */
   private skyOn = 0;
+  /**
+   * THE SKY WORD'S OPACITY AS ACTUALLY SENT — not the ramp above.
+   *
+   * `skyOn` only says a word is WANTED; what the word is actually wearing
+   * is that ramp times the beat's own in and out, and the out takes it to
+   * nothing by 68% of the beat. When the next beat had no word the film
+   * used to hand the picture `skyOn` to fade from — a number still sitting
+   * near 1 — so a word that had been gone for seconds snapped back to 92%
+   * on the frame after the cut and faded out a second time, across the
+   * seam. Fade from what the word is wearing instead.
+   */
+  private skyA = 0;
   /** the time of day the furniture is currently dressed for */
   private wearing = '';
   /** the cast-shadow offset the type is currently wearing, px */
@@ -1289,11 +1528,23 @@ export class Film extends Component<FilmSignature> {
    *
    * `?from=N` seeds it, so a shot can be linked to.
    */
-  @tracked private from = (() => {
+  /**
+   * The deep link's shot, as asked (`?from=N`). Clamped against the
+   * rows when READ, never when set: with the score a graph the rows
+   * arrive a frame after construction, and clamping here against zero
+   * rows once made every deep link −1.
+   */
+  @tracked private fromRaw = (() => {
     const q = new URLSearchParams(window.location.search).get('from');
     const n = q ? Number(q) : 0;
-    return Number.isFinite(n) && n > 0 ? Math.min(n, this.all.length - 1) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
   })();
+  private get from(): number {
+    return Math.min(this.fromRaw, Math.max(0, this.all.length - 1));
+  }
+  private set from(index: number) {
+    this.fromRaw = index;
+  }
 
   /** sound is off until asked for: nobody's first second should be音 */
   @tracked private sound = false;
@@ -1330,16 +1581,7 @@ export class Film extends Component<FilmSignature> {
 
   /** the first beat of each chapter, in whole-film indices */
   get chapterHeads(): number[] {
-    const heads: number[] = [];
-    this.all.forEach((b, i) => {
-      if (
-        heads.length === 0 ||
-        this.all[heads[heads.length - 1]!]!.ch !== b.ch
-      ) {
-        heads.push(i);
-      }
-    });
-    return heads;
+    return chapterHeadsOf(this.all);
   }
 
   /** where we are in the WHOLE film, not the current cut */
@@ -1348,7 +1590,7 @@ export class Film extends Component<FilmSignature> {
   }
 
   get beat(): Beat {
-    return this.beats[this.beatIndex] ?? this.beats[0]!;
+    return this.beats[this.beatIndex] ?? this.beats[0] ?? EMPTY_BEAT;
   }
 
   /**
@@ -1377,7 +1619,7 @@ export class Film extends Component<FilmSignature> {
   }
 
   get chapter() {
-    return this.chapters[this.beat.ch] ?? this.chapters[0]!;
+    return this.chapters[this.beat.ch] ?? this.chapters[0] ?? EMPTY_CHAPTER;
   }
 
   get embed(): boolean {
@@ -1399,11 +1641,12 @@ export class Film extends Component<FilmSignature> {
   }
 
   get src(): string {
-    return `${this.args.src}?host${AWAKE ? '&awake' : ''}`;
+    const src = this.picture?.src;
+    return src ? `${src}?host${AWAKE ? '&awake' : ''}` : '';
   }
 
   get photoSrc(): string {
-    return `${this.args.assets}${this.beat.photo?.src ?? ''}`;
+    return `${this.assets}${this.beat.photo?.src ?? ''}`;
   }
 
   /** a photograph that failed to load is no photograph — drop the plate */
@@ -1434,7 +1677,7 @@ export class Film extends Component<FilmSignature> {
    * two-second bounce every cold boot wore before its first real frame.
    */
   get openPose() {
-    const c = this.beats[0]!.cam;
+    const c = (this.beats[0] ?? EMPTY_BEAT).cam;
     return {
       dolly: c.dolly,
       look: { x: c.fx ?? 0, y: c.lookY, z: c.fz ?? 0 },
@@ -1473,197 +1716,11 @@ export class Film extends Component<FilmSignature> {
    * than easing up from a standstill.
    */
   private tailFor(bi: number): Cam {
-    const beats = this.beats;
-    const b = beats[bi]!;
-    const drift = b.toCam ?? {
-      ...b.cam,
-      dolly: b.cam.dolly * 1.05,
-      pitch: b.cam.pitch + 1.4,
-      yaw: b.cam.yaw + 6,
-    };
-    /**
-     * A SHOT MUST MOVE ON SCREEN, not on paper.
-     *
-     * Frame-differencing a screen capture of the cut said it plainly:
-     * outside the seams, whole minutes of this film change by about
-     * 5/255 per SECOND — 0.08 per frame, which is nothing at all. The
-     * authored tails looked like moves in the score (four to eight
-     * degrees of orbit, three per cent of push) and read as STILLS in
-     * the picture, because an orbit barely displaces the subject it is
-     * aimed at and two chase stages low-pass whatever is left.
-     *
-     * So a tail is a DIRECTION and a floor, not a distance: what the
-     * beat asks for is honoured, and anything slower than a real slow
-     * move is stretched up to one. The floors are per second, so a
-     * long hold travels further than a short one and every shot drifts
-     * at the same speed. The push does most of the work — a scale
-     * change moves every pixel and the aim keeps the subject centred —
-     * and the orbit gives the background its parallax.
-     *
-     * A shot that ENDS AT A SEAM may be stretched freely: nothing
-     * crosses a cut, so the far side is a different shot and cannot be
-     * bounced into. Inside a continuous run the next beat's head is
-     * this same lens still travelling, so the stretch stops there —
-     * landing exactly on the next head is the smoothest tail there is
-     * (the spline crosses it without a corner), and passing it is what
-     * makes the camera arrive, back up and go again.
-     *
-     * Pitch carries a floor too, because orbit alone can fail to READ:
-     * the worm's-eye on the stone base moves two degrees a second and
-     * changes almost nothing on screen, since a flat wall aimed at
-     * from a fixed height looks the same from either side of it. A
-     * little tilt moves the whole frame.
-     */
-    const next = beats[bi + 1];
-    const secs = b.ticks * TICK;
-    const sgn = (d: number) => (d < 0 ? -1 : 1);
-    const stretch = (
-      key: 'dolly' | 'ox' | 'pitch' | 'yaw',
-      floor: number,
-    ): number => {
-      const head = b.cam[key] ?? 0;
-      const d = (drift[key] ?? 0) - head;
-      const nose = next ? (next.cam[key] ?? 0) - head : 0;
-      /* the direction is the beat's own, or the next shot's if the
-         beat asked for nothing at all */
-      const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
-      /**
-       * NEVER TRAVEL PAST WHERE THE NEXT SHOT BEGINS. Inside a run
-       * that would make the camera arrive, back up and go again. At a
-       * CUT it is worse, and it is what chapter four was doing: the
-       * details sit eight or ten degrees apart, the floor asked for
-       * twenty-two, so every shot orbited past its successor's pose
-       * and the cut jumped BACKWARDS into it — a film that appears to
-       * be running one section behind its own captions.
-       */
-      const reach = !next
-        ? Infinity
-        : sgn(nose) === way && nose !== 0
-          ? Math.abs(nose)
-          : 0;
-      const want = Math.min(
-        Math.max(Math.abs(d), floor),
-        Math.max(Math.abs(d), reach),
-      );
-      return head + way * want;
-    };
-    /**
-     * AND A PAN. Orbit, push and tilt all move the camera AROUND the
-     * subject; a lateral drift moves the subject across the frame,
-     * which is the one Ken Burns move the others cannot fake — it
-     * changes the composition rather than the view. A few hundredths of
-     * the frustum over a shot is enough to feel: the building leaves
-     * the middle, or arrives in it, while everything else is happening.
-     */
-    const to = {
-      ...drift,
-      dolly: stretch('dolly', b.cam.dolly * Math.min(0.22, 0.022 * secs)),
-      ox: stretch('ox', Math.min(0.07, 0.008 * secs)),
-      pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
-      yaw: stretch('yaw', Math.min(22, 2 * secs)),
-    };
-    return {
-      dolly: to.dolly,
-      fx: to.fx ?? b.cam.fx ?? 0,
-      fz: to.fz ?? b.cam.fz ?? 0,
-      lookY: to.lookY,
-      ox: to.ox,
-      pitch: to.pitch,
-      yaw: to.yaw,
-    };
+    return tailForOf(this.beats, bi);
   }
 
   get path() {
-    const pts: {
-      cut?: boolean;
-      dolly: number;
-      look: { x: number; y: number; z: number };
-      pitch: number;
-      x: number;
-      y: number;
-      yaw: number;
-    }[] = [];
-    const beats = this.beats;
-    for (const [bi, b] of beats.entries()) {
-      /**
-       * A CUT BEAT'S HEAD IS A SPLICE. The library samples each side as
-       * its own clamped shot and steps across the seam at this waypoint's
-       * own instant (docs/choreo-splices.md) — no enforced holds, no
-       * ticks spent parked, no glide across the jump. A re-cut score
-       * (chapter skip) splices its very first waypoint too, so a skip
-       * opens inside its shot instead of travelling in from wherever the
-       * last run left the lens.
-       */
-      const splice = b.cut === true || (bi === 0 && this.from > 0);
-      const to = this.tailFor(bi);
-      /**
-       * A HOLD BREATHES. Before the splices, every "held" shot secretly
-       * lived on the one spline's residual sway; clamped shots took that
-       * away and the holds went DEAD — three static slides in the first
-       * minute. A shot with no authored tail now drifts on its own: a
-       * few degrees of orbit and a whisper of push over its whole
-       * length, too slow to read as a move and just enough that the
-       * frame is alive. An authored toCam always wins.
-       */
-      /* THE ARRIVAL. A lead spends its ticks travelling from wherever
-         the last shot finished to this beat's own head, so a chapter
-         change is a move rather than a jump. It cannot apply to the
-         first beat of a cut: there is nothing behind it to leave. */
-      const lead = bi === 0 ? 0 : (b.lead ?? 0);
-      const prev = pts[pts.length - 1];
-      if (lead > 0 && prev) {
-        for (let k = 1; k <= lead; k++) {
-          const f = k / (lead + 1);
-          pts.push({
-            dolly: lerp(prev.dolly, b.cam.dolly, f),
-            look: {
-              x: lerp(prev.look.x, b.cam.fx ?? 0, f),
-              y: lerp(prev.look.y, b.cam.lookY, f),
-              z: lerp(prev.look.z, b.cam.fz ?? 0, f),
-            },
-            pitch: lerp(prev.pitch, b.cam.pitch, f),
-            x: lerp(prev.x, b.cam.ox ?? 0, f),
-            y: 0,
-            yaw: lerp(prev.yaw, b.cam.yaw, f),
-          });
-        }
-      }
-      for (let k = 0; k < b.ticks; k++) {
-        /**
-         * ONE CURVE, NOT FIVE INTERPOLATIONS.
-         *
-         * A shot is a single move from one pose to another, and it is
-         * described here by exactly two poses: the beat's head and the
-         * tail computed above. The points between them are samples of
-         * that one line — collinear by construction, evenly spaced, one
-         * per tick because the cue clock counts ticks — so the spline
-         * has nothing to invent between them and no join to round off.
-         *
-         * They were briefly spaced on a smoothstep, to put the speed in
-         * the middle of the shot. That is the right INSTINCT and the
-         * wrong place for it: uneven spacing makes a Catmull-Rom
-         * overshoot at every sample, so a move that should read as one
-         * gesture reads as five corrections. The easing belongs to the
-         * chaser, which is a physical system and cannot overshoot into
-         * a corner, and to the shot's own head and tail.
-         */
-        const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
-        pts.push({
-          cut: splice && k === 0 ? true : undefined,
-          dolly: lerp(b.cam.dolly, to.dolly, f),
-          look: {
-            x: lerp(b.cam.fx ?? 0, to.fx ?? 0, f),
-            y: lerp(b.cam.lookY, to.lookY, f),
-            z: lerp(b.cam.fz ?? 0, to.fz ?? 0, f),
-          },
-          pitch: lerp(b.cam.pitch, to.pitch, f),
-          x: lerp(b.cam.ox ?? 0, to.ox ?? 0, f),
-          y: 0,
-          yaw: lerp(b.cam.yaw, to.yaw, f),
-        });
-      }
-    }
-    return pts;
+    return waypoints(this.beats, this.from > 0);
   }
 
   /**
@@ -1678,36 +1735,47 @@ export class Film extends Component<FilmSignature> {
    * re-fire has always been the first cue's job.
    */
   get cues() {
-    let t = 0;
-    const out: { action: string; delay: number; index: string }[] = [];
-    this.beats.forEach((b, i) => {
-      const lead = i === 0 ? 0 : (b.lead ?? 0);
-      /**
-       * The sky turns while the lens is still travelling: the air cue
-       * fires as the sweep BEGINS and the beat's own cue when it lands.
-       *
-       * (It was briefly moved two ticks earlier, so the hour changed
-       * under the end of the previous passage. It reads badly — the
-       * light goes while you are still looking at a shot composed for
-       * the old light, which is not anticipation, just a mismatch. The
-       * change belongs to the move.)
-       */
-      if (lead > 0) {
+    return cuesOf(this.beats);
+  }
+  /**
+   * THE ATTACHMENTS: every window the score drives another region over.
+   * The plate for every beat, the insert for a beat with a photograph,
+   * the clip for a beat with one — each on the score's own clock, so a
+   * seek stands all of them where playing there would. The regions are
+   * keyed per beat and mounted for their windows; `remove` past a window
+   * leaves them to that; a clip may outlive its beat and holds.
+   */
+  get windows() {
+    const beats = this.beats;
+    const heads = cuesOf(beats).filter((c) => c.action === 'beat');
+    const total = totalSecsOf(beats);
+    const out: {
+      end: 'hold' | 'remove';
+      length: number;
+      region: string;
+      start: number;
+    }[] = [];
+    heads.forEach((c, k) => {
+      const b = beats[k]!;
+      const start = c.delay;
+      const next = heads[k + 1]?.delay ?? total;
+      out.push({ end: 'remove', length: next - start, region: 'plate', start });
+      if (b.photo) {
         out.push({
-          action: 'air',
-          delay: t + TICK,
-          index: String(i),
+          end: 'remove',
+          length: next - start,
+          region: 'insert',
+          start,
         });
       }
-      const at = t + lead * TICK;
-      t = at + b.ticks * TICK;
-      /* a Perform target is a NAME, and a beat's name is its place in the
-         script — the index, as a string, so the cue and the array agree */
-      out.push({
-        action: 'beat',
-        delay: at === 0 ? 0 : at + TICK,
-        index: String(i),
-      });
+      if (b.clip) {
+        out.push({
+          end: 'hold',
+          length: clipWindow(b.clip, start, next),
+          region: 'clip',
+          start: start + (b.clip.at ?? 0),
+        });
+      }
     });
     return out;
   }
@@ -1794,10 +1862,17 @@ export class Film extends Component<FilmSignature> {
    * enters in its order: kicker, glyph, reading — and the lines after.
    */
   get typeAt(): number[] {
-    /* the type waits for the SEAM to finish, and an unnamed join is the
-       default one — reading '' here meant every default cut typed straight
-       through its own transition */
-    const wait = (JOIN_SECS[this.beat.join ?? this.defaultJoin] ?? 0) + 0.45;
+    /* A SEAM THAT COVERS THE FURNITURE NEEDS NO WAIT. The still is above
+       the type, so the setting may enter from the beat's first frame and
+       be under way — not starting — when the sweep reveals it. That is
+       the whole point of `everything`. */
+    if (this.overOf(this.beat) === 'everything') {
+      return [0, 0.12, 0.36];
+    }
+    /* otherwise the type waits for the SEAM to finish, and an unnamed
+       join is the default one — reading '' here meant every default cut
+       typed straight through its own transition */
+    const wait = this.secsOf(this.beat.join ?? this.defaultJoin) + 0.45;
     return [wait, wait + 0.12, wait + 0.36];
   }
 
@@ -1857,15 +1932,23 @@ export class Film extends Component<FilmSignature> {
    * over. The film may dress its door otherwise (`@poster`).
    */
   private dressPoster(film: Picture) {
-    const p = this.args.poster ?? {};
+    const p = this.picture?.poster ?? {};
     film.theme(p.theme ?? 2, true);
     const l = p.light ?? { az: -105, el: 21 };
     film.light({ az: l.az * RAD, el: l.el * RAD });
   }
 
+  private announced = false;
   private mount = modifier((el: HTMLElement) => {
+    /* the rows are a tracked read on purpose: a film whose score is a
+       graph has none on its first pass, and this modifier re-installs
+       — and re-runs the load path below — when they arrive */
+    const rows = this.all.length;
     /* which cut is actually in the browser, said out loud once */
-    console.info(`film ${this.args.name}: ${this.args.build ?? ''}`);
+    if (!this.announced) {
+      this.announced = true;
+      console.info(`film ${this.args.name}: ${this.args.build ?? ''}`);
+    }
     this.frameEl = el;
     this.pageEl = el.closest('.cf-page') as HTMLElement;
     window.addEventListener('keydown', this.key);
@@ -1893,6 +1976,27 @@ export class Film extends Component<FilmSignature> {
        entirely rather than fading, because unlike Sylva's theater there
        is no lockup here that wants to stay superimposed */
     document.body.classList.add(this.embed ? 'cf-embedded' : 'cf-film');
+    /**
+     * THE FILM, REACHABLE FROM OUTSIDE THE PAGE.
+     *
+     * An exact film is a pure function of one number, which is the whole
+     * claim of `@seek='exact'` — so it should be possible to stand it at
+     * a time from a script and read the frame back, rather than recording
+     * it in real time and hoping. `renderAt` has always existed on the
+     * handle; it was simply not reachable by anything that is not a
+     * template. Published under the film's own name so a page may hold
+     * more than one.
+     */
+    const reg = ((
+      window as unknown as { __choreo?: Record<string, unknown> }
+    ).__choreo ??= {});
+    reg[this.args.name] = {
+      exact: this.exact,
+      renderAt: this.renderAt,
+      runtime: () => this.runtime,
+      seconds: () => this.totalSecs,
+      seek: this.seek,
+    };
     /* only ever gate a film that has not begun: a dev-mode template swap
        re-runs this modifier on the SAME instance, and resurrecting the
        door over a running film left its buttons answering to a guard
@@ -1913,7 +2017,13 @@ export class Film extends Component<FilmSignature> {
       if (!w?.__film) {
         return;
       }
+      /* no rows yet: the graph compiles a frame after render, and the
+         boot below stands the picture on the FIRST shot — wait for it */
+      if (!rows && !this.all.length) {
+        return;
+      }
       this.film = w.__film;
+      this.takeGlass(this.film);
       this.film.volume?.(this.vol);
       /* a RUNNING film needs nothing from the door. This path re-fires
          whenever the modifier re-installs (it reads tracked state), and
@@ -1927,10 +2037,10 @@ export class Film extends Component<FilmSignature> {
            up before the first beat runs means a beat only ever has to say
            what it CHANGES, which is also what makes `?from` land on a
            real shot rather than on a field. */
-        w.__film.time(this.args.standing);
+        w.__film.time(this.standing);
         /* whatever the picture needs told once — the plan off, the city
            on — is the film's own */
-        this.args.seat?.(w.__film);
+        this.picture?.seat?.(w.__film);
         /* THE POSTER IS AN EVENING. The film proper opens in the morning
            — so the door stands in the last of the light, and pressing it
            turns the day over: the sky crossfades to nine o'clock while
@@ -1939,7 +2049,7 @@ export class Film extends Component<FilmSignature> {
         this.dressPoster(w.__film);
         /* seat the lens where the film opens, so the first frame is the
            shot and not a swing towards it */
-        this.snap(this.beats[0]!.cam);
+        this.snap((this.beats[0] ?? EMPTY_BEAT).cam);
       } finally {
         /* the door unlocks NO MATTER WHAT the seating did: a gate whose
            buttons can be stranded disabled by a throw above is a locked
@@ -2007,6 +2117,7 @@ export class Film extends Component<FilmSignature> {
       } | null;
       if (w?.__film) {
         this.film = w.__film;
+        this.takeGlass(this.film);
         this.film.volume?.(this.vol);
       }
       cancelAnimationFrame(this.raf);
@@ -2026,7 +2137,10 @@ export class Film extends Component<FilmSignature> {
       window.clearTimeout(this.idleTimer);
       frame.removeEventListener('load', onLoad);
       document.body.classList.remove('cf-film', 'cf-embedded');
+      delete (window as unknown as { __choreo?: Record<string, unknown> })
+        .__choreo?.[this.args.name];
       this.film = undefined;
+      this.takeGlass(undefined);
     };
   });
 
@@ -2219,7 +2333,7 @@ export class Film extends Component<FilmSignature> {
       this.posterAt = stamp;
     }
     const t = (stamp - this.posterAt) / 1000;
-    const c = this.beats[0]!.cam;
+    const c = (this.beats[0] ?? EMPTY_BEAT).cam;
     /* THREE-QUARTERS ON, and swinging. Dead in front of a building is
        an elevation drawing; the corner is where a tower shows you that
        it has depth — two faces, two eave lines, and a shadow that
@@ -2351,6 +2465,9 @@ export class Film extends Component<FilmSignature> {
       ? this.t - this.beatStart(this.absoluteIndex)
       : (stamp - this.beatAt) / 1000;
 
+    /* the seam, both halves, from one progress — before the pose, so a
+       frame never carries a lens that has moved past a seam that has not */
+    this.driveSeam(film, this.t);
     if (this.exact) {
       /* no integrator in the pose path: the lens IS the spline */
       this.now = { ...this.goal };
@@ -2537,7 +2654,7 @@ export class Film extends Component<FilmSignature> {
           : lutName.includes('.')
             ? {
                 amount: this.lutAmount,
-                url: `${this.args.assets}luts/${lutName}`,
+                url: `${this.assets}luts/${lutName}`,
               }
             : { ...(fx ?? { amount: this.lutAmount }), look: lutName },
         snap,
@@ -2686,7 +2803,12 @@ export class Film extends Component<FilmSignature> {
       : last
         ? smooth(Math.max(0, Math.min(1, (left - endOff - 0.5) / 2.0)))
         : smooth(Math.min(1, left / 1.0));
-    const typeA = Math.min(enter, tailA);
+    /* THE SEAM, HALF TWO. Whatever the seam is holding over the picture,
+       it holds over the type, the stamp and the inserts too — so a
+       caption is uncovered by the same gesture that uncovers the shot
+       behind it, rather than waiting for it or hiding under it. Outside a
+       seam this is 1 and costs nothing. */
+    const typeA = Math.min(enter, tailA, this.reveal);
     this.pageEl?.style.setProperty('--cf-type-a', typeA.toFixed(3));
     /* THE TITLE HANDS THE FRAME TO THE SUBJECT. The opening card is
        type-first — the study's name at poster size while the lens is
@@ -2803,12 +2925,12 @@ export class Film extends Component<FilmSignature> {
       const w = Math.max(0, Math.min(1, (local - 0.12 - phase) / 0.62));
       const cloud = Math.sin(Math.PI * w) ** 2;
       film.haze((this.hazeBase ?? 0) + this.cloudHaze * cloud);
-      this.pageEl?.style.setProperty('--cf-cloud', cloud.toFixed(3));
-      this.pageEl?.classList.toggle('is-cloudless', cloud < 0.02);
+      this.setCloud(film, cloud);
     } else {
-      this.pageEl?.style.setProperty('--cf-cloud', '0');
-      this.pageEl?.classList.add('is-cloudless');
+      this.setCloud(film, 0);
     }
+    /* and the wash, which changes with the shot and the palette */
+    this.pushWash(film);
 
     /* the lineup's metronome: the beat divides itself evenly among its
        towers and the last one holds the remainder, so the recap ends
@@ -2831,7 +2953,7 @@ export class Film extends Component<FilmSignature> {
         film.time(
           c.year !== undefined && this.args.clock
             ? this.args.clock.tAt(c.year)
-            : this.args.standing,
+            : this.standing,
         );
         /* each stamp lands with the scene's own construction hit; the
            final one — the film's subject — gets the bell */
@@ -2884,22 +3006,26 @@ export class Film extends Component<FilmSignature> {
         },
         {
           billboard: true,
-          opacity:
+          opacity: (this.skyA =
             this.skyOn *
             (beat.sky.opacity ?? 0.4) *
             0.78 *
             smooth(Math.max(0, Math.min(1, (local - 0.16) / 0.16))) *
-            (1 - smooth(Math.max(0, Math.min(1, (local - 0.52) / 0.16)))),
+            (1 - smooth(Math.max(0, Math.min(1, (local - 0.52) / 0.16))))),
           x: -Math.sin(a) * d,
           y: beat.sky.y,
           z: -Math.cos(a) * d,
         },
       );
-    } else if (this.skyOn > 0.001) {
+    } else if (this.skyA > 0.001 || this.skyOn > 0.001) {
       this.skyOn = this.exact
         ? 0
         : this.skyOn + (0 - this.skyOn) * Math.min(1, dt * 2.4);
-      film.fade('chapter', this.skyOn);
+      /* from where the word actually is, which is usually already nothing */
+      this.skyA = this.exact
+        ? 0
+        : this.skyA + (0 - this.skyA) * Math.min(1, dt * 2.4);
+      film.fade('chapter', this.skyA);
     }
 
     this.stageMark(film, beat, local, dt);
@@ -2949,6 +3075,44 @@ export class Film extends Component<FilmSignature> {
     }
   }
 
+  /** which of the frame's layers this picture draws itself */
+  private takeGlass(film?: Picture) {
+    this.washInGlass = !!film?.wash;
+    this.cloudInGlass = !!film?.cloud;
+    this.dimInGlass = !!film?.dim;
+    /* a picture arriving mid-run has not been told the wash yet */
+    this.washSent = '';
+  }
+
+  /**
+   * THE WASH, TOLD ON A CHANGE. Two things decide it — the shot's own mode
+   * and the palette's paper — and neither changes often, so the picture is
+   * told when one does and eases the change itself over the same 700 ms
+   * the stylesheet used to.
+   */
+  private pushWash(film: Picture) {
+    if (!film.wash) {
+      return;
+    }
+    const mode = this.beat.bare ? '' : (this.beat.mode ?? '');
+    const sig = `${mode}|${this.paperNow}`;
+    if (sig === this.washSent) {
+      return;
+    }
+    this.washSent = sig;
+    film.wash(mode, this.paperNow);
+  }
+
+  /** the cloud: into the glass where the picture takes it, onto a CSS plate where it does not */
+  private setCloud(film: Picture, k: number) {
+    if (film.cloud) {
+      film.cloud(k, this.rakeDeg);
+      return;
+    }
+    this.pageEl?.style.setProperty('--cf-cloud', k.toFixed(3));
+    this.pageEl?.classList.toggle('is-cloudless', k < 0.02);
+  }
+
   /**
    * THE FURNITURE WEARS THE SCENE'S PALETTE.
    *
@@ -2974,7 +3138,7 @@ export class Film extends Component<FilmSignature> {
      * sits on has genuinely gone dark, not merely when the clock says
      * night.
      */
-    const GB = this.args.gradeLum ?? GRADE_LUM;
+    const GB = this.picture?.gradeLum ?? GRADE_LUM;
     const beat = this.beat;
     const dimmed = beat.trace || beat.to ? 0.74 : 1;
     const eff =
@@ -2993,6 +3157,8 @@ export class Film extends Component<FilmSignature> {
     if (!el) {
       return;
     }
+    /* the wash is mixed from this too, wherever it is drawn */
+    this.paperNow = p.paper;
     el.style.setProperty('--cf-paper', p.paper);
     el.style.setProperty('--cf-paper-a', rgba(p.paper, 0.94));
     el.style.setProperty('--cf-paper-b', rgba(p.paper, 0.76));
@@ -3217,10 +3383,12 @@ export class Film extends Component<FilmSignature> {
     if (beat.to) {
       drew = Math.max(drew, Math.min(1, Math.max(0, (since - 0.04) / 0.18)));
     }
-    if (this.dim) {
-      this.dimNow = this.exact
-        ? drew
-        : this.dimNow + (drew - this.dimNow) * Math.min(1, dt * 3.2);
+    this.dimNow = this.exact
+      ? drew
+      : this.dimNow + (drew - this.dimNow) * Math.min(1, dt * 3.2);
+    if (this.dimInGlass) {
+      film.dim?.(this.dimNow);
+    } else if (this.dim) {
       this.dim.style.opacity = this.dimNow.toFixed(3);
     }
   }
@@ -3591,10 +3759,42 @@ export class Film extends Component<FilmSignature> {
          * genuinely needs pixels in the DOM (the wipe sweeps one, the iris
          * closes over one).
          */
-        if (join === 'blend' || join === 'melt' || join === 'dip') {
+        let held = '';
+        const deep = this.overOf(beat);
+        /**
+         * THE SEAM IN TWO HALVES. A mix seam the picture can hold goes
+         * into the glass — where it is composited in LIGHT, which an
+         * `<img>` faded by this document can never be — and the incoming
+         * furniture is revealed by the same two numbers rather than
+         * hidden under a still. No read-back, no JPEG, no decode to wait
+         * for, and a seek through it is a function of the clock.
+         *
+         * A wipe and an iris are shapes rather than mixes: they need
+         * pixels to sweep and to clip, so they keep their still.
+         */
+        const glass = this.glassFor(join);
+        if (glass) {
+          film.freeze?.(true);
+          this.glassKind = join;
+          this.glassName = glass.name ?? '';
+          this.glassLen = this.secsOf(join);
+          this.glassColor = beat.dipTo ?? '#0d0905';
+          this.reveal = 0;
+          this.freeze = '';
+          this.joinKind = '';
+          if (beat.cut) {
+            this.snap(
+              beat.cam,
+              this.tailFor(this.beatIndex),
+              beat.ticks * TICK,
+            );
+          }
+        } else if (
+          deep !== 'everything' &&
+          (join === 'blend' || join === 'melt' || join === 'dip')
+        ) {
           /* the crossfade lives in the glass now; the still is the
              fallback, and a stale one must never stand in for it */
-          this.freeze = '';
           /* A/B IN THE GLASS: when nothing but the lens changes across
              the seam, the outgoing shot keeps moving under the dissolve
              (the page draws both cameras). A seam that changes the hour,
@@ -3608,62 +3808,76 @@ export class Film extends Component<FilmSignature> {
             beat.winter === undefined &&
             beat.grade === undefined &&
             !beat.hours;
-          if (!film.dissolve(join, undefined, live)) {
+          if (
+            !film.dissolve(join as 'blend' | 'dip' | 'melt', undefined, live)
+          ) {
             const shot = film.snapshot();
-            this.freeze = shot.length > 64 ? shot : '';
+            held = shot.length > 64 ? shot : '';
           }
         } else if (join !== 'cut') {
           const shot = film.snapshot();
-          this.freeze = shot.length > 64 ? shot : '';
+          held = shot.length > 64 ? shot : '';
         }
-        /* A WIPE IS A CUT with punctuation over it (docs/choreo-splices.md):
-           the still of the outgoing shot sweeps off to reveal the incoming
-           one, so the lens must already BE on the incoming shot. Without
-           the cut, the sweep revealed the old shot still gliding toward the
-           new pose — the same picture twice, once as a still and once live. */
-        if (beat.cut || join === 'wipe') {
-          this.snap(beat.cam, this.tailFor(this.beatIndex), beat.ticks * TICK);
+        /* THE LENS WAITS FOR THE STILL (`film/seam.ts`): everything below
+           happens on the frame the outgoing frame can actually be painted
+           on, not on the frame it was read back. And while it waits, the
+           PICTURE holds the outgoing frame — the rest of this method lands
+           the beat's hour, build, model and weather immediately, and for
+           the two or three frames the decode takes, the canvas would
+           otherwise show the incoming world with nothing over it. */
+        const index = this.beatIndex;
+        if (this.glassKind === join) {
+          /* the glass has it; there is no still and nothing to gate */
+        } else if (held) {
+          film.freeze?.(true);
         }
-        if (join === 'dip') {
-          this.dipColor = beat.dipTo ?? '#0d0905';
-          this.play('dip');
-        } else if (join === 'flash') {
-          this.play('flash');
-        } else if (join === 'sweep') {
-          this.lightSweep(film, beat);
-        } else if (join === 'defocus') {
-          /* the rack: the freeze blurs away above while the live frame
-             arrives soft and pulls itself sharp underneath */
-          if (this.freeze) {
-            this.play('defocus');
+        this.seam.hold(this.glassKind === join ? '' : held, () => {
+          if (this.glassKind === join) {
+            return;
           }
-          this.liveEl?.animate(
-            [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
-            { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' },
-          );
-        } else if (this.freeze) {
-          if (join === 'wipe') {
-            this.play('wipe');
-          } else if (join === 'blur') {
-            this.play('blur');
-          } else if (join === 'luma') {
-            this.play('luma');
-          } else if (join === 'melt') {
-            this.play('melt');
-          } else if (join === 'blend') {
-            this.play('blend');
-          } else if (join === 'iris') {
-            /* the circle closes ON the incoming shot's named point —
-               projected now, with the camera already snapped — so the
-               iris hands the eye directly to the subject */
-            const v = film.view();
-            const p = beat.to ? film.project(...beat.to) : undefined;
-            const cx = p ? Math.max(12, Math.min(88, (p.x / v.w) * 100)) : 50;
-            const cy = p ? Math.max(12, Math.min(88, (p.y / v.h) * 100)) : 50;
-            this.irisAt = `--ix:${cx.toFixed(1)}%;--iy:${cy.toFixed(1)}%`;
-            this.play('iris');
+          film.freeze?.(false);
+          this.freeze = held;
+          /* A WIPE IS A CUT with punctuation over it (docs/choreo-splices.md):
+             the still of the outgoing shot sweeps off to reveal the incoming
+             one, so the lens must already BE on the incoming shot. Without
+             the cut, the sweep revealed the old shot still gliding toward the
+             new pose — the same picture twice, once as a still and once live. */
+          if (beat.cut || join === 'wipe') {
+            this.snap(beat.cam, this.tailFor(index), beat.ticks * TICK);
           }
-        }
+          if (join === 'dip') {
+            this.dipColor = beat.dipTo ?? '#0d0905';
+            this.play('dip', deep);
+          } else if (join === 'flash') {
+            this.play('flash', deep);
+          } else if (join === 'sweep') {
+            this.lightSweep(film, beat);
+          } else if (join === 'defocus') {
+            /* the rack: the freeze blurs away above while the live frame
+               arrives soft and pulls itself sharp underneath */
+            if (held) {
+              this.play('defocus', deep);
+            }
+            this.liveEl?.animate(
+              [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
+              { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' },
+            );
+          } else if (held) {
+            if (join === 'iris') {
+              /* the circle closes ON the incoming shot's named point —
+                 projected now, with the camera already snapped — so the
+                 iris hands the eye directly to the subject */
+              const v = film.view();
+              const p = beat.to ? film.project(...beat.to) : undefined;
+              const cx = p ? Math.max(12, Math.min(88, (p.x / v.w) * 100)) : 50;
+              const cy = p ? Math.max(12, Math.min(88, (p.y / v.h) * 100)) : 50;
+              this.irisAt = `--ix:${cx.toFixed(1)}%;--iy:${cy.toFixed(1)}%`;
+              this.play('iris', deep);
+            } else if (this.presentations[join]?.component) {
+              this.play(join, deep);
+            }
+          }
+        });
       }
     }
     /**
@@ -3693,7 +3907,7 @@ export class Film extends Component<FilmSignature> {
         film.time(
           Array.isArray(beat.build)
             ? beat.build[0]
-            : (beat.build ?? this.args.standing),
+            : (beat.build ?? this.standing),
         );
       }
     }
@@ -3711,7 +3925,7 @@ export class Film extends Component<FilmSignature> {
          landing anywhere after the ending finds the tower standing, not
          the last beat's rubble. Only the construction chapter and the
          ending say otherwise, and they say it explicitly. */
-      film.time(this.args.standing);
+      film.time(this.standing);
     }
     if (beat.sky) {
       /* plant the word where the shot can see it, once */
@@ -3800,7 +4014,7 @@ export class Film extends Component<FilmSignature> {
     const hard =
       instant ||
       !!beat.cut ||
-      (beat.join !== undefined && STILL_JOINS.has(beat.join));
+      (beat.join !== undefined && this.holdsStill(beat.join));
     const film = this.film;
     if (!film) {
       return;
@@ -4115,7 +4329,7 @@ export class Film extends Component<FilmSignature> {
    */
 
   private voSrc(beat: Beat) {
-    return `${this.args.assets}vo/${beat.id}.mp3`;
+    return `${this.assets}vo/${beat.id}.mp3`;
   }
 
   /** ask the page to fetch and decode the line after this one, now */
@@ -4280,14 +4494,15 @@ export class Film extends Component<FilmSignature> {
     this.beatIndex = 0;
     this.markSeated = false;
     this.skyOn = 0;
+    this.skyA = 0;
     this.dimNow = 0;
     this.sent = undefined;
     this.t = 0;
     this.jumped = false;
     this.seamAt = -1;
+    this.endSeam();
     this.airedFor = -1;
     this.scoreRun = null;
-    this.plateRun = null;
     this.clipNow = null;
     this.clipKey = '';
     this.clipState = 'absent';
@@ -4306,10 +4521,10 @@ export class Film extends Component<FilmSignature> {
          needs it drawing again, or the poster is the ending's last frame */
       film.idle(false);
       this.idled = false;
-      film.time(this.args.standing);
-      this.args.seat?.(film);
+      film.time(this.standing);
+      this.picture?.seat?.(film);
       this.dressPoster(film);
-      this.snap(this.all[0]!.cam);
+      this.snap((this.all[0] ?? EMPTY_BEAT).cam);
     }
     /* the run only exists while the film is booted; taking that away
        ends it, and the door decides when the next one starts */
@@ -4358,9 +4573,12 @@ export class Film extends Component<FilmSignature> {
       this.beatIndex = head;
       this.jumped = false;
       this.seamAt = -1;
+      this.endSeam();
       this.airedFor = -1;
     }
-    const first = this.exact ? this.all[this.beatIndex]! : this.beats[0]!;
+    const first = this.exact
+      ? this.all[this.beatIndex]!
+      : (this.beats[0] ?? EMPTY_BEAT);
     this.settleAir(this.exact ? this.beatIndex : this.from);
     this.applyBeat(first, true);
     /* ...and the sky comes with it, NOT instantly: the evening of the
@@ -4377,7 +4595,7 @@ export class Film extends Component<FilmSignature> {
     if (this.posterPose && !this.exact) {
       this.now = { ...this.posterPose };
       this.mid = { ...this.posterPose };
-      this.goal = { ...this.beats[0]!.cam };
+      this.goal = { ...(this.beats[0] ?? EMPTY_BEAT).cam };
       this.whipUntil = performance.now() + 1200;
       for (const k of [
         'dolly',
@@ -4468,21 +4686,11 @@ export class Film extends Component<FilmSignature> {
   /** every chapter, with the beat it starts at and whether we are in it */
   get contents() {
     const here = this.absoluteIndex;
-    return this.chapterHeads.map((head, i) => {
-      const nextHead = this.chapterHeads[i + 1] ?? this.all.length;
-      const ch = this.chapters[this.all[head]!.ch] ?? this.chapters[0]!;
-      return {
-        head,
-        here: here >= head && here < nextHead,
-        n: ch.n,
-        shots: nextHead - head,
-        title: ch.title,
-        /* the chapter's own running time, from the beats it owns */
-        secs:
-          this.all.slice(head, nextHead).reduce((t, b) => t + b.ticks, 0) *
-          TICK,
-      };
-    });
+    const heads = this.chapterHeads;
+    return contentsOf(this.all, this.chapters).map((c, i) => ({
+      ...c,
+      here: here >= c.head && here < (heads[i + 1] ?? this.all.length),
+    }));
   }
 
   private pick = (head: number) => {
@@ -4508,22 +4716,26 @@ export class Film extends Component<FilmSignature> {
           <iframe
             class='cf-frame'
             src={{this.src}}
-            title={{@title}}
+            title={{this.frameTitle}}
             loading='eager'
           ></iframe>
         </div>
 
         {{! A scrim, not a box: each setting gets a soft directional lift
-        under it, which reads as light falling off and not as a panel }}
-        <div
-          class='cf-scrim cf-scrim-{{this.beat.mode}}
-            {{if this.beat.bare "is-bare"}}'
-          aria-hidden='true'
-        ></div>
+        under it, which reads as light falling off and not as a panel. It is
+        a layer here only for a picture that cannot take it into its own
+        glass — where it can, the wash is inside the seam }}
+        {{#unless this.washInGlass}}
+          <div
+            class='cf-scrim cf-scrim-{{this.beat.mode}}
+              {{if this.beat.bare "is-bare"}}'
+            aria-hidden='true'
+          ></div>
+        {{/unless}}
 
         {{! THE TRANSITIONS: the outgoing frame, held, and whatever the
         seam does to it }}
-        <div class='cf-joins' {{this.joinsWrap}}>
+        <div class='cf-joins {{if this.joinOver "is-over"}}' {{this.joinsWrap}}>
           <Joins
             @kind={{this.joinKind}}
             @stamp={{this.joinStamp}}
@@ -4531,16 +4743,21 @@ export class Film extends Component<FilmSignature> {
             @irisAt={{this.irisAt}}
             @dipColor={{this.dipColor}}
             @seekable={{this.exact}}
+            @presentations={{this.presentations}}
           />
         </div>
-
-        {{! THE CLOUD, driven per frame from --cf-cloud }}
-        <div class='cf-cloud' aria-hidden='true'></div>
+        {{! THE CLOUD, driven per frame from --cf-cloud — again only for a
+        picture that cannot draw it in the glass }}
+        {{#unless this.cloudInGlass}}
+          <div class='cf-cloud' aria-hidden='true'></div>
+        {{/unless}}
 
         {{! THE DIM: a wash that comes in WITH an annotation and lifts with
         it — dimming the plate is what a lecturer does when the slide goes
         up }}
-        <div class='cf-dim' aria-hidden='true' {{this.dimEl}}></div>
+        {{#unless this.dimInGlass}}
+          <div class='cf-dim' aria-hidden='true' {{this.dimEl}}></div>
+        {{/unless}}
 
         {{! the leader, the tether and the ring — what must connect DOM to
         world }}
@@ -4556,7 +4773,6 @@ export class Film extends Component<FilmSignature> {
             @glyphFit={{this.glyphFit}}
             @glyphTone={{this.glyphTone}}
             @mount={{this.plate}}
-            @grab={{this.grabPlate}}
           />
 
           <Stamp @step={{this.cycleStep}} @word={{this.stamp}} />
@@ -4626,6 +4842,18 @@ export class Film extends Component<FilmSignature> {
                   @ease='linear'
                   @tension={{0.34}}
                 />
+                {{! the type, the insert and the clip ride the score's clock:
+                one window per beat, driven, never played }}
+                {{#each this.windows as |w|}}
+                  <c.Attach
+                    @region={{w.region}}
+                    @at={{at 'film'}}
+                    @delay={{w.start}}
+                    @duration={{w.length}}
+                    @end={{w.end}}
+                    @exact={{this.exact}}
+                  />
+                {{/each}}
                 {{! an exact film derives its beats from the clock; a cut
                 film is told them }}
                 {{#unless this.exact}}
@@ -4708,8 +4936,13 @@ export class Film extends Component<FilmSignature> {
         @screen={{this.screen}}
       />
 
-      {{! under the stage: whatever the film puts beneath its own picture }}
-      {{yield this.handle}}
+      {{! under the stage: whatever the film puts beneath its own picture —
+      and its SCORE, when the film is written as a graph: the markers
+      compile to the table the engine runs }}
+      {{yield this.takePicture to='picture'}}
+      <FilmGraph @onCompile={{this.takeGraph}}>
+        {{yield this.handle}}
+      </FilmGraph>
     </div>
 
     <style>
@@ -4974,29 +5207,51 @@ export class Film extends Component<FilmSignature> {
          across the picture, and the still inside slides back by the same
          amount so it never moves on screen. Both are transforms: the
          compositor rasterises the masked sheet once and only translates. */
+      /**
+       * THE WIPE, AS A MOVING EDGE RATHER THAN A MOVING BOX.
+       *
+       * It used to be a box three frames wide carrying the gradient, with
+       * the image inside counter-moving so the edge appeared to cross. The
+       * travel was hardcoded up-left while the gradient's angle followed
+       * the SUN, so the two agreed only by luck: projected, the sweep was
+       * 0.92 of its intended distance at one rake, 0.16 at another, 0 at
+       * -27 degrees, and NEGATIVE past 0 — where the edge ran backwards
+       * and the outgoing frame grew back over the incoming one. Sizing the
+       * travel to the angle fixed the projection but not the geometry:
+       * WHICH corner of the box the still starts at also depends on the
+       * angle's quadrant, so at some rakes it began already uncovered.
+       *
+       * So nothing moves now. The element is the frame, the still fills
+       * it, and the two gradient stops are swept from before the frame to
+       * past it by one number. At p = 0 both stops are behind the frame,
+       * so it is wholly opaque; at p = 1 both are past it, so it is wholly
+       * gone. That is true at every angle, which the old one never was.
+       */
+      @property --cf-wipe-p {
+        syntax: '<number>';
+        initial-value: 0;
+        inherits: false;
+      }
+
       .cf-swipe {
         position: absolute;
-        left: 0;
-        top: 0;
-        width: 300%;
-        height: 300%;
+        inset: 0;
         z-index: 0;
         pointer-events: none;
-        will-change: transform, opacity;
+        will-change: mask-position, opacity;
+        /* the band is 24% of the gradient's line: soft enough to read as
+           a feathered edge, tight enough to read as an edge */
+        --cf-wipe-a: calc(var(--cf-wipe-p) * 150% - 45%);
         mask-image: linear-gradient(
           calc(var(--cf-rake, 35deg) + 72deg),
-          #000 44%,
-          transparent 56%
+          transparent var(--cf-wipe-a),
+          #000 calc(var(--cf-wipe-a) + 24%)
         );
-        mask-size: 100% 100%;
-        mask-repeat: no-repeat;
         -webkit-mask-image: linear-gradient(
           calc(var(--cf-rake, 35deg) + 72deg),
-          #000 44%,
-          transparent 56%
+          transparent var(--cf-wipe-a),
+          #000 calc(var(--cf-wipe-a) + 24%)
         );
-        -webkit-mask-size: 100% 100%;
-        -webkit-mask-repeat: no-repeat;
         /* Star Wars speed: a wipe is a STATEMENT, and at two-thirds of a
            second it reads as a glitch rather than a decision */
         animation: cf-swipe 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
@@ -5004,23 +5259,16 @@ export class Film extends Component<FilmSignature> {
 
       .cf-swipe img {
         position: absolute;
-        left: 0;
-        top: 0;
-        width: 33.3334%;
-        height: 33.3334%;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         object-fit: cover;
         display: block;
-        will-change: transform;
-        animation: cf-swipe-hold 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
       }
 
-      /* the sweep is the sheet; the last breath of opacity is a SEAL. A
-         mask that ends up not covering what you assumed leaves the
-         still on screen forever, and a wipe that fails should fail to
-         nothing rather than to a photograph of the last shot. */
       @keyframes cf-swipe {
         0% {
-          transform: translate3d(0, 0, 0);
+          --cf-wipe-p: 0;
           opacity: 1;
         }
 
@@ -5029,18 +5277,8 @@ export class Film extends Component<FilmSignature> {
         }
 
         100% {
-          transform: translate3d(-66.6667%, -66.6667%, 0);
+          --cf-wipe-p: 1;
           opacity: 0;
-        }
-      }
-
-      @keyframes cf-swipe-hold {
-        0% {
-          transform: translate3d(0, 0, 0);
-        }
-
-        100% {
-          transform: translate3d(200%, 200%, 0);
         }
       }
 
@@ -5201,13 +5439,15 @@ export class Film extends Component<FilmSignature> {
 
       /* the freeze holds until the veil has fully closed, then drops
          under cover — the incoming shot is never seen before the dip */
+      /* the outgoing frame is swapped for the incoming one IN THE DARK,
+         inside the veil's hold, so none of the change is ever on screen */
       @keyframes cf-dip-frame {
         0%,
-        38% {
+        37% {
           opacity: 1;
         }
 
-        42%,
+        41%,
         100% {
           opacity: 0;
         }
@@ -5217,17 +5457,91 @@ export class Film extends Component<FilmSignature> {
         position: absolute;
         inset: 0;
         opacity: 0;
-        animation: cf-dip-veil 760ms ease-in-out forwards;
+        /* linear: the curve is in the stops, and it is not an ease */
+        animation: cf-dip-veil 760ms linear forwards;
       }
 
+      /**
+       * A DIP CLOSES A SHUTTER; IT DOES NOT RAISE A BLIND.
+       *
+       * The veil is composited in sRGB, so an opacity of a leaves
+       * (1 - a)^2.2 of the LIGHT: a veil eased evenly to black is down to
+       * a fifth of the light by the halfway mark and then crawls, which is
+       * why the dip read as a lurch and then a wait rather than a fade.
+       * What a shutter does is take the LIGHT down smoothly, and the alpha
+       * that produces a smooth fall in light is this — nearly nothing for
+       * the first third, then a rush into black. The stops carry the
+       * curve, so the timing function is linear.
+       *
+       * Close over 34%, hold black for 10% (a dip is punctuation and the
+       * hold is the full stop), open over the remaining 56%: the way out
+       * is longer than the way in, which is the editor's convention and
+       * the reason a dip lands rather than bounces.
+       */
       @keyframes cf-dip-veil {
         0% {
           opacity: 0;
         }
 
-        32%,
-        48% {
+        6.8% {
+          opacity: 0.049;
+        }
+
+        13.6% {
+          opacity: 0.178;
+        }
+
+        17% {
+          opacity: 0.27;
+        }
+
+        20.4% {
+          opacity: 0.378;
+        }
+
+        23.8% {
+          opacity: 0.502;
+        }
+
+        27.2% {
+          opacity: 0.643;
+        }
+
+        30.6% {
+          opacity: 0.803;
+        }
+
+        34%,
+        44% {
           opacity: 1;
+        }
+
+        49.6% {
+          opacity: 0.803;
+        }
+
+        55.2% {
+          opacity: 0.643;
+        }
+
+        60.8% {
+          opacity: 0.502;
+        }
+
+        66.4% {
+          opacity: 0.378;
+        }
+
+        72% {
+          opacity: 0.27;
+        }
+
+        77.6% {
+          opacity: 0.178;
+        }
+
+        88.8% {
+          opacity: 0.049;
         }
 
         100% {
@@ -5241,6 +5555,19 @@ export class Film extends Component<FilmSignature> {
         position: absolute;
         inset: 0;
         pointer-events: none;
+      }
+
+      /**
+       * A SEAM THAT COVERS THE FURNITURE (`@over="everything"`). Above the
+       * type, the stamp, the rail, the inserts and the clips (1 to 4);
+       * level with the transport, which is later in the document and so
+       * stays in front of it; below the menu, the captions, the door and
+       * the fault banner (6 and up). A viewer must never lose the
+       * controls to a transition — and the layer takes no pointer events
+       * either way. The class is on only while the seam runs.
+       */
+      .cf-joins.is-over {
+        z-index: 5;
       }
 
       /* ---- the lens ------------------------------------------------- */
@@ -6127,6 +6454,34 @@ export class Film extends Component<FilmSignature> {
 
       .cf-clip.is-inset {
         z-index: 4;
+      }
+
+      /**
+       * A PIP IS A LAYER, not a photograph. No card, no rule, no caption
+       * furniture — the score places it (`left/top/width` in percent of
+       * the frame, written inline) and it carries nothing but its own
+       * media and a corner radius. It sits under the type, so a lower
+       * third still wins over it, and over the picture and its scrim.
+       */
+      .cf-clip.is-pip {
+        z-index: 2;
+        inset: 0;
+      }
+
+      .cf-clip.is-pip figure {
+        position: absolute;
+        margin: 0;
+        overflow: hidden;
+        line-height: 0;
+        box-shadow: calc(var(--cf-shx) * 3) calc(var(--cf-shy) * 3) 30px
+          rgba(20, 14, 4, 0.34);
+      }
+
+      .cf-clip.is-pip video,
+      .cf-clip.is-pip img {
+        display: block;
+        width: 100%;
+        height: auto;
       }
 
       .cf-clip.is-inset figure {

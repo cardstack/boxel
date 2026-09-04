@@ -1391,12 +1391,14 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
     cue per beat, and the type, the grade, the seams, the narration and
     the mix all hung off the same clock. What the film supplies is the
     script and a picture to point at. }}
-<Film
-  @beats={{this.beats}} @chapters={{this.chapters}}
-  @src={{this.src}} @assets={{this.assets}}
-  @standing={{T_TODAY}} @clock={{this.clock}}
-  @seek='exact'
->
+<Film @seek='exact' @clock={{this.clock}} @over='everything'>
+  <:picture as |register|>
+    <IframePicture @register={{register}}
+      @src={{this.src}} @assets={{this.assets}} @standing={{T_TODAY}} />
+  </:picture>
+  <:default as |f|>
+    <f.Spine @join='dip'>…the score: chapters, shots, joins…</f.Spine>
+  </:default>
   <:gate as |f|>…the door, in the film's own type…</:gate>
   <:end as |f|>…the back matter…</:end>
 </Film>

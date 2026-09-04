@@ -254,7 +254,23 @@ module('Acceptance | escort', function (hooks) {
     await click('[data-test-bay="1"]');
     await frames(4);
     const midway = pinError();
-    await frames(110);
+    /* WATCH UNTIL THE FLIGHT LANDS, not for a fixed count. A spring's
+       length is wall-clock, and a loaded runner gives fewer frames in the
+       same second — so a frame budget samples a shorter piece of the same
+       flight and the travel comes up short. This measured 51px against a
+       60px floor on CI while passing locally. Stop when the card has held
+       still for a dozen frames instead, with a generous ceiling. */
+    for (let i = 0; i < 400; i++) {
+      await frames(1);
+      const n = cardLefts.length;
+      if (n > 24) {
+        const recent = cardLefts.slice(-12);
+        const moved = Math.max(...recent) - Math.min(...recent);
+        if (moved < 0.5) {
+          break;
+        }
+      }
+    }
     stop = true;
 
     assert.true(

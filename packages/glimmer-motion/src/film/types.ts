@@ -51,6 +51,54 @@ export type Join =
   | 'whip'
   | 'wipe';
 
+/** a seam by name: one of the film's twelve, or one a score brought as a presentation */
+export type JoinName = Join | (string & {});
+
+/**
+ * HOW DEEP A SEAM GOES.
+ *
+ * `picture` is what every seam did until now: the transition happens to
+ * the picture and to nothing else, so the incoming shot's type, insert
+ * and clip have to wait for the seam to finish before they may enter —
+ * otherwise a caption for the new setting is read over a still of the old
+ * one. `everything` puts the seam ABOVE that furniture instead: the still
+ * covers the whole frame, the incoming shot plays under it WITH its type
+ * already running, and the sweep reveals a setting that is under way
+ * rather than one that starts when the sweep is over.
+ *
+ * It costs a frame read-back on the three seams the picture would
+ * otherwise dissolve in its own glass (`blend`, `melt`, `dip`): glass is
+ * inside the canvas and cannot cover anything outside it, so a seam that
+ * covers the furniture is always a seam with a still in the DOM.
+ */
+export type Over = 'everything' | 'picture';
+
+/**
+ * WHAT A PICTURE IS TOLD ABOUT A SEAM, every frame.
+ *
+ * Two ways to read it. Without a `name` the picture runs its own law:
+ * `mix` of the held frame over the live one, `veil` of `color` over both.
+ * With a `name` the picture runs the seam it DECLARED under that name
+ * (`PictureSpec.seams`) and reads `p`, its progress — plus whatever
+ * `params` that seam takes. The held frame and the live one are the two
+ * textures such a seam mixes, which is the contract every shader
+ * transition in the wild already has.
+ */
+export interface SeamSpec {
+  /** the colour the film's own veil passes through */
+  color?: string;
+  /** the held frame over the live one, 0..1 (the picture's own law) */
+  mix: number;
+  /** a seam the picture declared; absent, and the picture runs its own law */
+  name?: string;
+  /** the seam's progress, 0..1 — what a named seam is driven by */
+  p: number;
+  /** whatever the named seam takes, by its own names */
+  params?: Record<string, number>;
+  /** the colour over both, 0..1 (the picture's own law) */
+  veil: number;
+}
+
 export type PlateMode = 'clear' | 'lower' | 'plate' | 'point' | 'title';
 
 /**
@@ -110,7 +158,7 @@ export interface Beat {
   /** a designed silence: the boundary fades whatever is still speaking */
   hush?: boolean;
   id: string;
-  join?: Join;
+  join?: JoinName;
   /** the key term — a word in any script */
   kanji?: string;
   /** the eyebrow */
@@ -139,6 +187,8 @@ export interface Beat {
   mix?: { music?: number; sfx?: number; voice?: number; wx?: number };
   /** how the front layer is set */
   mode: PlateMode;
+  /** how deep this beat's seam goes: over the picture alone, or over the furniture too */
+  over?: Over;
   /** a photograph cut in beside the model; `src` resolves under `assets` */
   photo?: { caption: string; credit: string; src: string };
   /** pin the page's pixel ratio for this beat */
@@ -249,6 +299,23 @@ export interface FilmClock {
 export interface Picture {
   city?(mode: string, alpha?: number): void;
   clearTrace(id: string): void;
+  /**
+   * A CLOUD CROSSING THE FRAME, in the picture's own glass (optional).
+   * `k` is 0..1 and `rakeDeg` the sun's rake, the same two numbers the
+   * film used to write to `--cf-cloud` and `--cf-rake` for a CSS plate
+   * over the canvas. A picture that takes it gets the cloud into the
+   * post pass, which is the only way a seam can dissolve it: the film
+   * stops drawing its own.
+   */
+  cloud?(k: number, rakeDeg: number): void;
+  /**
+   * THE DIM, in the picture's own glass (optional). `k` is 0..1: the wash
+   * a lecturer puts on the plate when the annotation goes up. It belongs
+   * with the wash and the cloud rather than with the type, because it is
+   * a grade ON the picture — and a seam that covers the furniture would
+   * otherwise sweep an UNDIMMED still over a dimmed frame.
+   */
+  dim?(k: number): void;
   /** the freeze-blend done in the glass; false when the page cannot */
   dissolve(
     kind: 'blend' | 'dip' | 'melt',
@@ -258,6 +325,20 @@ export interface Picture {
   duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
+  /**
+   * HOLD THE FRAME THAT IS ON SCREEN, in the picture's own glass
+   * (optional). `freeze(true)` copies the last drawn frame and shows it
+   * until `freeze(false)`.
+   *
+   * The film needs this for a few milliseconds at every seam with a
+   * still. The still is a JPEG the browser has not decoded yet, so the
+   * cut waits for it (`film/seam.ts`) — but the BEAT does not: the hour,
+   * the build clock, the model and the weather all land the instant the
+   * beat does, and for those two or three frames the canvas showed the
+   * incoming world naked, before the seam had anything over it. Pinning
+   * the outgoing frame in the glass costs nothing and closes the window.
+   */
+  freeze?(on: boolean): void;
   grade(g: FilmGrade, instant?: boolean): void;
   grass?(on: boolean): void;
   haze(v: null | number): void;
@@ -330,6 +411,21 @@ export interface Picture {
     top: number;
     y1: number;
   };
+  /**
+   * THE SEAM, HALF ONE (optional). Two numbers, written every frame: how
+   * much of the HELD frame is over the live one, and how much of a colour
+   * is over both. Call `freeze(true)` first to take the frame it holds,
+   * and `seam(0, 0)` to end it.
+   *
+   * The film owns the clock and the shape; the picture owns the
+   * compositing, and does both mixes in LIGHT — which is the whole reason
+   * the seam moved in here. An `<img>` faded over the canvas by the
+   * parent mixes two DISPLAY values, and sRGB is a curve, so the middle
+   * of a crossfade sags: about 4.6 of 255 on a measured blend. The
+   * parent's other half is the furniture, revealed by the same two
+   * leaves over.
+   */
+  seam?(spec: SeamSpec | null): void;
   shot?(name: string): void;
   sky(id: string, spec: object, place: object): void;
   snapshot(): string;
@@ -363,6 +459,17 @@ export interface Picture {
   voiceStop(ms?: number): void;
   /** the master fader, 0..1, under the mix and the mute */
   volume?(v: number): void;
+  /**
+   * THE PAPER WASH, in the picture's own glass (optional). `mode` is the
+   * shot's own (`lower`, `title`, `plate`, `point`, or `''` for a bare
+   * beat) and `paper` the palette's paper colour — the same two things
+   * the film used to spell as `.cf-scrim-<mode>` and `--cf-paper-*` on a
+   * CSS layer over the canvas. A picture that takes it gets the wash
+   * into the post pass, where a seam can dissolve it; the film stops
+   * drawing its own. The picture eases a change of mode itself, the way
+   * the stylesheet's `transition: background 700ms` did.
+   */
+  wash?(mode: string, paper: string): void;
   winter(w: null | { gust: number; pack: number }): void;
   wx(i: number, instant?: boolean): void;
   year?(y: number): void;

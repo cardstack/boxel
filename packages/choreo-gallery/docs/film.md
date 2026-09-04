@@ -49,50 +49,106 @@ A film supplies a script, a picture, and an identity.
 
 ## 2 · The shape
 
+### 2.0 A film is a graph
+
+Since Phase 2 of the film-graph work a film is written as a **graph** in
+the default block, and the table arguments below are the compiled form —
+still accepted, and still what the engine runs, but no longer what a film
+writes:
+
+```gts
+<Film @name='sagrada' @src={{this.src}} @assets={{this.assets}} @seek='exact' …>
+  <:default as |f|>
+    <f.Spine @join='dip'>
+      <f.Chapter @n='01' @title='THE SITE' @grade='amber' @lut='sandstone'>
+        <f.Shot @name='title' @ticks={{5}} @dolly={{0.5}} @yaw={{35}} @pitch={{14}} @lookY={{-2.4}}>
+          <f.To @dolly={{0.74}} @yaw={{52}} @pitch={{14}} @lookY={{-2.0}} />
+          <f.Type @mode='title' @kicker='A CONSTRUCTION STUDY' @word='Obra' @reading='THE WORKS' />
+          <f.Voice @line='March, eighteen eighty-two…' @read={{get VO_SECS 'title'}} />
+          <f.picture.Weather @theme={{0}} @wx={{1}} />
+          <f.picture.Build @clock={{tAt 1882.3}} />
+          <f.Stamp @year={{1882}} @at={{0.04}} />
+        </f.Shot>
+        <f.Join @presentation='dip' />
+        <f.Shot @name='crypt' …>…</f.Shot>
+      </f.Chapter>
+    </f.Spine>
+  </:default>
+</Film>
+```
+
+The vocabulary `f` yields, and what each compiles to:
+
+| node                                                                | is                                                               | compiles to                                                     |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| `f.Spine @join`                                                     | the film; `@join` is the seam a shot gets when nothing names one | the table, and the film's default join                          |
+| `f.Chapter @n @title @grade @lut`                                   | a named sequence the menu and the rail read                      | a `Chapter` row; its shots' `ch`                                |
+| `f.Sequence @join @cut @hold @bob`                                  | a group of shots wearing defaults; attachments under it inherit  | fields on every shot in it                                      |
+| `f.Shot @name @ticks @dolly @yaw…`                                  | one shot: the head pose as its own arguments, and its facts      | `id`, `ticks`, `cam`, `cut`, `lead`, …                          |
+| `f.To`, `f.Eye`                                                     | the tail pose; an eye-level walk                                 | `toCam`; `eye`                                                  |
+| `f.Join @presentation @secs @over @to`                              | a sibling before the shot it cuts into                           | the next shot's `join`, `dipTo`, `over`                         |
+| `f.Type`, `f.Voice`                                                 | the lower third; the narration and its measured read             | `mode kicker kanji romaji gloss says`; `vo`, `voSecs`           |
+| `f.Stamp`, `f.Sky`, `f.Mark`, `f.Trace`, `f.Lineup`                 | what stands in the world                                         | `stamp`, `sky`, `mark`, `trace[]`, `cycle`                      |
+| `f.picture.*`, `f.sound.Mix`                                        | **adjustments** the picture and the sound actor declare          | `grade lut look theme wx haze sun rim city grass build…`; `mix` |
+| `f.Attach @at @for @end` around `f.Insert` / `f.Freeze` / `f.Video` | a window over a region the film does not own                     | `photo`; `clip`                                                 |
+| `f.Inset @x @y @w @radius @fade`                                    | a picture in the picture: a layer placed in percent of the frame | `clip` with `fit: 'pip'`                                        |
+
+The compiler is pure (`film/graph/compile.ts`); the components are markers
+walked in document order after each render, so the template's nesting is
+the tree. Both reference films exist as a table and as a graph, and
+`tests/integration/film/graph-test.gts` asserts the graph compiles to the
+table row for row — which is how they were migrated without a frame
+changing, and why `tests/fixtures/film/*.json` still pins them.
+
 ### 2.1 Required arguments
 
-Eight. Everything else has a default.
+Two: `@name` (a short name — a body class, the boot log) and `@menuTitle`
+(how the chapter menu heads itself). The score is the graph in the
+default block; the picture is a component in the `<:picture>` block.
 
-| Arg          | Type        | What it is                                                             |
-| ------------ | ----------- | ---------------------------------------------------------------------- |
-| `@beats`     | `Beat[]`    | the shot list — the film                                               |
-| `@chapters`  | `Chapter[]` | the chapter table, indexed by `Beat.ch`                                |
-| `@src`       | `string`    | the picture's page, mounted in an iframe                               |
-| `@assets`    | `string`    | where the film's files live: `vo/<id>.mp3`, `luts/*.cube`, photographs |
-| `@standing`  | `number`    | the page clock at which the subject stands whole                       |
-| `@name`      | `string`    | a short name — a body class, the boot log                              |
-| `@title`     | `string`    | the iframe's accessible name                                           |
-| `@menuTitle` | `string`    | how the chapter menu heads itself                                      |
+### 2.1a The picture block
 
-`@standing` is worth a sentence. Both films open on an empty site and are
-mostly about a finished building, so the construct stands the picture up
-before the first beat runs. That is what lets a beat say only what it
-_changes_, and it is what makes a deep link land on a real shot instead
-of a field.
+Everything that was ever about the page behind the iframe — where it
+lives, where its files are, how it is seated before the door, the rig's
+mid-height, how much frosted city a frame carries, the moods and looks
+the glass takes — belongs to the picture, and the picture is a component:
+
+```gts
+<Film @name='sagrada' @menuTitle='SAGRADA FAMÍLIA' @seek='exact' @clock={{CLOCK}}>
+  <:picture as |register|>
+    <IframePicture @register={{register}}
+      @src={{this.src}} @assets={{this.assets}} @title='Sagrada Família'
+      @standing={{T_TODAY}} @seat={{seat}} @rigMid={{6.6}} @cityGlass={{0.16}}
+      @lutAmount={{0.52}} @grades={{GRADES}} @lookFx={{LOOK_FX}} />
+  </:picture>
+  <:default as |f|>…</:default>
+</Film>
+```
+
+`IframePicture` renders nothing: it registers its spec with the film a
+frame after render and declares the **adjustments** a score may hold on
+it — `f.picture.Look`, `Weather`, `Winter`, `Sun`, `Light`, `Set`,
+`Build` — which is what `f.picture.*` yields. Its arguments are the
+`PictureSpec` (`film/picture.gts`): `src`, `assets`, `title`, `standing`,
+and the optional `seat`, `rigMid`, `cityGlass`, `cloudHaze`, `lutAmount`,
+`grades`, `lookFx`, `worldType`, `accent`, `gradeLum`, `poster`. A third
+kind of picture is another component with its own spec and its own
+adjustments; the film never sees the difference.
 
 ### 2.2 The arguments that direct it
 
-| Arg                               | Default      | What it does                                                   |
-| --------------------------------- | ------------ | -------------------------------------------------------------- |
-| `@seek`                           | `'cut'`      | the fork — see §4                                              |
-| `@join`                           | `'dip'`      | the seam a beat gets when it names none                        |
-| `@rail`                           | `true`       | the one-line transport on the picture                          |
-| `@clock`                          | —            | a `FilmClock`; turns the rail into a date rule                 |
-| `@grades`                         | `{}`         | named moods, as numbers the glass takes                        |
-| `@lookFx`                         | `{}`         | how each named look is worn                                    |
-| `@lutAmount`                      | `0.52`       | how much of a stock a beat wearing one gets                    |
-| `@voSecs`                         | `{}`         | what each read actually runs, measured                         |
-| `@voGain`                         | `{}`         | the level each line was mixed to                               |
-| `@seat`                           | —            | told the picture once, before the door                         |
-| `@embed`                          | `false`      | no door, no transport; also read off `?embed`                  |
-| `@rigMid`                         | `6.6`        | the rig's mid-height; `lookY` is measured from it              |
-| `@cityGlass`                      | `0.16`       | how much frosted city a frame carries                          |
-| `@cloudHaze`                      | `0.09`       | how much a passing cloud thickens the air                      |
-| `@worldType`                      | Archivo 800  | how type standing in the scene is set                          |
-| `@menuSub`                        | `'chapters'` | the menu's second line                                         |
-| `@build`                          | `''`         | which cut this is; shown under `?debug`                        |
-| `@onBeat`, `@onAir`               | —            | hooks for what the construct cannot know                       |
-| `@accent`, `@gradeLum`, `@poster` | —            | the editorial accent, the mood luminances, how the door is lit |
+| Arg                 | Default      | What it does                                   |
+| ------------------- | ------------ | ---------------------------------------------- |
+| `@seek`             | `'cut'`      | the fork — see §4                              |
+| `@join`             | `'dip'`      | the seam a beat gets when it names none        |
+| `@rail`             | `true`       | the one-line transport on the picture          |
+| `@clock`            | —            | a `FilmClock`; turns the rail into a date rule |
+| `@over`             | `'picture'`  | how deep a seam goes — see §5.5                |
+| `@voGain`           | `{}`         | the level each line was mixed to               |
+| `@embed`            | `false`      | no door, no transport; also read off `?embed`  |
+| `@menuSub`          | `'chapters'` | the menu's second line                         |
+| `@build`            | `''`         | which cut this is; shown under `?debug`        |
+| `@onBeat`, `@onAir` | —            | hooks for what the construct cannot know       |
 
 `@worldType` replaces rather than merges: passing a partial object sets
 the members you omit to the page's own, it does not keep the construct's.
@@ -203,6 +259,20 @@ corrected — so a clip is where the clock says it is whether the film
 played there or was scrubbed there. Past its window a clip is taken off
 (`end: 'remove'`, the default), held on its last sample, or frozen.
 
+A clip is fitted three ways, and they are three different objects rather
+than one with options. `cover` is the full frame over the picture.
+`inset` is the editorial photograph — a paper card with a rule and a
+caption, in the corner the type is not using, positioned by the
+stylesheet. `pip` is a LAYER: `x`, `y` and `w` in percent of the frame, a
+corner radius, its own `fade` in and out, and nothing around it. A pip is
+what a picture-in-picture actually is and the card is what an inset
+actually is; they were one thing for a while and should not have been.
+
+One limit worth knowing before you plan around it: **a beat carries one
+clip**. Two `f.Inset` children on the same shot compile to one row and the
+second wins. Lifting that is the insert-track question in
+`docs/film-graph/GAPS.md`.
+
 ---
 
 ## 4 · The clock
@@ -272,8 +342,42 @@ pose, snapped — takes one `snapshot()`, and plays the seam from its
 middle exactly as it would have played into it.
 
 The price is the hand: the lens follows the spline with a deterministic
-breath instead of a spring, and every seam holds a still of the outgoing
-frame, because the page's own dissolves run on their own clock.
+breath instead of a spring. (A seek into a seam once also paid a read-back
+to re-make the outgoing still; it now stands at the seam's end instead —
+§5.4.)
+
+---
+
+### 4.5 The schedule, headless
+
+Everything in this section is arithmetic on the shot list, and it lives
+in one pure module: `packages/glimmer-motion/src/film/schedule.ts` —
+`totalSecs`, `secsBefore`, `beatStart`, `cues`, `chapterHeads`,
+`contents`, `joinInto`, `tailFor` (where a shot ends: the authored tail,
+floored so it reads as a move, clamped so it never travels past the next
+shot's head) and `waypoints` (the spline, `ticks` points per beat, `lead`
+points travelling in, `cut` splices). The engine calls these; nothing in
+the module reads the clock, the page or the DOM.
+
+That is what makes the film **measurable**. `schedule(beats, chapters,
+defaultJoin)` returns the whole thing as one object — every beat's start,
+the cue table, the waypoints, the chapters — and two things pin it:
+
+- `scripts/film-fixtures.mjs` writes it for each reference film to
+  `test-app/tests/fixtures/film/{sagrada,towers}.json`, headless, on
+  Node's own type stripping (`node scripts/film-fixtures.mjs`; `--check`
+  fails when a fixture would change). It can do that because the films'
+  data is plain TypeScript with no Ember in it:
+  `test-app/app/lib/films/{sagrada,towers}.ts` — the shot list, the
+  chapters, the measured reads, the geometry sampled off the model.
+- `test-app/tests/unit/film-schedule-test.ts` recomputes the schedule in
+  the browser and asserts it equals the fixture to the digit.
+
+The rule that follows: **the cue table and the camera path are the
+film.** A change to the engine that alters any number in the fixtures has
+changed the film, and says so in the diff of the JSON; a change that means
+to re-runs the script and reviews that diff. Sagrada Família is 29 beats,
+170 waypoints and 340 seconds; Towers is 26, 137 and 274.
 
 ---
 
@@ -355,23 +459,300 @@ None of them nest inside the score. They are siblings with their own
 timelines, which is what makes the type re-cuttable independently of the
 camera.
 
-### 5.3 Exact mode drives runs it does not play
+### 5.3 The type, the insert and the clip are attached
 
-`<Plate>` hands its `ChoreoContext` up through a `@grab` callback. The
-film keeps two runs — the score's and the type's — and in exact mode
-**pauses both and writes their clocks**:
+The score carries one `c.Attach` window per beat for the plate, one for a
+beat with a photograph, one for a beat with a clip — each anchored at the
+camera step with the beat's own delay and length, so the shot list, the
+cues and the windows share one origin:
 
-```ts
-run.time = t; // the score
-plate.time = Math.max(0, t - beatStart(i)); // and the type
+```gts
+{{#each this.windows as |w|}}
+  <c.Attach @region={{w.region}} @at={{at 'film'}} @delay={{w.start}}
+    @duration={{w.length}} @end={{w.end}} @exact={{this.exact}} />
+{{/each}}
 ```
 
-This is the composition point that made the construct worth building. A
+The three regions declare their ids (`plate`, `insert`, `clip`) and
+nothing else: they do not know they are in a film. In exact mode the fold
+writes **one** clock, `run.time = t`, and the score's run drives every
+window from it; in cut mode the score plays and drives them the same way.
+This is the composition point that made the construct worth building: a
 Choreo run is addressable, so a film can be a pure function of one number
 without the timeline knowing it is in a film — and a paused exact film is
 simply a still, which is why the region must stand even while stopped.
+See [choreo-constructs.md](choreo-constructs.md) §3.4a for the construct.
 
 ---
+
+### 5.4 The seams are presentations
+
+A join is what happens to the outgoing frame while the incoming shot
+plays underneath it **from its very first frame**. Since the joins
+rewrite, each of the film's twelve is a component satisfying one
+contract (`PresentationSignature`: `@still`, `@at`, `@color`,
+`@seekable`), registered by name in `PRESENTATIONS` with its length and
+whether it needs a still; `<Joins>` renders whichever the kind names, a
+new element per cut. Three of the twelve are not presentations — a `cut`
+and a `whip` are the camera's, a `sweep` is the light's — and three
+(`blend`, `melt`, `dip`) the picture does in its own glass when it can.
+
+A seam written in an app satisfies the same contract with no library
+privilege: a score names it with `<f.Join @presentation={{Curtain}}
+@secs={{0.8}} />`, the compiler names it for the film
+(`presentation:N`) and registers it, and the film plays it like the
+twelve. `tests/integration/film/join-presentation-test.gts` is the proof.
+
+One rule changed with the rewrite, Chris's direction after watching the
+migrated films:
+
+- **A seek lands past the seam.** A seam is played forward over a still
+  of the frame that was actually on screen; a seek has no such frame.
+  The exact film used to re-make one (stand the picture at the previous
+  tail, read it back, replay the seam from its middle) — a read-back per
+  scrub for a transition nobody asked to watch. Now a jump into a seam's
+  window stands at its end: the incoming shot, whole. `refreeze` is gone,
+  and with it the "read-back per cut" price §4.4 listed.
+
+A second rule was asked for and is still owed: the incoming clip's type
+should enter from the START of the transition rather than after it. That
+needs the seam layer to sit ABOVE the type, the insert and the clip —
+otherwise an incoming caption drawn during the seam is painted over the
+outgoing still — so the two go together. Tried once, it regressed on
+Chris's screen (a visible gap, and the building doubled), and both halves
+were reverted: `.cf-joins` keeps its auto z-index before the cloud, and
+the type still waits `secsOf(join) + 0.45`.
+
+#### The still has to be paintable before the lens moves
+
+A join's still is a full-resolution JPEG data URL, and a JPEG handed to
+the DOM is not paintable on the frame it is handed over: the browser
+decodes it off the main thread. `pose({ snap: true })` moves the lens on
+that frame regardless, so the seam played backwards — three frames of the
+incoming shot at 60 Hz, then the freeze of the outgoing one, then the
+transition over it. Chris filmed it.
+
+`Seam.hold` (`film/seam.ts`) is the gate. It decodes the frame into the
+memory cache first and holds the whole cut — the lens snap, the overlay,
+an iris's projection — until the decode resolves, so the DOM image paints
+from that decode on the frame it is inserted. Three rules, each with a
+test in `tests/unit/film-seam-test.ts`:
+
+- a seam with no still (a cut, a flash, a dissolve the page held in its
+  own glass) runs synchronously, on the caller's stack, as it always did;
+- a cut that arrives while an earlier one is waiting retires it;
+- a decode that never returns is given 120 ms and then the film cuts
+  anyway.
+
+The outgoing shot stays live for those few milliseconds, which nobody can
+see. A cut two frames late reads as a cut; a cut that shows the wrong
+picture does not. Note that this does NOT reproduce in headless Chrome —
+SwiftShader renders the incoming camera slowly enough that the still
+always wins the race — so it is one of the few things in the film only a
+real GPU at retina scale can confirm.
+
+### 5.5 What a seam covers: the frame, not just the picture
+
+A join used to transition exactly one thing. The still was a JPEG of the
+canvas, the dissolve happened inside the picture's own glass, and the
+overlay sat in `.cf-joins` — one absolutely-positioned box among ten. The
+paper wash (`.cf-scrim-lower/-title/-plate/-point`, a radial gradient in
+the scene's palette chosen by the shot's `mode`) and the passing cloud
+(`.cf-cloud`) were two more boxes ABOVE it. So a wipe swept a still with
+the incoming wash painted over it, and a shot whose mode changed at the
+cut showed the picture dissolving while the paper behind the type moved on
+its own 700 ms. Two edits at once.
+
+Neither Final Cut nor After Effects lets you enumerate what a transition
+covers: a transition renders its own container, and to include a title you
+put both in a compound clip or a pre-comp. So rather than give the join a
+list of layers, the layers moved INTO the container. The post pass already
+owned the vignette, the grain, the split tone, the LUT and the grade — all
+coloured from the same palette — and the wash and the cloud were the only
+two members of that family still in CSS. They are terms in the pass now,
+after the grade and the grain and before the freeze mix, which is exactly
+where the DOM layers sat: above the picture, below the furniture.
+
+The dim (`.cf-dim`, the wash a lecturer puts on the plate when an
+annotation goes up) is the third of them and moved for the same reason:
+it is a grade ON the picture, not furniture beside it.
+
+The film tells the picture about them through three optional port
+members, `wash(mode, paper)`, `cloud(k, rakeDeg)` and `dim(k)` — the same
+handful of numbers it used to write to `--cf-paper-*`, `--cf-cloud`,
+`--cf-rake` and an inline opacity. A
+picture that offers them gets them, and `Film` stops rendering
+`.cf-scrim`, `.cf-cloud` and `.cf-dim`; one that does not keeps the CSS
+layers, so the port's "honoured when present" contract holds. The picture eases a
+change of mode itself over the same 700 ms the stylesheet's
+`transition: background` did.
+
+Two things came out of it. The seam now carries the wash, because the
+freeze is captured from the pass. And the still finally matches the frame
+it froze: it used to be a snapshot of an unwashed canvas shown under a
+DOM wash, which is why a cut had a visible step in it. Measured on the
+title-to-shiro wipe, headless, the same 22-frame sweep either side of the
+change — the frame where the still appears used to jump by 12.66 (of 255)
+and then sit frozen for 17 frames; it is now continuous.
+
+#### The dip's curve
+
+A veil is composited in sRGB, so an opacity of `a` leaves `(1 - a)^2.2`
+of the LIGHT. A veil eased evenly to black is therefore down to a fifth
+of the light by its halfway mark and then crawls — the picture lurches
+into the dark and waits there, which is what a dip used to feel like. The
+alpha that makes the LIGHT fall smoothly is a very different shape:
+almost nothing for the first third, then a rush into black. It is in the
+keyframes as a table of stops with a `linear` timing function, because
+the curve is the stops.
+
+The rest of the dip is editorial. Close over 34% of its length, hold
+black for 10% — a dip is punctuation and the hold is the full stop — and
+open over the remaining 56%, so the way out is longer than the way in.
+The outgoing frame is swapped for the incoming one inside the hold, where
+none of the change is on screen. Measured on the towers dip: the veil now
+reaches a frame mean of 11 of 255 (the dip colour itself) where it used
+to bottom out at 38, and the fall reads 47, 46, 45, 44, 42, 41, 39, 36,
+34, 31, 28, 24, 21, 17, 12, 11 instead of dropping 30 points in its first
+two frames.
+
+#### `@over`: the picture, or everything
+
+How deep a seam goes is one argument on the join, with two values.
+
+`picture` is the default and is what every seam did before: the
+transition happens to the picture and to nothing else, so the incoming
+shot's type has to WAIT for the seam to finish (`secsOf(join) + 0.45`)
+before it may enter. Otherwise a caption for the new setting would be
+read over a still of the old one.
+
+`everything` lifts the seam above the type, the stamp, the rail, the
+inserts and the clips instead. The still covers the whole frame, so the
+incoming shot plays under it with its type already running, and the sweep
+reveals a setting that is UNDER WAY rather than one that starts when the
+sweep is over. The type's wait goes to zero, which is the point.
+
+```hbs
+<f.Spine @join="wipe" @over="everything">   {{! the film's default }}
+  …
+  <f.Join @presentation="dip" @over="picture" />   {{! this one is shallow }}
+  <f.Chapter @n="04" @over="picture">…</f.Chapter> {{! this chapter is }}
+```
+
+The spine's `@over` is the film's default and is NOT written into the
+rows, exactly like its `@join`; a chapter's, a sequence's or a join's IS,
+because it is not the default. A brought presentation may declare its own
+in `Presentation.over` — a curtain that drops in front of the picture and
+leaves the caption standing in front of it is not a curtain. The film
+resolves row, then presentation, then default.
+
+Two things follow from it, both worth knowing before turning it on.
+
+The layer sits at `z-index: 5`: above the type, the stamp, the rail, the
+photos and the clips (1 to 4); level with the transport, which is later
+in the document and so stays in front of it; below the menu, the
+captions, the door and the fault banner. A viewer never loses the
+controls to a transition, and the layer takes no pointer events either
+way. The class is on only while the seam runs.
+
+Both reference films run on it. A note for anyone turning it on: the
+type's wait going to zero moves every beat's type earlier, and `sayAt`
+derives from `typeAt`, so the spoken line cues move with it. It changes a
+film's rhythm throughout, not only at its seams.
+
+The tier is also what forced the dim into the pass. Lifting the seam
+above `.cf-dim` exposed the fact that the still, being a snapshot of the
+canvas, had no dim in it: the first frame of a blend jumped from a mean
+of 146.9 to 191.1 as an undimmed still landed over a dimmed frame. With
+the dim in the pass the same seam reads 140.3 to 139.0. Anything that
+grades the picture has to be inside the picture, or a seam will find it.
+
+And a seam that covers the furniture can never be held in the picture's
+own glass, because the glass is inside the canvas and the type is outside
+it. So `everything` forces the DOM still on the three seams the picture
+would otherwise dissolve for free (`blend`, `melt`, `dip`) and pays a
+frame read-back for each. That is the whole cost of the tier, and it is
+why it is opt-in rather than the default.
+
+### 5.6 A seam is two numbers, and both halves read them
+
+A seam used to be one image over everything: a JPEG of the outgoing frame
+faded or swept by this document. That has three costs. This document
+cannot choose its compositing space, so a crossfade mixes two DISPLAY
+values and sRGB is a curve — the middle of a measured blend sagged 5.15 of
+255 under the straight line between its two shots. It needs a frame
+read-back and a decode per cut, which is why the cut has to be gated at
+all. And because the still is the only thing covering the incoming type,
+covering the type is all it can do.
+
+So a seam is two halves of one gesture, and one progress drives both.
+
+**Half one is the picture.** `Picture.seam(spec)` is written every frame
+with a `SeamSpec` and `seam(null)` ends it; `freeze(true)` takes the frame
+it holds. Without a `name` the picture runs the film's own law — `mix` of
+the held frame over the live one, `veil` of `color` over both — and does
+both mixes in LIGHT, which is the whole reason the seam moved in there.
+
+**Half two is the furniture.** The film multiplies the type, the stamp,
+the inserts and the clips by what the seam leaves over,
+`1 - max(mix, veil)`. A caption is uncovered by the same gesture that
+uncovers the shot behind it, rather than waiting for the seam or hiding
+under a still.
+
+The film owns the clock and the shape (`seamShape` in `joins.gts`); the
+picture owns the compositing. The progress is a function of the film's
+clock, so a seek through one of these has nothing to stand at a time.
+
+Blend, melt and dip take this path. A wipe and an iris are SHAPES rather
+than mixes — they need pixels to sweep and to clip — so they keep their
+presentation and their still, and an app-brought presentation is
+untouched.
+
+|                     | worst sag | read-backs over 45 s | frames over 25 ms |
+| ------------------- | --------- | -------------------- | ----------------- |
+| the still, in sRGB  | −5.15     | 4                    | 6                 |
+| the glass, in light | −3.01     | 0                    | 4                 |
+
+#### A seam can be a shader
+
+`PictureSpec.seams` declares the transitions a picture can run in its own
+glass, by name, the way `adjustments` declares its knobs. A join naming
+one is handed to `Picture.seam` with a `name` and its progress instead of
+being drawn as an overlay here, and the film learns nothing about it but
+its length:
+
+```hbs
+<IframePicture @register={{register}} @seams={{this.seamNames}} … />
+…
+<f.Join @presentation='ridged-burn' @secs={{0.9}} />
+```
+
+That is the same contract every shader transition in the wild already has
+— two textures and a progress — and our glass already held both: the held
+frame is the from-texture, the live render is the to-texture.
+
+`@secs` counts for a named seam. It is how a seam the film does not know
+gets its length, and it also lets a score retime one of the film's own.
+
+The reel at `/_seams` is the proof: a picture that is five images rather
+than a scene, declaring four seams after the shapes in hyperframes, and a
+score reaching them exactly as it reaches a dip.
+
+#### The wipe is an edge, not a moving box
+
+Worth knowing because it was wrong for a long time. The wipe used to be a
+box three frames wide carrying a masked still, with the image inside
+counter-moving so the edge appeared to cross — and the travel was
+hardcoded up-left while the gradient's angle followed the sun. Projected
+onto the gradient axis, the sweep was 0.92 of its intended distance at one
+rake, 0.16 at another, exactly 0 at −27°, and NEGATIVE past 0°, where the
+outgoing frame grew back over the incoming one.
+
+Nothing moves now. The element is the frame, the still fills it, and one
+registered custom property sweeps the two gradient stops from before the
+frame to past it. At p = 0 both stops are behind the frame, so it is
+wholly opaque; at p = 1 both are past it, so it is wholly gone. True at
+every angle, which the old one never was.
 
 ## 6 · The picture port
 
@@ -389,27 +770,104 @@ Two are worth calling out because the edit depends on them:
   still join and every seek into a seam gets its outgoing frame this way.
   It is also how the gallery posters are made: one frame of each film,
   captured headless at a named shot (`scripts/film-poster.mjs`).
+- **`seam(spec)`** and **`PictureSpec.seams`** (optional) are half of a
+  seam — see §5.6. `seams` names the transitions this picture can run in
+  its own glass; `seam` is written every frame with a `SeamSpec` and
+  `seam(null)` ends it.
+- **`freeze(on)`** (optional) holds the frame that is on screen in the
+  picture's own glass. The film pins it for the few milliseconds a seam's
+  still spends decoding: the still waits, but the BEAT does not — the
+  hour, the build clock, the model and the weather land the instant the
+  beat does, and without the pin the canvas showed the incoming world
+  naked for two or three frames before the seam had anything over it. On
+  a towers dip that was one full frame of a bright empty site in the
+  middle of a night shot.
+- **`wash(mode, paper)`**, **`cloud(k, rakeDeg)`** and **`dim(k)`**
+  (optional) take the frame's dressing into the glass — see §5.5. A
+  picture that offers them gets the paper wash, the passing cloud and the
+  annotation dim as terms in its post pass, and the film stops drawing its
+  own CSS layers; a picture that does not keeps them.
 - **`dissolve(kind, ms, live): boolean`** does the freeze-blend inside
   the glass and returns `false` when the page cannot — WebGL1, or a
   dropped post pass — so the construct falls back to the DOM still
   without the film knowing.
 
+  A note both pages carry, because it cost a day: the freeze capture
+  renders the post quad INTO `filmFreezeRT` while `tFreeze` is a bound
+  sampler on the same material. Pointing that sampler at the target being
+  written is a framebuffer feedback loop, the driver rejects the draw, and
+  the target is left on its clear — black on a GPU, white under
+  SwiftShader. Whether the shader takes the `uMix > 0` branch is
+  irrelevant; the binding is what the check looks at. The first seam of a
+  session captured a real frame (`tFreeze` starts null) and every seam
+  after it dissolved against an empty target, so every `blend` and `melt`
+  read as a dip to black. `tFreeze` is unbound around the capture now, in
+  `filmFreezeCapture` and in `filmABFrame`, in both pages. The console
+  proves it: dozens of `GL_INVALID_OPERATION: Feedback loop formed between
+Framebuffer and active Texture` per run before, none after.
+
 ---
+
+## 6a · Rendering, as opposed to recording
+
+An exact film is a pure function of one number, which is the whole claim
+of `@seek='exact'`. So it should be possible to stand one at a time from a
+script and read the frame back, rather than recording it in real time and
+hoping — and it is, but the hook had to be reachable.
+
+`<Film>` publishes itself on `window.__choreo[name]` while it is mounted:
+`renderAt`, `seek`, `seconds()`, `runtime()` and whether it is `exact`.
+`scripts/film-render.mjs` is the consumer. It never lets the film run: it
+calls `renderAt(t)` for every frame in turn, forces the delivery size
+through the debugger rather than inheriting the headless window's, and
+writes one JPEG per frame.
+
+```bash
+node scripts/film-render.mjs 'http://localhost:4201/_seams?from=1' out reel 60 0 50 9540 1920x1080
+```
+
+The output is reproducible: the same URL and frame numbers give the same
+pixels on any machine at any speed. A live capture gives whatever the
+machine managed that second, which is the honest comparison to run when
+you want to know whether the clock is what it claims.
+
+### A render is not a scrub
+
+The rule that a jump into a seam's window stands at the seam's END (§5.4)
+is right for a scrub and wrong for a render. A seam is played forward over
+a still of the frame that was on screen; a scrub has no such frame, and
+re-making one costs a read-back per drag for a transition nobody asked to
+watch. But `renderAt` is a jump too, and a film rendered frame by frame is
+a jump on EVERY frame — so with that rule alone an exact film rendered
+deterministically had no seams in it at all, which breaks the promise the
+mode is named for.
+
+So a render says so. `Film.rendering` is set for the duration of a
+`renderAt`, and `inSeam` honours a jump while it is. Measured on the reel:
+
+|                  | seams that play |
+| ---------------- | --------------- |
+| rendered, before | 7 / 12          |
+| rendered, after  | 13 / 13         |
+| live, same build | 12 / 13         |
+
+The rendered seams land on exact beat boundaries — 6.00, 10.00, 14.00,
+18.03, 22.03 — which is the clock being what it says. The live ones sit a
+frame or two earlier and wander, which is what a real-time capture is.
 
 ## 7 · The two films, side by side
 
 Both call the same component. What differs is the direction.
 
-|             | Towers                                 | Sagrada Família                      |
-| ----------- | -------------------------------------- | ------------------------------------ |
-| route       | `/towers`                              | `/sagrada`                           |
-| `@seek`     | `cut` — the hand-held lens             | `exact` — a function of one number   |
-| `@join`     | `wipe`                                 | `dip` (the default)                  |
-| `@rail`     | `false` — it keeps its own bar         | `true`, and it is a year rule        |
-| `@clock`    | —                                      | a `FilmClock` over 1882–2034         |
-| `@seat`     | —                                      | tells the picture what to show first |
-| `:default`  | a cutting room, with live join buttons | none, by choice                      |
-| the subject | one keep on one axis                   | a hundred metres with three fronts   |
+|             | Towers                                 | Sagrada Família                    |
+| ----------- | -------------------------------------- | ---------------------------------- |
+| route       | `/towers`                              | `/sagrada`                         |
+| `@seek`     | `cut` — the hand-held lens             | `exact` — a function of one number |
+| `@join`     | `wipe`                                 | `dip` (the default)                |
+| `@rail`     | `false` — it keeps its own bar         | `true`, and it is a year rule      |
+| `@clock`    | —                                      | a `FilmClock` over 1882–2034       |
+| `:default`  | a cutting room, with live join buttons | none, by choice                    |
+| the subject | one keep on one axis                   | a hundred metres with three fronts |
 
 Sagrada is the argument for the construct: it was written _against_
 `<Film>` rather than cut out of it, and everything it needed that Towers

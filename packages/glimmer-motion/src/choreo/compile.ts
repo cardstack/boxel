@@ -1070,6 +1070,22 @@ function resolveStep(
         }
         break;
       }
+      case 'attach':
+        cues.push({
+          attach: {
+            end: step.end ?? 'hold',
+            exact: step.exact ?? false,
+            in: step.in ?? 0,
+            rate: step.rate ?? 1,
+            region: step.region,
+          },
+          duration: step.ms,
+          kind: 'attach',
+          offset,
+          sprite,
+        });
+        longest = Math.max(longest, offset + step.ms);
+        break;
       case 'wait':
         cues.push({ duration: step.ms, kind: 'wait', offset, sprite });
         longest = Math.max(longest, offset + step.ms);
@@ -1458,6 +1474,18 @@ function sameCue(a: Cue, b: Cue): boolean {
   }
   if (a.raise || b.raise) {
     if (!a.raise || !b.raise || a.raise.shadow !== b.raise.shadow) {
+      return false;
+    }
+  }
+  if (a.attach || b.attach) {
+    if (
+      !a.attach ||
+      !b.attach ||
+      a.attach.region !== b.attach.region ||
+      a.attach.in !== b.attach.in ||
+      a.attach.rate !== b.attach.rate ||
+      a.attach.end !== b.attach.end
+    ) {
       return false;
     }
   }

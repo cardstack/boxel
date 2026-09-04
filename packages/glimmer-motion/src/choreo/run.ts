@@ -25,6 +25,7 @@ import { easingDefinitionToFunction } from 'motion-utils';
 
 import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
+import { choreoHostById } from './registry.ts';
 import type {
   Camera3DState,
   Camera3DWaypoint,
@@ -468,6 +469,8 @@ interface Track {
   };
   /** flight: the platform animations this track owns — cancelled before any measure */
   platform?: Animation[];
+  /** an attachment refused once (an integrator under an exact clock): never driven again */
+  refused?: boolean;
   /** scroll: the container being driven, and where it is headed */
   scrolling?: {
     cancelListener(): void;
@@ -668,6 +671,107 @@ export class ChoreoRun implements Run {
     return this.parkedAt !== null;
   }
 
+  /**
+   * ATTACH: write each attached region's clock from this one's.
+   *
+   * Several windows may name one region — a film's every beat has a plate
+   * window, and the plate is one region re-keyed per beat — so the run
+   * resolves ONE governing window per region on every evaluate: the window
+   * that holds `now`; else the latest past one, if it holds; else the
+   * earliest future one, which stands the child at its head (Remotion's
+   * premount: mounted early, clock frozen at `in`). The child's run is
+   * paused and told `in + (now − start) × rate`. No history is kept on
+   * either side, which is what makes a seek into a window land where
+   * playing there would.
+   */
+  private driveAttachments(now: number) {
+    let governing: Map<string, Track> | undefined;
+    for (const t of this.tracks) {
+      const a = t.cue.attach;
+      if (!a || t.refused) {
+        continue;
+      }
+      governing ??= new Map();
+      const g = governing.get(a.region);
+      if (!g) {
+        governing.set(a.region, t);
+        continue;
+      }
+      const rank = (x: Track) =>
+        now >= x.start && now < x.end ? 2 : now >= x.end ? 1 : 0;
+      const rt = rank(t);
+      const rg = rank(g);
+      if (
+        rt > rg ||
+        (rt === rg && rt === 1 && t.end > g.end) ||
+        (rt === rg && rt === 0 && t.start < g.start)
+      ) {
+        governing.set(a.region, t);
+      }
+    }
+    if (!governing) {
+      return;
+    }
+    for (const [region, t] of governing) {
+      const a = t.cue.attach!;
+      const child = choreoHostById(region)?.currentRun() ?? null;
+      if (!child || child === this) {
+        continue;
+      }
+      if (a.exact && child.hasIntegrator()) {
+        // refused ONCE, loudly, and never driven: the film goes on, the
+        // attachment stands dead, and the error names the region
+        t.refused = true;
+        console.error(
+          `choreo: <Choreo "${region}"> is attached under an exact clock, ` +
+            'but its score integrates (a spring or a follow): its state is ' +
+            'its history, and a driven clock has none',
+        );
+        continue;
+      }
+      let local: number;
+      if (now < t.start) {
+        local = a.in;
+      } else if (now < t.end) {
+        local = a.in + ((now - t.start) / 1000 / this.scale) * a.rate;
+      } else if (a.end === 'hold') {
+        local = a.in + (t.cue.duration / 1000) * a.rate;
+      } else {
+        continue;
+      }
+      // PLAY WHEN PLAYING, SEEK WHEN SEEKING. A parent that is playing
+      // lets the child play too — natively, on the compositor, as smooth
+      // as it ever was — and corrects it only past a frame of drift; a
+      // parent that is paused or scrubbed holds the child and writes its
+      // clock. Both are the same statement of where the child stands at
+      // `now`; only the means differ, and the means is what smoothness
+      // is made of.
+      const inside = now >= t.start && now < t.end;
+      if (this.playing && inside && !this.ended) {
+        if (child.paused) {
+          child.time = local;
+          child.play();
+        } else if (Math.abs(child.time - local) > 1 / 30) {
+          child.time = local;
+        }
+        const speed = this.rate * a.rate;
+        if (Math.abs(child.speed - speed) > 1e-6) {
+          child.speed = speed;
+        }
+        continue;
+      }
+      if (!child.paused) {
+        child.pause();
+      }
+      if (Math.abs(child.time - local) > 1e-4) {
+        child.time = local;
+      }
+    }
+  }
+  /** does this run's score integrate — a spring, a follow — so that its state is its history? */
+  hasIntegrator(): boolean {
+    return this.tracks.some((t) => t.cue.kind === 'spring' || !!t.cue.derive);
+  }
   isDone(): boolean {
     return this.ended || this.cancelled;
   }
@@ -701,6 +805,8 @@ export class ChoreoRun implements Run {
     }
     this.playing = false;
     this.setPaused(true);
+    // a paused parent holds what it drives, where the clock stands
+    this.driveAttachments(this.master);
     this.scheduleRestill();
   }
 
@@ -907,6 +1013,8 @@ export class ChoreoRun implements Run {
     }
     this.ended = true;
     this.stopTicking();
+    // the windows it drove are past: hold or leave them, per their policy
+    this.driveAttachments(this.master);
     this.options.onCamera?.({ ...this.camera });
     // land every remaining final before handing the layout back; ambient
     // loops play on until the next pass cancels them
@@ -980,6 +1088,12 @@ export class ChoreoRun implements Run {
     );
     const clamped = Math.max(0, Math.min(gate ? gate.at : target, this.total));
     this.master = clamped;
+    // a finished run seeked back inside itself is a run again: an
+    // attachment driven past its window and back must be playable, and
+    // a retreat already un-ends for the same reason
+    if (this.ended && clamped < this.total) {
+      this.ended = false;
+    }
     // seeking is a still: hold the transport
     const wasPlaying = this.playing;
     this.playing = false;
@@ -1418,6 +1532,7 @@ export class ChoreoRun implements Run {
       }
     }
     this.rewind(rewinds, now);
+    this.driveAttachments(now);
     this.foldPerforms(limit);
   }
 

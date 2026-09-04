@@ -20,6 +20,10 @@ Router.map(function () {
      were the same page twice. So the film takes the plain name, carries
      its dive beneath itself, and there is one address to send anyone.
      Declared before /:demo_id so the catalog cannot eat them. */
+  /* the transition reel: the film construct pointed at plates rather than
+     a building, to see whether the seam system holds up outside the two
+     films it was lifted from */
+  this.route('seams', { path: '/_seams' });
   this.route('towers');
   this.route('sagrada');
   this.route('demo', { path: '/:demo_id' });

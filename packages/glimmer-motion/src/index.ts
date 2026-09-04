@@ -13,6 +13,13 @@ export type { BeaconRef } from './choreo/beacons.ts';
 export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
 export type { GestureRef } from './choreo/gesture.ts';
+export {
+  type ChoreoHost,
+  choreoHostAt,
+  choreoHostById,
+  type ChoreoProvider,
+  closestChoreo,
+} from './choreo/registry.ts';
 export type { ChoreoRun } from './choreo/run.ts';
 export type { PlanePoint } from './choreo/space.ts';
 export { appliedCamera, toLocal, toPage } from './choreo/space.ts';
