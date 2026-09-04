@@ -41,7 +41,10 @@ import {
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
 import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
-import { generalSortFields } from './index-query-engine.ts';
+import {
+  generalSortFields,
+  MATCH_RELEVANCE_SORT_KEY,
+} from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
 
@@ -507,6 +510,7 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
       out.on === undefined &&
       typeof out.by === 'string' &&
       !(out.by in generalSortFields) &&
+      out.by !== MATCH_RELEVANCE_SORT_KEY &&
       rootAnchor !== undefined
     ) {
       out.on = rootAnchor;
@@ -1077,8 +1081,11 @@ export function buildEntryResource(args: {
   // Omitted only by callers with no generation to surface (unit tests); the
   // engine always supplies it.
   generation?: number;
+  // Full-text relevance for the query's `matches` terms — present only on a
+  // relevance-sorted query; rides in `meta._matchRelevance`. Omitted otherwise.
+  matchRelevance?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId, generation } = args;
+  let { url, htmlIds, itemType, iconId, generation, matchRelevance } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -1097,8 +1104,13 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
-  if (generation !== undefined) {
-    resource.meta = { generation };
+  if (generation !== undefined || matchRelevance !== undefined) {
+    resource.meta = {
+      ...(generation !== undefined ? { generation } : {}),
+      ...(matchRelevance !== undefined
+        ? { _matchRelevance: matchRelevance }
+        : {}),
+    } as EntryResource['meta'];
   }
   return resource;
 }

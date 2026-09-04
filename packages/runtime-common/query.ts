@@ -2,7 +2,12 @@ import { isEqual } from 'lodash-es';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef, generalSortFields } from './index.ts';
+import {
+  type CodeRef,
+  isCodeRef,
+  generalSortFields,
+  MATCH_RELEVANCE_SORT_KEY,
+} from './index.ts';
 type JSONValue =
   | string
   | number
@@ -351,7 +356,10 @@ function assertSortExpression(
     );
   }
   if (!('on' in sort)) {
-    if (Object.keys(generalSortFields).includes(sort.by)) {
+    if (
+      Object.keys(generalSortFields).includes(sort.by) ||
+      sort.by === MATCH_RELEVANCE_SORT_KEY
+    ) {
       return;
     }
     throw new InvalidQueryError(

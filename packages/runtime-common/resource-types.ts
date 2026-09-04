@@ -274,6 +274,12 @@ export interface EntryResource {
   // resource's own generation (the two channels advance independently).
   meta?: {
     generation: number;
+    // Full-text relevance of this entry for the query's `matches` terms
+    // (Postgres `ts_rank_cd`, 0–1). Present only on a query that sorts by
+    // `_matchRelevance`; absent otherwise. Lets a consumer gauge hit strength
+    // and re-rank across realms (the federated path concatenates per-realm
+    // results without re-sorting).
+    _matchRelevance?: number;
   };
 }
 

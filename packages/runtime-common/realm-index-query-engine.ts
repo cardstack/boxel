@@ -9,6 +9,7 @@ import {
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
+  MATCH_RELEVANCE_SORT_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -364,6 +365,15 @@ export class RealmIndexQueryEngine {
     let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
 
     for (let row of results) {
+      // Full-text relevance rides on the row only when the query sorted by
+      // `_matchRelevance` (Postgres `ts_rank_cd`, 0–1; SQLite 1/0 fallback);
+      // otherwise the column is absent and this stays undefined, so the entry
+      // carries no `meta._matchRelevance`.
+      let rawRelevance = (row as Record<string, unknown>)[
+        MATCH_RELEVANCE_SORT_KEY
+      ];
+      let matchRelevance =
+        rawRelevance == null ? undefined : Number(rawRelevance);
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -436,6 +446,7 @@ export class RealmIndexQueryEngine {
             itemType: fileItemEmitted ? FileMetaResourceType : undefined,
             iconId: fileIconId,
             generation: file.generation,
+            matchRelevance,
           }),
         );
         continue;
@@ -577,6 +588,7 @@ export class RealmIndexQueryEngine {
           itemType,
           iconId,
           generation,
+          matchRelevance,
         }),
       );
     }
