@@ -141,3 +141,44 @@ export function resolvePrerenderServerProxyTimeoutMs(): number {
     prerenderRequestTimeoutMs,
   );
 }
+
+// Whether any prerender server received this request before the manager
+// answered it. The manager stamps this on every response it produces itself.
+// `none` is the manager's guarantee that no prerender server saw the request,
+// which is what makes the failure safe to retry even for a request that must
+// not run twice; `delivered` — and an absent header, which reads the same way —
+// means a server may have received it and acted on it.
+export const PRERENDER_DISPATCH_HEADER = 'x-boxel-prerender-dispatch';
+export const PRERENDER_DISPATCH_NONE = 'none';
+export const PRERENDER_DISPATCH_DELIVERED = 'delivered';
+
+// How far a failed prerender request may be retried.
+//
+// A render is a pure read of a card: repeating it costs time and nothing else,
+// so any failure is worth another attempt. Running a command is not — it
+// creates cards, matrix rooms and outbound calls, and the queue deliberately
+// declines to collapse two identical invocations (see `dedupeKey` in
+// runtime-common's `tasks/run-command.ts`), so a retry of an invocation whose
+// outcome is unknown executes it a second time while the caller still sees a
+// single call. Such a request is retried only on a failure that proves it
+// never reached a prerender server.
+export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
+
+// Network error codes that mean no connection to the peer was ever
+// established, so the request cannot have been received, let alone acted on.
+// A reset or a timeout proves nothing: either can land after the peer read the
+// request and started work on it.
+const UNDELIVERED_ERROR_CODES = new Set([
+  'ECONNREFUSED', // the peer refused the connection
+  'ENOTFOUND', // DNS resolved to nothing
+  'EAI_AGAIN', // DNS resolution failed
+]);
+
+// Node's fetch wraps network errors in a TypeError carrying the underlying
+// error in `cause`, so the code sits at either level.
+export function isUndeliveredRequestError(err: unknown): boolean {
+  let code =
+    (err as { code?: unknown; cause?: { code?: unknown } })?.code ??
+    (err as { cause?: { code?: unknown } })?.cause?.code;
+  return typeof code === 'string' && UNDELIVERED_ERROR_CODES.has(code);
+}

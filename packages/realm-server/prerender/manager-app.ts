@@ -7,6 +7,10 @@ import {
 } from '../middleware/index.ts';
 import { format } from 'date-fns';
 import {
+  isUndeliveredRequestError,
+  PRERENDER_DISPATCH_DELIVERED,
+  PRERENDER_DISPATCH_HEADER,
+  PRERENDER_DISPATCH_NONE,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -16,6 +20,7 @@ import {
   resolvePrerenderServerProxyTimeoutMs,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
+  type PrerenderRetryPolicy,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity.ts';
@@ -972,6 +977,7 @@ export function buildPrerenderManagerApp(options?: {
     ctxt: Koa.Context,
     pathSuffix: string,
     label: string,
+    retryPolicy: PrerenderRetryPolicy = 'any-failure',
   ) {
     // CS-10872: honor caller-supplied correlation ID; mint one if
     // absent (direct curl, test harnesses). Echo on every subsequent
@@ -983,6 +989,12 @@ export function buildPrerenderManagerApp(options?: {
       sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
       randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Tells the caller whether any prerender server received this request, so
+    // that a caller retrying a request which must not run twice can tell a
+    // failure that landed before dispatch from one that may have lost the
+    // response to work already done. Starts at `none` and is upgraded the
+    // moment an upstream fetch could have been read by a server.
+    ctxt.set(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_NONE);
     // Optional indexing-job correlator threaded from the worker. When
     // present, gets stamped onto every proxying/proxied log line as
     // `[job: J.R]` and forwarded upstream so the prerender-server can
@@ -1148,6 +1160,7 @@ export function buildPrerenderManagerApp(options?: {
           `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}${jobTag}`,
         );
         let abortedDueToDrain = false;
+        let upstreamError: unknown;
         const ac = new AbortController();
         // Expose this attempt's controller so the ctxt.res 'close'
         // listener can abort the current upstream fetch
@@ -1184,6 +1197,7 @@ export function buildPrerenderManagerApp(options?: {
           body: raw,
           signal: ac.signal,
         }).catch((e) => {
+          upstreamError = e;
           if (e?.name === 'AbortError' && clientAborted) {
             // Client gave up — not our fault, not the upstream's
             // fault. Don't prune, don't mark drain. The outer
@@ -1204,6 +1218,15 @@ export function buildPrerenderManagerApp(options?: {
         });
         clearTimeout(timer as any);
         if (drainPoll) clearInterval(drainPoll as any);
+        // Whether this target can be ruled out as having acted on the request.
+        // Only a connection that was never established rules it out: a
+        // response of any status, and an abort of a connected request alike,
+        // leave the server free to have read the request and run it.
+        let undeliveredToTarget =
+          !res && isUndeliveredRequestError(upstreamError);
+        if (!undeliveredToTarget) {
+          ctxt.set(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_DELIVERED);
+        }
         // If the client aborted at any point during this attempt,
         // stop here — we've already told the upstream to bail via
         // `currentAc.abort()` and the response socket is already
@@ -1232,9 +1255,20 @@ export function buildPrerenderManagerApp(options?: {
           if (draining) {
             markDraining(target);
           }
-          // try next server if available
-          if (attempts.size < registry.servers.size) {
+          // Move on to the next server, unless this request must not run
+          // twice and the failed target may already have carried it out —
+          // failing over then is a second execution the caller never asked
+          // for, and it sees only one call.
+          let mayTryAnotherServer =
+            retryPolicy === 'any-failure' || undeliveredToTarget;
+          if (mayTryAnotherServer && attempts.size < registry.servers.size) {
             continue;
+          }
+          if (!mayTryAnotherServer && attempts.size < registry.servers.size) {
+            log.warn(
+              `not failing over ${label} requestId=${requestId} affinity=${affinityKey} target=${target}: ` +
+                `the request may already have been carried out there${jobTag}`,
+            );
           }
           if (draining) {
             ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
@@ -1286,6 +1320,7 @@ export function buildPrerenderManagerApp(options?: {
         // Re-echo after res.headers iteration so the manager's ID
         // wins over any header passthrough from the prerender-server.
         ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+        ctxt.set(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_DELIVERED);
         const buf = Buffer.from(await res.arrayBuffer());
         ctxt.body = buf;
         let proxyMs = now() - proxyStart;
@@ -1313,8 +1348,16 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/prerender-visit', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-visit', 'visit'),
   );
+  // A command is not idempotent — it creates cards, matrix rooms and outbound
+  // calls, and the queue declines to collapse two identical invocations — so
+  // it never fails over to a second server once a server may have received it.
   router.post('/run-command', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'run-command', 'command'),
+    proxyPrerenderRequest(
+      ctxt,
+      'run-command',
+      'command',
+      'only-when-undelivered',
+    ),
   );
   router.post('/prerender-screenshot', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-screenshot', 'screenshot'),

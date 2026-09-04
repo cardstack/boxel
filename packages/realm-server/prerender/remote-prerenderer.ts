@@ -10,6 +10,9 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import {
+  isUndeliveredRequestError,
+  PRERENDER_DISPATCH_HEADER,
+  PRERENDER_DISPATCH_NONE,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -18,6 +21,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
   sanitizePrerenderJobId,
+  type PrerenderRetryPolicy,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
@@ -29,9 +33,18 @@ const jsonApiHeaders = {
 
 class RetryablePrerenderError extends Error {
   status?: number;
-  constructor(message: string, status?: number) {
+  // Whether the manager answered without any prerender server having received
+  // the request. Only such a failure is safe to retry under
+  // `only-when-undelivered`.
+  undelivered: boolean;
+  constructor(
+    message: string,
+    status?: number,
+    opts?: { undelivered?: boolean },
+  ) {
     super(message);
     this.status = status;
+    this.undelivered = opts?.undelivered ?? false;
   }
 }
 
@@ -69,6 +82,7 @@ export function createRemotePrerenderer(
       renderOptions?: RenderRouteOptions;
       [key: string]: any;
     },
+    retryPolicy: PrerenderRetryPolicy = 'any-failure',
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
 
@@ -151,7 +165,11 @@ export function createRemotePrerenderer(
             message += `: ${text}`;
           }
           if (response.status === 503 || draining || serverError) {
-            throw new RetryablePrerenderError(message, response.status);
+            throw new RetryablePrerenderError(message, response.status, {
+              undelivered:
+                response.headers.get(PRERENDER_DISPATCH_HEADER) ===
+                PRERENDER_DISPATCH_NONE,
+            });
           }
           throw new Error(message);
         }
@@ -189,13 +207,35 @@ export function createRemotePrerenderer(
         // underlying error (ECONNREFUSED, ECONNRESET, etc.) in e.cause.
         // Check both e.code and e.cause.code to catch these.
         let code = e?.code ?? e?.cause?.code;
-        let retryable =
+        let transportFailure =
           e instanceof RetryablePrerenderError ||
           code === 'ECONNREFUSED' ||
           code === 'ETIMEDOUT' ||
           code === 'ECONNRESET' ||
           (e instanceof TypeError && e.message === 'fetch failed');
+        // A request that must not run twice is retried only when the failure
+        // proves no prerender server received it: the manager saying it never
+        // dispatched, or a connection that was never established. A timeout, a
+        // reset, or a 5xx from a server that may have run the request is a
+        // completed side effect whose response was lost, and repeating it
+        // would perform that side effect a second time.
+        let undelivered =
+          e instanceof RetryablePrerenderError
+            ? e.undelivered
+            : isUndeliveredRequestError(e);
+        let retryable =
+          retryPolicy === 'only-when-undelivered'
+            ? undelivered
+            : transportFailure;
         if (!retryable || attempts >= maxAttempts) {
+          if (transportFailure && !retryable && attempts < maxAttempts) {
+            log.warn(
+              `Prerender request to ${endpoint.href} failed and is not retryable ` +
+                `(requestId=${requestId}, affinity=${affinityTag}): the request may ` +
+                `already have been carried out, so a retry could repeat its side ` +
+                `effects: ${e.message}`,
+            );
+          }
           throw e;
         }
         let delayMs = Math.min(
@@ -264,6 +304,11 @@ export function createRemotePrerenderer(
         },
       );
     },
+    // Commands are not idempotent — they create cards, matrix rooms and
+    // outbound calls, and the queue declines to collapse two identical
+    // invocations — so this request is retried only on a failure that proves
+    // no prerender server ever received it. Every other prerender call is a
+    // pure read and keeps the full retry budget.
     async runCommand({ userId, auth, command, commandInput, priority }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
@@ -276,6 +321,7 @@ export function createRemotePrerenderer(
           commandInput,
           ...(priority !== undefined ? { priority } : {}),
         },
+        'only-when-undelivered',
       );
     },
     async prerenderScreenshot({

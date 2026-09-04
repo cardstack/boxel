@@ -9,6 +9,9 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app.ts';
 import {
+  PRERENDER_DISPATCH_DELIVERED,
+  PRERENDER_DISPATCH_HEADER,
+  PRERENDER_DISPATCH_NONE,
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -2246,6 +2249,166 @@ module(basename(import.meta.filename), function () {
       assert.false(
         registry.servers.has(serverUrlA!),
         'unhealthy server pruned from registry',
+      );
+    });
+
+    // A command is not idempotent: it creates cards, matrix rooms and outbound
+    // calls. Handing it to a second server after the first may already have
+    // run it is a second execution the caller never asked for and cannot see.
+    test('does not fail over a command to a second server after a 500', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      // Both servers answer the same way, so the count is the number of
+      // servers that received the command regardless of which is chosen first.
+      let runs = 0;
+      let failAfterRunning = (ctxt: Koa.Context) => {
+        runs++;
+        ctxt.status = 500;
+        ctxt.body = JSON.stringify({
+          errors: [{ status: 500, message: 'Protocol error (Target closed)' }],
+        });
+      };
+      mockPrerenderA?.setResponder(failAfterRunning);
+      mockPrerenderB?.setResponder(failAfterRunning);
+
+      let res = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+
+      assert.strictEqual(res.status, 503, 'reports the failure to the caller');
+      assert.strictEqual(runs, 1, 'only one server received the command');
+      assert.strictEqual(
+        res.headers[PRERENDER_DISPATCH_HEADER],
+        PRERENDER_DISPATCH_DELIVERED,
+        'tells the caller a server may have run the command',
+      );
+    });
+
+    test('fails a command over when the first server is unreachable', async function (assert) {
+      // A refused connection is the one failure that proves the command never
+      // reached the server, so the useful part of the failover survives.
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+      await mockPrerenderA?.stop();
+
+      let runs = 0;
+      mockPrerenderB?.setResponder((ctxt) => {
+        runs++;
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({
+          data: { attributes: { status: 'ready' } },
+        });
+      });
+
+      let res = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+
+      assert.strictEqual(res.status, 201, 'the command runs');
+      assert.strictEqual(runs, 1, 'the reachable server ran it once');
+      assert.false(
+        registry.servers.has(serverUrlA!),
+        'unreachable server pruned from registry',
+      );
+    });
+
+    test('renders still fail over to a second server after a 500', async function (assert) {
+      // Confining the rule to commands: a render is a pure read, so a second
+      // server repeating it costs time and nothing else.
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      let renders = 0;
+      let failAfterRendering = (ctxt: Koa.Context) => {
+        renders++;
+        ctxt.status = 500;
+        ctxt.body = JSON.stringify({
+          errors: [{ status: 500, message: 'Protocol error (Target closed)' }],
+        });
+      };
+      mockPrerenderA?.setResponder(failAfterRendering);
+      mockPrerenderB?.setResponder(failAfterRendering);
+
+      let res = await request
+        .post('/prerender-visit')
+        .send(
+          makeBody(
+            'https://realm.example/render-failover',
+            'https://realm.example/render-failover/1',
+          ),
+        );
+
+      assert.strictEqual(res.status, 503, 'reports the failure to the caller');
+      assert.strictEqual(renders, 2, 'both servers were tried');
+    });
+
+    test('reports whether a failed request reached a prerender server', async function (assert) {
+      process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '0';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let undispatched = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+      assert.strictEqual(undispatched.status, 503, '503 when no servers');
+      assert.strictEqual(
+        undispatched.headers[PRERENDER_DISPATCH_HEADER],
+        PRERENDER_DISPATCH_NONE,
+        'a request that never left the manager is safe to retry',
+      );
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      let dispatched = await request
+        .post('/run-command')
+        .send(makeCommandBody('https://realm.example/cmd', 'create-card'));
+      assert.strictEqual(dispatched.status, 201, 'the command runs');
+      assert.strictEqual(
+        dispatched.headers[PRERENDER_DISPATCH_HEADER],
+        PRERENDER_DISPATCH_DELIVERED,
+        'a proxied request is reported as delivered',
       );
     });
 
