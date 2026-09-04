@@ -8,7 +8,7 @@ module.exports = function (environment) {
     // from /<repo>/, and the router has to strip that prefix before it can
     // recognise /choreo/lightbox as the `lightbox` route
     rootURL: process.env.APP_BASE || '/',
-    locationType: 'history',
+    locationType: process.env.APP_LOCATION || 'history',
     EmberENV: {
       EXTEND_PROTOTYPES: false,
       FEATURES: {

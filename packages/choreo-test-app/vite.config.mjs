@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defineConfig } from 'vite';
+import { boxelIframe } from '../packages/choreo-gallery/scripts/iframe-plugin.mjs';
 
 /**
  * THE DRACO DECODER COMES FROM THREE, not from the repository.
@@ -169,6 +170,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [
+    boxelIframe(),
     captureStill(),
     classicEmberSupport(),
     ember(),

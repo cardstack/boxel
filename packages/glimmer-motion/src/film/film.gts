@@ -1640,6 +1640,10 @@ export class Film extends Component<FilmSignature> {
     return this.args.build ?? '';
   }
 
+  get srcdoc(): string | undefined {
+    return this.picture?.srcdoc;
+  }
+
   get src(): string {
     const src = this.picture?.src;
     return src ? `${src}?host${AWAKE ? '&awake' : ''}` : '';
@@ -4716,6 +4720,7 @@ export class Film extends Component<FilmSignature> {
           <iframe
             class='cf-frame'
             src={{this.src}}
+            srcdoc={{this.srcdoc}}
             title={{this.frameTitle}}
             loading='eager'
           ></iframe>
