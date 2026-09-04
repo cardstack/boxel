@@ -51,13 +51,12 @@ function declaredModuleTitles(source: string, file: string): string[] {
   ];
   return calls.map(([, raw]) => {
     const expression = raw.trim();
-    const plain =
-      /^(?:path\.)?basename\((?:import\.meta\.filename|__filename)\)$/;
+    const plain = /^(?:path\.)?basename\(import\.meta\.filename\)$/;
     if (plain.test(expression)) {
       return base;
     }
     const templated =
-      /^`([^`$]*)\$\{(?:path\.)?basename\((?:import\.meta\.filename|__filename)\)\}([^`$]*)`$/;
+      /^`([^`$]*)\$\{(?:path\.)?basename\(import\.meta\.filename\)\}([^`$]*)`$/;
     const parts = templated.exec(expression);
     if (parts) {
       return `${parts[1]}${base}${parts[2]}`;
