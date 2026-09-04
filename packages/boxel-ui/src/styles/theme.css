@@ -165,12 +165,20 @@
   --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
 
   /* other */
+  /* same values the Switch falls back to; declared so a light region nested
+     in a dark subtree re-resolves them instead of inheriting the dark thumb */
+  --boxel-switch-thumb: var(--background);
+  --boxel-switch-thumb-icon: var(--foreground);
   --boxel-button-default-border: var(--boxel-button-border-color);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
   --boxel-button-default-active-border: var(--foreground);
   --boxel-button-primary-active-background: var(--boxel-highlight-hover);
   --boxel-button-secondary-background: transparent;
+  /* declared in both scheme blocks: a var() inside a knob resolves where the
+     knob is declared, so a light region nested in a dark subtree would
+     otherwise inherit the dark-resolved color */
+  --boxel-button-secondary-foreground: var(--foreground);
   --boxel-button-secondary-border: var(--boxel-button-border-color);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-danger-hover);
