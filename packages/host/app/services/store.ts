@@ -833,24 +833,31 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // A caller that asked the prerender app to persist gets an error rather
-    // than the unpersisted instance. An instance handed back with no id is
-    // indistinguishable from a saved one — `SaveCardTool` reports it as a
-    // success — so returning it makes a blocked write a wrong answer instead
-    // of a failure, which is what lets a mis-marked tab answer a card-saving
-    // command with a card that does not exist. `create` already throws on the
-    // same state; `patch` reports a blocked write as `undefined`, which its
-    // callers already branch on. Thrown before the instance is registered so
-    // a failed `add` leaves nothing resident.
+    // A headless command running while the prerender app's persistence block
+    // is still raised is an impossible state, and the only one this path
+    // reports rather than absorbs. The command route drops the block on entry
+    // precisely so a command's writes can land; with the block still up the
+    // save resolves to an instance carrying no id, `SaveCardTool` returns it
+    // as saved, and every caller downstream — `boxel run-command` included —
+    // reads a card that does not exist as a success. `create` already throws
+    // on the same state. Raised before the instance is registered, so a
+    // failed `add` leaves nothing resident.
     //
-    // Scoped to the prerender app rather than to every blocked context: host
-    // tests and the interactive app run in-browser index renders whose render
-    // store is blocked too, and a card that writes while rendering there has
-    // always had that write dropped rather than failing its render.
-    if (!opts?.doNotPersist && (globalThis as any).__boxelPrerenderApp) {
+    // A card render is deliberately NOT an error. The prerenderer is not an
+    // avenue for mutations, and a card whose template or computed writes to
+    // the store is doing what it was designed to do — it just cannot have
+    // that write here, because it would aim at a realm whose sole indexing
+    // worker this render is occupying. Dropping the write renders the card;
+    // throwing would fail the render and index the card as an error.
+    if (
+      !opts?.doNotPersist &&
+      (globalThis as any).__boxelPrerenderApp &&
+      (globalThis as any).__boxelHeadlessCommand
+    ) {
       throw new Error(
         `cannot persist instance ${
           instance.id ?? instance[localIdSymbol]
-        }: persistence is blocked in the prerender app`,
+        }: a headless command is running with the prerender app's persistence block still raised`,
       );
     }
 

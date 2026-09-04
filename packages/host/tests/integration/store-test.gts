@@ -607,27 +607,38 @@ module('Integration | Store', function (hooks) {
     }
   });
 
-  test('adding an instance for persistence errors while persistence is blocked', async function (assert) {
-    // The prerender app raises `__boxelPrerenderApp` to block every store's
-    // writes. An instance handed back from that block carries no id, which is
-    // indistinguishable from a saved one to every caller — so a caller that
-    // asked for persistence gets an error instead, and only a `doNotPersist`
-    // caller gets the in-memory instance it asked for.
+  test('a card render absorbs a blocked write, a headless command reports it', async function (assert) {
+    // `__boxelPrerenderApp` blocks every store's writes in the prerender app.
+    // A card render absorbs the block: the prerenderer is not an avenue for
+    // mutations, so a card that writes from a template or computed still
+    // renders, with the write dropped.
     (globalThis as any).__boxelPrerenderApp = true;
     try {
-      await assert.rejects(
-        storeService.add(new PersonDef({ name: 'Andrea' })),
-        /persistence is blocked/,
-        'a persisting add reports the blocked write',
+      let rendered = new PersonDef({ name: 'Andrea' });
+      assert.strictEqual(
+        await storeService.add(rendered),
+        rendered,
+        'a render keeps the instance rather than failing',
       );
 
-      let instance = new PersonDef({ name: 'Mango' });
+      // A command is the one caller whose write must land, so the block being
+      // up here means the command route did not drop it — and an instance
+      // with no id reads as a saved card to every caller.
+      (globalThis as any).__boxelHeadlessCommand = true;
+      await assert.rejects(
+        storeService.add(new PersonDef({ name: 'Van Gogh' })),
+        /persistence block still raised/,
+        'a command reports the blocked write',
+      );
+
+      let ephemeral = new PersonDef({ name: 'Mango' });
       assert.strictEqual(
-        await storeService.add(instance, { doNotPersist: true }),
-        instance,
+        await storeService.add(ephemeral, { doNotPersist: true }),
+        ephemeral,
         'a memory-only add is served as asked',
       );
     } finally {
+      delete (globalThis as any).__boxelHeadlessCommand;
       delete (globalThis as any).__boxelPrerenderApp;
     }
   });

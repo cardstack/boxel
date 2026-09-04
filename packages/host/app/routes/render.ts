@@ -242,6 +242,15 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__boxelRenderContext = true;
+    // A render is never a headless command. The command route raises
+    // `__boxelHeadlessCommand` and drops it in its own teardown, but a
+    // transition runs the entering route's model hooks before the departing
+    // route's exit hooks — so a tab arriving here from the command route
+    // still carries the flag through this render's model hook. Clearing it
+    // keeps a render's writes from being marked for deferred indexing, and
+    // keeps a card that writes while rendering on the store's drop path
+    // rather than its report-a-stuck-command path.
+    (globalThis as any).__boxelHeadlessCommand = undefined;
     this.#registerGlobalsDestructor();
     this.#authGuard.register();
     if (!isTesting()) {
