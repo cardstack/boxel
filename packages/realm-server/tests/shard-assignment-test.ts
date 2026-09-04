@@ -11,6 +11,7 @@ import {
   discoverTestFiles,
   testsDir,
 } from '../scripts/test-module-names.mjs';
+import { buildModuleFilter } from './helpers/suite-registry.ts';
 
 const {
   DEFAULT_WEIGHT,
@@ -50,13 +51,12 @@ function declaredModuleTitles(source: string, file: string): string[] {
   ];
   return calls.map(([, raw]) => {
     const expression = raw.trim();
-    const plain =
-      /^(?:path\.)?basename\((?:import\.meta\.filename|__filename)\)$/;
+    const plain = /^(?:path\.)?basename\(import\.meta\.filename\)$/;
     if (plain.test(expression)) {
       return base;
     }
     const templated =
-      /^`([^`$]*)\$\{(?:path\.)?basename\((?:import\.meta\.filename|__filename)\)\}([^`$]*)`$/;
+      /^`([^`$]*)\$\{(?:path\.)?basename\(import\.meta\.filename\)\}([^`$]*)`$/;
     const parts = templated.exec(expression);
     if (parts) {
       return `${parts[1]}${base}${parts[2]}`;
@@ -100,6 +100,27 @@ module(basename(import.meta.filename), function () {
           `${file}: the module title ${JSON.stringify(title)} resolves to ${JSON.stringify(
             resolveFile(title),
           )}`,
+        );
+      }
+    }
+  });
+
+  // A shard gets its file list through TEST_MODULES and turns it into a QUnit
+  // name filter, so a module whose title the filter cannot express runs
+  // nowhere — silently, since a filter that matches nothing is
+  // indistinguishable from a file with no tests. The ` | qualifier` form is
+  // the shape most easily left out: a file's second top-level module is
+  // followed by neither `:` nor ` > `.
+  test('the module filter matches every declared top-level module', function (assert) {
+    for (const file of discoverTestFiles()) {
+      const filter = buildModuleFilter([file]);
+      const pattern = new RegExp(filter.slice(1, -1));
+      const source = readFileSync(join(testsDir, file), 'utf8');
+      for (const title of declaredModuleTitles(source, file)) {
+        // QUnit tests its filter against `<module name>: <test name>`.
+        assert.true(
+          pattern.test(`${title}: a test`),
+          `${file}: TEST_MODULES would not select the module ${JSON.stringify(title)}`,
         );
       }
     }
