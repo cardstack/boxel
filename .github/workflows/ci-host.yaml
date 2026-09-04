@@ -1473,7 +1473,7 @@ jobs:
             git fetch origin main
 
             if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
-               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qvE "Update host test (memory )?baselines?"; then
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
               echo "main has advanced past $WORKFLOW_SHA with non-baseline commits — skipping (a newer CI run will publish the baselines)."
               exit 0
             fi
