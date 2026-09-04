@@ -477,9 +477,11 @@ export class SearchResource<
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
     if (seed && !this.#seedApplied) {
+      // Recorded before the application starts, because the application itself
+      // reads it to confirm it is still the seed the resource reports holding.
+      this.#appliedSeedIdentity = seed.identity;
       this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
       this.#seedApplied = true;
-      this.#appliedSeedIdentity = seed.identity;
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
       if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
@@ -618,8 +620,11 @@ export class SearchResource<
     if (seed.identity && seed.identity === this.#appliedSeedIdentity) {
       return;
     }
-    this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
+    // Before the application starts, for the reason the initial seed records it
+    // first: the application confirms against this that it has not been
+    // superseded.
     this.#appliedSeedIdentity = seed.identity;
+    this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
     let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
     if (seed.searchURL && !hasQueryErrors) {
       let { query: seedQuery } = parseSearchURL(seed.searchURL);
