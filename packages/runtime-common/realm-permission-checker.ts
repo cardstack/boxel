@@ -6,10 +6,12 @@ import type { RealmPermissions, RealmAction } from './index.ts';
  * `users` row (any registered matrix user), its `*` row (everyone, matrix
  * account or not) and the user's own row.
  *
- * `Realm#assertPermissions` compares a session token's `permissions` claim
+ * `Realm#checkPermission` compares a normal session token's `permissions` claim
  * against exactly this union and rejects any difference as a
- * `PermissionMismatch`, so anything that mints a token has to mint the same
- * union rather than the bare per-username row.
+ * `PermissionMismatch`, so anything that mints such a token has to mint the same
+ * union rather than the bare per-username row. The three cases that bypass the
+ * comparison entirely — the realm's own matrix user, an `X-Boxel-Assume-User`
+ * indirection, and a delegated read-only token — are not modelled here.
  *
  * `matrixUserExists` answers whether the matrix account exists, which is what
  * gates the `users` row. It is consulted only when the realm carries such a

@@ -445,11 +445,11 @@ module(basename(import.meta.filename), function () {
     // against the union of the realm's `users` and `*` grants with the
     // caller's own row, and rejects any difference as a PermissionMismatch.
     // These cover the mint side of that contract.
-    async function mintedPermissions(
+    async function mintPrerenderCard(
       rows: any[],
       user: string,
       realm: string,
-    ): Promise<string[] | undefined> {
+    ): Promise<{ status: number; permissions?: string[] }> {
       let { prerenderer, renderCalls } = makePrerenderer();
       let dbAdapter = makeDbAdapter(rows);
       let app = new Koa();
@@ -476,38 +476,87 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({ data: { attributes: { realm, url: `${realm}card` } } });
       if (response.status !== 201) {
-        return undefined;
+        return { status: response.status };
       }
       let sessions = JSON.parse(renderCalls[0]!.args.auth);
-      return verifyJWT(sessions[realm], realmSecretSeed).permissions;
+      // Sorted because the claim is compared as a set — `checkPermission`
+      // sorts both sides before matching.
+      let permissions = verifyJWT(
+        sessions[realm],
+        realmSecretSeed,
+      ).permissions?.sort();
+      return { status: response.status, permissions };
     }
+
+    // Answers the homeserver's profile lookup with `respond` and counts the
+    // lookups, so a test can pin both how a `users` grant resolves and the
+    // claim that a realm without one costs no round trip.
+    async function withProfileLookups<T>(
+      respond: () => Response,
+      fn: () => Promise<T>,
+    ): Promise<{ result: T; profileRequests: string[] }> {
+      let profileRequests: string[] = [];
+      let realFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: any, init?: any) => {
+        let url = typeof input === 'string' ? input : input.url;
+        if (url.includes('/_matrix/client/v3/profile/')) {
+          profileRequests.push(url);
+          return respond();
+        }
+        return realFetch(input, init);
+      }) as typeof fetch;
+      try {
+        return { result: await fn(), profileRequests };
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+
+    const USERS_GRANT_ROWS = [
+      { username: 'users', read: true, write: false, realm_owner: false },
+      {
+        username: '@someone:localhost',
+        read: false,
+        write: true,
+        realm_owner: false,
+      },
+    ];
 
     test('mints the union of the wildcard grant and the caller row', async function (assert) {
       let realm = 'http://example.test/';
-      let permissions = await mintedPermissions(
-        [
-          { username: '*', read: true, write: false, realm_owner: false },
-          {
-            username: '@someone:localhost',
-            read: false,
-            write: true,
-            realm_owner: false,
-          },
-        ],
-        '@someone:localhost',
-        realm,
+      let { result, profileRequests } = await withProfileLookups(
+        () => new Response('{}', { status: 404 }),
+        () =>
+          mintPrerenderCard(
+            [
+              { username: '*', read: true, write: false, realm_owner: false },
+              {
+                username: '@someone:localhost',
+                read: false,
+                write: true,
+                realm_owner: false,
+              },
+            ],
+            '@someone:localhost',
+            realm,
+          ),
       );
 
       assert.deepEqual(
-        permissions?.sort(),
+        result.permissions,
         ['read', 'write'],
         "wildcard read is unioned with the row's write",
+      );
+      assert.deepEqual(
+        profileRequests,
+        [],
+        'a realm with no users grant costs no homeserver round trip',
       );
     });
 
     test('mints the wildcard grant for a caller with no row of their own', async function (assert) {
       let realm = 'http://example.test/';
-      let permissions = await mintedPermissions(
+      let { permissions } = await mintPrerenderCard(
         [{ username: '*', read: true, write: false, realm_owner: false }],
         '@nobody:localhost',
         realm,
@@ -522,88 +571,61 @@ module(basename(import.meta.filename), function () {
 
     test('mints the union of the users grant and the caller row for a registered matrix user', async function (assert) {
       let realm = 'http://example.test/';
-      let profileRequests: string[] = [];
-      let realFetch = globalThis.fetch;
-      globalThis.fetch = (async (input: any, init?: any) => {
-        let url = typeof input === 'string' ? input : input.url;
-        if (url.includes('/_matrix/client/v3/profile/')) {
-          profileRequests.push(url);
-          return new Response(JSON.stringify({ displayname: 'Someone' }), {
+      let { result, profileRequests } = await withProfileLookups(
+        () =>
+          new Response(JSON.stringify({ displayname: 'Someone' }), {
             headers: { 'content-type': 'application/json' },
-          });
-        }
-        return realFetch(input, init);
-      }) as typeof fetch;
+          }),
+        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      );
 
-      try {
-        let permissions = await mintedPermissions(
-          [
-            { username: 'users', read: true, write: false, realm_owner: false },
-            {
-              username: '@someone:localhost',
-              read: false,
-              write: true,
-              realm_owner: false,
-            },
-          ],
-          '@someone:localhost',
-          realm,
-        );
-
-        assert.deepEqual(
-          permissions?.sort(),
-          ['read', 'write'],
-          "the users grant is unioned with the row's write",
-        );
-        assert.strictEqual(
-          profileRequests.length,
-          1,
-          'resolves the users grant against the homeserver once',
-        );
-      } finally {
-        globalThis.fetch = realFetch;
-      }
+      assert.deepEqual(
+        result.permissions,
+        ['read', 'write'],
+        "the users grant is unioned with the row's write",
+      );
+      assert.strictEqual(
+        profileRequests.length,
+        1,
+        'resolves the users grant against the homeserver once',
+      );
     });
 
     test('withholds the users grant from an unregistered matrix user', async function (assert) {
       let realm = 'http://example.test/';
-      let realFetch = globalThis.fetch;
-      globalThis.fetch = (async (input: any, init?: any) => {
-        let url = typeof input === 'string' ? input : input.url;
-        if (url.includes('/_matrix/client/v3/profile/')) {
-          return new Response('{}', { status: 404 });
-        }
-        return realFetch(input, init);
-      }) as typeof fetch;
+      let { result } = await withProfileLookups(
+        () => new Response('{}', { status: 404 }),
+        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      );
 
-      try {
-        let permissions = await mintedPermissions(
-          [
-            { username: 'users', read: true, write: false, realm_owner: false },
-            {
-              username: '@someone:localhost',
-              read: false,
-              write: true,
-              realm_owner: false,
-            },
-          ],
-          '@someone:localhost',
-          realm,
-        );
+      assert.deepEqual(
+        result.permissions,
+        ['write'],
+        "only the caller's own row survives",
+      );
+    });
 
-        assert.deepEqual(
-          permissions,
-          ['write'],
-          "only the caller's own row survives",
-        );
-      } finally {
-        globalThis.fetch = realFetch;
-      }
+    // A homeserver that cannot answer is not evidence the account is absent.
+    // Reading it that way would drop the `users` grant and mint a token the
+    // realm rejects for its whole lifetime, so the request fails instead.
+    test('fails the request when the homeserver cannot resolve the users grant', async function (assert) {
+      let realm = 'http://example.test/';
+      let { result } = await withProfileLookups(
+        () => new Response('upstream boom', { status: 503 }),
+        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      );
+
+      assert.strictEqual(
+        result.status,
+        500,
+        'answers with an error rather than a token missing the users grant',
+      );
+      assert.strictEqual(result.permissions, undefined, 'mints nothing');
     });
 
     test('mints the caller row verbatim when the realm has no shared grants', async function (assert) {
       let realm = 'http://example.test/';
-      let permissions = await mintedPermissions(
+      let { permissions } = await mintPrerenderCard(
         [
           {
             username: '@someone:localhost',

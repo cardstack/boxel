@@ -136,7 +136,7 @@ export async function fetchRealmPermissions(
 }
 
 /**
- * One user's effective permissions in one realm — what `Realm#assertPermissions`
+ * One user's effective permissions in one realm — what `Realm#checkPermission`
  * will compute for them, so this is the set to mint a session token from.
  *
  * Takes a homeserver URL rather than a matrix client because the callers that

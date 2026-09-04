@@ -303,6 +303,7 @@ const ALL_TEST_FILES: string[] = [
   './pg-queue-finalize-test',
   './finalize-child-fatal-failure-test',
   './screenshot-card-test',
+  './screenshot-card-task-test',
   './run-command-task-test',
   './realm-endpoints-test',
   './realm-endpoints/dependencies-test',

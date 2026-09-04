@@ -443,18 +443,36 @@ export class MatrixClient {
   }
 }
 
+// A homeserver that answers this at all answers it quickly. The ceiling exists
+// so an unresponsive one — accepting connections but never replying — fails the
+// caller instead of holding it for the platform's default socket timeout, which
+// is minutes.
+const MATRIX_PROFILE_TIMEOUT_MS = 10_000;
+
 // Profile lookup is unauthenticated on the matrix client-server API, so it is
 // reachable from a homeserver URL alone. `MatrixClient#getProfile` is the entry
 // point for a caller that holds a client; this one serves the callers that hold
 // only a URL — a worker child process has no matrix client, but still has to
 // answer "is this a registered matrix user?" to resolve a realm's `users` grant.
+//
+// `undefined` means the homeserver answered and the account does not exist. A
+// homeserver that fails to answer throws instead, because the two are not
+// interchangeable to a caller deriving permissions: silently reading an outage
+// as "not registered" drops a realm's `users` grant, and a token minted from
+// that reduced set is one the realm will reject for the whole of its life.
 export async function fetchMatrixProfile(
   matrixURL: URL,
   userId: string,
 ): Promise<{ displayname: string } | undefined> {
   let response = await fetch(
     `${matrixURL.href}_matrix/client/v3/profile/${encodeURIComponent(userId)}`,
+    { signal: AbortSignal.timeout(MATRIX_PROFILE_TIMEOUT_MS) },
   );
+  if (response.status >= 500) {
+    throw new Error(
+      `Matrix profile lookup for ${userId} failed: homeserver responded ${response.status}`,
+    );
+  }
   if (!response.ok) {
     return undefined;
   }

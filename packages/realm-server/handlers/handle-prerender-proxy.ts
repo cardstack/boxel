@@ -1,8 +1,10 @@
 import type Koa from 'koa';
+import * as Sentry from '@sentry/node';
 
 import {
   fetchEffectiveRealmPermissions,
   type DBAdapter,
+  type RealmAction,
   type RealmPermissions,
   type Prerenderer,
 } from '@cardstack/runtime-common';
@@ -89,12 +91,31 @@ export default function handlePrerenderProxy({
     // permissions claim differs from that union in either direction, so on a
     // realm that carries a shared grant the caller's row alone is not a
     // mintable set.
-    let userPermissions = await fetchEffectiveRealmPermissions(
-      dbAdapter,
-      new URL(attrs.realm),
-      token.user,
-      matrixURL,
-    );
+    //
+    // Resolving a `users` grant reaches the homeserver, so this can fail on
+    // something other than the database — answer through the JSON:API error
+    // envelope like every other failure here rather than letting it fall
+    // through to Koa's bare 500.
+    let userPermissions: RealmAction[];
+    try {
+      userPermissions = await fetchEffectiveRealmPermissions(
+        dbAdapter,
+        new URL(attrs.realm),
+        token.user,
+        matrixURL,
+      );
+    } catch (err) {
+      console.error(
+        `Failed to resolve permissions for ${token.user} in ${attrs.realm}:`,
+        err,
+      );
+      Sentry.captureException(err);
+      await sendResponseForSystemError(
+        ctxt,
+        'Error resolving realm permissions',
+      );
+      return;
+    }
     if (!userPermissions.length) {
       await sendResponseForForbiddenRequest(
         ctxt,

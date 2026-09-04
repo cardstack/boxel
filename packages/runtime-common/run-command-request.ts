@@ -89,6 +89,12 @@ export async function prepareRunCommand({
   let allUserPermissions = await fetchUserPermissions(dbAdapter, {
     userId: runAsUserId,
   });
+  // Only the realm the command names carries the effective set. The sibling
+  // entries come from the per-user enumeration, which reads each realm's own
+  // row and its `*` row but never unions the two, and does not consult `users`
+  // rows at all — so a realm reachable only through a shared grant is missing
+  // from the bundle, and one where a shared grant widens the user's row is
+  // present with a claim the realm will reject.
   allUserPermissions[normalizedRealmURL] = userPermissions;
   let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
   let accessibleRealms = Object.keys(allUserPermissions);

@@ -184,7 +184,10 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       }
 
       // Include JWTs for all realms the user has access to so cross-realm
-      // card references render correctly during the screenshot.
+      // card references render correctly during the screenshot. Only the realm
+      // being captured carries the effective set: the per-user enumeration
+      // behind the sibling entries reads each realm's own row and its `*` row
+      // without unioning them, and never consults `users` rows.
       let allUserPermissions = await fetchUserPermissions(dbAdapter, {
         userId: runAsUserId,
       });
