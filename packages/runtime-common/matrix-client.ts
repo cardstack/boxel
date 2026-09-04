@@ -455,11 +455,13 @@ const MATRIX_PROFILE_TIMEOUT_MS = 10_000;
 // only a URL — a worker child process has no matrix client, but still has to
 // answer "is this a registered matrix user?" to resolve a realm's `users` grant.
 //
-// `undefined` means the homeserver answered and the account does not exist. A
-// homeserver that fails to answer throws instead, because the two are not
-// interchangeable to a caller deriving permissions: silently reading an outage
-// as "not registered" drops a realm's `users` grant, and a token minted from
-// that reduced set is one the realm will reject for the whole of its life.
+// `undefined` means the account is absent or the homeserver declines to say —
+// a 4xx, which covers a missing account, a profile endpoint kept behind auth,
+// and a rate-limited lookup alike. Only a homeserver that cannot answer at all
+// throws, because that case is not interchangeable with the others to a caller
+// deriving permissions: silently reading an outage as "not registered" drops a
+// realm's `users` grant, and a token minted from that reduced set is one the
+// realm will reject for the whole of its life.
 export async function fetchMatrixProfile(
   matrixURL: URL,
   userId: string,
