@@ -141,3 +141,84 @@ export function resolvePrerenderServerProxyTimeoutMs(): number {
     prerenderRequestTimeoutMs,
   );
 }
+
+// Whether any prerender server received this request before the manager
+// answered it. The manager stamps this on every response it produces itself.
+// `none` is the manager's guarantee that no prerender server saw the request,
+// which is what makes the failure safe to retry even for a request that must
+// not run twice; `delivered` — and an absent header, which reads the same way —
+// means a server may have received it and acted on it.
+export const PRERENDER_DISPATCH_HEADER = 'x-boxel-prerender-dispatch';
+export const PRERENDER_DISPATCH_NONE = 'none';
+export const PRERENDER_DISPATCH_DELIVERED = 'delivered';
+
+// How far a failed prerender request may be retried.
+//
+// A render is a pure read of a card: repeating it costs time and nothing else,
+// so any failure is worth another attempt. Running a command is not — it
+// creates cards, matrix rooms and outbound calls, and the queue deliberately
+// declines to collapse two identical invocations (see `dedupeKey` in
+// runtime-common's `tasks/run-command.ts`), so a retry of an invocation whose
+// outcome is unknown executes it a second time while the caller still sees a
+// single call. Such a request is retried only on a failure that proves it
+// never reached a prerender server.
+export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
+
+// Every endpoint that either retrying layer can address. Both take this as
+// their path parameter, so the map below is exhaustive over it and a new
+// endpoint does not compile until it has declared a policy — the alternative,
+// defaulting an unlisted endpoint, makes forgetting to list one mean "retry
+// everything", which is the single outcome this table exists to prevent.
+export type PrerenderEndpoint =
+  | 'prerender-module'
+  | 'prerender-visit'
+  | 'prerender-screenshot'
+  | 'run-command';
+
+// The policy for each endpoint, read by both layers that retry — the client's
+// per-request loop and the manager's failover across servers. They enforce
+// different halves of the same guarantee, so an endpoint given one policy on
+// one side and another on the other would keep retrying through the remaining
+// half in silence; naming it once is what makes that impossible.
+const RETRY_POLICY_BY_PATH: Record<PrerenderEndpoint, PrerenderRetryPolicy> = {
+  'prerender-module': 'any-failure',
+  'prerender-visit': 'any-failure',
+  'prerender-screenshot': 'any-failure',
+  'run-command': 'only-when-undelivered',
+};
+
+export function retryPolicyForPath(
+  path: PrerenderEndpoint,
+): PrerenderRetryPolicy {
+  return RETRY_POLICY_BY_PATH[path];
+}
+
+// Network error codes that mean no connection to the peer was ever
+// established, so the request cannot have been received, let alone acted on.
+// A reset or a timeout proves nothing: either can land after the peer read the
+// request and started work on it.
+//
+// Membership turns on the phase an error can be raised in, not on how it
+// reads. Routing failures (`EHOSTUNREACH`, `ENETUNREACH`) are deliberately
+// absent even though they usually do come from a failed `connect`: undici
+// forwards a socket error raw from an established connection too, so a route
+// that dies while the request is in flight surfaces under the same code as one
+// that died before the SYN. `UND_ERR_CONNECT_TIMEOUT` is included because it
+// carries the distinction itself — undici raises it only from the timer it
+// clears once the socket connects, so it cannot describe a request that was
+// already written.
+const UNDELIVERED_ERROR_CODES = new Set([
+  'ECONNREFUSED', // the peer refused the connection
+  'ENOTFOUND', // DNS resolved to nothing
+  'EAI_AGAIN', // DNS resolution failed
+  'UND_ERR_CONNECT_TIMEOUT', // the connection was never established
+]);
+
+// Node's fetch wraps network errors in a TypeError carrying the underlying
+// error in `cause`, so the code sits at either level.
+export function isUndeliveredRequestError(err: unknown): boolean {
+  let code =
+    (err as { code?: unknown; cause?: { code?: unknown } })?.code ??
+    (err as { cause?: { code?: unknown } })?.cause?.code;
+  return typeof code === 'string' && UNDELIVERED_ERROR_CODES.has(code);
+}
