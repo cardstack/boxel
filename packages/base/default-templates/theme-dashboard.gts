@@ -1618,6 +1618,8 @@ export class ThemeDashboard extends GlimmerComponent<{
           /* one measure for the header, content, and footer columns; the
              theme card opens in the wide stack format, so this is sized for it */
           --dsr-content-max-width: 72rem;
+          /* long generated CSS scrolls inside its block instead of stretching the page */
+          --css-field-max-height: 40vh;
           display: flex;
           flex-direction: column;
           height: 100%;
