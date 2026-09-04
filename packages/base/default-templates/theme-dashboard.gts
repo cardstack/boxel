@@ -1465,11 +1465,14 @@ const CHART_BARS = [62, 84, 45, 91, 70].map((height, index) => ({
   style: sanitizeHtmlSafe(`height: ${height}%`),
 }));
 
-// Ids in this markup end up in cached prerendered HTML, and several copies can
-// share one document, so a process-local counter like guidFor() is not unique
-// enough. A random token per instance is.
-function instanceId(): string {
-  return `specimens-${Math.random().toString(36).slice(2, 10)}`;
+// Prerendered HTML is cached, must be deterministic for unchanged content, and
+// can be inserted into a document more than once, so it carries no ids: the
+// panels are named by aria-label alone and the fragment is inert anyway. Live
+// renders link tabs to panels with a random per-instance token, unique even
+// across the copies of one card open in different stacks. The host's render
+// page marks its output container with `data-prerender`.
+function isPrerendering(el: Element): boolean {
+  return Boolean(el.closest('[data-prerender]'));
 }
 
 // Realistic scenes built from boxel-ui, so a theme is judged on a page rather
@@ -1479,8 +1482,21 @@ export class ThemeSpecimens extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   @tracked private activeTab: SpecimenTabId = 'surfaces';
-  private uid = instanceId();
-  private panelId = (id: string) => `${this.uid}-${id}`;
+  private uid = `specimens-${Math.random().toString(36).slice(2, 10)}`;
+
+  // ids are stamped after insert rather than rendered, so the template output
+  // stays id-free where it will be serialized
+  private linkPanel = modifier((el: HTMLElement, [key]: [SpecimenTabId]) => {
+    if (!isPrerendering(el)) {
+      el.id = `${this.uid}-${key}`;
+    }
+  });
+
+  private linkTab = modifier((el: HTMLElement, [key]: [SpecimenTabId]) => {
+    if (!isPrerendering(el)) {
+      el.setAttribute('aria-controls', `${this.uid}-${key}`);
+    }
+  });
   @tracked private switchOn = true;
   @tracked private selected: string | null = SELECT_OPTIONS[1];
   private selectOptions = SELECT_OPTIONS;
@@ -1516,7 +1532,7 @@ export class ThemeSpecimens extends GlimmerComponent<{
             }}
             role='tab'
             aria-selected={{if (this.isActive tab.id) 'true' 'false'}}
-            aria-controls={{this.panelId tab.id}}
+            {{this.linkTab tab.id}}
             {{on 'click' (fn this.selectTab tab.id)}}
             data-test-specimen-tab={{tab.id}}
           >
@@ -1527,11 +1543,11 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Surfaces & Ink }}
       <section
-        id={{this.panelId 'surfaces'}}
         class='specimen-panel'
         role='tabpanel'
         aria-label='Surfaces & Ink'
         hidden={{this.isHidden 'surfaces'}}
+        {{this.linkPanel 'surfaces'}}
         data-test-specimen-panel='surfaces'
       >
         <div class='sp-canvas'>
@@ -1637,11 +1653,11 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Controls }}
       <section
-        id={{this.panelId 'controls'}}
         class='specimen-panel'
         role='tabpanel'
         aria-label='Controls'
         hidden={{this.isHidden 'controls'}}
+        {{this.linkPanel 'controls'}}
         data-test-specimen-panel='controls'
       >
         <div class='sp-controls-row'>
@@ -1719,11 +1735,11 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Dashboard }}
       <section
-        id={{this.panelId 'dashboard'}}
         class='specimen-panel'
         role='tabpanel'
         aria-label='Dashboard'
         hidden={{this.isHidden 'dashboard'}}
+        {{this.linkPanel 'dashboard'}}
         data-test-specimen-panel='dashboard'
       >
         <div class='sp-stats'>
@@ -1757,11 +1773,11 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
       {{! Reading }}
       <section
-        id={{this.panelId 'reading'}}
         class='specimen-panel'
         role='tabpanel'
         aria-label='Reading'
         hidden={{this.isHidden 'reading'}}
+        {{this.linkPanel 'reading'}}
         data-test-specimen-panel='reading'
       >
         <article class='sp-article'>
