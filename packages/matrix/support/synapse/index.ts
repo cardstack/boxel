@@ -27,6 +27,11 @@ export const SYNAPSE_PORT = 8008;
 // which `cfgDirFromTemplate` creates with this prefix.
 const TEST_SYNAPSE_CONTAINER_PREFIX = 'sf-test-synapse-';
 
+// Records which process started a container, so a later run can tell a
+// container whose owner is still running from one left behind by an owner that
+// is gone.
+const SYNAPSE_OWNER_LABEL = 'boxel.synapse-owner-pid';
+
 // Synapse's listeners bind to "::" (IPv6 dual-stack) by default. Hosts whose
 // kernel lacks IPv6 (some minimal cloud VMs / containers) can't bind it and
 // synapse dies at startup with "Address family not supported by protocol". We
@@ -55,7 +60,6 @@ interface SynapseConfig {
   // Synapse must be configured with its public_baseurl so we have to allocate a port & url at this stage
   baseUrl: string;
   port: number;
-  host: string;
 }
 
 export interface SynapseInstance extends SynapseConfig {
@@ -145,7 +149,6 @@ export async function cfgDirFromTemplate(
   dataDir?: string,
   options?: {
     publicBaseUrl?: string;
-    host?: string;
     port?: number;
   },
 ): Promise<SynapseConfig> {
@@ -157,7 +160,7 @@ export async function cfgDirFromTemplate(
   }
   const configDir = dataDir
     ? dataDir
-    : await fse.mkdtemp(path.join(os.tmpdir(), 'sf-test-synapse-'));
+    : await fse.mkdtemp(path.join(os.tmpdir(), TEST_SYNAPSE_CONTAINER_PREFIX));
 
   // copy the contents of the template dir, omitting homeserver.yaml as we'll template that
   console.log(`Copy ${templateDir} -> ${configDir}`);
@@ -169,9 +172,8 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  const host = options?.host ?? '127.0.0.1';
   const port = options?.port ?? SYNAPSE_PORT;
-  const baseUrl = options?.publicBaseUrl ?? `http://${host}:${port}`;
+  const baseUrl = options?.publicBaseUrl ?? `http://127.0.0.1:${port}`;
 
   // now copy homeserver.yaml, applying substitutions
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
@@ -206,7 +208,6 @@ export async function cfgDirFromTemplate(
 
   return {
     port,
-    host,
     baseUrl,
     configDir,
     registrationSecret,
@@ -235,10 +236,13 @@ interface StartOptions {
 export function synapseDockerParams(args: {
   configDir: string;
   hostPort: number;
+  ownerPid: number;
   runAsRoot?: boolean;
 }): string[] {
   return [
     '--rm',
+    '--label',
+    `${SYNAPSE_OWNER_LABEL}=${args.ownerPid}`,
     '-v',
     `${args.configDir}:/data`,
     '-v',
@@ -265,7 +269,10 @@ function dockerCapture(params: string[]): Promise<string | undefined> {
     childProcess.execFile(
       'docker',
       params,
-      { encoding: 'utf8' },
+      // Bounded so an unresponsive daemon cannot hang startup, and — since
+      // this also runs while reporting a failure — cannot turn a fast, clear
+      // error into an indefinite stall.
+      { encoding: 'utf8', timeout: 10_000 },
       (err, stdout) => resolve(err ? undefined : stdout.trim()),
     );
   });
@@ -321,28 +328,66 @@ export async function describeHostPortConflict(
 // so a run killed before its teardown leaves one behind under a name no later
 // run can predict — which rules out clearing it by name.
 //
-// What separates debris from a live tenant is the port. A container still
-// publishing the fixed Synapse port is holding the one this launch is about to
-// claim; a harness that chose its port dynamically is deliberately sharing the
-// host (it starts with `stopExisting: false` precisely so it can coexist with a
-// dev Synapse) and is left alone. So the sweep is the intersection: this
-// harness's own containers, on the port being claimed.
-export function abandonedSynapseQuery(hostPort: number): string[] {
+// Nothing about the container itself distinguishes debris from a live tenant
+// either: an abandoned Synapse is running and healthy, on the same port and
+// under the same name shape as one whose suite is mid-run. The owning process
+// is the only signal that separates them, so each container carries its
+// owner's pid and only those whose owner has exited are swept. The dev Synapse
+// is excluded by name — it outlives the process that starts it, and callers
+// meaning to replace it stop it explicitly.
+export function abandonedSynapseQuery(): string[] {
   return [
     'ps',
-    '-q',
     '--filter',
     `name=${TEST_SYNAPSE_CONTAINER_PREFIX}`,
     '--filter',
-    `publish=${hostPort}`,
+    `label=${SYNAPSE_OWNER_LABEL}`,
+    '--format',
+    `{{.ID}} {{.Label "${SYNAPSE_OWNER_LABEL}"}}`,
   ];
 }
 
-async function removeAbandonedTestSynapseContainers(
-  hostPort: number,
-): Promise<void> {
-  let ids = await dockerCapture(abandonedSynapseQuery(hostPort));
-  let containerIds = (ids ?? '').split(/\s+/).filter(Boolean);
+// Select the containers in that listing whose owning process is gone.
+//
+// Every unreadable answer fails toward leaving the container alone: an owner
+// that does not parse, and a pid that is alive only because it was reused, both
+// read as live. Declining to sweep costs a clear port-conflict message on the
+// next start, while sweeping a container whose run is still going destroys it.
+export function abandonedContainerIds(
+  listing: string | undefined,
+  isOwnerAlive: (pid: number) => boolean,
+): string[] {
+  return (listing ?? '')
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([id, ownerPid]) => {
+      if (!id) {
+        return false;
+      }
+      let pid = Number(ownerPid);
+      if (!Number.isInteger(pid) || pid <= 0) {
+        return false;
+      }
+      return !isOwnerAlive(pid);
+    })
+    .map(([id]) => id);
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e: any) {
+    // EPERM means the process exists but belongs to another user.
+    return e?.code === 'EPERM';
+  }
+}
+
+async function removeAbandonedTestSynapseContainers(): Promise<void> {
+  let containerIds = abandonedContainerIds(
+    await dockerCapture(abandonedSynapseQuery()),
+    processIsAlive,
+  );
   if (containerIds.length === 0) {
     return;
   }
@@ -374,11 +419,7 @@ export async function synapseStart(
       stopPromises.push(synapseStop(id));
     }
     await Promise.allSettled(stopPromises);
-    // Only a fixed-port launch has a port to be blocked out of: the dynamic
-    // path picks one nothing holds.
-    if (!useDynamicHostPort) {
-      await removeAbandonedTestSynapseContainers(SYNAPSE_PORT);
-    }
+    await removeAbandonedTestSynapseContainers();
   }
   await dockerCreateNetwork({ networkName: 'boxel' });
 
@@ -421,6 +462,7 @@ export async function synapseStart(
     let dockerParams = synapseDockerParams({
       configDir: synCfg.configDir,
       hostPort,
+      ownerPid: process.pid,
       runAsRoot: process.getuid?.() === 0,
     });
 
@@ -495,7 +537,6 @@ export async function synapseStart(
   const synapse: SynapseInstance = {
     synapseId,
     ...synCfg,
-    host: '127.0.0.1',
     port: hostPort,
     baseUrl: `http://localhost:${hostPort}`,
   };

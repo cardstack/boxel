@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  abandonedContainerIds,
   abandonedSynapseQuery,
   formatHostPortConflict,
   synapseDockerParams,
@@ -9,6 +10,7 @@ test.describe('Synapse container networking', () => {
   test('joins the shared network without requesting an address on it', async () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
       hostPort: 8008,
     });
 
@@ -24,6 +26,7 @@ test.describe('Synapse container networking', () => {
   test('publishes the requested host port', async () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
       hostPort: 34567,
     });
 
@@ -34,6 +37,7 @@ test.describe('Synapse container networking', () => {
   test('mounts the config dir and keeps the default container user', async () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
       hostPort: 8008,
     });
 
@@ -44,6 +48,7 @@ test.describe('Synapse container networking', () => {
   test('stays root in the container when the host runs as root', async () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
       hostPort: 8008,
       runAsRoot: true,
     });
@@ -52,17 +57,56 @@ test.describe('Synapse container networking', () => {
     expect(params).toContain('GID=0');
   });
 
-  test('sweeps abandoned containers only on the port being claimed', () => {
-    const query = abandonedSynapseQuery(8008);
+  test('labels each container with the process that started it', () => {
+    const params = synapseDockerParams({
+      configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
+      hostPort: 8008,
+    });
 
-    // A container carrying this harness's name prefix is debris only while it
-    // holds the port this launch is about to claim. A harness that published a
-    // dynamically chosen port is a live tenant sharing the host, so the name
-    // prefix alone must never be enough to select a container for removal.
+    // Debris and a live tenant are indistinguishable from the outside — both
+    // are running, healthy, and named alike — so the owning process is what a
+    // later run reads to tell them apart.
+    expect(params).toContain('boxel.synapse-owner-pid=4242');
+  });
+
+  test('the sweep asks only about this harness own containers', () => {
+    const query = abandonedSynapseQuery();
+
     expect(query).toContain('name=sf-test-synapse-');
-    expect(query).toContain('publish=8008');
-    // `-a` would also list exited containers, which hold no port at all.
-    expect(query).not.toContain('-aq');
+    expect(query).toContain('label=boxel.synapse-owner-pid');
+  });
+
+  test('sweeps containers whose owner has exited', () => {
+    const ids = abandonedContainerIds(
+      'aaa111 4242\nbbb222 9999',
+      (pid) => pid === 9999,
+    );
+
+    expect(ids).toEqual(['aaa111']);
+  });
+
+  test('spares a container whose owning run is still going', () => {
+    // The case that matters most: a suite mid-run looks exactly like debris,
+    // and removing it kills someone's test run rather than costing them a
+    // legible error.
+    const ids = abandonedContainerIds('aaa111 4242', () => true);
+
+    expect(ids).toEqual([]);
+  });
+
+  test('spares a container whose owner cannot be read', () => {
+    const ids = abandonedContainerIds(
+      'aaa111 not-a-pid\nbbb222 -1\nccc333',
+      () => false,
+    );
+
+    expect(ids).toEqual([]);
+  });
+
+  test('reads no containers out of an unavailable listing', () => {
+    expect(abandonedContainerIds(undefined, () => false)).toEqual([]);
+    expect(abandonedContainerIds('', () => false)).toEqual([]);
   });
 
   test('a bind conflict names the port and the containers holding it', () => {
