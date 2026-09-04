@@ -14,6 +14,7 @@ import {
   modulesConsumedInMeta,
   RealmPaths,
   renderScopeFor,
+  unixTime,
   type Batch,
   type DeclaredScreenshotError,
   type DeclaredScreenshotVisitArgs,
@@ -685,9 +686,22 @@ async function visitForPrerenderedHtml({
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),
-    ...(fileRef.lastModified != null
-      ? { fileLastModified: fileRef.lastModified }
-      : {}),
+    // Floored the way the index visit floors it (visit-file.ts), because the
+    // row this visit runs after already holds that floor: leaving the option
+    // off when the adapter reports no mtime would bake HTML with no modified
+    // time against a row that has one, which is the disagreement between the
+    // two channels this whole path exists to remove. The extract's
+    // `last-modified` header fallback cannot cover it here — forwarding the
+    // content hash and size above is what lets the extract skip its own fetch,
+    // so no response header is ever read.
+    //
+    // The two floors are separate `Date.now()` reads and so not bit-identical,
+    // but both shells render this at day granularity, and an indexing pass
+    // does not straddle midnight often enough for the difference to reach a
+    // reader. Sourcing it from the row would need a per-path accessor that
+    // does not exist — `realm_file_meta` carries createdAt, contentHash and
+    // contentSize, not lastModified.
+    fileLastModified: fileRef.lastModified ?? unixTime(Date.now()),
     fileCreatedAt,
   };
 
