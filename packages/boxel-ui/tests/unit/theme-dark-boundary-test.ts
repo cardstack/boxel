@@ -71,8 +71,19 @@ module('Unit | theme dark boundary', function () {
       return;
     }
 
+    // the light boundary reset blanks the chrome knobs so themed cards derive
+    // them from their own tokens; the dark boundary must leave those alone too
+    const resetRule = findThemeRule(
+      (rule) =>
+        matchesSelector(rule, BOUNDARY_SELECTOR) &&
+        !(rule.parentRule instanceof CSSContainerRule) &&
+        rule.style.getPropertyValue(customProperties(rule)[0] ?? '') ===
+          'initial',
+    );
+    assert.ok(resetRule, 'found the light boundary reset rule');
+    const resetKnobs = new Set(resetRule ? customProperties(resetRule) : []);
     const expected = customProperties(darkRule).filter(
-      (name) => name !== SCHEME_SIGNAL,
+      (name) => name !== SCHEME_SIGNAL && !resetKnobs.has(name),
     );
     const actual = customProperties(boundaryRule);
     assert.deepEqual(
@@ -84,6 +95,12 @@ module('Unit | theme dark boundary', function () {
       actual.includes(SCHEME_SIGNAL),
       `${SCHEME_SIGNAL} keeps inheriting through the boundary`,
     );
+    for (const knob of resetKnobs) {
+      assert.false(
+        actual.includes(knob),
+        `${knob} is left to the boundary reset in dark mode too`,
+      );
+    }
     for (const name of expected) {
       assert.strictEqual(
         boundaryRule.style.getPropertyValue(name),

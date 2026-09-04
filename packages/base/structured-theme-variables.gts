@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import {
   CopyButton,
   FieldContainer,
+  Pill,
   Swatch,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
@@ -293,55 +294,72 @@ export class ThemeTypographyField extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <section class='theme-typography'>
-        <span class='theme-typography-eyebrow'>
-          {{#if @model.eyebrow.sampleText}}
-            {{@model.eyebrow.sampleText}}
-          {{else}}
-            Eyebrow
-          {{/if}}
-        </span>
-        <h1>
-          {{#if @model.heading.sampleText}}
-            {{@model.heading.sampleText}}
-          {{else}}
-            Sample Heading (H1)
-          {{/if}}
-        </h1>
-        <h2>
-          {{#if @model.sectionHeading.sampleText}}
-            {{@model.sectionHeading.sampleText}}
-          {{else}}
-            Sample Section Heading (H2)
-          {{/if}}
-        </h2>
-        <h3>
-          {{#if @model.subheading.sampleText}}
-            {{@model.subheading.sampleText}}
-          {{else}}
-            Sample Subheading (H3)
-          {{/if}}
-        </h3>
-        <p>
-          {{#if @model.body.sampleText}}
-            {{@model.body.sampleText}}
-          {{else}}
-            Sample body text.
-          {{/if}}
-        </p>
-        <small>
-          {{#if @model.caption.sampleText}}
-            {{@model.caption.sampleText}}
-          {{else}}
-            Small text
-          {{/if}}
-        </small>
-        <span class='theme-typography-label'>
-          {{#if @model.label.sampleText}}
-            {{@model.label.sampleText}}
-          {{else}}
-            UI label
-          {{/if}}
-        </span>
+        <MeasuredType @role='Eyebrow' @token='--boxel-eyebrow-*'>
+          <span class='theme-typography-eyebrow'>
+            {{#if @model.eyebrow.sampleText}}
+              {{@model.eyebrow.sampleText}}
+            {{else}}
+              Eyebrow
+            {{/if}}
+          </span>
+        </MeasuredType>
+        <MeasuredType @role='Heading' @token='--boxel-heading-*'>
+          <h1>
+            {{#if @model.heading.sampleText}}
+              {{@model.heading.sampleText}}
+            {{else}}
+              Sample Heading (H1)
+            {{/if}}
+          </h1>
+        </MeasuredType>
+        <MeasuredType
+          @role='Section heading'
+          @token='--boxel-section-heading-*'
+        >
+          <h2>
+            {{#if @model.sectionHeading.sampleText}}
+              {{@model.sectionHeading.sampleText}}
+            {{else}}
+              Sample Section Heading (H2)
+            {{/if}}
+          </h2>
+        </MeasuredType>
+        <MeasuredType @role='Subheading' @token='--boxel-subheading-*'>
+          <h3>
+            {{#if @model.subheading.sampleText}}
+              {{@model.subheading.sampleText}}
+            {{else}}
+              Sample Subheading (H3)
+            {{/if}}
+          </h3>
+        </MeasuredType>
+        <MeasuredType @role='Body' @token='--boxel-body-*'>
+          <p>
+            {{#if @model.body.sampleText}}
+              {{@model.body.sampleText}}
+            {{else}}
+              Sample body text.
+            {{/if}}
+          </p>
+        </MeasuredType>
+        <MeasuredType @role='Caption' @token='--boxel-caption-*'>
+          <small>
+            {{#if @model.caption.sampleText}}
+              {{@model.caption.sampleText}}
+            {{else}}
+              Small text
+            {{/if}}
+          </small>
+        </MeasuredType>
+        <MeasuredType @role='UI label' @token='--boxel-ui-label-*'>
+          <span class='theme-typography-label'>
+            {{#if @model.label.sampleText}}
+              {{@model.label.sampleText}}
+            {{else}}
+              UI label
+            {{/if}}
+          </span>
+        </MeasuredType>
       </section>
       <style scoped>
         .theme-typography {
@@ -378,6 +396,135 @@ export class ThemeTypographyField extends FieldDef {
       </style>
     </template>
   };
+}
+
+// The variable name behind a sample, so a reader can find what to edit: a
+// muted Pill rendered as <code>, in the mono face
+export class TokenPill extends GlimmerComponent<{
+  Args: { name: string };
+  Element: HTMLElement;
+}> {
+  <template>
+    <Pill @tag='code' @variant='muted' class='token-pill' ...attributes>
+      {{@name}}
+    </Pill>
+    <style scoped>
+      .token-pill {
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-weight: 400;
+        letter-spacing: normal;
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
+// One rung of the type ladder: the specimen, its token, and the size and
+// weight the browser actually resolved for it
+class MeasuredType extends GlimmerComponent<{
+  Args: { role: string; token: string };
+  Blocks: { default: [] };
+  Element: HTMLElement;
+}> {
+  @tracked private measured?: string;
+
+  private measure = modifier((el: HTMLElement) => {
+    let read = () =>
+      schedule('afterRender', () => {
+        if (!el.isConnected) {
+          return;
+        }
+        // the yielded specimen carries the role's styles, not the wrapper
+        let style = getComputedStyle(el.firstElementChild ?? el);
+        let size = parseFloat(style.fontSize);
+        let line = parseFloat(style.lineHeight);
+        let ratio =
+          size && line
+            ? ` / ${(line / size).toFixed(2).replace(/0$/, '')}`
+            : '';
+        let next = `${Math.round(size * 100) / 100}px${ratio} · ${style.fontWeight}`;
+        // the observer below also sees this component's own output, so only
+        // dirty the tracked value when the measurement actually moved
+        if (next !== this.measured) {
+          this.measured = next;
+        }
+      });
+    read();
+    // theme edits and the light/dark toggle land inside the dashboard: its
+    // <style> tag is rewritten and its wrapper's data-theme flips. Neither
+    // changes this component's args, so watch that subtree and re-measure.
+    let scope =
+      el.closest<HTMLElement>('[data-theme-dashboard]')?.parentElement ??
+      document.head;
+    let observer = new MutationObserver(read);
+    observer.observe(scope, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  });
+
+  <template>
+    <div class='measured-type' ...attributes>
+      <div class='measured-type-specimen' {{this.measure}}>
+        {{yield}}
+      </div>
+      <dl class='measured-type-meta'>
+        <dt class='measured-type-role'>{{@role}}</dt>
+        <dd class='measured-type-value' data-test-measured-type={{@role}}>
+          {{this.measured}}
+        </dd>
+        <dd><TokenPill @name={{@token}} /></dd>
+      </dl>
+    </div>
+    <style scoped>
+      .measured-type {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--boxel-sp);
+        align-items: baseline;
+        padding-bottom: var(--boxel-sp-xs);
+        border-bottom: 1px solid var(--border);
+      }
+      .measured-type-specimen {
+        min-width: 0;
+      }
+      .measured-type-meta {
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+        text-align: right;
+      }
+      .measured-type-meta dd {
+        margin: 0;
+      }
+      .measured-type-role {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .measured-type-value {
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-variant-numeric: tabular-nums;
+      }
+      @container (width < 480px) {
+        .measured-type {
+          grid-template-columns: 1fr;
+        }
+        .measured-type-meta {
+          justify-content: flex-start;
+          text-align: left;
+        }
+      }
+    </style>
+  </template>
 }
 
 export class FontPreviews extends GlimmerComponent<{

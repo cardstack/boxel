@@ -256,7 +256,10 @@ class Isolated extends Component<typeof StyleReference> {
               {{#if @model.cssVariables}}
                 <section id='card-container-css'>
                   <h2>Computed Styles</h2>
-                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  <CardContainerCss
+                    @cssVariables={{@model.cssVariables}}
+                    @isDarkMode={{this.isDarkMode}}
+                  />
                 </section>
               {{/if}}
 
