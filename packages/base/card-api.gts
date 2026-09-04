@@ -532,37 +532,46 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // the server's own result set rather than the reconciled one, so a locally
   // edited or created card can't be mistaken for a short page.
   readonly isPartial: boolean;
+  // Hand a running resource the result set a document fetched since it started
+  // carries. Optional: a store whose resources hold no state worth superseding
+  // implements no supersession.
+  reseed?(seed: StoreSearchSeed<T>): void;
 }
+
+// A result set a producer already resolved, handed to a search resource in
+// place of running the query. Generic in the row type so a `FileDef` search
+// seeds with file-meta rows rather than being narrowed to `CardDef`.
+export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
+  cards: T[];
+  searchURL?: string;
+  realms?: string[];
+  queryErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
+  // IDs the parent doc named in `relationships.{field}.data`. Used
+  // by the SearchResource when `cards` is empty and the parent
+  // skipped query-backed expansion — the resource loads each ID by
+  // URL instead of running a live re-query.
+  cardURLs?: string[];
+  // The result meta the seed was resolved under, chiefly `page.total` —
+  // the query's match count, which exceeds `cards.length` when the page
+  // ceiling clamped the expansion. Absent it, the resource takes the
+  // record count for the total and a truncated seed reads as complete.
+  meta?: QueryResultsMeta;
+  // The seed's match count is not knowable and must not be inferred from its
+  // rows — the producer resolved the field but deliberately reported no
+  // total, as a query-backed field does when one of its realms failed.
+  totalUnknown?: boolean;
+};
 
 export type GetSearchResourceFuncOpts = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: {
-    cards: CardDef[];
-    searchURL?: string;
-    realms?: string[];
-    queryErrors?: Array<{
-      realm: string;
-      type: string;
-      message: string;
-      status?: number;
-    }>;
-    // IDs the parent doc named in `relationships.{field}.data`. Used
-    // by the SearchResource when `cards` is empty and the parent
-    // skipped query-backed expansion — the resource loads each ID by
-    // URL instead of running a live re-query.
-    cardURLs?: string[];
-    // The result meta the seed was resolved under, chiefly `page.total` —
-    // the query's match count, which exceeds `cards.length` when the page
-    // ceiling clamped the expansion. Absent it, the resource takes the
-    // record count for the total and a truncated seed reads as complete.
-    meta?: QueryResultsMeta;
-    // The seed's match count is not knowable and must not be inferred from its
-    // rows — the producer resolved the field but deliberately reported no
-    // total, as a query-backed field does when one of its realms failed.
-    totalUnknown?: boolean;
-  };
+  seed?: StoreSearchSeed;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,

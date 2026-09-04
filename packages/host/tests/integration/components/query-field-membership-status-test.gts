@@ -88,6 +88,9 @@ module('Integration | query-field relationship status', function (hooks) {
         'test-cards.gts': { Person, Host },
         'Person/one.json': new Person({ name: 'Anchor' }),
         'Person/two.json': new Person({ name: 'Anchor' }),
+        // Deliberately outside the query. A live search can never return this
+        // card, so its presence in the field is proof a document put it there.
+        'Person/three.json': new Person({ name: 'Different' }),
         'Host/anchor.json': new Host({ cardTitle: 'Anchor' }),
       },
     });
@@ -103,6 +106,39 @@ module('Integration | query-field relationship status', function (hooks) {
     let host = (await getService('store').get(HOST_URL)) as CardDefType;
     await settled();
     return host;
+  }
+
+  // The document the realm serves for the host card, which carries every
+  // query-backed field resolved as of that read.
+  async function fetchHostDoc(): Promise<any> {
+    let response = await getService('network').authedFetch(HOST_URL, {
+      headers: { Accept: 'application/vnd.card+json' },
+    });
+    return await response.json();
+  }
+
+  // Add `Person/three` to the host document's `matches`, spelled the way the
+  // realm spells the members it already carries: the resolved instance in
+  // `included`, an id in the umbrella relationship's `data`, a per-member
+  // `matches.N` entry (which is what the deserializer reads), and a match total
+  // covering all three, so the document describes three matches rather than
+  // contradicting itself.
+  function spliceThirdMember(hostDoc: any): void {
+    let relationships = hostDoc.data.relationships;
+    let template = hostDoc.included.find((resource: { id: string }) =>
+      resource.id.endsWith('Person/one'),
+    );
+    let spliced = JSON.parse(JSON.stringify(template));
+    spliced.id = template.id.replace('Person/one', 'Person/three');
+    hostDoc.included.push(spliced);
+
+    let umbrella = relationships.matches;
+    umbrella.data.push({ type: 'card', id: spliced.id });
+    umbrella.meta = { ...umbrella.meta, total: umbrella.data.length };
+    relationships[`matches.${umbrella.data.length - 1}`] = {
+      links: { self: spliced.id },
+      data: { type: 'card', id: spliced.id },
+    };
   }
 
   test('a singular query-backed field reports the one slot it surfaces, not the whole result set', async function (this: RenderingTestContext, assert) {
@@ -260,6 +296,71 @@ module('Integration | query-field relationship status', function (hooks) {
     assert.strictEqual(status.membership?.length, 1);
     assert.strictEqual(status.totalMatchCount, undefined);
     assert.false(status.isPartial);
+  });
+
+  test('a document fetched after the field resolved hands it the fresher result set', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field resolves to the two cards the query matches',
+    );
+
+    // Start from the document the realm actually serves — the server resolves
+    // query fields at read time, so this carries `matches` already resolved —
+    // and splice in a third member. The spliced card claims a name the query
+    // matches, while the copy the realm indexed does not, so a search can never
+    // return it: the field can only hold it if this document put it there. (It
+    // has to claim a matching name because the resource reconciles its result
+    // set against the filter and drops rows that fail it.)
+    let hostDoc = await fetchHostDoc();
+    spliceThirdMember(hostDoc);
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.membership?.length,
+      3,
+      'the newer document supersedes the result set the resource was holding',
+    );
+    assert.true(
+      matches.membership?.some(
+        (member) =>
+          member.kind === 'present' &&
+          member.reference.endsWith('Person/three'),
+      ),
+      'including the card no live search for this query could return',
+    );
+  });
+
+  test('a document that did not resolve the field cannot displace a result set', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    // `links.search` is written only where the indexer resolved the field, so
+    // its absence marks a relationship this document is not authoritative
+    // about — a raw source file's own `data`, say. Stripping it while narrowing
+    // the field to a single member makes displacement unmistakable: a field
+    // that took this document's word for its membership would drop to one.
+    let hostDoc = await fetchHostDoc();
+    let relationships = hostDoc.data.relationships;
+    delete relationships.matches.links.search;
+    relationships.matches.data = [relationships.matches.data[0]];
+    relationships.matches.meta = { total: 1 };
+    delete relationships['matches.1'];
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field keeps the result set the indexer resolved',
+    );
   });
 
   test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {
