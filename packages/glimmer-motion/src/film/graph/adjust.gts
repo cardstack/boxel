@@ -18,7 +18,7 @@
  */
 import type { Beat } from '../types.ts';
 import type { Patch } from './compile.ts';
-import { PatchComponent } from './nodes.gts';
+import { ClipLookNode, PatchComponent } from './nodes.gts';
 
 /** a value held on an actor for the window it is attached to */
 export abstract class Adjustment<A extends object> extends PatchComponent<A> {}
@@ -153,3 +153,11 @@ export class Mix extends Adjustment<{
 export const IFRAME_PICTURE = { Build, Light, Look, Set, Sun, Weather, Winter };
 /** what the sound actor yields as `f.sound` */
 export const SOUND = { Mix };
+
+/* ---- the clip actor's set ------------------------------------------------ *
+ * The first adjustments that belong to something other than the picture. A
+ * clip is a DOM element, so what it can be given is what a browser can do
+ * to one without a texture — which is the honest half of a filter stack,
+ * and the half that needs no pixels.
+ */
+export const CLIP_LOOK = { Look: ClipLookNode } as const;

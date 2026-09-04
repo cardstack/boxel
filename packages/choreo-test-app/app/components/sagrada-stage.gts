@@ -114,8 +114,13 @@ export class SagradaStage extends Component {
     const w = Math.round(
       Math.max(SIZE_MIN.w, Math.min(max.w, g.w0 + 2 * (e.clientX - g.x0)))
     );
+    /* AND THE BOX NEVER GOES TALLER THAN IT IS WIDE. Every layout
+       inside the film is written for a frame that is not portrait — the
+       type sets beside the subject, the mark draws across to it — so a
+       tall thin drag does not show the film small, it shows a different
+       film. The grip is free above that line and stops at it. */
     const h = Math.round(
-      Math.max(SIZE_MIN.h, Math.min(max.h, g.h0 + 2 * (e.clientY - g.y0)))
+      Math.max(SIZE_MIN.h, Math.min(max.h, w, g.h0 + 2 * (e.clientY - g.y0)))
     );
     /* at the ceiling on both axes the frame is the well again: no override */
     this.size = w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };

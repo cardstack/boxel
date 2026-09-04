@@ -257,22 +257,25 @@ export default class TowerFilm extends Component<{
       }
 
       /* the seal: the lineup's stamp, miniature — a vertical hanko */
+      /* the vertical stamp, in the door's own unit: it is a piece of the
+         poster's composition, not a fixed badge stuck on top of it, so it
+         shrinks with everything else rather than growing into the frame */
       .is-towers .cf-mg-seal {
-        top: 8px;
-        right: -34px;
+        top: calc(8 * var(--gu, 1px));
+        right: calc(-34 * var(--gu, 1px));
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 58px;
+        width: calc(34 * var(--gu, 1px));
+        height: calc(58 * var(--gu, 1px));
         writing-mode: vertical-rl;
         font-family: var(--cf-display);
         font-weight: 400;
-        font-size: 19px;
+        font-size: calc(19 * var(--gu, 1px));
         letter-spacing: 0.14em;
         text-indent: 0;
         text-transform: none;
-        border-radius: 3px;
+        border-radius: calc(3 * var(--gu, 1px));
       }
 
       .is-towers .cf-end-k {

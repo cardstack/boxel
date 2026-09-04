@@ -193,6 +193,19 @@ they cost one idle element for a few hundred milliseconds.
   the old uniform skew this was invisible; a splice made it a 2 s
   drag-back and forced the correction.
 
+## What a splice means to the smoother (2026-09-04)
+
+`c.Camera3D @settle` filters the path by averaging it — see §4.2a of
+`docs/film.md`. An average is exactly the machinery this note exists to
+keep away from a seam, so the window is tapered to the shot the clock is
+in: it shrinks to the room it has and reaches zero at the cut itself. A
+seam therefore stays a step function no matter how much hand is asked
+for, and the same taper makes a path land exactly on its last waypoint
+rather than on an average of one. The taper is `tanh` rather than a hard
+`min`, because a filter whose own width has a corner in it puts a tick
+back into what it is filtering — measured, the hard version LOST ground
+as the window widened.
+
 ## Open questions
 
 - Should a shot be able to declare its own `@tension`/ease? (A whip pan

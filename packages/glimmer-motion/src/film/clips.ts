@@ -51,6 +51,25 @@ export interface ClipSpec {
   /** the source's in point, seconds (video) */
   in?: number;
   kind: ClipKind;
+  /**
+   * WHICH LANE THIS CLIP IS ON, and it is the whole reason a beat can
+   * carry more than one.
+   *
+   * Within a lane the rule is what it always was: the newest clip wins,
+   * an older one is never reached past it, and an end policy decides
+   * whether the lane empties or holds. Across lanes clips coexist, which
+   * is what a picture-in-picture over a full-frame video needs and what a
+   * single slot could not do — a second clip on a beat used to overwrite
+   * the first silently.
+   *
+   * Defaults to the clip's own position among its beat's clips, so two
+   * insets on one shot are two lanes without anybody saying so; name it
+   * when a later beat should REPLACE an earlier clip rather than sit
+   * beside it.
+   */
+  lane?: number;
+  /** a look held on this clip alone (`f.clip.Look`) */
+  look?: ClipLook;
   /** the source's out point, seconds (video); with `in`, sets the window */
   out?: number;
   /** a pip's corner radius, in percent of its width */
@@ -67,6 +86,41 @@ export interface ClipSpec {
   x?: number;
   /** a pip's top edge, percent of the frame (default 10) */
   y?: number;
+}
+
+/**
+ * A LOOK HELD ON A CLIP — the first adjustment that belongs to something
+ * other than the picture.
+ *
+ * `f.picture.Look` reaches the WebGL page's own grade; a clip is a DOM
+ * element and has never had one, so a video inset over a graded picture
+ * was ungraded and there was no way to say otherwise. These are the
+ * operations a browser can do to an element without a texture, composed
+ * in the order the film's own shader composes them (saturate, contrast,
+ * brightness, then sepia and hue) — because filter order is not
+ * commutative and the two should agree.
+ *
+ * What this is NOT is the whole filter stack: curves, secondaries and a
+ * LUT need the pixels, which needs the clip through a texture. This is
+ * the half a browser gives for free.
+ */
+export interface ClipLook {
+  /** gaussian blur, pixels */
+  blur?: number;
+  /** exposure, 1 is unchanged */
+  bri?: number;
+  /** contrast, 1 is unchanged */
+  con?: number;
+  /** to grey, 0..1 */
+  gray?: number;
+  /** hue rotation, degrees */
+  hue?: number;
+  /** the whole layer's opacity, 0..1 */
+  opacity?: number;
+  /** saturation, 1 is unchanged, 0 is monochrome */
+  sat?: number;
+  /** to sepia, 0..1 */
+  sepia?: number;
 }
 
 export type ClipState = 'absent' | 'active' | 'frozen' | 'held';
@@ -111,9 +165,10 @@ export function resolveClip(
   film: number,
   index: number,
   total: number,
+  lane = 0,
 ): ResolvedClip | null {
   for (let i = Math.min(index, beats.length - 1); i >= 0; i -= 1) {
-    const spec = beats[i]!.clip;
+    const spec = laneOf(beats[i]!, lane);
     if (!spec) {
       continue;
     }
@@ -150,4 +205,54 @@ export function resolveClip(
     };
   }
   return null;
+}
+
+/** a beat's clip on one lane; a clip with no lane takes its own position */
+function laneOf(beat: Beat, lane: number): ClipSpec | undefined {
+  const list = beat.clips;
+  if (!list?.length) {
+    return undefined;
+  }
+  for (let i = 0; i < list.length; i += 1) {
+    if ((list[i]!.lane ?? i) === lane) {
+      return list[i];
+    }
+  }
+  return undefined;
+}
+
+/** every lane any beat up to `index` puts a clip on, in order */
+export function clipLanes(beats: readonly Beat[], index: number): number[] {
+  const seen = new Set<number>();
+  for (let i = Math.min(index, beats.length - 1); i >= 0; i -= 1) {
+    beats[i]!.clips?.forEach((spec, n) => seen.add(spec.lane ?? n));
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+/**
+ * EVERY CLIP ON SCREEN AT A FILM TIME, one per lane, in lane order — which
+ * is also paint order, so a score decides what sits over what by which
+ * lane it puts a thing on.
+ *
+ * A beat used to carry one clip and a second on the same shot overwrote
+ * the first without saying so. Lanes are the smallest thing that fixes
+ * that without inventing a track model: the resolver below is the old
+ * one, run once per lane.
+ */
+export function resolveClips(
+  beats: readonly Beat[],
+  beatStart: (i: number) => number,
+  film: number,
+  index: number,
+  total: number,
+): ResolvedClip[] {
+  const out: ResolvedClip[] = [];
+  for (const lane of clipLanes(beats, index)) {
+    const found = resolveClip(beats, beatStart, film, index, total, lane);
+    if (found) {
+      out.push(found);
+    }
+  }
+  return out;
 }

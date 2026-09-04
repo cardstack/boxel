@@ -1311,14 +1311,16 @@ export const BEATS: Beat[] = [
      * sense. A video is the same field with `kind: 'video'`, a `src`
      * under public/sagrada/, and `in`/`out` on the source.
      */
-    clip: {
-      at: 3,
-      caption: 'FREEZE FRAME · 200 M',
-      credit: 'the picture, read back and held',
-      fit: 'inset',
-      for: 8,
-      kind: 'freeze',
-    },
+    clips: [
+      {
+        at: 3,
+        caption: 'FREEZE FRAME · 200 M',
+        credit: 'the picture, read back and held',
+        fit: 'inset',
+        for: 8,
+        kind: 'freeze',
+      },
+    ],
     id: 'gruistes',
     join: 'whip',
     kanji: 'Gruistes',

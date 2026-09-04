@@ -905,7 +905,12 @@ export const BEATS: Beat[] = [
       { pts: RING_EAVE2 },
       { pts: RING_EAVE3 },
     ],
-    wx: 1,
+    /* THE STORM, not rain. This is the beat the whole chapter is for —
+       "wait for weather; the styling explains itself" — and rain under
+       an overcast sky illustrates the sentence where a storm makes the
+       argument: the eave is a metre of overhang because water arrives
+       with force behind it, not because it drizzles. */
+    wx: 2,
   },
 
   /* ---------------------------------------------------------------- *
@@ -947,10 +952,10 @@ export const BEATS: Beat[] = [
     sun: { az: -35, el: 58 },
     ticks: 4,
     toCam: { dolly: 0.66, lookY: 1.8, ox: 0.02, pitch: 10, yaw: 211 },
-    /* clear. Weather is a sentence, not wallpaper: the rain belongs to
+    /* clear. Weather is a sentence, not wallpaper: the storm belongs to
        the eaves (noki) and the snow to the north (c-cn); the question is
-       asked in plain air. (`wx: 2` + `lightning: 0.9` is the storm, kept
-       in the vocabulary for a beat that earns it.) */
+       asked in plain air. (`lightning` is a separate cue, still unspent
+       — a flash is an event, and no beat has earned one yet.) */
     wx: 0,
   },
   {

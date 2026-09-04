@@ -90,7 +90,7 @@ Still owed here: the `params` channel on `SeamSpec` is declared and unused.
 That is where a centre, a direction and a softness belong, and until
 something uses it we should not pretend it is a feature.
 
-### 2. An adjustment cannot attach to a clip
+### 2. An adjustment cannot attach to a clip — HALF CLOSED
 
 `f.picture.Look`, `f.picture.Weather` and the rest are the PICTURE's
 vocabulary, declared by the picture and yielded under its name. That was
@@ -108,6 +108,25 @@ carry children (`<f.Video><f.clip.Look @lut="ekta" /></f.Video>`). The
 RUNTIME change is a GPU path for DOM media, because CSS filters will
 reach blur, brightness and saturation and nothing else — no curves, no
 secondaries, no LUT.
+
+**The graph half is closed (2026-09-04).** `f.clip.Look` is the clip
+actor's own adjustment set, declared by the film because the film draws
+the clip layer, and collected by the CLIP rather than by the beat — a
+look under an inset never reaches the row. Several stack the way an
+adjustment layer should, the nearer one winning the keys it names. The
+`Clip` composes them into a CSS filter in the same order the picture's
+own shader composes its grade (saturate, contrast, brightness, then sepia
+and hue, blur last), because filter order is not commutative and the two
+should agree about what a number means. It rides the media, so an inset's
+caption and card are not graded with the footage.
+
+**The runtime half is open**, and it is the more interesting one. CSS
+gives blur, brightness, contrast, saturation, sepia, greyscale and hue —
+the operations a browser can do to an element without a texture. Curves,
+secondaries and a LUT need the pixels, which means the clip through a
+texture: either the picture's own glass (only for a picture that has
+one) or a compositor of ours. That is Chris's filter-stack move, and it
+is what would let a `<div>` take the same LUT as a three.js scene.
 
 ### 3. PIP is a fixed card, not a layer — CLOSED
 
@@ -177,3 +196,84 @@ device wallpapers and icons, and exactly one alpha cutout
 source. There are no image sequences and no committed `.cube` LUTs; their
 LUT catalogue is three looks resolved from a CDN. We have seventeen
 `.cube` files locally, which is more than they ship.
+
+---
+
+## A note from watching, not from reading
+
+**Sylva's camera is smoother than the films', and the smoothing is not
+shared.** (Chris, 2026-09-04: "in sylva we have very good smoothing of
+camera motion. is that unified so that towers can use it?")
+
+It is not. They are different filters in different places:
+
+- **Sylva** runs a two-stage cascade, `chase2` in `sylva-stage.gts`:
+  goal → stage one → stage two, each a critically-damped spring
+  integrating velocity as state. One spring is C1 — velocity is
+  continuous but ACCELERATION snaps the moment the goal moves, and the
+  frame flinches. Feeding stage one's output to stage two bounds the jerk
+  as well. About forty lines, and they live in a demo component.
+- **The film** runs ONE spring (`Film.chase`), and its `mid`/`midV`
+  naming is vestigial — stage one's output is assigned straight to `now`.
+  In practice towers does get a second stage, but it belongs to the
+  PICTURE: the page behind the iframe runs its own exponential chase on
+  the pose it is handed. So the cascade exists, half of it is in another
+  document, and the two halves are different filters.
+
+Worth unifying, and the right home is the library rather than either
+demo — this is a Choreo-level primitive, not a route's.
+
+**One constraint that decides the shape.** An exact film has NO
+integrator by design: `@seek='exact'` sets `now = goal` and the comment
+says why — a spring's state is its history, which is exactly what
+forfeits random access. So a shared chaser cannot simply be switched on
+for every film. Either it stays opt-in for cut films, or it is written as
+a closed-form settle (a function of time since the goal moved) rather
+than an integrator, which would make it seekable and would let an exact
+film have the hand as well. The second is the better answer and the
+harder one.
+
+### CLOSED — `c.Camera3D @settle`, 2026-09-04
+
+The second answer, and it is not a chaser at all. The tick both filters
+were hiding is a property of the PATH, not of the frame rate: a cardinal
+spline crosses its waypoints with continuous velocity and a step in
+curvature, so every pose change is an impulse of jerk. A filter that
+runs on the path instead of on the frame does not need state.
+
+`c.Camera3D @settle={{seconds}}` reports a Hann-weighted average of the
+same spline, sampled fifteen times around the current progress
+(`settleThrough`, `packages/glimmer-motion/src/choreo/path.ts`). It is
+centred, so unlike a spring it has NO lag. It is an average of one pure
+function of progress, so it is still a pure function of progress: play,
+scrub and `renderAt` agree, and the exact film gets the hand it was told
+it could not have.
+
+The window tapers to nothing at a `cut` and at either end of the path —
+by `tanh`, not by a `min`, because a hard taper has a corner in it and a
+filter whose width has a corner puts a tick back into what it filters.
+So cuts stay cuts, the landing is exact, and the pose handed to the next
+cue is the waypoint rather than an average of one.
+
+Measured on the two reference films' own paths at 60 fps, with a 1.5 s
+guard around every splice so the cuts do not mask the shots:
+
+| film    | peak jerk, no settle | at 0.5 s    | peak pan speed    |
+| ------- | -------------------- | ----------- | ----------------- |
+| sagrada | 2267 °/s³            | 281 (0.12×) | 71.18 → 70.84 °/s |
+| towers  | 270 °/s³             | 36 (0.14×)  | 6.03 → 6.01 °/s   |
+
+Eight times less jerk for half a percent of the move — which is the test
+that matters, because a filter that flattened the pan would have taken
+the shot away with the tick. Past about a second it gets WORSE again
+(0.14× at 0.5 s, 0.15× at 1 s): the window starts to rival the two
+seconds between waypoints. `<Film>` therefore defaults to a QUARTER OF
+THE GAP between waypoints rather than to a constant — the same 0.5 s for
+these two films, and a quarter of that for a score that cuts four times
+as fast — capped at half a second, and `@settle={{0}}` gives the raw
+spline.
+
+What is still not unified is the film's own `Film.chase` spring and the
+picture page's exponential chase behind it — the settle makes the path
+smooth enough that the cascade may not be earning its keep, but that is
+a separate measurement.
