@@ -247,6 +247,24 @@ export interface PrerenderMetaDiagnostics {
   // the manifest simply omits the name, so this is the only indexed signal
   // that a declared capture is missing. Omitted when every slot captured.
   screenshotErrors?: DeclaredScreenshotError[];
+  // How many consecutive prerender-html renders of this row have recorded
+  // at least one declared-capture failure, under any name. The row-level
+  // companion to each entry's `consecutiveFailures`: a per-name run resets
+  // whenever the failing name changes (a roster-level '*' failure
+  // alternating with a per-name one, format groups failing on alternating
+  // renders), so the reconcile sweep's retry cap is enforced against this
+  // counter, which no name change can reset. A render that records no
+  // capture errors drops it along with `screenshotErrors`.
+  screenshotCaptureFailureRenders?: number;
+  // Per-slot wall-clock of the declared-screenshot captures this visit
+  // performed, keyed by slot name — the per-name decomposition of the
+  // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
+  // attributable to its slot. Failed attempts appear here too (their time
+  // was spent all the same); carried-forward slots don't (nothing
+  // rendered). Slots captured from one shared format render each record
+  // that render's whole elapsed time, so entries can exceed the aggregate
+  // when summed. Omitted when the visit captured nothing.
+  screenshotTimingsMs?: Record<string, number>;
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -925,6 +943,22 @@ export type DeclaredScreenshotVisitArgs = {
 export type DeclaredScreenshotError = {
   name: string;
   message: string;
+  // Wall-clock the engine spent on the render/capture attempt that failed
+  // this slot. On a roster-level '*' entry (the capture step failed as a
+  // unit — the roster read errored, or the step lost its timeout race)
+  // this is the whole step's elapsed time, not one slot's share. Absent
+  // when nothing rendered for the failure: the slot overflowed the capture
+  // cap, or the persist step failed after a successful capture — the
+  // capture's own time then rides the sibling timing entry.
+  captureMs?: number;
+  // How many consecutive prerender-html renders have failed this slot's
+  // capture, maintained by the persist path from the prior row's recorded
+  // errors. A successful capture of the slot ends the run by dropping its
+  // error entry outright — which means a run also resets when the failing
+  // name changes, so this is the per-name diagnostic term of the reconcile
+  // sweep's bounded retry lane; the lane's convergence bound is the
+  // row-level `screenshotCaptureFailureRenders` counter alongside it.
+  consecutiveFailures?: number;
 };
 
 // One declared slot's outcome from the visit's capture step. A fresh capture
@@ -944,6 +978,12 @@ export type DeclaredScreenshotCaptureResult = {
   useAsThumbnail?: boolean;
   base64?: string;
   carriedForward?: boolean;
+  // Wall-clock of the render + capture that produced this slot's bytes.
+  // Slots captured from one shared format render each carry that render's
+  // whole elapsed time (an upper bound on their own share); a render-based
+  // slot's time is entirely its own. Absent on carry-forwards — nothing
+  // rendered.
+  captureMs?: number;
 };
 
 export interface DeclaredScreenshotVisitResult {

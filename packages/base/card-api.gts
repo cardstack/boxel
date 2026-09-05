@@ -2885,6 +2885,23 @@ export type BaseDefComponent = ComponentLike<{
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
 // use a dedicated `render` component there.
+//
+// Render deterministically. A capture is stored under a hash of its bytes,
+// so two renders of unchanged data should produce identical pixels — the
+// platform's side of that bargain is settling fonts and images before
+// shooting, and the author's side is keeping nondeterminism out of the
+// rendered output. Avoid anything that differs run to run: `Date.now()` /
+// `new Date()` rendered into the markup ("3 minutes ago" timestamps),
+// `Math.random`, CSS animations or transitions mid-flight at capture time,
+// autoplaying carousels, or content fetched from an endpoint that answers
+// differently on each call. For media-derived captures, decode
+// deterministically too: seek to an exact timestamp rather than "current
+// frame", position WebGL cameras explicitly, and avoid ambient animation
+// loops. Nondeterministic output doesn't break anything visibly — the row
+// publishes and the durable screenshot URLs don't change — but every
+// reindex captures "new" bytes, wasting renders and storage churn and
+// defeating image caching (each rotation changes the image's ETag, so
+// every viewer re-downloads it).
 export type ScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
