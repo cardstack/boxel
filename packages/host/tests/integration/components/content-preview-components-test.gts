@@ -1,3 +1,4 @@
+import { find } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -266,6 +267,103 @@ module('Integration | content-only file preview components', function (hooks) {
       .dom('img[data-test-image-preview]')
       .hasAttribute('alt', 'hero.png', 'reading formats describe the image');
     assertNoShellChrome(assert);
+  });
+
+  test('ImagePreview assembles srcset from the captured rendition slots', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // A wire-shape model carrying the same `screenshotsMeta` key a FileDef
+    // instance exposes: the reading formats offer the captured renditions as
+    // narrower candidates with the original as the largest.
+    let image = {
+      id: 'http://example.com/img/hero.png',
+      url: 'http://example.com/img/hero.png',
+      name: 'hero.png',
+      contentType: 'image/png',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        thumb: {
+          url: 'http://example.com/_screenshot/img/hero.png?name=thumb',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+        'rendition-1280': {
+          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-1280',
+          width: 1280,
+          height: 960,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{image}} />
+        </div>
+      </template>,
+    );
+    let srcset =
+      find('img[data-test-image-preview]')?.getAttribute('srcset') ?? '';
+    assert.ok(
+      srcset.includes('?name=rendition-640 640w'),
+      `the small rendition is a candidate (got: ${srcset})`,
+    );
+    assert.ok(
+      srcset.includes('?name=rendition-1280 1280w'),
+      'the large rendition is a candidate',
+    );
+    assert.ok(
+      srcset.includes('http://example.com/img/hero.png 3000w'),
+      'the original is the largest candidate',
+    );
+    assert.notOk(
+      srcset.includes('?name=thumb'),
+      'the cover-cropped thumb is not a srcset candidate',
+    );
+    assert
+      .dom('img[data-test-image-preview]')
+      .hasAttribute('sizes', '100vw', 'w descriptors carry a sizes hint');
+  });
+
+  test('ImagePreview offers no srcset for animated or vector sources', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // A rendition of a GIF is a still of its first frame — substituting it
+    // in a reading format would silently drop the animation.
+    let gif = {
+      id: 'http://example.com/img/loop.gif',
+      url: 'http://example.com/img/loop.gif',
+      name: 'loop.gif',
+      contentType: 'image/gif',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/loop.gif?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{gif}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
   });
 
   test('AudioPreview renders the waveform and player from a bare FileDef instance', async function (assert) {

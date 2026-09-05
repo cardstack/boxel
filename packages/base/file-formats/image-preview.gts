@@ -8,6 +8,7 @@ import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { FileImage } from './file-image';
+import { IMAGE_RENDITION_SLOT_NAMES } from './image-captures';
 import { letterboxImage } from './file-presentation';
 import type { ContentPreviewSignature } from './file-preview-stage';
 import {
@@ -64,6 +65,61 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
     return this.format === 'fitted' ? 'lazy' : 'eager';
   }
 
+  // Responsive candidates for the reading formats, assembled from the image
+  // family's captured rendition slots plus the original as the largest
+  // candidate. Skipped where a substitute would lie about the picture: an
+  // SVG scales crisply at any size with no bytes to save, a GIF's renditions
+  // are stills of its first frame, a fitted cell already prefers the `thumb`
+  // capture through the stage, and a source smaller than the smallest
+  // rendition has nothing to gain. Renditions capture at deviceScaleFactor 1
+  // (their declared width is their physical width) but the descriptor
+  // multiplies it anyway so a future dsf change can't silently skew the
+  // browser's density math.
+  get srcset(): string | undefined {
+    if (this.isSvg || this.model.previewKind === 'gif') {
+      return undefined;
+    }
+    if (this.format === 'fitted') {
+      return undefined;
+    }
+    let meta = (this.model.source as any)?.screenshotsMeta as
+      | Record<
+          string,
+          | { url?: string; width?: number; deviceScaleFactor?: number }
+          | undefined
+        >
+      | undefined;
+    if (!meta || !this.model.imageUrl || !this.model.width) {
+      return undefined;
+    }
+    let candidates = IMAGE_RENDITION_SLOT_NAMES.map((name) => meta[name])
+      .filter(
+        (
+          entry,
+        ): entry is { url: string; width: number; deviceScaleFactor: number } =>
+          Boolean(entry?.url && entry?.width),
+      )
+      .filter(
+        (entry) =>
+          entry.width * (entry.deviceScaleFactor ?? 1) < this.model.width!,
+      )
+      .map(
+        (entry) =>
+          `${entry.url} ${entry.width * (entry.deviceScaleFactor ?? 1)}w`,
+      );
+    if (candidates.length === 0) {
+      return undefined;
+    }
+    candidates.push(`${this.model.imageUrl} ${this.model.width}w`);
+    return candidates.join(', ');
+  }
+
+  // `w` descriptors need a sizes hint; the stage can occupy up to the full
+  // viewport, so the honest ceiling keeps the browser from under-selecting.
+  get sizes(): string | undefined {
+    return this.srcset ? '100vw' : undefined;
+  }
+
   <template>
     <FileImage
       class='image-preview'
@@ -71,6 +127,8 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
       @alt={{this.alt}}
       @loading={{this.loading}}
       @decoding='async'
+      srcset={{this.srcset}}
+      sizes={{this.sizes}}
       width={{this.model.width}}
       height={{this.model.height}}
       data-image-fit={{this.fit}}

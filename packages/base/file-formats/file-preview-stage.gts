@@ -97,15 +97,12 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
     return ['normal', 'stale', 'malformed'].includes(this.state);
   }
 
-  // A fitted cell prefers a current extracted rendition over mounting a heavy
-  // engine. A stale one is not usable: it was rendered from bytes the file no
-  // longer has.
+  // A fitted cell prefers the captured rendition over mounting a heavy
+  // engine. Freshness is the capture pipeline's job: a file-content-keyed
+  // capture recaptures when the bytes change, so a URL present here is
+  // always current-or-healing.
   get useThumbnail() {
-    return (
-      this.args.format === 'fitted' &&
-      Boolean(this.model?.thumbnailUrl) &&
-      !this.model?.thumbnailStale
-    );
+    return this.args.format === 'fitted' && Boolean(this.model?.thumbnailUrl);
   }
 
   get icon() {

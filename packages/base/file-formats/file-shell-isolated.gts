@@ -158,10 +158,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     }
     push('Title', m.title);
     push('URL', m.url, true);
-    // The displayed renditions are real linked FileDefs, so they are
-    // inspectable rather than opaque pixels.
+    // The poster is a real linked FileDef; the thumbnail is the declared
+    // capture's durable served URL. Both are inspectable links.
     push('Poster file', m.posterUrl, true);
-    push('Thumbnail file', m.thumbnailUrl, true);
+    push('Thumbnail', m.thumbnailUrl, true);
     return rows;
   }
 
@@ -232,13 +232,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     return Boolean(poster?.status || poster?.frameSeconds || poster?.error);
   }
 
-  get hasThumbnailMetadata() {
-    let thumbnail = this.args.model?.thumbnailMetadata;
-    return Boolean(
-      thumbnail?.status || thumbnail?.generator || thumbnail?.error,
-    );
-  }
-
   get hasTags() {
     let t = this.args.model?.mediaTags;
     return Boolean(t?.trackTitle || t?.artist);
@@ -251,17 +244,17 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     let m = this.args.model?.midi;
     return Boolean(
       m?.trackCount ||
-        m?.noteCount ||
-        m?.durationSeconds ||
-        m?.format != null ||
-        m?.ppq ||
-        m?.pitchRange ||
-        m?.hasPercussion ||
-        m?.keySignatures?.length ||
-        m?.timeSignatures?.length ||
-        m?.tempoMap?.length ||
-        m?.programs?.length ||
-        m?.channels?.length,
+      m?.noteCount ||
+      m?.durationSeconds ||
+      m?.format != null ||
+      m?.ppq ||
+      m?.pitchRange ||
+      m?.hasPercussion ||
+      m?.keySignatures?.length ||
+      m?.timeSignatures?.length ||
+      m?.tempoMap?.length ||
+      m?.programs?.length ||
+      m?.channels?.length,
     );
   }
 
@@ -297,11 +290,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     let m = this.args.model?.officeMetadata;
     return Boolean(
       m?.title ||
-        m?.creator ||
-        m?.application ||
-        m?.pageCount != null ||
-        m?.slideCount != null ||
-        m?.sheetCount != null,
+      m?.creator ||
+      m?.application ||
+      m?.pageCount != null ||
+      m?.slideCount != null ||
+      m?.sheetCount != null,
     );
   }
 
@@ -530,10 +523,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{#if this.hasPosterMetadata}}
             <h2 class='insp-group'>Poster rendition</h2>
             <div class='insp-family'><@fields.posterMetadata /></div>
-          {{/if}}
-          {{#if this.hasThumbnailMetadata}}
-            <h2 class='insp-group'>Fitted thumbnail</h2>
-            <div class='insp-family'><@fields.thumbnailMetadata /></div>
           {{/if}}
           {{#if this.hasWaveform}}
             <h2 class='insp-group'>Waveform analysis</h2>

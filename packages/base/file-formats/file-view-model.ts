@@ -104,7 +104,6 @@ export interface FileViewModel {
   imageUrl?: string;
   posterUrl: string;
   thumbnailUrl: string;
-  thumbnailStale: boolean;
   mediaUrl?: string;
   captionUrl?: string;
   waveformBars: number[];
@@ -156,7 +155,6 @@ export interface FileViewModel {
   htmlMetadata?: any;
   officeMetadata?: any;
   posterMetadata?: any;
-  thumbnailMetadata?: any;
 }
 
 function fittedTextSnippet(text: string): string {
@@ -334,6 +332,26 @@ function linkedFileURL(value: any): string {
   return String(value.url ?? value.sourceUrl ?? value.id ?? '');
 }
 
+// The durable URL of the capture the file's family flags `useAsThumbnail`
+// among its declared screenshots. Duck-typed off the model rather than
+// imported from card-api (this module sits inside card-api's dependency
+// graph): a FileDef instance exposes `screenshotsMeta`, and a plain
+// wire-shape object may carry the same key.
+function screenshotThumbnailURL(file: FileModelLike): string {
+  let entries = file.screenshotsMeta as
+    | Record<string, { url?: string; useAsThumbnail?: boolean } | undefined>
+    | undefined;
+  if (!entries || typeof entries !== 'object') {
+    return '';
+  }
+  for (let entry of Object.values(entries)) {
+    if (entry?.useAsThumbnail && entry.url) {
+      return String(entry.url);
+    }
+  }
+  return '';
+}
+
 // `model` is typed loosely because a FileDef subclass instance is a class
 // instance, which TypeScript won't assign to an index-signature type. Reading
 // it as a permissive record is the whole point of a projection: the fields past
@@ -379,10 +397,16 @@ export function fileViewModel(
       ? (profileSource?.displayName ?? profile.kind)
       : profile.kind);
 
-  // A generated poster (video) and a generated thumbnail (everything
-  // expensive) are separate linked FileDefs, never bytes in card JSON.
+  // A generated poster (video) is a separate linked FileDef, never bytes in
+  // card JSON.
   let posterUrl = linkedFileURL(file.posterImage);
-  let thumbnailUrl = linkedFileURL(file.thumbnailImage);
+  // The thumbnail is the declared-screenshot capture the family flags
+  // `useAsThumbnail`, read from `meta.screenshots` via the instance's
+  // `screenshotsMeta` getter (a plain wire-shape object may carry the same
+  // key). Staleness is not modeled: a file-content-keyed slot recaptures
+  // when the bytes change and serves its prior capture until then, so there
+  // is no "rendered from bytes the file no longer has" state to expose.
+  let thumbnailUrl = screenshotThumbnailURL(file);
 
   let width = file.width;
   let height = file.height;
@@ -517,14 +541,6 @@ export function fileViewModel(
       family === 'image' ? url : family === 'video' ? posterUrl : undefined,
     posterUrl,
     thumbnailUrl,
-    // A source-hash mismatch stays visible rather than silently presenting
-    // pixels rendered from bytes the file no longer has.
-    thumbnailStale: Boolean(
-      thumbnailUrl &&
-      file.thumbnailMetadata?.sourceHash &&
-      file.contentHash &&
-      file.thumbnailMetadata.sourceHash !== file.contentHash,
-    ),
     mediaUrl: ['audio', 'video', 'music'].includes(family) ? url : undefined,
     captionUrl: file.captionUrl,
     waveformBars: waveformBarsFor(file, format),
@@ -590,7 +606,6 @@ export function fileViewModel(
     htmlMetadata,
     officeMetadata,
     posterMetadata: file.posterMetadata,
-    thumbnailMetadata: file.thumbnailMetadata,
   };
 }
 
