@@ -101,6 +101,7 @@ import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 import {
   consumingRealmHeader,
   duringPrerenderHeaders,
+  headlessCommandWriteHeaders,
   jobIdHeader,
   loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
@@ -338,6 +339,11 @@ export default class StoreService extends Service implements StoreInterface {
     // store on __boxelRenderContext alone breaks it: card-prerender sets that
     // global around every test-realm index render, silently dropping app saves
     // that coincide with one.
+    //
+    // The command-runner route is the one place in the prerender app that
+    // drops `__boxelPrerenderApp`, because a command is expected to write and
+    // its writes index deferred rather than waiting on the worker the tab is
+    // holding.
     if ((globalThis as any).__boxelPrerenderApp) {
       return true;
     }
@@ -824,6 +830,33 @@ export default class StoreService extends Service implements StoreInterface {
         ...instance[meta],
         ...{ realmURL: opts.realm },
       } as CardResourceMeta;
+    }
+
+    // A headless command running while the prerender app's persistence block
+    // is still raised is an impossible state, and the only one this path
+    // reports rather than absorbs. The command route drops the block on entry
+    // precisely so a command's writes can land; with the block still up the
+    // save resolves to an instance carrying no id, `SaveCardTool` returns it
+    // as saved, and every caller downstream — `boxel run-command` included —
+    // reads a card that does not exist as a success. `create` already throws
+    // on the same state.
+    //
+    // A card render is deliberately NOT an error. The prerenderer is not an
+    // avenue for mutations, and a card whose template or computed writes to
+    // the store is doing what it was designed to do — it just cannot have
+    // that write here, because it would aim at a realm whose sole indexing
+    // worker this render is occupying. Dropping the write renders the card;
+    // throwing would fail the render and index the card as an error.
+    if (
+      !opts?.doNotPersist &&
+      (globalThis as any).__boxelPrerenderApp &&
+      (globalThis as any).__boxelHeadlessCommand
+    ) {
+      throw new Error(
+        `cannot persist instance ${
+          instance.id ?? instance[localIdSymbol]
+        }: a headless command is running with the prerender app's persistence block still raised`,
+      );
     }
 
     let maybeOldInstance = instance.id
@@ -2053,6 +2086,10 @@ export default class StoreService extends Service implements StoreInterface {
   // deliberately not part of the test — card-prerender sets it around index
   // renders that run alongside an interactive app, whose own query fields must
   // keep resolving through those windows.
+  //
+  // A command runs with `__boxelPrerenderApp` dropped, so its query fields do
+  // resolve eagerly — matching what a command gets on a tab that has never
+  // served a render.
   protected resolvesQueryFieldsEagerly(): boolean {
     if ((globalThis as any).__boxelPrerenderApp) {
       return false;
@@ -3036,7 +3073,7 @@ export default class StoreService extends Service implements StoreInterface {
       deferred.fulfill(fileInstance as T);
       return fileInstance as T;
     } catch (error: any) {
-      let errorResponse = processCardError(id, error);
+      let errorResponse = processCardError(id, error, 'file-meta');
       let cardError = errorResponse.errors[0];
       deferred.fulfill(cardError);
       console.error(
@@ -3266,6 +3303,12 @@ export default class StoreService extends Service implements StoreInterface {
       body: JSON.stringify(doc, null, 2),
       headers: {
         'Content-Type': SupportedMimeType.CardJson,
+        // Marks a write issued by a headless command, which makes the realm
+        // index it deferred and answer from the document it serialized rather
+        // than from the index. The command's tab holds a prerender render slot
+        // until it returns, and the index read the realm would otherwise do
+        // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
+        ...headlessCommandWriteHeaders(),
       },
       clientRequestId: opts?.clientRequestId,
     });
@@ -3611,24 +3654,29 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
+// `readType` names what the failed read asked the realm for. A realm serves
+// card instances and file metadata out of one URL namespace, so the URL alone
+// cannot say which of the two a 404 is about — only the caller knows, and the
+// not-found wording below is written from it.
 function processCardError(
   url: string | undefined,
   error: any,
+  readType: StoreReadType = 'card',
 ): CardErrorsJSONAPI {
   let httpStatus = typeof error?.status === 'number' ? error.status : undefined;
   let errorResponse: CardErrorsJSONAPI;
-  try {
-    let parsed = JSON.parse(error.responseText);
-    errorResponse = formattedError(url, error, parsed.errors?.[0]);
-  } catch (parseError) {
+  let body = errorResponseBody(error);
+  if (body) {
+    errorResponse = formattedError(url, error, body.errors?.[0]);
+  } else {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        errorResponse = formattedError(url, error, {
-          status: 404,
-          title: 'Card Not Found',
-          message: `The card ${url} does not exist`,
-        });
+        errorResponse = formattedError(
+          url,
+          error,
+          notFoundError(url, readType),
+        );
         break;
       default:
         errorResponse = formattedError(url, error, undefined);
@@ -3647,6 +3695,42 @@ function processCardError(
     }
   }
   return errorResponse;
+}
+
+// The raw response body of a failed read, when one survived to here. Only a
+// failure thrown straight from a fetch wrapper carries `responseText`: a realm
+// error response is rebuilt into a `CardError` from the JSON:API document it
+// carried, which keeps the status and message but not the body text. The
+// bodiless and the unparseable case both come back `undefined`, which is what
+// routes a read to the status-tailored fallback in `processCardError`.
+function errorResponseBody(error: any): { errors?: any[] } | undefined {
+  if (typeof error?.responseText !== 'string') {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(error.responseText);
+  } catch {
+    return undefined;
+  }
+  return parsed != null && typeof parsed === 'object'
+    ? (parsed as { errors?: any[] })
+    : undefined;
+}
+
+function notFoundError(
+  url: string | undefined,
+  readType: StoreReadType,
+): Partial<CardErrorJSONAPI> {
+  let { title, noun } =
+    readType === 'file-meta'
+      ? { title: 'File Not Found', noun: 'file' }
+      : { title: 'Card Not Found', noun: 'card' };
+  return {
+    status: 404,
+    title,
+    message: `The ${noun} ${url} does not exist`,
+  };
 }
 
 function needsServerStateMerge(

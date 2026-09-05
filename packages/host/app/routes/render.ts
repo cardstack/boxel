@@ -17,14 +17,18 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   formattedError,
+  loadCardDef,
   snapshotRuntimeDependencies,
+  screenshotsMetaFromRoster,
   SupportedMimeType,
   isCardError,
   rri,
   type CardErrorsJSONAPI,
+  type DeclaredScreenshotRoster,
   type LooseSingleCardDocument,
   type RealmIdentifier,
   type RenderError,
+  type ScreenshotsMeta,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
   logger as runtimeLogger,
@@ -60,6 +64,7 @@ import {
   scheduleNativeTimeout,
 } from '../utils/render-timer-stub';
 
+import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
@@ -103,6 +108,7 @@ export default class RenderRoute extends Route<Model> {
   // it the same way.
   @service('store') declare private cardContextStore: StoreService;
   @service declare router: RouterService;
+  @service declare private cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -236,6 +242,15 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__boxelRenderContext = true;
+    // A render is never a headless command. The command route raises
+    // `__boxelHeadlessCommand` and drops it in its own teardown, but a
+    // transition runs the entering route's model hooks before the departing
+    // route's exit hooks — so a tab arriving here from the command route
+    // still carries the flag through this render's model hook. Clearing it
+    // keeps a render's writes from being marked for deferred indexing, and
+    // keeps a card that writes while rendering on the store's drop path
+    // rather than its report-a-stuck-command path.
+    (globalThis as any).__boxelHeadlessCommand = undefined;
     this.#registerGlobalsDestructor();
     this.#authGuard.register();
     if (!isTesting()) {
@@ -594,6 +609,11 @@ export default class RenderRoute extends Route<Model> {
           );
 
           await this.realm.ensureRealmMeta(realmURL);
+          let screenshotsMeta = await this.declarationScreenshotsMeta(
+            doc,
+            canonicalId,
+            realmURL,
+          );
 
           let enhancedDoc: LooseSingleCardDocument = {
             ...doc,
@@ -606,6 +626,7 @@ export default class RenderRoute extends Route<Model> {
                 lastModified: lastModified.getTime(),
                 realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
+                ...(screenshotsMeta ? { screenshots: screenshotsMeta } : {}),
               },
             },
           };
@@ -652,6 +673,59 @@ export default class RenderRoute extends Route<Model> {
   setupController(controller: Controller, model: Model) {
     super.setupController(controller, model);
     this.#scheduleReady(model);
+  }
+
+  // The render context's `meta.screenshots`: derived from the class's
+  // declared roster rather than a persisted manifest, so a card's own
+  // rendered output can embed its declared captures' durable URLs
+  // (`screenshotURLs`) even on the instance's very first prerender pass —
+  // captures run later in that same pass, after the display-format renders,
+  // so a manifest join could never see them. A URL embedded ahead of its
+  // capture 404s with a short max-age until the capture lands, then
+  // self-heals; live loads instead join the real manifest server-side
+  // (`getCard`), preserving `undefined` as the not-captured absence signal.
+  // Roster entries carry no `hash` for the same reason — no capture is being
+  // asserted.
+  private async declarationScreenshotsMeta(
+    doc: LooseSingleCardDocument,
+    canonicalId: string,
+    realmURL: string,
+  ): Promise<ScreenshotsMeta | undefined> {
+    try {
+      let adoptsFrom = doc.data?.meta?.adoptsFrom;
+      if (!adoptsFrom) {
+        return undefined;
+      }
+      let api = await this.cardService.getAPI();
+      // A stale base/card-api build loaded during a deploy overlap may
+      // predate this export; no roster then means no declared captures, not
+      // an error (mirrors the render.screenshots route).
+      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+        return undefined;
+      }
+      let resolvedId = this.network.virtualNetwork.toURL(canonicalId);
+      let Klass = await loadCardDef(adoptsFrom, {
+        loader: this.loaderService.loader,
+        relativeTo: resolvedId,
+      });
+      let roster = api.serializeDeclaredScreenshots(
+        Klass as typeof CardDef,
+      ) as DeclaredScreenshotRoster;
+      if (Object.keys(roster).length === 0) {
+        return undefined;
+      }
+      if (!resolvedId.href.startsWith(realmURL)) {
+        return undefined;
+      }
+      return screenshotsMetaFromRoster(roster, {
+        realmURL,
+        instanceLocalPath: resolvedId.href.slice(realmURL.length),
+      });
+    } catch {
+      // A class that fails to load fails the render itself moments later;
+      // this auxiliary read must never be what surfaces it.
+      return undefined;
+    }
   }
 
   #scheduleReady(model: Model) {

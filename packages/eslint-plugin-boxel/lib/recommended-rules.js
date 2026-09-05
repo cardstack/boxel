@@ -8,6 +8,7 @@ module.exports = {
   "@cardstack/boxel/missing-card-api-import": "error",
   "@cardstack/boxel/no-duplicate-imports": "error",
   "@cardstack/boxel/no-forbidden-head-tags": "error",
+  "@cardstack/boxel/no-reserved-field-names": "error",
   "@cardstack/boxel/no-url-form-base-imports": "error",
   "@cardstack/boxel/template-missing-invokable": "error"
 }

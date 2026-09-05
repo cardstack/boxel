@@ -5,6 +5,15 @@
  * Pure JS — no external dependencies.
  */
 
+/**
+ * Endpoint of the realm every account-bootstrap flow creates first — the
+ * host's signup flow and boxel-cli's ensurePersonalRealm both post it, and
+ * the realm-server keys personal-realm behavior (e.g. README seeding) off
+ * it. The endpoint collides on a second attempt, so it uniquely identifies
+ * a user's personal, first-created realm.
+ */
+export const PERSONAL_REALM_ENDPOINT = 'personal';
+
 const ICON_URLS: { [letter: string]: string } = Object.freeze({
   a: 'https://boxel-images.boxel.ai/icons/Letter-a.png',
   b: 'https://boxel-images.boxel.ai/icons/Letter-b.png',

@@ -1447,6 +1447,80 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('an echoed serve-time meta.screenshots never persists into the source file', async function (assert) {
+          // The shape a card+json GET stamps — a client that GETs a doc and
+          // POSTs it back to duplicate the card echoes this, and persisting
+          // it would pin the copy's source file to the original instance's
+          // captures.
+          let echoedScreenshots = {
+            card: {
+              url: `${testRealmHref}_screenshot/some-card?name=card`,
+              hash: 'abc123',
+              contentType: 'image/png',
+              width: 400,
+              height: 300,
+              deviceScaleFactor: 2,
+            },
+          };
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                  screenshots: echoedScreenshots,
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          let id = response.body.data.id.split('/').pop()!;
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'CardDef',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), 'card json exists');
+          let card = readJSONSync(cardFile);
+          assert.strictEqual(
+            card.data.meta.screenshots,
+            undefined,
+            'the POSTed echo is stripped from the source file',
+          );
+
+          let patchResponse = await request
+            .patch(`/CardDef/${id}`)
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                  screenshots: echoedScreenshots,
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patchResponse.status, 200, 'HTTP 200 status');
+          card = readJSONSync(cardFile);
+          assert.strictEqual(
+            card.data.meta.screenshots,
+            undefined,
+            'the PATCHed echo is stripped from the source file',
+          );
+        });
+
         test('an explicitly-null relationship is preserved and an absent one omitted, in both the source and the served card+json', async function (assert) {
           let realmEventTimestampStart = Date.now();
 

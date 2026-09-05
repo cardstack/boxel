@@ -18,6 +18,9 @@ interface Signature {
     cardId: string | null;
     displayBoundaries?: boolean;
     isPrimary?: boolean;
+    // Only the host *submode* can offer this: it renders inside operator mode,
+    // where switching submodes is possible. A standalone host-mode page (a
+    // published site) leaves it undefined and so shows the empty state alone.
     openInteractSubmode?: () => void;
   };
 }
@@ -146,17 +149,15 @@ export default class HostModeCard extends Component<Signature> {
         <div class='message'>
           <p>Loading card…</p>
         </div>
-      {{else if @openInteractSubmode}}
-        <div class='non-publishable-message'>
-          <p>This file is not in a publishable realm.</p>
-          <BoxelButton
-            {{on 'click' @openInteractSubmode}}
-            data-test-switch-to-interact
-          >View in Interact mode</BoxelButton>
-        </div>
       {{else if this.shouldShowEmptyMessage}}
-        <div class='message'>
+        <div class='message' data-test-host-mode-empty>
           <p>No card selected.</p>
+          {{#if @openInteractSubmode}}
+            <BoxelButton
+              {{on 'click' @openInteractSubmode}}
+              data-test-switch-to-interact
+            >View in Interact mode</BoxelButton>
+          {{/if}}
         </div>
       {{/if}}
     </CardContainer>
@@ -175,6 +176,7 @@ export default class HostModeCard extends Component<Signature> {
 
       .message {
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         min-height: 16rem;
@@ -203,16 +205,6 @@ export default class HostModeCard extends Component<Signature> {
         margin: 0;
         color: var(--boxel-450);
         font: var(--boxel-font);
-      }
-
-      .non-publishable-message {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 16rem;
-        text-align: center;
-        gap: var(--boxel-sp);
       }
 
       @media print {

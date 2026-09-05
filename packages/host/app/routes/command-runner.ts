@@ -85,7 +85,34 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   async beforeModel() {
     registerBoxelTransitionTo(this.router, this);
     (globalThis as any).__boxelRenderContext = true;
+    // Unlike the render routes, a command is expected to write. This flag is
+    // what tells the store's card-write path to mark its requests so the realm
+    // indexes them deferred — the tab holds a prerender render slot until the
+    // command returns, and a write that waited for indexing would wait on a
+    // job needing that slot. Narrower than `__boxelRenderContext`, which host
+    // tests also raise around in-browser index renders that run alongside an
+    // interactive app whose saves must keep their indexed echo.
+    (globalThis as any).__boxelHeadlessCommand = true;
+    // `__boxelPrerenderApp` marks the app as the dedicated prerender app for
+    // its whole lifetime, and blocks persistence on every store while it is
+    // raised (see `renderContextBlocksPersistence`). This route is the one
+    // exception: a command is expected to write, and its writes are
+    // deadlock-safe through the deferred indexing `__boxelHeadlessCommand`
+    // asks for. So drop the block here rather than leave it standing.
+    //
+    // It has to be dropped rather than merely never raised: a pool tab that
+    // has served a card render carries the flag, and the pool can retag that
+    // tab from its realm affinity onto the user affinity a command runs on.
+    // Under the block a command's save resolves to an instance with no id,
+    // which every caller reads as success.
+    //
+    // Deliberately not restored on teardown. The render route raises the flag
+    // itself in `beforeModel`, and that hook runs before the exit hooks of
+    // the route being left — so a restore of a never-raised value would lower
+    // the block for the whole of the next render's model hook.
+    (globalThis as any).__boxelPrerenderApp = undefined;
     registerDestructor(this, () => {
+      (globalThis as any).__boxelHeadlessCommand = undefined;
       if (isTesting()) {
         (globalThis as any).__boxelRenderContext = undefined;
       }
@@ -94,6 +121,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   }
 
   deactivate() {
+    (globalThis as any).__boxelHeadlessCommand = undefined;
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }

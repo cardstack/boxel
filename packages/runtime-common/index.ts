@@ -1290,6 +1290,7 @@ export * from './utils.ts';
 export * from './authorization-middleware.ts';
 export * from './resource-types.ts';
 export * from './prerender-headers.ts';
+export * from './lint-headers.ts';
 export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';

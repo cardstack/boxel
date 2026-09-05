@@ -21,5 +21,17 @@ module(basename(import.meta.filename), function () {
     test('passes scoped command through unchanged', async function (assert) {
       await runSharedTest(runCommandTaskTests, assert, {});
     });
+
+    test('mints the union of the wildcard grant and the runner row', async function (assert) {
+      await runSharedTest(runCommandTaskTests, assert, {});
+    });
+
+    test('mints the union of the users grant for a registered matrix user', async function (assert) {
+      await runSharedTest(runCommandTaskTests, assert, {});
+    });
+
+    test('runs for a runner whose only access is the wildcard grant', async function (assert) {
+      await runSharedTest(runCommandTaskTests, assert, {});
+    });
   });
 });

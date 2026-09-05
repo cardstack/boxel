@@ -92,20 +92,44 @@ runs:
     # because a release asset is a supply-chain input in a way a signed
     # distribution package is not.
     #
+    # That every job runs this action also sets what a bad window on the
+    # release CDN costs: many jobs at once, and more than their own results,
+    # since a dead shard leaves the Percy build it would have contributed to
+    # incomplete and so rejected as a baseline. The fetch is cached and bounded
+    # accordingly — see .github/actions/fetch-cached-release-asset, which owns
+    # the caching, the retry window and the checksum verification.
+    - name: Look for a preinstalled mkcert
+      id: mkcert-preinstalled
+      shell: bash
+      run: |
+        if command -v mkcert >/dev/null 2>&1; then
+          echo "mkcert is already on PATH"
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "present=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Fetch mkcert
+      id: mkcert
+      if: steps.mkcert-preinstalled.outputs.present != 'true'
+      uses: ./.github/actions/fetch-cached-release-asset
+      with:
+        name: mkcert
+        url: https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
+        sha256: 6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+
     # certutil, mkcert's only other requirement, already ships on the runner
     # image; the apt path below covers a future image that drops it.
     - name: Install mkcert
       shell: bash
       env:
-        MKCERT_VERSION: 1.4.4
-        MKCERT_SHA256: 6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+        # Empty when mkcert was already on PATH and the fetch above was skipped.
+        MKCERT_ASSET: ${{ steps.mkcert.outputs.path }}
       run: |
-        if ! command -v mkcert >/dev/null 2>&1; then
-          url="https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64"
-          timeout 2m curl -fsSL --retry 3 -o /tmp/mkcert "$url"
-          echo "${MKCERT_SHA256}  /tmp/mkcert" | sha256sum -c -
-          sudo install -m 0755 /tmp/mkcert /usr/local/bin/mkcert
+        if [ -n "$MKCERT_ASSET" ]; then
+          sudo install -m 0755 "$MKCERT_ASSET" /usr/local/bin/mkcert
         fi
+
         if ! command -v certutil >/dev/null 2>&1; then
           echo "certutil is absent from the runner image; installing libnss3-tools"
           timeout 3m sudo apt-get update -o Acquire::Retries=3

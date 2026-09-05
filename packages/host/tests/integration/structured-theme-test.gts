@@ -1,14 +1,22 @@
+import {
+  click,
+  settled,
+  waitUntil,
+  type RenderingTestContext,
+} from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
 import { setupBaseRealm } from '../helpers/base-realm';
-
+import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type * as StructuredThemeModule from '@cardstack/base/structured-theme';
 import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
+import type * as StyleReferenceModule from '@cardstack/base/style-reference';
 import type * as TypographyFieldModule from '@cardstack/base/typography';
 
 // A real tweakcn export: alongside the `:root` and `.dark` variable blocks it
@@ -233,8 +241,25 @@ module('Integration | structured-theme', function (hooks) {
       'Poppins, sans-serif',
       'the @theme inline self-reference (var(--font-sans)) does not clobber the :root value',
     );
+    // the shadow primitives exist so a tweakcn export round-trips losslessly;
+    // a name-derivation miss (shadowX → --shadow-x, shadow2xs → --shadow-2xs)
+    // would drop them silently rather than fail
+    assert.strictEqual(card.rootVariables.shadowX, '3px');
+    assert.strictEqual(card.rootVariables.shadowY, '3px');
+    assert.strictEqual(card.rootVariables.shadowBlur, '0px');
+    assert.strictEqual(card.rootVariables.shadowSpread, '0px');
+    assert.strictEqual(card.rootVariables.shadowOpacity, '1.0');
+    assert.strictEqual(
+      card.rootVariables.shadowColor,
+      'hsl(325.78 58.18% 56.86% / 0.5)',
+    );
+    assert.strictEqual(
+      card.rootVariables.shadow2xs,
+      '3px 3px 0px 0px hsl(325.7800 58.1800% 56.8600% / 0.50)',
+    );
     assert.strictEqual(card.darkModeVariables.background, '#12242e');
     assert.strictEqual(card.darkModeVariables.fontMono, 'Fira Code, monospace');
+    assert.strictEqual(card.darkModeVariables.shadowColor, '#324859');
     assert.deepEqual(
       [...(card.cssImports ?? [])],
       [
@@ -314,6 +339,198 @@ module('Integration | structured-theme', function (hooks) {
       [...card.cssImports],
       ['https://use.typekit.net/abc123.css'],
       'imports the user added by hand survive a reset',
+    );
+  });
+
+  test('the extended contract tokens round-trip through setCss and cssVariables', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({}),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    assert.true(
+      card.setCss(`:root {
+        --canvas: #f1f2f3;
+        --field: #ffffff;
+        --subtle-foreground: #9a9da3;
+        --border-strong: #cfd3da;
+        --info: #2c7a8c;
+        --attention-foreground: #ffffff;
+        --primary-ink: #008f73;
+        --overlay: rgb(16 24 40 / 0.4);
+        --chart-7: #65a30d;
+        --control-height: 1.75rem;
+        --shadow-inset: inset 0 1px 2px rgb(16 24 40 / 0.16);
+      }
+      .dark {
+        --tooltip: #f7f8fa;
+        --tooltip-foreground: #24262b;
+      }`),
+    );
+    let root = card.rootVariables;
+    assert.strictEqual(root.canvas, '#f1f2f3');
+    assert.strictEqual(root.field, '#ffffff');
+    assert.strictEqual(root.subtleForeground, '#9a9da3');
+    assert.strictEqual(root.borderStrong, '#cfd3da');
+    assert.strictEqual(root.info, '#2c7a8c');
+    assert.strictEqual(root.attentionForeground, '#ffffff');
+    assert.strictEqual(root.primaryInk, '#008f73');
+    assert.strictEqual(root.overlay, 'rgb(16 24 40 / 0.4)');
+    assert.strictEqual(root.chart7, '#65a30d');
+    assert.strictEqual(root.controlHeight, '1.75rem');
+    assert.strictEqual(
+      root.shadowInset,
+      'inset 0 1px 2px rgb(16 24 40 / 0.16)',
+    );
+    assert.strictEqual(card.darkModeVariables.tooltip, '#f7f8fa');
+    assert.strictEqual(card.darkModeVariables.tooltipForeground, '#24262b');
+
+    let css = card.cssVariables ?? '';
+    for (let declaration of [
+      '--canvas: #f1f2f3',
+      '--subtle-foreground: #9a9da3',
+      '--primary-ink: #008f73',
+      '--control-height: 1.75rem',
+      '--shadow-inset: inset 0 1px 2px rgb(16 24 40 / 0.16)',
+      '--tooltip-foreground: #24262b',
+    ]) {
+      assert.true(
+        css.includes(declaration),
+        `generated CSS declares ${declaration}`,
+      );
+    }
+  });
+
+  test('unset variables in the isolated preview show the value they inherit from the Boxel defaults', async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({ primary: '#d04f99' }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    assert
+      .dom('[data-test-root-vars] [data-test-var-value="--primary"]')
+      .doesNotHaveAttribute(
+        'data-test-var-inherited',
+        'a value the theme sets is shown as its own',
+      );
+    assert
+      .dom(
+        '[data-test-root-vars] [data-test-var-value="--primary"] [data-test-swatch="#d04f99"]',
+      )
+      .exists();
+
+    let canvas = this.element.querySelector(
+      '[data-test-root-vars] [data-test-var-value="--canvas"]',
+    );
+    let inherited = canvas?.getAttribute('data-test-var-inherited') ?? '';
+    assert.ok(
+      inherited.length,
+      'an unset variable resolves to the theme.css default at the preview',
+    );
+    assert
+      .dom(canvas)
+      .containsText('inherited', 'the resolved value is tagged as inherited');
+    assert
+      .dom(`[data-test-root-vars] [data-test-swatch="${inherited}"]`)
+      .exists('the swatch paints the resolved default');
+
+    let primaryInk = this.element
+      .querySelector(
+        '[data-test-root-vars] [data-test-var-value="--primary-ink"]',
+      )
+      ?.getAttribute('data-test-var-inherited');
+    // Chrome serializes the mix in oklch; the point is that the formula is gone
+    assert.ok(primaryInk, 'the ink default resolves');
+    assert.false(
+      primaryInk?.startsWith('color-mix'),
+      `the color-mix ink formula collapses to a literal color (${primaryInk})`,
+    );
+  });
+
+  // Style Reference renders the palette unconditionally, so flipping the
+  // preview's color mode never tears the swatch grid down — the resolution has
+  // to follow the toggle on its own
+  test("the Style Reference palette's inherited swatches follow the preview's dark toggle", async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let StyleReference = (
+      await loader.import<typeof StyleReferenceModule>(
+        '@cardstack/base/style-reference',
+      )
+    ).default;
+    // --primary-ink is unset in both modes, and its default mixes --primary,
+    // which this theme sets to a different color per mode
+    let card = new StyleReference({
+      rootVariables: new ThemeVarField({ primary: '#d04f99' }),
+      darkModeVariables: new ThemeVarField({ primary: '#00e5ff' }),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    let primaryInk = () =>
+      this.element
+        .querySelector(
+          '[data-test-root-vars] [data-test-var-value="--primary-ink"]',
+        )
+        ?.getAttribute('data-test-var-inherited') ?? '';
+
+    let light = primaryInk();
+    assert.ok(light.length, 'the ink default resolves in light mode');
+
+    await click('[data-test-theme-nav] [data-test-mode] input');
+    // resolution runs off a MutationObserver on the scheme wrapper, so it
+    // lands a microtask after the click settles
+    let dark = await waitUntil(
+      () => {
+        let value = primaryInk();
+        return value === light ? undefined : value;
+      },
+      { timeoutMessage: 'the inherited swatch never re-resolved for dark' },
+    );
+
+    assert.notStrictEqual(
+      dark,
+      light,
+      `the swatch re-resolves against the dark scheme (light ${light}, dark ${dark})`,
+    );
+  });
+
+  test('label and eyebrow typography slots emit theme variables, including letter-spacing', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({}),
+      darkModeVariables: new ThemeVarField({}),
+      typography: new ThemeTypographyField({
+        heading: new TypographyField({ letterSpacing: '-0.02em' }),
+        label: new TypographyField({
+          fontSize: '0.75rem',
+          fontWeight: '500',
+          letterSpacing: '0.01em',
+        }),
+        eyebrow: new TypographyField({
+          fontSize: '0.6875rem',
+          letterSpacing: '0.08em',
+          sampleText: 'Kicker',
+        }),
+      }),
+    });
+    let css = card.cssVariables ?? '';
+    for (let declaration of [
+      '--theme-heading-letter-spacing: -0.02em',
+      '--theme-label-font-size: 0.75rem',
+      '--theme-label-font-weight: 500',
+      '--theme-label-letter-spacing: 0.01em',
+      '--theme-eyebrow-font-size: 0.6875rem',
+      '--theme-eyebrow-letter-spacing: 0.08em',
+    ]) {
+      assert.true(
+        css.includes(declaration),
+        `generated CSS declares ${declaration}`,
+      );
+    }
+    assert.false(
+      css.includes('sample-text'),
+      'sample text is not emitted as a variable',
     );
   });
 });

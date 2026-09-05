@@ -3,6 +3,10 @@ const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
+import {
+  encodeLintFilename,
+  LINT_FILENAME_HEADER,
+} from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
@@ -1010,6 +1014,74 @@ export class MyCard extends CardDef {
 }
 `,
         'X-Filename header is used for parser detection',
+      );
+    });
+
+    // A header value is a ByteString, so a name outside Latin-1 travels
+    // percent-encoded (`encodeLintFilename`). This covers the round trip an
+    // emoji-named file takes through the endpoint — encode, decode, `.gts`
+    // parser. It does not pin the decode on its own: percent-encoding never
+    // touches `.` or an ASCII letter, so the extension survives either way.
+    // The traversal test below is what the decode itself is answerable to.
+    test('supports an X-Filename outside Latin-1 for parser detection', async function (assert) {
+      let encodedFilename = encodeLintFilename('ai\u{1F389}app-card.gts');
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set(LINT_FILENAME_HEADER, encodedFilename)
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+@field name = contains(StringField);
+}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
+`,
+        'an emoji-named .gts file is linted as .gts',
+      );
+    });
+
+    // The traversal guard runs on the decoded name, which is the reason the
+    // decode happens before validation rather than after. Percent-encoded,
+    // `../../../etc/passwd.gts` presents to `path.resolve` as one long
+    // innocuous segment that stays inside the lint anchor; decoded, it is the
+    // escape the guard exists to catch and is rejected exactly as the
+    // unencoded spelling is.
+    test('rejects a percent-encoded traversal in X-Filename', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set(LINT_FILENAME_HEADER, '..%2F..%2F..%2Fetc%2Fpasswd.gts')
+        .send(`let x = 1;\n`);
+
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      assert.false(body.passed, 'lint reports failure');
+      assert.ok(
+        body.messages.some((m: { message: string }) =>
+          m.message.includes('invalid filename'),
+        ),
+        `payload carries the validation problem: ${JSON.stringify(
+          body.messages,
+        )}`,
       );
     });
 

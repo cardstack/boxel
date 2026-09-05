@@ -2271,6 +2271,7 @@ module('Unit | index-writer', function (hooks) {
         types: null,
         indexedAt: null,
         deps: null,
+        screenshots: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be a card document`);
@@ -2415,6 +2416,7 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         headHtml: null,
         markdown: null,
+        screenshots: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -2513,6 +2515,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         headHtml: null,
         markdown: null,
+        screenshots: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);

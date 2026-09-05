@@ -21,6 +21,7 @@
     "baseUrl": ".",
     "strict": true,
     "experimentalDecorators": true,
+    "types": ["@cardstack/local-types"],
     "paths": {
       "@cardstack/boxel-ui": ["../boxel-ui/declarations"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/declarations/*"],

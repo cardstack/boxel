@@ -60,7 +60,15 @@ export interface RunBoxelOptions {
   env?: NodeJS.ProcessEnv;
   /** Text piped to the command's stdin. */
   input?: string;
-  /** Kill the command after this many ms (default 60s). */
+  /**
+   * Kill the command after this many ms, instead of
+   * `RUN_BOXEL_DEFAULT_DEADLINE_MS`. Must clear a deadline the command was
+   * given on its own argv by a margin (see `resolveDeadline`), and the
+   * enclosing test or hook budget has to clear this — which the helper cannot
+   * check, since vitest does not expose the budget it is running under. A
+   * value above the default belongs at a call site that raises that budget in
+   * the same place.
+   */
   timeout?: number;
 }
 
@@ -71,12 +79,115 @@ export interface BoxelResult {
   /** True when the command exited 0. */
   ok: boolean;
   /**
+   * True when the harness's deadline killed the command rather than the
+   * command exiting on its own. Distinguishes "the CLI reported a failure"
+   * from "the CLI never finished", which the exit code alone cannot: a
+   * signalled process reports a null code, which is only visible as
+   * `ok === false`.
+   */
+  timedOut: boolean;
+  /**
    * Parse stdout as JSON (for commands run with `--json`). Throws with
    * the captured stdout/stderr attached when stdout isn't valid JSON, so
    * a failing command surfaces its error instead of an opaque parse
    * throw.
    */
   json<T = unknown>(): T;
+}
+
+/**
+ * The deadline a command was given on its own argv, in ms, or undefined when
+ * it was given none. Commands that poll (`realm publish`, `realm
+ * wait-for-ready`) take `--timeout <ms>` and report a precise diagnostic of
+ * their own when it elapses.
+ */
+function commandOwnDeadlineMs(args: string[]): number | undefined {
+  for (let i = 0; i < args.length; i++) {
+    let value =
+      args[i] === '--timeout'
+        ? args[i + 1]
+        : args[i].startsWith('--timeout=')
+          ? args[i].slice('--timeout='.length)
+          : undefined;
+    if (value === undefined) {
+      continue;
+    }
+    let ms = Number(value);
+    if (Number.isFinite(ms) && ms >= 0) {
+      return ms;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The longest this helper will wait on a command without being told to.
+ *
+ * It is a ceiling, not just a default: `vitest.config.mjs` keeps its budgets
+ * above this number, and that only means anything if the helper cannot derive
+ * a longer deadline on its own. A command whose own `--timeout` needs more has
+ * to say so through `options.timeout`, at a call site that can also raise the
+ * budget around it — see `resolveDeadline` and
+ * `tests/lib/deadline-ladder.test.ts`.
+ */
+export const RUN_BOXEL_DEFAULT_DEADLINE_MS = 60_000;
+/**
+ * How far the harness's deadline must sit above the command's own. Only needs
+ * to cover the command noticing its deadline, printing its diagnostic, and
+ * exiting — a fraction of the deadline it is protecting.
+ */
+const DEADLINE_MARGIN_MS = 30_000;
+/**
+ * Grace between the deadline's SIGTERM and a SIGKILL. Long enough for a
+ * command that shuts down on a signal to do it, short enough that the
+ * deadline still ends the command well inside the enclosing test's budget.
+ */
+const KILL_ESCALATION_MS = 5_000;
+
+/**
+ * The harness deadline exists to stop a *wedged* command from hanging its
+ * test, so it must never be the thing that pre-empts a command's own
+ * deadline. A command killed at the same instant it was about to report
+ * "timed out after Nms waiting for …" dies with that reason unwritten, and
+ * the test is left asserting on an exit code with nothing to explain it.
+ */
+function resolveDeadline(
+  args: string[],
+  requested: number | undefined,
+): number {
+  let ownDeadline = commandOwnDeadlineMs(args);
+  if (ownDeadline === undefined) {
+    return requested ?? RUN_BOXEL_DEFAULT_DEADLINE_MS;
+  }
+  let floor = ownDeadline + DEADLINE_MARGIN_MS;
+  if (requested === undefined) {
+    if (floor > RUN_BOXEL_DEFAULT_DEADLINE_MS) {
+      // Deriving the deadline from argv alone would put it above anything the
+      // config can guarantee to sit under, and the budget that then fires
+      // first is vitest's — which abandons the command instead of ending it,
+      // the failure this ladder exists to prevent. Only a call site can settle
+      // it, because only a call site can also raise the budget around itself.
+      throw new Error(
+        `a command given --timeout ${ownDeadline} needs a runBoxel deadline ` +
+          `of ${floor}ms, past the ${RUN_BOXEL_DEFAULT_DEADLINE_MS}ms this ` +
+          `helper takes on its own. Pass \`timeout: ${floor}\` and give the ` +
+          `enclosing test or hook a budget above it, or lower the command's ` +
+          `--timeout to ${
+            RUN_BOXEL_DEFAULT_DEADLINE_MS - DEADLINE_MARGIN_MS
+          } or less.`,
+      );
+    }
+    return RUN_BOXEL_DEFAULT_DEADLINE_MS;
+  }
+  if (requested < floor) {
+    throw new Error(
+      `runBoxel timeout of ${requested}ms cannot enforce a command that was ` +
+        `given --timeout ${ownDeadline}: the kill would race the command's ` +
+        `own deadline and discard its diagnostic. Use at least ${floor}ms, ` +
+        `or lower the command's --timeout.`,
+    );
+  }
+  return requested;
 }
 
 /**
@@ -102,13 +213,59 @@ export function runBoxel(
     ...options.env,
   };
 
+  let commandLine = [...baseArgs, ...args].join(' ');
+
   return new Promise<BoxelResult>((resolvePromise, reject) => {
+    // Inside the executor so a misconfigured deadline rejects the returned
+    // promise, the way every other failure from this helper does.
+    let deadlineMs = resolveDeadline(args, options.timeout);
+    let startedAt = Date.now();
     let child = spawn(command, [...baseArgs, ...args], {
       cwd: options.cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: options.timeout ?? 60_000,
+      // Leads its own process group, so the deadline can signal the command
+      // and everything it started rather than the command alone. Commands here
+      // do spawn their own children — `boxel parse` runs ember-tsc, several
+      // shell out to git — and a child that outlives a killed parent runs on
+      // into the next test in this process, which the suite shares.
+      //
+      // It reaches an ordinary child, not every possible descendant: one that
+      // makes itself a group leader (as playwright does for the browser it
+      // launches) leaves this group and is unaffected.
+      detached: true,
     });
+
+    // Signal the whole group. Falls back to the command alone if the group is
+    // unavailable (already reaped, or a platform without process groups).
+    let killTree = (signal: NodeJS.Signals) => {
+      try {
+        if (child.pid !== undefined) {
+          process.kill(-child.pid, signal);
+          return;
+        }
+      } catch {
+        // Fall through to the direct kill.
+      }
+      try {
+        child.kill(signal);
+      } catch {
+        // Already gone.
+      }
+    };
+
+    // Enforce the deadline here rather than through spawn's own `timeout`, so
+    // the result can say the command was killed. spawn's kill leaves only a
+    // null exit code behind, which reads as an ordinary failure.
+    let timedOut = false;
+    let escalation: NodeJS.Timeout | undefined;
+    let deadline = setTimeout(() => {
+      timedOut = true;
+      killTree('SIGTERM');
+      // A command that handles SIGTERM, or is stuck somewhere that cannot run
+      // a handler, would otherwise outlive the deadline meant to end it.
+      escalation = setTimeout(() => killTree('SIGKILL'), KILL_ESCALATION_MS);
+    }, deadlineMs);
 
     let stdout = '';
     let stderr = '';
@@ -123,13 +280,42 @@ export function runBoxel(
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
-    child.on('error', reject);
-    child.on('close', (code) => {
+    let settled = false;
+    let clearTimers = () => {
+      clearTimeout(deadline);
+      if (escalation) {
+        clearTimeout(escalation);
+      }
+    };
+
+    let settle = (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timedOut) {
+        // Nothing waits on the group past this point, so nothing in it may
+        // survive: sweep it before the escalation timer is cleared. The
+        // command itself is already gone — this reaches whatever it left
+        // behind holding its stdio.
+        killTree('SIGKILL');
+      }
+      clearTimers();
+      // Nearly every call site asserts with `expect(res.ok, res.stderr)`, so
+      // stderr is where a reader looks for the reason. A killed command has
+      // written no reason of its own — say so there, with what it had printed
+      // before the kill left in place above it.
+      let reportedStderr = timedOut
+        ? `${stderr}\n[runBoxel] killed after ${
+            Date.now() - startedAt
+          }ms (deadline ${deadlineMs}ms): ${commandLine}\n`
+        : stderr;
       resolvePromise({
         stdout,
-        stderr,
+        stderr: reportedStderr,
         exitCode: code,
         ok: code === 0,
+        timedOut,
         json<T = unknown>(): T {
           try {
             return JSON.parse(stdout) as T;
@@ -137,11 +323,36 @@ export function runBoxel(
             throw new Error(
               `Expected JSON on stdout but parse failed (${
                 err instanceof Error ? err.message : String(err)
-              }).\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+              }).\n--- stdout ---\n${stdout}\n--- stderr ---\n${reportedStderr}`,
             );
           }
         },
       });
+    };
+
+    child.on('error', (err) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
+      reject(err);
+    });
+    // `close` is the normal end: it waits for the stdio pipes, so all output
+    // is captured before the result is built.
+    child.on('close', (code) => settle(code));
+    // On the deadline path the command's own exit is the answer instead.
+    // `close` waits for the pipes, and a descendant holding an inherited
+    // write end keeps them open after the command is gone — which would let
+    // whatever outlived the command decide when the deadline takes effect. No
+    // command in this suite is known to leave one (the group kill above
+    // reaches the ordinary case), so this is a backstop rather than a path
+    // anything here exercises; the cost of being wrong the other way is a
+    // deadline that never fires.
+    child.on('exit', (code) => {
+      if (timedOut) {
+        settle(code);
+      }
     });
 
     if (options.input !== undefined) {

@@ -18,11 +18,14 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     return this.args.model?.cardDescription;
   }
 
+  // cardThumbnailURL carries the whole thumbnail fallback chain (explicit
+  // URL, then ImageDef link, then useAsThumbnail capture), so the social
+  // preview shows the same image as every other consumer — except a base64
+  // value (MaybeBase64Field allows one): no scraper accepts a data: URI for
+  // og:image, and the payload would inline into every prerendered head.
   get image(): string | undefined {
-    return (
-      this.args.model?.cardInfo?.cardThumbnail?.url ??
-      this.args.model?.cardThumbnailURL
-    );
+    let url = this.args.model?.cardThumbnailURL;
+    return url && !url.startsWith('data:') ? url : undefined;
   }
 
   get themeIcon(): string | undefined {

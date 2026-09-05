@@ -9,7 +9,8 @@ import {
   type Querier,
   upsert,
 } from '../expression.ts';
-import { getMatrixUsername } from '../matrix-client.ts';
+import { fetchMatrixProfile, getMatrixUsername } from '../matrix-client.ts';
+import { effectiveRealmPermissions } from '../realm-permission-checker.ts';
 
 async function insertPermission(
   dbAdapter: DBAdapter,
@@ -133,6 +134,30 @@ export async function fetchRealmPermissions(
     {} as RealmPermissions,
   );
 }
+
+/**
+ * One user's effective permissions in one realm — what `Realm#checkPermission`
+ * will compute for them, so this is the set to mint a session token from.
+ *
+ * Takes a homeserver URL rather than a matrix client because the callers that
+ * need it most are worker tasks, which run in a child process that holds no
+ * client. The URL is used only to resolve a `users` grant, and only when the
+ * realm actually carries one.
+ */
+export async function fetchEffectiveRealmPermissions(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  username: string,
+  matrixURL: string,
+): Promise<RealmAction[]> {
+  let realmPermissions = await fetchRealmPermissions(dbAdapter, realmURL);
+  return await effectiveRealmPermissions(
+    realmPermissions,
+    username,
+    async () => !!(await fetchMatrixProfile(new URL(matrixURL), username)),
+  );
+}
+
 export async function fetchUserPermissions(
   dbAdapter: DBAdapter,
   args: {

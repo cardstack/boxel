@@ -169,11 +169,16 @@ import {
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
+import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
+import stableStringify from 'safe-stable-stringify';
 import {
   captureSpecHash,
   captureSpecOverrides,
+  isValidScreenshotName,
   parseCaptureSpecParams,
+  screenshotsMetaFromManifest,
   type CaptureSpec,
+  type ScreenshotManifest,
 } from './capture-spec.ts';
 import {
   findMediaCacheEntry,
@@ -319,21 +324,41 @@ export type RealmIndexCounts = {
   definitionCount: number | null;
 };
 
-// Marker header the host SPA attaches to outbound _federated-search /
-// _search calls when it's running inside a prerender tab. The prerender
-// server uses puppeteer's `evaluateOnNewDocument` to inject a window
-// global (`__boxelRenderContext = true`) into every Chrome tab before
-// the host loads; the host's realm-server fetch wrapper then reads that
-// flag and adds this header on its own outbound search requests only —
-// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
-// see it on a CORS preflight. When the realm sees this on an inbound
-// _search request it knows the caller is the host SPA mid-render and
-// switches the search to cacheOnlyDefinitions:true, which short-circuits
-// the recursive lookupDefinition → prerenderModule path in
-// populateQueryFields that causes self-referential prerender deadlocks
-// under parallel indexing. Kept as a bare string here so runtime-common
-// stays independent of realm-server. The realm-server prerender side
-// re-exports the same value from prerender-constants.ts.
+// Marker header the host SPA attaches to its outbound search calls and card
+// writes when it's running inside a prerender tab. Two different host-side
+// flags produce it, and the split is deliberate:
+//
+//   - Search calls read `__boxelRenderContext`, which the prerender server
+//     injects into every Chrome tab via puppeteer's `evaluateOnNewDocument`
+//     before the host loads, and which the prerender-shaped routes also
+//     raise when they activate.
+//   - Card writes read `__boxelHeadlessCommand`, raised only by the
+//     command-runner route. Host tests raise `__boxelRenderContext` around
+//     in-browser index renders that run alongside an interactive app, and a
+//     save from that app must keep answering from the index — so a write
+//     cannot use the broader flag. A command is the only writer in a
+//     prerender tab anyway; the render routes block persistence outright.
+//
+// Either way the header goes on those requests only, narrowly scoped so
+// non-realm-server origins (icons, vite, etc.) don't see it on a CORS
+// preflight.
+//
+// The realm reads it as "the caller is the host SPA mid-render, and it is
+// holding a prerender render slot until this request returns". Two inbound
+// requests act on that:
+//
+//   - `_search` / `_federated-search` switch to cacheOnlyDefinitions:true,
+//     short-circuiting the recursive lookupDefinition → prerenderModule path
+//     in populateQueryFields that causes self-referential prerender deadlocks
+//     under parallel indexing.
+//   - a JSON-API card POST / PATCH indexes deferred and answers from the
+//     document it serialized, because reading the write back out of the index
+//     would await a job that needs the slot the caller is holding. See
+//     `serializedInstanceEcho`.
+//
+// Kept as a bare string here so runtime-common stays independent of
+// realm-server. The realm-server prerender side re-exports the same value
+// from prerender-constants.ts.
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
@@ -390,16 +415,19 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 const READINESS_REQUEST_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
-// per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
-// validators and split the cache key. Two inputs feed the base:
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
+// — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
+// validators and split the cache key. Three inputs feed the base:
 //   - `indexed_at` on the primary card's index row, which bumps on
 //     direct writes AND dependency-triggered re-writes (so the deps
 //     graph carries cascading invalidations forward through it);
 //   - md5 of the cached `RealmInfo`, since `attachRealmInfo()`
 //     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
 //     into the assembled response at request time and that field
-//     can change without any card being re-indexed.
+//     can change without any card being re-indexed;
+//   - a fingerprint of the joined screenshot manifest, which lands on
+//     the prerendered_html channel without moving `indexed_at` (see
+//     `screenshotsEtagFingerprint`).
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
@@ -610,23 +638,46 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>:card"`. The value
-// is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<screenshotsFingerprint>]:card"`.
+// The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
 // would fail strict-validator parsing in some intermediaries.
 // `indexedAt` captures direct + dep-cascaded writes; the
 // `realmInfoHash` captures `attachRealmInfo()`'s request-time
 // injection of `meta.realmInfo` (which can flip without re-indexing
-// any card). A null `indexedAt` suppresses ETag emission entirely.
+// any card); the screenshots fingerprint captures the joined
+// `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
+// `indexedAt` suppresses ETag emission entirely.
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
+  screenshotsFingerprint?: string,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
   }
-  let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
+  let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
+    .filter(Boolean)
+    .join('-');
   return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+}
+
+// The joined `meta.screenshots` travels on the prerendered_html channel,
+// which publishes after — and independently of — the index row: `indexed_at`
+// does not move when a capture lands, so a validator built from it alone
+// would 304 a cached document past its own screenshots forever (the same
+// two-channel trap `buildEntryEtag` documents below). Folding a fingerprint
+// of the manifest in rotates the validator exactly when the served
+// `meta.screenshots` changes — objectKeys are content hashes, so a re-render
+// whose captures are byte-identical keeps its fingerprint. Absent manifest
+// contributes no component, so cards without captures keep their validators.
+function screenshotsEtagFingerprint(
+  manifest: ScreenshotManifest | null | undefined,
+): string | undefined {
+  if (!manifest) {
+    return undefined;
+  }
+  return computeContentHash(stableStringify(manifest) ?? '').slice(0, 8);
 }
 
 // The card+html / file-meta+html GET's composite validator. It encodes both
@@ -789,9 +840,10 @@ export interface WriteOptions {
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
   // it, the next instance's serialization would fail. This flag governs
-  // only the final indexing await. The first concrete caller is the per-
-  // file `+source` POST handler, which writes a single file at a time, so
-  // the intermediate-flush path is not exercised in practice.
+  // only the final indexing await. `/_atomic` does write mixed batches and
+  // so does reach that intermediate flush; the per-file `+source` POST and
+  // the JSON-API card handlers do not, writing a single file and instances
+  // respectively.
   waitForIndex?: boolean | null;
 }
 
@@ -4113,17 +4165,6 @@ export class Realm {
     let instanceURL = this.paths.fileURL(
       instanceLocalPath.replace(/\.json$/, ''),
     );
-    // One narrow read is both the liveness gate and the cache key's
-    // generation: undefined means the instance is missing, deleted, or
-    // errored — an uncaptured miss — and otherwise it pins the generation an
-    // edit bumps, without hydrating the row.
-    let generationLookupStart = Date.now();
-    let sourceGeneration =
-      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
-    let generationLookupMs = Date.now() - generationLookupStart;
-    if (sourceGeneration === undefined) {
-      return mediaCacheMissResponse({ requestContext });
-    }
     let searchParams = new URL(request.url).searchParams;
 
     // `name=` addresses a declared screenshot through the instance's
@@ -4140,8 +4181,93 @@ export class Realm {
           requestContext,
         });
       }
-      // Declared-screenshot manifests are indexing-time artifacts; nothing
-      // publishes them, so every name is an uncaptured miss.
+      if (!isValidScreenshotName(name)) {
+        return badRequest({
+          message: `"${name}" is not a valid screenshot name`,
+          requestContext,
+        });
+      }
+      // The manifest read doubles as the liveness gate (same row predicate
+      // as the DSL path's generation read): undefined means the instance is
+      // missing, deleted, or errored. A live instance with no manifest, or
+      // a manifest without this name — not yet captured, capture-errored,
+      // or never declared — is an uncaptured miss with a short max-age, so
+      // an `<img>` embedded ahead of its capture picks it up on
+      // revalidation. Names never trigger capture work: declared captures
+      // are produced by the prerender pass alone.
+      let manifestLookupStart = Date.now();
+      let manifest =
+        await this.#realmIndexQueryEngine.liveInstanceScreenshots(instanceURL);
+      let manifestLookupMs = Date.now() - manifestLookupStart;
+      if (manifest === undefined) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      let manifestEntry = manifest?.[name];
+      if (!manifestEntry) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      // The manifest names both the capture identity (`specHash`) and the
+      // exact artifact (`objectKey`), and the lookup pins both — so what
+      // this URL serves always matches the `hash` the joined
+      // `meta.screenshots` advertises for it, whatever newer ledger rows
+      // exist (media persists before its manifest publishes, and a
+      // carried-forward capture's row keeps an older generation). A fresher
+      // capture serves once its own manifest publishes moments later; a
+      // pinned object whose row is gone is an uncaptured miss that the
+      // short max-age self-heals.
+      let ledgerLookupStart = Date.now();
+      let entry = await findMediaCacheEntry(this.#dbAdapter, {
+        realmURL: this.url,
+        sourceURL: instanceURL.href,
+        captureSpecHash: manifestEntry.specHash,
+        objectKey: manifestEntry.objectKey,
+      });
+      if (!entry) {
+        return mediaCacheMissResponse({ requestContext });
+      }
+      let perf: ScreenshotServePerf = {
+        requestStart,
+        correlationId: sanitizeLoggingCorrelationId(
+          request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+        ),
+        generationLookupMs: manifestLookupMs,
+        ledgerLookupMs: Date.now() - ledgerLookupStart,
+      };
+      let serveStart = Date.now();
+      let response = await serveMediaCacheEntry({
+        request,
+        requestContext,
+        entry,
+        mediaCacheAdapter: this.#mediaCacheAdapter,
+        dbAdapter: this.#dbAdapter,
+      });
+      this.emitScreenshotServePerf(
+        {
+          realmURL: this.url,
+          sourceURL: instanceURL.href,
+          captureSpecHash: manifestEntry.specHash,
+          sourceGeneration: entry.sourceGeneration,
+        },
+        perf,
+        'hit',
+        {
+          lane: entry.lane,
+          serveMs: Date.now() - serveStart,
+        },
+        'get-named',
+      );
+      return response;
+    }
+
+    // One narrow read is both the liveness gate and the cache key's
+    // generation: undefined means the instance is missing, deleted, or
+    // errored — an uncaptured miss — and otherwise it pins the generation an
+    // edit bumps, without hydrating the row.
+    let generationLookupStart = Date.now();
+    let sourceGeneration =
+      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    let generationLookupMs = Date.now() - generationLookupStart;
+    if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
     }
 
@@ -4204,10 +4330,11 @@ export class Realm {
     perf: ScreenshotServePerf,
     outcome: ScreenshotRequestPerfEvent['outcome'],
     fields: Partial<ScreenshotRequestPerfEvent> = {},
+    surface: ScreenshotRequestPerfEvent['surface'] = 'get-dsl',
   ): void {
     emitScreenshotPerf({
       eventType: 'request',
-      surface: 'get-dsl',
+      surface,
       outcome,
       realmURL: this.url,
       sourceURL: entryKey.sourceURL,
@@ -4884,6 +5011,31 @@ export class Realm {
     }
   }
 
+  // The realm-relative target for a 302, built from a local path. A header
+  // value is a ByteString, so a local path carrying anything outside Latin-1 —
+  // an emoji in a file name, a CJK character — cannot go into `Location` as the
+  // path spells it: `new Response` rejects the value outright with
+  // `Cannot convert argument to a ByteString`. Resolving through `fileURL`
+  // percent-encodes the path the same way the client's own URL was encoded on
+  // the wire, so the header stays ASCII and `paths.local` recovers the same
+  // file from it.
+  //
+  // The `./` prefix is what keeps that resolution path-relative, and it is not
+  // optional. A bare local path whose first segment reads as a URL scheme is
+  // otherwise parsed as an absolute or opaque URL, and everything up to and
+  // including the colon — the realm's own mount path along with it — is dropped
+  // from `pathname`: `notes:x.gts` yields `x.gts`, `https:x.gts` yields `/`,
+  // and a name as ordinary as `re: notes.gts` yields ` notes.gts`, which a
+  // header then trims to `notes.gts`. Each of those addresses a different file
+  // than the one that was found. `./` cannot begin a scheme, so every name
+  // resolves as a path under the realm.
+  //
+  // `pathname` (not `href`) keeps the target realm-relative, which is what a
+  // client reaching the realm through a different published host needs.
+  private redirectTarget(localPath: LocalPath): string {
+    return this.paths.fileURL(`./${localPath}`).pathname;
+  }
+
   private async getSourceOrRedirect(
     request: Request,
     requestContext: RequestContext,
@@ -4971,7 +5123,7 @@ export class Realm {
           return notFound(request, requestContext, `${localName} not found`);
         }
         let headers = {
-          Location: `${new URL(this.url).pathname}${handle.path}`,
+          Location: this.redirectTarget(handle.path),
           [CACHE_HEADER]: CACHE_MISS_VALUE,
         };
         let response = createResponse({
@@ -5453,6 +5605,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let duringPrerender = isDuringPrerenderRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
     // card. fileSerialization runs lookupDefinition on the card's
     // adoptsFrom module, and with CS-11003's deferred +source POST a
@@ -5461,9 +5614,22 @@ export class Realm {
     // and the +json POST would fail. Draining here makes the JSON-API
     // path tolerant of an immediately-preceding +source POST without
     // disturbing the +json POST's own synchronous-indexing contract.
-    let pending = this.incrementalIndexing();
-    if (pending) {
-      await pending;
+    //
+    // A prerender-originated write skips the drain: the job it would wait on
+    // needs the render slot (and, on the queued-command path, the worker) the
+    // caller is holding, so waiting deadlocks. Serialization still resolves a
+    // definition it has never seen — `lookupDefinition` reads through to
+    // `prerenderModule`, which serves the module off disk rather than out of
+    // the index. What the drain did cover and this path does not is a module
+    // the same caller just rewrote: the cached definition stays authoritative
+    // until the deferred index job invalidates it, so a serialization run in
+    // that window is against the previous schema and `fileSerialization`
+    // drops attributes whose fields it doesn't know.
+    if (!duringPrerender) {
+      let pending = this.incrementalIndexing();
+      if (pending) {
+        await pending;
+      }
     }
     let body = await request.text();
     let json;
@@ -5502,6 +5668,7 @@ export class Realm {
     let included = (maybeIncluded ?? []) as CardResource[];
     let resources = [primaryResource, ...included];
     let primaryResourceURL: URL | undefined;
+    let primarySerialization: LooseSingleCardDocument | undefined;
     for (let [i, resource] of resources.entries()) {
       if (
         (i > 0 && typeof resource.lid !== 'string') ||
@@ -5548,6 +5715,9 @@ export class Realm {
       }
       let localPath = this.paths.local(fileURL);
       files.set(localPath, JSON.stringify(fileSerialization, null, 2));
+      if (i === 0) {
+        primarySerialization = fileSerialization;
+      }
     }
     if (!primaryResourceURL) {
       return systemError({
@@ -5558,33 +5728,45 @@ export class Realm {
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      ...(duringPrerender ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
-    let entry = await this.#realmIndexQueryEngine.cardDocument(
-      new URL(newURL),
-      {
-        loadLinks: true,
-        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
-      },
-    );
-    if (!entry || entry?.type === 'error') {
-      let err = entry
-        ? CardError.fromSerializableError(entry.error)
-        : undefined;
-      return systemError({
-        requestContext,
-        message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
-        additionalError: err,
-        id: newURL,
+    let doc: SingleCardDocument;
+    if (duringPrerender) {
+      // See serializedInstanceEcho: the write indexed deferred, so there is
+      // nothing to read back yet.
+      doc = await this.serializedInstanceEcho(
+        primarySerialization!,
+        newURL,
+        lastModified,
+      );
+    } else {
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(newURL),
+        {
+          loadLinks: true,
+          skipQueryBackedExpansion: false,
+        },
+      );
+      if (!entry || entry?.type === 'error') {
+        let err = entry
+          ? CardError.fromSerializableError(entry.error)
+          : undefined;
+        return systemError({
+          requestContext,
+          message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
+          additionalError: err,
+          id: newURL,
+        });
+      }
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: newURL },
+          meta: { lastModified },
+        },
       });
     }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: newURL },
-        meta: { lastModified },
-      },
-    });
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -5617,6 +5799,7 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
+    let duringPrerender = isDuringPrerenderRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -5703,6 +5886,9 @@ export class Realm {
       delete (patch as any).type;
       delete (patch as any).meta.realmInfo;
       delete (patch as any).meta.realmURL;
+      // Server-stamped at serve time (the `meta.screenshots` join); an echo
+      // from a client must never persist into the source file.
+      delete (patch as any).meta.screenshots;
 
       promoteLocalIdsToRemoteIds({
         resource: patch,
@@ -5749,7 +5935,7 @@ export class Realm {
           new URL(instanceURL),
           {
             loadLinks: true,
-            skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+            skipQueryBackedExpansion: duringPrerender,
           },
         );
         if (entry && entry.type !== 'error') {
@@ -5762,6 +5948,20 @@ export class Realm {
           let createdAt = await this.getCreatedTime(
             this.paths.local(url) + '.json',
           );
+          // The PATCH echo is the same served representation as a GET —
+          // including the joined `meta.screenshots` (the store replaces an
+          // instance's meta wholesale from a save response, so an echo
+          // without it would wipe the key client-side until the next GET)
+          // and the same validator components.
+          if (entry.screenshots) {
+            existingDoc.data.meta = {
+              ...existingDoc.data.meta,
+              screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+                realmURL: this.url,
+                instanceLocalPath: this.paths.local(url),
+              }),
+            };
+          }
           // entry.doc came from cardDocument(), which already called
           // attachRealmInfo() and (re)populated the realm-info cache —
           // so the cached hash is current as of this response.
@@ -5769,7 +5969,11 @@ export class Realm {
           let foreignDeps = this.hasForeignRealmDeps(entry.deps);
           let etag = foreignDeps
             ? undefined
-            : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+            : buildCardJsonEtag(
+                entry.indexedAt,
+                this.getCachedRealmInfoHash(),
+                screenshotsEtagFingerprint(entry.screenshots),
+              );
           this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
@@ -5855,15 +6059,40 @@ export class Realm {
       // connection).
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        ...(duringPrerender ? { waitForIndex: false } : {}),
       });
+      let doc: SingleCardDocument;
+      if (duringPrerender) {
+        // See serializedInstanceEcho: the write indexed deferred, so there is
+        // nothing to read back yet.
+        doc = await this.serializedInstanceEcho(
+          primarySerialization!,
+          instanceURL,
+          lastModified,
+        );
+        this.#serveInstanceIdsAsRRI(doc);
+        return createResponse({
+          body: JSON.stringify(doc, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': this.cardJsonCacheControl(requestContext),
+              ...lastModifiedHeader(doc),
+              ...(created
+                ? { 'x-created': formatRFC7231(created * 1000) }
+                : {}),
+            },
+          },
+          requestContext,
+        });
+      }
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(instanceURL),
         {
           loadLinks: true,
-          skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          skipQueryBackedExpansion: false,
         },
       );
-      let doc: SingleCardDocument;
       if (!entry || entry?.type === 'error') {
         if (
           primarySerialization &&
@@ -5897,6 +6126,19 @@ export class Realm {
             meta: { lastModified },
           },
         });
+        // The PATCH echo carries the joined `meta.screenshots` like a GET
+        // does — the store replaces an instance's meta wholesale from a
+        // save response, so an echo without it would wipe the key
+        // client-side until the next GET.
+        if (entry.screenshots) {
+          doc.data.meta = {
+            ...doc.data.meta,
+            screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+              realmURL: this.url,
+              instanceLocalPath: this.paths.local(url),
+            }),
+          };
+        }
       }
       // Same rationale as the no-op short-circuit branch above:
       // cardDocument() above primed the realm-info cache via
@@ -5909,7 +6151,11 @@ export class Realm {
           : false;
       let etag =
         entry && entry.type !== 'error' && !foreignDeps
-          ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
+          ? buildCardJsonEtag(
+              entry.indexedAt,
+              this.getCachedRealmInfoHash(),
+              screenshotsEtagFingerprint(entry.screenshots),
+            )
           : undefined;
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
@@ -6053,7 +6299,7 @@ export class Realm {
         init: {
           status: 302,
           headers: {
-            Location: `${new URL(this.url).pathname}${canonicalPath}`,
+            Location: this.redirectTarget(canonicalPath),
           },
         },
       });
@@ -6104,7 +6350,11 @@ export class Realm {
           instanceEntry.type === 'instance' &&
           instanceEntry.indexedAt != null
         ) {
-          let etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
+          let etag = buildCardJsonEtag(
+            instanceEntry.indexedAt,
+            realmInfoHash,
+            screenshotsEtagFingerprint(instanceEntry.screenshots),
+          );
           if (etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
             return createResponse({
               requestContext,
@@ -6199,9 +6449,23 @@ export class Realm {
       this.#serveInstanceIdsAsRRI(card);
       // Surface the instance's index-data generation
       // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
-      // card+json GET can tell fresh index data from stale. A fresh `meta`
-      // object — never a mutation of the cached pristine doc's `meta`.
-      card.data.meta = { ...card.data.meta, generation: maybeError.generation };
+      // card+json GET can tell fresh index data from stale, and join the
+      // instance's declared-screenshot manifest into `meta.screenshots` (the
+      // serve-time join — the manifest is never written back into
+      // `boxel_index` or the source file). A fresh `meta` object — never a
+      // mutation of the cached pristine doc's `meta`.
+      card.data.meta = {
+        ...card.data.meta,
+        generation: maybeError.generation,
+        ...(maybeError.screenshots
+          ? {
+              screenshots: screenshotsMetaFromManifest(maybeError.screenshots, {
+                realmURL: this.url,
+                instanceLocalPath: localPath,
+              }),
+            }
+          : {}),
+      };
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the
@@ -6215,7 +6479,7 @@ export class Realm {
           body: null,
           init: {
             status: 302,
-            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+            headers: { Location: this.redirectTarget(foundPath) },
           },
         });
       }
@@ -6236,6 +6500,7 @@ export class Realm {
         : buildCardJsonEtag(
             maybeError.indexedAt,
             this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(maybeError.screenshots),
           );
       return createResponse({
         body: JSON.stringify(card, null, 2),
@@ -6716,7 +6981,9 @@ export class Realm {
     } else {
       // Get source from plain text request body
       const source = await request.text();
-      const filename = request.headers.get('X-Filename') || 'input.gts';
+      const filename =
+        decodeLintFilename(request.headers.get(LINT_FILENAME_HEADER)) ??
+        'input.gts';
       if (!source || source.trim() === '') {
         return createResponse({
           body: JSON.stringify({
@@ -7641,10 +7908,19 @@ export class Realm {
     publishable: boolean | null;
   }> {
     try {
-      let results = (await query(this.#dbAdapter, [
-        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
-        param(this.url),
-      ])) as {
+      // Both columns are declared `boolean | null` and consumers compare them
+      // as booleans, so coerce them: adapters are free to hand back a
+      // driver-native spelling for a boolean column — postgres yields real
+      // booleans, SQLite yields 1/0 — and an uncoerced 1 fails every
+      // `=== true` check downstream while still looking truthy.
+      let results = (await query(
+        this.#dbAdapter,
+        [
+          `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+          param(this.url),
+        ],
+        { show_as_catalog: 'BOOLEAN', publishable: 'BOOLEAN' },
+      )) as {
         show_as_catalog: boolean | null;
         publishable: boolean | null;
       }[];
@@ -8149,6 +8425,42 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // Builds a card write's response out of the document just serialized to
+  // disk, instead of reading the write back out of the index.
+  //
+  // This is what a write from a prerender tab answers with. Such a caller
+  // holds a prerender render slot for as long as its write is open — and, on
+  // the queued-command path, a queue worker as well — while the index read
+  // would await the `incremental-index` job the write enqueues, a job that
+  // needs the very slot and worker the caller is holding. Answering from the
+  // serialization keeps the write independent of indexing; pairing it with
+  // `waitForIndex: false` on the write is what makes the enqueue deferred
+  // rather than awaited.
+  //
+  // The echo carries what a saving client merges back: the assigned id, the
+  // self link, `lastModified`, and the realm's `realmInfo`. It does not carry
+  // computed fields, resolved links, or the joined `meta.screenshots` — only
+  // the index knows those. A caller that needs them reads the instance again
+  // once indexing has settled.
+  private async serializedInstanceEcho(
+    serialization: LooseSingleCardDocument,
+    instanceURL: string,
+    lastModified: number | null,
+  ): Promise<SingleCardDocument> {
+    let realmInfo = await this.getRealmInfo();
+    return merge({}, serialization, {
+      data: {
+        id: instanceURL,
+        links: { self: instanceURL },
+        meta: {
+          realmURL: this.url,
+          realmInfo,
+          ...(lastModified != null ? { lastModified } : {}),
+        },
+      },
+    }) as SingleCardDocument;
   }
 
   private async fileSerialization(

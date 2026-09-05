@@ -266,6 +266,11 @@ export class Responder {
       Boolean(call),
     );
 
+    // Record the finish_reason regardless of streaming mode: the final
+    // consolidated edit surfaces an error to the user when the provider cut
+    // the generation at its output-token limit ('length').
+    this.responseState.updateFinishReason(chunk.choices?.[0]?.finish_reason);
+
     // When we're not sending mid-turn, `finalize()` owns the
     // `isStreamingFinished` transition — otherwise the flag would flip here,
     // the mid-turn send would be gated off, and `finalize()` would see no

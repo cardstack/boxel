@@ -286,7 +286,10 @@ export async function touchMediaCacheEntry(
 // `sourceGeneration` the lookup is the exact primary key (the caller's cache
 // key pins the generation); without one it is the capture's newest
 // generation — the row a re-capture repointed, whatever generation stamped
-// it.
+// it. An `objectKey` narrows the lookup to the row holding that exact
+// artifact — the `?name=` route pins the object its manifest names, so what
+// a URL serves always matches the `hash` the joined `meta.screenshots`
+// advertises for it.
 export async function findMediaCacheEntry(
   dbAdapter: DBAdapter,
   {
@@ -294,8 +297,10 @@ export async function findMediaCacheEntry(
     sourceURL,
     captureSpecHash,
     sourceGeneration,
+    objectKey,
   }: Omit<MediaCacheEntryKey, 'sourceGeneration'> & {
     sourceGeneration?: number;
+    objectKey?: string;
   },
 ): Promise<MediaCacheEntry | undefined> {
   // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
@@ -314,6 +319,9 @@ export async function findMediaCacheEntry(
     param(captureSpecHash),
     ...(sourceGeneration != null
       ? ([`AND source_generation =`, param(sourceGeneration)] as Expression)
+      : []),
+    ...(objectKey != null
+      ? ([`AND object_key =`, param(objectKey)] as Expression)
       : []),
     `ORDER BY source_generation DESC LIMIT 1`,
   ] as Expression)) as {

@@ -75,6 +75,42 @@ function makeFileSystem() {
         @field name = contains(StringField);
       }
 
+      // Default fitted template + a content-bearing capture flagged
+      // useAsThumbnail: the persisted tile HTML must carry the capture's
+      // durable URL through the cardThumbnailURL fallback chain, with no
+      // template edits.
+      export class Gallery extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Gallery: <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          tile: { format: 'isolated', width: 170, height: 250, useAsThumbnail: true },
+        };
+      }
+
+      // Consumes its own declared capture in a display format — pins the
+      // render context's declaration-derived meta.screenshots: the durable
+      // URL must land in persisted HTML on the instance's very first
+      // prerender pass, when the capture itself runs later in that same
+      // pass and no manifest exists yet.
+      export class SelfPromo extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Promo: <@fields.name/></h1>
+            {{#if @model.screenshotURLs.card}}
+              <img src={{@model.screenshotURLs.card}} alt='self preview' />
+            {{/if}}
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          card: { format: 'fitted', width: 400, height: 300 },
+        };
+      }
+
       // Renders the linked card in a display format, so the persisted
       // isolated_html carries the linked data as text — the inspectable
       // twin of the capture-only path above.
@@ -257,6 +293,119 @@ module(basename(import.meta.filename), function (hooks) {
       errors,
       undefined,
       'no screenshotErrors diagnostics on a clean capture',
+    );
+  });
+
+  test('card+json joins the manifest into meta.screenshots and the ?name= URL serves the capture', async function (assert) {
+    await writeAndSettle('widget.json', productDoc('Widget'));
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}widget.json`,
+    );
+    let manifest = row!.screenshots as ScreenshotManifest;
+
+    let response = await realm.handle(
+      new Request(`${testRealm}widget`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    assert.strictEqual(response!.status, 200);
+    let json = await response!.json();
+    assert.deepEqual(
+      json.data.meta.screenshots,
+      {
+        card: {
+          url: `${testRealm}_screenshot/widget?name=card`,
+          hash: manifest.card.objectKey,
+          contentType: 'image/png',
+          width: 400,
+          height: 300,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+        hero: {
+          url: `${testRealm}_screenshot/widget?name=hero`,
+          hash: manifest.hero.objectKey,
+          contentType: 'image/webp',
+          width: 320,
+          height: 180,
+          deviceScaleFactor: 2,
+        },
+      },
+      'the manifest joins into meta.screenshots in its public projection',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_screenshot/widget?name=card`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(served!.headers.get('content-type'), 'image/png');
+    assert.strictEqual(
+      served!.headers.get('etag'),
+      `"${manifest.card.objectKey}"`,
+      'the ETag is the capture content hash',
+    );
+  });
+
+  test('a card can embed its own declared capture on its first prerender pass', async function (assert) {
+    await writeAndSettle(
+      'self-promo-1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'First' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'SelfPromo' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}self-promo-1.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.card, 'the capture landed in the same pass');
+    assert.true(
+      (row!.isolated_html ?? '').includes(
+        `${testRealm}_screenshot/self-promo-1?name=card`,
+      ),
+      `the very first persisted isolated_html embeds the durable URL (render-context declaration-derived meta); got: ${row!.isolated_html}`,
+    );
+  });
+
+  test('a useAsThumbnail capture feeds the default fitted tile with no template edits', async function (assert) {
+    await writeAndSettle(
+      'gallery-1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'First' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Gallery' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}gallery-1.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.tile, 'the thumbnail capture landed');
+    assert.true(
+      manifest!.tile.useAsThumbnail,
+      'the manifest carries the thumbnail flag',
+    );
+
+    let fittedHtml = Object.values(
+      (row!.fitted_html ?? {}) as Record<string, string>,
+    ).join('\n');
+    assert.true(
+      fittedHtml.includes(`${testRealm}_screenshot/gallery-1?name=tile`),
+      `the default fitted tile renders the capture through the cardThumbnailURL chain; got: ${fittedHtml.slice(0, 2000)}`,
     );
   });
 

@@ -1,7 +1,7 @@
 import type Koa from 'koa';
 import { resolve, join } from 'path';
 import fsExtra from 'fs-extra';
-const { ensureDirSync, writeJSONSync } = fsExtra;
+const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import * as Sentry from '@sentry/node';
 import type {
   DBAdapter,
@@ -22,6 +22,11 @@ import {
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import {
+  REALM_README_FILENAME,
+  realmReadmeTemplate,
+  shouldSeedRealmReadme,
+} from '../lib/realm-readme.ts';
 import type { SendEvent } from './send-event.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
@@ -189,7 +194,7 @@ export async function createRealm(
         },
       },
     });
-    writeJSONSync(join(realmPath, 'index.json'), {
+    let indexCard: Record<string, any> = {
       data: {
         type: 'card',
         meta: {
@@ -199,7 +204,29 @@ export async function createRealm(
           },
         },
       },
-    });
+    };
+    // Seed a Home README into the user's personal (first) realm. Best-effort:
+    // a template read/write hiccup must not fail realm creation, so on error we
+    // fall back to a README-less index card. When it succeeds, link the file via
+    // the Workspace card's `readme` field so it renders on Home.
+    if (shouldSeedRealmReadme(endpoint)) {
+      try {
+        writeFileSync(
+          join(realmPath, REALM_README_FILENAME),
+          realmReadmeTemplate(),
+        );
+        indexCard.data.relationships = {
+          readme: {
+            links: { self: `./${REALM_README_FILENAME}` },
+            data: { type: 'file-meta', id: `./${REALM_README_FILENAME}` },
+          },
+        };
+      } catch (err) {
+        log.error(`failed to seed README for realm ${url}: ${err}`);
+        Sentry.captureException(err);
+      }
+    }
+    writeJSONSync(join(realmPath, 'index.json'), indexCard);
 
     // Register the source realm in realm_registry. The INSERT emits
     // NOTIFY realm_registry; the reconciler on every instance picks

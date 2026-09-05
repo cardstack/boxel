@@ -4,7 +4,7 @@ import type { Task } from './index.ts';
 
 import {
   captureSpecHash,
-  fetchRealmPermissions,
+  fetchEffectiveRealmPermissions,
   fetchUserPermissions,
   isCaptureFormat,
   jobIdentity,
@@ -154,13 +154,19 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     let prerenderMs: number | undefined;
     let response!: ScreenshotPrerenderResponse;
     try {
-      let realmPermissions = await fetchRealmPermissions(
+      let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
+      // The effective set the realm itself enforces: its `users` and `*`
+      // grants unioned with the runner's own row. A session token is rejected
+      // when its permissions claim differs from that union in either
+      // direction, so on a realm that carries a shared grant the runner's row
+      // alone is not a mintable set.
+      let userPermissions = await fetchEffectiveRealmPermissions(
         dbAdapter,
         new URL(normalizedRealmURL),
+        runAsUserId,
+        matrixURL,
       );
-      let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
-      let userPermissions = realmPermissions[runAsUserId];
-      if (!userPermissions || userPermissions.length === 0) {
+      if (userPermissions.length === 0) {
         let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
         log.error(message);
         reportStatus(jobInfo, 'finish');
@@ -178,7 +184,10 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       }
 
       // Include JWTs for all realms the user has access to so cross-realm
-      // card references render correctly during the screenshot.
+      // card references render correctly during the screenshot. Only the realm
+      // being captured carries the effective set: the per-user enumeration
+      // behind the sibling entries reads each realm's own row and its `*` row
+      // without unioning them, and never consults `users` rows.
       let allUserPermissions = await fetchUserPermissions(dbAdapter, {
         userId: runAsUserId,
       });

@@ -7,6 +7,7 @@ import {
   BrokenLinkTemplate,
   CopyButton,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
 } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -104,6 +105,8 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  fileNameFromUrl,
+  referenceNamesFile,
   isDeclaredScreenshotFormat,
   isValidScreenshotName,
   DECLARED_SCREENSHOT_FORMATS,
@@ -1747,7 +1750,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
-                  @displayName={{cardTypeName broken.reference}}
+                  @itemType={{brokenLinkItemType linksToField}}
+                  @displayName={{brokenLinkDisplayName
+                    linksToField
+                    broken.reference
+                  }}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
@@ -2405,6 +2412,29 @@ export function brokenLinkFormat(
   }
 }
 
+// What the placeholder says is missing. A `linksTo(FileDef)` slot holds a file,
+// so its failure reads as a missing file rather than a missing card.
+export function brokenLinkItemType(
+  field: Field<LinkableDefConstructor>,
+): BrokenLinkItemType {
+  return isFileDef(field.card) ? 'file' : 'card';
+}
+
+// The label the placeholder shows next to the link-off icon. The two reference
+// shapes name themselves in different segments: a card instance url is
+// `<Type>/<id>`, whose readable name is the type; a file url is a path, whose
+// readable name is the file name. Reading a file url as a card reference names
+// the directory that happens to sit second-to-last — `images` for a missing
+// `images/photo.jpg` — which points a reader at nothing.
+export function brokenLinkDisplayName(
+  field: Field<LinkableDefConstructor>,
+  reference: string,
+): string {
+  return isFileDef(field.card)
+    ? fileNameFromUrl(reference)
+    : cardTypeName(reference);
+}
+
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
@@ -2440,6 +2470,12 @@ interface InternalFieldInitializer {
   description: string | undefined;
 }
 
+// Property names the system provides as getters on CardDef/FileDef. A
+// userland `@field` under one of these would shadow the getter via the
+// prototype chain silently, so the decorator refuses them by name (the
+// `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
+const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
@@ -2450,6 +2486,11 @@ export const field = function (
   if (typeof key === 'symbol') {
     throw new Error(
       `the @field decorator only supports string field names, not symbols`,
+    );
+  }
+  if (RESERVED_FIELD_NAMES.includes(key)) {
+    throw new Error(
+      `"${key}" is a reserved name: it is provided by the system and cannot be declared as a field`,
     );
   }
   if (!(target instanceof BaseDef)) {
@@ -2855,8 +2896,26 @@ export type ScreenshotSpec = {
   // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
   // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
-  // Feed this capture to `cardThumbnailURL`. At most one entry across a
-  // card's merged declarations may set this.
+  // Feed this capture to `cardThumbnailURL` (its fallback chain prefers an
+  // author-set URL, then an authored ImageDef link, then this capture). At
+  // most one entry across a card's merged declarations may set this.
+  //
+  // Recommended (not enforced) box: 170×250 — the CardsGrid tile — at the
+  // default deviceScaleFactor of 2, so the capture crops predictably under
+  // consumers' `object-fit`/`background-size`. The declared width×height is
+  // the capture envelope, used exactly as given; for a format-based capture
+  // the rendered variant is emergent from the template's own container-query
+  // breakpoints, deterministic per box. Preview a candidate box with
+  // `?format=fitted&envelope=WxH` via the `_screenshot/` DSL on a dev realm,
+  // then codify it here. A box declared near one of the template's
+  // breakpoints can flip variants when those breakpoints are tuned — the
+  // same fragility any responsive design has.
+  //
+  // Point the capture at content: a capture-only `render` component, an
+  // isolated/embedded format, or a fitted template that does not itself
+  // render `cardThumbnailURL`. A fitted capture of the default fitted
+  // template would capture the tile chrome — including its own thumbnail
+  // slot, which shows the previous capture.
   useAsThumbnail?: boolean;
   // What invalidates the capture: the instance's index generation (any
   // edit), or — for file-backed defs — the file's content hash, so a
@@ -3137,6 +3196,70 @@ export function serializeDeclaredScreenshots(
   return roster;
 }
 
+// Shared body of the `screenshotURLs` getter on CardDef and FileDef (two
+// sites, matching how `static screenshots` itself is declared — FieldDef has
+// no addressable URL, so it gets neither). Every declared slot name appears
+// as a key; the value is the capture's durable served URL when
+// `meta.screenshots` (the serve-time join, or the prerender render context's
+// declaration-derived form) holds the name, and `undefined` otherwise —
+// not-yet-captured, capture-errored, or an unsaved instance. `undefined`
+// rather than a placeholder URL is deliberate: it is the absence signal
+// consumption fallback chains (e.g. a thumbnail falling through to an icon
+// default) rely on, which a placeholder would defeat.
+function composeScreenshotURLs(
+  instance: CardDef | FileDef,
+): Record<string, string | undefined> {
+  let urls: Record<string, string | undefined> = {};
+  try {
+    for (let name of Object.keys(
+      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+    )) {
+      urls[name] = undefined;
+    }
+  } catch {
+    // An invalid declaration fails loudly at its authoring surfaces (the
+    // capture roster read, `getScreenshots` callers); a consuming template
+    // must stay render-safe, so here it reads as "nothing declared".
+  }
+  let captured = getCardMeta(instance, 'screenshots');
+  if (captured) {
+    for (let [name, entry] of Object.entries(captured)) {
+      urls[name] = entry.url;
+    }
+  }
+  return urls;
+}
+
+// The durable URL of the capture feeding `cardThumbnailURL`: the declared
+// slot flagged `useAsThumbnail` (at most one across the merged declarations,
+// enforced by `getScreenshots`), read with `screenshotURLs`' semantics — a
+// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise.
+// On live loads meta joins the persisted manifest, so an uncaptured slot
+// reads `undefined` and the fallback chain's terminal rung (the icon
+// default) engages. In the prerender render context meta is
+// declaration-derived (`screenshotsMetaFromRoster`), so this rung asserts
+// the durable URL before any capture exists: persisted HTML embeds a URL
+// that 404s until the capture lands, then self-heals — and a slot whose
+// capture never succeeds stays a 404 (a blank tile), not the icon default.
+// Same render-safety posture as `composeScreenshotURLs`: an invalid
+// declaration reads as "no thumbnail capture".
+function thumbnailScreenshotURL(
+  instance: CardDef | FileDef,
+): string | undefined {
+  let name: string | undefined;
+  try {
+    name = Object.entries(
+      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+    ).find(([, spec]) => spec.useAsThumbnail)?.[0];
+  } catch {
+    return undefined;
+  }
+  if (!name) {
+    return undefined;
+  }
+  return getCardMeta(instance, 'screenshots')?.[name]?.url;
+}
+
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
   // class type cannot masquerade as a FieldDef class type
@@ -3303,26 +3426,65 @@ export class CSSField extends TextAreaField {
             --border,
             color-mix(in oklab, var(--field-fg) 20%, var(--field-bg))
           );
+          --field-fade: 1.5rem;
           position: relative;
+          background-color: var(--field-bg);
+          border: 1px solid var(--field-border);
+          border-radius: var(--radius, var(--boxel-border-radius));
+          overflow: hidden;
         }
         .css-field-copy-button {
           position: absolute;
           top: var(--boxel-sp-xs);
           right: var(--boxel-sp-xs);
+          z-index: 1;
         }
         .css-field {
           margin-block: 0;
           padding: var(--boxel-sp);
-          background-color: var(--field-bg);
-          border: 1px solid var(--field-border);
-          border-radius: var(--radius, var(--boxel-border-radius));
           color: var(--field-fg);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
           );
           font-size: var(--boxel-font-size-xs);
-          overflow-x: auto;
+          max-height: var(--css-field-max-height, none);
+          overflow: auto;
+          /* iOS-style edge fades: text dissolves into the background at an
+             edge only while more content lies beyond it. Each mask layer is
+             taller than the box by the fade height, so shifting it up by that
+             amount parks its fade offscreen; the scroll timeline slides them
+             into view. Base positions show no fade, which is also what
+             browsers without scroll-driven animations render. */
+          mask-image:
+            linear-gradient(to bottom, transparent, black var(--field-fade)),
+            linear-gradient(to top, transparent, black var(--field-fade));
+          mask-size: 100% calc(100% + var(--field-fade));
+          mask-repeat: no-repeat;
+          mask-composite: intersect;
+          mask-position:
+            0 calc(-1 * var(--field-fade)),
+            0 0;
+          animation: css-field-edge-fade linear both;
+          animation-timeline: scroll(self);
+        }
+        @keyframes css-field-edge-fade {
+          0% {
+            mask-position:
+              0 calc(-1 * var(--field-fade)),
+              0 calc(-1 * var(--field-fade));
+          }
+          8%,
+          92% {
+            mask-position:
+              0 0,
+              0 calc(-1 * var(--field-fade));
+          }
+          100% {
+            mask-position:
+              0 0,
+              0 0;
+          }
         }
         .css-field::placeholder {
           opacity: 0.5;
@@ -3523,6 +3685,13 @@ export class FileDef extends BaseDef {
     return this[meta]?.resourceCreatedAt;
   }
 
+  // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
+  // file-backed defs. The prerender pass captures only instance rows, so a
+  // file's declared names read `undefined` until file rows capture too.
+  get screenshotURLs(): Record<string, string | undefined> {
+    return composeScreenshotURLs(this);
+  }
+
   // The four shared format shells own identity, facts, budgets, and state for
   // every file family. What they can't know is how to draw the file itself — a
   // waveform, a page, a 3D scene — so a family supplies that one renderer here
@@ -3719,12 +3888,23 @@ export class CardDef extends BaseDef {
       return this.cardInfo.theme;
     },
   });
-  // TODO: this will probably be an image or image url field card when we have it
-  // UPDATE: we now have a Base64ImageField card. we can probably refactor this
-  // to use it directly now (or wait until a better image field comes along)
+  // The thumbnail fallback chain: an author-set URL wins, then an authored
+  // ImageDef link, then the capture the card's `static screenshots` flags
+  // `useAsThumbnail` — so every opted-in card gets a live preview with no
+  // template edits (the default fitted template already renders this field).
+  // Falsy past all three rungs is the absence signal consumers use to fall
+  // through to the icon default, which is why the capture rung reads
+  // `undefined` (never a placeholder) until a capture exists. `||` rather
+  // than `??`: a text edit can leave `''` in the authored URL (only the
+  // picker's clear button writes `null`), and `''` is never a meaningful
+  // URL — it must not mask the rungs below it.
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.cardThumbnailURL;
+      return (
+        this.cardInfo.cardThumbnailURL ||
+        this.cardInfo.cardThumbnail?.url ||
+        thumbnailScreenshotURL(this)
+      );
     },
   });
   static displayName = 'Card';
@@ -3806,6 +3986,24 @@ export class CardDef extends BaseDef {
   get [realmURL](): URL | undefined {
     let realmURLString: string | undefined = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
+  }
+
+  // The durable served URLs of this instance's declared screenshots, keyed
+  // by slot name — one key per `static screenshots` declaration, `undefined`
+  // until a capture exists (see `composeScreenshotURLs`). `undefined` is the
+  // deliberate absence signal, so a template must guard its `<img>` —
+  // Glimmer omits the attribute for an undefined value, which renders a
+  // broken/empty image:
+  //
+  //   {{#if @model.screenshotURLs.card}}
+  //     <img src={{@model.screenshotURLs.card}} alt='preview' />
+  //   {{/if}}
+  //
+  // A getter rather than a `@field` (like FileDef's timestamp getters) so it
+  // never round-trips on a write; the name is reserved by the `@field`
+  // decorator so a userland field can't shadow it.
+  get screenshotURLs(): Record<string, string | undefined> {
+    return composeScreenshotURLs(this);
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
@@ -4194,8 +4392,17 @@ function lazilyLoadLink(
         (isCardError(error) && error.status === 404) ||
         (typeof error?.message === 'string' &&
           /not found/i.test(error.message));
+      // The realm file the broken reference stands for: a card instance is
+      // served out of `<id>.json`, while a reference that names a file is
+      // already the file. The field's own type settles it when the field is
+      // declared to hold a file; otherwise the reference's shape does, judged
+      // by a registered extension rather than by a dot, so a card id that
+      // carries one keeps the `.json` its row is keyed on. This string is both
+      // what the reader is told is missing and the dep invalidation watches, so
+      // a `.json` appended to a file path names a row that can never appear and
+      // the mended link never reaches this consumer.
       let referenceForMissingFile =
-        isFileLink || reference.endsWith('.json')
+        isFileLink || referenceNamesFile(reference)
           ? reference
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &

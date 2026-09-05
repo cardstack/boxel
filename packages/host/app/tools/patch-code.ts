@@ -1,6 +1,10 @@
 import { service } from '@ember/service';
 
-import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
+import {
+  decodeLintFilename,
+  hasExecutableExtension,
+  rri,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
@@ -235,7 +239,15 @@ export default class PatchCodeTool extends HostBaseTool<
   ): Promise<BaseToolModule.LintAndFixResult> {
     let lintCommand = new LintAndFixTool(this.toolContext);
     let realmURL = this.realm.url(fileUrl);
-    let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
+    // `pathname` is percent-encoded, so the last segment of an emoji-named
+    // file reads as `ai%F0%9F%8E%89app-card.gts`. The tool's `filename` is the
+    // name as it is on disk — the same thing the code editor passes it from
+    // `readyFile.name` — and encoding it for the header it travels in belongs
+    // to the tool, not to each caller. The header's decoder recovers the name
+    // here because `URL.pathname` carries it under that same encoding.
+    let filename =
+      decodeLintFilename(new URL(fileUrl).pathname.split('/').pop()) ||
+      'input.gts';
 
     return await lintCommand.execute({
       realm: realmURL,

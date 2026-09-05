@@ -751,14 +751,14 @@ function buildQunitTestPageHtml(opts: {
 </html>`;
 }
 
-interface RealmMount {
+export interface RealmMount {
   /** URL path segment (no slashes), e.g. "workspace" or "base". */
   prefix: string;
   /** Absolute path to the directory served at that prefix. */
   root: string;
 }
 
-interface TestPageServerOptions {
+export interface TestPageServerOptions {
   hostDistDir: string;
   /** Realm mounts served from this same server (local-mode only). */
   realmMounts?: RealmMount[];
@@ -780,8 +780,16 @@ interface TestPageServerOptions {
  * The two responsibilities live in one server so chromium issues every
  * request against the same origin; that sidesteps CORS preflights and
  * the loader's URL-mapping edge cases.
+ *
+ * Every mount response identifies the realm it serves — see `realmHeaders`
+ * for what depends on that.
+ *
+ * @internal Exported for tests, which drive the mounts without a browser.
+ * `api.ts` names its exports explicitly, so this stays inside the package.
  */
-async function startTestPageServer(opts: TestPageServerOptions): Promise<{
+export async function startTestPageServer(
+  opts: TestPageServerOptions,
+): Promise<{
   url: string;
   server: Server;
   setHtml: (h: string) => void;
@@ -812,6 +820,39 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
       prefix: mount.prefix,
       root: resolve(mount.root),
     });
+  }
+
+  // Headers every mount response carries. The realm-identity pair —
+  // `X-Boxel-Realm-Url` and `X-Boxel-Realm-Public-Readable` — is what a
+  // realm-server stamps via `createResponse`; the blanket allow-origin is
+  // this server's own, carried by every response it serves. A mount serves a
+  // realm's modules without being a realm, so that pair is the only thing
+  // that can name the realm a mounted module belongs to — whoever needs that
+  // owner asks the module URL for it.
+  //
+  // `CachingDefinitionLookup.buildLookupContext` is the consequential asker:
+  // for a module outside every realm registered with it, it HEADs the module
+  // URL and reads `x-boxel-realm-url`. With no owner to name it throws
+  // `FilterRefersToNonexistentTypeError`, which aborts the field-tree walk
+  // behind every card GET and turns it into a 500 — and that walk reaches a
+  // mounted module for every card there is, because `CardDef.cardInfo` holds
+  // a `CardInfoField` served from the base mount.
+  //
+  // Public-readable is the truth here rather than a convenience: the mounts
+  // are unauthenticated static file serving. Expose-Headers pairs with the
+  // blanket `Access-Control-Allow-Origin` these responses already carry;
+  // without it a cross-origin reader gets the body but not the identity.
+  function realmHeaders(realmUrl: string): Record<string, string> {
+    return {
+      'Access-Control-Allow-Origin': '*',
+      'X-Boxel-Realm-Url': realmUrl,
+      'X-Boxel-Realm-Public-Readable': 'true',
+      // Just the identity pair, which is all a mount adds — a realm-server
+      // names a longer list. `Last-Modified` is absent because it is on the
+      // CORS response safelist and reaches a cross-origin reader regardless.
+      'Access-Control-Expose-Headers':
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable',
+    };
   }
   let transpileCache = new Map<string, { mtimeMs: number; body: string }>();
 
@@ -906,7 +947,7 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
           walkRealm(mount.root, '', realmUrl, mtimes);
           reply.writeHead(200, {
             'Content-Type': 'application/vnd.api+json',
-            'Access-Control-Allow-Origin': '*',
+            ...realmHeaders(realmUrl),
           });
           reply.end(
             JSON.stringify({
@@ -922,19 +963,33 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
 
         let normalized = normalize(rest).split(sep).join('/');
         if (normalized.startsWith('..') || normalized.startsWith('/')) {
-          reply.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+          reply.writeHead(403, realmHeaders(realmUrl));
           reply.end('Forbidden');
           return;
         }
         let filePath = resolveExisting(mount.root, normalized);
         if (!filePath) {
-          reply.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+          reply.writeHead(404, realmHeaders(realmUrl));
           reply.end('Not found');
           return;
         }
         let stat = statSync(filePath);
         let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
         let needsTranspile = ext === '.gts' || ext === '.ts';
+        // A realm-server stamps this on every file serve, and the module
+        // prerender requires it: `buildModuleModel` HEADs the module with
+        // `Accept: card-source` and treats only a 404 as a shimmed module, so
+        // for a served module it reads `last-modified` and fails the render
+        // outright without one. That failure is not a 404, so the definition
+        // lookup persists it as a module error and `lookupDefinition` throws
+        // `FilterRefersToNonexistentTypeError` — the same 500 an unidentified
+        // mount produces, one step further along. `x-created` is the optional
+        // half of the pair: absent, the module's created time falls back to
+        // this, which is the best a file mount can honestly report anyway.
+        //
+        // `toUTCString` is RFC 7231 IMF-fixdate, the format `formatRFC7231`
+        // writes and the host's reader parses.
+        let lastModified = new Date(stat.mtimeMs).toUTCString();
 
         if (needsTranspile) {
           let cached = transpileCache.get(filePath);
@@ -949,7 +1004,7 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
               let message = err instanceof Error ? err.message : String(err);
               reply.writeHead(500, {
                 'Content-Type': 'text/plain',
-                'Access-Control-Allow-Origin': '*',
+                ...realmHeaders(realmUrl),
               });
               reply.end(`transpile failed: ${message}`);
               return;
@@ -958,8 +1013,9 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
           }
           reply.writeHead(200, {
             'Content-Type': 'application/javascript',
-            'Access-Control-Allow-Origin': '*',
+            'Last-Modified': lastModified,
             'X-Boxel-Cli-Transpiled': '1',
+            ...realmHeaders(realmUrl),
           });
           reply.end(cached.body);
           return;
@@ -968,11 +1024,12 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
         try {
           reply.writeHead(200, {
             'Content-Type': mimeTypes[ext] ?? 'application/octet-stream',
-            'Access-Control-Allow-Origin': '*',
+            'Last-Modified': lastModified,
+            ...realmHeaders(realmUrl),
           });
           reply.end(readFileSync(filePath));
         } catch {
-          reply.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+          reply.writeHead(404, realmHeaders(realmUrl));
           reply.end('Not found');
         }
         return;

@@ -56,7 +56,7 @@ async function backdate(full: string, ageMs: number): Promise<void> {
   await fs.utimes(full, when, when);
 }
 
-module('prerender v8-prof', function (hooks) {
+module(path.basename(import.meta.filename), function (hooks) {
   let saved: Record<string, string | undefined>;
   let created: string[];
 

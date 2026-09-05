@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import ScreenshotCardCommand from '@cardstack/boxel-host/tools/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/tools/screenshot-card';
 import { Button } from '@cardstack/boxel-ui/components';
 
 type ScreenshotFormat = 'isolated' | 'embedded';
@@ -26,10 +26,10 @@ const FormatField = enumField(StringField, {
 class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked isRunning = false;
   @tracked errorMessage: string | null = null;
-  @tracked imageDefUrl: string | null = null;
+  @tracked imageUrl: string | null = null;
 
-  get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+  get hasToolContext() {
+    return Boolean(this.args.context?.toolContext);
   }
 
   get hasLinkedCard() {
@@ -37,7 +37,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   }
 
   get isDisabled() {
-    return this.isRunning || !this.hasCommandContext || !this.hasLinkedCard;
+    return this.isRunning || !this.hasToolContext || !this.hasLinkedCard;
   }
 
   get effectiveFormat(): ScreenshotFormat {
@@ -47,11 +47,11 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
   @action
   async takeScreenshot() {
-    let commandContext = this.args.context?.commandContext;
+    let toolContext = this.args.context?.toolContext;
     let card = (this.args.model as any)?.card;
-    if (!commandContext) {
+    if (!toolContext) {
       this.errorMessage =
-        'Command context is unavailable. Open this card in host interact mode.';
+        'Tool context is unavailable. Open this card in host interact mode.';
       return;
     }
     if (!card) {
@@ -61,13 +61,13 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
     this.isRunning = true;
     this.errorMessage = null;
-    this.imageDefUrl = null;
+    this.imageUrl = null;
     try {
-      let result = await new ScreenshotCardCommand(commandContext).execute({
+      let result = await new ScreenshotCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });
-      this.imageDefUrl = result.imageDefUrl;
+      this.imageUrl = result.captures?.[0]?.url ?? null;
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -81,9 +81,8 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       <header>
         <h2>Screenshot Card Demo</h2>
         <p>
-          Pick a card and a format, then capture a settled PNG into the
-          card's own realm under
-          <code>Screenshots/</code>.
+          Pick a card and a format, then capture a settled PNG. The capture is
+          persisted to the media cache and its served URL is shown below.
         </p>
       </header>
 
@@ -107,11 +106,11 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
         </Button>
       </section>
 
-      {{#if this.imageDefUrl}}
+      {{#if this.imageUrl}}
         <section class='result'>
           <p>Saved to:</p>
-          <code class='url'>{{this.imageDefUrl}}</code>
-          <img src={{this.imageDefUrl}} alt='Card screenshot' />
+          <code class='url'>{{this.imageUrl}}</code>
+          <img src={{this.imageUrl}} alt='Card screenshot' />
         </section>
       {{/if}}
 

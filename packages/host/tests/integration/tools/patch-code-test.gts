@@ -5,7 +5,9 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  decodeLintFilename,
   Deferred,
+  LINT_FILENAME_HEADER,
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
@@ -95,8 +97,13 @@ export class Task extends CardDef {
       request: Request,
       _requestContext: any,
     ): Promise<LintResult> => {
-      // Verify that X-Filename header is passed correctly
-      const filename = request.headers.get('X-Filename');
+      // The X-Filename header travels percent-encoded, so that a name outside
+      // Latin-1 can be carried in a header at all. Read it back through the
+      // same codec, which is what pins the name the realm sees to the name on
+      // disk rather than to whichever spelling the caller happened to hold.
+      const filename = decodeLintFilename(
+        request.headers.get(LINT_FILENAME_HEADER),
+      );
       assert.strictEqual(
         filename,
         testFileName,

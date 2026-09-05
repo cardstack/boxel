@@ -607,6 +607,42 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('a card render absorbs a blocked write, a headless command reports it', async function (assert) {
+    // `__boxelPrerenderApp` blocks every store's writes in the prerender app.
+    // A card render absorbs the block: the prerenderer is not an avenue for
+    // mutations, so a card that writes from a template or computed still
+    // renders, with the write dropped.
+    (globalThis as any).__boxelPrerenderApp = true;
+    try {
+      let rendered = new PersonDef({ name: 'Andrea' });
+      assert.strictEqual(
+        await storeService.add(rendered),
+        rendered,
+        'a render keeps the instance rather than failing',
+      );
+
+      // A command is the one caller whose write must land, so the block being
+      // up here means the command route did not drop it — and an instance
+      // with no id reads as a saved card to every caller.
+      (globalThis as any).__boxelHeadlessCommand = true;
+      await assert.rejects(
+        storeService.add(new PersonDef({ name: 'Van Gogh' })),
+        /persistence block still raised/,
+        'a command reports the blocked write',
+      );
+
+      let ephemeral = new PersonDef({ name: 'Mango' });
+      assert.strictEqual(
+        await storeService.add(ephemeral, { doNotPersist: true }),
+        ephemeral,
+        'a memory-only add is served as asked',
+      );
+    } finally {
+      delete (globalThis as any).__boxelHeadlessCommand;
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
+  });
+
   test('restoring sessions from storage skips the re-walk when the session blob is unchanged', function (assert) {
     // `restoreSessionsFromStorage` is synchronous, so the walk-count delta
     // measured immediately around each call is exactly that call's work — other
@@ -843,6 +879,26 @@ module('Integration | Store', function (hooks) {
       storeService.peekError(fileUrl, { type: 'file-meta' }),
       undefined,
       'no error cached on the file-meta bucket',
+    );
+  });
+
+  test('a file the realm does not hold is reported as a missing file', async function (assert) {
+    let missingFileUrl = `${testRealmURL}missing.png`;
+
+    let error = (await storeService.get(missingFileUrl, {
+      type: 'file-meta',
+    })) as CardErrorJSONAPI;
+
+    assert.strictEqual(error.status, 404, 'the error carries the HTTP status');
+    assert.strictEqual(
+      error.title,
+      'File Not Found',
+      'a missing file is titled as a missing file, not a missing card',
+    );
+    assert.strictEqual(
+      error.message,
+      `The file ${missingFileUrl} does not exist`,
+      'the message names a file, not a card',
     );
   });
 

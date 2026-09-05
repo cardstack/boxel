@@ -67,8 +67,8 @@ const realmAFiles: Record<string, any> = {
   'realm.json': realmConfigCardJSON({
     name: 'Test Workspace A',
     backgroundURL:
-      'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+    iconURL: '/test-fixtures/realm-images/boxel-logo.png',
   }),
   'index.json': {
     data: {
@@ -689,8 +689,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+              '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: '/test-fixtures/realm-images/boxel-logo.png',
           }),
         },
       });

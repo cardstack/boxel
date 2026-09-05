@@ -9,6 +9,7 @@ import type {
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { Query } from './query.ts';
+import type { ScreenshotsMeta } from './capture-spec.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -112,6 +113,12 @@ export type CardResourceMeta = Meta & {
   // data from stale. Additive — absent when the serialization did not come off
   // the index (e.g. a freshly-built resource that has not been persisted).
   generation?: number;
+  // The instance's declared-screenshot captures, joined at serve time from
+  // the prerendered manifest (`prerendered_html.screenshots`) — never
+  // persisted into the index or the source file, and stripped from incoming
+  // writes like `realmInfo`/`realmURL`. The `screenshotURLs` getter on
+  // CardDef/FileDef reads this.
+  screenshots?: ScreenshotsMeta;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -131,15 +138,22 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
+  // See CardResourceMeta.screenshots. The prerender pass captures only
+  // instance rows, so nothing stamps this on file-meta responses — the key
+  // exists so FileDef's `screenshotURLs` getter reads both kinds uniformly
+  // when file rows capture too.
+  screenshots?: ScreenshotsMeta;
 };
 
 // The single home for how a file's timestamps land in `meta`: the card key
 // names (`resourceCreatedAt`, not the legacy `attributes.createdAt` spelling),
 // mapped once. Every producer of a file-meta resource — the two indexed
-// builders and the filesystem fallback — spreads this so a hydrated FileDef
-// exposes them through `getCardMeta` / its getters, and a fourth producer can't
-// silently reintroduce the mapping omission. Callers resolve their own defaults
-// (the source values differ per path) and pass the two resolved values here.
+// builders, the filesystem fallback, and the extract-time builder the
+// prerender hydrates its FileDef from (host `buildFileResource`) — spreads
+// this so a hydrated FileDef exposes them through `getCardMeta` / its getters,
+// and another producer can't silently reintroduce the mapping omission.
+// Callers resolve their own defaults (the source values differ per path) and
+// pass the two resolved values here.
 export function fileMetaTimestamps(
   lastModified: number | undefined,
   createdAt: number | undefined,

@@ -137,8 +137,13 @@ setComponentManager(
   _SimpleHTMLComponent.prototype,
 );
 
+// One HTMLComponent may be mounted in several places at once (a search
+// consumer that shows the same entry twice). The parsed nodes are owned by the
+// component, and appendChild would move them from the earlier mount into the
+// later one, so a mount that finds them already live in the document takes a
+// copy. Nodes left inside a torn-down root are disconnected and move freely.
 const withChildren = modifier((element: Element, [children]: [Node[]]) => {
   for (let child of children) {
-    element.appendChild(child);
+    element.appendChild(child.isConnected ? child.cloneNode(true) : child);
   }
 });

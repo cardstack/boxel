@@ -320,7 +320,10 @@ class Isolated extends Component<typeof DetailedStyleReference> {
                   </div>
                 {{else if (eq section.id 'card-container-css')}}
                   {{#if @model.cssVariables}}
-                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                    <CardContainerCss
+                      @cssVariables={{@model.cssVariables}}
+                      @isDarkMode={{this.isDarkMode}}
+                    />
                   {{/if}}
                 {{else if (eq section.id 'import-css')}}
                   {{! the cardInfo editor in the header owns the name and

@@ -35,6 +35,7 @@ Then configure the rules you want to use under the rules section:
 | [host-tools-registered](docs/rules/host-tools-registered.md)             | Ensure every host tool module is imported, shimmed, and exported                                     | ✅  |     |
 | [mock-window-only](docs/rules/mock-window-only.md)                       | Enforce use of window mock localStorage                                                              | ✅  | 🔧  |
 | [no-percy-direct-import](docs/rules/no-percy-direct-import.md)           | Forbid importing percySnapshot directly from @percy/ember; use @cardstack/host/tests/helpers instead | ✅  | 🔧  |
+| [no-remote-realm-images](docs/rules/no-remote-realm-images.md)           | Forbid pointing a realm iconURL or backgroundURL at an image host outside the allow-list             | ✅  |     |
 | [unique-percy-snapshot-names](docs/rules/unique-percy-snapshot-names.md) | Require every Percy snapshot within a test to have a distinct name                                   | ✅  |     |
 | [wrapped-setup-helpers-only](docs/rules/wrapped-setup-helpers-only.md)   | Enforce use of wrapped setup helpers that use ember-window-mock                                      | ✅  |     |
 

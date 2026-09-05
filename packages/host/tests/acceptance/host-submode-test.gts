@@ -134,8 +134,8 @@ module('Acceptance | host submode', function (hooks) {
       'realm.json': realmConfigCardJSON({
         name: 'Test Workspace B',
         backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: '/test-fixtures/realm-images/boxel-logo.png',
       }),
       'person.gts': personCardSource,
       'view-card-demo.gts': viewCardDemoCardSource,
@@ -318,10 +318,20 @@ module('Acceptance | host submode', function (hooks) {
     setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
+      // No realm_metadata row at all, which is how most realms sit: the table
+      // is created empty and only createRealm and publishing ever write to it.
+      // The publish endpoint refuses anything that is not explicitly
+      // publishable, so a missing row is a refusal — the state a realm
+      // predating the table, or a disk-mounted bootstrap realm, is in.
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `DELETE FROM realm_metadata WHERE url =`,
+        param(testRealmURL),
+      ]);
       // Each of these nested modules builds the same realm for every one of its
       // tests, so the indexed result is cached per module and restored instead
-      // of being rebuilt. The seeded realm_metadata row above is part of what
-      // the snapshot captures, so a restored test starts from the same state.
+      // of being rebuilt. The realm_metadata state above is part of what the
+      // snapshot captures, so a restored test starts from the same state.
       await withCachedRealmSetup(async () => {
         await setupAcceptanceTestRealm({
           mockMatrixUtils,
@@ -356,6 +366,86 @@ module('Acceptance | host submode', function (hooks) {
 
       assert.dom('[data-test-submode-switcher]').hasText('Interact');
       assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
+    });
+
+    test('the publish modal warns that the workspace cannot be published', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      // The warning waits on the dialog's own `ensureRealmMeta`, so it can
+      // render a beat after the dialog does.
+      await waitFor('[data-test-unpublishable-realm-warning]');
+
+      assert
+        .dom('[data-test-unpublishable-realm-warning]')
+        .containsText(
+          'not publishable',
+          'the warning states the workspace cannot be published',
+        );
+
+      // Selecting a domain is what clears the rest of `isPublishDisabled`, so
+      // without this the assertion below would hold on any realm at all and
+      // say nothing about publishability.
+      await click('[data-test-default-domain-checkbox]');
+      assert
+        .dom('[data-test-publish-button]')
+        .isDisabled(
+          'publishing stays withheld with a domain selected, rather than being left to fail against the endpoint',
+        );
+    });
+  });
+
+  module('with a realm flagged unpublishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      // publishable explicitly false, rather than absent: the state publishing
+      // leaves the published copy in, so opening a published site's own
+      // workspace lands here. Seeded BEFORE setupAcceptanceTestRealm so
+      // parseRealmInfo's first read — the one that gets cached — sees it.
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(false),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = false`,
+      ]);
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
+      });
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
+    });
+
+    test('the publish modal warns and withholds publishing', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-unpublishable-realm-warning]');
+
+      assert
+        .dom('[data-test-unpublishable-realm-warning]')
+        .containsText('not publishable');
+
+      await click('[data-test-default-domain-checkbox]');
+      assert
+        .dom('[data-test-publish-button]')
+        .isDisabled(
+          'a domain is selected, so only the publishability gate can be holding this',
+        );
     });
   });
 
@@ -414,6 +504,41 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       assert.dom('[data-test-open-search-field]').doesNotExist();
+    });
+
+    test('the publish modal shows no unpublishability warning', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-default-domain-checkbox]');
+
+      assert.dom('[data-test-unpublishable-realm-warning]').doesNotExist();
+
+      // A publishable workspace must reach an *enabled* publish button once a
+      // domain is picked. Without this the absence of the warning above would
+      // also be satisfied by realm info that never loaded at all.
+      await click('[data-test-default-domain-checkbox]');
+      assert.dom('[data-test-publish-button]').isNotDisabled();
+    });
+
+    test('an empty selection reports itself as empty, not as unpublishable', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom('[data-test-host-mode-empty]')
+        .containsText('No card selected');
+      assert
+        .dom('[data-test-host-mode-empty]')
+        .doesNotContainText(
+          'publishable',
+          'having nothing to render is not a publishability problem',
+        );
     });
 
     test('entering from interact mode stays on the same card', async function (assert) {
