@@ -2344,7 +2344,8 @@ export class RenderRunner {
         signal,
       ),
     );
-    recordStepMs(Date.now() - stepStart);
+    let stepMs = Date.now() - stepStart;
+    recordStepMs(stepMs);
     if (!stepResult.ok) {
       return {
         result: {
@@ -2355,6 +2356,9 @@ export class RenderRunner {
               message:
                 stepResult.error.error?.message ??
                 'declared screenshot capture failed',
+              // The step failed as a unit, so this is the whole step's
+              // elapsed time, not one slot's share.
+              captureMs: stepMs,
             },
           ],
         },
