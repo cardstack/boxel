@@ -1562,29 +1562,45 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot manifest the previous pass published for this
-  // row, read from production `prerendered_html` — the carry-forward input
-  // for `keyBy: 'file-content'` slots (skip re-rendering when the source
-  // bytes are unchanged). Null when no prior row exists or it carried no
-  // manifest.
-  async priorScreenshotManifest(
+  // The declared-screenshot manifests the previous pass published for this
+  // URL's rows, read from production `prerendered_html` and keyed by row
+  // type — the carry-forward inputs for `keyBy: 'file-content'` slots (skip
+  // re-rendering when the source bytes are unchanged). A row that doesn't
+  // exist or carried no manifest simply has no key.
+  async priorScreenshotManifests(
     url: URL,
-    type: PrerenderedHtmlTable['type'],
-  ): Promise<ScreenshotManifest | null> {
-    // This runs once per instance visit, so it selects only the manifest —
-    // the row's HTML columns are large and irrelevant here.
-    let [row] = (await this.#query([
-      `SELECT screenshots FROM prerendered_html WHERE`,
+  ): Promise<Partial<Record<'instance' | 'file', ScreenshotManifest>>> {
+    // This runs once per visit, so it selects only the manifests — the
+    // rows' HTML columns are large and irrelevant here.
+    let rows = (await this.#query([
+      `SELECT type, screenshots FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
           [`url =`, param(url.href)],
           [`file_alias =`, param(url.href)],
         ]),
-        ['type =', param(type)],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
       ]),
-    ] as Expression)) as unknown as Pick<PrerenderedHtmlTable, 'screenshots'>[];
-    return (row?.screenshots as ScreenshotManifest | null) ?? null;
+    ] as Expression)) as unknown as Pick<
+      PrerenderedHtmlTable,
+      'type' | 'screenshots'
+    >[];
+    let manifests: Partial<Record<'instance' | 'file', ScreenshotManifest>> =
+      {};
+    for (let row of rows) {
+      if (
+        (row.type === 'instance' || row.type === 'file') &&
+        row.screenshots &&
+        Object.keys(row.screenshots).length > 0
+      ) {
+        manifests[row.type] = row.screenshots as ScreenshotManifest;
+      }
+    }
+    return manifests;
   }
 
   private async getPrerenderedHtmlProductionVersion(

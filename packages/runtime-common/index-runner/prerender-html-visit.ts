@@ -706,31 +706,21 @@ async function visitForPrerenderedHtml({
   };
 
   // Declared-screenshot capture rides the visit only when this pass can
-  // persist the bytes (both adapters present) and the URL has a card
-  // rendering to capture from. The prior manifest + current content hash go
-  // along so file-content-keyed slots can carry forward in-engine.
-  let captureScreenshots = Boolean(
-    parsedCardResource && dbAdapter && mediaCacheAdapter,
-  );
-  let priorManifest: ScreenshotManifest | null = null;
+  // persist the bytes (both adapters present). One opt-in covers both of the
+  // URL's renderings — the card pass captures only when the URL has a card
+  // rendering at all, so no per-half gating is needed here. The prior
+  // manifests (one per prerendered_html row, keyed by row type) + the
+  // current content hash go along so file-content-keyed slots can carry
+  // forward in-engine.
+  let captureScreenshots = Boolean(dbAdapter && mediaCacheAdapter);
+  let priorManifests:
+    | Partial<Record<'instance' | 'file', ScreenshotManifest>>
+    | undefined;
   let screenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
   if (captureScreenshots) {
-    priorManifest = await batch.priorScreenshotManifest(url, 'instance');
+    priorManifests = await batch.priorScreenshotManifests(url);
     screenshotVisitArgs = {
-      ...(priorManifest ? { priorManifest } : {}),
-      ...(contentHash !== undefined ? { contentHash } : {}),
-    };
-  }
-  // The file rendering captures too — every URL has one, and a FileDef
-  // family's poster slots live on the 'file' row. Carry-forward keys on the
-  // file row's own prior manifest; the content hash is the same file's.
-  let captureFileScreenshots = Boolean(dbAdapter && mediaCacheAdapter);
-  let filePriorManifest: ScreenshotManifest | null = null;
-  let fileScreenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
-  if (captureFileScreenshots) {
-    filePriorManifest = await batch.priorScreenshotManifest(url, 'file');
-    fileScreenshotVisitArgs = {
-      ...(filePriorManifest ? { priorManifest: filePriorManifest } : {}),
+      ...(Object.keys(priorManifests).length > 0 ? { priorManifests } : {}),
       ...(contentHash !== undefined ? { contentHash } : {}),
     };
   }
@@ -761,9 +751,6 @@ async function visitForPrerenderedHtml({
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
     ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),
-    ...(fileScreenshotVisitArgs
-      ? { fileScreenshots: fileScreenshotVisitArgs }
-      : {}),
   });
 
   // The visit's render diagnostics (launch/wait timings, render elapsed,
@@ -803,8 +790,8 @@ async function visitForPrerenderedHtml({
       let screenshotOutcome =
         captureScreenshots && dbAdapter && mediaCacheAdapter
           ? await persistDeclaredScreenshots({
-              result: response.screenshots,
-              priorManifest,
+              result: card.screenshots,
+              priorManifest: priorManifests?.instance ?? null,
               dbAdapter,
               mediaCacheAdapter,
               realmURL,
@@ -863,10 +850,10 @@ async function visitForPrerenderedHtml({
     stats.fileErrors++;
   } else {
     let fileScreenshotOutcome =
-      captureFileScreenshots && dbAdapter && mediaCacheAdapter
+      captureScreenshots && dbAdapter && mediaCacheAdapter
         ? await persistDeclaredScreenshots({
-            result: response.fileScreenshots,
-            priorManifest: filePriorManifest,
+            result: fileRender.screenshots,
+            priorManifest: priorManifests?.file ?? null,
             dbAdapter,
             mediaCacheAdapter,
             realmURL,
