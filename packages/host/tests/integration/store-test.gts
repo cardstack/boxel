@@ -2140,6 +2140,146 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Records the store-side identity steps a create runs, filtered to `instance`
+  // so unrelated saves in the same test cannot pad the sequence. The three
+  // subjects are the three shapes the steps are called with: the instance
+  // itself, its remote id, and its local id. Returns a restore function.
+  function spyOnIdentitySteps(instance: CardDefType, steps: string[]) {
+    let store = storeService as any;
+    let operatorModeState = operatorModeStateService as any;
+    let isSubject = (subject: unknown) =>
+      subject === instance ||
+      subject === instance[localId] ||
+      (instance.id != null && subject === instance.id);
+    let spied: [Record<string, any>, string, any][] = [
+      [store, 'subscribeToRealm', store.subscribeToRealm],
+      [store, 'updateForeignConsumersOf', store.updateForeignConsumersOf],
+      [store, 'setIdentityContext', store.setIdentityContext],
+      [store, 'startAutoSaving', store.startAutoSaving],
+      [
+        operatorModeState,
+        'handleCardIdAssignment',
+        operatorModeState.handleCardIdAssignment,
+      ],
+    ];
+    for (let [target, name, original] of spied) {
+      target[name] = function (...args: any[]) {
+        if (isSubject(args[0])) {
+          steps.push(name);
+        }
+        return original.apply(target, args);
+      };
+    }
+    return () => {
+      for (let [target, name, original] of spied) {
+        target[name] = original;
+      }
+    };
+  }
+
+  test('a create assigns the instance its remote identity in a fixed order', async function (assert) {
+    // A second way to create cards has to run these same steps in this same
+    // order, so the sequence is pinned here rather than just its end state.
+    let instance = new PersonDef({ name: 'Sequence' });
+    let steps: string[] = [];
+    let restore = spyOnIdentitySteps(instance, steps);
+    let result: unknown;
+    try {
+      result = await (storeService as any).persistAndUpdate(instance);
+    } finally {
+      restore();
+    }
+
+    assert.true(isCardInstance(result), 'the create resolved to the instance');
+    assert.ok(instance.id, 'the instance took the realm-assigned remote id');
+    // `subscribeToRealm` is recorded only when its argument matches the
+    // instance's remote id, so its presence also pins the id assignment ahead
+    // of it — the sequence below is the whole assignment, in order.
+    assert.deepEqual(
+      steps,
+      [
+        'subscribeToRealm',
+        'handleCardIdAssignment',
+        'updateForeignConsumersOf',
+        'setIdentityContext',
+        'startAutoSaving',
+      ],
+      'the remote-identity steps ran in order',
+    );
+    assert.strictEqual(
+      storeService.peek(instance[localId]),
+      instance,
+      'the identity map resolves the local id to this instance',
+    );
+    assert.strictEqual(
+      storeService.peek(instance.id!),
+      instance,
+      'the identity map resolves the remote id to the same instance',
+    );
+  });
+
+  test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
+    let instance = new PersonDef({ name: 'Overlap' });
+
+    // Hold the POST open so the second save is guaranteed to arrive while the
+    // create is still in flight — the window the per-instance mutation lock
+    // exists to cover. Without it the second save serializes a card that still
+    // has no remote id and POSTs it again, leaving two cards in the realm.
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let methods: string[] = [];
+    let reachedPost = new Deferred<void>();
+    let releasePost = new Deferred<void>();
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (args?.method !== 'POST' && args?.method !== 'PATCH') {
+        return originalFetchJSON(url, args);
+      }
+      methods.push(args.method);
+      if (args.method === 'POST') {
+        reachedPost.fulfill();
+        await releasePost.promise;
+      }
+      return originalFetchJSON(url, args);
+    };
+
+    try {
+      let creating = (storeService as any).persistAndUpdate(instance);
+      await reachedPost.promise;
+      (instance as any).name = 'Overlap Edited';
+      let overlapping = (storeService as any).persistAndUpdate(instance);
+      releasePost.fulfill();
+      await Promise.all([creating, overlapping]);
+    } finally {
+      // Released here too: if the create never reaches its POST the intercepted
+      // fetch would otherwise never return, and the test would hang to the
+      // qunit timeout instead of failing with a reason.
+      releasePost.fulfill();
+      delete cardService.fetchJSON;
+    }
+    await settled();
+
+    assert.deepEqual(
+      methods.slice(0, 2),
+      ['POST', 'PATCH'],
+      'the overlapping save waited for the remote id and updated the created card',
+    );
+    assert.strictEqual(
+      methods.filter((method) => method === 'POST').length,
+      1,
+      'the card was created exactly once',
+    );
+
+    let file = await testRealmAdapter.openFile(
+      `${instance.id!.substring(testRealmURL.length)}.json`,
+    );
+    assert.ok(file, 'the created card exists in the realm');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Overlap Edited',
+      'the overlapping edit reached the realm',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([
