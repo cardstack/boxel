@@ -491,7 +491,14 @@ export default class RenderRoute extends Route<Model> {
     }
     if (parsedOptions.fileRender) {
       let fileRenderData = (globalThis as any).__boxelFileRenderData as
-        | { resource: any; fileDefCodeRef: { module: string; name: string } }
+        | {
+            resource: any;
+            fileDefCodeRef: { module: string; name: string };
+            // The visit's realm, stashed by the prerender server alongside
+            // the file data — a file render has no response header to learn
+            // its realm from the way the card branch does.
+            realmURL?: string;
+          }
         | undefined;
       if (!fileRenderData) {
         throw new Error('fileRender mode requires __boxelFileRenderData');
@@ -505,6 +512,7 @@ export default class RenderRoute extends Route<Model> {
       let fileScreenshotsMeta = await this.fileDeclarationScreenshotsMeta(
         fileRenderData.fileDefCodeRef,
         resource,
+        fileRenderData.realmURL,
       );
       if (fileScreenshotsMeta) {
         resource = {
@@ -711,10 +719,13 @@ export default class RenderRoute extends Route<Model> {
       id?: string;
       meta?: { realmURL?: string };
     },
+    visitRealmURL: string | undefined,
   ): Promise<ScreenshotsMeta | undefined> {
     try {
       let id = resource.id;
-      let realmURL = resource.meta?.realmURL;
+      // The stashed visit realm is the authority; an extract-built resource
+      // carries no meta.realmURL of its own.
+      let realmURL = visitRealmURL ?? resource.meta?.realmURL;
       if (!id || !realmURL) {
         return undefined;
       }
