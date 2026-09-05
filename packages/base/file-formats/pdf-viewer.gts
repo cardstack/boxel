@@ -4,10 +4,11 @@
 // for free), while the budgeted fitted cell shows a lightweight page placeholder
 // rather than a live PDF engine per tile.
 //
-// The fitted first-page poster is deliberately not drawn here — it needs the
-// derived-artifact contract (CS-12231) to rasterize and store a page image. Once
-// that lands and populates `thumbnailUrl`, the preview stage prefers the real
-// poster over this placeholder automatically, with no change to this component.
+// The fitted first-page poster is deliberately not drawn here: the family's
+// declared `poster` capture (see `pdf-captures`) rasterizes page 1 during the
+// prerender pass, and the preview stage prefers that rendition over this
+// placeholder through the view model's `thumbnailUrl` — the placeholder is
+// the graceful fallback for an uncaptured or capture-errored document.
 import GlimmerComponent from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
