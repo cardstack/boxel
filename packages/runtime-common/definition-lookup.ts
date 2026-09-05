@@ -785,9 +785,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // invalidated, ignoring realm-wide and global wipes. `invalidate()` says
   // "these bytes changed, re-derive them", so a populate it discarded is
   // worth re-running. `clearRealmDefinitions` / `clearAllDefinitions` say
-  // "drop this realm's (or every) definition now" — re-populating into one of
-  // those would refill rows the caller just cleared, so a populate they
-  // discard stays discarded.
+  // "drop this realm's (or every) definition now", so a populate they discard
+  // stays discarded rather than refilling what the caller just cleared.
+  //
+  // A wipe landing in the same populate window as a module invalidation is
+  // read as the module invalidation and does retry, refilling that one row.
+  // That is the deliberate reading: the retry re-derives from current disk
+  // bytes, which is the state a wipe exists to force, and answering the
+  // caller beats failing a card write over a module that is readable.
   private moduleGenerationChanged(
     resolvedRealmURL: string,
     moduleURL: string,
