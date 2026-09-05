@@ -2887,6 +2887,23 @@ export type BaseDefComponent = ComponentLike<{
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
 // use a dedicated `render` component there.
+//
+// Render deterministically. A capture is stored under a hash of its bytes,
+// so two renders of unchanged data should produce identical pixels — the
+// platform's side of that bargain is settling fonts and images before
+// shooting, and the author's side is keeping nondeterminism out of the
+// rendered output. Avoid anything that differs run to run: `Date.now()` /
+// `new Date()` rendered into the markup ("3 minutes ago" timestamps),
+// `Math.random`, CSS animations or transitions mid-flight at capture time,
+// autoplaying carousels, or content fetched from an endpoint that answers
+// differently on each call. For media-derived captures, decode
+// deterministically too: seek to an exact timestamp rather than "current
+// frame", position WebGL cameras explicitly, and avoid ambient animation
+// loops. Nondeterministic output doesn't break anything visibly — the row
+// publishes and the durable screenshot URLs don't change — but every
+// reindex captures "new" bytes, wasting renders and storage churn and
+// defeating image caching (each rotation changes the image's ETag, so
+// every viewer re-downloads it).
 export type ScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
@@ -3428,26 +3445,65 @@ export class CSSField extends TextAreaField {
             --border,
             color-mix(in oklab, var(--field-fg) 20%, var(--field-bg))
           );
+          --field-fade: 1.5rem;
           position: relative;
+          background-color: var(--field-bg);
+          border: 1px solid var(--field-border);
+          border-radius: var(--radius, var(--boxel-border-radius));
+          overflow: hidden;
         }
         .css-field-copy-button {
           position: absolute;
           top: var(--boxel-sp-xs);
           right: var(--boxel-sp-xs);
+          z-index: 1;
         }
         .css-field {
           margin-block: 0;
           padding: var(--boxel-sp);
-          background-color: var(--field-bg);
-          border: 1px solid var(--field-border);
-          border-radius: var(--radius, var(--boxel-border-radius));
           color: var(--field-fg);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
           );
           font-size: var(--boxel-font-size-xs);
-          overflow-x: auto;
+          max-height: var(--css-field-max-height, none);
+          overflow: auto;
+          /* iOS-style edge fades: text dissolves into the background at an
+             edge only while more content lies beyond it. Each mask layer is
+             taller than the box by the fade height, so shifting it up by that
+             amount parks its fade offscreen; the scroll timeline slides them
+             into view. Base positions show no fade, which is also what
+             browsers without scroll-driven animations render. */
+          mask-image:
+            linear-gradient(to bottom, transparent, black var(--field-fade)),
+            linear-gradient(to top, transparent, black var(--field-fade));
+          mask-size: 100% calc(100% + var(--field-fade));
+          mask-repeat: no-repeat;
+          mask-composite: intersect;
+          mask-position:
+            0 calc(-1 * var(--field-fade)),
+            0 0;
+          animation: css-field-edge-fade linear both;
+          animation-timeline: scroll(self);
+        }
+        @keyframes css-field-edge-fade {
+          0% {
+            mask-position:
+              0 calc(-1 * var(--field-fade)),
+              0 calc(-1 * var(--field-fade));
+          }
+          8%,
+          92% {
+            mask-position:
+              0 0,
+              0 calc(-1 * var(--field-fade));
+          }
+          100% {
+            mask-position:
+              0 0,
+              0 0;
+          }
         }
         .css-field::placeholder {
           opacity: 0.5;
