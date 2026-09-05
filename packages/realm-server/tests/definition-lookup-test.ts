@@ -1776,6 +1776,95 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("a peer's invalidation drops in-flight populates, so a caller arriving after it does not inherit a discarded result", async function (assert) {
+      // A peer realm-server's invalidation reaches this process as a NOTIFY
+      // that ModuleCacheInvalidationListener replays by calling
+      // bumpModuleGeneration. That has to drop in-flight populates the same
+      // way the in-process invalidate() does. If it only bumped, caller B
+      // below would coalesce onto A's pre-invalidation populate, receive the
+      // result the generation guard discards, and — its own snapshot already
+      // carrying the peer's bump — read that empty answer as "no such type"
+      // instead of as a race worth re-running. For a card write serializing
+      // against this module, that is a spurious 500.
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}peer-invalidation-inflight.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          if (calls === 1) {
+            await gate;
+          }
+          return buildModuleResponse(args.url, 'PeerInvalidation', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'PeerInvalidation',
+      });
+      pA.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(calls, 1, 'A started the only populate so far');
+
+      // Exactly what the listener does on a peer's NOTIFY — no DB delete
+      // here, because the peer already ran it.
+      lookup.bumpModuleGeneration(realmURL, moduleURL);
+
+      let pB = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'PeerInvalidation',
+      });
+      pB.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        calls,
+        2,
+        "B started its own populate — the peer's bump dropped A's in-flight entry",
+      );
+
+      releaseGate();
+      let [rA, rB] = await Promise.allSettled([pA, pB]);
+      assert.strictEqual(
+        rB.status,
+        'fulfilled',
+        'B resolves rather than reporting a readable module as a nonexistent type',
+      );
+      assert.strictEqual(
+        rA.status,
+        'fulfilled',
+        'A re-runs its discarded populate and resolves too',
+      );
+    });
+
     test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
@@ -2157,6 +2246,13 @@ module(basename(import.meta.filename), function () {
         module: rri(moduleURL),
         name: 'Identity',
       });
+      // A is not awaited until the end of the test, and its rejection handler
+      // would otherwise attach only then. A regression that makes A reject
+      // would surface in that gap as an unhandled rejection, which
+      // tests/index.ts rethrows — killing the process and taking the rest of
+      // the shard with it. Attaching here keeps such a regression to a failed
+      // assertion on the status asserted below.
+      pA.catch(() => {});
       await waitForCalls(1);
 
       // invalidate drops A's #inFlight entry synchronously.

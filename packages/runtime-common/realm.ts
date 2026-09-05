@@ -2427,10 +2427,10 @@ export class Realm {
         // check on the row — `readFromDatabaseCache` never compares content
         // hashes or mtimes, and only error rows carry a TTL — so a cached
         // definition for this module stays authoritative until something
-        // deletes it. Dropping it here, where the bytes change, keeps that
-        // cache in step with the file rather than with the index: the next
-        // `lookupDefinition` misses and reads the rewritten module through
-        // `prerenderModule`, which resolves it off disk.
+        // deletes it. Dropping it here, where the bytes change, keeps a
+        // written module's cached definition in step with the file rather
+        // than with the index: the next `lookupDefinition` misses and reads
+        // the rewritten module through `prerenderModule`, off disk.
         //
         // Leaving this to the index job's `onInvalidation` instead would
         // leave a window — the whole of it on the deferred-indexing paths —
@@ -2441,12 +2441,23 @@ export class Realm {
         // reports success; a dropped attribute is indistinguishable from an
         // unset one, so nothing downstream can tell it happened.
         //
-        // Awaited, and allowed to reject: a failed invalidation leaves rows
-        // that silently drop fields out of every instance serialized
-        // against them, which is worse for the caller than a failed write
-        // whose bytes are already durable and whose index job will
-        // invalidate again regardless.
-        await this.#definitionLookup.invalidate(url.href);
+        // Best-effort, like `#notifyFileChange` below. The bytes are already
+        // durable at this point but `urls` has not been appended to yet, so
+        // letting this throw would abandon the batch before ANY index job is
+        // enqueued — for this file and for every file written ahead of it —
+        // and the caller's natural remedy makes it worse: a retry with the
+        // same bytes takes the unchanged-content short-circuit above, so it
+        // enqueues nothing either and the file stays on disk and out of the
+        // index until an unrelated edit or a full reindex. Swallowing leaves
+        // only the staleness this call exists to remove, which the index
+        // job's own invalidation still clears.
+        try {
+          await this.#definitionLookup.invalidate(url.href);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
+          );
+        }
       }
       await this.#notifyFileChange(path);
       results.push({ path, lastModified });

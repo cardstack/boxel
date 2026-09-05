@@ -821,12 +821,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // double-bump from the self-notify echo is observationally indistinguishable
   // from a single bump because in-flight prerenders only test for snapshot
   // equality, not absolute value.
+  //
+  // Each bump drops the in-flight entries it invalidates, so the two always
+  // move together no matter who bumps. A bump without the drop leaves a
+  // populate that started before the invalidation joinable: a caller arriving
+  // afterwards coalesces onto it, gets the discarded (empty) result, and —
+  // because its own generation snapshot already includes the bump — reads that
+  // as "this module has no definition" rather than as a race it should retry.
+  // For a `fileSerialization` that is a failed card write for a module sitting
+  // readable on disk.
   bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string): void {
     let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
     this.#moduleGenerations.set(
       key,
       (this.#moduleGenerations.get(key) ?? 0) + 1,
     );
+    this.dropInFlightForRealm(resolvedRealmURL, [moduleURL]);
   }
 
   bumpRealmGeneration(resolvedRealmURL: string): void {
@@ -834,10 +844,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
     );
+    this.dropInFlightForRealm(resolvedRealmURL);
   }
 
   bumpGlobalGeneration(): void {
     this.#globalGeneration += 1;
+    this.#inFlight.clear();
   }
 
   // Returns true if the cached entry has a top-level error and has exceeded
@@ -986,9 +998,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       ) {
         break;
       }
-      log.debug(
-        `definition populate for ${canonicalModuleURL} was discarded by a concurrent invalidation; retrying (attempt ${attempt + 1} of ${POPULATE_RACE_MAX_ATTEMPTS})`,
-      );
+      if (attempt + 1 < POPULATE_RACE_MAX_ATTEMPTS) {
+        log.debug(
+          `definition populate for ${canonicalModuleURL} was discarded by a concurrent invalidation; retrying (attempt ${attempt + 2} of ${POPULATE_RACE_MAX_ATTEMPTS})`,
+        );
+      }
     }
 
     if (!moduleEntry) {
@@ -1055,9 +1069,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // leaves unrelated in-flight prerenders in the same realm untouched —
     // their generations are unchanged, their persists proceed normally.
     for (let invalidatedURL of uniqueInvalidations) {
+      // Drops the matching in-flight entries as it bumps.
       this.bumpModuleGeneration(resolvedRealmURL, invalidatedURL);
     }
-    this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
     await this.notifyDefinitionCacheInvalidations(
       resolvedRealmURL,
@@ -1070,7 +1084,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // Realm-scope bump: every in-flight prerender for this realm (any
     // module URL, any scope/user) sees the mismatch at persist time.
     this.bumpRealmGeneration(resolvedRealmURL);
-    this.dropInFlightForRealm(resolvedRealmURL);
     await this.query([
       'DELETE FROM',
       MODULES_TABLE,
@@ -1084,7 +1097,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async clearAllDefinitions(): Promise<void> {
     this.bumpGlobalGeneration();
-    this.#inFlight.clear();
     await this.query(['DELETE FROM', MODULES_TABLE]);
     await this.notifyGlobalDefinitionCacheInvalidation();
   }

@@ -277,9 +277,11 @@ module(basename(import.meta.filename), function () {
 
       // Widen the schema on a deferred-indexing write, the shape the headless
       // command and prerender-originated paths take: the bytes land and the
-      // index job is enqueued, so the write's own definition-cache
-      // invalidation is the only thing that can carry the new field into the
-      // instance write that follows.
+      // index job is enqueued. This realm does run a worker, so that job's own
+      // `onInvalidation` would eventually clear the cached definition too —
+      // the write-time invalidation is what reliably wins the race, not the
+      // only thing that can. The determinism lives in the no-worker module
+      // above; these tests pin the user-visible outcome.
       async function widenPersonSchema() {
         await testRealm.write('person.gts', personV2, { waitForIndex: false });
       }
