@@ -371,6 +371,53 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the video family captures a poster frame onto the file row', async function (assert) {
+    let webmBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/webm-simple.webm',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+    await realm.write('clip.webm', webmBytes);
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      afterJobId: baseline,
+      timeout: 60000,
+    });
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}clip.webm`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the poster frame landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.strictEqual(
+      manifest!.poster.contentType,
+      'image/jpeg',
+      'a photographic frame captures as jpeg',
+    );
+    // JPEG SOI marker.
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), [0xff, 0xd8]),
+      'the capture is a JPEG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/clip.webm?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
     await writeAndSettle('sample.mismatch', 'poster me');
     let firstRow = await prerenderedHtmlRowFor(
