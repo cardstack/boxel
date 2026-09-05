@@ -2423,6 +2423,56 @@ export class Realm {
       (isNewFile ? addedFiles : updatedFiles).push(path);
       this.invalidateCache(path);
       await this.#notifyFileChange(path);
+      if (currentWriteType === 'module') {
+        // The definition cache is keyed by module URL with no freshness
+        // check on the row — `readFromDatabaseCache` never compares content
+        // hashes or mtimes, and only error rows carry a TTL — so a cached
+        // definition for this module stays authoritative until something
+        // deletes it. Dropping it here, where the bytes change, keeps a
+        // written module's cached definition in step with the file rather
+        // than with the index: the next `lookupDefinition` misses and reads
+        // the rewritten module through `prerenderModule`, off disk.
+        //
+        // Leaving this to the index job's `onInvalidation` instead would
+        // leave a window — the whole of it on the deferred-indexing paths —
+        // in which `fileSerialization` resolves an instance against the
+        // module's previous schema. `serializeCardResource` skips every
+        // attribute whose field that schema doesn't declare, so the
+        // instance lands on disk missing the new field and the write still
+        // reports success; a dropped attribute is indistinguishable from an
+        // unset one, so nothing downstream can tell it happened.
+        //
+        // Ordered after `#notifyFileChange` deliberately. This replica dropped
+        // its own byte caches synchronously in `invalidateCache(path)` above,
+        // but peer replicas only drop theirs when they receive that
+        // notification. Deleting the definition row is what makes the next
+        // `lookupDefinition` — on any replica — prerender the module; a peer
+        // that prerenders while still holding pre-write bytes derives the old
+        // schema and caches THAT, reinstating the staleness this call removes
+        // and making it durable until indexing lands. Publishing the byte
+        // invalidation first narrows that to peers which have not yet
+        // processed the notification; it does not close it, since the notify
+        // is best-effort and applied asynchronously. The index job's own
+        // invalidation stays the backstop.
+        //
+        // Best-effort, like `#notifyFileChange` above. The bytes are already
+        // durable at this point but `urls` has not been appended to yet, so
+        // letting this throw would abandon the batch before ANY index job is
+        // enqueued — for this file and for every file written ahead of it —
+        // and the caller's natural remedy makes it worse: a retry with the
+        // same bytes takes the unchanged-content short-circuit above, so it
+        // enqueues nothing either and the file stays on disk and out of the
+        // index until an unrelated edit or a full reindex. Swallowing leaves
+        // only the staleness this call exists to remove, which the index
+        // job's own invalidation still clears.
+        try {
+          await this.#definitionLookup.invalidate(url.href);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
+          );
+        }
+      }
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
@@ -5620,11 +5670,10 @@ export class Realm {
     // caller is holding, so waiting deadlocks. Serialization still resolves a
     // definition it has never seen — `lookupDefinition` reads through to
     // `prerenderModule`, which serves the module off disk rather than out of
-    // the index. What the drain did cover and this path does not is a module
-    // the same caller just rewrote: the cached definition stays authoritative
-    // until the deferred index job invalidates it, so a serialization run in
-    // that window is against the previous schema and `fileSerialization`
-    // drops attributes whose fields it doesn't know.
+    // the index. A module the same caller just rewrote reads through for the
+    // same reason: `_batchWriteUnlocked` drops that module's cached
+    // definition as it writes the bytes, so no indexing-dependent step
+    // stands between a module rewrite and the serialization that follows it.
     if (!duringPrerender) {
       let pending = this.incrementalIndexing();
       if (pending) {

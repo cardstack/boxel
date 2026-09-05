@@ -91,6 +91,17 @@ const COALESCE_NOTIFY_WAIT_MS = 180_000; // 180 seconds
 // principle cycle the loser indefinitely; capping at a small number and
 // throwing surfaces it instead of silently hanging.
 const COALESCE_MAX_ITERATIONS = 4;
+// How many times `lookupDefinition` re-runs a populate whose result an
+// invalidation discarded out from under it. A populate that loses this race
+// returns the post-invalidate cache state — `undefined` once the invalidation
+// has deleted the row — which is indistinguishable at the call site from "this
+// module does not exist" even though the module is on disk and readable. A
+// module write invalidates and then indexes, and the index job invalidates
+// again, so any serialization that follows a module write can land inside that
+// second invalidation's window. Retrying re-snapshots the generation and
+// converges as soon as no invalidation lands mid-populate; the cap keeps an
+// invalidation storm from spinning on prerenders instead of surfacing.
+const POPULATE_RACE_MAX_ATTEMPTS = 3;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -770,6 +781,30 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     };
   }
 
+  // Narrower than `generationChanged`: true only when THIS module was
+  // invalidated, ignoring realm-wide and global wipes. `invalidate()` says
+  // "these bytes changed, re-derive them", so a populate it discarded is
+  // worth re-running. `clearRealmDefinitions` / `clearAllDefinitions` say
+  // "drop this realm's (or every) definition now", so a populate they discard
+  // stays discarded rather than refilling what the caller just cleared.
+  //
+  // A wipe landing in the same populate window as a module invalidation is
+  // read as the module invalidation and does retry, refilling that one row.
+  // That is the deliberate reading: the retry re-derives from current disk
+  // bytes, which is the state a wipe exists to force, and answering the
+  // caller beats failing a card write over a module that is readable.
+  private moduleGenerationChanged(
+    resolvedRealmURL: string,
+    moduleURL: string,
+    snapshot: { module: number; realm: number; global: number },
+  ): boolean {
+    return (
+      (this.#moduleGenerations.get(
+        moduleGenerationKey(resolvedRealmURL, moduleURL),
+      ) ?? 0) !== snapshot.module
+    );
+  }
+
   private generationChanged(
     resolvedRealmURL: string,
     moduleURL: string,
@@ -791,12 +826,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // double-bump from the self-notify echo is observationally indistinguishable
   // from a single bump because in-flight prerenders only test for snapshot
   // equality, not absolute value.
+  //
+  // Each bump drops the in-flight entries it invalidates, so the two always
+  // move together no matter who bumps. A bump without the drop leaves a
+  // populate that started before the invalidation joinable: a caller arriving
+  // afterwards coalesces onto it, gets the discarded (empty) result, and —
+  // because its own generation snapshot already includes the bump — reads that
+  // as "this module has no definition" rather than as a race it should retry.
+  // For a `fileSerialization` that is a failed card write for a module sitting
+  // readable on disk.
   bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string): void {
     let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
     this.#moduleGenerations.set(
       key,
       (this.#moduleGenerations.get(key) ?? 0) + 1,
     );
+    this.dropInFlightForRealm(resolvedRealmURL, [moduleURL]);
   }
 
   bumpRealmGeneration(resolvedRealmURL: string): void {
@@ -804,10 +849,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
     );
+    this.dropInFlightForRealm(resolvedRealmURL);
   }
 
   bumpGlobalGeneration(): void {
     this.#globalGeneration += 1;
+    this.#inFlight.clear();
   }
 
   // Returns true if the cached entry has a top-level error and has exceeded
@@ -926,15 +973,42 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
     } = context;
 
-    let moduleEntry = await this.loadDefinitionCacheEntry({
-      moduleURL: canonicalModuleURL,
-      realmURL,
-      resolvedRealmURL,
-      cacheScope,
-      cacheUserId,
-      prerenderUserId,
-      priority: contextOpts?.priority,
-    });
+    // An empty result means one of two things, and only the generation
+    // separates them: the module genuinely has no definition to load, or a
+    // populate ran and an invalidation discarded its result before it could
+    // persist. Retry only the second — the module is on disk, and the next
+    // populate reads it under the post-invalidate generation.
+    let moduleEntry: DefinitionCacheEntry | undefined;
+    for (let attempt = 0; attempt < POPULATE_RACE_MAX_ATTEMPTS; attempt++) {
+      let snapshot = this.snapshotGeneration(
+        resolvedRealmURL,
+        canonicalModuleURL,
+      );
+      moduleEntry = await this.loadDefinitionCacheEntry({
+        moduleURL: canonicalModuleURL,
+        realmURL,
+        resolvedRealmURL,
+        cacheScope,
+        cacheUserId,
+        prerenderUserId,
+        priority: contextOpts?.priority,
+      });
+      if (
+        moduleEntry ||
+        !this.moduleGenerationChanged(
+          resolvedRealmURL,
+          canonicalModuleURL,
+          snapshot,
+        )
+      ) {
+        break;
+      }
+      if (attempt + 1 < POPULATE_RACE_MAX_ATTEMPTS) {
+        log.debug(
+          `definition populate for ${canonicalModuleURL} was discarded by a concurrent invalidation; retrying (attempt ${attempt + 2} of ${POPULATE_RACE_MAX_ATTEMPTS})`,
+        );
+      }
+    }
 
     if (!moduleEntry) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
@@ -1000,9 +1074,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // leaves unrelated in-flight prerenders in the same realm untouched —
     // their generations are unchanged, their persists proceed normally.
     for (let invalidatedURL of uniqueInvalidations) {
+      // Drops the matching in-flight entries as it bumps.
       this.bumpModuleGeneration(resolvedRealmURL, invalidatedURL);
     }
-    this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
     await this.notifyDefinitionCacheInvalidations(
       resolvedRealmURL,
@@ -1015,7 +1089,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // Realm-scope bump: every in-flight prerender for this realm (any
     // module URL, any scope/user) sees the mismatch at persist time.
     this.bumpRealmGeneration(resolvedRealmURL);
-    this.dropInFlightForRealm(resolvedRealmURL);
     await this.query([
       'DELETE FROM',
       MODULES_TABLE,
@@ -1029,7 +1102,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async clearAllDefinitions(): Promise<void> {
     this.bumpGlobalGeneration();
-    this.#inFlight.clear();
     await this.query(['DELETE FROM', MODULES_TABLE]);
     await this.notifyGlobalDefinitionCacheInvalidation();
   }

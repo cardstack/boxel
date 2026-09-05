@@ -1776,6 +1776,95 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("a peer's invalidation drops in-flight populates, so a caller arriving after it does not inherit a discarded result", async function (assert) {
+      // A peer realm-server's invalidation reaches this process as a NOTIFY
+      // that ModuleCacheInvalidationListener replays by calling
+      // bumpModuleGeneration. That has to drop in-flight populates the same
+      // way the in-process invalidate() does. If it only bumped, caller B
+      // below would coalesce onto A's pre-invalidation populate, receive the
+      // result the generation guard discards, and — its own snapshot already
+      // carrying the peer's bump — read that empty answer as "no such type"
+      // instead of as a race worth re-running. For a card write serializing
+      // against this module, that is a spurious 500.
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}peer-invalidation-inflight.gts`;
+      let calls = 0;
+      let releaseGate!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          if (calls === 1) {
+            await gate;
+          }
+          return buildModuleResponse(args.url, 'PeerInvalidation', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let pA = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'PeerInvalidation',
+      });
+      pA.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(calls, 1, 'A started the only populate so far');
+
+      // Exactly what the listener does on a peer's NOTIFY — no DB delete
+      // here, because the peer already ran it.
+      lookup.bumpModuleGeneration(realmURL, moduleURL);
+
+      let pB = lookup.lookupDefinition({
+        module: rri(moduleURL),
+        name: 'PeerInvalidation',
+      });
+      pB.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        calls,
+        2,
+        "B started its own populate — the peer's bump dropped A's in-flight entry",
+      );
+
+      releaseGate();
+      let [rA, rB] = await Promise.allSettled([pA, pB]);
+      assert.strictEqual(
+        rB.status,
+        'fulfilled',
+        'B resolves rather than reporting a readable module as a nonexistent type',
+      );
+      assert.strictEqual(
+        rA.status,
+        'fulfilled',
+        'A re-runs its discarded populate and resolves too',
+      );
+    });
+
     test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
@@ -1795,8 +1884,19 @@ module(basename(import.meta.filename), function () {
         },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
-          await gate;
-          return buildModuleResponse(args.url, 'StalePersist', []);
+          // Only the first prerender parks; the retry after the discard
+          // runs straight through. `deps` tags which call produced a row,
+          // so the assertions below can tell the discarded pre-invalidate
+          // result apart from the post-invalidate one.
+          if (calls === 1) {
+            await gate;
+            return buildModuleResponse(args.url, 'StalePersist', [
+              'pre-invalidate',
+            ]);
+          }
+          return buildModuleResponse(args.url, 'StalePersist', [
+            'post-invalidate',
+          ]);
         },
       };
 
@@ -1831,25 +1931,34 @@ module(basename(import.meta.filename), function () {
       // invalidate just deleted.
       releaseGate();
       let result = await Promise.allSettled([pA]);
+      // The module is on disk, so the invalidation means "re-derive it", not
+      // "it does not exist". A re-populates under the post-invalidate
+      // generation and answers from that.
       assert.strictEqual(
         result[0].status,
-        'rejected',
-        'A rejects because the post-skip readFromDatabaseCache misses (row was deleted)',
+        'fulfilled',
+        'A resolves from a populate that ran after the invalidation',
       );
       assert.strictEqual(
         calls,
-        1,
-        'prerenderModule was still called once (no double-prerender)',
+        2,
+        'the discarded populate was re-run exactly once',
       );
 
       let rows = (await dbAdapter.execute(
-        `SELECT url FROM modules WHERE url = $1`,
+        `SELECT deps FROM modules WHERE url = $1`,
         { bind: [moduleURL] },
-      )) as { url: string }[];
-      assert.strictEqual(
-        rows.length,
-        0,
-        'invalidate is honored — no zombie row from A persist',
+      )) as { deps: string[] | string }[];
+      assert.strictEqual(rows.length, 1, 'exactly one row for the module');
+      let deps =
+        typeof rows[0].deps === 'string'
+          ? (JSON.parse(rows[0].deps) as string[])
+          : rows[0].deps;
+      // deps are persisted resolved against the realm.
+      assert.deepEqual(
+        deps,
+        [`${realmURL}post-invalidate`],
+        'invalidate is honored — the row came from the post-invalidate populate, not the discarded one',
       );
     });
 
@@ -2137,6 +2246,13 @@ module(basename(import.meta.filename), function () {
         module: rri(moduleURL),
         name: 'Identity',
       });
+      // A is not awaited until the end of the test, and its rejection handler
+      // would otherwise attach only then. A regression that makes A reject
+      // would surface in that gap as an unhandled rejection, which
+      // tests/index.ts rethrows — killing the process and taking the rest of
+      // the shard with it. Attaching here keeps such a regression to a failed
+      // assertion on the status asserted below.
+      pA.catch(() => {});
       await waitForCalls(1);
 
       // invalidate drops A's #inFlight entry synchronously.
@@ -2162,9 +2278,11 @@ module(basename(import.meta.filename), function () {
         'C coalesced into B without adding a prerender',
       );
 
-      // Settle A. Its .finally must NOT delete B's entry.
+      // Release A's prerender. The invalidation discarded its result, so A
+      // re-populates — and finds B already in-flight under the same key, so
+      // it joins B rather than starting a third prerender. A therefore
+      // settles with B, not before it.
       gates[0].release();
-      await Promise.allSettled([pA]);
 
       // D should STILL coalesce into B. If A's finally deleted B's entry,
       // D would create a third prerender here.
@@ -2181,10 +2299,16 @@ module(basename(import.meta.filename), function () {
 
       // Release B; everyone converges.
       gates[1].release();
-      let [rB, rC, rD] = await Promise.allSettled([pB, pC, pD]);
+      let [rA, rB, rC, rD] = await Promise.allSettled([pA, pB, pC, pD]);
+      assert.strictEqual(rA.status, 'fulfilled');
       assert.strictEqual(rB.status, 'fulfilled');
       assert.strictEqual(rC.status, 'fulfilled');
       assert.strictEqual(rD.status, 'fulfilled');
+      assert.strictEqual(
+        calls,
+        2,
+        "A's retry joined B's in-flight populate instead of prerendering again",
+      );
     });
 
     test('in-flight prerender persists normally when no invalidate runs', async function (assert) {
