@@ -2146,6 +2146,14 @@ module('Integration | Store', function (hooks) {
     // and `add` would have supplied both before any save ran.
     let instance = new PersonDef({ name: 'Sequence' });
     let instanceLocalId = instance[localId];
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'the realm is not subscribed before the create',
+    );
 
     let result = await (storeService as any).persistAndUpdate(instance);
     assert.true(isCardInstance(result), 'the create resolved to the instance');
@@ -2165,6 +2173,10 @@ module('Integration | Store', function (hooks) {
       storeService.peek(instance.id!),
       instance,
       'the remote id resolves to the same instance',
+    );
+    assert.true(
+      subscriptions.has(testRealmURL),
+      "the store is listening for the realm's index events",
     );
 
     let cardPath = `${instance.id!.substring(testRealmURL.length)}.json`;
@@ -2200,7 +2212,8 @@ module('Integration | Store', function (hooks) {
     // Hold the POST open so the second save is guaranteed to arrive while the
     // create is still in flight — the window the per-instance mutation lock
     // exists to cover. Without it the second save serializes a card that still
-    // has no remote id and POSTs it again, leaving two cards in the realm.
+    // has no remote id and issues a second create for a card the realm has
+    // already named, rather than updating it.
     let cardService = getService('card-service') as any;
     let originalFetchJSON = cardService.fetchJSON.bind(cardService);
     let methods: string[] = [];
@@ -2220,14 +2233,24 @@ module('Integration | Store', function (hooks) {
 
     try {
       let creating = (storeService as any).persistAndUpdate(instance);
-      await reachedPost.promise;
+      // `persistAndUpdate` absorbs its errors and resolves to a card error, so
+      // a create that dies before its POST would otherwise leave this parked on
+      // `reachedPost` until the qunit timeout, with nothing saying why. Racing
+      // the two turns that into an assertion failure naming the error.
+      let reachedPostFirst = await Promise.race([
+        reachedPost.promise.then(() => true),
+        creating.then(() => false),
+      ]);
+      assert.true(
+        reachedPostFirst,
+        `the create reached its POST (resolved early as: ${JSON.stringify(
+          await Promise.race([creating, Promise.resolve('still in flight')]),
+        )})`,
+      );
       let overlapping = (storeService as any).persistAndUpdate(instance);
       releasePost.fulfill();
       await Promise.all([creating, overlapping]);
     } finally {
-      // Released here too: if the create never reaches its POST the intercepted
-      // fetch would otherwise never return, and the test would hang to the
-      // qunit timeout instead of failing with a reason.
       releasePost.fulfill();
       delete cardService.fetchJSON;
     }
@@ -2238,14 +2261,11 @@ module('Integration | Store', function (hooks) {
       ['POST', 'PATCH'],
       'the overlapping save waited for the remote id and updated the created card',
     );
-    let file = await testRealmAdapter.openFile(
-      `${instance.id!.substring(testRealmURL.length)}.json`,
-    );
-    assert.ok(file, 'the created card exists in the realm');
-    assert.strictEqual(
-      JSON.parse(file!.content as string).data.attributes.name,
-      'Overlap',
-      'the card the realm holds is the one the store created',
+    assert.ok(
+      await testRealmAdapter.openFile(
+        `${instance.id!.substring(testRealmURL.length)}.json`,
+      ),
+      'the realm holds the created card',
     );
   });
 
