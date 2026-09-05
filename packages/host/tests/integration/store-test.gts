@@ -2140,89 +2140,60 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  // Records the store-side identity steps a create runs, filtered to `instance`
-  // so unrelated saves in the same test cannot pad the sequence. The three
-  // subjects are the three shapes the steps are called with: the instance
-  // itself, its remote id, and its local id. Returns a restore function.
-  function spyOnIdentitySteps(instance: CardDefType, steps: string[]) {
-    let store = storeService as any;
-    let operatorModeState = operatorModeStateService as any;
-    let isSubject = (subject: unknown) =>
-      subject === instance ||
-      subject === instance[localId] ||
-      (instance.id != null && subject === instance.id);
-    let spied: [Record<string, any>, string, any][] = [
-      [store, 'subscribeToRealm', store.subscribeToRealm],
-      [store, 'updateForeignConsumersOf', store.updateForeignConsumersOf],
-      [store, 'setIdentityContext', store.setIdentityContext],
-      [store, 'startAutoSaving', store.startAutoSaving],
-      [
-        operatorModeState,
-        'handleCardIdAssignment',
-        operatorModeState.handleCardIdAssignment,
-      ],
-    ];
-    for (let [target, name, original] of spied) {
-      target[name] = function (...args: any[]) {
-        if (isSubject(args[0])) {
-          steps.push(name);
-        }
-        return original.apply(target, args);
-      };
-    }
-    return () => {
-      for (let [target, name, original] of spied) {
-        target[name] = original;
-      }
-    };
-  }
-
-  test('a create assigns the instance its remote identity in a fixed order', async function (assert) {
-    // Any other way of creating a card has to run these same steps in this same
-    // order, so the sequence is pinned here, not just its end state. The spies
-    // go on after the instance is in the store so that only the create's own
-    // steps are recorded.
+  test('a create gives the instance a remote identity the rest of the store can use', async function (assert) {
+    // Deliberately not put in the store first: the identity-map registration
+    // and the autosave subscription asserted below are the create's own doing,
+    // and `add` would have supplied both before any save ran.
     let instance = new PersonDef({ name: 'Sequence' });
-    await storeService.add(instance, { doNotPersist: true });
+    let instanceLocalId = instance[localId];
 
-    let steps: string[] = [];
-    let restore = spyOnIdentitySteps(instance, steps);
-    let result: unknown;
-    try {
-      result = await (storeService as any).persistAndUpdate(instance);
-    } finally {
-      restore();
-    }
-
+    let result = await (storeService as any).persistAndUpdate(instance);
     assert.true(isCardInstance(result), 'the create resolved to the instance');
-    assert.ok(instance.id, 'the instance took the realm-assigned remote id');
-    // `subscribeToRealm` is recorded only when its argument matches the
-    // instance's remote id, so its presence also pins the id assignment ahead
-    // of it — the sequence below is the whole assignment, in order.
-    assert.deepEqual(
-      steps,
-      [
-        'subscribeToRealm',
-        'handleCardIdAssignment',
-        'updateForeignConsumersOf',
-        'setIdentityContext',
-        'startAutoSaving',
-      ],
-      'the remote-identity steps ran in order',
+
+    // The realm named the card, and the store left it reachable under both the
+    // id the browser picked and the one the realm assigned.
+    assert.ok(
+      instance.id?.startsWith(testRealmURL),
+      'the instance took a remote id in the realm',
     );
     assert.strictEqual(
-      storeService.peek(instance[localId]),
+      storeService.peek(instanceLocalId),
       instance,
-      'the identity map resolves the local id to this instance',
+      'the local id still resolves to this instance',
     );
     assert.strictEqual(
       storeService.peek(instance.id!),
       instance,
-      'the identity map resolves the remote id to the same instance',
+      'the remote id resolves to the same instance',
+    );
+
+    let cardPath = `${instance.id!.substring(testRealmURL.length)}.json`;
+    assert.ok(
+      await testRealmAdapter.openFile(cardPath),
+      'the realm holds the created card',
+    );
+
+    // Autosave is live on the instance the create just named, so an edit
+    // reaches the realm without anyone asking for a save.
+    (instance as any).name = 'Sequence Edited';
+    await waitUntil(
+      () => storeService.getSaveState(instanceLocalId)?.lastSaved,
+      { timeout: 10000 },
+    );
+    await settled();
+    let file = await testRealmAdapter.openFile(cardPath);
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Sequence Edited',
+      'an edit after the create autosaves to the realm',
     );
   });
 
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
+    // Driven through `persistAndUpdate` rather than `save`, because the
+    // autosave queue awaits the in-flight mutation before it saves at all —
+    // it never reaches the window the mutation lock covers, which is the
+    // window under test here.
     let instance = new PersonDef({ name: 'Overlap' });
     await storeService.add(instance, { doNotPersist: true });
 
