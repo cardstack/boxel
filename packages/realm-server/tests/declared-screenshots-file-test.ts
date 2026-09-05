@@ -214,8 +214,17 @@ module(basename(import.meta.filename), function (hooks) {
       "the named screenshot URL serves the file row's capture",
     );
     assert.strictEqual(imageResponse!.headers.get('content-type'), 'image/png');
-    let served = new Uint8Array(await imageResponse!.arrayBuffer());
-    assert.ok(startsWith(served, PNG_MAGIC), 'the served bytes are the PNG');
+    // The body is a node stream, so the served artifact is pinned by its
+    // ETag (the capture content hash) and the bytes verified in the store.
+    assert.strictEqual(
+      imageResponse!.headers.get('etag'),
+      `"${manifest.poster.objectKey}"`,
+      'the ETag is the capture content hash',
+    );
+    assert.ok(
+      startsWith(objectBytes(manifest.poster.objectKey), PNG_MAGIC),
+      'the served artifact is the PNG',
+    );
 
     let metaResponse = await realm.handle(
       new Request(`${testRealm}sample.mismatch`, {
