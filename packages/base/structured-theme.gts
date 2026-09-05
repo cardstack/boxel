@@ -280,7 +280,10 @@ class Isolated extends Component<typeof StructuredTheme> {
               >
                 {{#if (eq section.id 'card-container-css')}}
                   {{#if @model.cssVariables}}
-                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                    <CardContainerCss
+                      @cssVariables={{@model.cssVariables}}
+                      @isDarkMode={{this.isDarkMode}}
+                    />
                   {{else}}
                     <p><em>No theme variables added</em></p>
                   {{/if}}
@@ -333,6 +336,7 @@ class Edit extends Isolated {
 
 export default class StructuredTheme extends Theme {
   static displayName = 'Theme';
+  static prefersWideFormat = true;
 
   @field typography = contains(ThemeTypographyField, {
     description:

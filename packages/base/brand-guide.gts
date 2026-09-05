@@ -19,7 +19,6 @@ import {
   BasicFitted,
   CopyButton,
   Swatch,
-  Button,
   FieldContainer,
   GridContainer,
 } from '@cardstack/boxel-ui/components';
@@ -48,6 +47,8 @@ import {
   ThemeDashboardHeader,
   NavSection,
   PreviewPills,
+  FontsPreview,
+  ThemeSpecimens,
   CardContainerCss,
   ThemeImporter,
   ResetButton,
@@ -223,47 +224,13 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     </GridContainer>
                   {{/unless}}
                   <@fields.typography class='brand-typography-preview' />
+                {{else if (eq section.id 'fonts')}}
+                  <FontsPreview
+                    @fontStack={{@model.fontStacksFor this.isDarkMode}}
+                    @cssImports={{@model.cssImports}}
+                  />
                 {{else if (eq section.id 'ui-components')}}
-                  <GridContainer class='cta-grid'>
-                    <FieldContainer @label='Primary CTA' @vertical={{true}}>
-                      <div class='preview-container cta-preview-container'>
-                        <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
-                      </div>
-                    </FieldContainer>
-                    <FieldContainer @label='Secondary CTA' @vertical={{true}}>
-                      <div class='preview-container cta-preview-container'>
-                        <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
-                      </div>
-                    </FieldContainer>
-                    <FieldContainer @label='Disabled CTA' @vertical={{true}}>
-                      <div class='preview-container cta-preview-container'>
-                        <Button @disabled={{true}} @size='extra-small'>Sample
-                          CTA</Button>
-                      </div>
-                    </FieldContainer>
-                  </GridContainer>
-                  <FieldContainer
-                    @label='Corner Radius for holding shapes'
-                    @vertical={{true}}
-                  >
-                    <GridContainer class='ui-grid'>
-                      <div class='preview-container ui-preview-container'>
-                        <p>Lorem ipsum dolor sit amet, consectetur adipiscing
-                          elit, sed do eiusmod tempor incididunt ut labore et
-                          dolore magna aliqua. Ut enim ad minim veniam, quis
-                          nostrud exercitation ullamco laboris nisi ut aliquip
-                          ex ea commodo consequat. Duis aute irure dolor in
-                          reprehenderit in voluptate velit esse cillum dolore eu
-                          fugiat nulla pariatur. Excepteur sint occaecat
-                          cupidatat non proident, sunt in culpa qui officia
-                          deserunt mollit anim id est laborum.
-                        </p>
-                      </div>
-                      <div
-                        class='preview-container ui-preview-container photo-container'
-                      />
-                    </GridContainer>
-                  </FieldContainer>
+                  <ThemeSpecimens />
                 {{else if (eq section.id 'visual-dna')}}
                   <div class='dsr-section-content'>
                     {{#if this.editMode}}
@@ -344,7 +311,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                   </div>
                 {{else if (eq section.id 'card-container-css')}}
                   {{#if @model.cssVariables}}
-                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                    <CardContainerCss
+                      @cssVariables={{@model.cssVariables}}
+                      @isDarkMode={{this.isDarkMode}}
+                    />
                     <hr class='brand-guide-vars-divider' />
                     <h3 class='brand-guide-vars-heading'>Brand Guide-Specific
                       Variables</h3>
@@ -641,46 +611,13 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       :deep(h3) {
         font-size: var(--boxel-font-size-md);
       }
-      .cta-grid {
-        margin-bottom: var(--boxel-sp-xl);
-        grid-template-columns: repeat(3, 1fr);
-      }
-      .preview-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        max-width: 100%;
-        background-color: var(--muted);
-        color: var(--dsr-foreground);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
-      }
-      .cta-preview-container {
-        min-height: 7.5rem;
-      }
-      .ui-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      .ui-preview-container {
-        height: 11.25rem;
-        align-items: flex-start;
-        padding: var(--boxel-sp-xxl);
-        overflow: auto;
-      }
-      .photo-container {
-        background-image: url('https://app-assets-cardstack.s3.us-east-1.amazonaws.com/%40cardstack/boxel/images/placeholders/photo-placeholder.png');
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: cover;
-      }
 
       /* typography section */
       .typography-grid {
         grid-template-columns: 1fr 1fr;
       }
       @container (width <= 768px) {
-        .typography-grid,
-        .cta-grid {
+        .typography-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -1011,6 +948,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       fieldName: 'typography',
     },
     {
+      id: 'fonts',
+      navTitle: 'Fonts',
+      title: 'Fonts',
+    },
+    {
       id: 'mark-usage',
       navTitle: 'Mark Usage',
       title: 'Mark Usage',
@@ -1043,7 +985,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         this.sections.filter(
           (section) =>
             section.id !== 'card-container-css' &&
-            section.id !== 'ui-components',
+            section.id !== 'ui-components' &&
+            section.id !== 'fonts',
         ),
         this.hasThemeCss,
       );
@@ -1061,6 +1004,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
       if (section.id === 'card-container-css') {
         return Boolean(this.args.model.cssVariables);
+      }
+
+      if (section.id === 'fonts') {
+        return this.hasFontsContent;
       }
 
       if (section.id === 'custom-css') {
@@ -1095,6 +1042,14 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
       return Boolean(content);
     });
+  }
+
+  private get hasFontsContent() {
+    let model = this.args.model;
+    return Boolean(
+      model.fontStacksFor?.(this.isDarkMode).some((font) => font.stack) ||
+      model.cssImports?.length,
+    );
   }
 
   private get hasBrandPaletteContent() {

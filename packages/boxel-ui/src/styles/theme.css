@@ -45,6 +45,21 @@
   --card-foreground: var(--boxel-dark);
   --popover: var(--boxel-light);
   --popover-foreground: var(--boxel-dark);
+  /* Neutral surfaces beyond shadcn's, by role: the workspace ground behind the
+     page, a well sunk into a card, an editable region at rest, the pointer
+     acknowledgement, zebra rows, the selected row. `--foreground` must read on
+     all of them, so none carries its own -foreground. `--hover` is translucent
+     so it composes over whichever surface it lands on. */
+  --canvas: var(--boxel-100);
+  --inset: var(--boxel-50);
+  --field: var(--boxel-light);
+  --hover: var(--boxel-dark-10);
+  --stripe: var(--boxel-50);
+  --selected: color-mix(in oklch, var(--primary) 15%, var(--card));
+  --tooltip: var(--boxel-dark-80);
+  --tooltip-foreground: var(--boxel-light);
+  /* third ink step, fainter than --muted-foreground */
+  --subtle-foreground: var(--boxel-400);
 
   /* roles */
   --primary: var(--boxel-highlight);
@@ -60,8 +75,10 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
+  --border-strong: var(--boxel-400);
   --input: var(--boxel-400);
   --ring: var(--boxel-highlight);
+  --control-height: 2.5rem;
 
   /* charts */
   --chart-1: var(--boxel-fuschia);
@@ -69,6 +86,8 @@
   --chart-3: var(--boxel-lime);
   --chart-4: var(--boxel-blue);
   --chart-5: var(--boxel-green);
+  --chart-6: var(--boxel-orange);
+  --chart-7: var(--boxel-cyan);
 
   /* sidebar */
   --sidebar: var(--boxel-light);
@@ -112,18 +131,54 @@
   --shadow-xl:
     0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --shadow-inset: inset 0 1px 2px hsl(0 0% 0% / 0.1);
 
   /* status */
   --success: var(--boxel-success);
+  --success-foreground: var(--boxel-light);
   --warning: var(--boxel-warning);
+  --warning-foreground: var(--boxel-dark);
+  --info: var(--boxel-blue);
+  --info-foreground: var(--boxel-light);
+  --attention: var(--boxel-pink);
+  --attention-foreground: var(--boxel-light);
+  --overlay: var(--boxel-dark-50);
+
+  /* Hue as ink. `--x`/`--x-foreground` cover ink *on* a hue's fill; `--x-ink` is
+     the hue used *as* ink on a neutral surface (a status label, a link, an icon).
+     The default pulls each hue toward --foreground so it darkens on light and
+     lightens on dark; a theme that sets only `--x` still gets a readable ink.
+     Re-declared in the dark block: a var() inside a custom property resolves
+     where it is declared, so a dark subtree would otherwise inherit the
+     light-resolved color. */
+  --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+  --secondary-ink: color-mix(in oklch, var(--secondary) 60%, var(--foreground));
+  --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+  --destructive-ink: color-mix(
+    in oklch,
+    var(--destructive) 60%,
+    var(--foreground)
+  );
+  --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+  --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
+  --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+  --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
 
   /* other */
+  /* same values the Switch falls back to; declared so a light region nested
+     in a dark subtree re-resolves them instead of inheriting the dark thumb */
+  --boxel-switch-thumb: var(--background);
+  --boxel-switch-thumb-icon: var(--foreground);
   --boxel-button-default-border: var(--boxel-button-border-color);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
   --boxel-button-default-active-border: var(--foreground);
   --boxel-button-primary-active-background: var(--boxel-highlight-hover);
   --boxel-button-secondary-background: transparent;
+  /* declared in both scheme blocks: a var() inside a knob resolves where the
+     knob is declared, so a light region nested in a dark subtree would
+     otherwise inherit the dark-resolved color */
+  --boxel-button-secondary-foreground: var(--foreground);
   --boxel-button-secondary-border: var(--boxel-button-border-color);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-danger-hover);
@@ -157,6 +212,7 @@
   --boxel-button-default-active-border: initial;
   --boxel-button-primary-active-background: initial;
   --boxel-button-secondary-background: initial;
+  --boxel-button-secondary-foreground: initial;
   --boxel-button-secondary-border: initial;
   --boxel-button-secondary-active-border: initial;
   --boxel-button-link-primary-foreground: initial;
@@ -196,9 +252,32 @@
   --accent-foreground: var(--boxel-light);
   --destructive: var(--boxel-danger);
   --destructive-foreground: var(--boxel-light-100);
+  --canvas: #1e1b26;
+  --inset: #302d3b;
+  --field: var(--boxel-700);
+  --hover: var(--boxel-light-10);
+  --stripe: var(--boxel-600);
+  --selected: color-mix(in oklch, var(--primary) 15%, var(--card));
+  --tooltip: var(--boxel-dark-80);
+  --tooltip-foreground: var(--boxel-light);
+  --subtle-foreground: #8a8895;
   --border: var(--boxel-550);
+  --border-strong: #6e6c78;
   --input: var(--boxel-550);
   --ring: var(--boxel-highlight);
+  --overlay: var(--boxel-dark-80);
+  --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+  --secondary-ink: color-mix(in oklch, var(--secondary) 60%, var(--foreground));
+  --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+  --destructive-ink: color-mix(
+    in oklch,
+    var(--destructive) 60%,
+    var(--foreground)
+  );
+  --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+  --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
+  --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+  --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);
   --sidebar-primary: var(--boxel-highlight);
@@ -215,6 +294,7 @@
   --boxel-button-default-active-border: var(--foreground);
   --boxel-button-primary-active-background: var(--boxel-highlight-hover);
   --boxel-button-secondary-background: transparent;
+  --boxel-button-secondary-foreground: var(--foreground);
   --boxel-button-secondary-border: var(--border);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-danger-hover);
@@ -222,4 +302,79 @@
   --boxel-button-disabled-background: #444051;
   --boxel-button-disabled-foreground: #817c93;
   --boxel-button-disabled-border: 1px solid#444051;
+}
+
+/* Dark defaults at themed-card boundaries. The light block re-declares the
+   whole contract on `:where([data-boxel-theme-scope])`, so without this a
+   themed card in a dark subtree would reset every token its theme omits to the
+   light default. Keyed off the inherited scheme signal, the same way a card's
+   own `.dark` variables are applied (see theme-scoped-css.ts), so it follows
+   the nearest light/dark switch rather than any `[data-theme]` ancestor.
+   `:where()` keeps it at zero specificity so the card's scoped stylesheet
+   still wins. Declares the dark block's contract tokens, minus
+   --boxel-color-scheme (which has to keep inheriting) and minus the
+   --boxel-switch/button chrome knobs, which the boundary reset above
+   sets to `initial` so themed cards derive them from their own tokens in both
+   schemes — a test enforces both. */
+@container style(--boxel-color-scheme: dark) {
+  :where([data-boxel-theme-scope]) {
+    --background: var(--boxel-700);
+    --foreground: var(--boxel-light);
+    --card: var(--boxel-650);
+    --card-foreground: var(--boxel-light);
+    --popover: #4f4b57;
+    --popover-foreground: var(--boxel-light);
+    --primary: var(--boxel-highlight);
+    --primary-foreground: var(--boxel-dark);
+    --secondary: #46434e;
+    --secondary-foreground: var(--boxel-light);
+    --muted: #34313c;
+    --muted-foreground: #b6b6be;
+    --accent: #797788;
+    --accent-foreground: var(--boxel-light);
+    --destructive: var(--boxel-danger);
+    --destructive-foreground: var(--boxel-light-100);
+    --canvas: #1e1b26;
+    --inset: #302d3b;
+    --field: var(--boxel-700);
+    --hover: var(--boxel-light-10);
+    --stripe: var(--boxel-600);
+    --selected: color-mix(in oklch, var(--primary) 15%, var(--card));
+    --tooltip: var(--boxel-dark-80);
+    --tooltip-foreground: var(--boxel-light);
+    --subtle-foreground: #8a8895;
+    --border: var(--boxel-550);
+    --border-strong: #6e6c78;
+    --input: var(--boxel-550);
+    --ring: var(--boxel-highlight);
+    --overlay: var(--boxel-dark-80);
+    --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
+    --secondary-ink: color-mix(
+      in oklch,
+      var(--secondary) 60%,
+      var(--foreground)
+    );
+    --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+    --destructive-ink: color-mix(
+      in oklch,
+      var(--destructive) 60%,
+      var(--foreground)
+    );
+    --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+    --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
+    --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+    --attention-ink: color-mix(
+      in oklch,
+      var(--attention) 60%,
+      var(--foreground)
+    );
+    --sidebar: #555366;
+    --sidebar-foreground: var(--boxel-light);
+    --sidebar-primary: var(--boxel-highlight);
+    --sidebar-primary-foreground: var(--boxel-dark);
+    --sidebar-accent: #797788;
+    --sidebar-accent-foreground: var(--boxel-light);
+    --sidebar-border: var(--boxel-550);
+    --sidebar-ring: var(--boxel-highlight);
+  }
 }
