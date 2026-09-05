@@ -44,7 +44,7 @@ import type { DBAdapter } from './db.ts';
 import type { ScreenshotManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
-import type { Diagnostics } from './index.ts';
+import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -187,6 +187,14 @@ export interface FileEntry {
   markdown?: string;
   // See InstanceEntry.diagnostics.
   diagnostics?: Diagnostics;
+}
+
+// One prerendered_html row's declared-screenshot state, as
+// `priorScreenshotStates` reads it back for the next pass over the same URL.
+export interface PriorScreenshotState {
+  manifest: ScreenshotManifest | null;
+  screenshotErrors: DeclaredScreenshotError[] | null;
+  captureFailureRenders: number | null;
 }
 
 // The per-URL write payloads of a `prerenderHtmlOnly` batch — the HTML half
@@ -1562,18 +1570,23 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot manifests the previous pass published for this
-  // URL's rows, read from production `prerendered_html` and keyed by row
-  // type — the carry-forward inputs for `keyBy: 'file-content'` slots (skip
-  // re-rendering when the source bytes are unchanged). A row that doesn't
-  // exist or carried no manifest simply has no key.
-  async priorScreenshotManifests(
+  // The declared-screenshot state the previous pass published for this URL's
+  // rows, read from production `prerendered_html` in one query and keyed by
+  // row type: the manifest is the carry-forward input for
+  // `keyBy: 'file-content'` slots (skip re-rendering when the source bytes
+  // are unchanged), and the recorded capture failures seed this pass's
+  // consecutive-failure bookkeeping — per-slot runs (a slot that fails again
+  // extends its run) plus the row-level failing-render counter the reconcile
+  // sweep's bounded retry lane caps on. A row that doesn't exist has no key;
+  // fields it carried nothing for are null.
+  async priorScreenshotStates(
     url: URL,
-  ): Promise<Partial<Record<'instance' | 'file', ScreenshotManifest>>> {
-    // This runs once per visit, so it selects only the manifests — the
-    // rows' HTML columns are large and irrelevant here.
+  ): Promise<Partial<Record<'instance' | 'file', PriorScreenshotState>>> {
+    // This runs once per visit, so it selects only what the two rows'
+    // capture bookkeeping needs — the HTML columns are large and irrelevant
+    // here.
     let rows = (await this.#query([
-      `SELECT type, screenshots FROM prerendered_html WHERE`,
+      `SELECT type, screenshots, diagnostics FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
@@ -1587,20 +1600,28 @@ export class Batch {
       ]),
     ] as Expression)) as unknown as Pick<
       PrerenderedHtmlTable,
-      'type' | 'screenshots'
+      'type' | 'screenshots' | 'diagnostics'
     >[];
-    let manifests: Partial<Record<'instance' | 'file', ScreenshotManifest>> =
-      {};
+    let states: Partial<Record<'instance' | 'file', PriorScreenshotState>> = {};
     for (let row of rows) {
-      if (
-        (row.type === 'instance' || row.type === 'file') &&
-        row.screenshots &&
-        Object.keys(row.screenshots).length > 0
-      ) {
-        manifests[row.type] = row.screenshots as ScreenshotManifest;
+      if (row.type !== 'instance' && row.type !== 'file') {
+        continue;
       }
+      let priorDiagnostics = row.diagnostics as Diagnostics | null;
+      let priorErrors = priorDiagnostics?.screenshotErrors;
+      let priorFailureRenders =
+        priorDiagnostics?.screenshotCaptureFailureRenders;
+      states[row.type] = {
+        manifest: (row.screenshots as ScreenshotManifest | null) ?? null,
+        screenshotErrors:
+          Array.isArray(priorErrors) && priorErrors.length > 0
+            ? priorErrors
+            : null,
+        captureFailureRenders:
+          typeof priorFailureRenders === 'number' ? priorFailureRenders : null,
+      };
     }
-    return manifests;
+    return states;
   }
 
   private async getPrerenderedHtmlProductionVersion(

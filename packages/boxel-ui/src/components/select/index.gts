@@ -147,6 +147,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       '--boxel-dropdown-selected-highlighted-color',
       '--boxel-dropdown-selected-hover-color',
       '--boxel-dropdown-hover-color',
+      '--boxel-dropdown-hover-text-color',
       '--boxel-form-control-border-radius',
     ];
 
@@ -389,30 +390,38 @@ export default class BoxelSelect<ItemT = any> extends Component<
         .boxel-select__dropdown.ember-power-select-dropdown {
           --dropdown-background-color: var(
             --boxel-dropdown-background-color,
-            var(--background, var(--boxel-light))
+            var(--background)
           );
           --dropdown-border-color: var(
             --boxel-dropdown-border-color,
-            var(--border, var(--boxel-border-color))
+            var(--border)
           );
           --dropdown-text-color: var(
             --boxel-dropdown-text-color,
-            var(--foreground, var(--boxel-dark))
+            var(--foreground)
           );
           --dropdown-highlight-color: var(
             --boxel-dropdown-highlight-color,
-            var(--theme-highlight, var(--boxel-highlight))
+            var(--theme-highlight, var(--primary))
           );
           --dropdown-highlight-hover-color: var(
             --boxel-dropdown-highlight-hover-color,
             var(
-              --boxel-dropdown-hover-color,
-              var(--theme-highlight-hover, var(--boxel-highlight-hover))
+              --theme-highlight-hover,
+              color-mix(
+                in oklab,
+                var(--dropdown-highlight-color) 88%,
+                var(--dropdown-selected-text-color)
+              )
             )
           );
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
+            var(--theme-hover, var(--muted))
+          );
+          --dropdown-hover-text-color: var(
+            --boxel-dropdown-hover-text-color,
+            var(--foreground)
           );
           --dropdown-focus-border-color: var(
             --boxel-dropdown-focus-border-color,
@@ -420,7 +429,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
           );
           --dropdown-selected-text-color: var(
             --boxel-dropdown-selected-text-color,
-            var(--foreground, var(--boxel-dark))
+            var(--primary-foreground)
           );
           --dropdown-selected-highlighted-color: var(
             --boxel-dropdown-selected-highlighted-color,
@@ -496,7 +505,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
 
         .boxel-select__dropdown .ember-power-select-option:hover {
           background-color: var(--dropdown-hover-color);
-          color: var(--dropdown-selected-text-color);
+          color: var(--dropdown-hover-text-color);
         }
 
         .boxel-select__dropdown .ember-power-select-option:focus {
@@ -693,13 +702,13 @@ export class BoxelSelectOptions extends PowerSelectOptions {
 
       .boxel-select-option-item:not([aria-disabled='true']):hover {
         background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-selected-text-color);
+        color: var(--dropdown-hover-text-color);
         cursor: pointer;
       }
 
       .boxel-select-option-item.is-highlighted {
         background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-selected-text-color);
+        color: var(--dropdown-hover-text-color);
       }
 
       .boxel-select-option-item.is-selected {
@@ -715,6 +724,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
          apply — hovering an option also highlights it. */
       .boxel-select-option-item.is-selected:hover {
         background-color: var(--dropdown-selected-hover-color);
+        color: var(--dropdown-selected-text-color);
       }
 
       .boxel-select-option-item[aria-disabled='true'] {

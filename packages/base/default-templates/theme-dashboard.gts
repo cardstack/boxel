@@ -1,6 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import GlimmerComponent from '@glimmer/component';
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
@@ -23,7 +23,10 @@ import {
   BoxelInput,
   Menu as BoxelMenu,
   Pill,
+  ProgressBar,
   Switch,
+  CopyButton,
+  BoxelSelect,
 } from '@cardstack/boxel-ui/components';
 import {
   and,
@@ -31,6 +34,7 @@ import {
   cn,
   eq,
   MenuItem,
+  sanitizeHtmlSafe,
   themeScope,
   themeScopedCss,
 } from '@cardstack/boxel-ui/helpers';
@@ -38,6 +42,7 @@ import {
 import {
   DEFAULT_THEME_SCALE,
   FontPreviews,
+  TokenPill,
 } from '../structured-theme-variables';
 import CardInfoTemplates from '../default-templates/card-info';
 
@@ -245,6 +250,7 @@ export class ThemeImporter extends GlimmerComponent<{
 export class CardContainerCss extends GlimmerComponent<{
   Args: {
     cssVariables: string;
+    isDarkMode?: boolean;
   };
   Element: HTMLElement;
 }> {
@@ -364,6 +370,8 @@ export class CardContainerCss extends GlimmerComponent<{
       '--boxel-subheading',
       '--boxel-section-heading',
       '--boxel-caption',
+      '--boxel-ui-label',
+      '--boxel-eyebrow',
     ]);
   }
 
@@ -415,6 +423,10 @@ export class CardContainerCss extends GlimmerComponent<{
         <code>--boxel-*</code>
         internals with Boxel defaults as fallbacks.
       </p>
+      <ThemeRecipe
+        @cssVariables={{@cssVariables}}
+        @isDarkMode={{@isDarkMode}}
+      />
       <div class='computed-vars-section'>
         <div class='computed-vars-group'>
           <h4>Spacing</h4>
@@ -480,6 +492,8 @@ export class CardContainerCss extends GlimmerComponent<{
             <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
             <dt><code>--boxel-body-*</code></dt><dd>p</dd>
             <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
+            <dt><code>--boxel-ui-label-*</code></dt><dd>UI labels, control text</dd>
+            <dt><code>--boxel-eyebrow-*</code></dt><dd>kicker above a title</dd>
           </dl>
         </div>
       </div>
@@ -1052,12 +1066,16 @@ export class NavBar extends GlimmerComponent<{
           max-height: 50vh;
           overflow-y: auto;
         }
+        /* the bar spans the card; its items keep to the content measure */
         .nav-container {
           position: relative;
           flex-grow: 1;
           display: flex;
           gap: var(--boxel-sp-xs);
           overflow: hidden;
+          width: 100%;
+          max-width: var(--dsr-content-max-width);
+          margin: 0 auto;
           padding-inline: var(--boxel-sp-xl);
         }
 
@@ -1123,40 +1141,42 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
       class='theme-dashboard-header {{if @mode @mode "isolated"}}'
       ...attributes
     >
-      {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
-        <CardInfoTemplates.edit
-          @fields={{@fields}}
-          @model={{this.cardInfoModel}}
-          @hideThemeChooser={{true}}
-        />
-        <FieldContainer
-          class='theme-dashboard-version-edit-field'
-          @icon={{VersionIcon}}
-          @label='Version No'
-          @tag='label'
-        >
-          <@fields.version />
-        </FieldContainer>
-      {{else}}
-        {{#if (has-block 'meta')}}
-          {{yield to='meta'}}
+      <div class='theme-dashboard-header-content'>
+        {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
+          <CardInfoTemplates.edit
+            @fields={{@fields}}
+            @model={{this.cardInfoModel}}
+            @hideThemeChooser={{true}}
+          />
+          <FieldContainer
+            class='theme-dashboard-version-edit-field'
+            @icon={{VersionIcon}}
+            @label='Version No'
+            @tag='label'
+          >
+            <@fields.version />
+          </FieldContainer>
         {{else}}
-          <div class='theme-dashboard-header-meta'>
-            <span class='theme-dashboard-header-meta-label'>
-              {{if @metaLabel @metaLabel 'Style Guide'}}
-            </span>
-            <span class='theme-dashboard-header-meta-version'>
-              Version
-              {{if @version @version '1.0'}}
-            </span>
-          </div>
+          {{#if (has-block 'meta')}}
+            {{yield to='meta'}}
+          {{else}}
+            <div class='theme-dashboard-header-meta'>
+              <span class='theme-dashboard-header-meta-label'>
+                {{if @metaLabel @metaLabel 'Style Guide'}}
+              </span>
+              <span class='theme-dashboard-header-meta-version'>
+                Version
+                {{if @version @version '1.0'}}
+              </span>
+            </div>
+          {{/if}}
+          <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
+          {{#if @description}}
+            <p class='theme-dashboard-header-tagline'>{{@description}}</p>
+          {{/if}}
         {{/if}}
-        <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
-        {{#if @description}}
-          <p class='theme-dashboard-header-tagline'>{{@description}}</p>
-        {{/if}}
-      {{/if}}
-      {{yield}}
+        {{yield}}
+      </div>
     </header>
     <style scoped>
       @layer baseComponent {
@@ -1172,6 +1192,16 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
         .edit {
           padding: var(--boxel-sp-xl);
         }
+        /* the band spans the card; its content keeps to the dashboard's measure */
+        .theme-dashboard-header-content {
+          /* the band carries the horizontal padding that .dsr-content and the
+             nav include in their measure, so subtract it to keep text edges
+             aligned */
+          max-width: calc(
+            var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-xl)
+          );
+          margin: 0 auto;
+        }
         .theme-dashboard-header-meta {
           display: flex;
           justify-content: space-between;
@@ -1185,9 +1215,6 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
         .theme-dashboard-header-title {
           margin-bottom: var(--boxel-sp-sm);
           color: var(--foreground);
-        }
-        .theme-dashboard-header-tagline {
-          max-width: 48rem;
         }
         .theme-dashboard-version-edit-field {
           margin-top: var(--boxel-sp);
@@ -1294,6 +1321,999 @@ export class PreviewPills extends GlimmerComponent<{
   </template>
 }
 
+// The tokens that decide a theme's look, excerpted from the generated CSS so a
+// reader does not have to scan the full variable dump for them
+// Chosen by counting: these are the contract tokens boxel-ui components read
+// most, plus the ones other theme.css defaults are mixed from (--foreground
+// alone feeds thirteen), plus the knobs the spacing and radius scales derive
+// from. Re-count before adding to it.
+const RECIPE_TOKENS = [
+  '--background',
+  '--foreground',
+  '--card',
+  '--muted',
+  '--muted-foreground',
+  '--primary',
+  '--primary-foreground',
+  '--secondary',
+  '--accent',
+  '--destructive',
+  '--border',
+  '--ring',
+  '--radius',
+  '--spacing',
+  '--font-sans',
+  '--font-mono',
+];
+
+export class ThemeRecipe extends GlimmerComponent<{
+  Args: { cssVariables?: string | null; isDarkMode?: boolean };
+  Element: HTMLElement;
+}> {
+  private get entries(): { name: string; value: string }[] {
+    let css = this.args.cssVariables;
+    if (!css) {
+      return [];
+    }
+    let declared = new Map<string, string>();
+    let collect = (selector: RegExp) => {
+      let block = css!.match(selector);
+      if (!block) {
+        return;
+      }
+      for (let match of block[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+        declared.set(match[1], match[2].trim());
+      }
+    };
+    // the dark block layers over :root, so read it second in dark mode
+    collect(/:root\s*{([^}]*)}/);
+    if (this.args.isDarkMode) {
+      collect(/\.dark\s*{([^}]*)}/);
+    }
+    return RECIPE_TOKENS.flatMap((name) => {
+      let value = declared.get(name);
+      return value ? [{ name, value }] : [];
+    });
+  }
+
+  private get text(): string {
+    return `:root {\n${this.entries
+      .map(({ name, value }) => `  ${name}: ${value};`)
+      .join('\n')}\n}`;
+  }
+
+  <template>
+    {{#if this.entries.length}}
+      <div class='theme-recipe' ...attributes>
+        <h4>Key tokens{{if @isDarkMode ' (dark)'}}</h4>
+        <p class='theme-recipe-description'>
+          The variables components read most and that other defaults are derived
+          from. Pulled from the generated CSS so you can read or copy them
+          without scanning the full list.
+        </p>
+        {{! same surface as CSSField's code block, with the copy button pinned
+            to the block rather than the heading }}
+        <div class='theme-recipe-block'>
+          <CopyButton
+            class='theme-recipe-copy-button'
+            @textToCopy={{this.text}}
+          />
+          <pre
+            class='theme-recipe-pre'
+            data-test-theme-recipe
+          >{{this.text}}</pre>
+        </div>
+      </div>
+    {{/if}}
+    <style scoped>
+      @layer baseComponent {
+        .theme-recipe {
+          margin-bottom: var(--boxel-sp-xl);
+        }
+        .theme-recipe h4 {
+          margin: 0;
+        }
+        .theme-recipe-description {
+          margin: var(--boxel-sp-4xs) 0 var(--boxel-sp-xs);
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
+        }
+        .theme-recipe-block {
+          position: relative;
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius, var(--boxel-border-radius));
+          overflow: hidden;
+        }
+        .theme-recipe-copy-button {
+          position: absolute;
+          top: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
+          z-index: 1;
+        }
+        .theme-recipe-pre {
+          margin: 0;
+          padding: var(--boxel-sp);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: var(--boxel-font-size-xs);
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </template>
+}
+
+const SPECIMEN_TABS = [
+  { id: 'surfaces', label: 'Surfaces & Ink' },
+  { id: 'controls', label: 'Controls' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'reading', label: 'Editorial' },
+] as const;
+
+type SpecimenTabId = (typeof SPECIMEN_TABS)[number]['id'];
+
+const SPECIMEN_ROWS = [
+  { name: 'Website redesign', status: 'success', label: 'On track' },
+  { name: 'Quarterly report', status: 'warning', label: 'At risk' },
+  { name: 'Onboarding guide', status: 'info', label: 'In review' },
+  { name: 'Vendor contract', status: 'attention', label: 'Needs sign-off' },
+];
+
+const INKS = [
+  'primary',
+  'secondary',
+  'accent',
+  'destructive',
+  'success',
+  'warning',
+  'info',
+  'attention',
+];
+
+const SELECT_OPTIONS = ['Draft', 'In review', 'Published', 'Archived'];
+
+const CHART_BARS = [62, 84, 45, 91, 70].map((height, index) => ({
+  className: `sp-bar sp-bar--${index + 1}`,
+  style: sanitizeHtmlSafe(`height: ${height}%`),
+}));
+
+// Prerendered HTML is cached, must be deterministic for unchanged content, and
+// can be inserted into a document more than once, so it carries no ids: the
+// panels are named by aria-label alone and the fragment is inert anyway. Live
+// renders link tabs to panels with a random per-instance token, unique even
+// across the copies of one card open in different stacks. The host's render
+// page marks its output container with `data-prerender`.
+function isPrerendering(el: Element): boolean {
+  return Boolean(el.closest('[data-prerender]'));
+}
+
+// Realistic scenes built from boxel-ui, so a theme is judged on a page rather
+// than on isolated swatches. Every panel stays in the DOM (inactive ones are
+// hidden) so tests and prerender see the full set.
+export class ThemeSpecimens extends GlimmerComponent<{
+  Element: HTMLElement;
+}> {
+  @tracked private activeTab: SpecimenTabId = 'surfaces';
+  private uid = `specimens-${Math.random().toString(36).slice(2, 10)}`;
+
+  // ids are stamped after insert rather than rendered, so the template output
+  // stays id-free where it will be serialized
+  private linkPanel = modifier((el: HTMLElement, [key]: [SpecimenTabId]) => {
+    if (!isPrerendering(el)) {
+      el.id = `${this.uid}-${key}`;
+    }
+  });
+
+  private linkTab = modifier((el: HTMLElement, [key]: [SpecimenTabId]) => {
+    if (!isPrerendering(el)) {
+      el.setAttribute('aria-controls', `${this.uid}-${key}`);
+    }
+  });
+  @tracked private switchOn = true;
+  @tracked private selected: string | null = SELECT_OPTIONS[1];
+  private selectOptions = SELECT_OPTIONS;
+  private tabs = SPECIMEN_TABS;
+  private rows = SPECIMEN_ROWS;
+  private inks = INKS;
+  private bars = CHART_BARS;
+
+  private isActive = (id: SpecimenTabId) => this.activeTab === id;
+  private isHidden = (id: SpecimenTabId) => this.activeTab !== id;
+
+  @action private selectTab(id: SpecimenTabId) {
+    this.activeTab = id;
+  }
+
+  @action private toggleSwitch(isEnabled: boolean) {
+    this.switchOn = isEnabled;
+  }
+
+  @action private select(option: string | null) {
+    this.selected = option;
+  }
+
+  <template>
+    <div class='specimens' ...attributes>
+      <div class='specimen-tabs' role='tablist' aria-label='Component samples'>
+        {{#each this.tabs as |tab|}}
+          <button
+            type='button'
+            class={{cn
+              'specimen-tab'
+              specimen-tab--active=(this.isActive tab.id)
+            }}
+            role='tab'
+            aria-selected={{if (this.isActive tab.id) 'true' 'false'}}
+            {{this.linkTab tab.id}}
+            {{on 'click' (fn this.selectTab tab.id)}}
+            data-test-specimen-tab={{tab.id}}
+          >
+            {{tab.label}}
+          </button>
+        {{/each}}
+      </div>
+
+      {{! Surfaces & Ink }}
+      <section
+        class='specimen-panel'
+        role='tabpanel'
+        aria-label='Surfaces & Ink'
+        hidden={{this.isHidden 'surfaces'}}
+        {{this.linkPanel 'surfaces'}}
+        data-test-specimen-panel='surfaces'
+      >
+        <div class='sp-canvas'>
+          <div class='sp-canvas-label'>
+            <span>Canvas</span>
+            <TokenPill @name='--canvas' />
+          </div>
+          <div class='sp-card'>
+            <header class='sp-card-header'>
+              <h4>Card on canvas</h4>
+              <TokenPill @name='--card' />
+            </header>
+            <div class='sp-inset'>
+              {{! wrapping label: no id, so cached prerendered copies of this
+                  dashboard can share a document without colliding }}
+              <label class='sp-field-label'>
+                <span class='sp-field-label-text'>
+                  Field at rest in an inset well
+                  <TokenPill @name='--inset' />
+                  <TokenPill @name='--field' />
+                  <TokenPill @name='--subtle-foreground' />
+                </span>
+                <BoxelInput @placeholder='Placeholder in subtle ink' />
+              </label>
+            </div>
+            <div class='sp-table-scroll'>
+              <table class='sp-table'>
+                <thead>
+                  <tr>
+                    <th scope='col'>Project</th>
+                    <th scope='col'>Status</th>
+                    <th scope='col'>Row</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{#each this.rows as |row index|}}
+                    <tr
+                      class={{cn
+                        sp-row--hover=(eq index 1)
+                        sp-row--selected=(eq index 2)
+                      }}
+                      aria-selected={{if (eq index 2) 'true'}}
+                    >
+                      <td>{{row.name}}</td>
+                      <td>
+                        <span
+                          class={{cn
+                            'sp-status'
+                            (concat 'sp-status--' row.status)
+                          }}
+                        >{{row.label}}</span>
+                      </td>
+                      <td class='sp-row-note'>
+                        {{#if (eq index 0)}}
+                          <TokenPill @name='--card' />
+                        {{else if (eq index 1)}}
+                          <TokenPill @name='--hover' />
+                        {{else if (eq index 2)}}
+                          <TokenPill @name='--selected' />
+                        {{else}}
+                          <TokenPill @name='--stripe' />
+                        {{/if}}
+                      </td>
+                    </tr>
+                  {{/each}}
+                </tbody>
+              </table>
+            </div>
+            <div class='sp-tooltip-row'>
+              <span class='sp-tooltip' role='tooltip'>Tooltip</span>
+              <TokenPill @name='--tooltip' />
+            </div>
+          </div>
+        </div>
+        <div class='sp-ink-grid'>
+          <div>
+            <h4 class='sp-group-title'>Hue as ink</h4>
+            <ul class='sp-inks'>
+              {{#each this.inks as |ink|}}
+                <li class={{concat 'sp-ink sp-ink--' ink}}>
+                  <a href='#' class='sp-ink-link'>{{ink}} ink</a>
+                  <TokenPill @name={{concat '--' ink '-ink'}} />
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+          <div>
+            <h4 class='sp-group-title'>Status on its own fill</h4>
+            <div class='sp-status-row'>
+              <span class='sp-status sp-status--success'>Success</span>
+              <span class='sp-status sp-status--warning'>Warning</span>
+              <span class='sp-status sp-status--info'>Info</span>
+              <span class='sp-status sp-status--attention'>Attention</span>
+              <span class='sp-status sp-status--destructive'>Destructive</span>
+            </div>
+            <p class='sp-subtle'>
+              Tertiary text in subtle ink
+              <TokenPill @name='--subtle-foreground' />
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {{! Controls }}
+      <section
+        class='specimen-panel'
+        role='tabpanel'
+        aria-label='Controls'
+        hidden={{this.isHidden 'controls'}}
+        {{this.linkPanel 'controls'}}
+        data-test-specimen-panel='controls'
+      >
+        <div class='sp-controls-row'>
+          <Button
+            @size='small'
+            @rectangular={{true}}
+            data-test-action-sample='default'
+          >
+            Default Action
+          </Button>
+          <Button
+            @kind='primary'
+            @size='small'
+            @rectangular={{true}}
+            data-test-action-sample='primary'
+          >
+            Primary Action
+          </Button>
+          <Button
+            @kind='secondary'
+            @size='small'
+            @rectangular={{true}}
+            data-test-action-sample='secondary'
+          >
+            Secondary Action
+          </Button>
+          <Button @kind='muted' @size='small' @rectangular={{true}}>
+            Muted Action
+          </Button>
+          <Button @kind='destructive' @size='small' @rectangular={{true}}>
+            Destructive
+          </Button>
+          <Button @size='small' @rectangular={{true}} @disabled={{true}}>
+            Disabled
+          </Button>
+        </div>
+        <div class='sp-controls-grid'>
+          <FieldContainer @label='Text input' @vertical={{true}}>
+            <BoxelInput @placeholder='Type to search' />
+          </FieldContainer>
+          <FieldContainer @label='Select' @vertical={{true}}>
+            <BoxelSelect
+              @options={{this.selectOptions}}
+              @selected={{this.selected}}
+              @onChange={{this.select}}
+              @placeholder='Choose a status'
+              @renderInPlace={{true}}
+              aria-label='Sample select'
+              as |option|
+            >
+              {{option}}
+            </BoxelSelect>
+          </FieldContainer>
+          <FieldContainer @label='Switch' @vertical={{true}}>
+            <Switch
+              @isEnabled={{this.switchOn}}
+              @onChange={{this.toggleSwitch}}
+              @label='Sample switch'
+            />
+          </FieldContainer>
+          <FieldContainer @label='Progress' @vertical={{true}}>
+            <ProgressBar @value={{64}} @max={{100}} @label='64%' />
+          </FieldContainer>
+        </div>
+        <CardContainer @displayBoundaries={{true}} class='sp-sample-card'>
+          <BoxelContainer @display='grid'>
+            <h4>Sample Card</h4>
+            <p>
+              Card component showcasing background, borders, and shadows from
+              the theme system.
+            </p>
+          </BoxelContainer>
+        </CardContainer>
+      </section>
+
+      {{! Dashboard }}
+      <section
+        class='specimen-panel'
+        role='tabpanel'
+        aria-label='Dashboard'
+        hidden={{this.isHidden 'dashboard'}}
+        {{this.linkPanel 'dashboard'}}
+        data-test-specimen-panel='dashboard'
+      >
+        <div class='sp-stats'>
+          <div class='sp-stat'>
+            <span class='sp-stat-label'>Tasks completed</span>
+            <span class='sp-stat-value'>1,284</span>
+            <span class='sp-delta sp-delta--up'>▲ 8.2%</span>
+          </div>
+          <div class='sp-stat'>
+            <span class='sp-stat-label'>Avg. response</span>
+            <span class='sp-stat-value'>42m</span>
+            <span class='sp-delta sp-delta--down'>▼ 3.1%</span>
+          </div>
+          <div class='sp-stat'>
+            <span class='sp-stat-label'>Open items</span>
+            <span class='sp-stat-value'>17</span>
+            <span class='sp-delta'>no change</span>
+          </div>
+        </div>
+        <div class='sp-chart' role='img' aria-label='Sample bar chart'>
+          {{#each this.bars as |bar|}}
+            <div class={{bar.className}} style={{bar.style}}></div>
+          {{/each}}
+        </div>
+        <div class='sp-banner' role='status'>
+          <strong>Two projects need sign-off.</strong>
+          Warning hue used as ink on a neutral surface.
+          <TokenPill @name='--warning-ink' />
+        </div>
+      </section>
+
+      {{! Editorial }}
+      <section
+        class='specimen-panel'
+        role='tabpanel'
+        aria-label='Editorial'
+        hidden={{this.isHidden 'reading'}}
+        {{this.linkPanel 'reading'}}
+        data-test-specimen-panel='reading'
+      >
+        <article class='sp-article'>
+          <span class='sp-eyebrow'>Field notes</span>
+          <h2 class='sp-article-title'>The last vat still taking colour</h2>
+          <p class='sp-lead'>
+            Body copy at reading measure, with a
+            <a
+              href='#'
+              class='sp-ink-link sp-ink--primary sp-ink-link-body'
+            >link in primary ink</a>
+            and a run of ordinary prose long enough to show line height.
+          </p>
+          <p>
+            Every surface here is the theme's own: the page, the rule under the
+            quote, the caption's quieter ink. Nothing is hard-coded.
+          </p>
+          <blockquote class='sp-quote'>
+            A theme is judged on a page, not on a swatch.
+          </blockquote>
+          <p class='sp-caption'>Caption text in muted ink.</p>
+        </article>
+      </section>
+    </div>
+    <style scoped>
+      @layer baseComponent {
+        .specimens {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+          container-type: inline-size;
+        }
+        .specimen-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-4xs);
+          border-bottom: 1px solid var(--border);
+        }
+        .specimen-tab {
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+          border: 0;
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+          background: none;
+          color: var(--muted-foreground);
+          font: inherit;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .specimen-tab:hover {
+          background-color: var(--hover);
+          color: var(--foreground);
+        }
+        .specimen-tab:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .specimen-tab--active {
+          color: var(--foreground);
+          border-bottom-color: var(--primary);
+        }
+        .specimen-panel {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+        }
+        /* author display beats the UA [hidden] rule, so restate it */
+        .specimen-panel[hidden] {
+          display: none;
+        }
+        .specimen-panel h4 {
+          margin: 0;
+        }
+        .sp-group-title {
+          margin-bottom: var(--boxel-sp-xs);
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
+        }
+
+        /* surfaces */
+        .sp-canvas {
+          min-width: 0;
+          padding: var(--boxel-sp);
+          background-color: var(--canvas);
+          color: var(--foreground);
+          border-radius: var(--radius);
+        }
+        .sp-canvas-label {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          margin-bottom: var(--boxel-sp-xs);
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-xs);
+        }
+        .sp-card {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow-sm);
+        }
+        .sp-card-header {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+        }
+        .sp-inset {
+          /* BoxelInput paints from --background and --muted-foreground, so remap
+             those inside the well to show the field and subtle-ink tokens on
+             the real component */
+          --background: var(--field);
+          --muted-foreground: var(--subtle-foreground);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp);
+          background-color: var(--inset);
+          border-radius: calc(var(--radius) - 0.25rem);
+          box-shadow: var(--shadow-inset);
+        }
+        .sp-field-label {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
+        }
+        .sp-field-label-text {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+        }
+        .sp-table-scroll {
+          overflow-x: auto;
+        }
+        .sp-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .sp-table td {
+          white-space: nowrap;
+        }
+        .sp-table th {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border-bottom: 1px solid var(--border-strong);
+          color: var(--muted-foreground);
+          text-align: left;
+          font-family: var(--boxel-ui-label-font-family);
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
+        }
+        .sp-table td {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border-bottom: 1px solid var(--border);
+        }
+        .sp-table tbody tr:nth-child(even) {
+          background-color: var(--stripe);
+        }
+        .sp-table tbody tr.sp-row--hover,
+        .sp-table tbody tr:hover {
+          background-color: var(--hover);
+        }
+        .sp-table tbody tr.sp-row--selected {
+          background-color: var(--selected);
+        }
+        .sp-row-note {
+          text-align: right;
+        }
+        .sp-tooltip-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .sp-tooltip {
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          background-color: var(--tooltip);
+          color: var(--tooltip-foreground);
+          border-radius: var(--boxel-border-radius-sm);
+          font-size: var(--boxel-font-size-xs);
+        }
+        .sp-ink-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(min(14rem, 100%), 1fr)
+          );
+          gap: var(--boxel-sp-lg);
+        }
+        .sp-inks {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(14rem, 100%), 1fr)
+          );
+          gap: var(--boxel-sp-xs);
+        }
+        .sp-ink {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        }
+        .sp-ink-link {
+          color: inherit;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 0.15em;
+          text-transform: capitalize;
+        }
+        .sp-ink-link-body {
+          font-size: inherit;
+        }
+        .sp-ink--primary {
+          color: var(--primary-ink);
+        }
+        .sp-ink--secondary {
+          color: var(--secondary-ink);
+        }
+        .sp-ink--accent {
+          color: var(--accent-ink);
+        }
+        .sp-ink--destructive {
+          color: var(--destructive-ink);
+        }
+        .sp-ink--success {
+          color: var(--success-ink);
+        }
+        .sp-ink--warning {
+          color: var(--warning-ink);
+        }
+        .sp-ink--info {
+          color: var(--info-ink);
+        }
+        .sp-ink--attention {
+          color: var(--attention-ink);
+        }
+        .sp-status-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+        .sp-status {
+          display: inline-block;
+          padding: 0 var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-xl);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          line-height: 1.6;
+        }
+        .sp-status--success {
+          background-color: var(--success);
+          color: var(--success-foreground);
+        }
+        .sp-status--warning {
+          background-color: var(--warning);
+          color: var(--warning-foreground);
+        }
+        .sp-status--info {
+          background-color: var(--info);
+          color: var(--info-foreground);
+        }
+        .sp-status--attention {
+          background-color: var(--attention);
+          color: var(--attention-foreground);
+        }
+        .sp-status--destructive {
+          background-color: var(--destructive);
+          color: var(--destructive-foreground);
+        }
+        .sp-subtle {
+          margin: var(--boxel-sp) 0 0;
+          color: var(--subtle-foreground);
+          font-size: var(--boxel-font-size-sm);
+        }
+
+        /* controls */
+        .sp-controls-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+        .sp-controls-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(min(12rem, 100%), 1fr)
+          );
+          gap: var(--boxel-sp);
+          align-items: start;
+        }
+
+        /* dashboard */
+        .sp-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
+          gap: var(--boxel-sp);
+        }
+        .sp-stat {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-4xs);
+          padding: var(--boxel-sp);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow-xs);
+        }
+        .sp-stat-label {
+          color: var(--muted-foreground);
+          font-family: var(--boxel-ui-label-font-family);
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
+        }
+        .sp-stat-value {
+          font-size: var(--boxel-heading-font-size);
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .sp-delta {
+          color: var(--subtle-foreground);
+          font-size: var(--boxel-font-size-xs);
+        }
+        .sp-delta--up {
+          color: var(--success-ink);
+        }
+        .sp-delta--down {
+          color: var(--destructive-ink);
+        }
+        .sp-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: var(--boxel-sp-xs);
+          height: 6rem;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm) 0;
+          border-bottom: 1px solid var(--border-strong);
+        }
+        .sp-bar {
+          flex: 1;
+          border-radius: var(--boxel-border-radius-xs)
+            var(--boxel-border-radius-xs) 0 0;
+        }
+        .sp-bar--1 {
+          background-color: var(--chart-1);
+        }
+        .sp-bar--2 {
+          background-color: var(--chart-2);
+        }
+        .sp-bar--3 {
+          background-color: var(--chart-3);
+        }
+        .sp-bar--4 {
+          background-color: var(--chart-4);
+        }
+        .sp-bar--5 {
+          background-color: var(--chart-5);
+        }
+        .sp-banner {
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+          border-left: 3px solid var(--warning);
+          background-color: var(--card);
+          color: var(--warning-ink);
+          font-size: var(--boxel-font-size-sm);
+        }
+
+        /* reading */
+        .sp-article {
+          max-width: 40rem;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .sp-article p {
+          margin: 0;
+        }
+        .sp-eyebrow {
+          color: var(--muted-foreground);
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
+          text-transform: uppercase;
+        }
+        .sp-article-title {
+          margin: 0;
+        }
+        .sp-lead {
+          font-size: var(--boxel-subheading-font-size);
+        }
+        .sp-quote {
+          margin: var(--boxel-sp-xs) 0;
+          padding-left: var(--boxel-sp);
+          border-left: 3px solid var(--border-strong);
+          color: var(--muted-foreground);
+          font-style: italic;
+        }
+        .sp-caption {
+          color: var(--subtle-foreground);
+          font-size: var(--boxel-caption-font-size);
+        }
+      }
+      /* outside the layer: CardContainer paints --background with an unlayered
+         rule, so a layered override would lose to it */
+      .sp-sample-card {
+        background-color: var(--card);
+        color: var(--card-foreground);
+      }
+    </style>
+  </template>
+}
+
+// Font previews beside the CSS import list, used by the visualizer and by the
+// Brand Guide's Fonts section
+export class FontsPreview extends GlimmerComponent<{
+  Args: {
+    fontStack?: { label: string; stack?: string }[];
+    cssImports?: string[] | null;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <div class='fonts-grid' ...attributes>
+      <FontPreviews @fontStack={{@fontStack}} />
+      {{#if @cssImports.length}}
+        <FieldContainer
+          class='css-imports-preview'
+          @label='CSS Imports'
+          @vertical={{true}}
+        >
+          <ul class='font-import-links'>
+            {{#each @cssImports as |importUrl|}}
+              <li>
+                <a
+                  class='font-import-link'
+                  href={{importUrl}}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >
+                  <ExternalLinkIcon
+                    class='font-import-link-icon'
+                    width='14'
+                    height='14'
+                    aria-hidden='true'
+                  />
+                  {{importUrl}}
+                </a>
+              </li>
+            {{/each}}
+          </ul>
+        </FieldContainer>
+      {{else}}
+        <p class='font-import-empty'><em>No web fonts referenced.</em></p>
+      {{/if}}
+    </div>
+    <style scoped>
+      /* previews beside the import list when both fit, stacked otherwise */
+      .fonts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+        gap: var(--boxel-sp-xl);
+        align-items: start;
+      }
+      .font-import-links {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xs);
+      }
+      .font-import-link {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .font-import-link:hover,
+      .font-import-link:focus-visible {
+        text-decoration: underline;
+      }
+      .font-import-link-icon {
+        flex-shrink: 0;
+        align-self: center;
+      }
+      .font-import-empty {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
 export class ThemeVisualizer extends GlimmerComponent<{
   Args: {
     fontStack?: { label: string; stack?: string }[];
@@ -1329,37 +2349,10 @@ export class ThemeVisualizer extends GlimmerComponent<{
         {{else if this.showFontsSection}}
           <div data-test-font-imports-section>
             <h3 class='structured-theme-visualizer-subtitle'>Fonts</h3>
-            <FontPreviews @fontStack={{@fontStack}} />
-            {{#if @cssImports.length}}
-              <FieldContainer
-                class='css-imports-preview'
-                @label='CSS Imports'
-                @vertical={{true}}
-              >
-                <ul class='font-import-links'>
-                  {{#each @cssImports as |importUrl|}}
-                    <li>
-                      <a
-                        class='font-import-link'
-                        href={{importUrl}}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                      >
-                        <ExternalLinkIcon
-                          class='font-import-link-icon'
-                          width='14'
-                          height='14'
-                          aria-hidden='true'
-                        />
-                        {{importUrl}}
-                      </a>
-                    </li>
-                  {{/each}}
-                </ul>
-              </FieldContainer>
-            {{else if this.hasNoImports}}
-              <p class='font-import-empty'><em>No web fonts referenced.</em></p>
-            {{/if}}
+            <FontsPreview
+              @fontStack={{@fontStack}}
+              @cssImports={{@cssImports}}
+            />
           </div>
         {{/if}}
         {{#if (has-block 'typography')}}
@@ -1368,48 +2361,10 @@ export class ThemeVisualizer extends GlimmerComponent<{
             {{yield to='typography'}}
           </div>
         {{/if}}
-        {{#unless @editMode}}
-          <div>
-            <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
-            <div class='structured-theme-component-samples'>
-              <Button
-                @size='small'
-                @rectangular={{true}}
-                data-test-action-sample='default'
-              >
-                Default Action
-              </Button>
-              <Button
-                @kind='primary'
-                @size='small'
-                @rectangular={{true}}
-                data-test-action-sample='primary'
-              >
-                Primary Action
-              </Button>
-              <Button
-                @kind='secondary'
-                @size='small'
-                @rectangular={{true}}
-                data-test-action-sample='secondary'
-              >
-                Secondary Action
-              </Button>
-              <CardContainer
-                @displayBoundaries={{true}}
-                class='structured-theme-component-sample-card'
-              >
-                <BoxelContainer @display='grid'>
-                  <h3>Sample Card</h3>
-                  <p>
-                    Card component showcasing background, borders, and shadows
-                    from the theme system.
-                  </p>
-                </BoxelContainer>
-              </CardContainer>
-            </div>
-          </div>
-        {{/unless}}
+        <div>
+          <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
+          <ThemeSpecimens />
+        </div>
       </div>
     </section>
 
@@ -1456,56 +2411,9 @@ export class ThemeVisualizer extends GlimmerComponent<{
           border-bottom: var(--boxel-border);
           margin-bottom: var(--boxel-sp-xl);
         }
-        .structured-theme-component-samples {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp);
-          align-items: flex-start;
-        }
         .visualizer-preview-pills {
           margin-bottom: var(--boxel-sp);
         }
-      }
-      .structured-theme-component-sample-card {
-        background-color: var(--card);
-        color: var(--card-foreground);
-      }
-      .css-imports-preview {
-        margin-top: var(--boxel-sp-xl);
-      }
-      .font-import-links {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-2xs);
-      }
-      .font-import-link {
-        display: flex;
-        align-items: baseline;
-        gap: var(--boxel-sp-2xs);
-        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
-        background-color: var(--muted);
-        color: var(--muted-foreground);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius-sm);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-xs);
-        text-decoration: none;
-        overflow-wrap: anywhere;
-      }
-      .font-import-link:hover,
-      .font-import-link:focus-visible {
-        text-decoration: underline;
-      }
-      .font-import-link-icon {
-        flex-shrink: 0;
-        align-self: center;
-      }
-      .font-import-empty {
-        margin: var(--boxel-sp) 0 0;
-        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -1554,6 +2462,7 @@ export class ThemeDashboard extends GlimmerComponent<{
         data-theme-dashboard
         data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
         ...attributes
+        data-test-theme-dashboard
       >
         {{#if @themeCss}}
           {{! template-lint-disable require-scoped-style }}
@@ -1598,6 +2507,11 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
+          /* one measure for the header, content, and footer columns; the
+             theme card opens in the wide stack format, so this is sized for it */
+          --dsr-content-max-width: 90rem;
+          /* long generated CSS scrolls inside its block instead of stretching the page */
+          --css-field-max-height: 40vh;
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -1623,7 +2537,7 @@ export class ThemeDashboard extends GlimmerComponent<{
           display: flex;
           flex-direction: column;
           width: 100%;
-          max-width: 56rem;
+          max-width: var(--dsr-content-max-width);
           margin: 0 auto;
           padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
           counter-reset: section;
@@ -1637,7 +2551,7 @@ export class ThemeDashboard extends GlimmerComponent<{
           color: var(--muted-foreground);
         }
         .footer-content {
-          max-width: 56rem;
+          max-width: var(--dsr-content-max-width);
           margin: 0 auto;
           text-align: center;
         }
