@@ -2016,19 +2016,24 @@ async function captureRenderBasedEntry(
   );
 }
 
-// Capture a card's declared screenshots (`static screenshots`) on the same
-// warm tab a prerender-html visit just rendered on. Reads the merged roster
-// from the render.screenshots route, carries forward file-content-keyed
-// slots whose source bytes are unchanged, batches format-based entries per
-// format through captureScreenshot, and renders capture-only components
-// through render.screenshot. Per-slot failures land in `errors` (the
-// broken-links model: the visit publishes normally, the manifest omits the
-// name); only a roster-level failure returns a RenderError.
+// Capture the current rendering's declared screenshots (`static
+// screenshots`) on the same warm tab a prerender-html visit just rendered
+// on. `kind` names which of the URL's renderings is on the page — the card
+// instance or the FileDef family — and selects that row's prior manifest
+// from the shared args for carry-forward. Reads the merged roster from the
+// render.screenshots route, carries forward file-content-keyed slots whose
+// source bytes are unchanged, batches format-based entries per format
+// through captureScreenshot, and renders capture-only components through
+// render.screenshot. Per-slot failures land in `errors` (the broken-links
+// model: the visit publishes normally, the manifest omits the name); only a
+// roster-level failure returns a RenderError.
 export async function captureDeclaredScreenshots(
   page: Page,
   args: DeclaredScreenshotVisitArgs,
+  kind: 'instance' | 'file',
   opts?: CaptureOptions,
 ): Promise<DeclaredScreenshotVisitResult | RenderError> {
+  let priorManifest = args.priorManifests?.[kind] ?? null;
   log.debug(`captureDeclaredScreenshots start url=${page.url()}`);
   await transitionTo(page, 'render.screenshots');
   await waitForRoutePathSuffix(page, '/screenshots', opts);
@@ -2086,7 +2091,7 @@ export async function captureDeclaredScreenshots(
       shouldCarryForwardDeclaredEntry({
         keyBy: resolved.keyBy,
         specHash,
-        prior: args.priorManifest?.[name],
+        prior: priorManifest?.[name],
         contentHash: args.contentHash,
       })
     ) {
