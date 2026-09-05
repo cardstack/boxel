@@ -25,9 +25,7 @@ const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
 // `./filedef-mismatch` module (the one realm-supplied entry in
 // FILEDEF_CODE_REF_BY_EXTENSION), which is what lets this fixture declare a
 // family-level poster slot without touching packages/base.
-function makeFileSystem() {
-  return {
-    'filedef-mismatch.gts': `
+const FILEDEF_MISMATCH_SOURCE = `
       import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
       import { Component, type ScreenshotSpec } from "@cardstack/base/card-api";
 
@@ -62,7 +60,11 @@ function makeFileSystem() {
           </template>
         };
       }
-    `,
+    `;
+
+function makeFileSystem() {
+  return {
+    'filedef-mismatch.gts': FILEDEF_MISMATCH_SOURCE,
     'sample.mismatch': 'poster me',
     // Exercises the image family's own declared slots (ImageDef ships a
     // `thumb` + rendition roster): SVG keeps the fixture textual while still
@@ -134,7 +136,9 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test("the prerender-html pass captures a file family's declared screenshots onto the file row", async function (assert) {
-    await writeAndSettle('sample.mismatch', 'poster me');
+    // Distinct from the fixture's bytes: an identical write is a no-op that
+    // enqueues no indexing pass for the settle to wait on.
+    await writeAndSettle('sample.mismatch', 'poster me, freshly written');
 
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
@@ -162,9 +166,17 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     // The ledger keys the file row's captures on the file's own URL,
-    // extension intact — only instance ids shed `.json`.
-    let ledger = await declaredLedgerRows(`${testRealm}sample.mismatch`);
-    assert.strictEqual(ledger.length, 1, 'one ledger row for the slot');
+    // extension intact — only instance ids shed `.json`. The fixture build
+    // captured its own generation's row already (older generations are
+    // GC-superseded, not overwritten), so scope to this render's generation.
+    let ledger = (
+      await declaredLedgerRows(`${testRealm}sample.mismatch`)
+    ).filter((row) => row.source_generation === fileRow!.generation);
+    assert.strictEqual(
+      ledger.length,
+      1,
+      'one ledger row for the slot at this generation',
+    );
     assert.strictEqual(ledger[0].lane, 'declared');
     assert.strictEqual(
       ledger[0].source_content_hash,
@@ -185,7 +197,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("the ?name= URL serves a file row's capture and the file-meta GET joins meta.screenshots", async function (assert) {
-    await writeAndSettle('sample.mismatch', 'poster me');
+    await writeAndSettle('sample.mismatch', 'poster me, served');
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
       `${testRealm}sample.mismatch`,
@@ -230,7 +242,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("the file's own prerendered HTML embeds the durable URL via the declaration-derived render context", async function (assert) {
-    await writeAndSettle('sample.mismatch', 'poster me');
+    await writeAndSettle('sample.mismatch', 'poster me, embedded');
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
       `${testRealm}sample.mismatch`,
@@ -284,18 +296,26 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
-    await writeAndSettle('sample.mismatch', 'poster me');
+    await writeAndSettle('sample.mismatch', 'carry me');
     let firstRow = await prerenderedHtmlRowFor(
       testDbAdapter,
       `${testRealm}sample.mismatch`,
       'file',
     );
     let firstManifest = firstRow!.screenshots as ScreenshotManifest;
+    let ledgerAfterFirstWrite = await declaredLedgerRows(
+      `${testRealm}sample.mismatch`,
+    );
 
-    // Rewrite with identical bytes: the pass re-renders but the
-    // file-content-keyed slot skips the Chrome capture and copies the prior
-    // manifest entry; the earlier generation's ledger row stays the only one.
-    await writeAndSettle('sample.mismatch', 'poster me');
+    // Re-render without a byte change: rewriting identical bytes is a no-op
+    // write, so the pass comes from invalidating a dependency instead — the
+    // family module every .mismatch file row depends on. The
+    // file-content-keyed slot then skips the Chrome capture and copies the
+    // prior manifest entry; no new ledger row appears.
+    await writeAndSettle(
+      'filedef-mismatch.gts',
+      `${FILEDEF_MISMATCH_SOURCE}\n// touched to invalidate dependents\n`,
+    );
     let secondRow = await prerenderedHtmlRowFor(
       testDbAdapter,
       `${testRealm}sample.mismatch`,
@@ -316,13 +336,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       ledgerAfterCarryForward.length,
-      1,
+      ledgerAfterFirstWrite.length,
       'no new ledger row on a carry-forward',
     );
 
     // A content change must recapture: new ledger row at the new generation,
     // manifest keyed by the new source hash.
-    await writeAndSettle('sample.mismatch', 'poster me, but changed');
+    await writeAndSettle('sample.mismatch', 'carry me, but changed');
     let thirdRow = await prerenderedHtmlRowFor(
       testDbAdapter,
       `${testRealm}sample.mismatch`,
@@ -339,7 +359,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       ledgerAfterChange.length,
-      2,
+      ledgerAfterCarryForward.length + 1,
       'the content change persisted a fresh capture',
     );
   });
