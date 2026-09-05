@@ -418,6 +418,47 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the 3D family captures a rendered still onto the file row', async function (assert) {
+    let glbBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/glb-simple.glb',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+    await realm.write('part.glb', glbBytes);
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      afterJobId: baseline,
+      timeout: 60000,
+    });
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}part.glb`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the rendered still landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the still feeds the thumbnail chain',
+    );
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/part.glb?name=poster`),
+      `the fitted rendering carries the still URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
     await writeAndSettle('sample.mismatch', 'poster me');
     let firstRow = await prerenderedHtmlRowFor(
