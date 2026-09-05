@@ -310,6 +310,13 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
+  // The card class's declared-screenshot captures, present when the visit
+  // args requested them (see PrerenderVisitArgs.screenshots) and this pass
+  // reached its capture step. Absent entirely on prerenderers that don't
+  // support capture (the in-browser twin) — the caller writes no manifest
+  // then. Carried on the pass sub-response because each rendering owns its
+  // captures: the file rendering's land on FileRenderResponse the same way.
+  screenshots?: DeclaredScreenshotVisitResult;
 }
 
 // `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
@@ -600,6 +607,9 @@ export interface FileRenderResponse {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
+  // The FileDef family's declared-screenshot captures — see
+  // RenderResponse.screenshots for the presence semantics.
+  screenshots?: DeclaredScreenshotVisitResult;
 }
 
 export type FileRenderArgs = ModulePrerenderArgs & {
@@ -898,17 +908,14 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
-  // Present when the caller wants the visit to capture the card's declared
-  // screenshots (`static screenshots`) on the same warm tab — the
-  // prerender-html indexing pass sends this when it has a MediaCache to
-  // persist into. Only honored by 'prerender-html' visits.
+  // Present when the caller wants the visit to capture declared screenshots
+  // (`static screenshots`) on the same warm tab — the prerender-html
+  // indexing pass sends this when it has a MediaCache to persist into. One
+  // opt-in covers both of the URL's renderings: the card pass captures the
+  // card class's roster, the file pass the FileDef family's, each keying
+  // carry-forward on its own row's prior manifest inside. Only honored by
+  // 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
-  // The file rendering's twin of `screenshots`: capture the FileDef family's
-  // declared screenshots after the file formats render. A separate field
-  // because the two halves carry different carry-forward inputs — each keys
-  // on its own row's prior manifest (the URL's 'instance' vs 'file'
-  // prerendered_html rows), while the content hash is the same file's.
-  fileScreenshots?: DeclaredScreenshotVisitArgs;
   // The realm view this visit renders against — one realm at one generation.
   // An index pass and the `prerender_html` job it spawns are separate queue
   // jobs that read the same files, so they carry the same scope, while the
@@ -919,13 +926,16 @@ export type PrerenderVisitArgs = {
   renderScope?: string;
 };
 
-// Inputs the declared-screenshot capture step needs from the indexing side:
+// Inputs the declared-screenshot capture steps need from the indexing side:
 // what the previous pass captured (so unchanged file-content-keyed slots can
 // carry forward without re-rendering) and the source file's current
-// realm_file_meta content hash to compare against.
+// realm_file_meta content hash to compare against. The content hash is the
+// one file's; the prior manifests are per rendering — a URL's 'instance' and
+// 'file' prerendered_html rows each carry their own — keyed by the same row
+// type the storage layer speaks.
 export type DeclaredScreenshotVisitArgs = {
-  priorManifest?: ScreenshotManifest | null;
   contentHash?: string | null;
+  priorManifests?: Partial<Record<'instance' | 'file', ScreenshotManifest>>;
 };
 
 export type DeclaredScreenshotError = {
@@ -999,14 +1009,6 @@ export interface RenderVisitResponse {
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
-  // Declared-screenshot captures, present when the visit args requested them
-  // (see PrerenderVisitArgs.screenshots) and the card pass reached the
-  // capture step. Absent entirely on prerenderers that don't support
-  // capture (the in-browser twin) — the caller writes no manifest then.
-  screenshots?: DeclaredScreenshotVisitResult;
-  // The file rendering's captures (see PrerenderVisitArgs.fileScreenshots),
-  // with the same presence semantics as `screenshots`.
-  fileScreenshots?: DeclaredScreenshotVisitResult;
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
