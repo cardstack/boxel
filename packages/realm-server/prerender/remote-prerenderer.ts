@@ -285,7 +285,6 @@ export function createRemotePrerenderer(
       priority,
       jobId,
       screenshots,
-      fileScreenshots,
       renderScope,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
@@ -306,7 +305,6 @@ export function createRemotePrerenderer(
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
-          ...(fileScreenshots ? { fileScreenshots } : {}),
           ...(renderScope ? { renderScope } : {}),
         },
       );
