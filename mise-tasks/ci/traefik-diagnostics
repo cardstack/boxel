@@ -1,0 +1,111 @@
+#!/bin/bash
+#MISE description="Dump the state of the env-mode Traefik proxy: its log, the route files it serves from, and what is listening behind them"
+
+# Traefik is the only process that sees a request for a `*.<slug>.localhost`
+# host that no service has registered a route for. It answers that 404 itself,
+# a browser reports the missing CORS headers on that 404 as a CORS failure, and
+# no service log records the request at all. Its own log (4xx/5xx access log
+# entries plus provider reloads, see traefik/traefik.yml) and the per-service
+# route files in its dynamic directory are therefore the evidence for a whole
+# class of env-mode failures that is otherwise invisible: a route that was
+# never written, was written and then removed, or points at a port nothing is
+# listening on any more.
+#
+# Everything here is best-effort and read-only. It runs after a failure has
+# already happened, so a missing container or directory is a finding to print,
+# not a reason to exit non-zero.
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+
+section() {
+  printf '\n=== %s ===\n' "$1"
+}
+
+section "containers"
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>&1 || echo "docker ps failed"
+
+# The dynamic directory Traefik actually watches is whatever is bind-mounted
+# into the running container; in a worktree that can differ from this repo's
+# own traefik/dynamic (see scripts/start-traefik.sh). Fall back to the
+# repo-relative path when the container is gone.
+section "traefik dynamic config directory"
+dynamic_dir="$(docker inspect boxel-traefik \
+  --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}' \
+  2>/dev/null || true)"
+if [ -z "$dynamic_dir" ]; then
+  dynamic_dir="$REPO_ROOT/traefik/dynamic"
+  echo "(container not inspectable; assuming $dynamic_dir)"
+else
+  echo "$dynamic_dir"
+fi
+if [ -d "$dynamic_dir" ]; then
+  ls -la --time-style=full-iso "$dynamic_dir" 2>/dev/null || ls -la "$dynamic_dir"
+  for f in "$dynamic_dir"/*.yml "$dynamic_dir"/*.yaml; do
+    [ -e "$f" ] || continue
+    printf -- '--- %s\n' "$(basename "$f")"
+    cat "$f"
+  done
+else
+  echo "directory does not exist"
+fi
+
+# Whether the ports the route files point at still have a listener behind
+# them separates "Traefik has no route" from "Traefik has a route to a dead
+# backend": both surface to a client as a Traefik-originated error.
+section "listening TCP ports (node / traefik / docker-proxy)"
+if command -v ss >/dev/null 2>&1; then
+  ss -ltnp 2>/dev/null | grep -Ei 'node|traefik|docker-proxy|http-server|LISTEN.*:(80|443) ' | head -60 \
+    || echo "(none matched)"
+else
+  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -Ei 'node|traefik|docker' | head -60 || echo "(lsof unavailable)"
+fi
+
+# Traefik writes its own log and the access log to the same standard output,
+# so `docker logs` returns them interleaved. They are split here rather than
+# read together: the access log records every 4xx (traefik/traefik.yml), and a
+# realm-server that resolves a module import by probing each extension in turn
+# produces hundreds of legitimate 404s in seconds, enough to push every line
+# of the process log out of any shared tail. An access-log entry is a JSON
+# object carrying RequestHost; nothing in the process log is.
+if ! docker inspect boxel-traefik >/dev/null 2>&1; then
+  section "traefik log"
+  echo "no boxel-traefik container"
+  exit 0
+fi
+all="$(mktemp)"
+access="$(mktemp)"
+process="$(mktemp)"
+docker logs boxel-traefik > "$all" 2>&1
+grep -F '"RequestHost"' "$all" > "$access" || true
+grep -vF '"RequestHost"' "$all" > "$process" || true
+
+# Provider start-up, warnings, and TLS or upstream errors (traefik.yml sets
+# INFO). Short, so the tail is generous. Route arrivals are not in here: the
+# mtimes in the dynamic-directory listing above date those.
+section "traefik process log (last 200 of $(wc -l < "$process" | tr -d ' ') lines)"
+tail -200 "$process"
+
+# `OriginStatus` is what the upstream answered, so an entry without a router,
+# or with an origin status of 0, is a response Traefik produced itself: no
+# route matched the host, or the routed upstream never answered. Those are the
+# entries no service log can show, and they are listed in full; everything
+# else is only counted.
+section "traefik access log (4xx/5xx responses)"
+total="$(wc -l < "$access" | tr -d ' ')"
+echo "${total} entries"
+if [ "$total" -gt 0 ]; then
+  if command -v jq >/dev/null 2>&1; then
+    echo "--- by status, host and router; '(no router)' means Traefik answered itself"
+    jq -r '[.DownstreamStatus, .RequestHost, (.RouterName // "(no router)")] | @tsv' "$access" 2>/dev/null \
+      | sort | uniq -c | sort -rn | head -40
+    echo "--- responses Traefik produced itself (no router matched, or the upstream never answered), oldest first, first 200"
+    jq -r 'select((.RouterName == null) or ((.OriginStatus // 0) == 0))
+             | [.time, .DownstreamStatus, .RequestHost, .RequestPath, (.RouterName // "(no router)")] | @tsv' "$access" 2>/dev/null \
+      | head -200
+  else
+    echo "(jq not installed; last 100 entries)"
+    tail -100 "$access"
+  fi
+fi
+rm -f "$all" "$access" "$process"

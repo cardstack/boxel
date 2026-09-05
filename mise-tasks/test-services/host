@@ -79,6 +79,9 @@ fi
 # strictSSL:true on wait-on (overriding NODE_TLS_REJECT_UNAUTHORIZED), so
 # the documented INSECURE flag is the right escape hatch. Does not affect
 # the actual services under test.
+# `ci:wait-for-realms` budgets its own wait a minute inside this value so a
+# hang fails there, with the stack still up for diagnostics, rather than here
+# with the stack torn down. Keep the two in step.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG="$SKIP_CATALOG" \
