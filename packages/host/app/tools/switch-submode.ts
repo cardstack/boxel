@@ -12,6 +12,26 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
 
+// Models sometimes hand this tool the SEARCH/REPLACE file header instead of a
+// path — "https://realm/card.gts (new)" — or prose. Strip the new-file marker,
+// which is harmless, and refuse anything that is not one file URL or realm
+// resource identifier, so the tab is never pointed at a path that cannot exist.
+export function cleanCodePath(raw: string | undefined): string | undefined {
+  if (raw == null) {
+    return undefined;
+  }
+  let path = raw.trim().replace(/\s*\(new\)\s*$/i, '');
+  if (!path) {
+    return undefined;
+  }
+  if (/\s/.test(path) || !/^(https?:\/\/|@[a-z0-9-]+\/)/i.test(path)) {
+    throw new Error(
+      `codePath must be a single file URL or realm resource identifier, got "${raw}"`,
+    );
+  }
+  return path;
+}
+
 export default class SwitchSubmodeTool extends HostBaseTool<
   typeof BaseToolModule.SwitchSubmodeInput,
   typeof BaseToolModule.SwitchSubmodeResult | undefined
@@ -62,7 +82,7 @@ export default class SwitchSubmodeTool extends HostBaseTool<
       case Submodes.Code: {
         let lastId = this.lastCardInRightMostStack;
         let codePath =
-          input.codePath ??
+          cleanCodePath(input.codePath) ??
           (lastId
             ? this.lastStackItem?.type === 'file'
               ? lastId
@@ -70,6 +90,16 @@ export default class SwitchSubmodeTool extends HostBaseTool<
             : null);
         let codeRRI = codePath ? rri(codePath) : null;
         let currentSubmode = this.operatorModeStateService.state.submode;
+        // Already in code mode on that very file: there is nothing to switch.
+        // A model that re-asserts its position gets an applied result at
+        // once instead of the file being re-resolved and re-opened.
+        if (
+          currentSubmode === Submodes.Code &&
+          codeRRI &&
+          this.operatorModeStateService.codePathString === codeRRI
+        ) {
+          break;
+        }
         let finalCodePath = codeRRI;
         if (
           codeRRI &&
