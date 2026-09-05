@@ -117,10 +117,12 @@ class Isolated extends Component<typeof StyleReference> {
           />
         {{else}}
           <header class='style-header'>
-            <h1><@fields.cardTitle /></h1>
-            <p class='style-header-description'>
-              <@fields.cardDescription />
-            </p>
+            <div class='style-header-content'>
+              <h1><@fields.cardTitle /></h1>
+              <p class='style-header-description'>
+                <@fields.cardDescription />
+              </p>
+            </div>
           </header>
         {{/if}}
       </:header>
@@ -136,7 +138,7 @@ class Isolated extends Component<typeof StyleReference> {
             @editMode={{this.editMode}}
           >
             <:colorPalette>
-              <@fields.rootVariables />
+              <@fields.rootVariables data-test-root-vars />
             </:colorPalette>
             <:typography>
               <@fields.typography />
@@ -254,7 +256,10 @@ class Isolated extends Component<typeof StyleReference> {
               {{#if @model.cssVariables}}
                 <section id='card-container-css'>
                   <h2>Computed Styles</h2>
-                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  <CardContainerCss
+                    @cssVariables={{@model.cssVariables}}
+                    @isDarkMode={{this.isDarkMode}}
+                  />
                 </section>
               {{/if}}
 
@@ -284,8 +289,14 @@ class Isolated extends Component<typeof StyleReference> {
       section {
         scroll-margin-top: var(--boxel-sp-2xl);
       }
-      .style-reference {
-        max-width: 50rem;
+      /* the header band spans the card; its text keeps to the body's measure,
+         which is the dashboard's content measure less .dsr-content's padding
+         and the section grid's own padding-inline */
+      .style-header-content {
+        max-width: calc(
+          var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-xl) - 2 *
+            var(--boxel-sp-2xl)
+        );
         margin: 0 auto;
       }
       .style-header {
