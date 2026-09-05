@@ -2422,6 +2422,7 @@ export class Realm {
       let { lastModified } = await this.#adapter.write(path, content);
       (isNewFile ? addedFiles : updatedFiles).push(path);
       this.invalidateCache(path);
+      await this.#notifyFileChange(path);
       if (currentWriteType === 'module') {
         // The definition cache is keyed by module URL with no freshness
         // check on the row — `readFromDatabaseCache` never compares content
@@ -2441,7 +2442,20 @@ export class Realm {
         // reports success; a dropped attribute is indistinguishable from an
         // unset one, so nothing downstream can tell it happened.
         //
-        // Best-effort, like `#notifyFileChange` below. The bytes are already
+        // Ordered after `#notifyFileChange` deliberately. This replica dropped
+        // its own byte caches synchronously in `invalidateCache(path)` above,
+        // but peer replicas only drop theirs when they receive that
+        // notification. Deleting the definition row is what makes the next
+        // `lookupDefinition` — on any replica — prerender the module; a peer
+        // that prerenders while still holding pre-write bytes derives the old
+        // schema and caches THAT, reinstating the staleness this call removes
+        // and making it durable until indexing lands. Publishing the byte
+        // invalidation first narrows that to peers which have not yet
+        // processed the notification; it does not close it, since the notify
+        // is best-effort and applied asynchronously. The index job's own
+        // invalidation stays the backstop.
+        //
+        // Best-effort, like `#notifyFileChange` above. The bytes are already
         // durable at this point but `urls` has not been appended to yet, so
         // letting this throw would abandon the batch before ANY index job is
         // enqueued — for this file and for every file written ahead of it —
@@ -2459,7 +2473,6 @@ export class Realm {
           );
         }
       }
-      await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
