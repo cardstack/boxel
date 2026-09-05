@@ -330,6 +330,47 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the Office family captures a first-page poster onto the file row', async function (assert) {
+    let docxBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/docx-simple.docx',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+    await realm.write('memo.docx', docxBytes);
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      afterJobId: baseline,
+      timeout: 60000,
+    });
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}memo.docx`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the poster landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/memo.docx?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
     await writeAndSettle('sample.mismatch', 'poster me');
     let firstRow = await prerenderedHtmlRowFor(

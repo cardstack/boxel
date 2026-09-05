@@ -7,11 +7,12 @@
 // information derived from the source" provenance; it branches on the file's
 // `previewKind` for the domain-specific body.
 //
-// The fitted first-page/first-slide poster is deliberately not drawn here — it
-// needs the derived-artifact contract (CS-12231) to rasterize and store a real
-// rendition. Once that lands and populates `thumbnailUrl`, the preview stage
-// prefers the real poster over the typed placeholder automatically, with no
-// change to this component.
+// The fitted first-page/first-slide poster is deliberately not drawn here:
+// the families' declared `poster` capture (see `office-captures`) renders the
+// extracted structure's first unit during the prerender pass, and the preview
+// stage prefers that rendition over the typed placeholder through the view
+// model's `thumbnailUrl` — the placeholder is the graceful fallback for an
+// uncaptured file.
 import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -296,10 +297,8 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         content: '';
         position: absolute;
         inset: 12% 12%;
-        background-image: repeating-linear-gradient(
-            var(--border) 0 1px,
-            transparent 1px 16px
-          ),
+        background-image:
+          repeating-linear-gradient(var(--border) 0 1px, transparent 1px 16px),
           repeating-linear-gradient(
             90deg,
             var(--border) 0 1px,
