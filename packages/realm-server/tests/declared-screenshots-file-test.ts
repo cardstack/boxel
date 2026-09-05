@@ -66,6 +66,10 @@ function makeFileSystem() {
   return {
     'filedef-mismatch.gts': FILEDEF_MISMATCH_SOURCE,
     'sample.mismatch': 'poster me',
+    // Exercises the image family's own declared slots (ImageDef ships a
+    // `thumb` + rendition roster): SVG keeps the fixture textual while still
+    // hitting the SvgDef -> ImageDef chain.
+    'picture.svg': `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#3b82f6"/></svg>`,
   };
 }
 
@@ -257,6 +261,46 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       embedded.includes(`_screenshot/sample.mismatch?name=poster`),
       `the embedded rendering carries the durable capture URL (got: ${embedded.slice(0, 500)})`,
+    );
+  });
+
+  test('the image family captures its declared thumb and rendition slots', async function (assert) {
+    await writeAndSettle(
+      'picture.svg',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#0ea5e9"/></svg>`,
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}picture.svg`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest, 'the image captures landed on the file row');
+    assert.deepEqual(Object.keys(manifest!).sort(), [
+      'rendition-1280',
+      'rendition-640',
+      'thumb',
+    ]);
+    assert.true(
+      manifest!.thumb.useAsThumbnail,
+      'the thumb slot feeds the thumbnail chain',
+    );
+    assert.strictEqual(manifest!.thumb.contentType, 'image/webp');
+    assert.strictEqual(
+      manifest!['rendition-640'].deviceScaleFactor,
+      1,
+      'renditions capture at their declared physical width',
+    );
+
+    // The fitted shell prefers the captured thumbnail: the view model reads
+    // the render context's declaration-derived meta.screenshots, so the
+    // file's prerendered fitted HTML embeds the durable thumb URL.
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/picture.svg?name=thumb`),
+      `the fitted rendering carries the captured thumbnail URL (got: ${fitted.slice(0, 500)})`,
     );
   });
 

@@ -66,5 +66,16 @@ ruleTester.run('no-reserved-field-names', rule, {
       `,
       errors: [{ messageId: 'no-reserved-field-names' }],
     },
+    {
+      code: `
+        import { contains, field, CardDef } from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+
+        export class Product extends CardDef {
+          @field screenshotsMeta = contains(StringField);
+        }
+      `,
+      errors: [{ messageId: 'no-reserved-field-names' }],
+    },
   ],
 });

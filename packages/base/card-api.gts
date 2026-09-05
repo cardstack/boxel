@@ -120,6 +120,7 @@ import {
   type DeclaredScreenshotRoster,
   type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
+  type ScreenshotsMeta,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -149,6 +150,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
+import { IMAGE_FAMILY_SCREENSHOTS } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -2474,7 +2476,7 @@ interface InternalFieldInitializer {
 // userland `@field` under one of these would shadow the getter via the
 // prototype chain silently, so the decorator refuses them by name (the
 // `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
-const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
@@ -3703,10 +3705,17 @@ export class FileDef extends BaseDef {
   }
 
   // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
-  // file-backed defs. The prerender pass captures only instance rows, so a
-  // file's declared names read `undefined` until file rows capture too.
+  // file-backed defs. The prerender pass captures a URL's file rendering
+  // alongside its instance rendering, so a file family's declared names
+  // resolve here just as a card's do.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // See CardDef.screenshotsMeta — the same reserved, meta-derived getter for
+  // file-backed defs.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   // The four shared format shells own identity, facts, budgets, and state for
@@ -3832,6 +3841,13 @@ export class ImageDef extends FileDef {
   // The four formats come from FileDef's shared shells; the family supplies
   // only the renderer that draws its pixels.
   static previewComponent: FilePreviewComponent = ImagePreview;
+
+  // The family's captures: a `thumb` that feeds the thumbnail fallback chain
+  // and the fitted cell, plus the downscaled renditions the format
+  // templates' `srcset` reads. All file-content-keyed, so a metadata-only
+  // edit never re-decodes the pixels. See `image-captures` for the boxes and
+  // the capture-only components.
+  static screenshots: Record<string, ScreenshotSpec> = IMAGE_FAMILY_SCREENSHOTS;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -4021,6 +4037,17 @@ export class CardDef extends BaseDef {
   // decorator so a userland field can't shadow it.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // The instance's `meta.screenshots` entries verbatim — the dimensional
+  // companion to `screenshotURLs` for consumers that need more than the URL:
+  // each captured slot's width/height/deviceScaleFactor (a `srcset`
+  // assembler's inputs) and its `useAsThumbnail` flag. Same absence
+  // semantics: a slot appears only once `meta.screenshots` holds it, so an
+  // uncaptured live instance reads `undefined` here. Reserved like
+  // `screenshotURLs`, so a userland field can't shadow it.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
