@@ -234,10 +234,75 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-caption-font-weight: var(--theme-caption-font-weight, 500);
 
+      /* ui label: control text, table headers, badges. Kept off the
+         `--boxel-label-*` family, which is Label's own contract and has to
+         keep falling back to the body slot. */
+      --boxel-ui-label-font-family: var(
+        --theme-label-font-family,
+        var(--boxel-body-font-family)
+      );
+      --boxel-ui-label-font-size: var(
+        --theme-label-font-size,
+        var(--boxel-font-size-xs)
+      );
+      --boxel-ui-label-line-height: var(
+        --theme-label-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-ui-label-font-weight: var(--theme-label-font-weight, 500);
+
+      /* eyebrow: the tracked-out kicker above a title */
+      --boxel-eyebrow-font-family: var(
+        --theme-eyebrow-font-family,
+        var(--boxel-ui-label-font-family)
+      );
+      --boxel-eyebrow-font-size: var(
+        --theme-eyebrow-font-size,
+        var(--boxel-font-size-2xs)
+      );
+      --boxel-eyebrow-line-height: var(
+        --theme-eyebrow-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight, 600);
+
+      /* letter-spacing per slot; body, caption, and label follow the theme's base tracking */
+      --boxel-heading-letter-spacing: var(
+        --theme-heading-letter-spacing,
+        normal
+      );
+      --boxel-section-heading-letter-spacing: var(
+        --theme-section-heading-letter-spacing,
+        var(--theme-heading-letter-spacing, normal)
+      );
+      --boxel-subheading-letter-spacing: var(
+        --theme-subheading-letter-spacing,
+        var(--theme-heading-letter-spacing, normal)
+      );
+      --boxel-body-letter-spacing: var(
+        --theme-body-letter-spacing,
+        var(--tracking-normal, normal)
+      );
+      --boxel-caption-letter-spacing: var(
+        --theme-caption-letter-spacing,
+        var(--boxel-body-letter-spacing)
+      );
+      --boxel-ui-label-letter-spacing: var(
+        --theme-label-letter-spacing,
+        var(--boxel-body-letter-spacing)
+      );
+      --boxel-eyebrow-letter-spacing: var(
+        --theme-eyebrow-letter-spacing,
+        0.08em
+      );
+
+      --boxel-form-control-height: var(--control-height, 2.5rem);
+
       font-family: var(--boxel-body-font-family);
       font-size: var(--boxel-body-font-size);
       font-weight: var(--boxel-body-font-weight);
       line-height: var(--boxel-body-line-height);
+      letter-spacing: var(--boxel-body-letter-spacing);
     }
 
     /* Element reset + typography roles, contained to card content: bare
@@ -257,18 +322,21 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         font-size: var(--boxel-heading-font-size);
         font-weight: var(--boxel-heading-font-weight);
         line-height: var(--boxel-heading-line-height);
+        letter-spacing: var(--boxel-heading-letter-spacing);
       }
       :global(.boxel-card-container h2) {
         font-family: var(--boxel-section-heading-font-family);
         font-size: var(--boxel-section-heading-font-size);
         font-weight: var(--boxel-section-heading-font-weight);
         line-height: var(--boxel-section-heading-line-height);
+        letter-spacing: var(--boxel-section-heading-letter-spacing);
       }
       :global(.boxel-card-container h3) {
         font-family: var(--boxel-subheading-font-family);
         font-size: var(--boxel-subheading-font-size);
         font-weight: var(--boxel-subheading-font-weight);
         line-height: var(--boxel-subheading-line-height);
+        letter-spacing: var(--boxel-subheading-letter-spacing);
       }
       :global(.boxel-card-container :is(h4, h5, h6)) {
         font-size: inherit;
@@ -276,6 +344,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       :global(.boxel-card-container small) {
         font-size: var(--boxel-caption-font-size);
         line-height: var(--boxel-caption-line-height);
+        letter-spacing: var(--boxel-caption-letter-spacing);
       }
     }
   </style>
