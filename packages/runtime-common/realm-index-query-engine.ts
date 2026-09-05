@@ -815,6 +815,15 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
   }
 
+  // The file-row twin of `liveInstanceScreenshots` — the `?name=` route's
+  // fallback addressing read for paths that resolve to no live instance.
+  async liveFileScreenshots(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<ScreenshotManifest | null | undefined> {
+    return await this.#indexQueryEngine.liveFileScreenshots(url, opts);
+  }
+
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
@@ -2409,6 +2418,18 @@ function fileResourceFromIndex(
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
       ...fileMetaTimestamps(lastModified, createdAt),
+      // The file row's declared-screenshot manifest, joined here so a linked
+      // FileDef carries `meta.screenshots` the way a linked instance does
+      // (see the loadLinks instance branch) — a file's own GET stamps the
+      // same key via `fileMetaDocumentFromIndex`.
+      ...(fileEntry.screenshots && fileURL.href.startsWith(fileEntry.realmURL)
+        ? {
+            screenshots: screenshotsMetaFromManifest(fileEntry.screenshots, {
+              realmURL: fileEntry.realmURL,
+              instanceLocalPath: fileURL.href.slice(fileEntry.realmURL.length),
+            }),
+          }
+        : {}),
     },
     links: { self: fileURL.href },
   };

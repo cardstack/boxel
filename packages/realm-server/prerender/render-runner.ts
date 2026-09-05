@@ -1,4 +1,5 @@
 import {
+  type DeclaredScreenshotVisitArgs,
   type DeclaredScreenshotVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
@@ -1626,59 +1627,30 @@ export class RenderRunner {
         // format renders (the hydrated card and its images are already
         // settled and cached). Only the prerender-html half captures — the
         // caller opts in by sending `screenshots` when it has a MediaCache
-        // to persist into. Deliberately NOT a runTimedStep: that helper
-        // promotes a step failure into the card error, but a failed capture
-        // is an absent screenshot, not an errored row (the broken-links
-        // model) — only an evicted page or an auth failure escalates, since
-        // the page itself is then unusable for anyone.
+        // to persist into.
+        let cardScreenshots: DeclaredScreenshotVisitResult | undefined;
         if (
           !cardShortCircuit &&
           runHtmlSteps &&
           !runIndexSteps &&
           screenshots
         ) {
-          let stepStart = Date.now();
-          let stepResult = await this.#step(
+          let { result, escalation } = await this.#declaredScreenshotsStep({
+            page,
+            kind: 'instance',
+            bucket: 'card',
+            screenshots,
+            captureOptions,
             affinityKey,
-            'visit card declared screenshots',
-            () =>
-              withTimeout(
-                page,
-                () =>
-                  captureDeclaredScreenshots(page, screenshots, captureOptions),
-                opts?.timeoutMs,
-                this.#profileContext(
-                  affinityKey,
-                  url,
-                  'visit card declared screenshots',
-                  jobId,
-                ),
-                signal,
-              ),
-          );
-          recordFormatMs('card', 'screenshots', Date.now() - stepStart);
-          let allSlotsErrored = (error: RenderError) => {
-            response.screenshots = {
-              entries: [],
-              errors: [
-                {
-                  name: '*',
-                  message:
-                    error.error?.message ??
-                    'declared screenshot capture failed',
-                  captureMs: Date.now() - stepStart,
-                },
-              ],
-            };
-          };
-          if (!stepResult.ok) {
-            if (stepResult.evicted || this.#isAuthError(stepResult.error)) {
-              applyStepError(stepResult.error, stepResult.evicted);
-            }
-            allSlotsErrored(stepResult.error);
-          } else {
-            response.screenshots =
-              stepResult.value as DeclaredScreenshotVisitResult;
+            url,
+            jobId,
+            timeoutMs: opts?.timeoutMs,
+            signal,
+            recordStepMs: (ms) => recordFormatMs('card', 'screenshots', ms),
+          });
+          cardScreenshots = result;
+          if (escalation) {
+            applyStepError(escalation.error, escalation.evicted);
           }
           if (!cardShortCircuit) {
             // The settle-time deps snapshot read after the isolated render
@@ -1718,6 +1690,7 @@ export class RenderRunner {
           ...(meta as PrerenderMeta),
           ...(capturedDeps ? { deps: capturedDeps } : {}),
           ...(cardError ? { error: cardError } : {}),
+          ...(cardScreenshots ? { screenshots: cardScreenshots } : {}),
           iconHTML,
           isolatedHTML,
           headHTML,
@@ -1858,11 +1831,18 @@ export class RenderRunner {
               : undefined;
 
           if (memoizedIconHTML === undefined) {
-            // stash file data for the render route model hook to consume
+            // stash file data for the render route model hook to consume,
+            // with the visit's realm alongside — a file render has no
+            // response header to learn its realm from (the card branch reads
+            // x-boxel-realm-url off the card GET), and the route needs it to
+            // compose declaration-derived screenshot URLs.
             await abortable(signal, () =>
-              page.evaluate((data) => {
-                (globalThis as any).__boxelFileRenderData = data;
-              }, effectiveFileData),
+              page.evaluate(
+                (data) => {
+                  (globalThis as any).__boxelFileRenderData = data;
+                },
+                { ...effectiveFileData, realmURL: realm },
+              ),
             );
             didStashFileRenderData = true;
           }
@@ -2104,8 +2084,42 @@ export class RenderRunner {
             }
           }
 
+          // The file rendering's declared screenshots, mirroring the card
+          // pass's capture step above: same warm tab, after the file's format
+          // renders, and only when the caller can persist the bytes. The
+          // render.screenshots roster and render.screenshot captures read the
+          // parent render model's instance, which the fileRender transitions
+          // above have set to the hydrated FileDef — so the roster here is
+          // the file family's `static screenshots`, not the card's.
+          let fileScreenshots: DeclaredScreenshotVisitResult | undefined;
+          if (
+            !fileShortCircuit &&
+            runHtmlSteps &&
+            !runIndexSteps &&
+            screenshots
+          ) {
+            let { result, escalation } = await this.#declaredScreenshotsStep({
+              page,
+              kind: 'file',
+              bucket: 'file',
+              screenshots,
+              captureOptions,
+              affinityKey,
+              url,
+              jobId,
+              timeoutMs: opts?.timeoutMs,
+              signal,
+              recordStepMs: (ms) => recordFormatMs('file', 'screenshots', ms),
+            });
+            fileScreenshots = result;
+            if (escalation) {
+              applyStepError(escalation.error, escalation.evicted);
+            }
+          }
+
           let fileResponse: FileRenderResponse = {
             ...(fileError ? { error: fileError } : {}),
+            ...(fileScreenshots ? { screenshots: fileScreenshots } : {}),
             iconHTML,
             isolatedHTML,
             headHTML,
@@ -2281,6 +2295,84 @@ export class RenderRunner {
     }
     log.debug(`prerender step done affinity=${affinityKey} step=${step}`);
     return { ok: true, value: r as T };
+  }
+
+  // One rendering's declared-screenshot capture step, shared by the card and
+  // file passes: runs the capture against the pass's settled page and
+  // normalizes a step failure into the all-slots-errored result — a failed
+  // capture is an absent screenshot, never an errored row (the broken-links
+  // model). Only an eviction or an auth failure comes back as an escalation
+  // for the caller to fold into its pass error, since the page is then
+  // unusable for anyone.
+  async #declaredScreenshotsStep({
+    page,
+    kind,
+    bucket,
+    screenshots,
+    captureOptions,
+    affinityKey,
+    url,
+    jobId,
+    timeoutMs,
+    signal,
+    recordStepMs,
+  }: {
+    page: Page;
+    kind: 'instance' | 'file';
+    bucket: 'card' | 'file';
+    screenshots: DeclaredScreenshotVisitArgs;
+    captureOptions: CaptureOptions;
+    affinityKey: string;
+    url: string;
+    jobId?: string;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    recordStepMs: (ms: number) => void;
+  }): Promise<{
+    result: DeclaredScreenshotVisitResult;
+    escalation?: { error: RenderError; evicted: boolean };
+  }> {
+    let label = `visit ${bucket} declared screenshots`;
+    let stepStart = Date.now();
+    let stepResult = await this.#step(affinityKey, label, () =>
+      withTimeout(
+        page,
+        () =>
+          captureDeclaredScreenshots(page, screenshots, kind, captureOptions),
+        timeoutMs,
+        this.#profileContext(affinityKey, url, label, jobId),
+        signal,
+      ),
+    );
+    let stepMs = Date.now() - stepStart;
+    recordStepMs(stepMs);
+    if (!stepResult.ok) {
+      return {
+        result: {
+          entries: [],
+          errors: [
+            {
+              name: '*',
+              message:
+                stepResult.error.error?.message ??
+                'declared screenshot capture failed',
+              // The step failed as a unit, so this is the whole step's
+              // elapsed time, not one slot's share.
+              captureMs: stepMs,
+            },
+          ],
+        },
+        ...(stepResult.evicted || this.#isAuthError(stepResult.error)
+          ? {
+              escalation: {
+                error: stepResult.error,
+                evicted: stepResult.evicted,
+              },
+            }
+          : {}),
+      };
+    }
+    return { result: stepResult.value as DeclaredScreenshotVisitResult };
   }
 
   #captureToError(capture: RenderCapture): RenderError | undefined {

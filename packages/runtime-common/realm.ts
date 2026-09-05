@@ -179,6 +179,7 @@ import {
   screenshotsMetaFromManifest,
   type CaptureSpec,
   type ScreenshotManifest,
+  type ScreenshotManifestEntry,
 } from './capture-spec.ts';
 import {
   findMediaCacheEntry,
@@ -232,7 +233,7 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { computeContentHash, isSampledContentHash } from './content-hash.ts';
-import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
+import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
@@ -4195,14 +4196,50 @@ export class Realm {
       // an `<img>` embedded ahead of its capture picks it up on
       // revalidation. Names never trigger capture work: declared captures
       // are produced by the prerender pass alone.
+      //
+      // Names address the URL's file row too: a FileDef family's declared
+      // captures persist there, keyed by the file's own URL with its
+      // extension intact (only an instance id sheds `.json`). A path that
+      // names a file by a registered extension reads the file row first;
+      // any other path reads the instance first — with the other row as the
+      // fallback either way, so an extensionless file (`LICENSE`) still
+      // resolves.
+      let rawFileURL = this.paths.fileURL(instanceLocalPath);
       let manifestLookupStart = Date.now();
-      let manifest =
-        await this.#realmIndexQueryEngine.liveInstanceScreenshots(instanceURL);
-      let manifestLookupMs = Date.now() - manifestLookupStart;
-      if (manifest === undefined) {
-        return mediaCacheMissResponse({ requestContext });
+      let readInstance = async () => ({
+        manifest:
+          await this.#realmIndexQueryEngine.liveInstanceScreenshots(
+            instanceURL,
+          ),
+        sourceURL: instanceURL,
+      });
+      let readFileRow = async () => ({
+        manifest:
+          await this.#realmIndexQueryEngine.liveFileScreenshots(rawFileURL),
+        sourceURL: rawFileURL,
+      });
+      let reads = urlNamesFile(rawFileURL)
+        ? [readFileRow, readInstance]
+        : [readInstance, readFileRow];
+      // The first live row whose manifest holds the name wins — a URL both
+      // rows answer to (a `.json` file that is also a card) must resolve to
+      // the row that actually captured this slot, not 404 against the other
+      // row's empty manifest.
+      let manifestEntry: ScreenshotManifestEntry | undefined;
+      let manifestSourceURL = instanceURL;
+      for (let read of reads) {
+        let outcome = await read();
+        if (outcome.manifest === undefined) {
+          continue;
+        }
+        let entry = outcome.manifest?.[name];
+        if (entry) {
+          manifestEntry = entry;
+          manifestSourceURL = outcome.sourceURL;
+          break;
+        }
       }
-      let manifestEntry = manifest?.[name];
+      let manifestLookupMs = Date.now() - manifestLookupStart;
       if (!manifestEntry) {
         return mediaCacheMissResponse({ requestContext });
       }
@@ -4218,7 +4255,7 @@ export class Realm {
       let ledgerLookupStart = Date.now();
       let entry = await findMediaCacheEntry(this.#dbAdapter, {
         realmURL: this.url,
-        sourceURL: instanceURL.href,
+        sourceURL: manifestSourceURL.href,
         captureSpecHash: manifestEntry.specHash,
         objectKey: manifestEntry.objectKey,
       });
@@ -4244,7 +4281,7 @@ export class Realm {
       this.emitScreenshotServePerf(
         {
           realmURL: this.url,
-          sourceURL: instanceURL.href,
+          sourceURL: manifestSourceURL.href,
           captureSpecHash: manifestEntry.specHash,
           sourceGeneration: entry.sourceGeneration,
         },
@@ -5555,6 +5592,20 @@ export class Realm {
             : {}),
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
+            : {}),
+          // The file row's declared-screenshot manifest, joined at serve time
+          // the way the card+json GET joins an instance row's — never
+          // persisted into the index row's resource itself.
+          ...(fileEntry.screenshots
+            ? {
+                screenshots: screenshotsMetaFromManifest(
+                  fileEntry.screenshots,
+                  {
+                    realmURL: this.url,
+                    instanceLocalPath: localPath,
+                  },
+                ),
+              }
             : {}),
         },
         links: { self: fileURL },

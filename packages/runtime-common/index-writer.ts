@@ -189,6 +189,14 @@ export interface FileEntry {
   diagnostics?: Diagnostics;
 }
 
+// One prerendered_html row's declared-screenshot state, as
+// `priorScreenshotStates` reads it back for the next pass over the same URL.
+export interface PriorScreenshotState {
+  manifest: ScreenshotManifest | null;
+  screenshotErrors: DeclaredScreenshotError[] | null;
+  captureFailureRenders: number | null;
+}
+
 // The per-URL write payloads of a `prerenderHtmlOnly` batch — the HTML half
 // of an index entry. `PrerenderedHtmlEntry` lands a fresh rendering;
 // `PrerenderedHtmlErrorEntry` records a render failure while preserving the
@@ -810,12 +818,15 @@ export class Batch {
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
       if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
+        // The ledger key the prerender-html visit persisted under: instance
+        // rows use the extensionless card-id form, file rows the file's own
+        // URL (a `.json` suffix is an instance-id spelling, so only the
+        // instance half strips it).
+        let ledgerKey = (value: string) =>
+          entry.type === 'instance' ? value.replace(/\.json$/, '') : value;
         manifestCopies.push({
-          // The extensionless card-id form the MediaCache ledger keys on
-          // (matching what the prerender-html visit derives from the file
-          // URL when it persists a capture).
-          sourceLedgerURL: entry.url.replace(/\.json$/, ''),
-          destLedgerURL: destURL.replace(/\.json$/, ''),
+          sourceLedgerURL: ledgerKey(entry.url),
+          destLedgerURL: ledgerKey(destURL),
           manifest: entry.screenshots as ScreenshotManifest,
         });
       }
@@ -1559,50 +1570,58 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot state the previous pass published for this row,
-  // read from production `prerendered_html`: the manifest is the
-  // carry-forward input for `keyBy: 'file-content'` slots (skip re-rendering
-  // when the source bytes are unchanged), and the recorded capture failures
-  // seed this pass's consecutive-failure bookkeeping — per-slot runs (a slot
-  // that fails again extends its run) plus the row-level failing-render
-  // counter the reconcile sweep's bounded retry lane caps on. All null when
-  // no prior row exists or it carried none.
-  async priorScreenshotState(
+  // The declared-screenshot state the previous pass published for this URL's
+  // rows, read from production `prerendered_html` in one query and keyed by
+  // row type: the manifest is the carry-forward input for
+  // `keyBy: 'file-content'` slots (skip re-rendering when the source bytes
+  // are unchanged), and the recorded capture failures seed this pass's
+  // consecutive-failure bookkeeping — per-slot runs (a slot that fails again
+  // extends its run) plus the row-level failing-render counter the reconcile
+  // sweep's bounded retry lane caps on. A row that doesn't exist has no key;
+  // fields it carried nothing for are null.
+  async priorScreenshotStates(
     url: URL,
-    type: PrerenderedHtmlTable['type'],
-  ): Promise<{
-    manifest: ScreenshotManifest | null;
-    screenshotErrors: DeclaredScreenshotError[] | null;
-    captureFailureRenders: number | null;
-  }> {
-    // This runs once per instance visit, so it selects only what it needs —
-    // the row's HTML columns are large and irrelevant here.
-    let [row] = (await this.#query([
-      `SELECT screenshots, diagnostics FROM prerendered_html WHERE`,
+  ): Promise<Partial<Record<'instance' | 'file', PriorScreenshotState>>> {
+    // This runs once per visit, so it selects only what the two rows'
+    // capture bookkeeping needs — the HTML columns are large and irrelevant
+    // here.
+    let rows = (await this.#query([
+      `SELECT type, screenshots, diagnostics FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
           [`url =`, param(url.href)],
           [`file_alias =`, param(url.href)],
         ]),
-        ['type =', param(type)],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
       ]),
     ] as Expression)) as unknown as Pick<
       PrerenderedHtmlTable,
-      'screenshots' | 'diagnostics'
+      'type' | 'screenshots' | 'diagnostics'
     >[];
-    let priorDiagnostics = row?.diagnostics as Diagnostics | null;
-    let priorErrors = priorDiagnostics?.screenshotErrors;
-    let priorFailureRenders = priorDiagnostics?.screenshotCaptureFailureRenders;
-    return {
-      manifest: (row?.screenshots as ScreenshotManifest | null) ?? null,
-      screenshotErrors:
-        Array.isArray(priorErrors) && priorErrors.length > 0
-          ? priorErrors
-          : null,
-      captureFailureRenders:
-        typeof priorFailureRenders === 'number' ? priorFailureRenders : null,
-    };
+    let states: Partial<Record<'instance' | 'file', PriorScreenshotState>> = {};
+    for (let row of rows) {
+      if (row.type !== 'instance' && row.type !== 'file') {
+        continue;
+      }
+      let priorDiagnostics = row.diagnostics as Diagnostics | null;
+      let priorErrors = priorDiagnostics?.screenshotErrors;
+      let priorFailureRenders =
+        priorDiagnostics?.screenshotCaptureFailureRenders;
+      states[row.type] = {
+        manifest: (row.screenshots as ScreenshotManifest | null) ?? null,
+        screenshotErrors:
+          Array.isArray(priorErrors) && priorErrors.length > 0
+            ? priorErrors
+            : null,
+        captureFailureRenders:
+          typeof priorFailureRenders === 'number' ? priorFailureRenders : null,
+      };
+    }
+    return states;
   }
 
   private async getPrerenderedHtmlProductionVersion(

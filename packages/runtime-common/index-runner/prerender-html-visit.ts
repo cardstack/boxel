@@ -26,6 +26,7 @@ import {
   type LooseCardResource,
   type Prerenderer,
   type PrerenderedHtmlChange,
+  type PriorScreenshotState,
   type Reader,
   type RenderRouteOptions,
   type RenderVisitResponse,
@@ -770,24 +771,30 @@ async function visitForPrerenderedHtml({
   };
 
   // Declared-screenshot capture rides the visit only when this pass can
-  // persist the bytes (both adapters present) and the URL has a card
-  // rendering to capture from. The prior manifest + current content hash go
-  // along so file-content-keyed slots can carry forward in-engine.
-  let captureScreenshots = Boolean(
-    parsedCardResource && dbAdapter && mediaCacheAdapter,
-  );
-  let priorManifest: ScreenshotManifest | null = null;
-  let priorScreenshotErrors: DeclaredScreenshotError[] | null = null;
-  let priorCaptureFailureRenders: number | null = null;
+  // persist the bytes (both adapters present). One opt-in covers both of the
+  // URL's renderings — the card pass captures only when the URL has a card
+  // rendering at all, so no per-half gating is needed here. Each row's prior
+  // state goes along keyed by row type: the manifest so file-content-keyed
+  // slots can carry forward in-engine, the recorded failures to seed this
+  // pass's consecutive-failure bookkeeping.
+  let captureScreenshots = Boolean(dbAdapter && mediaCacheAdapter);
+  let priorStates:
+    | Partial<Record<'instance' | 'file', PriorScreenshotState>>
+    | undefined;
   let screenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
   if (captureScreenshots) {
-    ({
-      manifest: priorManifest,
-      screenshotErrors: priorScreenshotErrors,
-      captureFailureRenders: priorCaptureFailureRenders,
-    } = await batch.priorScreenshotState(url, 'instance'));
+    priorStates = await batch.priorScreenshotStates(url);
+    let priorManifests: Partial<
+      Record<'instance' | 'file', ScreenshotManifest>
+    > = {};
+    for (let kind of ['instance', 'file'] as const) {
+      let manifest = priorStates[kind]?.manifest;
+      if (manifest && Object.keys(manifest).length > 0) {
+        priorManifests[kind] = manifest;
+      }
+    }
     screenshotVisitArgs = {
-      ...(priorManifest ? { priorManifest } : {}),
+      ...(Object.keys(priorManifests).length > 0 ? { priorManifests } : {}),
       ...(contentHash !== undefined ? { contentHash } : {}),
     };
   }
@@ -857,10 +864,11 @@ async function visitForPrerenderedHtml({
       let screenshotOutcome =
         captureScreenshots && dbAdapter && mediaCacheAdapter
           ? await persistDeclaredScreenshots({
-              result: response.screenshots,
-              priorManifest,
-              priorScreenshotErrors,
-              priorCaptureFailureRenders,
+              result: card.screenshots,
+              priorManifest: priorStates?.instance?.manifest ?? null,
+              priorScreenshotErrors: priorStates?.instance?.screenshotErrors,
+              priorCaptureFailureRenders:
+                priorStates?.instance?.captureFailureRenders,
               dbAdapter,
               mediaCacheAdapter,
               realmURL,
@@ -873,9 +881,7 @@ async function visitForPrerenderedHtml({
               log,
             })
           : undefined;
-      let screenshotTimingsMs = declaredScreenshotTimingsMs(
-        response.screenshots,
-      );
+      let screenshotTimingsMs = declaredScreenshotTimingsMs(card.screenshots);
       let instanceDiagnostics: Diagnostics | undefined =
         (screenshotOutcome && screenshotOutcome.errors.length > 0) ||
         screenshotTimingsMs
@@ -929,6 +935,47 @@ async function visitForPrerenderedHtml({
     });
     stats.fileErrors++;
   } else {
+    let fileScreenshotOutcome =
+      captureScreenshots && dbAdapter && mediaCacheAdapter
+        ? await persistDeclaredScreenshots({
+            result: fileRender.screenshots,
+            priorManifest: priorStates?.file?.manifest ?? null,
+            priorScreenshotErrors: priorStates?.file?.screenshotErrors,
+            priorCaptureFailureRenders:
+              priorStates?.file?.captureFailureRenders,
+            dbAdapter,
+            mediaCacheAdapter,
+            realmURL,
+            // File rows key the ledger on the file's own URL, extension and
+            // all — a `.json` suffix is an instance-id spelling, and only
+            // the instance half strips it.
+            sourceURL: fileURL,
+            sourceGeneration: batch.currentGeneration,
+            contentHash,
+            jobInfo,
+            log,
+          })
+        : undefined;
+    let fileScreenshotTimingsMs = declaredScreenshotTimingsMs(
+      fileRender.screenshots,
+    );
+    let fileDiagnostics: Diagnostics | undefined =
+      (fileScreenshotOutcome && fileScreenshotOutcome.errors.length > 0) ||
+      fileScreenshotTimingsMs
+        ? {
+            ...(diagnostics ?? {}),
+            ...(fileScreenshotOutcome && fileScreenshotOutcome.errors.length > 0
+              ? {
+                  screenshotErrors: fileScreenshotOutcome.errors,
+                  screenshotCaptureFailureRenders:
+                    fileScreenshotOutcome.captureFailureRenders,
+                }
+              : {}),
+            ...(fileScreenshotTimingsMs
+              ? { screenshotTimingsMs: fileScreenshotTimingsMs }
+              : {}),
+          }
+        : diagnostics;
     await batch.updatePrerenderedHtmlEntry(url, {
       type: 'file',
       isolatedHtml: fileRender.isolatedHTML,
@@ -938,7 +985,8 @@ async function visitForPrerenderedHtml({
       fittedHtml: fileRender.fittedHTML,
       markdown: fileRender.markdown,
       deps: response.fileExtract?.deps ?? [],
-      ...(diagnostics ? { diagnostics } : {}),
+      ...(fileDiagnostics ? { diagnostics: fileDiagnostics } : {}),
+      screenshots: fileScreenshotOutcome?.manifest ?? null,
     });
     stats.filesIndexed++;
   }

@@ -491,12 +491,35 @@ export default class RenderRoute extends Route<Model> {
     }
     if (parsedOptions.fileRender) {
       let fileRenderData = (globalThis as any).__boxelFileRenderData as
-        | { resource: any; fileDefCodeRef: { module: string; name: string } }
+        | {
+            resource: any;
+            fileDefCodeRef: { module: string; name: string };
+            // The visit's realm, stashed by the prerender server alongside
+            // the file data — a file render has no response header to learn
+            // its realm from the way the card branch does.
+            realmURL?: string;
+          }
         | undefined;
       if (!fileRenderData) {
         throw new Error('fileRender mode requires __boxelFileRenderData');
       }
       let { resource } = fileRenderData;
+      // The file-half twin of the card branch's declaration-derived
+      // `meta.screenshots` injection below (`declarationScreenshotsMeta`):
+      // the FileDef family's declared roster asserts each slot's durable URL
+      // so the file's own prerendered formats can embed it on the very first
+      // pass, before that pass's captures persist.
+      let fileScreenshotsMeta = await this.fileDeclarationScreenshotsMeta(
+        fileRenderData.fileDefCodeRef,
+        resource,
+        fileRenderData.realmURL,
+      );
+      if (fileScreenshotsMeta) {
+        resource = {
+          ...resource,
+          meta: { ...resource.meta, screenshots: fileScreenshotsMeta },
+        };
+      }
       let doc = { data: resource };
       let instance = (await this.store.addFileMeta(
         resource,
@@ -686,6 +709,61 @@ export default class RenderRoute extends Route<Model> {
   // (`getCard`), preserving `undefined` as the not-captured absence signal.
   // Roster entries carry no `hash` for the same reason — no capture is being
   // asserted.
+  // The file rendering's variant of `declarationScreenshotsMeta` below: the
+  // roster comes from the file's FileDef family class (resolved by
+  // extension), and the addressed path keeps its extension — a file row's
+  // captures are keyed by the file's own URL, only instance ids shed `.json`.
+  private async fileDeclarationScreenshotsMeta(
+    fileDefCodeRef: { module: string; name: string },
+    resource: {
+      id?: string;
+      meta?: { realmURL?: string };
+    },
+    visitRealmURL: string | undefined,
+  ): Promise<ScreenshotsMeta | undefined> {
+    try {
+      let id = resource.id;
+      // The stashed visit realm is the authority; an extract-built resource
+      // carries no meta.realmURL of its own.
+      let realmURL = visitRealmURL ?? resource.meta?.realmURL;
+      if (!id || !realmURL) {
+        return undefined;
+      }
+      let api = await this.cardService.getAPI();
+      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+        return undefined;
+      }
+      let resolvedId = this.network.virtualNetwork.toURL(id);
+      if (!resolvedId.href.startsWith(realmURL)) {
+        return undefined;
+      }
+      let Klass = await loadCardDef(
+        // The wire shape carries plain strings; loadCardDef wants the branded
+        // resource-identifier spelling of the same ref.
+        fileDefCodeRef as Parameters<typeof loadCardDef>[0],
+        {
+          loader: this.loaderService.loader,
+          relativeTo: resolvedId,
+        },
+      );
+      let roster = api.serializeDeclaredScreenshots(
+        Klass as typeof CardDef,
+      ) as DeclaredScreenshotRoster;
+      if (Object.keys(roster).length === 0) {
+        return undefined;
+      }
+      return screenshotsMetaFromRoster(roster, {
+        realmURL,
+        instanceLocalPath: resolvedId.href.slice(realmURL.length),
+      });
+    } catch {
+      // Same posture as `declarationScreenshotsMeta`: a class that fails to
+      // load fails the render itself moments later; this auxiliary read must
+      // never be what surfaces it.
+      return undefined;
+    }
+  }
+
   private async declarationScreenshotsMeta(
     doc: LooseSingleCardDocument,
     canonicalId: string,
