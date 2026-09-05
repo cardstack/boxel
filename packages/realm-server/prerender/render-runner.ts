@@ -885,6 +885,7 @@ export class RenderRunner {
     priority,
     jobId,
     screenshots,
+    fileScreenshots,
     renderScope,
     signal,
     onTabAcquired,
@@ -2100,6 +2101,66 @@ export class RenderRunner {
                 applyStepError(res.error, res.evicted);
                 if (fileShortCircuit) break;
               }
+            }
+          }
+
+          // The file rendering's declared screenshots, mirroring the card
+          // pass's capture step above: same warm tab, after the file's format
+          // renders, and only when the caller can persist the bytes. The
+          // render.screenshots roster and render.screenshot captures read the
+          // parent render model's instance, which the fileRender transitions
+          // above have set to the hydrated FileDef — so the roster here is
+          // the file family's `static screenshots`, not the card's.
+          if (
+            !fileShortCircuit &&
+            runHtmlSteps &&
+            !runIndexSteps &&
+            fileScreenshots
+          ) {
+            let stepStart = Date.now();
+            let stepResult = await this.#step(
+              affinityKey,
+              'visit file declared screenshots',
+              () =>
+                withTimeout(
+                  page,
+                  () =>
+                    captureDeclaredScreenshots(
+                      page,
+                      fileScreenshots,
+                      captureOptions,
+                    ),
+                  opts?.timeoutMs,
+                  this.#profileContext(
+                    affinityKey,
+                    url,
+                    'visit file declared screenshots',
+                    jobId,
+                  ),
+                  signal,
+                ),
+            );
+            recordFormatMs('file', 'screenshots', Date.now() - stepStart);
+            if (!stepResult.ok) {
+              if (stepResult.evicted || this.#isAuthError(stepResult.error)) {
+                applyStepError(stepResult.error, stepResult.evicted);
+              }
+              // A failed capture is an absent screenshot, never an errored
+              // row (the broken-links model), matching the card step.
+              response.fileScreenshots = {
+                entries: [],
+                errors: [
+                  {
+                    name: '*',
+                    message:
+                      stepResult.error.error?.message ??
+                      'declared screenshot capture failed',
+                  },
+                ],
+              };
+            } else {
+              response.fileScreenshots =
+                stepResult.value as DeclaredScreenshotVisitResult;
             }
           }
 

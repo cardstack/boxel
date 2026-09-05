@@ -721,6 +721,19 @@ async function visitForPrerenderedHtml({
       ...(contentHash !== undefined ? { contentHash } : {}),
     };
   }
+  // The file rendering captures too — every URL has one, and a FileDef
+  // family's poster slots live on the 'file' row. Carry-forward keys on the
+  // file row's own prior manifest; the content hash is the same file's.
+  let captureFileScreenshots = Boolean(dbAdapter && mediaCacheAdapter);
+  let filePriorManifest: ScreenshotManifest | null = null;
+  let fileScreenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
+  if (captureFileScreenshots) {
+    filePriorManifest = await batch.priorScreenshotManifest(url, 'file');
+    fileScreenshotVisitArgs = {
+      ...(filePriorManifest ? { priorManifest: filePriorManifest } : {}),
+      ...(contentHash !== undefined ? { contentHash } : {}),
+    };
+  }
 
   let response: RenderVisitResponse = await prerenderer.prerenderVisit({
     affinityType: 'realm',
@@ -748,6 +761,9 @@ async function visitForPrerenderedHtml({
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
     ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),
+    ...(fileScreenshotVisitArgs
+      ? { fileScreenshots: fileScreenshotVisitArgs }
+      : {}),
   });
 
   // The visit's render diagnostics (launch/wait timings, render elapsed,
@@ -846,6 +862,31 @@ async function visitForPrerenderedHtml({
     });
     stats.fileErrors++;
   } else {
+    let fileScreenshotOutcome =
+      captureFileScreenshots && dbAdapter && mediaCacheAdapter
+        ? await persistDeclaredScreenshots({
+            result: response.fileScreenshots,
+            priorManifest: filePriorManifest,
+            dbAdapter,
+            mediaCacheAdapter,
+            realmURL,
+            // File rows key the ledger on the file's own URL, extension and
+            // all — a `.json` suffix is an instance-id spelling, and only
+            // the instance half strips it.
+            sourceURL: fileURL,
+            sourceGeneration: batch.currentGeneration,
+            contentHash,
+            jobInfo,
+            log,
+          })
+        : undefined;
+    let fileDiagnostics: Diagnostics | undefined =
+      fileScreenshotOutcome && fileScreenshotOutcome.errors.length > 0
+        ? {
+            ...(diagnostics ?? {}),
+            screenshotErrors: fileScreenshotOutcome.errors,
+          }
+        : diagnostics;
     await batch.updatePrerenderedHtmlEntry(url, {
       type: 'file',
       isolatedHtml: fileRender.isolatedHTML,
@@ -855,7 +896,8 @@ async function visitForPrerenderedHtml({
       fittedHtml: fileRender.fittedHTML,
       markdown: fileRender.markdown,
       deps: response.fileExtract?.deps ?? [],
-      ...(diagnostics ? { diagnostics } : {}),
+      ...(fileDiagnostics ? { diagnostics: fileDiagnostics } : {}),
+      screenshots: fileScreenshotOutcome?.manifest ?? null,
     });
     stats.filesIndexed++;
   }

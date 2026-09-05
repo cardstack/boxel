@@ -1024,6 +1024,13 @@ export function buildPrerenderApp(options: {
         !Array.isArray(attrs.screenshots)
           ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
           : undefined;
+      // The file rendering's capture opt-in, same presence semantics.
+      let fileScreenshots: DeclaredScreenshotVisitArgs | undefined =
+        attrs.fileScreenshots &&
+        typeof attrs.fileScreenshots === 'object' &&
+        !Array.isArray(attrs.fileScreenshots)
+          ? (attrs.fileScreenshots as DeclaredScreenshotVisitArgs)
+          : undefined;
 
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -1150,6 +1157,7 @@ export function buildPrerenderApp(options: {
         ...(priority !== undefined ? { priority } : {}),
         ...(jobId ? { jobId } : {}),
         ...(screenshots ? { screenshots } : {}),
+        ...(fileScreenshots ? { fileScreenshots } : {}),
         ...(renderScope ? { renderScope } : {}),
         signal: ac.signal,
       };

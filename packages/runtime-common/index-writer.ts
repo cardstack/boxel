@@ -810,12 +810,15 @@ export class Batch {
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
       if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
+        // The ledger key the prerender-html visit persisted under: instance
+        // rows use the extensionless card-id form, file rows the file's own
+        // URL (a `.json` suffix is an instance-id spelling, so only the
+        // instance half strips it).
+        let ledgerKey = (value: string) =>
+          entry.type === 'instance' ? value.replace(/\.json$/, '') : value;
         manifestCopies.push({
-          // The extensionless card-id form the MediaCache ledger keys on
-          // (matching what the prerender-html visit derives from the file
-          // URL when it persists a capture).
-          sourceLedgerURL: entry.url.replace(/\.json$/, ''),
-          destLedgerURL: destURL.replace(/\.json$/, ''),
+          sourceLedgerURL: ledgerKey(entry.url),
+          destLedgerURL: ledgerKey(destURL),
           manifest: entry.screenshots as ScreenshotManifest,
         });
       }

@@ -903,6 +903,12 @@ export type PrerenderVisitArgs = {
   // prerender-html indexing pass sends this when it has a MediaCache to
   // persist into. Only honored by 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
+  // The file rendering's twin of `screenshots`: capture the FileDef family's
+  // declared screenshots after the file formats render. A separate field
+  // because the two halves carry different carry-forward inputs — each keys
+  // on its own row's prior manifest (the URL's 'instance' vs 'file'
+  // prerendered_html rows), while the content hash is the same file's.
+  fileScreenshots?: DeclaredScreenshotVisitArgs;
   // The realm view this visit renders against — one realm at one generation.
   // An index pass and the `prerender_html` job it spawns are separate queue
   // jobs that read the same files, so they carry the same scope, while the
@@ -998,6 +1004,9 @@ export interface RenderVisitResponse {
   // capture step. Absent entirely on prerenderers that don't support
   // capture (the in-browser twin) — the caller writes no manifest then.
   screenshots?: DeclaredScreenshotVisitResult;
+  // The file rendering's captures (see PrerenderVisitArgs.fileScreenshots),
+  // with the same presence semantics as `screenshots`.
+  fileScreenshots?: DeclaredScreenshotVisitResult;
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
