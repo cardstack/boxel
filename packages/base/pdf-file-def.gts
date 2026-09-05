@@ -3,6 +3,7 @@ import FileTypePdfIcon from '@cardstack/boxel-icons/file-type-pdf';
 import { FileDef, contains, field } from './card-api';
 import type { ByteStream, SerializedFile } from './file-api';
 import { DocumentInfoField } from './file-formats/metadata-fields';
+import { PDF_FAMILY_SCREENSHOTS } from './file-formats/pdf-captures';
 import { PdfViewer } from './file-formats/pdf-viewer';
 import { extractPdfMetadata, type DocumentInfo } from './pdf-meta-extractor';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
@@ -45,6 +46,11 @@ export class PdfDef extends FileDef {
   // The four formats come from FileDef's shared shells; the family supplies only
   // the renderer that draws the pages — a native `<object>` viewer.
   static previewComponent: FilePreviewComponent = PdfViewer;
+
+  // The fitted first-page poster: a capture-only render of page 1, keyed on
+  // the file's bytes and flagged useAsThumbnail, so the fitted cell and the
+  // thumbnail chain show the real page while the viewer stays engine-free.
+  static screenshots = PDF_FAMILY_SCREENSHOTS;
 
   static async extractAttributes(
     url: string,

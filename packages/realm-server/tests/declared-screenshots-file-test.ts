@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { readFileSync } from 'fs';
 import { basename } from 'path';
+import { fileURLToPath } from 'url';
 
 import {
   declaredCaptureSpecHash,
@@ -301,6 +303,51 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/picture.svg?name=thumb`),
       `the fitted rendering carries the captured thumbnail URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('the PDF family captures a first-page poster onto the file row', async function (assert) {
+    let pdfBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/pdf-simple.pdf',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+    await realm.write('doc.pdf', pdfBytes);
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      afterJobId: baseline,
+      timeout: 60000,
+    });
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}doc.pdf`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the first-page poster landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.strictEqual(manifest!.poster.contentType, 'image/png');
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+
+    // The fitted shell prefers the captured poster over the typed page
+    // placeholder, via the view model's thumbnail seam.
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/doc.pdf?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
     );
   });
 
