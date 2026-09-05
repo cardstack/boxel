@@ -357,6 +357,118 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // `search` (dataOnly) returns raw index rows with a real `url` column and the
+    // computed `_matchRelevance`; the seed's `pristine_doc` is `{}`, so ordering
+    // and score assertions read the row, not a reconstituted card.
+    let relevanceUrls = async (query: Parameters<typeof engine.search>[1]) => {
+      let { results } = await engine.search(
+        new URL(testRealmURL),
+        query,
+        {},
+        { kind: 'dataOnly' },
+      );
+      return results.map((r) => r.url as string);
+    };
+
+    test('sorts by ts_rank_cd relevance, best match first', async function (assert) {
+      // Two fresh rows carrying a term absent from the beforeEach seed, at
+      // different term frequency: the denser one must rank higher.
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zebra' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
+        'the denser row ranks first',
+      );
+
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zebra' },
+          sort: [{ by: '_matchRelevance', direction: 'asc' }],
+        }),
+        [`${testRealmURL}zebra-sparse.json`, `${testRealmURL}zebra-dense.json`],
+        'asc reverses the ranking',
+      );
+    });
+
+    test('exposes a bounded 0–1 relevance value on the row', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+
+      let { results } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'zebra' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      let scores = results.map((r) =>
+        Number((r as Record<string, unknown>)['_matchRelevance']),
+      );
+      assert.strictEqual(scores.length, 2, 'both rows carry a score');
+      for (let score of scores) {
+        assert.ok(score > 0, `relevance is positive; got ${score}`);
+        assert.ok(
+          score <= 1,
+          `ts_rank_cd flag 32 normalizes to at most 1; got ${score}`,
+        );
+      }
+      assert.ok(
+        scores[0] > scores[1],
+        'the denser row carries the higher score',
+      );
+    });
+
+    test('ranks a positive-polarity union of multiple matches terms', async function (assert) {
+      // A row carrying both union terms out-ranks a row carrying one.
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}both.json`,
+        markdown: 'a nimble zebra beside a bright quokka.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}one.json`,
+        markdown: 'a lone zebra on the plain.',
+      });
+
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { any: [{ matches: 'zebra' }, { matches: 'quokka' }] },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [`${testRealmURL}both.json`, `${testRealmURL}one.json`],
+        'the row matching both union terms ranks ahead of the one-term row',
+      );
+    });
+
+    test('rejects a relevance sort with no positive matches term', async function (assert) {
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          filter: { not: { matches: 'mango' } },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        /requires at least one positive `matches` filter/,
+        'a negated-only tree has no positive term to rank by',
+      );
+    });
+
     test('IndexQueryEngine emits the null-rejecting guard in its matches SQL', async function (assert) {
       // The join-shape test below proves the guard *would* reduce the join, but
       // it composes the predicate itself, so it can't catch IndexQueryEngine

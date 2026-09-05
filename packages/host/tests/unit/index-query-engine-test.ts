@@ -3418,6 +3418,94 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`'_matchRelevance' sort orders matched rows ahead of non-matched (SQLite 1/0 fallback)`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: { name: 'Mango' },
+          markdown: 'Mango is here.',
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: { name: 'Van Gogh' },
+          markdown: 'Van Gogh is here.',
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: { name: 'Ringo' },
+          markdown: 'Ringo is here.',
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    // ringo is pulled in by the `matches` branch (relevance 1 under the SQLite
+    // fallback); mango is pulled in only by the `eq` branch and its markdown has
+    // no "ringo" (relevance 0). So relevance sort separates them deterministically.
+    let query = {
+      filter: {
+        on: type,
+        any: [{ matches: 'ringo' }, { eq: { name: 'Mango' } }],
+      },
+    };
+
+    let desc = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      ...query,
+      sort: [{ by: '_matchRelevance', direction: 'desc' }],
+    });
+    assert.deepEqual(
+      getIds(desc.cards),
+      [ringo.id, mango.id],
+      'best match (the matches-branch hit) sorts first on desc',
+    );
+
+    let asc = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      ...query,
+      sort: [{ by: '_matchRelevance', direction: 'asc' }],
+    });
+    assert.deepEqual(
+      getIds(asc.cards),
+      [mango.id, ringo.id],
+      'asc reverses the relevance ordering',
+    );
+  });
+
+  test(`'_matchRelevance' sort with no positive 'matches' term throws`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+    let type = await personCardType(testCards);
+
+    await assert.rejects(
+      indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: { on: type, eq: { name: 'Mango' } },
+        sort: [{ by: '_matchRelevance', direction: 'desc' }],
+      }),
+      /requires at least one positive `matches` filter/,
+      'a query with no matches term cannot sort by relevance',
+    );
+
+    // A negated `matches` filters rows out but contributes no score, so a tree
+    // whose only match term is negated has zero positive terms and throws.
+    await assert.rejects(
+      indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: { on: type, not: { matches: 'mango' } },
+        sort: [{ by: '_matchRelevance', direction: 'desc' }],
+      }),
+      /requires at least one positive `matches` filter/,
+      'a negated matches term does not count as a positive term',
+    );
+  });
+
   test('can sort using a general field that is not an attribute of a card', async function (assert) {
     await setupIndex(dbAdapter, [
       {
