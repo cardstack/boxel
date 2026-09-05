@@ -680,11 +680,22 @@ class InheritedSwatch extends GlimmerComponent<{
           <code>{{this.expression}}</code>
         </:content>
       </Tooltip>
-      <Swatch
-        class='inherited-swatch-preview'
-        @color={{this.resolved}}
-        @label={{@name}}
-      />
+      <div class='inherited-swatch-row'>
+        <Swatch
+          class='inherited-swatch-preview'
+          @color={{this.resolved}}
+          @label={{@name}}
+        />
+        {{#if this.resolved}}
+          <CopyButton
+            @width='16px'
+            @height='16px'
+            @ariaLabel='Copy {{this.resolved}}'
+            @tooltipText='Copy {{this.resolved}}'
+            @textToCopy={{this.resolved}}
+          />
+        {{/if}}
+      </div>
     </div>
     <style scoped>
       @layer {
@@ -700,7 +711,14 @@ class InheritedSwatch extends GlimmerComponent<{
           width: 100%;
           min-width: 0;
         }
-        /* same swatch layout as ThemeSwatch */
+        /* same swatch + copy button layout as ThemeSwatch */
+        .inherited-swatch-row {
+          display: grid;
+          grid-template-columns: minmax(50%, 1fr) 1.875rem;
+          align-items: end;
+          width: 100%;
+          min-width: 0;
+        }
         .inherited-swatch-preview {
           --swatch-width: 2.75rem;
           --swatch-height: 2.75rem;
@@ -708,7 +726,6 @@ class InheritedSwatch extends GlimmerComponent<{
           flex-direction: row-reverse;
           justify-content: flex-end;
           align-items: center;
-          align-self: stretch;
           min-width: 0;
         }
         :deep(.boxel-swatch-preview) {

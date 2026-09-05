@@ -1385,16 +1385,24 @@ export class ThemeRecipe extends GlimmerComponent<{
   <template>
     {{#if this.entries.length}}
       <div class='theme-recipe' ...attributes>
-        <div class='theme-recipe-header'>
-          <h4>Key tokens{{if @isDarkMode ' (dark)'}}</h4>
-          <CopyButton @textToCopy={{this.text}} />
-        </div>
+        <h4>Key tokens{{if @isDarkMode ' (dark)'}}</h4>
         <p class='theme-recipe-description'>
           The variables components read most and that other defaults are derived
           from. Pulled from the generated CSS so you can read or copy them
           without scanning the full list.
         </p>
-        <pre class='theme-recipe-pre' data-test-theme-recipe>{{this.text}}</pre>
+        {{! same surface as CSSField's code block, with the copy button pinned
+            to the block rather than the heading }}
+        <div class='theme-recipe-block'>
+          <CopyButton
+            class='theme-recipe-copy-button'
+            @textToCopy={{this.text}}
+          />
+          <pre
+            class='theme-recipe-pre'
+            data-test-theme-recipe
+          >{{this.text}}</pre>
+        </div>
       </div>
     {{/if}}
     <style scoped>
@@ -1402,27 +1410,35 @@ export class ThemeRecipe extends GlimmerComponent<{
         .theme-recipe {
           margin-bottom: var(--boxel-sp-xl);
         }
-        .theme-recipe-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--boxel-sp-xs);
-        }
-        .theme-recipe-header h4 {
+        .theme-recipe h4 {
           margin: 0;
         }
         .theme-recipe-description {
-          margin: var(--boxel-sp-4xs) 0 0;
+          margin: var(--boxel-sp-4xs) 0 var(--boxel-sp-xs);
           color: var(--muted-foreground);
           font-size: var(--boxel-font-size-sm);
         }
+        .theme-recipe-block {
+          position: relative;
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius, var(--boxel-border-radius));
+          overflow: hidden;
+        }
+        .theme-recipe-copy-button {
+          position: absolute;
+          top: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
+          z-index: 1;
+        }
         .theme-recipe-pre {
-          margin: var(--boxel-sp-xs) 0 0;
-          padding: var(--boxel-sp-sm) var(--boxel-sp);
-          background-color: var(--muted);
-          color: var(--muted-foreground);
-          border-radius: var(--boxel-border-radius-sm);
-          font-family: var(--font-mono, var(--boxel-monospace-font-family));
+          margin: 0;
+          padding: var(--boxel-sp);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           font-size: var(--boxel-font-size-xs);
           overflow-x: auto;
         }
@@ -1435,7 +1451,7 @@ const SPECIMEN_TABS = [
   { id: 'surfaces', label: 'Surfaces & Ink' },
   { id: 'controls', label: 'Controls' },
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'reading', label: 'Reading' },
+  { id: 'reading', label: 'Editorial' },
 ] as const;
 
 type SpecimenTabId = (typeof SPECIMEN_TABS)[number]['id'];
@@ -1522,7 +1538,7 @@ export class ThemeSpecimens extends GlimmerComponent<{
 
   <template>
     <div class='specimens' ...attributes>
-      <div class='specimen-tabs' role='tablist' aria-label='Theme specimens'>
+      <div class='specimen-tabs' role='tablist' aria-label='Component samples'>
         {{#each this.tabs as |tab|}}
           <button
             type='button'
@@ -1771,11 +1787,11 @@ export class ThemeSpecimens extends GlimmerComponent<{
         </div>
       </section>
 
-      {{! Reading }}
+      {{! Editorial }}
       <section
         class='specimen-panel'
         role='tabpanel'
-        aria-label='Reading'
+        aria-label='Editorial'
         hidden={{this.isHidden 'reading'}}
         {{this.linkPanel 'reading'}}
         data-test-specimen-panel='reading'
@@ -2087,10 +2103,6 @@ export class ThemeSpecimens extends GlimmerComponent<{
           gap: var(--boxel-sp);
           align-items: start;
         }
-        .sp-sample-card {
-          background-color: var(--card);
-          color: var(--card-foreground);
-        }
 
         /* dashboard */
         .sp-stats {
@@ -2202,6 +2214,12 @@ export class ThemeSpecimens extends GlimmerComponent<{
           color: var(--subtle-foreground);
           font-size: var(--boxel-caption-font-size);
         }
+      }
+      /* outside the layer: CardContainer paints --background with an unlayered
+         rule, so a layered override would lose to it */
+      .sp-sample-card {
+        background-color: var(--card);
+        color: var(--card-foreground);
       }
     </style>
   </template>
@@ -2344,7 +2362,7 @@ export class ThemeVisualizer extends GlimmerComponent<{
           </div>
         {{/if}}
         <div>
-          <h3 class='structured-theme-visualizer-subtitle'>Specimens</h3>
+          <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
           <ThemeSpecimens />
         </div>
       </div>
