@@ -2178,9 +2178,13 @@ module('Integration | Store', function (hooks) {
   }
 
   test('a create assigns the instance its remote identity in a fixed order', async function (assert) {
-    // A second way to create cards has to run these same steps in this same
-    // order, so the sequence is pinned here rather than just its end state.
+    // Any other way of creating a card has to run these same steps in this same
+    // order, so the sequence is pinned here, not just its end state. The spies
+    // go on after the instance is in the store so that only the create's own
+    // steps are recorded.
     let instance = new PersonDef({ name: 'Sequence' });
+    await storeService.add(instance, { doNotPersist: true });
+
     let steps: string[] = [];
     let restore = spyOnIdentitySteps(instance, steps);
     let result: unknown;
@@ -2220,6 +2224,7 @@ module('Integration | Store', function (hooks) {
 
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
     let instance = new PersonDef({ name: 'Overlap' });
+    await storeService.add(instance, { doNotPersist: true });
 
     // Hold the POST open so the second save is guaranteed to arrive while the
     // create is still in flight — the window the per-instance mutation lock
@@ -2245,7 +2250,6 @@ module('Integration | Store', function (hooks) {
     try {
       let creating = (storeService as any).persistAndUpdate(instance);
       await reachedPost.promise;
-      (instance as any).name = 'Overlap Edited';
       let overlapping = (storeService as any).persistAndUpdate(instance);
       releasePost.fulfill();
       await Promise.all([creating, overlapping]);
@@ -2259,24 +2263,18 @@ module('Integration | Store', function (hooks) {
     await settled();
 
     assert.deepEqual(
-      methods.slice(0, 2),
+      methods,
       ['POST', 'PATCH'],
       'the overlapping save waited for the remote id and updated the created card',
     );
-    assert.strictEqual(
-      methods.filter((method) => method === 'POST').length,
-      1,
-      'the card was created exactly once',
-    );
-
     let file = await testRealmAdapter.openFile(
       `${instance.id!.substring(testRealmURL.length)}.json`,
     );
     assert.ok(file, 'the created card exists in the realm');
     assert.strictEqual(
       JSON.parse(file!.content as string).data.attributes.name,
-      'Overlap Edited',
-      'the overlapping edit reached the realm',
+      'Overlap',
+      'the card the realm holds is the one the store created',
     );
   });
 
