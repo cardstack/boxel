@@ -1831,11 +1831,18 @@ export class RenderRunner {
               : undefined;
 
           if (memoizedIconHTML === undefined) {
-            // stash file data for the render route model hook to consume
+            // stash file data for the render route model hook to consume,
+            // with the visit's realm alongside — a file render has no
+            // response header to learn its realm from (the card branch reads
+            // x-boxel-realm-url off the card GET), and the route needs it to
+            // compose declaration-derived screenshot URLs.
             await abortable(signal, () =>
-              page.evaluate((data) => {
-                (globalThis as any).__boxelFileRenderData = data;
-              }, effectiveFileData),
+              page.evaluate(
+                (data) => {
+                  (globalThis as any).__boxelFileRenderData = data;
+                },
+                { ...effectiveFileData, realmURL: realm },
+              ),
             );
             didStashFileRenderData = true;
           }
