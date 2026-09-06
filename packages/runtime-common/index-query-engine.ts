@@ -500,27 +500,16 @@ export class IndexQueryEngine {
 
   // The declared-screenshot manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
-  // a name resolves exactly when a DSL capture of the same instance would),
-  // selecting only the manifest column. `undefined` means no live instance
-  // matches; `null` means the instance is live but nothing has been captured
-  // for it.
+  // a name resolves exactly when a DSL capture of the same instance would).
+  // `undefined` means no live instance matches; a live row comes back with
+  // its canonical `url` (the lookup also matches `file_alias`, and the
+  // MediaCache ledger is keyed off the row's own spelling, never the
+  // request's) and a `manifest` that is null when nothing has been captured.
   async liveInstanceScreenshots(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
-    let rows = (await this.#query([
-      'SELECT ph.screenshots AS screenshots',
-      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
-      'WHERE',
-      ...this.#liveInstanceConditions(url),
-      'LIMIT 1',
-    ] as Expression)) as unknown as {
-      screenshots: ScreenshotManifest | null;
-    }[];
-    if (rows.length === 0) {
-      return undefined;
-    }
-    return rows[0].screenshots ?? null;
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'instance', opts);
   }
 
   // The file-row twin of `liveInstanceScreenshots`: the declared-screenshot
@@ -530,20 +519,29 @@ export class IndexQueryEngine {
   async liveFileScreenshots(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'file', opts);
+  }
+
+  async #liveRowScreenshots(
+    url: URL,
+    type: 'instance' | 'file',
+    opts?: GetEntryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     let rows = (await this.#query([
-      'SELECT ph.screenshots AS screenshots',
+      'SELECT i.url AS url, ph.screenshots AS screenshots',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
-      ...this.#liveRowConditions(url, 'file'),
+      ...this.#liveRowConditions(url, type),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       screenshots: ScreenshotManifest | null;
     }[];
     if (rows.length === 0) {
       return undefined;
     }
-    return rows[0].screenshots ?? null;
+    return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
   }
 
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
