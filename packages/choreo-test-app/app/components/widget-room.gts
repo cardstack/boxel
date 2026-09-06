@@ -20,7 +20,11 @@ import {
   gallerySigns,
 } from 'test-app/lib/widget-gallery-layout';
 import { projectLiveTile } from 'test-app/lib/widget-live-projection';
-import { playNarrationClip } from 'test-app/lib/widget-narration';
+import {
+  type NarrationResult,
+  narrationURL,
+  playNarrationClip,
+} from 'test-app/lib/widget-narration';
 import { quickCameraPath, quickScore } from 'test-app/lib/widget-quick-tour';
 import { roomGuide } from 'test-app/lib/widget-room-guide';
 import { tileReady } from 'test-app/lib/widget-tile-ready';
@@ -177,7 +181,7 @@ export class WidgetRoom extends Component {
   private run?: ReturnType<typeof moveRoomCamera>;
   private generation = 0;
   private audio?: HTMLAudioElement;
-  private settleNarration?: (finished: boolean) => void;
+  private settleNarration?: (result: NarrationResult) => void;
   private guideGeneration = 0;
   private cancelDemo?: () => void;
   isolated = (id: string) => ['sylva', 'towers', 'sagrada'].includes(id);
@@ -514,7 +518,7 @@ export class WidgetRoom extends Component {
     this.cancelDemo?.();
     this.cancelDemo = undefined;
     this.touring = false;
-    this.settleNarration?.(false);
+    this.settleNarration?.('cancelled');
     this.settleNarration = undefined;
     this.audio?.pause();
     this.run?.cancel();
@@ -572,6 +576,7 @@ export class WidgetRoom extends Component {
       button.click();
     }
     this.quickMode = true;
+    this.mount('mockup');
     this.quickFinished = false;
     this.quickIndex = 0;
     this.tourIndex = -1;
@@ -679,9 +684,9 @@ export class WidgetRoom extends Component {
   nextStop = () => {
     void this.playTour(Math.min(tourStops.length - 1, this.tourIndex + 1));
   };
-  private playNarration = (id: string): Promise<boolean> => {
+  private playNarration = (id: string): Promise<NarrationResult> => {
     const audio = (this.audio ??= new Audio());
-    return new Promise<boolean>((resolve) => {
+    return new Promise<NarrationResult>((resolve) => {
       this.settleNarration = playNarrationClip(
         audio,
         `${this.assetRoot}${this.narrationPath}/${id}.mp3`,
@@ -699,14 +704,21 @@ export class WidgetRoom extends Component {
       if (token !== this.guideGeneration) {
         return;
       }
+      this.audioIssue = false;
       this.tourIndex = index;
+      if (index === start) {
+        this.mount('mockup');
+      }
       const stop = tourStops[index]!;
       const started = performance.now();
       const next = tourStops[index + 1];
       if (next && this.narrationAvailable) {
-        void fetch(`${this.assetRoot}${this.narrationPath}/${next.id}.mp3`, {
-          cache: 'force-cache',
-        }).catch(() => {});
+        void fetch(
+          narrationURL(`${this.assetRoot}${this.narrationPath}/${next.id}.mp3`),
+          {
+            cache: 'force-cache',
+          }
+        ).catch(() => {});
       }
       this.cancelDemo?.();
       this.cancelDemo = guideDemo(
@@ -733,12 +745,15 @@ export class WidgetRoom extends Component {
         if (token !== this.guideGeneration) {
           return;
         }
-        if (!finished) {
+        if (finished === 'blocked' || finished === 'cancelled') {
           this.cancelDemo?.();
           this.audioIssue = true;
           this.touring = false;
           return;
         }
+        // An unavailable clip keeps its written narration on screen, then
+        // proceeds to the next separate clip instead of stopping the tour.
+        this.audioIssue = finished === 'unavailable';
         const remaining = stop.seconds * 1000 - (performance.now() - started);
         if (remaining > 0) {
           await this.travel(this.pose, remaining);

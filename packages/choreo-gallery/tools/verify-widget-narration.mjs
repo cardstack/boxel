@@ -28,7 +28,10 @@ try {
       play() {
         this.playbackRate = 4;
         window.__attempts.push(this.src);
-        if (this.src.endsWith('/enter.mp3') && !window.__injected) {
+        if (
+          this.src.split('?')[0].endsWith('/enter.mp3') &&
+          !window.__injected
+        ) {
           window.__injected = true;
           return Promise.reject(
             new DOMException(
@@ -50,7 +53,8 @@ try {
     .click();
   await page
     .waitForFunction(
-      () => window.__clips.some((s) => s.endsWith('/presence.mp3')),
+      () =>
+        window.__clips.some((s) => s.split('?')[0].endsWith('/presence.mp3')),
       {},
       { timeout: 60000 },
     )
@@ -88,7 +92,8 @@ try {
   );
   await page.getByRole('button', { name: 'Resume stop', exact: true }).click();
   await page.waitForFunction(
-    () => window.__clips.some((s) => s.endsWith('/keyframes.mp3')),
+    () =>
+      window.__clips.some((s) => s.split('?')[0].endsWith('/keyframes.mp3')),
     {},
     { timeout: 40000 },
   );
@@ -96,7 +101,7 @@ try {
   await page.evaluate(() => window.__audios[0].pause());
   await page.waitForFunction(() => !window.__audios[0].paused);
   await page.waitForFunction(
-    () => window.__clips.some((s) => s.endsWith('/pointer.mp3')),
+    () => window.__clips.some((s) => s.split('?')[0].endsWith('/pointer.mp3')),
     {},
     { timeout: 40000 },
   );

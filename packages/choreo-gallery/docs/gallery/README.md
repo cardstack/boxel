@@ -27,6 +27,7 @@ server running:
 
 ```sh
 pnpm exec playwright install chromium webkit
+node scripts/verify-widget-full-tour.mjs
 node scripts/verify-widget-narration.mjs
 node scripts/verify-widget-mockup-tour.mjs
 node scripts/verify-widget-freeze.mjs
@@ -71,3 +72,21 @@ See [Boxel deployment](BOXEL-DEPLOYMENT.md), [room design](ROOM-DESIGN.md),
 The accompanying Sagrada changes refine model geometry, shader stability,
 material grading, and typography; its procedural model is an interpretation,
 not a surveyed reconstruction.
+
+## Tour loading recovery
+
+Narration uses explicit audio content negotiation and retries failed or stalled
+loads with fresh URLs. If a clip remains unavailable after two retries, the
+tour continues to the next clip; browser permission denial still requires a
+visitor tap. Pausing cancels recovery so a user-paused tour stays paused.
+
+Mockup loads its 3D model ahead of its stop, freezes its render loop until active,
+and retries transient model failures. The guide owns screen clicks during tours;
+the device score supplies camera motion. Visible-canvas checks cover a failed
+model request and activation while the model is still loading.
+
+```sh
+TOUR_START=30 TOUR_END=33 FAIL_CLIP=fold STALL_CLIP=sheet node scripts/verify-widget-full-tour.mjs
+MOCKUP_FAIL_MODEL=1 node scripts/verify-widget-mockup-tour.mjs
+MOCKUP_WAIT_ACTIVE=1 node scripts/verify-widget-mockup-tour.mjs
+```

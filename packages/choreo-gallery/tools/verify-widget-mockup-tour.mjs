@@ -19,6 +19,31 @@ try {
       hasTouch: true,
     });
     const errors = [];
+    let failedModel = false;
+    if (process.env.MOCKUP_WAIT_ACTIVE) {
+      await p.route('**/iphone-15-pro.glb*', async (route) => {
+        await p.waitForFunction(
+          () =>
+            document
+              .querySelector('[data-widget-id="mockup"]')
+              ?.getAttribute('data-widget-active') === 'true',
+        );
+        await route.continue();
+      });
+    }
+    if (process.env.MOCKUP_FAIL_MODEL) {
+      await p.route('**/iphone-15-pro.glb*', async (route) => {
+        if (!failedModel) {
+          failedModel = true;
+          return route.fulfill({
+            status: 503,
+            contentType: 'text/plain',
+            body: 'Temporary gateway failure',
+          });
+        }
+        return route.continue();
+      });
+    }
     p.on('pageerror', (e) => errors.push(e.message));
     await p.addInitScript(() => {
       const A = window.Audio;
@@ -57,6 +82,39 @@ try {
       {},
       { timeout: 45000 },
     );
+    await p.waitForFunction(
+      () => {
+        const tile = document.querySelector('[data-widget-id="mockup"]');
+        const stage = tile?.querySelector('.mg-stage');
+        const canvas = stage?.querySelector('canvas');
+        return (
+          tile?.getAttribute('data-widget-ready') === 'true' &&
+          stage?.getAttribute('data-ready') === 'yes' &&
+          canvas?.width > 300 &&
+          Number(getComputedStyle(canvas).opacity) === 1
+        );
+      },
+      {},
+      { timeout: 15000 },
+    );
+    if (!quick) {
+      await p.waitForFunction(() =>
+        document.querySelector('.wr-shell')?.classList.contains('is-live'),
+      );
+    }
+    await p.waitForFunction(
+      () =>
+        Number(
+          getComputedStyle(
+            document.querySelector(
+              '[data-widget-id="mockup"] .wr-tile-preview',
+            ),
+          ).opacity,
+        ) < 0.05,
+    );
+    await p.screenshot({
+      path: `/tmp/mockup-visible-${quick ? 'highlights' : 'full'}.png`,
+    });
     console.log(
       quick ? 'Highlights' : 'Full tour',
       'Mockup entered 3D',
