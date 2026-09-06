@@ -17,6 +17,7 @@ import {
   partOf,
   type Relation,
 } from 'test-app/lib/builds';
+import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /* ── the score, as it opens ──────────────────────────────────────────────── */
@@ -211,7 +212,7 @@ export class BuildOrder extends Component {
   private stage?: HTMLElement;
   private railW = 0;
   private watcher?: ResizeObserver;
-  private viewport?: IntersectionObserver;
+  private viewport?: ReturnType<typeof observeStage>;
   private raf = 0;
   /** the readouts `tick` writes by hand, found once */
   private clockEl?: HTMLElement | null;
@@ -245,9 +246,10 @@ export class BuildOrder extends Component {
     // Twenty-six demos live in the gallery, and the frames belong to whichever
     // of them is on screen. Off screen the run pauses where it was; back on
     // screen it carries on, unless a hand has paused it since.
-    this.viewport = new IntersectionObserver(
-      (entries) => {
-        this.onstage = entries.some((entry) => entry.isIntersecting);
+    this.viewport = observeStage(
+      el,
+      (visible) => {
+        this.onstage = visible;
         if (this.onstage) {
           this.raf ||= requestAnimationFrame(this.tick);
           if (this.seen === null && this.take === 0) {
@@ -270,7 +272,6 @@ export class BuildOrder extends Component {
       },
       { threshold: 0.35 }
     );
-    this.viewport.observe(el);
     return () => {
       this.watcher?.disconnect();
       this.viewport?.disconnect();

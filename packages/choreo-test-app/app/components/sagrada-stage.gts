@@ -20,7 +20,15 @@ import type TheaterService from 'test-app/services/theater';
  * the film read back through the picture's own snapshot(): no WebGL in a
  * gallery card, ever. See film-tile.
  */
-const EMBED = `${config.rootURL}sagrada?embed`;
+const EMBED = (() => {
+  if (config.locationType === 'hash') {
+    const url = new URL(window.location.href);
+    url.searchParams.set('embed', '1');
+    url.hash = '/sagrada';
+    return url.href;
+  }
+  return `${config.rootURL}sagrada?embed`;
+})();
 /* one frame of the film, read back through the picture's own snapshot()
    — see scripts/film-poster.mjs. The type over it is HTML, not baked in. */
 const POSTER = `${config.rootURL}sagrada-poster.webp`;

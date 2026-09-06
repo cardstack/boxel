@@ -79,16 +79,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Weather @theme={{0}} @wx={{1}} />
         <@f.picture.Set @city="glass" @grass={{true}} />
         <@f.picture.Build @clock={{tAt 1882.3}} />
-        <@f.Stamp @year={{1882}} @at={{0.04}} />
-        <@f.Sky
-          @az={{0}}
-          @dist={{26}}
-          @lines={{array "1882"}}
-          @opacity={{0.4}}
-          @size={{4.2}}
-          @track={{0.12}}
-          @y={{7.5}}
-        />
       </@f.Shot>
       <@f.Shot
         @name="crypt"
@@ -297,7 +287,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
           @clock={{array (tAt 1912) (tAt 1925.9)}}
           @by={{0.6}}
         />
-        <@f.Stamp @year={{1925}} @at={{0.44}} />
         <@f.Trace @pts={{NAT_TOWERS}} />
       </@f.Shot>
       <@f.Shot
@@ -382,7 +371,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Light @rim={{0.9}} />
         <@f.picture.Set @city="glass" />
         <@f.picture.Build @clock={{tAt 1926.5}} />
-        <@f.Stamp @year={{1926}} @at={{0.03}} />
       </@f.Shot>
       <@f.Join @presentation="dip" @to="#080604" />
       <@f.Shot
@@ -426,7 +414,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Light @rim={{1.2}} />
         <@f.picture.Set @city="off" />
         <@f.picture.Build @clock={{array (tAt 1936.5) (tAt 1939.2)}} />
-        <@f.Stamp @year={{1936}} @at={{0.03}} />
       </@f.Shot>
       <@f.Join @presentation="dip" />
       <@f.Shot
@@ -633,7 +620,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Weather @theme={{0}} @wx={{1}} />
         <@f.picture.Set @city="glass" />
         <@f.picture.Build @clock={{array (tAt 1978) (tAt 2010)}} />
-        <@f.Stamp @year={{2010}} @at={{0.82}} />
       </@f.Shot>
       <@f.Join @presentation="blend" />
       <@f.Shot
@@ -763,7 +749,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
           @clock={{array (tAt 2016) (tAt 2021.96)}}
           @by={{0.6}}
         />
-        <@f.Stamp @year={{2021}} @at={{0.8}} />
         <@f.Trace @pts={{MARY_STAR}} />
       </@f.Shot>
       <@f.Shot
@@ -839,7 +824,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
           @clock={{array (tAt 2016) (tAt 2023.9)}}
           @by={{0.8}}
         />
-        <@f.Stamp @year={{2022}} @at={{0.34}} />
       </@f.Shot>
       <@f.Join @presentation="whip" />
       <@f.Shot
@@ -1093,7 +1077,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Light @rim={{1.2}} />
         <@f.picture.Set @city="glass" />
         <@f.picture.Build @clock={{tAt 2026.6}} />
-        <@f.Stamp @year={{2026}} @at={{0.22}} />
       </@f.Shot>
       <@f.Shot
         @name="street"
@@ -1249,15 +1232,6 @@ export const SagradaScore: TOC<{ Args: { f: FilmVocabulary } }> = <template>
         <@f.picture.Light @rim={{1.1}} />
         <@f.picture.Set @city="glass" />
         <@f.picture.Build @clock={{tAt 2036}} />
-        <@f.Sky
-          @az={{0}}
-          @dist={{26}}
-          @lines={{array "1882 —"}}
-          @opacity={{0.36}}
-          @size={{3.6}}
-          @track={{0.12}}
-          @y={{7.5}}
-        />
       </@f.Shot>
     </@f.Chapter>
   </@f.Spine>

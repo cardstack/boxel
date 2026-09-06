@@ -11,6 +11,7 @@ import {
   type PerformCommand,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
+import { observeStage } from 'test-app/lib/onstage';
 
 /**
  * The firing schedule. ONE array: it emits the score's `<c.Perform>` steps
@@ -196,9 +197,10 @@ export class Fold extends Component {
   register = modifier((el: HTMLElement) => {
     this.stage = el;
     (el as HTMLElement & { fold?: Fold }).fold = this;
-    const seen = new IntersectionObserver(
-      (entries) => {
-        this.onstage = entries.some((e) => e.isIntersecting);
+    const seen = observeStage(
+      el,
+      (visible) => {
+        this.onstage = visible;
         if (this.onstage) {
           this.raf ||= requestAnimationFrame(this.tick);
           // The score is gated on `take`, so the region plays nothing until
@@ -221,7 +223,6 @@ export class Fold extends Component {
       },
       { threshold: 0.3 }
     );
-    seen.observe(el);
     return () => {
       seen.disconnect();
       cancelAnimationFrame(this.raf);

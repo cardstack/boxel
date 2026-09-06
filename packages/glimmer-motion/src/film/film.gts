@@ -8302,6 +8302,88 @@ export class Film extends Component<FilmSignature> {
           bottom: 17%;
         }
       }
+      /* Sagrada: typography belongs to the shot, not the phone viewport.
+         Keep a compact editorial corner in square/portrait containers;
+         never turn the architecture into the backdrop for a full-width card. */
+      @container shot (max-aspect-ratio: 4/3) or ((max-width: 900px) and (max-height: 500px)) {
+        .is-sagrada .cf-type {
+          --cf-lx: 0;
+          --cf-ly: 0;
+        }
+        .is-sagrada .cf-block,
+        .is-sagrada .cf-block.is-title,
+        .is-sagrada .cf-block.is-lower,
+        .is-sagrada .cf-block.is-point,
+        .is-sagrada .cf-block.is-plate {
+          left: 5.5%;
+          right: auto;
+          top: auto;
+          bottom: 12%;
+          width: 48cqw;
+          max-width: 48cqw;
+          display: block;
+          text-align: left;
+        }
+        .is-sagrada .cf-kanji.is-latin,
+        .is-sagrada .is-title .cf-kanji.is-latin,
+        .is-sagrada .is-point .cf-kanji.is-latin,
+        .is-sagrada .is-plate .cf-kanji.is-latin {
+          --cf-fit: 46cqw;
+          font-size: min(
+            5.6cqw,
+            6cqh,
+            calc(46cqw / (var(--cf-glyphs, 4) * 0.56))
+          );
+          max-width: 46cqw;
+          margin-bottom: 1.5cqw;
+        }
+        .is-sagrada .cf-kicker {
+          font-size: clamp(7px, 1.65cqw, 12px);
+          gap: 1.5cqw;
+          margin-bottom: 1.5cqw;
+          letter-spacing: 0.07em;
+        }
+        .is-sagrada .cf-kicker > span {
+          white-space: normal;
+        }
+        .is-sagrada .cf-kicker::after {
+          min-width: 2cqw;
+          height: 1px;
+        }
+        .is-sagrada .cf-read {
+          gap: 0.8cqw 1.2cqw;
+          margin-bottom: 2cqw;
+          justify-content: flex-start;
+        }
+        .is-sagrada .cf-romaji,
+        .is-sagrada .cf-block:not(:has(.is-glyph)) .cf-romaji {
+          font-size: clamp(8px, 1.9cqw, 13px);
+          letter-spacing: 0.06em;
+        }
+        .is-sagrada .cf-gloss,
+        .is-sagrada .cf-block:not(:has(.is-glyph)) .cf-gloss {
+          font-size: clamp(8px, 1.9cqw, 13px);
+        }
+        .is-sagrada .cf-say {
+          font-size: clamp(9px, 2.1cqw, 15px);
+          line-height: 1.2;
+          max-width: 48cqw;
+          margin-bottom: 1cqw;
+        }
+        .is-sagrada .is-plate .cf-plane.is-glyph {
+          padding: 0 0 1.2cqw;
+          margin-bottom: 1.5cqw;
+          border-width: 1px;
+        }
+        .is-sagrada .cf-subs {
+          font-size: clamp(10px, 2.4cqw, 15px);
+          max-width: 80cqw;
+          bottom: 5%;
+        }
+        .is-sagrada .cf-ghost {
+          display: none;
+        }
+      }
     </style>
   </template>
 }

@@ -4,6 +4,7 @@ import { dirname, relative, resolve } from 'node:path';
 
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
+import json from '@rollup/plugin-json';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 
 const addon = new Addon({ srcDir: 'src', destDir: 'dist' });
@@ -60,6 +61,7 @@ export default {
       },
     },
     addon.dependencies(),
+    json(),
     babel({
       extensions: ['.js', '.gjs', '.ts', '.gts'],
       babelHelpers: 'bundled',

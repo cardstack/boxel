@@ -38,6 +38,10 @@ function environment(): 'development' | 'test' {
 }
 
 const config = {
+  // The addon host owns routing; standalone Vite builds supply hash routing.
+  get locationType(): string {
+    return 'history';
+  },
   get environment() {
     return environment();
   },

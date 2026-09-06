@@ -487,6 +487,10 @@ export class Drift extends Component {
    * change a few times a minute, which is what tracked state is for.
    */
   private loop = (now: number) => {
+    if (!this.seen) {
+      this.raf = 0;
+      return;
+    }
     this.raf = requestAnimationFrame(this.loop);
     // a tab that was in the background does not get to teleport the car
     const dt = Math.min((now - this.last) / 1000, 0.25);

@@ -291,7 +291,10 @@ export class Hang extends Component {
 
   bindLane = modifier((el: HTMLElement) => {
     this.laneEl = el;
+    const surface = el as HTMLElement & { playDemoShot?: () => void };
+    surface.playDemoShot = this.demoShot;
     return () => {
+      delete surface.playDemoShot;
       this.laneEl = null;
     };
   });
@@ -409,6 +412,27 @@ export class Hang extends Component {
     this.ghostEl?.removeAttribute('data-call');
     this.powerEl?.style.removeProperty('--power');
   }
+
+  /** Guided-tour/capture handle: use the same landing model as a real release. */
+  demoShot = () => {
+    if (!this.laneEl) {
+      return;
+    }
+    const rect = this.laneEl.getBoundingClientRect();
+    const start = RUNWAY * 0.7;
+    const destination = this.thrown % 2 ? 0.86 : 0.76;
+    this.land(
+      new PointerEvent('pointerup', {
+        clientX: rect.left + start * rect.width,
+      }),
+      {
+        velocity: {
+          x: ((destination - start) * rect.width) / this.coast,
+          y: 0,
+        },
+      }
+    );
+  };
 
   rack = () => {
     this.pucks = [];

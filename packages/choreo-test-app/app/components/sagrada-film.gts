@@ -83,18 +83,14 @@ export default class SagradaFilm extends Component<{
           @lookFx={{this.lookFx}}
         />
       </:picture>
-      {{! FRONT MATTER. The gate runs the title package: a rule draws down,
-      the year settles out of a blur, the wordmark tracks in, and the seal
-      stamps last. }}
+      {{! FRONT MATTER. Keep the title package clear of oversized years;
+      the date remains in the spine and navigation. }}
       <:gate as |f|>
         {{! the spine: the film's name written down the edge }}
         <span class="cf-gate-vert" aria-hidden="true">Temple Expiatori de la
           Sagrada Família — 1882</span>
         <div class="cf-gate-in cf-matter">
           <i class="cf-mg-rule" aria-hidden="true"></i>
-          <p class="cf-gate-k">
-            <span class="cf-gate-ghost" aria-hidden="true">1882</span>
-            <span class="cf-mg-g1">18</span><span class="cf-mg-g2">82</span></p>
           <p class="cf-gate-t cf-mg-mark">SAGRADA FAMÍLIA</p>
           <p class="cf-gate-s cf-mg-sub">A construction study ·
             {{f.runtime}}</p>
@@ -125,9 +121,6 @@ export default class SagradaFilm extends Component<{
       {{! BACK MATTER — the same package in reverse order of importance }}
       <:end as |f|>
         <i class="cf-mg-rule" aria-hidden="true"></i>
-        <p class="cf-end-k"><span class="cf-mg-g1">1882<i
-              class="cf-end-dash"
-            >—</i></span></p>
         <p class="cf-end-t cf-mg-mark">SAGRADA FAMÍLIA</p>
         <p class="cf-end-s cf-mg-sub">A construction study</p>
         <span class="cf-mg-seal" aria-hidden="true">Obra</span>

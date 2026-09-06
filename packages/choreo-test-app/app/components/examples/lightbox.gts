@@ -123,6 +123,9 @@ export class Lightbox extends Component {
   };
 
   <template>
+    {{! The shared card has one painted owner. Crossfading both copies makes
+        offset silhouettes and duplicate labels visible in a projected room.
+        Keep the layout morph, but hand visibility directly to its lead. }}
     <LayoutGroup>
       <div class="ex" {{this.register}}>
         <div class="shots">
@@ -136,13 +139,18 @@ export class Lightbox extends Component {
                 class="shot-card"
                 {{motion
                   layoutId=(cardId photo.id)
+                  layoutCrossfade=false
                   style=(photoStyle photo)
                   transition=spring
                 }}
               >
                 <span
                   class="shot-name"
-                  {{motion layoutId=(nameId photo.id) transition=spring}}
+                  {{motion
+                    layoutId=(nameId photo.id)
+                    layoutCrossfade=false
+                    transition=spring
+                  }}
                 >{{photo.label}}</span>
               </span>
             </button>
@@ -179,6 +187,7 @@ export class Lightbox extends Component {
               {{motion
                 presence=h
                 layoutId=(cardId photo.id)
+                layoutCrossfade=false
                 style=(photoStyle photo)
                 transition=spring
               }}
@@ -201,6 +210,7 @@ export class Lightbox extends Component {
                   {{motion
                     presence=h
                     layoutId=(nameId photo.id)
+                    layoutCrossfade=false
                     transition=spring
                   }}
                 >{{photo.label}}</b>

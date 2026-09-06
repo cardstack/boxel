@@ -93,6 +93,7 @@ declare module 'three' {
     constructor(x?: number, y?: number, z?: number);
     addScaledVector(v: Vector3, s: number): this;
     applyQuaternion(q: Quaternion): this;
+    project(camera: PerspectiveCamera): this;
     clone(): Vector3;
     copy(v: Vector3): this;
     multiplyScalar(s: number): this;
@@ -123,6 +124,10 @@ declare module 'three' {
 
   export class Matrix4 {
     elements: number[];
+    set(...elements: number[]): this;
+    multiply(matrix: Matrix4): this;
+    makeScale(x: number, y: number, z: number): this;
+    makeTranslation(x: number, y: number, z: number): this;
   }
 
   export class Layers {
@@ -267,6 +272,7 @@ declare module 'three' {
 declare module 'three/examples/jsm/loaders/GLTFLoader.js' {
   import type { Object3D } from 'three';
   export class GLTFLoader {
+    loadAsync(url: string): Promise<{ scene: Object3D }>;
     load(
       url: string,
       onLoad: (gltf: { scene: Object3D }) => void,
@@ -279,6 +285,7 @@ declare module 'three/examples/jsm/loaders/GLTFLoader.js' {
 
 declare module 'three/examples/jsm/loaders/DRACOLoader.js' {
   export class DRACOLoader {
+    dispose(): this;
     setDecoderPath(path: string): this;
   }
 }

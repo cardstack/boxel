@@ -67,6 +67,7 @@
     "@glint/environment-ember-template-imports": "2.0.1-unstable.ca8146a",
     "@glint/template": "1.7.5-unstable.27a551c",
     "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-json": "6.1.0",
     "@types/three": "^0.185.4",
     "babel-plugin-ember-template-compilation": "^2.4.1",
     "ember-source": "~6.12.0",

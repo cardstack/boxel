@@ -19,7 +19,15 @@ import type TheaterService from 'test-app/services/theater';
  * ⛶ Theater door Sylva's stage wears. The tile face is a POSTER — drawn,
  * not rendered: no WebGL in a gallery card, ever. See film-tile.
  */
-const EMBED = `${config.rootURL}towers?embed`;
+const EMBED = (() => {
+  if (config.locationType === 'hash') {
+    const url = new URL(window.location.href);
+    url.searchParams.set('embed', '1');
+    url.hash = '/towers';
+    return url.href;
+  }
+  return `${config.rootURL}towers?embed`;
+})();
 /* one frame of the film, read back through the picture's own snapshot()
    — see scripts/film-poster.mjs. The type over it is HTML, not baked in. */
 const POSTER = `${config.rootURL}towers-poster.webp`;

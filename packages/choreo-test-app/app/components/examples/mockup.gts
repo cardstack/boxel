@@ -354,6 +354,9 @@ export class Mockup extends Component {
   private resetHost?: () => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
+  private inRoom = false;
+  private stageActive = false;
+  private holdRendering?: (held: boolean) => void;
   private tint?: (hex: number) => void;
 
   readonly apps = APPS;
@@ -465,6 +468,30 @@ export class Mockup extends Component {
    * like unasked, and that is the state it returns to.
    */
   offstage = (visible: boolean) => {
+    this.stageActive = visible;
+    if (this.inRoom) {
+      if (
+        document.querySelector('.wr-shell.has-guide, .wr-shell.is-quick-tour')
+      ) {
+        this.syncOn = false;
+        this.setMode('3d');
+      }
+      // Keep the 3D canvas and pose exactly where the camera left them.
+      this.holdRendering?.(!visible);
+      if (!visible) {
+        this.region?.run?.pause();
+      } else if (
+        this.mode === '3d' &&
+        !this.cameraOn &&
+        document.querySelector('.wr-shell.has-guide, .wr-shell.is-quick-tour')
+      ) {
+        this.cameraOn = true;
+        this.take += 1;
+      } else if (this.cameraOn) {
+        this.region?.run?.play();
+      }
+      return;
+    }
     if (visible) {
       return;
     }
@@ -498,19 +525,31 @@ export class Mockup extends Component {
     // up, the button says so, and the swap happens when the model has
     // landed and the first frame is mapped.
     this.arming = true;
-    void this.boot?.().then(() => {
-      this.arming = false;
-      this.mode = '3d';
-      // ENTERING 3D IS ASKING FOR THE FILM. Nobody presses 3D to look at
-      // a still phone, and asking them to press play afterwards is asking
-      // twice for one thing.
-      this.cameraOn = true;
-      this.syncOn = true;
-      this.ended = false;
-      requestAnimationFrame(() => {
-        this.take += 1;
+    void this.boot?.()
+      .then(() => {
+        this.arming = false;
+        this.mode = '3d';
+        // ENTERING 3D IS ASKING FOR THE FILM. Nobody presses 3D to look at
+        // a still phone, and asking them to press play afterwards is asking
+        // twice for one thing.
+        this.cameraOn = !this.inRoom || this.stageActive;
+        // The room's guide owns screen clicks; the device score owns its camera.
+        this.syncOn =
+          !this.inRoom ||
+          !document.querySelector(
+            '.wr-shell.has-guide, .wr-shell.is-quick-tour'
+          );
+        this.ended = false;
+        requestAnimationFrame(() => {
+          if (this.cameraOn) {
+            this.take += 1;
+          }
+        });
+      })
+      .catch(() => {
+        this.arming = false;
+        this.status = 'The 3D model could not load. Press 3D to retry.';
       });
-    });
   };
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
@@ -969,6 +1008,7 @@ export class Mockup extends Component {
   }
 
   stage = modifier((host: HTMLElement) => {
+    this.inRoom = !!host.closest('[data-widget-active]');
     const canvas = host.querySelector('canvas')!;
     const layer = host.querySelector<HTMLElement>('.mg-css')!;
     const cam = host.querySelector<HTMLElement>('.mg-cam')!;
@@ -1070,6 +1110,31 @@ export class Mockup extends Component {
           import('three/examples/jsm/loaders/DRACOLoader.js'),
           import('three/examples/jsm/loaders/GLTFLoader.js'),
         ]);
+
+      const draco = new DRACOLoader().setDecoderPath(DRACO);
+      const loader = new GLTFLoader().setDRACOLoader(draco);
+      let gltf: Awaited<ReturnType<typeof loader.loadAsync>> | undefined;
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const url = new URL(PHONE, document.baseURI);
+            if (attempt) {
+              url.searchParams.set('modelRetry', String(attempt));
+            }
+            gltf = await loader.loadAsync(url.href);
+            break;
+          } catch (error) {
+            if (attempt === 2) {
+              throw error;
+            }
+          }
+        }
+      } finally {
+        draco.dispose();
+      }
+      if (!gltf) {
+        throw new Error('The phone model did not load.');
+      }
 
       const renderer = new T.WebGLRenderer({
         alpha: true,
@@ -1380,198 +1445,190 @@ export class Mockup extends Component {
       const anchor = new T.Object3D();
       pivot.add(anchor);
 
-      const draco = new DRACOLoader().setDecoderPath(DRACO);
-      const loader = new GLTFLoader().setDRACOLoader(draco);
-      await new Promise<void>((resolve) => {
-        loader.load(PHONE, (gltf) => {
-          const model = gltf.scene;
-          model.updateMatrixWorld(true);
+      {
+        const model = gltf.scene;
+        model.updateMatrixWorld(true);
 
-          // THE SCREEN, found by geometry — this GLB's node names are
-          // obfuscated (`xXDHkMplTIDAXLN`), so mockup-studio's own name
-          // list never matches it either and it falls back to a heuristic
-          // too. The display is the flattest large panel whose aspect is
-          // a phone's: 2.510 / 1.162 = 2.161, against the iPhone 15 Pro's
-          // 2556/1179 = 2.168. The glass cover sits just in front of it
-          // and is a shade wider, which is what the ratio separates.
-          const PHONE_ASPECT = 2556 / 1179;
-          const whole = new T.Box3()
-            .setFromObject(model)
-            .getSize(new T.Vector3());
-          let best: { box: THREE.Box3; mesh: THREE.Mesh; miss: number } | null =
-            null;
-          model.traverse((child) => {
-            if (!(child as THREE.Mesh).isMesh) {
-              return;
-            }
-            const mesh = child as THREE.Mesh;
-            const box = new T.Box3().setFromObject(mesh);
-            const v = box.getSize(new T.Vector3());
-            if (v.z > whole.z * 0.08 || v.x < whole.x * 0.7) {
-              return;
-            }
-            const miss = Math.abs(v.y / v.x - PHONE_ASPECT);
-            if (!best || miss < best.miss) {
-              best = { box, mesh, miss };
-            }
-          });
-          if (!best) {
-            this.status = 'no screen mesh found';
-            resolve();
+        // THE SCREEN, found by geometry — this GLB's node names are
+        // obfuscated (`xXDHkMplTIDAXLN`), so mockup-studio's own name
+        // list never matches it either and it falls back to a heuristic
+        // too. The display is the flattest large panel whose aspect is
+        // a phone's: 2.510 / 1.162 = 2.161, against the iPhone 15 Pro's
+        // 2556/1179 = 2.168. The glass cover sits just in front of it
+        // and is a shade wider, which is what the ratio separates.
+        const PHONE_ASPECT = 2556 / 1179;
+        const whole = new T.Box3()
+          .setFromObject(model)
+          .getSize(new T.Vector3());
+        let best: { box: THREE.Box3; mesh: THREE.Mesh; miss: number } | null =
+          null;
+        model.traverse((child) => {
+          if (!(child as THREE.Mesh).isMesh) {
             return;
           }
-          const found = best as {
-            box: THREE.Box3;
-            mesh: THREE.Mesh;
-            miss: number;
-          };
-
-          // EVERY MEASUREMENT BELOW HAPPENS WITH THE ORBIT AT REST. A
-          // Box3 is world-space and axis-aligned, so measuring the
-          // display under a rotated pivot returns the bounding box of the
-          // ROTATED panel — centre and front face both wrong, and wrong
-          // by more the further the phone is turned.
-          pivot.rotation.set(0, 0, 0);
-          pivot.updateMatrixWorld(true);
-
-          // ONE WORLD UNIT IS ONE CSS PIXEL. `perspective` and the
-          // camera's translateZ are written in px, so a scene authored at
-          // "2.6 units for a whole phone" projects nothing like the WebGL
-          // one. It looks nearly right at small angles, which is the
-          // trap. Scale the model until the display is exactly as wide as
-          // the DOM screen and every matrix below is in pixels.
-          const raw = found.box.getSize(new T.Vector3());
-          model.scale.multiplyScalar(SCREEN.w / raw.x);
-          pivot.add(model);
-          pivot.updateMatrixWorld(true);
-          const bounds = new T.Box3().setFromObject(model);
-          model.position.sub(bounds.getCenter(new T.Vector3()));
-          pivot.updateMatrixWorld(true);
-          const whole2 = new T.Box3()
-            .setFromObject(model)
-            .getSize(new T.Vector3());
-          // the silhouette a turned phone sweeps, so a yaw does not push
-          // a corner out of frame
-          phone = { h: whole2.y, w: Math.hypot(whole2.x, whole2.z) };
-          frame2();
-
-          const box = new T.Box3().setFromObject(found.mesh);
-          const dims = box.getSize(new T.Vector3());
-          const centre = box.getCenter(new T.Vector3());
-          // FLUSH: exactly ON the display's front face (this model faces
-          // -Z). There is no z-fighting to avoid — the DOM is on the CSS
-          // layer and never enters the depth buffer — and any offset at
-          // all is parallax you see the moment the phone turns.
-          anchor.position.set(centre.x, centre.y, box.min.z);
-          anchor.rotation.y = Math.PI;
-          plane.style.width = `${SCREEN.w}px`;
-          plane.style.height = `${Math.round(dims.y)}px`;
-
-          // THE GLASS. Lume's `<lume-mixed-plane>` is a
-          // MeshPhysicalMaterial with `blending: NoBlending` — the whole
-          // trick, because NoBlending writes the material's RGB *and its
-          // alpha* straight into the framebuffer, replacing the opaque
-          // body fragments already drawn there. The canvas becomes a hole
-          // the shape of the display and the DOM beneath shows through.
-          // With NoBlending the alpha written IS this opacity, uniformly,
-          // so every point of tint is a point of haze over the UI: clear
-          // glass wants it near zero.
-          // GLOSSY. The face is smooth glass again — the fix for the
-          // white-out was never to sand it down, it was to keep the one
-          // eye-level source off it. Everything else in the rig is above,
-          // beside or behind, so what it reflects reads as a highlight.
-          // NOT alphaTest. It discards fragments below the threshold, and
-          // this material's whole point is a uniform 0.05 alpha — every
-          // fragment fails, the display mesh disappears, and you are left
-          // looking through the front of the phone at the inside of its
-          // own back shell. The seam is handled on the DOM side instead:
-          // see the scale passed to objectCss.
-          found.mesh.material = new T.MeshPhysicalMaterial({
-            blending: T.NoBlending,
-            clearcoat: 1,
-            clearcoatRoughness: 0.03,
-            color: 0x010206,
-            // The glass reflects the room, because that is what glass
-            // does — but the room is now a dark cyc with a flag where the
-            // lens is, so what comes back is the overhead strip and not a
-            // white sheet. Killing the reflection outright (intensity 0)
-            // reads like a screen in a void.
-            envMap: flagged,
-            envMapIntensity: 0.9,
-            metalness: 0,
-            // AN OLED EMITS; IT IS NOT LIT. Whatever this alpha is, that
-            // much of the DOM is replaced by shaded glass — so a tint
-            // heavy enough to look like a filter is also a screen with
-            // its brightness turned down. Five percent of near-black is
-            // depth without dimming.
-            opacity: 0.05,
-            roughness: 0.05,
-            transparent: true,
-          });
-
-          let biggest: { bulk: number; mesh: THREE.Mesh | null } = {
-            bulk: 0,
-            mesh: null,
-          };
-          model.traverse((child) => {
-            if (!(child as THREE.Mesh).isMesh) {
-              return;
-            }
-            const mesh = child as THREE.Mesh;
-            // every mesh joins the key light's layer EXCEPT the display
-            if (mesh !== found.mesh) {
-              mesh.layers.enable(EYE_LEVEL);
-            }
-            // THE LOGO IS COPLANAR WITH THE BACK SHELL, and two surfaces
-            // at the same depth is a coin toss per pixel per frame — the
-            // stripes tearing through the mark as the phone turns.
-            //
-            // A polygon offset breaks the tie by biasing one surface in
-            // DEPTH ONLY, and it has to be ONE: applying it to every
-            // material moves both by the same amount and changes nothing,
-            // which is what the first attempt did. Identifying the decal
-            // is fiddly — a logo may be flat or extruded, its own mesh or
-            // a submesh — but identifying the SHELL is trivial: it is the
-            // biggest thing in the model. So the shell is pushed back and
-            // everything sitting on it wins the tie by default.
-            const vol = new T.Box3()
-              .setFromObject(mesh)
-              .getSize(new T.Vector3());
-            const bulk = vol.x * vol.y * vol.z;
-            if (bulk > biggest.bulk) {
-              biggest = { bulk, mesh };
-            }
-          });
-
-          // ...applied after the walk, once the biggest is actually known
-          const shove = (m: THREE.Material) => {
-            const p = m as THREE.Material & {
-              polygonOffset?: boolean;
-              polygonOffsetFactor?: number;
-              polygonOffsetUnits?: number;
-            };
-            p.polygonOffset = true;
-            p.polygonOffsetFactor = 6;
-            p.polygonOffsetUnits = 6;
-          };
-          if (biggest.mesh) {
-            const mat = biggest.mesh.material;
-            if (Array.isArray(mat)) {
-              mat.forEach(shove);
-            } else {
-              shove(mat);
-            }
+          const mesh = child as THREE.Mesh;
+          const box = new T.Box3().setFromObject(mesh);
+          const v = box.getSize(new T.Vector3());
+          if (v.z > whole.z * 0.08 || v.x < whole.x * 0.7) {
+            return;
           }
-
-          ready = true;
-          mapped =
-            `iPhone 15 Pro GLB · screen "${found.mesh.name}" · ` +
-            `${SCREEN.w}×${Math.round(dims.y)} css px = ` +
-            `${dims.x.toFixed(1)}×${dims.y.toFixed(1)} world · 1:1`;
-          this.status = mapped;
-          resolve();
+          const miss = Math.abs(v.y / v.x - PHONE_ASPECT);
+          if (!best || miss < best.miss) {
+            best = { box, mesh, miss };
+          }
         });
-      });
+        if (!best) {
+          this.status = 'no screen mesh found';
+          throw new Error('The phone model has no screen mesh.');
+        }
+        const found = best as {
+          box: THREE.Box3;
+          mesh: THREE.Mesh;
+          miss: number;
+        };
+
+        // EVERY MEASUREMENT BELOW HAPPENS WITH THE ORBIT AT REST. A
+        // Box3 is world-space and axis-aligned, so measuring the
+        // display under a rotated pivot returns the bounding box of the
+        // ROTATED panel — centre and front face both wrong, and wrong
+        // by more the further the phone is turned.
+        pivot.rotation.set(0, 0, 0);
+        pivot.updateMatrixWorld(true);
+
+        // ONE WORLD UNIT IS ONE CSS PIXEL. `perspective` and the
+        // camera's translateZ are written in px, so a scene authored at
+        // "2.6 units for a whole phone" projects nothing like the WebGL
+        // one. It looks nearly right at small angles, which is the
+        // trap. Scale the model until the display is exactly as wide as
+        // the DOM screen and every matrix below is in pixels.
+        const raw = found.box.getSize(new T.Vector3());
+        model.scale.multiplyScalar(SCREEN.w / raw.x);
+        pivot.add(model);
+        pivot.updateMatrixWorld(true);
+        const bounds = new T.Box3().setFromObject(model);
+        model.position.sub(bounds.getCenter(new T.Vector3()));
+        pivot.updateMatrixWorld(true);
+        const whole2 = new T.Box3()
+          .setFromObject(model)
+          .getSize(new T.Vector3());
+        // the silhouette a turned phone sweeps, so a yaw does not push
+        // a corner out of frame
+        phone = { h: whole2.y, w: Math.hypot(whole2.x, whole2.z) };
+        frame2();
+
+        const box = new T.Box3().setFromObject(found.mesh);
+        const dims = box.getSize(new T.Vector3());
+        const centre = box.getCenter(new T.Vector3());
+        // FLUSH: exactly ON the display's front face (this model faces
+        // -Z). There is no z-fighting to avoid — the DOM is on the CSS
+        // layer and never enters the depth buffer — and any offset at
+        // all is parallax you see the moment the phone turns.
+        anchor.position.set(centre.x, centre.y, box.min.z);
+        anchor.rotation.y = Math.PI;
+        plane.style.width = `${SCREEN.w}px`;
+        plane.style.height = `${Math.round(dims.y)}px`;
+
+        // THE GLASS. Lume's `<lume-mixed-plane>` is a
+        // MeshPhysicalMaterial with `blending: NoBlending` — the whole
+        // trick, because NoBlending writes the material's RGB *and its
+        // alpha* straight into the framebuffer, replacing the opaque
+        // body fragments already drawn there. The canvas becomes a hole
+        // the shape of the display and the DOM beneath shows through.
+        // With NoBlending the alpha written IS this opacity, uniformly,
+        // so every point of tint is a point of haze over the UI: clear
+        // glass wants it near zero.
+        // GLOSSY. The face is smooth glass again — the fix for the
+        // white-out was never to sand it down, it was to keep the one
+        // eye-level source off it. Everything else in the rig is above,
+        // beside or behind, so what it reflects reads as a highlight.
+        // NOT alphaTest. It discards fragments below the threshold, and
+        // this material's whole point is a uniform 0.05 alpha — every
+        // fragment fails, the display mesh disappears, and you are left
+        // looking through the front of the phone at the inside of its
+        // own back shell. The seam is handled on the DOM side instead:
+        // see the scale passed to objectCss.
+        found.mesh.material = new T.MeshPhysicalMaterial({
+          blending: T.NoBlending,
+          clearcoat: 1,
+          clearcoatRoughness: 0.03,
+          color: 0x010206,
+          // The glass reflects the room, because that is what glass
+          // does — but the room is now a dark cyc with a flag where the
+          // lens is, so what comes back is the overhead strip and not a
+          // white sheet. Killing the reflection outright (intensity 0)
+          // reads like a screen in a void.
+          envMap: flagged,
+          envMapIntensity: 0.9,
+          metalness: 0,
+          // AN OLED EMITS; IT IS NOT LIT. Whatever this alpha is, that
+          // much of the DOM is replaced by shaded glass — so a tint
+          // heavy enough to look like a filter is also a screen with
+          // its brightness turned down. Five percent of near-black is
+          // depth without dimming.
+          opacity: 0.05,
+          roughness: 0.05,
+          transparent: true,
+        });
+
+        let biggest: { bulk: number; mesh: THREE.Mesh | null } = {
+          bulk: 0,
+          mesh: null,
+        };
+        model.traverse((child) => {
+          if (!(child as THREE.Mesh).isMesh) {
+            return;
+          }
+          const mesh = child as THREE.Mesh;
+          // every mesh joins the key light's layer EXCEPT the display
+          if (mesh !== found.mesh) {
+            mesh.layers.enable(EYE_LEVEL);
+          }
+          // THE LOGO IS COPLANAR WITH THE BACK SHELL, and two surfaces
+          // at the same depth is a coin toss per pixel per frame — the
+          // stripes tearing through the mark as the phone turns.
+          //
+          // A polygon offset breaks the tie by biasing one surface in
+          // DEPTH ONLY, and it has to be ONE: applying it to every
+          // material moves both by the same amount and changes nothing,
+          // which is what the first attempt did. Identifying the decal
+          // is fiddly — a logo may be flat or extruded, its own mesh or
+          // a submesh — but identifying the SHELL is trivial: it is the
+          // biggest thing in the model. So the shell is pushed back and
+          // everything sitting on it wins the tie by default.
+          const vol = new T.Box3().setFromObject(mesh).getSize(new T.Vector3());
+          const bulk = vol.x * vol.y * vol.z;
+          if (bulk > biggest.bulk) {
+            biggest = { bulk, mesh };
+          }
+        });
+
+        // ...applied after the walk, once the biggest is actually known
+        const shove = (m: THREE.Material) => {
+          const p = m as THREE.Material & {
+            polygonOffset?: boolean;
+            polygonOffsetFactor?: number;
+            polygonOffsetUnits?: number;
+          };
+          p.polygonOffset = true;
+          p.polygonOffsetFactor = 6;
+          p.polygonOffsetUnits = 6;
+        };
+        if (biggest.mesh) {
+          const mat = biggest.mesh.material;
+          if (Array.isArray(mat)) {
+            mat.forEach(shove);
+          } else {
+            shove(mat);
+          }
+        }
+
+        ready = true;
+        mapped =
+          `iPhone 15 Pro GLB · screen "${found.mesh.name}" · ` +
+          `${SCREEN.w}×${Math.round(dims.y)} css px = ` +
+          `${dims.x.toFixed(1)}×${dims.y.toFixed(1)} world · 1:1`;
+        this.status = mapped;
+      }
 
       tick = () => {
         raf = requestAnimationFrame(tick!);
@@ -1642,7 +1699,18 @@ export class Mockup extends Component {
     /** idempotent: safe on every entry into 3D, built or not */
     const run3d = async () => {
       running = true;
-      await build();
+      try {
+        await build();
+      } catch (error) {
+        building = false;
+        running = false;
+        throw error;
+      }
+      // Focus can change while the model request is in flight. Use the
+      // current room state when boot settles, not its earlier paused state.
+      if (this.inRoom) {
+        running = this.stageActive;
+      }
       if (!running || raf || !tick) {
         return;
       }
@@ -1866,6 +1934,15 @@ export class Mockup extends Component {
     };
     apply();
     this.boot = run3d;
+    this.holdRendering = (held) => {
+      if (held) {
+        running = false;
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (this.mode === '3d') {
+        void run3d();
+      }
+    };
     this.halt = () => {
       running = false;
       if (raf) {
@@ -1882,6 +1959,7 @@ export class Mockup extends Component {
 
     return () => {
       this.halt?.();
+      this.holdRendering = undefined;
       dispose?.();
       release();
       stopTheme?.();
