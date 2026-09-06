@@ -2,6 +2,7 @@ import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import { FileDef, contains, field } from './card-api';
 import { Model3dMetadataField } from './file-formats/metadata-fields';
 import { Model3DPreview } from './file-formats/model3d-preview';
+import { MODEL3D_FAMILY_SCREENSHOTS } from './file-formats/model3d-captures';
 
 // Extracted to a module const: a regex literal inline in a `.gts` (with `/`
 // inside a character class) can confuse the content-tag template lexer.
@@ -84,6 +85,12 @@ export class ThreeDModelDef extends FileDef {
   static icon = File3dIcon;
 
   static previewComponent = Model3DPreview;
+
+  // The fitted rendered still: a capture-only WebGL render with a stable
+  // default camera, keyed on the file's bytes and flagged useAsThumbnail, so
+  // the fitted cell shows the model through the view model's thumbnail seam
+  // with the cube glyph as the fallback.
+  static screenshots = MODEL3D_FAMILY_SCREENSHOTS;
 
   @field model3d = contains(Model3dMetadataField);
 }
