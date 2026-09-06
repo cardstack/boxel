@@ -176,6 +176,7 @@ import {
   captureSpecOverrides,
   isValidScreenshotName,
   parseCaptureSpecParams,
+  screenshotLedgerSourceURL,
   screenshotsMetaFromManifest,
   type CaptureSpec,
   type ScreenshotManifest,
@@ -4206,36 +4207,39 @@ export class Realm {
       // resolves.
       let rawFileURL = this.paths.fileURL(instanceLocalPath);
       let manifestLookupStart = Date.now();
-      let readInstance = async () => ({
-        manifest:
+      let readInstance = async () => {
+        let row =
           await this.#realmIndexQueryEngine.liveInstanceScreenshots(
             instanceURL,
-          ),
-        sourceURL: instanceURL,
-      });
-      let readFileRow = async () => ({
-        manifest:
-          await this.#realmIndexQueryEngine.liveFileScreenshots(rawFileURL),
-        sourceURL: rawFileURL,
-      });
+          );
+        return row && ({ kind: 'instance', ...row } as const);
+      };
+      let readFileRow = async () => {
+        let row =
+          await this.#realmIndexQueryEngine.liveFileScreenshots(rawFileURL);
+        return row && ({ kind: 'file', ...row } as const);
+      };
       let reads = urlNamesFile(rawFileURL)
         ? [readFileRow, readInstance]
         : [readInstance, readFileRow];
       // The first live row whose manifest holds the name wins — a URL both
       // rows answer to (a `.json` file that is also a card) must resolve to
       // the row that actually captured this slot, not 404 against the other
-      // row's empty manifest.
+      // row's empty manifest. The ledger key comes from the matched row's
+      // own canonical url, never the request's spelling: the lookups also
+      // match `file_alias`, and an alias-addressed hit would otherwise look
+      // up a source URL the ledger never held.
       let manifestEntry: ScreenshotManifestEntry | undefined;
-      let manifestSourceURL = instanceURL;
+      let manifestSourceURL = instanceURL.href;
       for (let read of reads) {
-        let outcome = await read();
-        if (outcome.manifest === undefined) {
+        let row = await read();
+        if (!row) {
           continue;
         }
-        let entry = outcome.manifest?.[name];
+        let entry = row.manifest?.[name];
         if (entry) {
           manifestEntry = entry;
-          manifestSourceURL = outcome.sourceURL;
+          manifestSourceURL = screenshotLedgerSourceURL(row.url, row.kind);
           break;
         }
       }
@@ -4255,7 +4259,7 @@ export class Realm {
       let ledgerLookupStart = Date.now();
       let entry = await findMediaCacheEntry(this.#dbAdapter, {
         realmURL: this.url,
-        sourceURL: manifestSourceURL.href,
+        sourceURL: manifestSourceURL,
         captureSpecHash: manifestEntry.specHash,
         objectKey: manifestEntry.objectKey,
       });
@@ -4281,7 +4285,7 @@ export class Realm {
       this.emitScreenshotServePerf(
         {
           realmURL: this.url,
-          sourceURL: manifestSourceURL.href,
+          sourceURL: manifestSourceURL,
           captureSpecHash: manifestEntry.specHash,
           sourceGeneration: entry.sourceGeneration,
         },

@@ -1092,6 +1092,18 @@ export function screenshotURLFor({
   return `${realmURL}_screenshot/${instanceLocalPath}${canonicalCaptureSpecQuery(spec)}`;
 }
 
+// The MediaCache ledger's source-URL spelling for one prerendered row's
+// declared captures: an instance's captures key on its extensionless card
+// id (matching `boxel_index.file_alias`), a file's on the file's own URL,
+// extension intact. The one home for the rule — the persist, realm-copy,
+// and serving paths all key through it.
+export function screenshotLedgerSourceURL(
+  url: string,
+  kind: 'instance' | 'file',
+): string {
+  return kind === 'instance' ? url.replace(/\.json$/, '') : url;
+}
+
 // The durable served URL for one *declared* screenshot of one instance —
 // the name-addressed twin of `screenshotURLFor`. Names are pre-validated by
 // `SCREENSHOT_NAME_PATTERN` (URL-safe characters only), so no encoding is

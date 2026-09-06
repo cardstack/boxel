@@ -41,7 +41,10 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
-import type { ScreenshotManifest } from './capture-spec.ts';
+import {
+  screenshotLedgerSourceURL,
+  type ScreenshotManifest,
+} from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
@@ -818,15 +821,11 @@ export class Batch {
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
       if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
-        // The ledger key the prerender-html visit persisted under: instance
-        // rows use the extensionless card-id form, file rows the file's own
-        // URL (a `.json` suffix is an instance-id spelling, so only the
-        // instance half strips it).
-        let ledgerKey = (value: string) =>
-          entry.type === 'instance' ? value.replace(/\.json$/, '') : value;
+        let kind: 'instance' | 'file' =
+          entry.type === 'instance' ? 'instance' : 'file';
         manifestCopies.push({
-          sourceLedgerURL: ledgerKey(entry.url),
-          destLedgerURL: ledgerKey(destURL),
+          sourceLedgerURL: screenshotLedgerSourceURL(entry.url, kind),
+          destLedgerURL: screenshotLedgerSourceURL(destURL, kind),
           manifest: entry.screenshots as ScreenshotManifest,
         });
       }

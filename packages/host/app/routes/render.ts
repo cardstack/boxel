@@ -713,6 +713,11 @@ export default class RenderRoute extends Route<Model> {
   // roster comes from the file's FileDef family class (resolved by
   // extension), and the addressed path keeps its extension — a file row's
   // captures are keyed by the file's own URL, only instance ids shed `.json`.
+  //
+  // Absent `realmURL` is a deliberate no-op, not a defensive default: the
+  // in-browser prerender twin stashes no realm on purpose — it never
+  // captures, so injection must stay off there, or the baked durable URLs
+  // would 404 with no capture ever landing to self-heal them.
   private async fileDeclarationScreenshotsMeta(
     fileDefCodeRef: { module: string; name: string },
     resource: {
