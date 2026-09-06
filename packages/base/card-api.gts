@@ -3703,8 +3703,9 @@ export class FileDef extends BaseDef {
   }
 
   // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
-  // file-backed defs. The prerender pass captures only instance rows, so a
-  // file's declared names read `undefined` until file rows capture too.
+  // file-backed defs. The prerender pass captures a URL's file rendering
+  // alongside its instance rendering, so a file family's declared names
+  // resolve here just as a card's do.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
   }

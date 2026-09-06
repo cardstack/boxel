@@ -138,10 +138,10 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. The prerender pass captures only
-  // instance rows, so nothing stamps this on file-meta responses — the key
-  // exists so FileDef's `screenshotURLs` getter reads both kinds uniformly
-  // when file rows capture too.
+  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // row's prerendered manifest — the file-meta GET and linked-file resources
+  // join it exactly as a card+json GET joins an instance row's, so FileDef's
+  // `screenshotURLs` getter reads both kinds uniformly.
   screenshots?: ScreenshotsMeta;
 };
 
