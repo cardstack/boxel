@@ -5,6 +5,7 @@ import {
   CachingDefinitionLookup,
   internalKeyFor,
   logger,
+  mintRealmLoaderEpoch,
   trimExecutableExtension,
   type ErrorEntry,
   type JobInfo,
@@ -109,12 +110,14 @@ module(basename(import.meta.filename), function () {
     let dbAdapter: PgAdapter;
     let prerenderModuleCalls: number = 0;
     let prerenderModulePriorities: (number | undefined)[] = [];
+    let prerenderModuleLoaderEpochs: (string | undefined)[] = [];
     let forceEmptyDefinitions: boolean = false;
     let virtualNetwork: VirtualNetwork;
 
     hooks.beforeEach(async () => {
       prerenderModuleCalls = 0;
       prerenderModulePriorities = [];
+      prerenderModuleLoaderEpochs = [];
       forceEmptyDefinitions = false;
     });
     hooks.before(async () => {
@@ -123,6 +126,7 @@ module(basename(import.meta.filename), function () {
         async prerenderModule(args: ModulePrerenderArgs) {
           prerenderModuleCalls++;
           prerenderModulePriorities.push(args.priority);
+          prerenderModuleLoaderEpochs.push(args.renderOptions?.loaderEpoch);
           if (forceEmptyDefinitions) {
             return Promise.resolve({
               id: 'example-id',
@@ -281,6 +285,51 @@ module(basename(import.meta.filename), function () {
         prerenderModuleCalls,
         1,
         'prerenderModule was called once',
+      );
+    });
+
+    // A populate is the one moment a definition is derived from a running
+    // module rather than read back from a row, so it is the one moment the
+    // tab it runs in has to be holding the current bytes. Threading the
+    // realm's epoch is what lets the module route decide that; a populate
+    // that threads nothing renders against whatever the tab already
+    // evaluated, and the definition it caches describes those bytes rather
+    // than the ones on disk.
+    test('a populate threads the realm loader epoch the write path minted', async function (assert) {
+      // Start from a cold modules cache; see lookupDefinition above.
+      await dbAdapter.execute('DELETE FROM modules');
+      let epoch = await mintRealmLoaderEpoch(dbAdapter, realmURL);
+
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      // De-duplicated rather than indexed: a lookup can prerender more than
+      // one candidate URL for the same module, and the epoch is per realm,
+      // so what matters is that no candidate went out under a stale one.
+      assert.deepEqual(
+        [...new Set(prerenderModuleLoaderEpochs)],
+        [epoch],
+        'the populate rendered under the epoch the realm currently holds',
+      );
+
+      await dbAdapter.execute('DELETE FROM modules');
+      let rewriteEpoch = await mintRealmLoaderEpoch(dbAdapter, realmURL);
+      prerenderModuleLoaderEpochs = [];
+
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      // Read per populate, not captured once: a lookup that kept threading
+      // the epoch it first saw would stop clearing tabs after the first
+      // module write of a process's life.
+      assert.deepEqual(
+        [...new Set(prerenderModuleLoaderEpochs)],
+        [rewriteEpoch],
+        'the next populate picked up the epoch minted after it',
       );
     });
 

@@ -11,6 +11,7 @@ import {
   type Querier,
 } from './expression.ts';
 import { clampSerializedError, type SerializedError } from './error.ts';
+import { readRealmLoaderEpoch } from './loader-epoch.ts';
 import { logger } from './log.ts';
 
 // Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
@@ -1369,6 +1370,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
+    // A populate exists because no usable row was found, which on the write
+    // path is precisely because the module's bytes just changed — so the tab
+    // this render lands on is the one most likely to be holding the module it
+    // superseded. Threading the realm's loader epoch lets the module route
+    // decide: it resets the tab's loader when the epoch differs from the one
+    // that tab last cleared for, so a rewritten module costs one reset per
+    // tab and a realm whose modules have not changed costs none. Without it
+    // the render imports out of whatever the tab already evaluated and the
+    // definition we cache under the new bytes' URL describes the old ones.
+    //
+    // A read per populate, not per lookup: cache hits never reach here.
+    let loaderEpoch = await readRealmLoaderEpoch(this.#dbAdapter, realmURL);
     return await this.#prerenderer.prerenderModule({
       affinityType: 'realm',
       affinityValue: realmURL,
@@ -1376,6 +1389,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       url: moduleUrl,
       auth,
       priority,
+      renderOptions: { loaderEpoch },
     });
   }
 

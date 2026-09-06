@@ -112,6 +112,7 @@ import {
   param,
   dbExpression,
   dbAdapterQuerier,
+  mintRealmLoaderEpoch,
   type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -2320,6 +2321,11 @@ export class Realm {
       contentSize?: number;
     }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
+    // Whether this batch has already minted a loader epoch. The token only
+    // has to differ from whatever a prerender tab is holding, so one per
+    // batch covers every module in it; minting per file would cost each warm
+    // tab a loader reset per file for no extra freshness.
+    let mintedLoaderEpoch = false;
     let addedFiles: LocalPath[] = [];
     let updatedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
@@ -2457,14 +2463,52 @@ export class Realm {
         //
         // Best-effort, like `#notifyFileChange` above. The bytes are already
         // durable at this point but `urls` has not been appended to yet, so
-        // letting this throw would abandon the batch before ANY index job is
-        // enqueued — for this file and for every file written ahead of it —
-        // and the caller's natural remedy makes it worse: a retry with the
-        // same bytes takes the unchanged-content short-circuit above, so it
-        // enqueues nothing either and the file stays on disk and out of the
-        // index until an unrelated edit or a full reindex. Swallowing leaves
-        // only the staleness this call exists to remove, which the index
-        // job's own invalidation still clears.
+        // letting either step throw would abandon the batch before ANY index
+        // job is enqueued — for this file and for every file written ahead of
+        // it — and the caller's natural remedy makes it worse: a retry with
+        // the same bytes takes the unchanged-content short-circuit above, so
+        // it enqueues nothing either and the file stays on disk and out of
+        // the index until an unrelated edit or a full reindex. Swallowing
+        // leaves only the staleness these steps exist to remove, which the
+        // index job's own invalidation still clears. They are caught
+        // separately so a failure in one still leaves the other's benefit:
+        // the delete without the epoch is what this write path did before
+        // the epoch existed, and the epoch without the delete still stops a
+        // later invalidation from re-deriving the definition off a warm tab.
+        //
+        // Deleting the cached definition only guarantees the next lookup
+        // re-derives one; it says nothing about what that lookup derives it
+        // FROM. `lookupDefinition` repopulates by prerendering the module,
+        // and a prerender tab that already evaluated this module keeps
+        // serving the evaluated copy — the route re-reads the file's metadata
+        // (so the response even carries the post-write mtime) but imports out
+        // of the loader it is holding. The result is the pre-write schema,
+        // cached under the post-write module's URL and durable until
+        // something else invalidates it: the staleness the delete removes,
+        // reinstated one layer down.
+        //
+        // Minting a loader epoch is how this codebase already says "warm tabs
+        // are stale for this realm" — an index pass whose invalidation set
+        // contains an executable mints one, and the render routes reset a
+        // tab's loader once per epoch it has not cleared for. The write path
+        // has to mint too, because every definition resolved between the
+        // write and that index pass — the whole of the window on the
+        // deferred-indexing paths — is resolved before the pass's epoch
+        // exists. Ordered before the delete so the epoch is already current
+        // for any lookup that observes the missing row.
+        if (!mintedLoaderEpoch) {
+          try {
+            await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+            // Only on success: a transient failure here gets another attempt
+            // from the next module in the batch rather than leaving every
+            // module in it renderable off a warm tab.
+            mintedLoaderEpoch = true;
+          } catch (err: unknown) {
+            this.#log.error(
+              `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+            );
+          }
+        }
         try {
           await this.#definitionLookup.invalidate(url.href);
         } catch (err: unknown) {
