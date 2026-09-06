@@ -805,13 +805,14 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
   }
 
-  // The live instance's declared-screenshot manifest (undefined when not
-  // live, null when live but uncaptured) — the `?name=` serving route's
-  // addressing read; liveness gate and manifest in one narrow read.
+  // The live instance's declared-screenshot manifest with the row's
+  // canonical url (undefined when not live, manifest null when live but
+  // uncaptured) — the `?name=` serving route's addressing read; liveness
+  // gate, ledger spelling, and manifest in one narrow read.
   async liveInstanceScreenshots(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
   }
 
@@ -820,7 +821,7 @@ export class RealmIndexQueryEngine {
   async liveFileScreenshots(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     return await this.#indexQueryEngine.liveFileScreenshots(url, opts);
   }
 

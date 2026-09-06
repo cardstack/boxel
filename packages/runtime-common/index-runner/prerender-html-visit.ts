@@ -33,9 +33,10 @@ import {
   type Stats,
 } from '../index.ts';
 import { putMedia, type MediaCacheAdapter } from '../media-cache.ts';
-import type {
-  ScreenshotManifest,
-  ScreenshotManifestEntry,
+import {
+  screenshotLedgerSourceURL,
+  type ScreenshotManifest,
+  type ScreenshotManifestEntry,
 } from '../capture-spec.ts';
 import type { DBAdapter } from '../db.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
@@ -872,9 +873,7 @@ async function visitForPrerenderedHtml({
               dbAdapter,
               mediaCacheAdapter,
               realmURL,
-              // The extensionless card-id form the ledger keys on (matches
-              // boxel_index.file_alias).
-              sourceURL: fileURL.replace(/\.json$/, ''),
+              sourceURL: screenshotLedgerSourceURL(fileURL, 'instance'),
               sourceGeneration: batch.currentGeneration,
               contentHash,
               jobInfo,
@@ -946,10 +945,7 @@ async function visitForPrerenderedHtml({
             dbAdapter,
             mediaCacheAdapter,
             realmURL,
-            // File rows key the ledger on the file's own URL, extension and
-            // all — a `.json` suffix is an instance-id spelling, and only
-            // the instance half strips it.
-            sourceURL: fileURL,
+            sourceURL: screenshotLedgerSourceURL(fileURL, 'file'),
             sourceGeneration: batch.currentGeneration,
             contentHash,
             jobInfo,
