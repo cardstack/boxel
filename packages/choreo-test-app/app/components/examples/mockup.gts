@@ -354,6 +354,8 @@ export class Mockup extends Component {
   private resetHost?: () => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
+  private inRoom = false;
+  private holdRendering?: (held: boolean) => void;
   private tint?: (hex: number) => void;
 
   readonly apps = APPS;
@@ -465,6 +467,22 @@ export class Mockup extends Component {
    * like unasked, and that is the state it returns to.
    */
   offstage = (visible: boolean) => {
+    if (this.inRoom) {
+      if (
+        visible &&
+        document.querySelector('.wr-shell.has-guide, .wr-shell.is-quick-tour')
+      ) {
+        this.setMode('3d');
+      }
+      // Keep the 3D canvas and pose exactly where the camera left them.
+      this.holdRendering?.(!visible);
+      if (!visible) {
+        this.region?.run?.pause();
+      } else if (this.cameraOn) {
+        this.region?.run?.play();
+      }
+      return;
+    }
     if (visible) {
       return;
     }
@@ -969,6 +987,7 @@ export class Mockup extends Component {
   }
 
   stage = modifier((host: HTMLElement) => {
+    this.inRoom = !!host.closest('[data-widget-active]');
     const canvas = host.querySelector('canvas')!;
     const layer = host.querySelector<HTMLElement>('.mg-css')!;
     const cam = host.querySelector<HTMLElement>('.mg-cam')!;
@@ -1866,6 +1885,15 @@ export class Mockup extends Component {
     };
     apply();
     this.boot = run3d;
+    this.holdRendering = (held) => {
+      if (held) {
+        running = false;
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (this.mode === '3d') {
+        void run3d();
+      }
+    };
     this.halt = () => {
       running = false;
       if (raf) {
@@ -1882,6 +1910,7 @@ export class Mockup extends Component {
 
     return () => {
       this.halt?.();
+      this.holdRendering = undefined;
       dispose?.();
       release();
       stopTheme?.();

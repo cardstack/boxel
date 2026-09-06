@@ -544,17 +544,7 @@ export const BEATS: Beat[] = [
       'One cornerstone',
       'A plan nobody alive would finish',
     ],
-    sky: {
-      az: 0,
-      dist: 26,
-      lines: ['1882'],
-      opacity: 0.4,
-      size: 4.2,
-      track: 0.12,
-      y: 7.5,
-    },
     theme: 0,
-    stamp: { at: 0.04, y: 1882 },
     ticks: 5,
     toCam: {
       dolly: 0.74,
@@ -750,7 +740,6 @@ export const BEATS: Beat[] = [
     mode: 'point',
     romaji: 'BARNABAS',
     says: ['One tower finished', 'Ninety-eight metres', 'November 1925'],
-    stamp: { at: 0.44, y: 1925 },
     ticks: 6,
     to: [NAT_X, 7.9, CRZ - 1.05],
     trace: [{ pts: NAT_TOWERS }],
@@ -830,7 +819,6 @@ export const BEATS: Beat[] = [
     ],
     sun: { az: -100, el: 14 },
     theme: 2,
-    stamp: { at: 0.03, y: 1926 },
     ticks: 6,
     toCam: {
       dolly: 0.86,
@@ -881,7 +869,6 @@ export const BEATS: Beat[] = [
        is an orange smudge on a lit building; the same fire against a
        night sky is the only light in the frame, which is what it was. */
     theme: 3,
-    stamp: { at: 0.03, y: 1936 },
     ticks: 6,
     toCam: {
       dolly: 1.0,
@@ -1085,7 +1072,6 @@ export const BEATS: Beat[] = [
       'Consecrated, November 2010',
     ],
     theme: 0,
-    stamp: { at: 0.82, y: 2010 },
     ticks: 6,
     toCam: {
       dolly: 0.8,
@@ -1199,7 +1185,6 @@ export const BEATS: Beat[] = [
     romaji: 'THE VIRGIN MARY',
     says: ['138 metres', 'A twelve-pointed star', 'Lit on 8 December 2021'],
     theme: 1,
-    stamp: { at: 0.8, y: 2021 },
     ticks: 8,
     to: [0, 10.9, APSE_Z],
     trace: [{ pts: MARY_STAR }],
@@ -1275,7 +1260,6 @@ export const BEATS: Beat[] = [
       'Each crowned with its figure',
     ],
     theme: 0,
-    stamp: { at: 0.34, y: 2022 },
     ticks: 6,
     toCam: {
       dolly: 1.3,
@@ -1519,7 +1503,6 @@ export const BEATS: Beat[] = [
       'Gaudí, a hundred years dead',
     ],
     theme: 3,
-    stamp: { at: 0.22, y: 2026 },
     ticks: 6,
     toCam: {
       dolly: 0.74,
@@ -1654,15 +1637,6 @@ export const BEATS: Beat[] = [
     rim: 1.1,
     romaji: 'THE WORKS',
     says: ['“My client is not in a hurry.”'],
-    sky: {
-      az: 0,
-      dist: 26,
-      lines: ['1882 —'],
-      opacity: 0.36,
-      size: 3.6,
-      track: 0.12,
-      y: 7.5,
-    },
     sun: { az: -100, el: 12 },
     theme: 3,
     ticks: 6,

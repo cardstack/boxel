@@ -93,6 +93,7 @@ declare module 'three' {
     constructor(x?: number, y?: number, z?: number);
     addScaledVector(v: Vector3, s: number): this;
     applyQuaternion(q: Quaternion): this;
+    project(camera: PerspectiveCamera): this;
     clone(): Vector3;
     copy(v: Vector3): this;
     multiplyScalar(s: number): this;
@@ -123,6 +124,10 @@ declare module 'three' {
 
   export class Matrix4 {
     elements: number[];
+    set(...elements: number[]): this;
+    multiply(matrix: Matrix4): this;
+    makeScale(x: number, y: number, z: number): this;
+    makeTranslation(x: number, y: number, z: number): this;
   }
 
   export class Layers {

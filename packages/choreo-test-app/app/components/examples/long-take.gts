@@ -14,7 +14,7 @@ import { Board } from 'test-app/components/long-take/board';
 import { BOARD, GLIDE, SHOTS } from 'test-app/components/long-take/shots';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
-import { onStage } from 'test-app/lib/onstage';
+import { observeStage, onStage } from 'test-app/lib/onstage';
 import type * as THREE from 'three';
 
 /**
@@ -168,6 +168,8 @@ export class LongTake extends Component {
   private resetHost?: () => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
+  private inRoom = false;
+  private holdRendering?: (held: boolean) => void;
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
 
@@ -186,6 +188,16 @@ export class LongTake extends Component {
    * like unasked, and that is the state it returns to.
    */
   offstage = (visible: boolean) => {
+    if (this.inRoom) {
+      // Keep the 3D canvas and pose exactly where the camera left them.
+      this.holdRendering?.(!visible);
+      if (!visible) {
+        this.region?.run?.pause();
+      } else if (this.cameraOn) {
+        this.region?.run?.play();
+      }
+      return;
+    }
     if (visible) {
       return;
     }
@@ -387,7 +399,7 @@ export class LongTake extends Component {
    * reconstructed against the pose in force. A score with a changeset in it
    * could not be driven this way, and this one deliberately has none.
    */
-  sync = modifier(() => {
+  sync = modifier((el: HTMLElement) => {
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -400,8 +412,14 @@ export class LongTake extends Component {
         board.time = outer.time;
       }
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const observer = observeStage(el, (visible) => {
+      cancelAnimationFrame(raf);
+      raf = visible ? requestAnimationFrame(tick) : 0;
+    });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(raf);
+    };
   });
 
   /** hold the region so the film can loop when its score finishes */
@@ -525,6 +543,7 @@ export class LongTake extends Component {
   });
 
   stage = modifier((host: HTMLElement) => {
+    this.inRoom = !!host.closest('[data-widget-active]');
     const canvas = host.querySelector('canvas')!;
     const layer = host.querySelector<HTMLElement>('.lt-css')!;
     const cam = host.querySelector<HTMLElement>('.lt-cam')!;
@@ -1363,6 +1382,15 @@ export class LongTake extends Component {
     apply();
 
     this.boot = run3d;
+    this.holdRendering = (held) => {
+      if (held) {
+        running = false;
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (this.mode === '3d') {
+        void run3d();
+      }
+    };
     this.halt = () => {
       running = false;
       if (raf) {
@@ -1378,6 +1406,7 @@ export class LongTake extends Component {
 
     return () => {
       this.halt?.();
+      this.holdRendering = undefined;
       dispose?.();
       release();
       stopTheme?.();

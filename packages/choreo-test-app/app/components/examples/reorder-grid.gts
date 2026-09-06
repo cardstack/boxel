@@ -63,8 +63,18 @@ export class ReorderGrid extends Component {
     this.items = items;
   };
 
+  cycle = () => {
+    this.setItems([...this.items.slice(1), this.items[0]!]);
+  };
+
   <template>
     <div class="ex no-select" {{on "selectstart" preventSelect}}>
+      <button
+        type="button"
+        class="replay"
+        data-tour-reorder
+        {{on "click" this.cycle}}
+      >Move first to last</button>
       <ReorderGroup
         class="covers"
         @values={{this.items}}

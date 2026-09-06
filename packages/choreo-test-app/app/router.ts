@@ -7,6 +7,8 @@ export default class Router extends EmberRouter {
 }
 
 Router.map(function () {
+  this.route('widget-room', { path: '/_widgets' });
+  this.route('widget-embed', { path: '/_widget/:demo_id' });
   this.route('feature-reel', { path: '/_feature-reel' });
   this.route('mockup-glb', { path: '/_mockup-glb' });
   // Own URLs, declared before /:demo_id so Ember does not eat them as ids.

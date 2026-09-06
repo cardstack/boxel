@@ -8,6 +8,7 @@ import { modifier } from 'ember-modifier';
 import type { ChoreoRun, Query, SpringSpec } from 'glimmer-motion';
 import { at, Choreo, motion } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
+import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /* ── the app being driven ────────────────────────────────────────────────── */
@@ -179,7 +180,7 @@ export class Playhead extends Component {
   private rest: { x: number; y: number } | null = null;
   private railW = 0;
   private watcher?: ResizeObserver;
-  private viewport?: IntersectionObserver;
+  private viewport?: ReturnType<typeof observeStage>;
   private raf = 0;
   private clockEl?: HTMLElement | null;
   private rangeEl?: HTMLInputElement | null;
@@ -259,10 +260,14 @@ export class Playhead extends Component {
     // the score plays on demand, but only while it is being looked at —
     // off screen the run pauses where it was; back on, a press of Play
     // carries on from there
-    this.viewport = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+    this.viewport = observeStage(
+      el,
+      (visible) => {
+        if (visible) {
           this.raf ||= requestAnimationFrame(this.tick);
+          if (this.mode === 'playing') {
+            this.c?.run?.play();
+          }
           if (this.seen === null && this.take === 0) {
             // the parked opening: the first pass compiles the score so the
             // transport has a run to hold — paused at 0, waiting for Play
@@ -272,14 +277,12 @@ export class Playhead extends Component {
           cancelAnimationFrame(this.raf);
           this.raf = 0;
           if (this.mode === 'playing') {
-            this.mode = 'scored';
             this.c?.run?.pause();
           }
         }
       },
       { threshold: 0.35 }
     );
-    this.viewport.observe(el);
     this.measureRail();
     // the hand waits at home from the very first paint — the score's pin
     // takes over the moment the first run exists

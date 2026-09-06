@@ -21,22 +21,70 @@ import { modifier } from 'ember-modifier';
  * boundary arrives frozen and then jerks into life a frame later, which reads
  * as a bug rather than as an optimisation.
  */
+function roomOwner(el: Element): HTMLElement | null {
+  const local = el.closest<HTMLElement>('[data-widget-active]');
+  if (local) {
+    return local;
+  }
+  try {
+    const frame = el.ownerDocument.defaultView?.frameElement;
+    return frame ? roomOwner(frame) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Room focus overrides viewport visibility; the ordinary 2D gallery is unchanged. */
+export function observeStage(
+  el: Element,
+  tell: (visible: boolean) => void,
+  options: IntersectionObserverInit = { rootMargin: '200px' }
+) {
+  const owner = roomOwner(el);
+  let intersecting = false;
+  let previous: boolean | undefined;
+  const update = () => {
+    const visible = owner
+      ? owner.dataset.widgetActive === 'true'
+      : intersecting;
+    if (visible !== previous) {
+      previous = visible;
+      tell(visible);
+    }
+  };
+  const io = new IntersectionObserver((entries) => {
+    intersecting = entries.some((entry) => entry.isIntersecting);
+    update();
+  }, options);
+  const changes = new MutationObserver(update);
+  if (owner) {
+    changes.observe(owner, {
+      attributes: true,
+      attributeFilter: ['data-widget-active'],
+    });
+  }
+  let connected = true;
+  io.observe(el);
+  // Visibility may update tracked demo state; run after Glimmer's render pass.
+  queueMicrotask(() => {
+    if (connected) {
+      update();
+    }
+  });
+  return {
+    disconnect() {
+      connected = false;
+      io.disconnect();
+      changes.disconnect();
+    },
+  };
+}
+
 export const onStage = modifier(
   (el: HTMLElement, [tell]: [(visible: boolean) => void]) => {
-    const io = new IntersectionObserver(
-      (entries) => {
-        const last = entries[entries.length - 1];
-        if (last) {
-          tell(last.isIntersecting);
-        }
-      },
-      { rootMargin: '200px' }
-    );
-    io.observe(el);
+    const observer = observeStage(el, tell);
     return () => {
-      io.disconnect();
-      // torn down means gone, which for every caller is the same as offscreen —
-      // and saying so here means no caller needs its own destructor for it
+      observer.disconnect();
       tell(false);
     };
   }
@@ -63,12 +111,9 @@ export const onStage = modifier(
  *
  * Web Animations — Motion's own — need the second half, because
  * `animation-play-state` cannot reach them: they are script-driven and have no
- * CSS animation to pause. Only the ENDLESS ones are touched. A finite animation
- * left alone finishes when it was always going to finish, which is the whole
- * reason not to pause everything: a Choreo run stopped behind the fold is a run
- * that lands at the wrong time, and a card scrolled past mid-transition should
- * come back settled rather than half way through a move it started a minute
- * ago.
+ * CSS animation to pause. The ordinary gallery pauses only endless effects,
+ * allowing finite transitions to settle offscreen. The 3D room instead holds
+ * every effect at its current frame until that one tile receives camera focus.
  *
  * `iterations` reads as `Infinity` or, for some engines, `null` — both mean the
  * same thing here and both are checked.
@@ -78,35 +123,85 @@ const endless = (a: Animation) => {
   return n === Infinity || n === null;
 };
 
+// Batch geometry/style reads for every affected tile before changing any of
+// their animation states. One subtree scan per frame, never one per style write.
+const pendingRest = new Map<HTMLElement, (animations: Animation[]) => void>();
+let restFrame = 0;
+function scheduleRest(
+  el: HTMLElement,
+  apply: (animations: Animation[]) => void
+) {
+  pendingRest.set(el, apply);
+  if (restFrame) {
+    return;
+  }
+  restFrame = requestAnimationFrame(() => {
+    restFrame = 0;
+    const reads = [...pendingRest].map(([element, fn]) => ({
+      fn,
+      animations: element.getAnimations({ subtree: true }),
+    }));
+    pendingRest.clear();
+    for (const { fn, animations } of reads) {
+      fn(animations);
+    }
+  });
+}
+
 export const restWhenOff = modifier((el: HTMLElement) => {
-  const settle = (visible: boolean) => {
-    el.classList.toggle('is-resting', !visible);
-    for (const a of el.getAnimations({ subtree: true })) {
-      if (!endless(a)) {
+  const room = !!roomOwner(el);
+  let active = false;
+  const paused = new Set<Animation>();
+  let closed = false;
+  const apply = (animations: Animation[]) => {
+    if (closed) {
+      return;
+    }
+    el.classList.toggle('is-resting', !active);
+    for (const animation of animations) {
+      if (!room && !endless(animation)) {
         continue;
       }
-      if (visible) {
-        if (a.playState === 'paused') {
-          a.play();
-        }
-      } else if (a.playState === 'running') {
-        a.pause();
+      if (!active && animation.playState === 'running') {
+        animation.pause();
+        paused.add(animation);
       }
     }
-  };
-  const io = new IntersectionObserver(
-    (entries) => {
-      const last = entries[entries.length - 1];
-      if (last) {
-        settle(last.isIntersecting);
+    if (active) {
+      for (const animation of paused) {
+        if (animation.playState === 'paused') {
+          animation.play();
+        }
       }
-    },
-    { rootMargin: '200px' }
-  );
-  io.observe(el);
+      paused.clear();
+    }
+  };
+  const settle = () => scheduleRest(el, apply);
+  const observer = observeStage(el, (visible) => {
+    active = visible;
+    settle();
+  });
+  // Catch animations created by a pending render while this card is frozen.
+  const changes = new MutationObserver(() => {
+    if (!active) {
+      settle();
+    }
+  });
+  changes.observe(el, {
+    childList: true,
+    subtree: true,
+    attributes: room,
+    attributeFilter: room ? ['style'] : undefined,
+  });
+  el.addEventListener('animationstart', settle);
   return () => {
-    io.disconnect();
-    settle(true);
+    observer.disconnect();
+    changes.disconnect();
+    el.removeEventListener('animationstart', settle);
+    pendingRest.delete(el);
+    active = true;
+    apply([]);
+    closed = true;
   };
 });
 
