@@ -473,6 +473,7 @@ export class Mockup extends Component {
       if (
         document.querySelector('.wr-shell.has-guide, .wr-shell.is-quick-tour')
       ) {
+        this.syncOn = false;
         this.setMode('3d');
       }
       // Keep the 3D canvas and pose exactly where the camera left them.

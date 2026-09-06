@@ -91,6 +91,25 @@ try {
     }
     sample();
   });
+  if (process.env.WARM_MOCKUP) {
+    await page
+      .locator('[data-widget-id="mockup"] .wr-live-hit')
+      .evaluate((el) => el.click());
+    await page.waitForFunction(() =>
+      document.querySelector('.wr-shell')?.classList.contains('is-live'),
+    );
+    await page
+      .locator('[data-live-demo="mockup"] .mg-seg button')
+      .last()
+      .click();
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-live-demo="mockup"] .mg-stage')
+          ?.getAttribute('data-ready') === 'yes',
+    );
+    await page.locator('.wr-brand').click();
+  }
   await page.getByRole('button', { name: '50-second highlights ↗' }).click();
   await page
     .getByRole('button', { name: 'Replay highlights', exact: true })
