@@ -526,6 +526,8 @@ export class WidgetRoom extends Component {
   pauseTour = () => {
     if (this.quickMode) {
       this.touring = false;
+      this.settleNarration?.('cancelled');
+      this.settleNarration = undefined;
       this.audio?.pause();
       this.run?.pause();
     } else {
@@ -534,20 +536,11 @@ export class WidgetRoom extends Component {
   };
   startQuickTour = () => {
     if (this.quickMode && !this.quickFinished && this.run && this.audio) {
-      this.audioIssue = false;
-      void this.audio
-        .play()
-        .then(() => {
-          this.touring = true;
-        })
-        .catch(() => {
-          this.audioIssue = true;
-        });
+      this.playQuickNarration(this.audio.currentTime);
       return;
     }
     this.stopGuide();
     ++this.generation;
-    const quickToken = this.guideGeneration;
     const first = quickScore.actions[0];
     if (first) {
       this.mount(first.demo);
@@ -606,19 +599,6 @@ export class WidgetRoom extends Component {
     this.run.pause();
     const run = this.run;
     const audio = (this.audio ??= new Audio());
-    audio.src = `${this.assetRoot}${quickScore.audio}`;
-    audio.onended = () => {
-      this.touring = false;
-      this.quickFinished = true;
-      this.cancelDemo?.();
-      this.cancelDemo = undefined;
-      cancelAnimationFrame(this.quickRaf);
-      run.time = quickScore.duration;
-    };
-    audio.onerror = () => {
-      this.audioIssue = true;
-      this.touring = false;
-    };
     this.cancelDemo = roomGuide(
       this.viewport.parentElement!,
       quickScore.actions,
@@ -664,19 +644,37 @@ export class WidgetRoom extends Component {
       this.quickRaf = requestAnimationFrame(sync);
     };
     this.quickRaf = requestAnimationFrame(sync);
-    // Unlock this one continuous narration synchronously from the visitor's tap.
-    void audio
-      .play()
-      .then(() => {
-        if (quickToken === this.guideGeneration) {
-          this.touring = true;
+    this.playQuickNarration();
+  };
+  private playQuickNarration = (startAt = 0) => {
+    const audio = (this.audio ??= new Audio());
+    const token = this.guideGeneration;
+    this.audioIssue = false;
+    this.touring = true;
+    // Use the same recoverable media lifecycle as the separate full-tour clips.
+    // This call stays synchronous with the visitor's tap for Safari permission.
+    this.settleNarration = playNarrationClip(
+      audio,
+      `${this.assetRoot}${quickScore.audio}`,
+      (result) => {
+        if (token !== this.guideGeneration || result === 'cancelled') {
+          return;
         }
-      })
-      .catch(() => {
-        if (quickToken === this.guideGeneration) {
+        this.touring = false;
+        if (result === 'ended') {
+          this.quickFinished = true;
+          this.cancelDemo?.();
+          this.cancelDemo = undefined;
+          cancelAnimationFrame(this.quickRaf);
+          if (this.run) {
+            this.run.time = quickScore.duration;
+          }
+        } else {
           this.audioIssue = true;
         }
-      });
+      },
+      startAt
+    );
   };
   startTour = () => {
     void this.playTour(this.tourIndex < 0 ? 0 : this.tourIndex);
