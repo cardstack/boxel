@@ -177,6 +177,7 @@ export default class ModuleRoute extends Route<Model> {
     options?: string;
   }) {
     let parsedOptions = parseRenderRouteOptions(options);
+    this.#synchronizeLoaderEpoch(parsedOptions.loaderEpoch);
     return await buildModuleModel(
       {
         id,
@@ -185,6 +186,51 @@ export default class ModuleRoute extends Route<Model> {
       },
       this.#moduleModelContext(),
     );
+  }
+
+  // Loader-epoch synchronization, this route's half of what routes/render.ts
+  // does for visits: the realm's loader epoch is re-minted whenever its
+  // executable modules change (an index pass that invalidates one, or the
+  // write that changed the bytes), and a mismatch in either direction means
+  // this tab's loader belongs to a different module timeline. Without it a
+  // module render imports out of whatever this tab already evaluated, so a
+  // module rewritten since then reports its previous shape — with the current
+  // file metadata attached, since that is re-read per render — and the
+  // definition cache stores that under the rewritten module's URL.
+  //
+  // On the route rather than in `buildModuleModel`, which the route shares
+  // with card-prerender.gts. That component renders in the app's own tab,
+  // where the loader and store belong to the session and are already kept
+  // current by the file resources and realm subscriptions the app runs;
+  // replacing them out from under it would discard live state on a schedule
+  // the app has no part in. A tab that reached this route exists to serve
+  // renders and holds nothing else worth keeping.
+  //
+  // Held under its own key rather than the one routes/render.ts uses. Visits
+  // thread the epoch their indexing batch minted, which is not committed
+  // until the batch ends, while this route's callers read the committed
+  // column; a single key would read that lag as two timelines alternating and
+  // reset the loader on every render for the length of the batch. Separate
+  // keys cost a tab one extra reset per epoch — each series synchronizes
+  // independently — and a reset only ever leaves the loader fresher than the
+  // other series assumes.
+  #synchronizeLoaderEpoch(loaderEpoch: string | undefined) {
+    if (loaderEpoch === undefined) {
+      return;
+    }
+    let held = (globalThis as any).__boxelModuleLoaderEpoch as
+      | string
+      | undefined;
+    if (held === loaderEpoch) {
+      return;
+    }
+    this.typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
+    this.loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'module-route loader epoch changed',
+    });
+    this.store.resetCache();
+    (globalThis as any).__boxelModuleLoaderEpoch = loaderEpoch;
   }
 
   #moduleModelContext(): ModuleModelContext {
@@ -214,42 +260,6 @@ export async function buildModuleModel(
   let parsedOptions = renderOptions ?? {};
   let moduleURL = trimExecutableExtension(rri(id));
   registerBoxelTransitionTo(context.router, context.owner);
-
-  // Loader-epoch synchronization, the module route's half of what
-  // routes/render.ts does for visits: the realm's loader epoch is re-minted
-  // whenever its executable modules change (an index pass that invalidates
-  // one, or the write that changed the bytes), and a mismatch in either
-  // direction means this tab's loader belongs to a different module
-  // timeline. Without it a module render imports out of whatever this tab
-  // already evaluated, so a module rewritten since then reports its previous
-  // shape — with the current file metadata attached, since that is re-read
-  // per render — and the definition cache stores that under the rewritten
-  // module's URL.
-  //
-  // Held under its own key rather than the one routes/render.ts uses.
-  // Visits thread the epoch their indexing batch minted, which is not
-  // committed until the batch ends, while this route's callers read the
-  // committed column; a single key would read that lag as two timelines
-  // alternating and reset the loader on every render for the length of the
-  // batch. Separate keys cost a tab one extra reset per epoch — each series
-  // synchronizes independently — and a reset only ever leaves the loader
-  // fresher than the other series assumes.
-  if (parsedOptions.loaderEpoch !== undefined) {
-    let held = (globalThis as any).__boxelModuleLoaderEpoch as
-      | string
-      | undefined;
-    if (held !== parsedOptions.loaderEpoch) {
-      context.state.setTypesCache(
-        new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>(),
-      );
-      context.loaderService.resetLoader({
-        clearFetchCache: true,
-        reason: 'module-route loader epoch changed',
-      });
-      context.store.resetCache();
-      (globalThis as any).__boxelModuleLoaderEpoch = parsedOptions.loaderEpoch;
-    }
-  }
 
   if (parsedOptions.clearCache) {
     context.state.setTypesCache(
