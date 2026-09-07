@@ -344,7 +344,6 @@ async function readActivity(page: Page): Promise<Activity> {
         `${messagesWithFailures} turns had a failed or rejected tool call or patch (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
     }
-    irregularities.push(`${errorAlerts} error alerts shown`);
     let gitStyle = Array.from(
       document.querySelectorAll('[data-test-ai-message-content]'),
     ).filter((el) => (el.textContent ?? '').includes('<<<<<<< SEARCH')).length;
