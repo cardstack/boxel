@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { Choreo, motion, type Rect, spring } from 'glimmer-motion';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const GLIDE = spring({ damping: 28, stiffness: 240 });
 
@@ -401,20 +402,27 @@ export class Wires extends Component {
 
         <c.Parallel>
           <c.Hold @of={{c.role "note"}} @zIndex={{3}} />
-          <c.Move @of={{c.moved "mark"}} @spring={{GLIDE}} @size={{false}} />
-          <c.Move @of={{c.moved "note"}} @spring={{GLIDE}} />
+          <c.Move
+            @of={{c.moved "mark"}}
+            @spring={{tuneSpring "wires" GLIDE "GLIDE"}}
+            @size={{false}}
+          />
+          <c.Move
+            @of={{c.moved "note"}}
+            @spring={{tuneSpring "wires" GLIDE "GLIDE"}}
+          />
           <c.Tween
             @of={{c.removed "note"}}
             @opacity={{0}}
             @y={{-8}}
-            @duration={{0.28}}
+            @duration={{tuneSeconds "wires" 0.28 "Step 1 duration"}}
             @ease="easeOut"
           />
           <c.Tween
             @of={{c.inserted "note"}}
             @opacity={{array 0 1}}
             @y={{array 8 0}}
-            @duration={{0.32}}
+            @duration={{tuneSeconds "wires" 0.32 "Step 2 duration"}}
             @ease="easeOut"
           />
           <c.Tether
@@ -440,3 +448,8 @@ export class Wires extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('wires', GLIDE, 'GLIDE');
+tuneSeconds('wires', 0.28, 'Step 1 duration');
+tuneSeconds('wires', 0.32, 'Step 2 duration');

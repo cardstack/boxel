@@ -46,13 +46,14 @@
     "@chenglou/pretext": "^0.0.8",
     "choreo-player": "workspace:*",
     "decorator-transforms": "^2.4.0",
-    "dialkit": "^1.4.3",
+    "dialkit": "^2.0.0",
     "ember-modifier": "^4.3.0",
     "glimmer-motion": "workspace:*",
     "motion": "^13.1.1",
     "motion-dom": "^13.1.1",
     "three": "^0.185.1",
-    "three-149": "npm:three@0.149.0"
+    "three-149": "npm:three@0.149.0",
+    "marked": "^18.0.11"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

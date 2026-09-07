@@ -10,7 +10,8 @@ export function narrationURL(source: string): string {
 export function playNarrationClip(
   audio: HTMLAudioElement,
   source: string,
-  complete: (result: NarrationResult) => void
+  complete: (result: NarrationResult) => void,
+  startAt = 0
 ): (result: NarrationResult) => void {
   let closed = false;
   let attemptId = 0;
@@ -19,8 +20,8 @@ export function playNarrationClip(
   let abortRetries = 0;
   let frame = 0;
   let lastProgress = performance.now();
-  let position = 0;
-  let restore = 0;
+  let position = startAt;
+  let restore = startAt;
   const finish = (result: NarrationResult) => {
     if (closed) {
       return;
@@ -153,7 +154,12 @@ export function playNarrationClip(
   audio.onended = null;
   audio.onerror = null;
   audio.preload = 'auto';
-  audio.src = narrationURL(source);
+  const sourceURL = narrationURL(source);
+  if (audio.src !== sourceURL || audio.error || audio.readyState === 0) {
+    audio.src = sourceURL;
+  } else {
+    metadata();
+  }
   audio.addEventListener('ended', ended);
   audio.addEventListener('error', failed);
   audio.addEventListener('canplay', ready);

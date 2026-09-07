@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, type Sprite } from 'glimmer-motion';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const bays = [
   { id: 'kiln', label: 'Kiln' },
@@ -151,7 +152,7 @@ export class FarMatch extends Component {
                   bounds to start from. }}
               <c.Move
                 @of={{c.moved "piece"}}
-                @spring={{carry}}
+                @spring={{tuneSpring "far" carry "carry"}}
                 @size={{false}}
               />
               <c.Hold @of={{c.moved "piece"}} @zIndex={{layer}} />
@@ -164,16 +165,19 @@ export class FarMatch extends Component {
               <c.Tween
                 @of={{c.removed "piece"}}
                 @opacity={{0}}
-                @duration={{0.2}}
+                @duration={{tuneSeconds "far" 0.2 "Step 1 duration"}}
               />
               <c.Tween
                 @of={{c.inserted "piece"}}
                 @opacity={{array 0 1}}
-                @duration={{0.26}}
+                @duration={{tuneSeconds "far" 0.26 "Step 2 duration"}}
               />
 
               {{! and the bay itself grows or shrinks around what it now holds }}
-              <c.Move @of={{c.moved "bay"}} @spring={{settle}} />
+              <c.Move
+                @of={{c.moved "bay"}}
+                @spring={{tuneSpring "far" settle "settle"}}
+              />
             </c.Parallel>
           </Choreo>
         {{/each}}
@@ -185,3 +189,9 @@ export class FarMatch extends Component {
 function wash(piece: Piece) {
   return `--wash: ${piece.wash}`;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('far', carry, 'carry');
+tuneSeconds('far', 0.2, 'Step 1 duration');
+tuneSeconds('far', 0.26, 'Step 2 duration');
+tuneSpring('far', settle, 'settle');

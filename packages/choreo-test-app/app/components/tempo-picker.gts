@@ -1,62 +1,75 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { beacon } from 'glimmer-motion';
 import { setTempo, settings, type Tempo, toggleCode } from 'test-app/lib/tempo';
 
-function choose(event: Event) {
-  const select = event.target as HTMLSelectElement;
-  if (select.value === 'code') {
-    toggleCode();
-    // not a mode: put the control back to whatever speed is actually set
-    select.value = settings.tempo;
-    return;
+function is(value: Tempo) {
+  return settings.tempo === value;
+}
+function label() {
+  return { instant: 'Instant', smooth: 'Smooth', slow: 'Slow-mo' }[
+    settings.tempo
+  ];
+}
+function choose(value: Tempo, event: Event) {
+  setTempo(value);
+  (event.currentTarget as HTMLElement)
+    .closest('details')
+    ?.removeAttribute('open');
+}
+function dismiss(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    const menu = event.currentTarget as HTMLDetailsElement;
+    menu.removeAttribute('open');
+    menu.querySelector('summary')?.focus();
   }
-  setTempo(select.value as Tempo);
 }
-
-function is(mode: string) {
-  return settings.tempo === mode;
-}
-
-/**
- * The page transition: how fast, and what it is made of.
- *
- * "How this works" is not a speed, so picking it opens the panel and puts the
- * control back where it was rather than pretending to be a fourth setting.
- *
- * The beacon is why the panel appears to come OUT of this control: it claims
- * this box by name, and <HowPanel>'s Choreo borrows it as the start of the
- * flight in and the end of the flight out. The select itself never animates —
- * a beacon is a point, not a participant.
- */
 export const TempoPicker = <template>
-  <label class="tempo">
-    <span class="tempo-label">Transition</span>
-    {{! Narrow screens only (see the stylesheet). A native <select> sizes
-        itself to its LONGEST option, and "Show how this works" made this
-        control wide enough to squeeze the wordmark down to "C…". On mobile
-        the select goes transparent and sits on top of this icon, so the tap
-        target and the native picker are untouched — only the label is. }}
-    {{! lucide "gauge" }}
-    <svg class="tempo-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m12 14 4-4" />
-      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-    </svg>
-    <select
-      class="tempo-select"
-      aria-label="Page transition"
+  <details
+    name="header-preferences"
+    class="header-picker"
+    {{on "keydown" dismiss}}
+  >
+    <summary
+      class="header-picker-pill"
+      aria-label="Navigation"
+      title="Navigation"
       {{beacon "transition-control"}}
-      {{on "change" choose}}
     >
-      <option value="instant" selected={{if (is "instant") true}}>
-        Instant
-      </option>
-      <option value="smooth" selected={{if (is "smooth") true}}>Smooth</option>
-      <option value="slow" selected={{if (is "slow") true}}>Slow-mo</option>
-      <option value="code">{{if
+      <span aria-hidden="true" class="header-picker-icon">↗</span>
+      <span>{{label}}</span><span
+        aria-hidden="true"
+        class="header-picker-chevron"
+      >⌄</span>
+    </summary>
+    <div class="header-picker-menu">
+      <span class="header-picker-label">Page transition speed</span>
+      <div class="header-picker-segments" role="group" aria-label="Navigation">
+        <button
+          type="button"
+          aria-pressed={{is "instant"}}
+          {{on "click" (fn choose "instant")}}
+        >Instant</button>
+        <button
+          type="button"
+          aria-pressed={{is "smooth"}}
+          {{on "click" (fn choose "smooth")}}
+        >Smooth</button>
+        <button
+          type="button"
+          aria-pressed={{is "slow"}}
+          {{on "click" (fn choose "slow")}}
+        >Slow-mo</button>
+      </div>
+      <button
+        type="button"
+        class="header-picker-help"
+        {{on "click" toggleCode}}
+      >{{if
           settings.showCode
           "Hide how this works"
           "Show how this works"
-        }}</option>
-    </select>
-  </label>
+        }}</button>
+    </div>
+  </details>
 </template>;

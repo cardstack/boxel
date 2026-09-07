@@ -8,6 +8,7 @@ import { modifier } from 'ember-modifier';
 import type { ChoreoRun, Query, SpringSpec } from 'glimmer-motion';
 import { at, Choreo, motion } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
 
@@ -817,30 +818,30 @@ export class Playhead extends Component {
           <c.Spring
             @of={{standing "pill"}}
             @x={{this.pillX}}
-            @spring={{PILL}}
+            @spring={{tuneSpring "playhead" PILL "PILL"}}
           />
           <c.Spring
             @of={{standing "knob"}}
             @x={{this.knobX}}
-            @spring={{KNOB_S}}
+            @spring={{tuneSpring "playhead" KNOB_S "KNOB_S"}}
           />
           <c.Spring
             @of={{standing "lit"}}
             @opacity={{this.litO}}
-            @spring={{LIT}}
+            @spring={{tuneSpring "playhead" LIT "LIT"}}
           />
           <c.Spring
             @of={{standing "app"}}
             @opacity={{this.appO}}
             @scale={{this.appS}}
-            @spring={{APP}}
+            @spring={{tuneSpring "playhead" APP "APP"}}
           />
           <c.Spring
             @of={{standing "receipt"}}
             @opacity={{this.rcpO}}
             @scale={{this.rcpS}}
             @y={{this.rcpY}}
-            @spring={{RECEIPT}}
+            @spring={{tuneSpring "playhead" RECEIPT "RECEIPT"}}
           />
         </c.Parallel>
       {{else}}
@@ -853,19 +854,22 @@ export class Playhead extends Component {
             scene to its opening state and a scrub is deterministic in
             either direction. }}
         <c.Sequence>
-          <c.Wait @of={{standing "hand"}} @duration={{0.34}} />
+          <c.Wait
+            @of={{standing "hand"}}
+            @duration={{tuneSeconds "playhead" 0.34 "Step 1 duration"}}
+          />
           <c.Tween
             @of={{standing "hand"}}
             @x={{this.walkX "home" "express"}}
             @y={{this.walkY "home" "express"}}
             @ease="easeInOut"
-            @duration={{0.62}}
+            @duration={{tuneSeconds "playhead" 0.62 "Step 2 duration"}}
           />
           <c.Tween
             @name="press-express"
             @of={{standing "hand"}}
             @scale={{array 1 0.74 1}}
-            @duration={{0.22}}
+            @duration={{tuneSeconds "playhead" 0.22 "Step 3 duration"}}
           />
           <c.Tween
             @at={{at "press-express" CLICK_AT}}
@@ -873,28 +877,31 @@ export class Playhead extends Component {
             @opacity={{array 0 0.8 0.4 0}}
             @scale={{array 0.4 1.9}}
             @ease="easeOut"
-            @duration={{0.42}}
+            @duration={{tuneSeconds "playhead" 0.42 "Step 4 duration"}}
           />
           <c.Spring
             @at={{at "press-express" CLICK_AT}}
             @of={{standing "pill"}}
             @x={{array 0 SEG}}
-            @spring={{PILL}}
+            @spring={{tuneSpring "playhead" PILL "PILL"}}
           />
 
-          <c.Wait @of={{standing "hand"}} @duration={{0.36}} />
+          <c.Wait
+            @of={{standing "hand"}}
+            @duration={{tuneSeconds "playhead" 0.36 "Step 5 duration"}}
+          />
           <c.Tween
             @of={{standing "hand"}}
             @x={{this.walkX "express" "wrap"}}
             @y={{this.walkY "express" "wrap"}}
             @ease="easeInOut"
-            @duration={{0.52}}
+            @duration={{tuneSeconds "playhead" 0.52 "Step 6 duration"}}
           />
           <c.Tween
             @name="press-wrap"
             @of={{standing "hand"}}
             @scale={{array 1 0.74 1}}
-            @duration={{0.22}}
+            @duration={{tuneSeconds "playhead" 0.22 "Step 7 duration"}}
           />
           <c.Tween
             @at={{at "press-wrap" CLICK_AT}}
@@ -902,34 +909,37 @@ export class Playhead extends Component {
             @opacity={{array 0 0.8 0.4 0}}
             @scale={{array 0.4 1.9}}
             @ease="easeOut"
-            @duration={{0.42}}
+            @duration={{tuneSeconds "playhead" 0.42 "Step 8 duration"}}
           />
           <c.Spring
             @at={{at "press-wrap" CLICK_AT}}
             @of={{standing "knob"}}
             @x={{array 0 KNOB}}
-            @spring={{KNOB_S}}
+            @spring={{tuneSpring "playhead" KNOB_S "KNOB_S"}}
           />
           <c.Spring
             @at={{at "press-wrap" CLICK_AT}}
             @of={{standing "lit"}}
             @opacity={{array 0 1}}
-            @spring={{LIT}}
+            @spring={{tuneSpring "playhead" LIT "LIT"}}
           />
 
-          <c.Wait @of={{standing "hand"}} @duration={{0.42}} />
+          <c.Wait
+            @of={{standing "hand"}}
+            @duration={{tuneSeconds "playhead" 0.42 "Step 9 duration"}}
+          />
           <c.Tween
             @of={{standing "hand"}}
             @x={{this.walkX "wrap" "place"}}
             @y={{this.walkY "wrap" "place"}}
             @ease="easeInOut"
-            @duration={{0.6}}
+            @duration={{tuneSeconds "playhead" 0.6 "Step 10 duration"}}
           />
           <c.Tween
             @name="press-place"
             @of={{standing "hand"}}
             @scale={{array 1 0.74 1}}
-            @duration={{0.24}}
+            @duration={{tuneSeconds "playhead" 0.24 "Step 11 duration"}}
           />
           <c.Tween
             @at={{at "press-place" CLICK_AT}}
@@ -937,14 +947,14 @@ export class Playhead extends Component {
             @opacity={{array 0 0.8 0.4 0}}
             @scale={{array 0.4 1.9}}
             @ease="easeOut"
-            @duration={{0.42}}
+            @duration={{tuneSeconds "playhead" 0.42 "Step 12 duration"}}
           />
           <c.Spring
             @at={{at "press-place" CLICK_AT}}
             @of={{standing "app"}}
             @opacity={{array 1 0.28}}
             @scale={{array 1 0.97}}
-            @spring={{APP}}
+            @spring={{tuneSpring "playhead" APP "APP"}}
           />
           <c.Spring
             @at={{at "press-place" CLICK_AT}}
@@ -952,22 +962,25 @@ export class Playhead extends Component {
             @opacity={{array 0 1}}
             @scale={{array 0.94 1}}
             @y={{array 18 0}}
-            @spring={{RECEIPT}}
+            @spring={{tuneSpring "playhead" RECEIPT "RECEIPT"}}
           />
 
-          <c.Wait @of={{standing "hand"}} @duration={{0.9}} />
+          <c.Wait
+            @of={{standing "hand"}}
+            @duration={{tuneSeconds "playhead" 0.9 "Step 13 duration"}}
+          />
           <c.Tween
             @of={{standing "hand"}}
             @x={{this.walkX "place" "done"}}
             @y={{this.walkY "place" "done"}}
             @ease="easeInOut"
-            @duration={{0.56}}
+            @duration={{tuneSeconds "playhead" 0.56 "Step 14 duration"}}
           />
           <c.Tween
             @name="press-done"
             @of={{standing "hand"}}
             @scale={{array 1 0.74 1}}
-            @duration={{0.22}}
+            @duration={{tuneSeconds "playhead" 0.22 "Step 15 duration"}}
           />
           <c.Tween
             @at={{at "press-done" CLICK_AT}}
@@ -975,32 +988,32 @@ export class Playhead extends Component {
             @opacity={{array 0 0.8 0.4 0}}
             @scale={{array 0.4 1.9}}
             @ease="easeOut"
-            @duration={{0.42}}
+            @duration={{tuneSeconds "playhead" 0.42 "Step 16 duration"}}
           />
           <c.Spring
             @at={{at "press-done" CLICK_AT}}
             @of={{standing "pill"}}
             @x={{array SEG 0}}
-            @spring={{PILL}}
+            @spring={{tuneSpring "playhead" PILL "PILL"}}
           />
           <c.Spring
             @at={{at "press-done" CLICK_AT}}
             @of={{standing "knob"}}
             @x={{array KNOB 0}}
-            @spring={{KNOB_S}}
+            @spring={{tuneSpring "playhead" KNOB_S "KNOB_S"}}
           />
           <c.Spring
             @at={{at "press-done" CLICK_AT}}
             @of={{standing "lit"}}
             @opacity={{array 1 0}}
-            @spring={{LIT}}
+            @spring={{tuneSpring "playhead" LIT "LIT"}}
           />
           <c.Spring
             @at={{at "press-done" CLICK_AT}}
             @of={{standing "app"}}
             @opacity={{array 0.28 1}}
             @scale={{array 0.97 1}}
-            @spring={{APP}}
+            @spring={{tuneSpring "playhead" APP "APP"}}
           />
           <c.Spring
             @at={{at "press-done" CLICK_AT}}
@@ -1008,7 +1021,7 @@ export class Playhead extends Component {
             @opacity={{array 1 0}}
             @scale={{array 1 0.94}}
             @y={{array 0 18}}
-            @spring={{RECEIPT}}
+            @spring={{tuneSpring "playhead" RECEIPT "RECEIPT"}}
           />
 
           <c.Tween
@@ -1016,9 +1029,12 @@ export class Playhead extends Component {
             @x={{this.walkX "done" "home"}}
             @y={{this.walkY "done" "home"}}
             @ease="easeInOut"
-            @duration={{0.48}}
+            @duration={{tuneSeconds "playhead" 0.48 "Step 17 duration"}}
           />
-          <c.Wait @of={{standing "hand"}} @duration={{0.46}} />
+          <c.Wait
+            @of={{standing "hand"}}
+            @duration={{tuneSeconds "playhead" 0.46 "Step 18 duration"}}
+          />
         </c.Sequence>
       {{/if}}
 
@@ -1086,3 +1102,28 @@ export class Playhead extends Component {
     </Choreo>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('playhead', PILL, 'PILL');
+tuneSpring('playhead', KNOB_S, 'KNOB_S');
+tuneSpring('playhead', LIT, 'LIT');
+tuneSpring('playhead', APP, 'APP');
+tuneSpring('playhead', RECEIPT, 'RECEIPT');
+tuneSeconds('playhead', 0.34, 'Step 1 duration');
+tuneSeconds('playhead', 0.62, 'Step 2 duration');
+tuneSeconds('playhead', 0.22, 'Step 3 duration');
+tuneSeconds('playhead', 0.42, 'Step 4 duration');
+tuneSeconds('playhead', 0.36, 'Step 5 duration');
+tuneSeconds('playhead', 0.52, 'Step 6 duration');
+tuneSeconds('playhead', 0.22, 'Step 7 duration');
+tuneSeconds('playhead', 0.42, 'Step 8 duration');
+tuneSeconds('playhead', 0.42, 'Step 9 duration');
+tuneSeconds('playhead', 0.6, 'Step 10 duration');
+tuneSeconds('playhead', 0.24, 'Step 11 duration');
+tuneSeconds('playhead', 0.42, 'Step 12 duration');
+tuneSeconds('playhead', 0.9, 'Step 13 duration');
+tuneSeconds('playhead', 0.56, 'Step 14 duration');
+tuneSeconds('playhead', 0.22, 'Step 15 duration');
+tuneSeconds('playhead', 0.42, 'Step 16 duration');
+tuneSeconds('playhead', 0.48, 'Step 17 duration');
+tuneSeconds('playhead', 0.46, 'Step 18 duration');

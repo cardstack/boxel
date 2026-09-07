@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import type { ChoreoRun } from 'glimmer-motion';
 import { beacon, Choreo, motion } from 'glimmer-motion';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const quick = { damping: 24, stiffness: 300 };
 const toss = { damping: 22, stiffness: 190 };
@@ -251,25 +252,34 @@ export class Inbox extends Component {
             <c.Move
               @of={{c.inserted "row"}}
               @from={{c.beacon "compose"}}
-              @spring={{toss}}
+              @spring={{tuneSpring "inbox" toss "toss"}}
             />
             {{! into the bin — the row is orphaned so it can finish the flight
                 after its element has left the list }}
             <c.Move
               @of={{c.removed "row"}}
               @to={{c.beacon "trash"}}
-              @spring={{toss}}
+              @spring={{tuneSpring "inbox" toss "toss"}}
             />
             <c.Tween
               @of={{c.removed "row"}}
               @opacity={{0}}
-              @duration={{0.38}}
+              @duration={{tuneSeconds "inbox" 0.38 "Step 1 duration"}}
             />
             {{! everything still in the tray closes up on the same spring }}
-            <c.Move @of={{c.moved "row"}} @spring={{quick}} @size={{false}} />
+            <c.Move
+              @of={{c.moved "row"}}
+              @spring={{tuneSpring "inbox" quick "quick"}}
+              @size={{false}}
+            />
           </c.Parallel>
         </Choreo>
       </div>
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('inbox', toss, 'toss');
+tuneSeconds('inbox', 0.38, 'Step 1 duration');
+tuneSpring('inbox', quick, 'quick');

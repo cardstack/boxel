@@ -10,6 +10,7 @@ import type {
   TimelineNode,
 } from 'glimmer-motion';
 import { at, Choreo, motion, StepComponent, toMs } from 'glimmer-motion';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 /**
  * Three bays and one card. Click a bay and the card flies to it — and two
@@ -232,14 +233,18 @@ export class Escort extends Component {
             while the card is still a few pixels out, and the handover is
             only seamless where the two agree. }}
         <c.Parallel>
-          <Carry @name="carry" @of={{c.moved "card"}} @spring={{carry}} />
+          <Carry
+            @name="carry"
+            @of={{c.moved "card"}}
+            @spring={{tuneSpring "escort" carry "Carry spring 1"}}
+          />
           <c.Follow
             @at={{at "carry"}}
             @of={{c.id "badge"}}
             @to={{c.id "card"}}
             @read={{pin}}
             @rest={{PIN_REST}}
-            @duration={{1.6}}
+            @duration={{tuneSeconds "escort" 1.6 "Follow duration 2"}}
           />
           <c.Follow
             @at={{at "carry"}}
@@ -247,7 +252,7 @@ export class Escort extends Component {
             @to={{c.id "card"}}
             @read={{cast}}
             @rest={{CAST_REST}}
-            @duration={{1.6}}
+            @duration={{tuneSeconds "escort" 1.6 "Follow duration 3"}}
           />
         </c.Parallel>
       </Choreo>
@@ -265,3 +270,8 @@ export class Escort extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('escort', carry, 'Carry spring 1');
+tuneSeconds('escort', 1.6, 'Follow duration 2');
+tuneSeconds('escort', 1.6, 'Follow duration 3');

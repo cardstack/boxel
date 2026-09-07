@@ -14,8 +14,8 @@ description: >-
 
 `<Choreo>` belongs around the machine it choreographs — the workspace, the
 modal, the panel, the list. **Never wrap `body`**: one root region makes
-every `id`/`role` in the app one changeset. Site-wide route motion stays on
-`viewTransition`/`animateView` (`motion-page-transition`).
+every `id`/`role` in the app one changeset. The app’s route crossing uses a deliberate `<Choreo @route>` boundary around
+the outlet (`magic-move-navigation`), not an unscoped region around the body.
 
 Discovery is nearest-wins: a `{{motion id= role=}}` registers with the
 nearest `<Choreo>` ancestor, and a region's timeline collection skips any

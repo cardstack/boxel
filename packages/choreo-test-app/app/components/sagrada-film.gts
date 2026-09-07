@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { Film, IframePicture } from 'glimmer-motion/film';
 import { SagradaScore } from 'test-app/components/films/sagrada-score';
 import config from 'test-app/config/environment';
+import { tuneNumber } from 'test-app/lib/demo-tuning';
 import {
   BUILD,
   CITY_GLASS,
@@ -15,6 +16,16 @@ import {
   T_TODAY,
   VO_GAIN,
 } from 'test-app/lib/films/sagrada';
+
+// Declare the film variables before asynchronous picture loading.
+function rigMid() {
+  return tuneNumber('sagrada', 6.6, 'Camera rig height (units)', 1, 14, 0.001);
+}
+rigMid();
+function lutAmount() {
+  return tuneNumber('sagrada', LUT_AMOUNT, 'Color grade strength', 0, 1, 0.01);
+}
+lutAmount();
 
 export default class SagradaFilm extends Component<{
   Args: { embed?: boolean };
@@ -76,9 +87,9 @@ export default class SagradaFilm extends Component<{
           @title="Sagrada Família"
           @standing={{T_TODAY}}
           @seat={{this.seat}}
-          @rigMid={{6.6}}
+          @rigMid={{(rigMid)}}
           @cityGlass={{CITY_GLASS}}
-          @lutAmount={{LUT_AMOUNT}}
+          @lutAmount={{(lutAmount)}}
           @grades={{this.grades}}
           @lookFx={{this.lookFx}}
         />

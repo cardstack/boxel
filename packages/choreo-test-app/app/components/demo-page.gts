@@ -152,6 +152,10 @@ export class DemoPage extends Component<{
         {{#if @model.slowmo}}
           <SpeedPicker />
         {{/if}}
+        <p class="demo-tune-link"><LinkTo
+            @route="demo-lab"
+            @model={{@model.id}}
+          >Tune this demo with DialKit ↗</LinkTo></p>
         <div class="stage-row">
           <div
             class="stage-wrap"

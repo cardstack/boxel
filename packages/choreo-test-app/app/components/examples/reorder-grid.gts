@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { ReorderGroup, ReorderItem } from 'glimmer-motion';
+import { tuneObject } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -88,8 +89,8 @@ export class ReorderGrid extends Component {
             @group={{group}}
             @value={{album}}
             @style={{(tileStyle album.wash)}}
-            @transition={{snap}}
-            @whileDrag={{whileDrag}}
+            @transition={{tuneObject "grid" snap "ReorderItem transition 1"}}
+            @whileDrag={{tuneObject "grid" whileDrag "ReorderItem whileDrag 2"}}
           >
             <b>{{album.label}}</b>
             <small>{{album.year}}</small>
@@ -103,3 +104,7 @@ export class ReorderGrid extends Component {
 function tileStyle(wash: string) {
   return { background: wash };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneObject('grid', snap, 'ReorderItem transition 1');
+tuneObject('grid', whileDrag, 'ReorderItem whileDrag 2');

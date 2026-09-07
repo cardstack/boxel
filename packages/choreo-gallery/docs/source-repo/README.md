@@ -37,6 +37,18 @@ The [Motion](https://motion.dev) engine for Ember — and a timeline for the sce
 
 ---
 
+## Guides and Playgrounds
+
+The gallery application includes a documentation website at `/docs`, with four
+learning paths: core glimmer-motion, interactive Choreo, spatial/3D Choreo, and
+recorded/film Choreo. Each catalog demo has a DialKit 2 tuning workspace at
+`/playground/:demo_id`; the main navigation also opens the 3D gallery.
+
+See [the documentation website guide](docs/documentation-site.md) for local
+startup, content authoring, and deployment. Agents can use the shared
+[choreo-create skill](.claude/skills/choreo-create/SKILL.md) to recreate examples
+or combine them into applications and films.
+
 ## What is Choreo?
 
 Choreo is two layers in one repo, published as two packages.

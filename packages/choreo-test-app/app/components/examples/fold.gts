@@ -11,6 +11,7 @@ import {
   type PerformCommand,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
+import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 
 /**
@@ -662,7 +663,9 @@ export class Fold extends Component {
               @target={{cmd.target}}
               @payload={{cmd.payload}}
             />
-            <c.Wait @duration={{cmd.hold}} />
+            <c.Wait
+              @duration={{tuneSeconds "fold" cmd.hold "cmd.hold duration"}}
+            />
           {{/each}}
         </c.Sequence>
       {{/if}}

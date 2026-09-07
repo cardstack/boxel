@@ -20,7 +20,7 @@ function write(path, source) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, source);
 }
-for (const folder of ['components', 'lib']) {
+for (const folder of ['components', 'lib', 'content']) {
   for (const path of walk(join(app, folder))) {
     const relative = path.slice(app.length + 1);
     if (relative === 'lib/theme.ts') {
@@ -58,7 +58,7 @@ for (const folder of ['components', 'lib']) {
       'private theater = theater;',
     );
     source = source.replace(
-      /@service declare private router: RouterService;/g,
+      /@service declare (?:private )?router: RouterService;/g,
       'private router = router;',
     );
     source = source.replaceAll(

@@ -7,6 +7,10 @@ export default class Router extends EmberRouter {
 }
 
 Router.map(function () {
+  this.route('demo-lab', { path: '/playground/:demo_id' });
+  this.route('docs', function () {
+    this.route('topic', { path: '/:topic_id' });
+  });
   this.route('widget-room', { path: '/_widgets' });
   this.route('widget-embed', { path: '/_widget/:demo_id' });
   this.route('feature-reel', { path: '/_feature-reel' });

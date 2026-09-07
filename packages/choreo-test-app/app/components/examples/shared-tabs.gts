@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const tabs = ['Forge', 'Reel', 'Ore'] as const;
 const pill = { bounce: 0.22, type: 'spring', visualDuration: 0.4 } as const;
@@ -30,7 +31,10 @@ export class SharedTabs extends Component {
                 {{#if (isOn tab this.selected)}}
                   <span
                     class="tab-line"
-                    {{motion layoutId="tab-pill" transition=pill}}
+                    {{motion
+                      layoutId="tab-pill"
+                      transition=(tuneMotion "tabs" pill "pill")
+                    }}
                   ></span>
                 {{/if}}
                 {{tab}}
@@ -50,3 +54,6 @@ export class SharedTabs extends Component {
 function isOn(tab: Tab, selected: Tab) {
   return tab === selected;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('tabs', pill, 'pill');

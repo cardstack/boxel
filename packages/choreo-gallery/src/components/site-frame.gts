@@ -85,7 +85,7 @@ export class SiteFrame extends Component<Signature> {
   };
 
   <template>
-    <div class='choreo-site' data-theme={{theme.mode}}>
+    <div class='choreo-site' data-theme={{theme.resolved}}>
       <MotionConfig @reducedMotion='user'>
         <div class='app-shell'>
           <header class='topbar'>

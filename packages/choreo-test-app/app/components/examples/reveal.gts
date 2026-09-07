@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 /** One pour. `shown` is the readout, counted up when the row arrives. */
 class Pour {
@@ -149,7 +150,7 @@ export class Reveal extends Component {
                 initial=parked
                 whileInView=passing
                 viewport=(everyPass this.root)
-                transition=sweep
+                transition=(tuneMotion "reveal" sweep "sweep")
               }}
             >{{entry.marker}}</div>
           {{else if entry.pour}}
@@ -159,7 +160,7 @@ export class Reveal extends Component {
                 initial=resting
                 whileInView=arrived
                 viewport=(band this.root)
-                transition=rise
+                transition=(tuneMotion "reveal" rise "rise")
                 onViewportEnter=(fn this.count entry.pour)
               }}
             >
@@ -172,7 +173,7 @@ export class Reveal extends Component {
                   initial=flat
                   whileInView=(bar entry.pour.fraction)
                   viewport=(band this.root)
-                  transition=fill
+                  transition=(tuneMotion "reveal" fill "fill")
                 }}
               ></i>
             </article>
@@ -212,3 +213,8 @@ function everyPass(root: Element | undefined) {
 function bar(fraction: number) {
   return { scaleX: fraction };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('reveal', sweep, 'sweep');
+tuneMotion('reveal', rise, 'rise');
+tuneMotion('reveal', fill, 'fill');

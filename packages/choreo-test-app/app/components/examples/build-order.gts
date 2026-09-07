@@ -17,6 +17,7 @@ import {
   partOf,
   type Relation,
 } from 'test-app/lib/builds';
+import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
 
@@ -733,7 +734,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeOut"
                     @opacity={{array 0 1}}
                   />
@@ -748,7 +753,11 @@ export class BuildOrder extends Component {
                     @at={{anchorOf build i}}
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeInOut"
                     @pathLength={{array 0 1}}
                     @pathSpacing={{array 2 2}}
@@ -761,7 +770,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeOut"
                     @opacity={{array 0 1 1}}
                     @scale={{array 0.78 1}}
@@ -774,7 +787,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeOut"
                     @opacity={{array 0 1 1 1}}
                     @x={{array -38 0}}
@@ -786,7 +803,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="backOut"
                     @opacity={{array 0 1 1 1}}
                     @scale={{array 0 1}}
@@ -798,7 +819,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeOut"
                     @opacity={{array 0 1 1}}
                     @scale={{array 1.06 1}}
@@ -811,7 +836,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="backOut"
                     @opacity={{array 0 1 1 1}}
                     @rotate={{array -150 0}}
@@ -824,7 +853,11 @@ export class BuildOrder extends Component {
                     @delay={{secondsOf build.delay}}
                     @of={{standing build.part}}
                     @by={{byOf build.by}}
-                    @duration={{secondsOf build.ms}}
+                    @duration={{tuneSeconds
+                      "build-order"
+                      (secondsOf build.ms)
+                      "secondsOf build.ms duration"
+                    }}
                     @ease="easeInOut"
                     @clipPath={{array
                       "inset(0 100% 0 0 round 20px)"
@@ -838,7 +871,7 @@ export class BuildOrder extends Component {
               <c.Wait
                 @of={{standing "plate"}}
                 @at={{this.holdAt}}
-                @duration={{HOLD}}
+                @duration={{tuneSeconds "build-order" HOLD "HOLD duration"}}
               />
             </c.Sequence>
           </Choreo>
@@ -1031,3 +1064,6 @@ export class BuildOrder extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSeconds('build-order', HOLD, 'HOLD duration');

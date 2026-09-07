@@ -3,7 +3,8 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import type { ChoreoContext, ChoreoRun } from 'glimmer-motion';
 import { Choreo, motion } from 'glimmer-motion';
-import { GLIDE, SHOTS } from 'test-app/components/long-take/shots';
+import type { SHOTS } from 'test-app/components/long-take/shots';
+import { GLIDE, tunedShots } from 'test-app/components/long-take/shots';
 
 /** the signal path, as an engineering drawing rather than as boxes */
 const WIRES = [
@@ -90,7 +91,9 @@ export class Board extends Component<BoardSignature> {
     }
   );
 
-  readonly shots = SHOTS;
+  get shots() {
+    return tunedShots();
+  }
   readonly wires = WIRES;
   readonly glide = GLIDE;
 

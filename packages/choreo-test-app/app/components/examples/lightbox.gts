@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const photos = [
   {
@@ -141,7 +142,7 @@ export class Lightbox extends Component {
                   layoutId=(cardId photo.id)
                   layoutCrossfade=false
                   style=(photoStyle photo)
-                  transition=spring
+                  transition=(tuneMotion "lightbox" spring "spring")
                 }}
               >
                 <span
@@ -149,7 +150,7 @@ export class Lightbox extends Component {
                   {{motion
                     layoutId=(nameId photo.id)
                     layoutCrossfade=false
-                    transition=spring
+                    transition=(tuneMotion "lightbox" spring "spring")
                   }}
                 >{{photo.label}}</span>
               </span>
@@ -178,7 +179,7 @@ export class Lightbox extends Component {
                 initial=fade
                 animate=fadeOn
                 exit=fadeOut
-                transition=fadeTween
+                transition=(tuneMotion "lightbox" fadeTween "fadeTween")
               }}
               {{on "click" this.close}}
             ><span class="sr">Close</span></button>
@@ -189,7 +190,7 @@ export class Lightbox extends Component {
                 layoutId=(cardId photo.id)
                 layoutCrossfade=false
                 style=(photoStyle photo)
-                transition=spring
+                transition=(tuneMotion "lightbox" spring "spring")
               }}
             >
               <button
@@ -201,7 +202,7 @@ export class Lightbox extends Component {
                   initial=detailsIn
                   animate=detailsOn
                   exit=detailsOut
-                  transition=detailsTween
+                  transition=(tuneMotion "lightbox" detailsTween "detailsTween")
                 }}
                 {{on "click" this.close}}
               >&times;</button>
@@ -211,7 +212,7 @@ export class Lightbox extends Component {
                     presence=h
                     layoutId=(nameId photo.id)
                     layoutCrossfade=false
-                    transition=spring
+                    transition=(tuneMotion "lightbox" spring "spring")
                   }}
                 >{{photo.label}}</b>
                 <div
@@ -221,7 +222,9 @@ export class Lightbox extends Component {
                     initial=detailsIn
                     animate=detailsOn
                     exit=detailsOut
-                    transition=detailsTween
+                    transition=(tuneMotion
+                      "lightbox" detailsTween "detailsTween"
+                    )
                   }}
                 >
                   <dl class="facts">
@@ -270,3 +273,8 @@ function isOpen(photo: Photo, open: Photo | null) {
 function photoStyle(photo: Photo) {
   return { background: photo.wash, borderRadius: '18px' };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('lightbox', spring, 'spring');
+tuneMotion('lightbox', fadeTween, 'fadeTween');
+tuneMotion('lightbox', detailsTween, 'detailsTween');

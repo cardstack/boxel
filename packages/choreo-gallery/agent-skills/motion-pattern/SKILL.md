@@ -24,18 +24,18 @@ doors, not steps on that ladder.
 
 ## Decision table
 
-| The ask sounds like                                                                                                                                                                              | Pattern                                            | Skill                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- | ------------------------ |
-| "fade/slide/scale this in", hover/tap states, keyframes, variants, stagger                                                                                                                       | `{{motion}}` with `initial`/`animate`/`transition` | `motion-element`         |
-| "animate it when it's removed", toasts, list add/remove, modal open/close                                                                                                                        | `<Presence>` + `exit`                              | `motion-presence`        |
-| "it moved because the layout changed", tab indicator, thumbnail → detail of the SAME thing                                                                                                       | `layout=true` / `layoutId` / `<LayoutGroup>`       | `motion-layout`          |
-| "first X, THEN everyone moves, THEN Y" — ordering across several elements; z-index for the span of a move; one element's motion computed from another's box; fly to a place that must not deform | `<Choreo>` timeline (+ `{{beacon}}`)               | `choreo-scene`           |
-| more than one `<Choreo>` in a tree; an element flying from one region into another (Boxel card between panels)                                                                                   | nested regions + far matching                      | `choreo-regions`         |
-| "when the route/page changes", full-scene morph between screens                                                                                                                                  | `animateView` / `viewTransition`                   | `motion-page-transition` |
-| the gallery-card ⇄ demo-page shared-element navigation, or porting that Magic Move recipe                                                                                                        | `animateView` + the pairing recipe                 | `magic-move-navigation`  |
-| drag, swipe-to-dismiss, reorderable list/grid, bottom sheet                                                                                                                                      | `drag` / `<ReorderGroup>`                          | `motion-drag`            |
-| parallax, scroll progress, reveal-on-scroll, hide-on-scroll header                                                                                                                               | `scrollProgress` / `InView`                        | `motion-scroll`          |
-| writing or fixing a test that involves motion                                                                                                                                                    | `glimmer-motion/test-support`                      | `motion-testing`         |
+| The ask sounds like                                                                                                                                                                              | Pattern                                                                    | Skill                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------------------- |
+| "fade/slide/scale this in", hover/tap states, keyframes, variants, stagger                                                                                                                       | `{{motion}}` with `initial`/`animate`/`transition`                         | `motion-element`                                   |
+| "animate it when it's removed", toasts, list add/remove, modal open/close                                                                                                                        | `<Presence>` + `exit`                                                      | `motion-presence`                                  |
+| "it moved because the layout changed", tab indicator, thumbnail → detail of the SAME thing                                                                                                       | `layout=true` / `layoutId` / `<LayoutGroup>`                               | `motion-layout`                                    |
+| "first X, THEN everyone moves, THEN Y" — ordering across several elements; z-index for the span of a move; one element's motion computed from another's box; fly to a place that must not deform | `<Choreo>` timeline (+ `{{beacon}}`)                                       | `choreo-scene`                                     |
+| more than one `<Choreo>` in a tree; an element flying from one region into another (Boxel card between panels)                                                                                   | nested regions + far matching                                              | `choreo-regions`                                   |
+| Route/page change                                                                                                                                                                                | Live DOM crossing: `<Choreo @route>`; intentional snapshots: `animateView` | `magic-move-navigation` / `motion-page-transition` |
+| the gallery-card ⇄ demo-page shared-element navigation, or porting that Magic Move recipe                                                                                                        | `<Choreo @route>` + paired identities                                      | `magic-move-navigation`                            |
+| drag, swipe-to-dismiss, reorderable list/grid, bottom sheet                                                                                                                                      | `drag` / `<ReorderGroup>`                                                  | `motion-drag`                                      |
+| parallax, scroll progress, reveal-on-scroll, hide-on-scroll header                                                                                                                               | `scrollProgress` / `InView`                                                | `motion-scroll`                                    |
+| writing or fixing a test that involves motion                                                                                                                                                    | `glimmer-motion/test-support`                                              | `motion-testing`                                   |
 
 ## The classic wrong reaches
 
@@ -66,3 +66,11 @@ interruption model holds, what the playhead samples). Read the note when
 modifying its demo.
 Docs: `docs/guide.md` (tutorial), `README.md` (API reference),
 `docs/choreography.md` + `docs/nested-choreo.md` (Choreo design).
+
+## Beyond the basic patterns
+
+For gates, Follow/Tether, commands, delivery and custom steps, read
+`.claude/skills/choreo-create/references/advanced-orchestration.md`.
+For 3D coordinates, cameras, picture actors and Film clocks, read
+`.claude/skills/choreo-create/references/spatial-and-film.md`.
+These routes extend the table; they do not require loading every specialist.

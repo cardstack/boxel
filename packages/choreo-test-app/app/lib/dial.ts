@@ -50,7 +50,8 @@ import type {
   Preset,
   ResolvedValues,
 } from 'dialkit/store';
-import { DialStore, resolveDialValues } from 'dialkit/store';
+import { resolveDialValues } from 'dialkit/store';
+import { DialStore } from 'dialkit/vanilla';
 
 /** what a panel accepts without caring which config produced it */
 export type AnyDial = Dial<DialConfig>;
@@ -173,6 +174,10 @@ export class Dial<T extends DialConfig> {
   get controls() {
     void this.revision;
     return DialStore.getPanel(this.id)?.controls ?? [];
+  }
+
+  get panelId() {
+    return this.id;
   }
 
   get name() {

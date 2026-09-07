@@ -14,6 +14,7 @@ import {
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
+import { tuneNumber } from 'test-app/lib/demo-tuning';
 import {
   createSylva,
   type Sylva,
@@ -687,8 +688,8 @@ export class SylvaStage extends Component<{
       this.poseMidV,
       this.poseNow,
       this.poseVel,
-      20,
-      13,
+      tuneNumber('sylva', 20, 'Camera first spring response', 2, 40, 0.5),
+      tuneNumber('sylva', 13, 'Camera second spring response', 2, 30, 0.5),
       dt,
       ['dolly', 'pitch', 'x', 'y', 'yaw'] as const
     );
@@ -698,8 +699,8 @@ export class SylvaStage extends Component<{
       this.lookMidV,
       this.lookNow,
       this.lookNowV,
-      7,
-      4.5,
+      tuneNumber('sylva', 7, 'Aim first spring response', 1, 20, 0.5),
+      tuneNumber('sylva', 4.5, 'Aim second spring response', 1, 15, 0.5),
       dt,
       ['x', 'y', 'z'] as const
     );
@@ -1228,7 +1229,9 @@ export class SylvaStage extends Component<{
   private readonly titlePts = 2;
 
   /** the whole lap's clock; segments are uniform, so timing is arithmetic */
-  private readonly lapSeconds = 31;
+  private get lapSeconds() {
+    return tuneNumber('sylva', 31, 'Tour duration seconds', 10, 90, 1);
+  }
 
   /** one uniform spline segment, seconds */
   private get lapSegment() {

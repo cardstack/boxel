@@ -6,6 +6,7 @@ import type { DialConfig } from 'dialkit/store';
 import { modifier } from 'ember-modifier';
 import { beacon, Choreo, motion } from 'glimmer-motion';
 import { DialPanel } from 'test-app/components/dial-panel';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { Dial } from 'test-app/lib/dial';
 import {
   applied,
@@ -1007,7 +1008,7 @@ export class Drift extends Component {
                 <c.Move
                   @of={{c.inserted "lap"}}
                   @from={{c.beacon "clock"}}
-                  @spring={{ARRIVE}}
+                  @spring={{tuneSpring "drift" ARRIVE "ARRIVE"}}
                   @size={{false}}
                 />
 
@@ -1016,7 +1017,7 @@ export class Drift extends Component {
                 for both is how a list stops telling you what happened. }}
                 <c.Move
                   @of={{c.moved "lap"}}
-                  @spring={{SHUFFLE}}
+                  @spring={{tuneSpring "drift" SHUFFLE "SHUFFLE"}}
                   @size={{false}}
                 />
 
@@ -1025,12 +1026,12 @@ export class Drift extends Component {
                 <c.Move
                   @of={{c.removed "lap"}}
                   @to={{c.beacon "bin"}}
-                  @spring={{DROP}}
+                  @spring={{tuneSpring "drift" DROP "DROP"}}
                 />
                 <c.Tween
                   @of={{c.removed "lap"}}
                   @opacity={{0}}
-                  @duration={{0.32}}
+                  @duration={{tuneSeconds "drift" 0.32 "Step 1 duration"}}
                 />
 
                 {{! a lap that beat nothing changes no row but its own. Dimming what
@@ -1039,7 +1040,7 @@ export class Drift extends Component {
                 <c.Hold
                   @of={{c.still "lap"}}
                   @opacity={{0.42}}
-                  @duration={{0.5}}
+                  @duration={{tuneSeconds "drift" 0.5 "Hold duration 1"}}
                 />
               </c.Parallel>
             </Choreo>
@@ -1052,3 +1053,10 @@ export class Drift extends Component {
 }
 
 export default Drift;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('drift', ARRIVE, 'ARRIVE');
+tuneSpring('drift', SHUFFLE, 'SHUFFLE');
+tuneSpring('drift', DROP, 'DROP');
+tuneSeconds('drift', 0.32, 'Step 1 duration');
+tuneSeconds('drift', 0.5, 'Hold duration 1');

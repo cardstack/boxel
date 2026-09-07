@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { Preset } from 'dialkit/store';
-import { DialControls } from 'test-app/components/dial-controls';
+import DialNativeControls from 'test-app/components/dial-native-controls';
 import type { AnyDial, DialTune } from 'test-app/lib/dial';
 import { preventSelect } from 'test-app/lib/pointer';
 
@@ -211,7 +211,7 @@ export class DialPanel extends Component<Signature> {
               by hand is the same trade as the rest of this panel — the package
               decides what it looks like. }}
           <div class="dialkit-folder-inner">
-            <DialControls @dial={{@dial}} @controls={{@dial.controls}} />
+            <DialNativeControls @dial={{@dial}} />
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const keyOf = (item: { id: string }) => item.id;
 
@@ -111,7 +112,7 @@ const ModeColumn = <template>
               initial=initial
               animate=animate
               exit=exit
-              transition=transition
+              transition=(tuneMotion "presence" transition "transition")
             }}
           >
             <span class="toast-mark" aria-hidden="true"></span>
@@ -121,7 +122,13 @@ const ModeColumn = <template>
             </span>
           </article>
         </Presence>
-        <div class="mode-rest" {{motion layout=true transition=restMove}}>
+        <div
+          class="mode-rest"
+          {{motion
+            layout=true
+            transition=(tuneMotion "presence" restMove "restMove")
+          }}
+        >
           Up next
         </div>
       </div>
@@ -136,3 +143,7 @@ const ModeColumn = <template>
 function isFail(notice: Notice) {
   return notice.tone === 'fail';
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('presence', transition, 'transition');
+tuneMotion('presence', restMove, 'restMove');
