@@ -75,3 +75,10 @@ Glimmer’s `postRender` hook. It retimes the existing Motion visual elements
 and preserves repeating animations’ phase; it does not remount the demo.
 Run `node scripts/check-demo-live-controls.mjs` against the dev server to
 verify live duration and target edits, DOM identity, and compact control rows.
+
+Each catalog demo includes two authored looks in DialKit’s Versions menu.
+`demo-presets.ts` maps each look to explicit demo variable names and values.
+Version 1 restores the source defaults; choosing a look keeps the demo mounted.
+Add presets only after their variables are registered, and keep all numeric
+values inside their declared ranges. Run `node scripts/check-demo-presets.mjs`
+against the development server to exercise both looks and restoration.

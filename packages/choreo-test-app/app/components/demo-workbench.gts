@@ -16,6 +16,7 @@ import SagradaFilm from 'test-app/components/sagrada-film';
 import { SylvaStage } from 'test-app/components/sylva-stage';
 import TowerFilm from 'test-app/components/tower-film';
 import type { DemoEntry } from 'test-app/lib/catalog';
+import { demoPresets } from 'test-app/lib/demo-presets';
 import { demoTuning } from 'test-app/lib/demo-tuning';
 import {
   captureDemoMotion,
@@ -64,15 +65,49 @@ export class DemoWorkbench extends Component<Signature> {
         this.replay();
       },
     });
+    let seeding = false;
+    const seeded = new Set<string>();
+    const seedPresets = () => {
+      const ready = (demoPresets[id] ?? []).filter(
+        (preset) =>
+          !seeded.has(preset.name) &&
+          Object.keys(preset.values).every((key) => key in state.definitions)
+      );
+      if (!ready.length) {
+        return;
+      }
+      seeding = true;
+      const previous = kit.getValues();
+      const active = DialStore.getActivePresetId(kit.id);
+      for (const preset of ready) {
+        kit.resetValues();
+        kit.setValues(preset.values);
+        DialStore.savePreset(kit.id, preset.name);
+        seeded.add(preset.name);
+      }
+      kit.resetValues();
+      if (active) {
+        DialStore.loadPreset(kit.id, active);
+      } else {
+        DialStore.clearActivePreset(kit.id);
+      }
+      kit.setValues(previous);
+      seeding = false;
+    };
+    seedPresets();
     let gone = false;
     let pendingMotion: ReturnType<typeof captureDemoMotion> | null = null;
     const refresh = () => {
       if (!gone) {
         kit.updateConfig(config());
+        seedPresets();
       }
     };
     state.listeners.add(refresh);
     const stop = kit.subscribe((values) => {
+      if (seeding) {
+        return;
+      }
       queueMicrotask(() => {
         const changed: Record<string, DialValue> = {};
         for (const [key, value] of Object.entries(values)) {
