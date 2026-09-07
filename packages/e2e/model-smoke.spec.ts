@@ -621,14 +621,16 @@ function classify(
 }
 
 // The one-word answer per model. GOOD: passed and inside every benchmark.
-// ROUGH: passed, but a benchmark was missed (more turns, switches, cost, or
-// time than a good run needs). FAIL: no card, or the run had to be stopped.
+// ROUGH: passed, but a benchmark was missed (more turns, switches, or time
+// than a good run needs). FAIL: no card, or the run had to be stopped. Cost is
+// reported in its own column but does not grade: it tracks the model's price
+// class more than its behaviour, and an Opus run would be ROUGH for doing the
+// same work as a Sonnet run.
 type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
 
 const BENCHMARKS = {
   maxTurns: 5,
   maxModeSwitches: 1,
-  maxCostUsd: 0.2,
   maxSeconds: 120,
 };
 
@@ -647,11 +649,6 @@ function grade(result: RunResult): { grade: Grade; misses: string[] } {
   if (switches > BENCHMARKS.maxModeSwitches) {
     misses.push(
       `${switches} mode switches (target ≤ ${BENCHMARKS.maxModeSwitches})`,
-    );
-  }
-  if (a.costUsd > BENCHMARKS.maxCostUsd) {
-    misses.push(
-      `$${a.costUsd.toFixed(2)} (target ≤ $${BENCHMARKS.maxCostUsd.toFixed(2)})`,
     );
   }
   if (result.durationSeconds > BENCHMARKS.maxSeconds) {
