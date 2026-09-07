@@ -45,8 +45,13 @@ during the work.
 - Towers: [towers-about.md](towers-about.md),
   [towers-wall-text.md](towers-wall-text.md),
   [towers-vo.md](towers-vo.md), [towers-vo-files.md](towers-vo-files.md),
-  [towers-vo-requests.md](towers-vo-requests.md),
-  [towers-vo-handoff.md](towers-vo-handoff.md),
   [towers-vo-pronunciation.md](towers-vo-pronunciation.md)
 - Sagrada Família: [sagrada-film.md](sagrada-film.md),
   [sagrada-vo.md](sagrada-vo.md)
+
+## Maintenance
+
+Completed Towers recording requests and branch handoffs have been consolidated
+into [the narration record](towers-vo-files.md). Keep scripts, measurements and
+reasoning that still explain the work; remove transient task queues once their
+outcome is captured. Historical proposals here are not evidence that an API shipped.

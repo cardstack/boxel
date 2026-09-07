@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+import { BoxelGlyph } from 'test-app/components/boxel-glyph';
 import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const photos = [
@@ -205,7 +206,7 @@ export class Lightbox extends Component {
                   transition=(tuneMotion "lightbox" detailsTween "detailsTween")
                 }}
                 {{on "click" this.close}}
-              >&times;</button>
+              ><BoxelGlyph @name="x" /></button>
               <div class="lightbox-body">
                 <b
                   {{motion

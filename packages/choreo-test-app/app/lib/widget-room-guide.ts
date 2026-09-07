@@ -8,6 +8,52 @@ export interface RoomAction {
   selector: string;
   value?: number;
 }
+/** Same-origin frame contents keep local layout measurements while the room
+ * projects their outer plane. Resolve the guided target across that boundary. */
+function targets(root: Element, selector: string): HTMLElement[] {
+  const result = [...root.querySelectorAll<HTMLElement>(selector)];
+  for (const frame of root.querySelectorAll('iframe')) {
+    try {
+      if (frame.contentDocument?.documentElement) {
+        result.push(
+          ...targets(frame.contentDocument.documentElement, selector)
+        );
+      }
+    } catch {
+      /* External frames are not interactive tour targets. */
+    }
+  }
+  return result;
+}
+function screenPoint(target: HTMLElement, fraction = 0.5) {
+  const rect = target.getBoundingClientRect();
+  let x = rect.left + rect.width * fraction;
+  let y = rect.top + rect.height / 2;
+  const frame = target.ownerDocument.defaultView
+    ?.frameElement as HTMLElement | null;
+  if (frame) {
+    const tile = frame.closest<HTMLElement>('[data-widget-id]');
+    const transform = tile && getComputedStyle(tile).transform;
+    if (tile && transform && transform !== 'none') {
+      let node: HTMLElement | null = frame;
+      x += frame.clientLeft;
+      y += frame.clientTop;
+      while (node && node !== tile) {
+        x += node.offsetLeft;
+        y += node.offsetTop;
+        node = node.offsetParent as HTMLElement | null;
+      }
+      const point = new DOMPoint(x, y).matrixTransform(
+        new DOMMatrix(transform)
+      );
+      return { x: point.x / point.w, y: point.y / point.w };
+    }
+    const outer = frame.getBoundingClientRect();
+    x = outer.left + (x * outer.width) / frame.offsetWidth;
+    y = outer.top + (y * outer.height) / frame.offsetHeight;
+  }
+  return { x, y };
+}
 /** One screen-space hand follows projected, moving DOM controls across the room. */
 export function roomGuide(
   room: HTMLElement,
@@ -44,6 +90,7 @@ export function roomGuide(
       takeover();
     }
   };
+  const frameDocuments = new Set<Document>();
   room.addEventListener('pointerdown', input, true);
   room.dataset.quickActions = '0';
   room.dataset.quickMissed = '';
@@ -69,15 +116,22 @@ export function roomGuide(
     );
     if (action && time >= action.at - 0.65) {
       const tile = room.querySelector(`[data-live-demo="${action.demo}"]`);
-      const target = tile?.querySelectorAll<HTMLElement>(action.selector)[
-        action.index ?? 0
-      ];
+      const target = tile
+        ? targets(tile, action.selector)[action.index ?? 0]
+        : undefined;
       const rect = target?.getBoundingClientRect();
       if (target && rect && rect.width > 0 && rect.height > 0) {
-        const endX =
-          rect.left +
-          rect.width * (action.kind === 'range' ? (action.value ?? 0.5) : 0.5);
-        const endY = rect.top + rect.height / 2;
+        if (
+          target.ownerDocument !== document &&
+          !frameDocuments.has(target.ownerDocument)
+        ) {
+          target.ownerDocument.addEventListener('pointerdown', input, true);
+          frameDocuments.add(target.ownerDocument);
+        }
+        const { x: endX, y: endY } = screenPoint(
+          target,
+          action.kind === 'range' ? (action.value ?? 0.5) : 0.5
+        );
         if (aiming !== index) {
           aiming = index;
           began = time;
@@ -134,17 +188,9 @@ export function roomGuide(
         index++;
       }
     } else if (lastTarget?.isConnected && since < 0.65) {
-      const rect = lastTarget.getBoundingClientRect();
-      x.jump(
-        rect.left +
-          rect.width / 2 +
-          (reduced ? 0 : Math.min(1, since / 0.65) * 16)
-      );
-      y.jump(
-        rect.top +
-          rect.height / 2 +
-          (reduced ? 0 : Math.min(1, since / 0.65) * 14)
-      );
+      const point = screenPoint(lastTarget);
+      x.jump(point.x + (reduced ? 0 : Math.min(1, since / 0.65) * 16));
+      y.jump(point.y + (reduced ? 0 : Math.min(1, since / 0.65) * 14));
     } else {
       opacity.jump(Math.max(0, 0.8 - Math.max(0, since - 0.65) * 0.8));
     }
@@ -154,6 +200,9 @@ export function roomGuide(
   return () => {
     cancelAnimationFrame(raf);
     room.removeEventListener('pointerdown', input, true);
+    for (const doc of frameDocuments) {
+      doc.removeEventListener('pointerdown', input, true);
+    }
     unbind();
     cursor.remove();
     for (const value of [x, y, opacity, scale]) {

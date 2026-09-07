@@ -11,7 +11,7 @@
     "summary": "Use to, styles, and perValue without competing with the renderer.",
     "demo": {
       "id": "enter",
-      "title": "Targets, Styles, and Property Ownership \u2014 live example",
+      "title": "Targets, Styles, and Property Ownership — live example",
       "instruction": "Replay the entrance, then compare the motion controls with the original settings."
     }
   },
@@ -21,7 +21,7 @@
     "summary": "Choose physical parameters or a perceived duration, and preserve continuity.",
     "demo": {
       "id": "interrupt",
-      "title": "Spring Transitions \u2014 live example",
+      "title": "Spring Transitions — live example",
       "instruction": "Choose another target before the movement settles. Compare the spring response with the tween."
     }
   },
@@ -31,7 +31,7 @@
     "summary": "Author a timed journey and give each property its own curve.",
     "demo": {
       "id": "keyframes",
-      "title": "Tweens, Easing, and Keyframes \u2014 live example",
+      "title": "Tweens, Easing, and Keyframes — live example",
       "instruction": "Watch the intermediate values, then replay at a different duration."
     }
   },
@@ -41,7 +41,7 @@
     "summary": "Name visual states and propagate them through a component tree.",
     "demo": {
       "id": "stagger",
-      "title": "Variants and Staggered Children \u2014 live example",
+      "title": "Variants and Staggered Children — live example",
       "instruction": "Replay the group and inspect the order of its children."
     }
   },
@@ -51,7 +51,7 @@
     "summary": "Keep continuous input outside the Glimmer render loop.",
     "demo": {
       "id": "pointer",
-      "title": "Motion Values and Derived Values \u2014 live example",
+      "title": "Motion Values and Derived Values — live example",
       "instruction": "Move the pointer within the demo and watch the continuous response."
     }
   },
@@ -61,7 +61,7 @@
     "summary": "Design a drag interaction that hands off cleanly at release.",
     "demo": {
       "id": "drag",
-      "title": "Dragging, Constraints, and Momentum \u2014 live example",
+      "title": "Dragging, Constraints, and Momentum — live example",
       "instruction": "Drag and release the cover. Compare a slow pull with a fast throw."
     }
   },
@@ -71,7 +71,7 @@
     "summary": "Start a drag from a handle and account for scaled or SVG surfaces.",
     "demo": {
       "id": "grip",
-      "title": "Drag Handles and Coordinate Correction \u2014 live example",
+      "title": "Drag Handles and Coordinate Correction — live example",
       "instruction": "Move a guest by the corner handle, then edit the card without dragging it."
     }
   },
@@ -81,7 +81,7 @@
     "summary": "Keep visual order and application order in agreement.",
     "demo": {
       "id": "reorder",
-      "title": "Reordering Lists and Grids \u2014 live example",
+      "title": "Reordering Lists and Grids — live example",
       "instruction": "Drag a row, then use Move first to last to compare pointer and data-driven ordering."
     }
   },
@@ -91,7 +91,7 @@
     "summary": "Choose continuous progress or a discrete visibility state.",
     "demo": {
       "id": "parallax",
-      "title": "Scroll Progress and Viewport Observation \u2014 live example",
+      "title": "Scroll Progress and Viewport Observation — live example",
       "instruction": "Scroll inside the example and watch the layers respond to the same progress."
     }
   },
@@ -101,7 +101,7 @@
     "summary": "Establish defaults at a DOM boundary and preserve user preferences.",
     "demo": {
       "id": "gestures",
-      "title": "Motion Configuration and Reduced Motion \u2014 live example",
+      "title": "Motion Configuration and Reduced Motion — live example",
       "instruction": "Hover or press the globe and compare the configured response."
     }
   },
@@ -111,7 +111,7 @@
     "summary": "Choose a snapshot transition or a live scene based on the content.",
     "demo": {
       "id": "crossing",
-      "title": "Page Transitions and Live Crossings \u2014 live example",
+      "title": "Page Transitions and Live Crossings — live example",
       "instruction": "Change scenes while the live content is still moving."
     }
   },
@@ -121,7 +121,7 @@
     "summary": "Distinguish transition duration scaling from a running clock.",
     "demo": {
       "id": "path",
-      "title": "Slow Motion and Playback Rate \u2014 live example",
+      "title": "Slow Motion and Playback Rate — live example",
       "instruction": "Change Time Scale and replay to inspect the stroke at the new tempo."
     }
   },
@@ -137,7 +137,7 @@
     "summary": "Select participants by identity, role, and what changed.",
     "demo": {
       "id": "lists",
-      "title": "Changesets, Sprites, and Queries \u2014 live example",
+      "title": "Changesets, Sprites, and Queries — live example",
       "instruction": "Move a person between the lists and identify the participants that were kept or received."
     }
   },
@@ -147,7 +147,7 @@
     "summary": "Build timing relationships that survive edits.",
     "demo": {
       "id": "sequence",
-      "title": "Sequences and Parallel Blocks \u2014 live example",
+      "title": "Sequences and Parallel Blocks — live example",
       "instruction": "Change the selected card and watch the ordered phases."
     }
   },
@@ -157,7 +157,7 @@
     "summary": "Let a presenter control builds without losing the timeline.",
     "demo": {
       "id": "presentation",
-      "title": "Gates, Advance, and Retreat \u2014 live example",
+      "title": "Gates, Advance, and Retreat — live example",
       "instruction": "Advance and retreat through builds, including a click while a build is moving."
     }
   },
@@ -167,8 +167,8 @@
     "summary": "Place work relative to another step or block.",
     "demo": {
       "id": "build-order",
-      "title": "Named Anchors and Overlap \u2014 live example",
-      "instruction": "Edit a build\u2019s timing and compare its relationship to the other named steps."
+      "title": "Named Anchors and Overlap — live example",
+      "instruction": "Edit a build’s timing and compare its relationship to the other named steps."
     }
   },
   {
@@ -177,7 +177,7 @@
     "summary": "Animate selected properties over a changeset.",
     "demo": {
       "id": "trail",
-      "title": "Tween and Spring Steps \u2014 live example",
+      "title": "Tween and Spring Steps — live example",
       "instruction": "Push a path and pop a crumb to inspect the entry and exit properties."
     }
   },
@@ -187,7 +187,7 @@
     "summary": "Move between real layouts without confusing shape with identity.",
     "demo": {
       "id": "inline-edit",
-      "title": "Measured Movement, Size, and Paths \u2014 live example",
+      "title": "Measured Movement, Size, and Paths — live example",
       "instruction": "Open the editor and compare the content and geometry throughout the transition."
     }
   },
@@ -197,7 +197,7 @@
     "summary": "Give temporary properties and persistent annotations explicit lifetimes.",
     "demo": {
       "id": "sheet",
-      "title": "Holds, Waits, and Standing Steps \u2014 live example",
+      "title": "Holds, Waits, and Standing Steps — live example",
       "instruction": "Drag the sheet and inspect how the hand releases ownership to the resting response."
     }
   },
@@ -207,7 +207,7 @@
     "summary": "Move above local clipping and reveal a subject in its container.",
     "demo": {
       "id": "jump",
-      "title": "Elevation and Directed Scrolling \u2014 live example",
+      "title": "Elevation and Directed Scrolling — live example",
       "instruction": "Advance to another failure and watch the selected row come into view."
     }
   },
@@ -217,7 +217,7 @@
     "summary": "Reveal words, characters, paragraphs, or objects on one score.",
     "demo": {
       "id": "build-order",
-      "title": "Text Delivery and Stagger \u2014 live example",
+      "title": "Text Delivery and Stagger — live example",
       "instruction": "Compare the lettering builds and their place in the shared score."
     }
   },
@@ -227,7 +227,7 @@
     "summary": "Compute a follower from captured geometry and the current score.",
     "demo": {
       "id": "escort",
-      "title": "Derived Motion With Follow \u2014 live example",
+      "title": "Derived Motion With Follow — live example",
       "instruction": "Send the parcel again mid-flight and watch its annotation follow the live subject."
     }
   },
@@ -237,7 +237,7 @@
     "summary": "Draw a relationship between moving participants.",
     "demo": {
       "id": "wires",
-      "title": "Tethers and Connector Geometry \u2014 live example",
+      "title": "Tethers and Connector Geometry — live example",
       "instruction": "Hover a text mark and watch the connector hold the relationship to its comment."
     }
   },
@@ -247,7 +247,7 @@
     "summary": "Coordinate independent scenes without flattening their ownership.",
     "demo": {
       "id": "far",
-      "title": "Nested Regions and Far Matching \u2014 live example",
+      "title": "Nested Regions and Far Matching — live example",
       "instruction": "Move a card across regions and watch the receiving scene preserve its identity."
     }
   },
@@ -257,7 +257,7 @@
     "summary": "Preserve real content while the surrounding scene changes.",
     "demo": {
       "id": "crossing",
-      "title": "Live Scene Crossings \u2014 live example",
+      "title": "Live Scene Crossings — live example",
       "instruction": "Switch scenes repeatedly and inspect the live counterpart handoff."
     }
   },
@@ -267,7 +267,7 @@
     "summary": "Watch a crossing before its run exists and through replacements.",
     "demo": {
       "id": "lightbox",
-      "title": "Arming and Reliable Activation \u2014 live example",
+      "title": "Arming and Reliable Activation — live example",
       "instruction": "Open and close the detail quickly to inspect repeated activation and teardown."
     }
   },
@@ -277,7 +277,7 @@
     "summary": "Own transport state and distinguish completion from replacement.",
     "demo": {
       "id": "rack",
-      "title": "The Run and Interruption \u2014 live example",
+      "title": "The Run and Interruption — live example",
       "instruction": "Scrub the arrangement and compare direct seeks with ordinary movement."
     }
   },
@@ -287,7 +287,7 @@
     "summary": "Reconstruct application state from semantic timeline actions.",
     "demo": {
       "id": "fold",
-      "title": "Perform Commands and Backward Folding \u2014 live example",
+      "title": "Perform Commands and Backward Folding — live example",
       "instruction": "Scrub backward through commands and check that the host state is reconstructed."
     }
   },
@@ -297,7 +297,7 @@
     "summary": "Extend the vocabulary through public timeline nodes.",
     "demo": {
       "id": "split",
-      "title": "Creating Composite Steps \u2014 live example",
+      "title": "Creating Composite Steps — live example",
       "instruction": "Change the split and inspect the combined steps acting as one interaction."
     }
   },
@@ -313,7 +313,7 @@
     "summary": "Fit a subject or recenter it without changing magnification.",
     "demo": {
       "id": "camera",
-      "title": "Framing and Aiming a DOM Camera \u2014 live example",
+      "title": "Framing and Aiming a DOM Camera — live example",
       "instruction": "Choose a subject and inspect the framing at the destination."
     }
   },
@@ -323,7 +323,7 @@
     "summary": "Continue a shot from the pose already in force.",
     "demo": {
       "id": "long-take",
-      "title": "Relative Pans and Slow Zooms \u2014 live example",
+      "title": "Relative Pans and Slow Zooms — live example",
       "instruction": "Follow the camera through the live screen and compare the relative reframing."
     }
   },
@@ -333,7 +333,7 @@
     "summary": "Let Choreo direct the pose while the host renders the scene.",
     "demo": {
       "id": "mockup",
-      "title": "The Camera3D Renderer Contract \u2014 live example",
+      "title": "The Camera3D Renderer Contract — live example",
       "instruction": "Switch to 3D, then use the screen controls while the device remains spatial."
     }
   },
@@ -343,7 +343,7 @@
     "summary": "Author a continuous tour that can also be rendered exactly.",
     "demo": {
       "id": "sylva",
-      "title": "Camera Paths, Cuts, and Smoothing \u2014 live example",
+      "title": "Camera Paths, Cuts, and Smoothing — live example",
       "instruction": "Start the world tour and watch the camera move through several subjects."
     }
   },
@@ -353,7 +353,7 @@
     "summary": "Convert rectangles through a camera without measuring the output again.",
     "demo": {
       "id": "subdivision",
-      "title": "Plane Coordinates and Hit Testing \u2014 live example",
+      "title": "Plane Coordinates and Hit Testing — live example",
       "instruction": "Drag a seam and inspect the relationship between pointer coordinates and real layout."
     }
   },
@@ -363,7 +363,7 @@
     "summary": "Preserve crisp controls while placing them in a rendered scene.",
     "demo": {
       "id": "mockup",
-      "title": "DOM and WebGL Compositing \u2014 live example",
+      "title": "DOM and WebGL Compositing — live example",
       "instruction": "Switch to 3D and open an app on the real screen."
     }
   },
@@ -373,7 +373,7 @@
     "summary": "Describe chapters and shots in the template that renders them.",
     "demo": {
       "id": "towers",
-      "title": "Authoring a Film Graph \u2014 live example",
+      "title": "Authoring a Film Graph — live example",
       "instruction": "Start the film and inspect how its chapters organize the edit."
     }
   },
@@ -383,7 +383,7 @@
     "summary": "State what the lens sees at the beginning and end of a shot.",
     "demo": {
       "id": "sagrada",
-      "title": "Shots, Tail Poses, and Eye-Level Views \u2014 live example",
+      "title": "Shots, Tail Poses, and Eye-Level Views — live example",
       "instruction": "Start the film and compare the establishing views with the detail shots."
     }
   },
@@ -399,7 +399,7 @@
     "summary": "Choose the correct operation for interaction or export.",
     "demo": {
       "id": "playhead",
-      "title": "Film Handles, Playback, and Exact Rendering \u2014 live example",
+      "title": "Film Handles, Playback, and Exact Rendering — live example",
       "instruction": "Pause and seek directly to a moment, then replay the same interval."
     }
   },
@@ -415,7 +415,7 @@
     "summary": "Control selected runs without taking over the document.",
     "demo": {
       "id": "playhead",
-      "title": "The Standalone Choreo Player \u2014 live example",
+      "title": "The Standalone Choreo Player — live example",
       "instruction": "Compare a direct scrub with playback to the same moment."
     }
   },
@@ -467,8 +467,8 @@
     "summary": "Give explanatory text its own readable interval.",
     "demo": {
       "id": "presentation",
-      "title": "Lower Thirds, Captions, and Screen Overlays \u2014 live example",
-      "instruction": "Advance the presentation and inspect each title\u2019s readable interval."
+      "title": "Lower Thirds, Captions, and Screen Overlays — live example",
+      "instruction": "Advance the presentation and inspect each title’s readable interval."
     }
   },
   {
@@ -505,6 +505,30 @@
     "slug": "core-test-geometry",
     "title": "Testing Geometry, Identity, and Cleanup",
     "summary": "Assert the live subject and inspect intermediate frames.",
+    "demo": null
+  },
+  {
+    "slug": "core-first-app",
+    "title": "Build Your First Choreo Application",
+    "summary": "Create a clean Ember app and build an interruptible task board.",
+    "demo": null
+  },
+  {
+    "slug": "spatial-first-scene",
+    "title": "Build Your First Spatial Scene",
+    "summary": "Build a CSS-only live plane and connect a Choreo camera.",
+    "demo": null
+  },
+  {
+    "slug": "film-first-export",
+    "title": "Render Your First MP4",
+    "summary": "Capture exact frames and encode a complete MP4 with audio.",
+    "demo": null
+  },
+  {
+    "slug": "core-troubleshooting",
+    "title": "Diagnose Motion Problems",
+    "summary": "Diagnose integration failures from their observable symptoms.",
     "demo": null
   }
 ]

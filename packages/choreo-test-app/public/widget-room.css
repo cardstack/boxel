@@ -929,3 +929,98 @@ body.in-widget-room {
 .wr-live-canvas.is-resting *::after {
   animation-play-state: paused !important;
 }
+
+/* Mockup-style rate controls, clear of the tour narration and demo controls. */
+.wr-navigation {
+  position: absolute;
+  z-index: 35;
+  right: 24px;
+  top: 100px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 12px 24px;
+  border-radius: 18px;
+  background: #211b16d9;
+  border: 1px solid #ffffff18;
+}
+.wr-navigation .wr-stick {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  touch-action: none;
+  cursor: grab;
+  border-radius: 999px;
+  border: 1px solid #ffffff2e;
+  background: linear-gradient(160deg, #ffffff26, #ffffff0f 42%, #ffffff08);
+  box-shadow:
+    0 1px 0 #ffffff3d inset,
+    0 8px 20px -8px #00000073;
+}
+.wr-navigation .wr-stick:active {
+  cursor: grabbing;
+}
+.wr-navigation .wr-stick:focus-visible {
+  outline: 2px solid #ff8755;
+  outline-offset: 4px;
+}
+.wr-navigation .wr-zoom {
+  width: 44px;
+}
+.wr-stick-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 21px;
+  height: 21px;
+  margin: -10.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 120% at 34% 26%,
+    #ffffffe6,
+    #ffffff8c 40%,
+    #ffffff33
+  );
+  box-shadow:
+    0 2px 6px #00000059,
+    0 0 0 1px #ffffff40 inset;
+  transform: translate(
+    calc(var(--knob-x, 0) * 15px),
+    calc(var(--knob-y, 0) * 15px)
+  );
+}
+.wr-zoom .wr-stick-dot {
+  transform: translateY(calc(var(--knob-y, 0) * 14px));
+}
+.wr-stick-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -17px;
+  text-align: center;
+  color: #d3c5b5;
+  font: 10px/1.2 var(--font-mono, monospace);
+  pointer-events: none;
+}
+.wr-navigation-reset {
+  color: #f3ece3;
+  background: transparent;
+  border: 1px solid #ffffff2e;
+  border-radius: 10px;
+  padding: 10px;
+  font: 11px/1.2 sans-serif;
+}
+@media (max-width: 650px) {
+  .wr-navigation {
+    right: 12px;
+    top: 88px;
+    gap: 10px;
+    padding: 9px 10px 24px;
+  }
+  .wr-navigation .wr-stick {
+    width: 44px;
+    height: 44px;
+  }
+}

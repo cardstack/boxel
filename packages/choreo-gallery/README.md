@@ -33,11 +33,8 @@ Three creates its worker; it must not contain Boxel loader instrumentation.
 
 ## Publish and compare
 
-Source realm: https://realms-staging.stack.cards/ctse/complex-macaw/
-
-Unlisted host: https://ctse.staging.boxel.dev/2pvv46wbmjdsr8dy/
-
-Reference: https://cardstack.github.io/choreo/
+Choose your own source realm and Boxel host. Keep account-specific addresses
+and authentication in local CLI configuration, outside this repository.
 
 Before pushing, cancel running and pending source indexing. Push without
 deleting remote files, POST the normal `_reindex`, then publish to the existing
@@ -48,7 +45,7 @@ unlisted does not mean private or access-controlled.
 Run browser checks with audio muted:
 
 ```sh
-node packages/choreo-gallery/scripts/compare-hosts.mjs https://ctse.staging.boxel.dev/2pvv46wbmjdsr8dy/
+node packages/choreo-gallery/scripts/compare-hosts.mjs "$BOXEL_HOST_URL"
 node packages/choreo-gallery/scripts/compare-hosts.mjs https://cardstack.github.io/choreo/
 ```
 

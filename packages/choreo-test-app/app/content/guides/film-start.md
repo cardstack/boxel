@@ -52,3 +52,7 @@ Start with [Driving an External Clock](/docs/film-clock), then read [Building a 
 **glimmer-motion/film**: `Film`, `FilmContext`, `FilmSignature`.
 
 Read the implementation: [`film.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film.ts), [`film.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/film.gts).
+
+## A complete working tutorial
+
+Continue with the [end-to-end tutorial](/docs/film-first-export) for a runnable application, complete source, and verification commands.

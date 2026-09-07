@@ -21,7 +21,7 @@ export function playNarrationClip(
   let frame = 0;
   let lastProgress = performance.now();
   let position = startAt;
-  let restore = startAt;
+  let restore: number | null = startAt;
   const finish = (result: NarrationResult) => {
     if (closed) {
       return;
@@ -74,9 +74,9 @@ export function playNarrationClip(
     );
   };
   const metadata = () => {
-    if (restore > 0 && Number.isFinite(audio.duration)) {
+    if (restore !== null && Number.isFinite(audio.duration)) {
       audio.currentTime = Math.min(restore, audio.duration);
-      restore = 0;
+      restore = null;
     }
   };
   const reload = () => {

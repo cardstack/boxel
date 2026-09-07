@@ -1,7 +1,12 @@
 # Focused, tunable studies for the guides
 
-Status: planned. These studies are not implemented or counted as shipped demos.
-The existing 45 examples remain composition examples. New studies belong to a
+Status: the broader study matrix below remains planned. Three initial tutorial
+examples now live in `test-app/app/components/tutorials/`: a task board, CSS-only
+spatial card, and recordable scene. They are embedded in the new end-to-end guides
+and copied into an independent Ember app by `scripts/create-tutorial-app.mjs`.
+They are not catalog demos or additions to the 3D tour. The CSS card establishes
+a minimal host boundary; it does not complete the projected WebGL study below.
+The existing 46 examples remain composition examples. New studies belong to a
 separate docs-only registry and should not appear automatically in the gallery,
 3D room, tour, or recorded highlights.
 

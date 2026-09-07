@@ -52,7 +52,7 @@ Publish the complete build and required static media using the chosen host. Do n
 
 ## API Coverage and Depth
 
-`docs/api-inventory.json` maps 343 exported names and yielded vocabulary members to their concept guides. The site currently has 76 guides, each with at least 300 explanatory prose words, excluding code and API tables. Related aliases and supporting types share their behavior chapter. `scripts/check-guide-coverage.mjs` compares the inventory with the TypeScript declarations and checks depth, preambles, section goals, and internal guide links. Run `pnpm docs:check` after an API or documentation change.
+`docs/api-inventory.json` maps 343 exported names and yielded vocabulary members to their concept guides. Each registered guide has at least 300 explanatory prose words, excluding code and API tables. Related aliases and supporting types share their behavior chapter. `scripts/check-guide-coverage.mjs` compares the inventory with the TypeScript declarations and checks depth, preambles, section goals, and internal guide links. Run `pnpm docs:check` after an API or documentation change.
 
 The inventory appears at `/docs/core-api-inventory`. Keep it synchronized when adding a public API. Do not automatically map a new export to a broad introduction simply to satisfy the check: review whether its concept needs a dedicated treatment.
 
@@ -95,3 +95,14 @@ studies. Keep these separate from shipped demo coverage until implemented.
 The 3D room and its tile frames force a dark palette without overwriting the
 visitor’s saved theme. `scripts/check-guide-lessons.mjs` checks real embedded
 controls and this gallery theme behaviour against the development server.
+
+## Complete tutorials
+
+`core-first-app`, `spatial-first-scene`, and `film-first-export` embed the standalone
+components from `test-app/app/components/tutorials/`. The app generator copies
+those exact sources; they must not import gallery-specific services or styles.
+`core-troubleshooting` records integration failures and their diagnostic checks.
+Run the generated consumer's build and type check, then use
+`packages/choreo-gallery/scripts/verify-tutorials.mjs` against its server.
+`record-tutorial.mjs` renders and probes a complete 1080p60 MP4 with local cue audio.
+Keep generated apps and output media outside the source tree.

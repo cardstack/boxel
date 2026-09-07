@@ -4,8 +4,8 @@ The recordings the film loads, what they measure, and what is on disk that it
 does not load. Voice: **Calvin — Asian, Calm, British, Professional**
 (ElevenLabs `p9KVucfSoJI7y6G681mZ`, `eleven_multilingual_v2`).
 
-- **In app:** `/towers/vo/<id>.mp3` · **Dev:** `http://localhost:4200/towers/vo/<id>.mp3`
-- **On disk:** `test-app/public/towers/vo/<id>.mp3`
+- **In app:** `/asset/towers/vo/<id>.mp3`
+- **On disk:** `test-app/public/asset/towers/vo/<id>.mp3`
 
 The lines are in `notes/towers-vo.md`, the timings in the beats themselves, and
 the pronunciations in `notes/towers-vo-pronunciation.md`. This file is about
@@ -63,7 +63,7 @@ speech is done at 3.58s.
 | 26  | `kaitai`   | 16.12s | -29.3 dB | -8.0 dB  |
 
 **26 files, 204.9s of speech.** Every duration here is also in
-`VO_SECS` in `tower-film.gts`, which paces the on-screen lines against the
+`VO_SECS` in `test-app/app/lib/films/towers.ts`, which paces the on-screen lines against the
 voice rather than against the beat — a re-record means re-measuring, and the
 two must agree.
 
@@ -78,3 +78,32 @@ two must agree.
 All of them are finished reads, kept because re-recording one costs a
 generation and none of them costs anything to keep. Nothing here is
 referenced from code.
+
+## Completed recording decisions
+
+The ending, `kaitai`, uses the shorter approved read (16.12 seconds in a
+20-second window). Two connectives were removed from the original request so
+the narrator could retain the film's unhurried delivery. Its final line remains
+“Enough to see from the fields.” The current script is in [towers-vo.md](towers-vo.md).
+
+`muneage` is voiced: “Muneage. The ridge goes on, and the carpenters stop for the
+day.” Its 4.02-second file fits the four-second beat because speech ends at
+3.58 seconds; the remaining tail is padding. The shorter alternative remains
+on disk. The older request queue's claim that this beat was silent is obsolete.
+
+The quiet reads were levelled in the audio files rather than regenerated,
+preserving the approved performances. The table above records that production
+pass; remeasure any replacement instead of assuming these levels still apply.
+
+## Recording another beat
+
+Use the same narrator and model as the existing recordings. Specify the beat
+ID, script, available window, target speech duration, and pronunciation before
+recording. Budget about 150 words per minute for this performance. If a line
+exceeds its window, revise the script or timing rather than rushing the read.
+
+Place the approved file in `test-app/public/asset/towers/vo/`, measure its length,
+and update `VO_SECS` in `test-app/app/lib/films/towers.ts`. Review both caption
+pacing and speech end against the next shot. Keep alternate takes separate from
+the filenames the score loads. Pronunciation guidance remains in
+[towers-vo-pronunciation.md](towers-vo-pronunciation.md).
