@@ -14,7 +14,8 @@ the ai-bot). Then, from `packages/e2e`:
 SMOKE_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm smoke
 ```
 
-`pnpm smoke:headed` shows the browser.
+`pnpm smoke:headed` shows the browser, one model at a time. `pnpm smoke:tabs` opens
+every model as a tab of one headed browser and runs them at once.
 
 - `SMOKE_MODELS` — comma-separated model names as the picker shows them
   (substring match, case-insensitive, must match exactly one option). The

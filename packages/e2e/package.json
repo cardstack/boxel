@@ -8,6 +8,7 @@
   "scripts": {
     "smoke": "playwright test -c playwright.config.ts",
     "smoke:headed": "SMOKE_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "smoke:tabs": "SMOKE_TABS=1 SMOKE_WORKERS=1 playwright test -c playwright.config.ts --headed",
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

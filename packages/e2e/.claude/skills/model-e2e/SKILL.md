@@ -40,6 +40,7 @@ From `packages/e2e`:
 ```sh
 SMOKE_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm smoke          # headless
 SMOKE_MODELS="Claude Sonnet 4.6" pnpm smoke:headed                   # watch it
+SMOKE_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm smoke:tabs     # watch several, one tab each
 ```
 
 Knobs (env vars):
@@ -73,8 +74,9 @@ nothing.
 When one appears:
 
 1. **Stop the generation, but only when it has clearly gone sideways.** The
-   runner does this itself for a second failed or invalid pill or error alert
-   (one is something the model can notice and correct), git-style markers, the
+   runner does this itself when two separate turns carry a failed or invalid
+   pill or an error alert (one bad turn is something the model can notice and
+   correct, even if several blocks in it failed), git-style markers, the
    same tool call repeated three times, a pill stuck past the host's two-minute
    tool timeout, a turn that streams nothing for three minutes, and the
    15-minute safety clock (verdict notes start with "stopped early"). It never stops a run for being

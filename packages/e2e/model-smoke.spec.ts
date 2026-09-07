@@ -30,6 +30,10 @@ const STUCK_APPLYING_MS = 150_000;
 // stalled request between the ai-bot and the provider; the bot has no timeout
 // of its own for it.
 const STALLED_GENERATION_MS = 180_000;
+// If the bot has not started a single reply this long after the prompt, it is
+// not slow: it never saw the message. The usual cause is an invite the ai-bot
+// missed, so it never joined the room.
+const NO_REPLY_MS = 120_000;
 // The bot starts its next message within a second or two of a tool result or
 // a patch landing; the correctness check takes a few seconds more. Idle has
 // to hold this long before it counts.
@@ -73,6 +77,7 @@ interface RunResult {
     | 'wall-clock'
     | 'stuck'
     | 'stalled'
+    | 'no-reply'
     | 'irregularity'
     | 'error';
   irregularities: string[];
@@ -103,16 +108,20 @@ async function loginViaLocalStorage(page: Page) {
     },
   );
   await page.goto('/');
-  // A dev-server rebuild can leave the page blank for a minute or more on the
-  // first request. Wait for the app to actually render something, either the
-  // chooser or operator mode, before deciding the session did not restore.
-  await expect(
-    page
-      .locator(
-        '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
-      )
-      .first(),
-  ).toBeVisible({ timeout: 180_000 });
+  let rendered = page
+    .locator(
+      '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
+    )
+    .first();
+  // The first tab of a fresh browser context can lose every module load to
+  // Chromium's ERR_CERT_VERIFIER_CHANGED: the ignore-certificate-errors setting
+  // lands while the page is already loading. A reload after a short wait
+  // recovers it. A dev-server rebuild can also leave the page blank for a
+  // minute or more on the first request, hence the long second wait.
+  if (!(await rendered.isVisible({ timeout: 15_000 }).catch(() => false))) {
+    await page.reload();
+  }
+  await expect(rendered).toBeVisible({ timeout: 180_000 });
   if ((await page.locator('[data-test-login-form]').count()) > 0) {
     throw new Error(
       'the stored matrix session was not accepted; the login form rendered',
@@ -318,14 +327,24 @@ async function readActivity(page: Page): Promise<Activity> {
     let failed = q('[data-test-apply-state="failed"]');
     let invalid = q('[data-test-apply-state="invalid"]');
     let errorAlerts = q('[data-test-boxel-alert="error"]');
-    // One failed or rejected call is something a model can notice and correct
-    // (the host tells it what was wrong); two is a run going sideways.
-    if (failed >= 2)
-      irregularities.push(`${failed} tool calls or patches failed`);
-    if (invalid >= 2)
-      irregularities.push(`${invalid} tool calls rejected as invalid`);
-    if (errorAlerts >= 2)
-      irregularities.push(`${errorAlerts} error alerts shown`);
+    // One turn with a failed or rejected call is something a model can notice
+    // and correct (the host tells it what was wrong); failures in two separate
+    // turns is a run going sideways. Count turns, not pills: one fix reply can
+    // carry several blocks that all fail together.
+    let messagesWithFailures = Array.from(
+      document.querySelectorAll('[data-test-message-idx]'),
+    ).filter(
+      (m) =>
+        m.querySelector(
+          '[data-test-apply-state="failed"], [data-test-apply-state="invalid"]',
+        ) || m.querySelector('[data-test-boxel-alert="error"]'),
+    ).length;
+    if (messagesWithFailures >= 2) {
+      irregularities.push(
+        `${messagesWithFailures} turns had a failed or rejected tool call or patch (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+      );
+    }
+    irregularities.push(`${errorAlerts} error alerts shown`);
     let gitStyle = Array.from(
       document.querySelectorAll('[data-test-ai-message-content]'),
     ).filter((el) => (el.textContent ?? '').includes('<<<<<<< SEARCH')).length;
@@ -387,9 +406,17 @@ async function waitForIdle(
   let applyingSince: number | undefined;
   let flatSince: number | undefined;
   let lastTextLength = -1;
+  let startedAt = Date.now();
   for (;;) {
     let now = Date.now();
     let activity = await readActivity(page);
+    if (
+      activity.botMessages === 0 &&
+      !activity.generating &&
+      now - startedAt > NO_REPLY_MS
+    ) {
+      return { stoppedBy: 'no-reply', irregularities: [] };
+    }
     if (activity.generating && activity.botTextLength === lastTextLength) {
       flatSince ??= now;
       if (now - flatSince > STALLED_GENERATION_MS) {
@@ -521,6 +548,12 @@ function classify(
     reasons.push('a tool pill stayed in "applying" past the host tool timeout');
     return { verdict: 'host-failure', reasons };
   }
+  if (stoppedBy === 'no-reply') {
+    reasons.push(
+      `the bot never started a reply within ${NO_REPLY_MS / 1000}s of the prompt; check whether the ai-bot joined the room (a missed invite leaves it in "invite" state forever)`,
+    );
+    return { verdict: 'bot-failure', reasons };
+  }
   if (stoppedBy === 'stalled') {
     reasons.push(
       `the bot showed "Generating results" with nothing streamed for ${STALLED_GENERATION_MS / 1000}s: the provider is either hung or reasoning without streaming; the room shows whether the turn completed later`,
@@ -616,134 +649,172 @@ test.beforeAll(async () => {
   await mkdir(RESULTS_DIR, { recursive: true });
 });
 
-for (let requestedModel of MODELS) {
-  test(`${requestedModel}: ${PROMPT}`, async ({ page }) => {
-    let slug = slugify(requestedModel);
-    let startedAt = Date.now();
-    let consoleErrors: string[] = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error') {
-        consoleErrors.push(message.text().slice(0, 300));
-      }
-    });
-    page.on('pageerror', (error) =>
-      consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`),
+async function runModel(
+  page: Page,
+  requestedModel: string,
+): Promise<RunResult> {
+  let slug = slugify(requestedModel);
+  let startedAt = Date.now();
+  let consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text().slice(0, 300));
+    }
+  });
+  page.on('pageerror', (error) =>
+    consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`),
+  );
+  let result: RunResult = {
+    requestedModel,
+    modelId: undefined,
+    reasoningEffort: undefined,
+    roomId: undefined,
+    realmUrl: undefined,
+    verdict: 'runner-failure',
+    reasons: [],
+    cardRendered: undefined,
+    renderedIn: undefined,
+    durationSeconds: 0,
+    stoppedBy: 'error',
+    irregularities: [],
+    analysis: undefined,
+    screenshot: undefined,
+    consoleErrors: [],
+  };
+  let credentials: Awaited<ReturnType<typeof loginWithPassword>> | undefined;
+  let step = 'start';
+  try {
+    step = 'login';
+    credentials = await loginViaLocalStorage(page);
+    // Human-readable stamp so the workspace list reads "Smoke Claude Opus
+    // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
+    let now = new Date();
+    let pad = (n: number) => String(n).padStart(2, '0');
+    let stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+      now.getHours(),
+    )}:${pad(now.getMinutes())}`;
+    step = 'create workspace';
+    result.realmUrl = await createWorkspace(
+      page,
+      `Smoke ${requestedModel} ${stamp}`,
+      `smoke-${slug}-${slugify(stamp)}`.slice(0, 60),
     );
-    let result: RunResult = {
-      requestedModel,
-      modelId: undefined,
-      reasoningEffort: undefined,
-      roomId: undefined,
-      realmUrl: undefined,
-      verdict: 'runner-failure',
-      reasons: [],
-      cardRendered: undefined,
-      renderedIn: undefined,
-      durationSeconds: 0,
-      stoppedBy: 'error',
-      irregularities: [],
-      analysis: undefined,
-      screenshot: undefined,
-      consoleErrors: [],
-    };
-    let credentials: Awaited<ReturnType<typeof loginWithPassword>> | undefined;
-    let step = 'start';
+    step = 'open room';
+    result.roomId = await openRoom(page);
+    step = 'select model';
+    await selectModel(page, requestedModel);
+    step = 'set act mode';
+    await ensureActMode(page);
+    step = 'confirm the tab is inside the new workspace';
+    await ensureInsideWorkspace(page, result.realmUrl);
+    step = 'send prompt';
+    await sendPrompt(page, result.roomId, PROMPT);
+    step = 'wait for idle';
+    let waited = await waitForIdle(page);
+    result.stoppedBy = waited.stoppedBy;
+    result.irregularities = waited.irregularities;
+    step = 'check render';
+
+    let rendered = await findRenderedCard(page, result.realmUrl);
+    result.cardRendered = rendered.cardId;
+    result.renderedIn = rendered.where;
+    result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await page.screenshot({ path: result.screenshot, fullPage: false });
+
+    let events = await allRoomEvents(result.roomId, credentials.accessToken);
+    let llm = activeLLM(events);
+    result.modelId = llm?.model;
+    result.reasoningEffort = llm?.reasoningEffort;
+    result.analysis = analyzeRoom(events, BOT_USER_ID);
+    let verdict = classify(
+      result.stoppedBy,
+      result.irregularities,
+      rendered.reasons,
+      rendered.cardId,
+      result.analysis,
+    );
+    result.verdict = verdict.verdict;
+    result.reasons = verdict.reasons;
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    result.reasons.push(
+      `runner error during "${step}": ${result.error.split('\n').slice(0, 3).join(' ')}`,
+    );
     try {
+      result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await page.screenshot({ path: result.screenshot });
+    } catch {
+      // the page may be gone
+    }
+    if (result.roomId && credentials) {
+      try {
+        let events = await allRoomEvents(
+          result.roomId,
+          credentials.accessToken,
+        );
+        result.analysis = analyzeRoom(events, BOT_USER_ID);
+        result.modelId = activeLLM(events)?.model;
+      } catch {
+        // best effort
+      }
+    }
+  } finally {
+    result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+    result.consoleErrors = consoleErrors.slice(0, 50);
+    await writeFile(
+      join(RESULTS_DIR, `${slug}.json`),
+      JSON.stringify(result, null, 2),
+    );
+    let graded = grade(result);
+    console.log(
+      `[smoke] ${graded.grade} ${requestedModel}: ${result.verdict}` +
+        (result.reasons.length ? ` — ${result.reasons.join('; ')}` : '') +
+        (graded.misses.length ? ` — ${graded.misses.join('; ')}` : '') +
+        (result.roomId ? ` (room ${result.roomId})` : ''),
+    );
+  }
+  return result;
+}
+
+// Two ways to run a sweep. Workers: one Playwright test per model, run by
+// parallel workers, each in its own browser (headless). Tabs: one test that
+// opens every model as a tab of one browser, for watching a sweep in a single
+// headed window. Same flow either way.
+const TABS_MODE = ['1', 'true'].includes(process.env.SMOKE_TABS ?? '');
+
+if (TABS_MODE) {
+  test(`${MODELS.length} models in tabs: ${PROMPT}`, async ({
+    browser,
+    baseURL,
+  }) => {
+    let context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1600, height: 1000 },
+      baseURL: baseURL ?? undefined,
+    });
+    let results = await Promise.all(
+      MODELS.map(async (model, index) => {
+        await new Promise((resolve) => setTimeout(resolve, index * STAGGER_MS));
+        let page = await context.newPage();
+        return runModel(page, model);
+      }),
+    );
+    let failed = results
+      .filter((r) => r.verdict !== 'pass')
+      .map((r) => `${r.requestedModel}: ${r.reasons.join('; ')}`);
+    expect(failed, 'every model passes').toEqual([]);
+  });
+} else {
+  for (let requestedModel of MODELS) {
+    test(`${requestedModel}: ${PROMPT}`, async ({ page }) => {
       if (!staggered) {
         staggered = true;
         await page.waitForTimeout(test.info().parallelIndex * STAGGER_MS);
       }
-      step = 'login';
-      credentials = await loginViaLocalStorage(page);
-      // Human-readable stamp so the workspace list reads "Smoke Claude Opus
-      // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
-      let now = new Date();
-      let pad = (n: number) => String(n).padStart(2, '0');
-      let stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
-        now.getHours(),
-      )}:${pad(now.getMinutes())}`;
-      step = 'create workspace';
-      result.realmUrl = await createWorkspace(
-        page,
-        `Smoke ${requestedModel} ${stamp}`,
-        `smoke-${slug}-${slugify(stamp)}`.slice(0, 60),
-      );
-      step = 'open room';
-      result.roomId = await openRoom(page);
-      step = 'select model';
-      await selectModel(page, requestedModel);
-      step = 'set act mode';
-      await ensureActMode(page);
-      step = 'confirm the tab is inside the new workspace';
-      await ensureInsideWorkspace(page, result.realmUrl);
-      step = 'send prompt';
-      await sendPrompt(page, result.roomId, PROMPT);
-      step = 'wait for idle';
-      let waited = await waitForIdle(page);
-      result.stoppedBy = waited.stoppedBy;
-      result.irregularities = waited.irregularities;
-      step = 'check render';
-
-      let rendered = await findRenderedCard(page, result.realmUrl);
-      result.cardRendered = rendered.cardId;
-      result.renderedIn = rendered.where;
-      result.screenshot = join(RESULTS_DIR, `${slug}.png`);
-      await page.screenshot({ path: result.screenshot, fullPage: false });
-
-      let events = await allRoomEvents(result.roomId, credentials.accessToken);
-      let llm = activeLLM(events);
-      result.modelId = llm?.model;
-      result.reasoningEffort = llm?.reasoningEffort;
-      result.analysis = analyzeRoom(events, BOT_USER_ID);
-      let verdict = classify(
-        result.stoppedBy,
-        result.irregularities,
-        rendered.reasons,
-        rendered.cardId,
-        result.analysis,
-      );
-      result.verdict = verdict.verdict;
-      result.reasons = verdict.reasons;
-    } catch (error) {
-      result.error = error instanceof Error ? error.message : String(error);
-      result.reasons.push(
-        `runner error during "${step}": ${result.error.split('\n').slice(0, 3).join(' ')}`,
-      );
-      try {
-        result.screenshot = join(RESULTS_DIR, `${slug}.png`);
-        await page.screenshot({ path: result.screenshot });
-      } catch {
-        // the page may be gone
-      }
-      if (result.roomId && credentials) {
-        try {
-          let events = await allRoomEvents(
-            result.roomId,
-            credentials.accessToken,
-          );
-          result.analysis = analyzeRoom(events, BOT_USER_ID);
-          result.modelId = activeLLM(events)?.model;
-        } catch {
-          // best effort
-        }
-      }
-    } finally {
-      result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
-      result.consoleErrors = consoleErrors.slice(0, 50);
-      await writeFile(
-        join(RESULTS_DIR, `${slug}.json`),
-        JSON.stringify(result, null, 2),
-      );
-      let graded = grade(result);
-      console.log(
-        `[smoke] ${graded.grade} ${requestedModel}: ${result.verdict}` +
-          (result.reasons.length ? ` — ${result.reasons.join('; ')}` : '') +
-          (graded.misses.length ? ` — ${graded.misses.join('; ')}` : '') +
-          (result.roomId ? ` (room ${result.roomId})` : ''),
-      );
-    }
-    expect(result.verdict, result.reasons.join('; ')).toBe('pass');
-  });
+      let result = await runModel(page, requestedModel);
+      expect(result.verdict, result.reasons.join('; ')).toBe('pass');
+    });
+  }
 }
 
 test.afterAll(async () => {
