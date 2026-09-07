@@ -1066,6 +1066,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isCard: true,
           isComponent: false,
           isField: false,
+          isFile: false,
           cardThumbnailURL: null,
           ref: {
             module: `${testRealmURL}person`,
@@ -1113,6 +1114,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        isFile: false,
         cardTheme: null,
         cardInfo: { cardThumbnail: null, theme: null },
       });
@@ -1192,6 +1194,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isCard: true,
           isComponent: false,
           isField: false,
+          isFile: false,
           cardThumbnailURL: null,
           ref: {
             module: `${testRealmURL}person`,
@@ -1239,6 +1242,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        isFile: false,
         cardTheme: null,
         cardInfo: { cardThumbnail: null, theme: null },
       });
@@ -2937,6 +2941,7 @@ module(`Integration | realm indexing`, function (hooks) {
       isCard: true,
       isComponent: false,
       isField: false,
+      isFile: false,
       cardTheme: null,
       cardInfo: { cardThumbnail: null, theme: null },
     });
@@ -3343,6 +3348,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isCard: true,
           isComponent: false,
           isField: false,
+          isFile: false,
           cardInfo,
         },
         meta: {
@@ -3396,6 +3402,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        isFile: false,
         cardTheme: null,
         cardInfo: { cardThumbnail: null, theme: null },
       });
