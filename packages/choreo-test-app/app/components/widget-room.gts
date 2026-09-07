@@ -931,7 +931,7 @@ export class WidgetRoom extends Component {
           >All {{this.count}} demos ☰</button></div></header>
       {{#if this.showWelcome}}<div class="wr-intro"><span class="wr-eyebrow">THE
             CHOREO ATELIER / OPEN COLLECTION</span><h1>Feel the change.<br
-            />Enter the story.</h1><p>Forty-five living studies in interaction,
+            />Enter the story.</h1><p>Forty-six living studies in interaction,
             space, and film.</p><div><button
               type="button"
               class="wr-primary"

@@ -80,6 +80,7 @@ const RESERVED = new Set([
   'stagger',
   'swap',
   'to',
+  'times',
 ]);
 
 /** the pre-seconds spellings, kept only to fail loudly with the new name */
@@ -206,10 +207,12 @@ export class Tween extends StepComponent<
     /** extra plays after the first; `Infinity` is an ambient loop whose phase rides the run clock */
     repeat?: number;
     repeatType?: 'loop' | 'mirror' | 'reverse';
+    /** Normalized keyframe offsets, one per value in every keyframe track. */
+    times?: number[];
   }
 > {
   node(): TimelineNode {
-    const { of, by, duration, ease, delay, order, repeat, repeatType } =
+    const { of, by, duration, ease, delay, order, repeat, repeatType, times } =
       this.args;
     return {
       at: this.args.at,
@@ -224,6 +227,7 @@ export class Tween extends StepComponent<
       props: propsOf(this.args),
       repeat,
       repeatType,
+      times,
       stagger: msOf(this.args.stagger),
     };
   }

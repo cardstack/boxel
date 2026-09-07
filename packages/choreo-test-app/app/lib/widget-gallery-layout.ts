@@ -52,6 +52,7 @@ const shapes: Record<string, [number, number]> = {
   trail: [360, 360],
   jump: [480, 420],
   keyframes: [360, 360],
+  'circle-loop': [480, 380],
   'long-take': [840, 540],
   sagrada: [840, 540],
   grip: [720, 440],
@@ -111,6 +112,7 @@ const zones = [
     'pointer',
     'stagger',
     'trail',
+    'circle-loop',
   ],
   [
     'tabs',

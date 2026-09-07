@@ -2,11 +2,25 @@ import lesson4 from '../content/guides/core-header.md?raw';
 import lesson1 from '../content/guides/core-reorder-grid.md?raw';
 import lesson3 from '../content/guides/core-reveal.md?raw';
 import lesson2 from '../content/guides/core-shared-layout.md?raw';
+import circleLoop from '../content/guides/interactive-circle-loop.md?raw';
 import lesson5 from '../content/guides/interactive-drift.md?raw';
 import lesson6 from '../content/guides/interactive-hang.md?raw';
 import lesson0 from '../content/guides/interactive-slides.md?raw';
 import type { Guide } from './guides';
 export const demoGuides: Guide[] = [
+  {
+    slug: 'interactive-circle-loop',
+    title: 'Composing a Continuous Loop',
+    section: 'interactive',
+    summary: 'Keyframe timing connects cluster, field, and grid',
+    source: circleLoop,
+    demo: {
+      id: 'circle-loop',
+      title: 'Circle continuity',
+      instruction:
+        'Compare Soft Orbit and Punchy Mosaic. Adjust zoom separately from grid spacing to separate parent motion from local arrangement.',
+    },
+  },
   {
     slug: 'interactive-slides',
     title: 'Composing Slide Changes',

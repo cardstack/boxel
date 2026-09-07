@@ -156,7 +156,10 @@ function literalIds(tree) {
   visit(tree);
   return ids;
 }
-const demoIds = literalIds(source('test-app/app/lib/catalog.ts'));
+const demoIds = new Set([
+  ...literalIds(source('test-app/app/lib/catalog.ts')),
+  ...literalIds(source('test-app/app/lib/docs-demos.ts')),
+]);
 assert.equal(
   new Set(lessons.map((lesson) => lesson.id)).size,
   lessons.length,

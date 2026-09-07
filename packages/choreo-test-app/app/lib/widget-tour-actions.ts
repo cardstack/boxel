@@ -36,6 +36,7 @@ export const tourActions: Record<string, TourAction[]> = {
   enter: [click(0.8, '.replay')],
   presence: [click(1, '.replay'), click(3, '.replay')],
   keyframes: [],
+  'circle-loop': [], // The complete cycle plays automatically on activation.
   path: [click(0.8, '.replay')],
   pointer: [
     { at: 1, selector: '.follow-stage', kind: 'pointer', value: 0.2 },

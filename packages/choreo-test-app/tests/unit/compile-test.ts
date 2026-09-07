@@ -41,6 +41,40 @@ const fade = (over: Partial<TimelineNode> = {}): TimelineNode =>
   }) as TimelineNode;
 
 module('Unit | choreo | compile', function () {
+  test('nonuniform keyframe times survive compilation and reject ambiguous tracks', function (assert) {
+    const cs = changeset('a');
+    const times = [0, 0.1, 0.8, 1];
+    const node = fade({
+      props: { x: [0, 0, 100, 0] },
+      times,
+      repeat: Infinity,
+    });
+    const { cues } = compile([node], cs);
+    assert.deepEqual(cues[0]!.transition!.times, times);
+    assert.strictEqual(cues[0]!.transition!.repeat, Infinity);
+    assert.notOk(
+      'times' in cues[0]!.target!,
+      'timing is not an animated property'
+    );
+    for (const invalid of [
+      [0, 0.5, 1],
+      [0, 0.7, 0.4, 1],
+      [0, 0, 0.8, 1],
+      [0, 0.1, 0.8, 2],
+      [0, NaN, 0.8, 1],
+    ]) {
+      assert.throws(
+        () =>
+          compile([fade({ props: { x: [0, 0, 100, 0] }, times: invalid })], cs),
+        /times must increase/
+      );
+    }
+    assert.notOk(
+      'times' in compile([fade()], cs).cues[0]!.transition!,
+      'omission keeps existing timing'
+    );
+  });
+
   test('an anchored step starts against the named one and is lifted from the flow', function (assert) {
     const cs = changeset('a', 'b', 'c');
     const { cues } = compile(

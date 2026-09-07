@@ -191,7 +191,9 @@ const TRANSFORMS: Record<string, (v: string) => string> = {
 /** cue.target, as WAAPI property-indexed keyframes */
 export function keyframesOf(
   target: Record<string, unknown>,
-): Record<string, string[]> {
+  times?: number[],
+  ease?: string,
+): PropertyIndexedKeyframes {
   const out: Record<string, string[]> = {};
   const transforms = new Map<string, string[]>();
   for (const key in target) {
@@ -215,7 +217,9 @@ export function keyframesOf(
     }
     out['transform'] = frames;
   }
-  return out;
+  return times
+    ? { ...out, offset: times, easing: times.map(() => ease ?? 'linear') }
+    : out;
 }
 
 const NAMED: Record<string, string> = {
@@ -281,7 +285,12 @@ export function deliver(cue: Cue, speed: number): Delivery {
   const parts = split(cue.sprite.element, by);
   const ranks = ladder(parts.slots.length, order);
   const spans = windows(parts.slots.length, cue.duration, stagger);
-  const keyframes = keyframesOf(cue.target ?? {});
+  const times = cue.transition?.times as number[] | undefined;
+  const keyframes = keyframesOf(
+    cue.target ?? {},
+    times,
+    cssEasing(cue.transition?.ease as Easing | undefined, cue.duration),
+  );
   const isSpring = cue.kind === 'spring';
   const sprung = isSpring
     ? springEasing(cue.transition as SpringSpec | undefined)
@@ -294,12 +303,14 @@ export function deliver(cue: Cue, speed: number): Delivery {
       slot.el.animate(keyframes as PropertyIndexedKeyframes, {
         delay: w.at * speed,
         duration: Math.max(1, ms * speed),
-        easing: sprung
-          ? sprung.easing
-          : cssEasing(
-              (cue.transition as { ease?: Easing } | undefined)?.ease,
-              ms,
-            ),
+        easing: times
+          ? 'linear'
+          : sprung
+            ? sprung.easing
+            : cssEasing(
+                (cue.transition as { ease?: Easing } | undefined)?.ease,
+                ms,
+              ),
         fill: 'both',
       }),
     );

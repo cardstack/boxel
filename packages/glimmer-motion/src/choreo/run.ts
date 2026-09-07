@@ -2170,14 +2170,19 @@ export class ChoreoRun implements Run {
       // and its phase is the run clock's remainder (§4.5)
       const el = cue.sprite.element;
       const cycle = t.end - t.start;
-      t.loopAnimation = el.animate(keyframesOf(cue.target ?? {}), {
-        duration: Math.max(1, cycle),
-        easing: cssEasing(
-          (cue.transition as { ease?: Easing } | undefined)?.ease,
-          cycle,
-        ),
-        iterations: Infinity,
-      });
+      const times = cue.transition?.times as number[] | undefined;
+      const segmentEase = cssEasing(
+        cue.transition?.ease as Easing | undefined,
+        cycle,
+      );
+      t.loopAnimation = el.animate(
+        keyframesOf(cue.target ?? {}, times, segmentEase),
+        {
+          duration: Math.max(1, cycle),
+          easing: times ? 'linear' : segmentEase,
+          iterations: Infinity,
+        },
+      );
       t.loopAnimation.playbackRate = this.rate;
       if (!this.playing) {
         t.loopAnimation.pause();
@@ -2387,11 +2392,23 @@ export class ChoreoRun implements Run {
         } as never);
         value = generator.next(now - t.start).value;
       } else {
+        const times = Array.isArray(raw)
+          ? (transition?.times as number[] | undefined)
+          : undefined;
         const eased = ease ? ease(p) : p;
         const segments = numeric.length - 1;
         const at = Math.min(segments - 1e-9, eased * segments);
-        const index = Math.max(0, Math.floor(at));
-        const local = at - index;
+        const index = times
+          ? p >= 1
+            ? segments - 1
+            : Math.max(0, times.findIndex((time) => time > p) - 1)
+          : Math.max(0, Math.floor(at));
+        const progress = times
+          ? p >= 1
+            ? 1
+            : (p - times[index]!) / (times[index + 1]! - times[index]!)
+          : at - index;
+        const local = times && ease ? ease(progress) : progress;
         value =
           numeric[index]! + (numeric[index + 1]! - numeric[index]!) * local;
       }

@@ -1,5 +1,6 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
+import { CircleLoop } from 'test-app/components/examples/circle-loop';
 import { Crossing } from 'test-app/components/examples/crossing';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Drift } from 'test-app/components/examples/drift';
@@ -67,6 +68,8 @@ import { WiresNotes } from 'test-app/components/notes/wires';
 import { SagradaStage } from 'test-app/components/sagrada-stage';
 import { SylvaStage } from 'test-app/components/sylva-stage';
 import { TowerStage } from 'test-app/components/tower-stage';
+
+import { docsDemos } from './docs-demos';
 
 export const groups = [
   'Animate',
@@ -1414,6 +1417,19 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
     title: 'Keyframes',
   },
   {
+    id: 'circle-loop',
+    title: 'Circle continuity',
+    group: 'Choreo',
+    Example: CircleLoop,
+    slowmo: true,
+    lede: 'One mounted cast, two coordinate levels, one repeating score.',
+    apis: ['Choreo', 'c.Tween', 'c.Parallel', '@times', '@repeat'],
+    sample: `<c.Tween @of={{c.id 'dot'}}
+  @x={{array 0 0 100 0 0}}
+  @times={{array 0 0.15 0.5 0.85 1}}
+  @duration={{8}} @repeat={{this.forever}} />`,
+  },
+  {
     Example: LongTake,
     apis: ['c.Frame', 'c.Aim', 'c.Pan', 'c.SlowZoom', 'c.Camera3D'],
     group: '3D',
@@ -2050,7 +2066,10 @@ c.run.play();       // puts the new run back at the SAME t, so retiming
 ];
 
 export function findDemo(id: string): DemoEntry | undefined {
-  return catalog.find((demo) => demo.id === id);
+  return (
+    catalog.find((demo) => demo.id === id) ??
+    docsDemos.find((demo) => demo.id === id)
+  );
 }
 
 export function neighbors(id: string): { next?: DemoEntry; prev?: DemoEntry } {

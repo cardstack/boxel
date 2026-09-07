@@ -37,6 +37,15 @@ export const tourStops = [
     text: 'Keyframes shape the journey between endpoints, adding anticipation and overshoot.',
   },
   {
+    id: 'circle-loop',
+    score: 8,
+    seconds: 10,
+    chapter: '01 / Feedback',
+    title: 'One cast, many arrangements',
+    cue: 'Follow the circles from cluster to field to grid. The whole scene zooms while each circle moves locally.',
+    text: 'The same circles become a cluster, a field, then a grid. One shared zoom connects them. Precise keyframe timing gives the loop its rhythm, without rebuilding the scene.',
+  },
+  {
     id: 'path',
     score: 4,
     seconds: 4,

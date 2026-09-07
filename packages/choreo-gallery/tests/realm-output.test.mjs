@@ -19,9 +19,9 @@ test('the unlisted comparison realm asks crawlers not to index it', () => {
   );
 });
 
-test('the generated realm covers the canonical 45-demo catalog exactly once', () => {
-  assert.equal(manifest.demoCount, 45);
-  assert.equal(new Set(manifest.ids).size, 45);
+test('the generated realm covers the canonical 46-demo catalog exactly once', () => {
+  assert.equal(manifest.demoCount, 46);
+  assert.equal(new Set(manifest.ids).size, 46);
   for (const id of manifest.ids) {
     const card = readJson(`demos/${id}.json`);
     assert.equal(card.data.attributes.demoId, id);

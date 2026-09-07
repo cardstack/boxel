@@ -2,6 +2,7 @@ import type { TOC } from '@ember/component/template-only';
 import { LinkTo } from '@ember/routing';
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
+import { DemoGuideLink } from 'test-app/components/demo-guide-link';
 import { DemoWorkbench } from 'test-app/components/demo-workbench';
 import type { DemoEntry } from 'test-app/lib/catalog';
 
@@ -19,7 +20,7 @@ const embedded = modifier((_element: HTMLElement, [on]: [boolean]) => {
           class="guide-deck"
         >{{@model.lede}}</p><p><LinkTo @route="index">← All demos</LinkTo>
           ·
-          <LinkTo @route="docs.index">Guides</LinkTo></p>{{/unless}}
+          <DemoGuideLink @id={{@model.id}} /></p>{{/unless}}
       <DemoWorkbench @demo={{@model}} @embedded={{@controller.embedded}} />
     {{/if}}
   </div>
