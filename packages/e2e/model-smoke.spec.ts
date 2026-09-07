@@ -426,6 +426,14 @@ async function waitForIdle(
       flatSince = undefined;
     }
     lastTextLength = activity.botTextLength;
+    if (activity.applying > 0) {
+      applyingSince ??= now;
+      if (now - applyingSince > STUCK_APPLYING_MS) {
+        return { stoppedBy: 'stuck', irregularities: [] };
+      }
+    } else {
+      applyingSince = undefined;
+    }
     if (activity.irregularities.length > 0) {
       // Something already went wrong. Letting the model carry on only spends
       // more turns on a broken path; stop it and read the room instead.
@@ -434,14 +442,6 @@ async function waitForIdle(
         stoppedBy: 'irregularity',
         irregularities: activity.irregularities,
       };
-    }
-    if (activity.applying > 0) {
-      applyingSince ??= now;
-      if (now - applyingSince > STUCK_APPLYING_MS) {
-        return { stoppedBy: 'stuck', irregularities: [] };
-      }
-    } else {
-      applyingSince = undefined;
     }
     if (activity.idle && activity.botMessages > 0) {
       idleSince ??= now;
