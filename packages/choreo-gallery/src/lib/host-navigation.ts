@@ -1,4 +1,5 @@
 import { tracked } from '@glimmer/tracking';
+import config from 'choreo-gallery/config/environment';
 
 let navigate: (id: string | null) => void = () => {};
 let hrefFor: (id: string | null) => string = () => './';
@@ -18,6 +19,29 @@ export function routeId(
       : route;
 }
 export const router = {
+  urlFor(
+    route: string,
+    model?: string,
+    options?: { queryParams?: Record<string, string | boolean> },
+  ) {
+    const routes: Record<string, string> = {
+      'docs.topic': 'docs',
+      docs: 'docs',
+      'demo-lab': 'playground',
+      'widget-room': '_widgets',
+    };
+    if (!(route in routes)) {
+      return href(route, undefined, model);
+    }
+    const path = routes[route] + (model ? `/${encodeURIComponent(model)}` : '');
+    const query = new URLSearchParams(
+      Object.entries(options?.queryParams ?? {}).map(([key, value]) => [
+        key,
+        String(value),
+      ]),
+    ).toString();
+    return `${config.rootURL}iframe/index.html?acceptHeader=application%2Fvnd.card%2Bsource#/${path}${query ? '?' + query : ''}`;
+  },
   transitionTo(route: string, model?: string) {
     navigate(routeId(route, undefined, model));
     // Sylva's Ember route is its full theater. In Boxel keep the same live

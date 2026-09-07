@@ -13,3 +13,5 @@
 /src/lib/*
 !/src/lib/theme.ts
 !/src/lib/host-navigation.ts
+
+/src/content/

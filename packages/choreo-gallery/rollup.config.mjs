@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 import { Addon } from '@embroider/addon-dev/rollup';
@@ -56,6 +56,21 @@ export default {
           if (existsSync(candidate) && statSync(candidate).isFile()) {
             return candidate;
           }
+        }
+        return null;
+      },
+    },
+    {
+      name: 'raw-guide-content',
+      resolveId(id, importer) {
+        if (importer && id.endsWith('?raw')) {
+          return resolve(dirname(importer), id.slice(0, -4)) + '?raw';
+        }
+        return null;
+      },
+      load(id) {
+        if (id.endsWith('?raw')) {
+          return `export default ${JSON.stringify(readFileSync(id.slice(0, -4), 'utf8'))};`;
         }
         return null;
       },
