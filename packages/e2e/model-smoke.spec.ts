@@ -261,10 +261,15 @@ async function selectModel(page: Page, requested: string) {
   return matches[0].name;
 }
 
-async function ensureActMode(page: Page) {
-  let act = page.locator('[data-test-llm-mode-option="act"]');
-  if (await act.isVisible()) {
-    await act.click();
+// A new room is in Act mode by default, and the runner must not touch the
+// toggle. It only reports what the toggle shows, so a room that ends up in Ask
+// mode (where every tool and patch waits for a click nobody makes) is visible
+// in the log.
+async function reportMode(page: Page, requestedModel: string) {
+  let selected = page.locator('[data-test-llm-mode-option].selected');
+  if ((await selected.count()) > 0) {
+    let mode = await selected.first().getAttribute('data-test-llm-mode-option');
+    console.log(`[smoke] ${requestedModel}: mode toggle shows ${mode}`);
   }
 }
 
@@ -719,8 +724,8 @@ async function runModel(
     result.roomId = await openRoom(page);
     step = 'select model';
     await selectModel(page, requestedModel);
-    step = 'set act mode';
-    await ensureActMode(page);
+    step = 'read mode toggle';
+    await reportMode(page, requestedModel);
     step = 'confirm the tab is inside the new workspace';
     await ensureInsideWorkspace(page, result.realmUrl);
     step = 'send prompt';
