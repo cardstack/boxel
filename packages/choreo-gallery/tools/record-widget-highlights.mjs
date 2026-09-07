@@ -101,7 +101,7 @@ try {
   });
   await page.addStyleTag({
     content:
-      '.wr-guide-plane{visibility:hidden!important}.wr-header-actions,.wr-guide-controls,.wr-guide-copy>small,.dialkit-root,.drift-rail,.drift-tab{display:none!important}.wr-shell .wr-guide-plane{left:48px;right:48px;bottom:36px;grid-template-columns:72px minmax(0,1fr);padding:22px 28px}.wr-shell .wr-guide-copy{max-width:none}.wr-shell .wr-guide-copy p{font-size:17px;max-width:1500px;line-height:1.4}.wr-shell .wr-guide-copy h2{font-size:28px}.wr-shell .wr-header{left:48px;right:48px;top:32px}*{cursor:none!important}',
+      '.wr-guide-plane{visibility:hidden!important}.wr-navigation,.wr-header-actions,.wr-guide-controls,.wr-guide-copy>small,.dialkit-root,.drift-rail,.drift-tab{display:none!important}.wr-shell .wr-guide-plane{left:48px;right:48px;bottom:36px;grid-template-columns:72px minmax(0,1fr);padding:22px 28px}.wr-shell .wr-guide-copy{max-width:none}.wr-shell .wr-guide-copy p{font-size:17px;max-width:1500px;line-height:1.4}.wr-shell .wr-guide-copy h2{font-size:28px}.wr-shell .wr-header{left:48px;right:48px;top:32px}*{cursor:none!important}',
   });
   // Flush native compositor frames and deferred demo setup before freezing time.
   for (let warm = 0; warm < 30; warm++) {

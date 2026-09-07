@@ -14978,3 +14978,9 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
 .gallery-demo-links .gallery-tune-link {
   border-top: 0;
 }
+
+.boxel-glyph {
+  display: inline-block;
+  vertical-align: -0.18em;
+  flex: none;
+}

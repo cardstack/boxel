@@ -22,13 +22,7 @@ By the end of this section, you will be able to:
 
 ## Installing the Library
 
-In an existing Ember application with template tag support, install the library and its Motion dependencies:
-
-```sh title="Terminal"
-pnpm add glimmer-motion motion-dom motion-utils
-```
-
-Your application also needs the Glimmer and Ember packages listed in the [package's peer dependencies](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/package.json). Keep `motion-dom` and `motion-utils` on compatible versions. This repository's lockfile records the combination used by the demos.
+The verified path for this checkout uses built local packages in a separate Ember/Vite app. Follow [Build Your First Choreo Application](/docs/core-first-app) for the generator and exact commands. The local package manifests remain at version 0.0.0; these guides do not assume a published npm installation. Keep Motion peer versions aligned with the generated package.json and the repository lockfile.
 
 ## Your First Animation
 
@@ -61,3 +55,7 @@ The modifier works on the paragraph itself. You do not need a special animated e
 For hover, tap, and changes to a single element, continue with [Animating an Element](/docs/core-elements). For a list that adds or removes items, read [Entering and Leaving](/docs/core-presence).
 
 For cameras, live DOM planes, and galleries, explore [Spatial & 3D Choreo](/docs/spatial-start). When several changes need to happen in an order, move on to [Interactive Choreo](/docs/interactive-start). When a clock needs to reproduce an entire presentation, start with [Recorded & Film Choreo](/docs/film-start).
+
+## A complete working tutorial
+
+Continue with the [end-to-end tutorial](/docs/core-first-app) for a runnable application, complete source, and verification commands.

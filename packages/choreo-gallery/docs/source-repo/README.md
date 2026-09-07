@@ -1,11 +1,11 @@
 <div align="center">
 
-# Choreo
+<h1><img src="docs/media/choreo-mark.svg" width="36" height="36" alt=""> Choreo</h1>
 
 **Motion, Choreo-graphed.**
 The [Motion](https://motion.dev) engine for Ember — and a timeline for the scene. `<Choreo>` watches a render pass, measures its **changeset** — what was inserted, removed, kept, and where everything stood before and after — and plays a score you declare over it. Magic-Move crossings, gates you click through, wires drawn every frame, values derived from other elements' measurements — all interruptible mid-flight, by design.
 
-**Live gallery:** [**cardstack.github.io/choreo**](https://cardstack.github.io/choreo/) &nbsp; · &nbsp; 38 stages, every one a test fixture
+**Live gallery:** [**cardstack.github.io/choreo**](https://cardstack.github.io/choreo/) &nbsp; · &nbsp; 46 demos with source and guides
 
 </div>
 
@@ -32,22 +32,16 @@ The [Motion](https://motion.dev) engine for Ember — and a timeline for the sce
 </div>
 
 <p align="center">
-  <img src="docs/gallery.png" alt="The Choreo gallery in light mode: the Motion, Choreographed hero above a grid of live demos — Playhead, Lightbox, and more" width="900">
+  <img src="docs/media/mockup.webp" alt="Mockup: a live DOM interface projected inside a 3D device" width="900">
 </p>
 
+**Featured demo: Mockup.** The screen is a real Glimmer interface, projected inside
+a 3D device. Its controls remain interactive while Choreo coordinates the screen's
+layout transitions and the camera. Switch between 2D and 3D to compare the same
+application in both spaces. [Source](test-app/app/components/examples/mockup.gts) ·
+[How DOM projection works](docs/dom-in-3d.md).
+
 ---
-
-## Guides and Playgrounds
-
-The gallery application includes a documentation website at `/docs`, with four
-learning paths: core glimmer-motion, interactive Choreo, spatial/3D Choreo, and
-recorded/film Choreo. Each catalog demo has a DialKit 2 tuning workspace at
-`/playground/:demo_id`; the main navigation also opens the 3D gallery.
-
-See [the documentation website guide](docs/documentation-site.md) for local
-startup, content authoring, and deployment. Agents can use the shared
-[choreo-create skill](.claude/skills/choreo-create/SKILL.md) to recreate examples
-or combine them into applications and films.
 
 ## What is Choreo?
 
@@ -57,7 +51,7 @@ Choreo is two layers in one repo, published as two packages.
 
 **The binding underneath** is **`glimmer-motion`**: `motion-dom` — Motion's framework-free engine, untouched — bound to Glimmer as a modifier and a handful of components. Layout animation, shared-element transitions, presence, variants, drag, reorder, scroll. It is a complete, usable port in its own right (held to Motion's own test suites, pixel for pixel), and it is what the choreography stands on. Both ship in the one `glimmer-motion` package.
 
-A third piece, **`choreo-player`**, is a dependency-free headless transport for clocking Choreo runs from outside — a video renderer, a capture worker, a scrub UI ([packages/choreo-player](packages/choreo-player)).
+The second package, **`choreo-player`**, is a dependency-free headless transport for clocking Choreo runs from outside — a video renderer, a capture worker, a scrub UI ([packages/choreo-player](packages/choreo-player)).
 
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`. The repo is **Choreo**; the published package is still **`glimmer-motion`** — one npm name, unchanged, and every import in these docs is the real one.
 
@@ -75,6 +69,7 @@ A third piece, **`choreo-player`**, is a dependency-free headless transport for 
 - [DOM in 3D: c.Camera3D](#dom-in-3d-ccamera3d)
 - [The binding underneath](#the-binding-underneath) · [Why the engine is untouched](#why-the-engine-is-untouched) · [How it was made](#how-it-was-made) · [Fidelity](#fidelity)
 - [API](#api) · [React → Glimmer](#react--glimmer) · [Three rules React does not need](#three-rules-react-does-not-need)
+- [Guides and tuning](#guides-and-tuning) · [3D gallery](#3d-gallery)
 - [Testing](#testing) · [Architecture](#architecture) · [Development](#development) · [Roadmap](#roadmap) · [Credits](#credits)
 
 ## Why choreography?
@@ -87,11 +82,24 @@ The changeset is what makes the declarative form possible. Because the region me
 
 ## Install
 
-```
-pnpm add glimmer-motion motion-dom motion-utils
+The verified setup for this checkout uses built local packages. Start with the
+[complete first-app tutorial](test-app/app/content/guides/core-first-app.md): it
+generates a clean Ember/Vite consumer and walks through installation, a working
+scene, and verification. Current package manifests are version `0.0.0`; this
+workflow does not depend on an npm release.
+
+```sh
+pnpm install
+pnpm build
+node scripts/create-tutorial-app.mjs /tmp/my-choreo-app
+cd /tmp/my-choreo-app
+pnpm install
+pnpm start
 ```
 
-Peer dependencies: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glimmer/component`, `@glimmer/tracking`, `ember-source >= 5.4`. It's a v2 addon: Embroider and Vite apps consume it directly, with TypeScript types and Glint signatures. The headless transport is separate: `pnpm add choreo-player`.
+The generated app uses local file dependencies and the declared Motion peers.
+Keep the checkout in place while using it. The addon is a v2 addon with Glint
+signatures and TypeScript declarations; `choreo-player` remains a separate package.
 
 ## At a glance: the design decisions
 
@@ -472,6 +480,11 @@ Any element. Named arguments are Motion's props — same names, same types (`Mot
 
 Timing: `@duration` / `@delay` in seconds, `@spring` for spring specs, `@stagger` across a query's sprites; `@name` / `@at={{at 'name'}}` / `after('name')` on steps _and blocks_. Any property may be a function `(sprite, changeset) => value`; sprites carry `initial` / `final` bounds in `context`, `parent` and `page` space, a `delta`, and their `counterpart`. Open vocabulary: `StepComponent` + `toMs` + node literals ([docs/step-vocabulary.md](docs/step-vocabulary.md)).
 
+`c.Tween` also accepts normalized `@times` for keyframe arrays, so a loop can
+hold, scatter, and regroup on an explicit rhythm without remounting its elements.
+The [Circle continuity example](test-app/app/components/examples/circle-loop.gts)
+and [guide](test-app/app/content/guides/interactive-circle-loop.md) show the pattern.
+
 ### `<Presence>` / `<LayoutGroup>` / `<ReorderGroup>` + `<ReorderItem>` / `<MotionConfig>`
 
 As in Motion — see [React → Glimmer](#react--glimmer). `<Presence>` keeps leaving items rendered until their exit finishes (`@mode`, `@initial`, `@custom`, `@onExitComplete`, `@propagate`); `<LayoutGroup>` namespaces `layoutId`s and hosts the render detector; outside one, wrap the state change in `layoutChange(() => …)`.
@@ -561,7 +574,7 @@ Only the last two lines know about Ember. Re-hosting means re-doing the modifier
 
 ## Examples
 
-`test-app` serves a gallery of **42 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **3D**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
+`test-app` serves a gallery of **46 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **3D**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
 
 Every demo is also a test fixture: the interruption soak hammers them, which is why they are the first place a regression shows up.
 
@@ -569,13 +582,57 @@ Every demo is also a test fixture: the interruption soak hammers them, which is 
 pnpm --filter test-app start
 ```
 
+### Guides and tuning
+
+Three complete tutorials provide runnable starting points:
+[first application](test-app/app/content/guides/core-first-app.md),
+[first spatial scene](test-app/app/content/guides/spatial-first-scene.md), and
+[first MP4](test-app/app/content/guides/film-first-export.md). The
+[troubleshooting guide](test-app/app/content/guides/core-troubleshooting.md)
+connects common failures to concrete checks.
+
+The documentation website at `/docs` teaches four paths: **core glimmer-motion**,
+**interactive Choreo**, **spatial & 3D Choreo**, and **recorded & film Choreo**.
+Each section starts with motivation and goals; concept pages pair explanations
+with code, live examples, experiments, and pitfalls.
+
+Every catalog demo links to its detailed guide and a DialKit workspace at
+`/playground/:demo_id`. Controls edit named variables consumed by that demo,
+with units, authored presets, and restoration of source defaults. Timing edits
+update running motion without remounting the example.
+
+The [API inventory](docs/api-inventory.json) and
+[teaching map](test-app/app/content/demo-lessons.json) cover 343 API/vocabulary
+entries and all 46 demos across 88 guides. `pnpm docs:check` checks those mappings,
+guide depth, section goals, and internal links. Focused docs-only spatial and film
+studies remain [planned](docs/docs-studies-plan.md), separate from shipped examples.
+See [documentation authoring](docs/documentation-site.md) for the content workflow.
+
+### 3D gallery
+
+`/_widgets` arranges the catalog in a dark exhibition space. Mockup-style
+thumbsticks provide pan, zoom, and rotation around the viewer's fixed position;
+arrow keys work when a control is focused. Inactive tiles use prerendered previews,
+with live interaction activated on approach to limit rendering work.
+
+The full audio tour connects the demos through narrated explanations and guided
+clicks. Its resume point survives pauses, exploration, and refreshes. A separate
+highlight tour covers selected capabilities in about 59 seconds, with narration,
+camera, and clicks following one media clock. Manual navigation pauses the guide.
+The existing recorded highlight remains a separate export.
+
+Additional [screenshots and motion previews](docs/media/README.md) are linked
+separately to keep this reference focused on the library.
+
 ## Development
 
 ```
 pnpm install
 pnpm build                     # packages/glimmer-motion → dist/ + declarations/
 pnpm test                      # build, then test-app: vite build --mode=development --out-dir dist-tests && ember test --path dist-tests
-pnpm lint:types                # glint, both packages
+pnpm lint:types                # glint, workspace packages
+pnpm docs:check                # API and demo teaching coverage
+pnpm build:boxel               # gallery adaptation and realm artifacts
 pnpm --filter test-app start   # examples at / ; tests at /tests
 pnpm realm:stage               # hashed realm bundle + stable choreo.ts entrypoint
 ```
@@ -590,6 +647,15 @@ back is changing the re-export. See
 `packages/glimmer-motion/scripts/build-realm-bundle.mjs` and the
 [realm publishing guide](docs/realm-publishing.md).
 
+The complete gallery, guides, tuning workspaces, and 3D room can also be deployed
+through the [Boxel gallery build](packages/choreo-gallery/README.md). Use your own
+realm and host configuration; account-specific addresses do not belong in the
+source documentation. GitHub Pages continues to build the canonical `test-app`.
+
+Agents can use the shared [choreo-create skill](.claude/skills/choreo-create/SKILL.md)
+from Claude Code or [Codex](.agents/skills/choreo-create/SKILL.md). It routes to
+real demo sources, motion patterns, composition recipes, tuning, and verification.
+
 `packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit (`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in `test-app/tests/helpers/layout-fixture.ts`.
 
 ## Roadmap
@@ -597,7 +663,7 @@ back is changing the re-export. See
 - **`0.1.0` on npm.** Consumers today use `workspace:*` against a checkout. A version number is what turns "copy this style" into a dependency, and it is the gate for everything below.
 - **`ember-try` against LTS** (5.12 / 6.4 / release). The peer range already says `>= 5.4`; nothing proves it.
 - **`ember-a11y-testing` over the gallery.** `reducedMotion` already defaults to `"user"`, which was the substantive half; a smoke pass is the other half.
-- **Docs for the newest constructs** — standing steps and `createArming` landed test-first; their prose is owed.
+- **Focused spatial and film studies** — smaller, tunable teaching examples alongside the existing composite demos; see the [study plan](docs/docs-studies-plan.md).
 - **boxel-motion** — a re-host inside [cardstack/boxel](https://github.com/cardstack/boxel) for its constraints (SES-sandboxed card code, cross-realm orchestration, fitted vs embedded intrinsic sizing). It replaces the modifier shell, the scheduler adapter and the components and keeps everything above the adapter line. Three host transitions are the proving ground: a stack open/close (far match), a panel that is its own scene over a moving shell (nested `<Choreo>`), and compose/trash (`{{beacon}}`, not `layoutId`).
 
 ## License

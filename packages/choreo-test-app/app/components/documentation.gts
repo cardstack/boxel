@@ -11,12 +11,21 @@ import { pageTitle } from 'ember-page-title';
 import { motion } from 'glimmer-motion';
 import { Marked } from 'marked';
 import { GuideDemo } from 'test-app/components/guide-demo';
+import { RecordableScene } from 'test-app/components/tutorials/recordable-scene';
+import { SpatialCard } from 'test-app/components/tutorials/spatial-card';
+import { TaskBoard } from 'test-app/components/tutorials/task-board';
 import { type Guide, guides, guideSections } from 'test-app/lib/guides';
 import { highlightSample } from 'test-app/lib/highlight';
 
 interface Signature {
   Args: { guide?: Guide; isTopic?: boolean };
 }
+const tutorial = (slug: string) =>
+  ({
+    'core-first-app': TaskBoard,
+    'spatial-first-scene': SpatialCard,
+    'film-first-export': RecordableScene,
+  })[slug as 'core-first-app'];
 const escape = (value: string) =>
   value
     .replaceAll('&', '&amp;')
@@ -229,6 +238,8 @@ export class Documentation extends Component<Signature> {
               <h1 id="guide-title" tabindex="-1">{{@guide.title}}</h1>
               <p class="guide-deck">{{@guide.summary}}</p>
               <div class="guide-prose guide-preamble">{{this.preamble}}</div>
+              {{#let (tutorial @guide.slug) as |Study|}}{{#if Study}}<Study
+                  />{{/if}}{{/let}}
               {{#if @guide.demo}}
                 {{#each (array @guide) key="slug" as |page|}}{{#if
                     page.demo

@@ -1,12 +1,15 @@
 import coreElements from '../content/guides/core-elements.md?raw';
+import firstApp from '../content/guides/core-first-app.md?raw';
 import coreInput from '../content/guides/core-input.md?raw';
 import coreLayout from '../content/guides/core-layout.md?raw';
 import corePresence from '../content/guides/core-presence.md?raw';
 import coreStart from '../content/guides/core-start.md?raw';
 import coreTesting from '../content/guides/core-testing.md?raw';
+import troubleshooting from '../content/guides/core-troubleshooting.md?raw';
 import filmAudio from '../content/guides/film-audio.md?raw';
 import filmClock from '../content/guides/film-clock.md?raw';
 import filmDelivery from '../content/guides/film-delivery.md?raw';
+import firstExport from '../content/guides/film-first-export.md?raw';
 import filmShots from '../content/guides/film-shots.md?raw';
 import filmStart from '../content/guides/film-start.md?raw';
 import interactiveBeacons from '../content/guides/interactive-beacons.md?raw';
@@ -14,6 +17,7 @@ import interactiveStart from '../content/guides/interactive-start.md?raw';
 import interactiveTimelines from '../content/guides/interactive-timelines.md?raw';
 import spatialCameras from '../content/guides/spatial-cameras.md?raw';
 import spatialDom from '../content/guides/spatial-dom.md?raw';
+import firstScene from '../content/guides/spatial-first-scene.md?raw';
 import spatialGallery from '../content/guides/spatial-gallery.md?raw';
 import spatialStart from '../content/guides/spatial-start.md?raw';
 import { demoGuides } from './demo-guides';
@@ -84,6 +88,21 @@ function guide(
 }
 
 const introductoryGuides = [
+  guide(
+    'core-first-app',
+    firstApp,
+    'Create a clean Ember app and build an interruptible task board.'
+  ),
+  guide(
+    'spatial-first-scene',
+    firstScene,
+    'Build a small live HTML plane before adding a WebGL model.'
+  ),
+  guide(
+    'film-first-export',
+    firstExport,
+    'Capture deterministic frames, mix audio, and encode a playable MP4.'
+  ),
   guide(
     'core-start',
     coreStart,
@@ -253,10 +272,28 @@ const introductoryGuides = [
     filmDelivery,
     'Review deterministic frames and deploy the complete experience.'
   ),
+  guide(
+    'core-troubleshooting',
+    troubleshooting,
+    'Diagnose ownership, geometry, readiness, audio, and recording failures.'
+  ),
 ];
 
 export const guides: Guide[] = guideSections.flatMap((section) => [
-  ...introductoryGuides.filter((item) => item.section === section.id),
+  ...introductoryGuides
+    .filter(
+      (item) => item.section === section.id && !item.slug.includes('-first-')
+    )
+    .flatMap((item) => [
+      item,
+      ...(item.slug === section.start
+        ? introductoryGuides.filter(
+            (tutorial) =>
+              tutorial.section === section.id &&
+              tutorial.slug.includes('-first-')
+          )
+        : []),
+    ]),
   ...referenceGuides.filter((item) => item.section === section.id),
   ...demoGuides.filter((item) => item.section === section.id),
 ]);

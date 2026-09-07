@@ -6,10 +6,12 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { type Camera3DState, motion } from 'glimmer-motion';
+import { BoxelGlyph } from 'test-app/components/boxel-glyph';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
 import config from 'test-app/config/environment';
 import { cameraCss, perspective } from 'test-app/lib/css3d';
 import { restWhenOff } from 'test-app/lib/onstage';
+import { type RoomControl, roomThumbstick } from 'test-app/lib/room-thumbstick';
 import { forceDarkTheme } from 'test-app/lib/theme';
 import { moveRoomCamera } from 'test-app/lib/widget-camera';
 import {
@@ -157,7 +159,9 @@ export class WidgetRoom extends Component {
   @tracked quickFinished = false;
   private quickRaf = 0;
   quickChapters = quickScore.chapters;
-  quickSeconds = Math.round(quickScore.duration);
+  // Keep score timestamps in media seconds; one audio clock slows every cue.
+  quickRate = 0.85;
+  quickSeconds = Math.round(quickScore.duration / this.quickRate);
   get quickChapter() {
     return this.quickChapters[this.quickIndex]!;
   }
@@ -170,6 +174,47 @@ export class WidgetRoom extends Component {
   @tracked activeBay = -1;
   @tracked touring = false;
   @tracked tourIndex = -1;
+  @tracked savedStop = -1;
+  private savedTime = 0;
+  private checkpointKey = 'choreo-full-tour-v1';
+  get fullTourLabel() {
+    return this.savedStop >= 0 ? 'Resume full audio tour' : 'Full audio tour';
+  }
+  private saveTour = () => {
+    if (this.quickMode || !this.touring || this.tourIndex < 0) {
+      return;
+    }
+    this.savedStop = this.tourIndex;
+    const stop = tourStops[this.tourIndex]!;
+    this.savedTime = this.audio?.src.includes(`/${stop.id}.mp3`)
+      ? this.audio.currentTime || 0
+      : 0;
+    try {
+      localStorage.setItem(
+        this.checkpointKey,
+        JSON.stringify({
+          id: stop.id,
+          time: this.savedTime,
+        })
+      );
+    } catch {
+      /* Storage may be unavailable; retain the in-memory checkpoint. */
+    }
+  };
+  private clearTour = () => {
+    this.savedStop = -1;
+    this.savedTime = 0;
+    try {
+      localStorage.removeItem(this.checkpointKey);
+    } catch {
+      /* optional */
+    }
+  };
+  restartTour = () => {
+    this.stopGuide();
+    this.clearTour();
+    void this.playTour(0);
+  };
   // Shipped narration is available before the optional auditions manifest loads.
   @tracked narrationAvailable = true;
   @tracked narrationPath = 'widget-tour/narration-george-fast-v1';
@@ -186,7 +231,11 @@ export class WidgetRoom extends Component {
   private settleNarration?: (result: NarrationResult) => void;
   private guideGeneration = 0;
   private cancelDemo?: () => void;
-  isolated = (id: string) => ['sylva', 'towers', 'sagrada'].includes(id);
+  // Shared-layout correction must measure inside a stable viewport, not the
+  // room's continuously changing perspective transform. The iframe isolates
+  // the lightbox's local geometry while the camera moves its outer plane.
+  isolated = (id: string) =>
+    ['sylva', 'towers', 'sagrada', 'lightbox'].includes(id);
   embedUrl = (id: string) => this.routeUrl(`/_widget/${id}`);
   private tiles = new Map<string, HTMLElement>();
   registerTile = modifier((element: HTMLElement, [id]: [string]) => {
@@ -212,7 +261,12 @@ export class WidgetRoom extends Component {
     return String(this.tourIndex + 1).padStart(2, '0');
   }
   get showWelcome() {
-    return !this.selected && !this.quickMode && this.activeBay < 0;
+    return (
+      !this.navigating &&
+      !this.selected &&
+      !this.quickMode &&
+      this.activeBay < 0
+    );
   }
   get nativeSize() {
     const demo = this.selected;
@@ -263,6 +317,61 @@ export class WidgetRoom extends Component {
   };
   toggleDrawer = () => {
     this.drawer = !this.drawer;
+  };
+  roomThumbstick = roomThumbstick;
+  @tracked navigating = false;
+  beginNavigation = () => {
+    this.stopGuide();
+    ++this.generation;
+    this.quickMode = false;
+    this.tourIndex = -1;
+    this.selected = null;
+    this.live = false;
+    this.activeBay = -1;
+    this.navigating = true;
+  };
+  nudgeRoom = (kind: RoomControl, x: number, y: number, dt: number) => {
+    const pose = this.pose;
+    const look = { ...(pose.look ?? galleryHome.look) };
+    const yaw = (pose.yaw * Math.PI) / 180;
+    const pitch = (pose.pitch * Math.PI) / 180;
+    const distance = 5600 * pose.dolly;
+    if (kind === 'rotate') {
+      // Keep the eye fixed. Only its look direction turns; an orbit would
+      // incorrectly carry the viewer around the exhibition's center.
+      const eye = {
+        x: look.x + Math.sin(yaw) * Math.cos(pitch) * distance,
+        y: look.y + Math.sin(pitch) * distance,
+        z: look.z + Math.cos(yaw) * Math.cos(pitch) * distance,
+      };
+      const nextYaw = pose.yaw + x * dt * 55;
+      const nextPitch = Math.max(-75, Math.min(75, pose.pitch + y * dt * 40));
+      const a = (nextYaw * Math.PI) / 180,
+        b = (nextPitch * Math.PI) / 180;
+      this.paint({
+        ...pose,
+        yaw: nextYaw,
+        pitch: nextPitch,
+        look: {
+          x: eye.x - Math.sin(a) * Math.cos(b) * distance,
+          y: eye.y - Math.sin(b) * distance,
+          z: eye.z - Math.cos(a) * Math.cos(b) * distance,
+        },
+      });
+    } else if (kind === 'pan') {
+      const rate = Math.max(300, distance * 0.45) * dt;
+      look.x +=
+        (Math.cos(yaw) * x - Math.sin(yaw) * Math.sin(pitch) * y) * rate;
+      look.y += Math.cos(pitch) * y * rate;
+      look.z +=
+        (-Math.sin(yaw) * x - Math.cos(yaw) * Math.sin(pitch) * y) * rate;
+      this.paint({ ...pose, look });
+    } else {
+      this.paint({
+        ...pose,
+        dolly: Math.max(0.06, Math.min(4, pose.dolly * Math.exp(y * dt))),
+      });
+    }
   };
   private paint = (pose: Camera3DState) => {
     this.pose = pose;
@@ -472,6 +581,7 @@ export class WidgetRoom extends Component {
     void this.approach(entry);
   };
   overview = () => {
+    this.navigating = false;
     this.stopGuide();
     this.quickMode = false;
     ++this.generation;
@@ -515,6 +625,7 @@ export class WidgetRoom extends Component {
       ]!
     );
   private stopGuide = () => {
+    this.saveTour();
     ++this.guideGeneration;
     cancelAnimationFrame(this.quickRaf);
     this.cancelDemo?.();
@@ -653,6 +764,9 @@ export class WidgetRoom extends Component {
     const token = this.guideGeneration;
     this.audioIssue = false;
     this.touring = true;
+    audio.defaultPlaybackRate = this.quickRate;
+    audio.playbackRate = this.quickRate;
+    audio.preservesPitch = true;
     // Use the same recoverable media lifecycle as the separate full-tour clips.
     // This call stays synchronous with the visitor's tap for Safari permission.
     this.settleNarration = playNarrationClip(
@@ -679,24 +793,33 @@ export class WidgetRoom extends Component {
     );
   };
   startTour = () => {
-    void this.playTour(this.tourIndex < 0 ? 0 : this.tourIndex);
+    this.saveTour();
+    void this.playTour(this.savedStop < 0 ? 0 : this.savedStop, this.savedTime);
   };
   nextStop = () => {
     void this.playTour(Math.min(tourStops.length - 1, this.tourIndex + 1));
   };
-  private playNarration = (id: string): Promise<NarrationResult> => {
+  private playNarration = (
+    id: string,
+    startAt = 0
+  ): Promise<NarrationResult> => {
     const audio = (this.audio ??= new Audio());
     return new Promise<NarrationResult>((resolve) => {
       this.settleNarration = playNarrationClip(
         audio,
         `${this.assetRoot}${this.narrationPath}/${id}.mp3`,
-        resolve
+        resolve,
+        startAt
       );
     });
   };
-  private playTour = async (start: number) => {
+  private playTour = async (start: number, startAt = 0) => {
     this.stopGuide();
     this.quickMode = false;
+    this.drawer = false;
+    const audio = (this.audio ??= new Audio());
+    audio.defaultPlaybackRate = 1;
+    audio.playbackRate = 1;
     const token = ++this.guideGeneration;
     this.touring = true;
     this.audioIssue = false;
@@ -710,7 +833,8 @@ export class WidgetRoom extends Component {
         this.mount('mockup');
       }
       const stop = tourStops[index]!;
-      const started = performance.now();
+      const offset = index === start ? startAt : 0;
+      const started = performance.now() - offset * 1000;
       const next = tourStops[index + 1];
       if (next && this.narrationAvailable) {
         void fetch(
@@ -734,7 +858,7 @@ export class WidgetRoom extends Component {
       );
       // Start within the tap gesture, before asynchronous camera travel.
       const narration = this.narrationAvailable
-        ? this.playNarration(stop.id)
+        ? this.playNarration(stop.id, offset)
         : null;
       await this.approach(this.entries.find((d) => d.id === stop.id)!);
       if (token !== this.guideGeneration) {
@@ -770,10 +894,26 @@ export class WidgetRoom extends Component {
     if (token === this.guideGeneration) {
       this.cancelDemo?.();
       this.touring = false;
+      this.clearTour();
     }
   };
   private setup = modifier((el: Element) => {
     this.viewport = el as HTMLElement;
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(this.checkpointKey) ?? 'null'
+      );
+      const index = tourStops.findIndex((stop) => stop.id === saved?.id);
+      if (index >= 0 && Number.isFinite(saved.time) && saved.time >= 0) {
+        this.savedStop = index;
+        this.savedTime = saved.time;
+      }
+    } catch {
+      /* A stale or unavailable checkpoint starts a fresh tour. */
+    }
+    const audio = (this.audio ??= new Audio());
+    audio.addEventListener('timeupdate', this.saveTour);
+    window.addEventListener('pagehide', this.saveTour);
     this.worlds = [...el.querySelectorAll<HTMLElement>('.wr-world')];
     document.body.classList.add('in-widget-room');
     const initialPaint = requestAnimationFrame(() => this.paint(galleryHome));
@@ -816,6 +956,8 @@ export class WidgetRoom extends Component {
       .catch(() => {});
     return () => {
       this.stopGuide();
+      audio.removeEventListener('timeupdate', this.saveTour);
+      window.removeEventListener('pagehide', this.saveTour);
       ++this.generation;
       cancelAnimationFrame(initialPaint);
       for (const controller of this.preparations.values()) {
@@ -918,17 +1060,57 @@ export class WidgetRoom extends Component {
           </article>
         {{/each}}
       </div>
+      <nav class="wr-navigation" aria-label="3D room navigation">
+        <button
+          type="button"
+          class="wr-stick"
+          aria-label="Rotate room"
+          title="Drag to rotate around your viewpoint. Arrow keys also work."
+          {{this.roomThumbstick "rotate" this.beginNavigation this.nudgeRoom}}
+        ><span class="wr-stick-dot"></span><span
+            class="wr-stick-name"
+          >Rotate</span></button>
+        <button
+          type="button"
+          class="wr-stick"
+          aria-label="Pan room"
+          title="Drag to pan. Arrow keys also work."
+          {{this.roomThumbstick "pan" this.beginNavigation this.nudgeRoom}}
+        ><span class="wr-stick-dot"></span><span
+            class="wr-stick-name"
+          >Pan</span></button>
+        <button
+          type="button"
+          class="wr-stick wr-zoom"
+          aria-label="Zoom room"
+          title="Drag up to move closer, down to move away. Use up and down arrow keys."
+          {{this.roomThumbstick "zoom" this.beginNavigation this.nudgeRoom}}
+        ><span class="wr-stick-dot"></span><span
+            class="wr-stick-name"
+          >Zoom</span></button>
+        <button
+          type="button"
+          class="wr-navigation-reset"
+          {{on "click" this.overview}}
+        >Reset view</button>
+      </nav>
       <header class="wr-header"><LinkTo
           class="wr-brand"
           @route="index"
           aria-label="Choreo home"
         ><ChoreoMark /><span><strong>Choreo</strong><small>BY CARDSTACK</small></span></LinkTo><div
           class="wr-header-actions"
-        ><button
+        >{{#unless this.touring}}<button
+              type="button"
+              {{on "click" this.startTour}}
+            >{{this.fullTourLabel}}</button>{{/unless}}<button
             type="button"
             aria-expanded={{this.drawer}}
             {{on "click" this.toggleDrawer}}
-          >All {{this.count}} demos ☰</button></div></header>
+          >All
+            {{this.count}}
+            demos
+            <BoxelGlyph @name="menu" /></button></div></header>
       {{#if this.showWelcome}}<div class="wr-intro"><span class="wr-eyebrow">THE
             CHOREO ATELIER / OPEN COLLECTION</span><h1>Feel the change.<br
             />Enter the story.</h1><p>Forty-six living studies in interaction,
@@ -936,7 +1118,8 @@ export class WidgetRoom extends Component {
               type="button"
               class="wr-primary"
               {{on "click" this.startQuickTour}}
-            >{{this.quickSeconds}}-second highlights ↗</button><button
+            >{{this.quickSeconds}}-second highlights
+              <BoxelGlyph @name="arrow-up-right" /></button><button
               type="button"
               class="wr-explore"
               {{on "click" this.next}}
@@ -944,14 +1127,14 @@ export class WidgetRoom extends Component {
               type="button"
               class="wr-explore"
               {{on "click" this.startTour}}
-            >Full audio tour</button></div></div>{{/if}}
+            >{{this.fullTourLabel}}</button></div></div>{{/if}}
       {{#if this.drawer}}<aside class="wr-drawer" aria-label="All demos"><div
             class="wr-drawer-head"
           ><h2>The collection <small>{{this.count}}</small></h2><button
               type="button"
               aria-label="Close collection"
               {{on "click" this.toggleDrawer}}
-            >×</button></div><input
+            ><BoxelGlyph @name="x" /></button></div><input
             aria-label="Search demos"
             placeholder="Find a demo or motion pattern…"
             value={{this.query}}
@@ -962,7 +1145,8 @@ export class WidgetRoom extends Component {
                 {{on "click" (fn this.focus demo)}}
               ><img src={{this.previewSource demo.id}} alt="" /><span
                 >{{demo.title}}<small>{{demo.group}}</small></span><span
-                >↗</span></button>{{else}}<p>No demos match this search.</p>{{/each}}</div></aside>{{/if}}
+                ><BoxelGlyph @name="arrow-up-right" /></span></button>{{else}}<p
+              >No demos match this search.</p>{{/each}}</div></aside>{{/if}}
       {{#if this.quickMode}}<section
           class="wr-guide-plane wr-quick-guide"
           aria-label="Quick tour narration"
@@ -1012,11 +1196,14 @@ export class WidgetRoom extends Component {
                 >{{if
                     this.audioIssue
                     "Tap to play audio"
-                    "Resume stop"
+                    "Resume tour"
                   }}</button>{{/if}}<button
                 type="button"
                 {{on "click" this.nextStop}}
-              >Next stop →</button><button
+              >Next stop <BoxelGlyph @name="arrow-right" /></button><button
+                type="button"
+                {{on "click" this.restartTour}}
+              >Restart tour</button><button
                 type="button"
                 {{on "click" this.overview}}
               >Leave tour</button></div></section>
@@ -1031,18 +1218,18 @@ export class WidgetRoom extends Component {
                   type="button"
                   aria-label="Previous demo"
                   {{on "click" this.previous}}
-                >←</button><button
+                ><BoxelGlyph @name="arrow-left" /></button><button
                   type="button"
                   {{on "click" this.overview}}
                 >Gallery</button><a
                   href={{this.fullUrl}}
                   target="_blank"
                   rel="noopener"
-                >Full demo ↗</a><button
+                >Full demo <BoxelGlyph @name="arrow-up-right" /></a><button
                   type="button"
                   aria-label="Next demo"
                   {{on "click" this.next}}
-                >→</button></nav>{{else}}<nav
+                ><BoxelGlyph @name="arrow-right" /></button></nav>{{else}}<nav
                 class="wr-bays"
                 aria-label="Gallery wings"
               >{{#each this.bays as |bay|}}<button
