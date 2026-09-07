@@ -87,3 +87,19 @@ And you can trigger room naming with `debug:title:create` on its own.
 ### Unit tests
 
 Run `pnpm test`
+
+## Checking that concurrent rooms are not dropped
+
+The bot's sliding sync list must be wide enough that several rooms changing at
+once all reach it; a narrow window makes the bot see only the newest event of
+the newest room per response, and every other room's turn hangs. With the local
+stack up and the smoke users registered (`MATRIX_USERNAME=smoke1 pnpm
+register-test-user` in `packages/matrix`, and again for smoke2 and smoke3):
+
+```sh
+pnpm sliding-sync-drop-probe        # the bot's window: expect 10/10 and 3/3
+pnpm sliding-sync-drop-probe 0 1    # a one-room window: shows the drops
+```
+
+It posts harmless topic events into ten rooms and counts what one sync
+returns. No model is called.

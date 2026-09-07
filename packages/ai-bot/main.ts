@@ -27,7 +27,8 @@ import {
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
-  INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE,
+  SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
@@ -895,18 +896,20 @@ Common issues are:
   });
 
   let lists: Map<string, MSC3575List> = new Map();
+  // See SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE for why the window is this wide:
+  // a narrower one drops events whenever several rooms are active at once.
   lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
-    ranges: [[0, 0]],
+    ranges: [SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE],
     filters: {
       is_dm: false,
     },
-    timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+    timeline_limit: SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
     required_state: [['*', '*']],
   });
   let slidingSync = new SlidingSync(
     client.baseUrl,
     lists,
-    { timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT },
+    { timeline_limit: SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT },
     client,
     SLIDING_SYNC_TIMEOUT,
   );

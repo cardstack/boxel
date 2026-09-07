@@ -41,6 +41,7 @@
     "lint:types": "ember-tsc --noEmit",
     "start": "NODE_NO_WARNINGS=1 node main.ts",
     "test": "NODE_NO_WARNINGS=1 node tests/index.ts",
-    "get-chat": "NODE_NO_WARNINGS=1 node scripts/get_chat.ts"
+    "get-chat": "NODE_NO_WARNINGS=1 node scripts/get_chat.ts",
+    "sliding-sync-drop-probe": "node scripts/sliding-sync-drop-probe.mjs"
   }
 }
