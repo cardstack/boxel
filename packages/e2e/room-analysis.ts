@@ -8,11 +8,17 @@ export interface RoomAnalysis {
   inputTokens: number;
   cachedTokens: number;
   costUsd: number;
-  // Turns after the first whose prompt was mostly not served from the cache.
-  // The conversation only grows, so from turn two on nearly all of the prompt
-  // should be a cache read; a miss means history was rewritten, the cache
-  // expired between turns, or the provider changed.
+  // Cache accounting starts after the initial skill load. Turn one has one
+  // tool; the first skill read adds the host tools to the request, and tools
+  // lead the cached prefix, so the turn right after that read is always billed
+  // cold. That miss is structural and not the model's, so it is left out: the
+  // window opens on the turn after it. Within the window the conversation only
+  // grows, so a miss means history was rewritten, the cache expired between
+  // turns, or the provider changed.
   cacheMisses: number;
+  cacheWindowInputTokens: number;
+  cacheWindowCachedTokens: number;
+  cacheWindowTurns: number;
   toolCalls: Record<string, number>;
   failedToolCalls: { name: string; reason: string }[];
   // Requests the host never answered: the signature of a stuck host.
@@ -68,6 +74,9 @@ export function analyzeRoom(
     cachedTokens: 0,
     costUsd: 0,
     cacheMisses: 0,
+    cacheWindowInputTokens: 0,
+    cacheWindowCachedTokens: 0,
+    cacheWindowTurns: 0,
     toolCalls: {},
     failedToolCalls: [],
     unansweredToolCalls: 0,
@@ -80,6 +89,7 @@ export function analyzeRoom(
   };
 
   // Tool results are keyed by the request id they answer.
+  let firstSkillReadTurn: number | undefined;
   let toolResults = new Map<string, { key: string; reason: string }>();
   for (let event of sorted) {
     if (event.type.startsWith('app.boxel.toolResult')) {
@@ -120,11 +130,26 @@ export function analyzeRoom(
       continue;
     }
     result.turns++;
+    let toolNames = (content[TOOL_REQUESTS_KEY] ?? []).map(
+      (r: { name?: string }) => r.name ?? '',
+    );
     if (
-      result.turns > 1 &&
-      (usage.cachedTokens ?? 0) < 0.5 * (usage.promptTokens ?? 0)
+      firstSkillReadTurn === undefined &&
+      toolNames.includes('readRealmFile')
     ) {
-      result.cacheMisses++;
+      firstSkillReadTurn = result.turns;
+    }
+    // The window opens two turns after the first skill read (the turn after
+    // the read pays the structural miss). With no skill read, from turn two.
+    let windowStart =
+      firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
+    if (result.turns >= windowStart) {
+      result.cacheWindowTurns++;
+      result.cacheWindowInputTokens += usage.promptTokens ?? 0;
+      result.cacheWindowCachedTokens += usage.cachedTokens ?? 0;
+      if ((usage.cachedTokens ?? 0) < 0.5 * (usage.promptTokens ?? 0)) {
+        result.cacheMisses++;
+      }
     }
     result.outputTokens += usage.completionTokens ?? 0;
     result.inputTokens += usage.promptTokens ?? 0;

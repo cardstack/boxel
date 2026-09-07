@@ -847,8 +847,8 @@ test.afterAll(async () => {
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
       } | ${tools} | ${blocks} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
-        a && a.inputTokens > 0
-          ? `${Math.round((100 * a.cachedTokens) / a.inputTokens)}%${
+        a && a.cacheWindowInputTokens > 0
+          ? `${Math.round((100 * a.cacheWindowCachedTokens) / a.cacheWindowInputTokens)}%${
               a.cacheMisses ? ` (${a.cacheMisses} miss)` : ''
             }`
           : '–'
