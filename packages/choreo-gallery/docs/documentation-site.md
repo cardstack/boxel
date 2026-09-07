@@ -69,3 +69,9 @@ return { scale: [1, 0.82, peakScale, 1], y: [0, -lift, 10, 0] };
 ```
 
 Use the same binding name wherever the same source variable is shared. Use distinct names for independent springs. Read these values in a getter, template helper, or the actual simulation update; a one-time module snapshot will not respond to edits. Native simulation controls such as Drift and Hang use their existing tracked Dial stores. Long Take’s two camera regions share one `shotTempo` variable, preserving their timing relationship.
+
+Timing-only edits use the workbench’s `live-demo-motion.ts` adapter after
+Glimmer’s `postRender` hook. It retimes the existing Motion visual elements
+and preserves repeating animations’ phase; it does not remount the demo.
+Run `node scripts/check-demo-live-controls.mjs` against the dev server to
+verify live duration and target edits, DOM identity, and compact control rows.

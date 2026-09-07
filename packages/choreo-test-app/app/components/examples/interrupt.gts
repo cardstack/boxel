@@ -124,3 +124,7 @@ export class Interrupt extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('interrupt', carry, 'carry');
+tuneSeconds('interrupt', TIMED, 'TIMED duration');

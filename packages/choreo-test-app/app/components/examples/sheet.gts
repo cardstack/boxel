@@ -260,3 +260,8 @@ const Glyph: TOC<GlyphSignature> = <template>
 function is(name: string, wanted: string) {
   return name === wanted;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('sheet', fade, 'fade');
+tuneMotion('sheet', settle, 'settle');
+tuneNumber('sheet', 0.05, 'dragElastic');

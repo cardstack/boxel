@@ -674,3 +674,14 @@ export class Hang extends Component {
 }
 
 export default Hang;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneNumber('hang', 0.06, 'dragElastic');
+tuneSpring('hang', HOME, 'HOME');
+tuneSeconds('hang', 0.1, 'Step 1 duration');
+tuneSpring('hang', KNOCK, 'KNOCK');
+tuneSeconds('hang', 0.55, 'Hold duration 1');
+tuneSpring('hang', OFF, 'OFF');
+tuneSeconds('hang', 0.42, 'Step 2 duration');
+tuneSeconds('hang', 1.6, 'Follow duration 2');
+tuneSeconds('hang', 0.24, 'Step 3 duration');

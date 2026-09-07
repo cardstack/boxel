@@ -197,3 +197,9 @@ function detailsId(card: Card) {
 function cardStyle(card: Card) {
   return { '--wash': card.wash, borderRadius: '14px' };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('sequence', soft, 'soft');
+tuneSeconds('sequence', 0.22, 'Step 1 duration');
+tuneSeconds('sequence', 0.56, 'Step 2 duration');
+tuneSeconds('sequence', 0.3, 'Step 3 duration');

@@ -82,3 +82,7 @@ function iconWash(hue: string) {
     `background: radial-gradient(circle at 32% 28%, #fff7, transparent 36%), linear-gradient(160deg, ${hue}, #1a100c)`
   );
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneVariants('stagger', grid, 'grid');
+tuneVariants('stagger', tile, 'tile');

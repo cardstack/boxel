@@ -189,3 +189,9 @@ export class FarMatch extends Component {
 function wash(piece: Piece) {
   return `--wash: ${piece.wash}`;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('far', carry, 'carry');
+tuneSeconds('far', 0.2, 'Step 1 duration');
+tuneSeconds('far', 0.26, 'Step 2 duration');
+tuneSpring('far', settle, 'settle');

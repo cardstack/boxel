@@ -143,3 +143,7 @@ const ModeColumn = <template>
 function isFail(notice: Notice) {
   return notice.tone === 'fail';
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('presence', transition, 'transition');
+tuneMotion('presence', restMove, 'restMove');

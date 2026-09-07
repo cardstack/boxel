@@ -270,3 +270,8 @@ export class Escort extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('escort', carry, 'Carry spring 1');
+tuneSeconds('escort', 1.6, 'Follow duration 2');
+tuneSeconds('escort', 1.6, 'Follow duration 3');

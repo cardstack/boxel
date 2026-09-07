@@ -1053,3 +1053,10 @@ export class Drift extends Component {
 }
 
 export default Drift;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('drift', ARRIVE, 'ARRIVE');
+tuneSpring('drift', SHUFFLE, 'SHUFFLE');
+tuneSpring('drift', DROP, 'DROP');
+tuneSeconds('drift', 0.32, 'Step 1 duration');
+tuneSeconds('drift', 0.5, 'Hold duration 1');

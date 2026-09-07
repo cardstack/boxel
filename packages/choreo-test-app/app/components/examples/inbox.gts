@@ -278,3 +278,8 @@ export class Inbox extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('inbox', toss, 'toss');
+tuneSeconds('inbox', 0.38, 'Step 1 duration');
+tuneSpring('inbox', quick, 'quick');

@@ -11,11 +11,16 @@ import {
   type DialValue,
 } from 'dialkit/vanilla';
 import { modifier } from 'ember-modifier';
+import { postRender } from 'glimmer-motion';
 import SagradaFilm from 'test-app/components/sagrada-film';
 import { SylvaStage } from 'test-app/components/sylva-stage';
 import TowerFilm from 'test-app/components/tower-film';
 import type { DemoEntry } from 'test-app/lib/catalog';
 import { demoTuning } from 'test-app/lib/demo-tuning';
+import {
+  captureDemoMotion,
+  refreshDemoMotion,
+} from 'test-app/lib/live-demo-motion';
 import { theme } from 'test-app/lib/theme';
 
 interface Signature {
@@ -60,6 +65,7 @@ export class DemoWorkbench extends Component<Signature> {
       },
     });
     let gone = false;
+    let pendingMotion: ReturnType<typeof captureDemoMotion> | null = null;
     const refresh = () => {
       if (!gone) {
         kit.updateConfig(config());
@@ -93,7 +99,22 @@ export class DemoWorkbench extends Component<Signature> {
           }
         }
         if (!gone && JSON.stringify(state.values) !== JSON.stringify(changed)) {
+          const scheduleRefresh = !pendingMotion;
+          pendingMotion ??= captureDemoMotion(
+            element
+              .closest('.demo-workbench')
+              ?.querySelector('.workbench-stage') ?? null
+          );
           state.values = changed;
+          if (scheduleRefresh) {
+            postRender(() => {
+              const running = pendingMotion;
+              pendingMotion = null;
+              if (!gone && running) {
+                refreshDemoMotion(running);
+              }
+            });
+          }
         }
       });
     });
@@ -110,6 +131,7 @@ export class DemoWorkbench extends Component<Signature> {
   <template>
     <section
       class="demo-workbench {{if @embedded 'is-embedded'}}"
+      data-demo-parameters={{@demo.id}}
       data-test-demo-workbench
     >
       <div class="workbench-toolbar"><span>LIVE / {{@demo.title}}</span><button
@@ -135,13 +157,13 @@ export class DemoWorkbench extends Component<Signature> {
           class="workbench-dials"
           hidden={{unless this.controlsOpen true}}
           aria-label="Live demo parameters"
-        ><div {{this.mount @demo.id}}></div><p>These values come from this
-            demo’s motion and scene parameters. Change a value, then interact or
-            replay to compare. Additional steps expose their controls when used.</p></aside>
+        ><div {{this.mount @demo.id}}></div><p>These variables feed the live
+            demo. Timing edits update running motion; target edits update the
+            current interaction.</p></aside>
       </div>
-      {{#unless @embedded}}<p class="workbench-help">Change a value, then
-          interact with the demo. Use DialKit’s + to save a version or Copy to
-          keep your settings.
+      {{#unless @embedded}}<p class="workbench-help">Adjust the demo’s live
+          variables. Use DialKit’s + to save a version or Copy to keep your
+          settings.
           <LinkTo @route="docs.topic" @model="interactive-timelines">Read the
             guide →</LinkTo></p>{{/unless}}
     </section>

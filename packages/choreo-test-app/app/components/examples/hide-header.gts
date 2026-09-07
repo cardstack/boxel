@@ -194,3 +194,6 @@ function isMe(line: Line) {
 function stamp(line: Line) {
   return line.kind === 'msg' && 'time' in line ? line.time : undefined;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('header', tween, 'tween');

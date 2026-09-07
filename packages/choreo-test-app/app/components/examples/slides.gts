@@ -236,3 +236,10 @@ function radiusFor(slide: Slide) {
 function dotLabel(slide: Slide) {
   return `Slide ${slide + 1}`;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('slides', radiusTween, 'radiusTween');
+tuneMotion('slides', type, 'type');
+tuneSpring('slides', plate, 'plate');
+tuneSeconds('slides', 0.14, 'Step 1 duration');
+tuneSeconds('slides', 0.26, 'Step 2 duration');

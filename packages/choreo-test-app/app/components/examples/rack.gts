@@ -1086,3 +1086,6 @@ function tickId(axis: string, value: number) {
 function notch(i: number) {
   return htmlSafe(`--f: ${i / LAST}`);
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSeconds('rack', SPAN, 'SPAN duration');

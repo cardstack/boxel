@@ -1421,3 +1421,32 @@ export class Presentation extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSeconds('presentation', IN, 'IN duration');
+tuneSeconds('presentation', 0.52, 'Step 1 duration');
+tuneSeconds('presentation', 0.66, 'Step 2 duration');
+tuneSeconds('presentation', 0.62, 'Step 3 duration');
+tuneSeconds('presentation', PULSE, 'PULSE duration');
+tuneSeconds('presentation', 0.48, 'Step 4 duration');
+tuneSeconds('presentation', 0.56, 'Step 5 duration');
+tuneSeconds('presentation', 0.48, 'Step 6 duration');
+tuneSeconds('presentation', 0.5, 'Step 7 duration');
+tuneSeconds('presentation', 0.4, 'Step 8 duration');
+tuneSeconds('presentation', 0.52, 'Step 9 duration');
+tuneSeconds('presentation', 0.5, 'Step 10 duration');
+tuneSeconds('presentation', 0.4, 'Step 11 duration');
+tuneSeconds('presentation', 0.52, 'Step 12 duration');
+tuneSeconds('presentation', 0.5, 'Step 13 duration');
+tuneSeconds('presentation', 0.4, 'Step 14 duration');
+tuneSeconds('presentation', 0.52, 'Step 15 duration');
+tuneSeconds('presentation', FLIGHT, 'FLIGHT duration');
+tuneSeconds('presentation', 0.2, 'Step 16 duration');
+tuneSeconds('presentation', GROUP, 'GROUP duration');
+tuneSeconds('presentation', 0.5, 'Step 17 duration');
+tuneSeconds('presentation', 0.36, 'Step 18 duration');
+tuneSeconds('presentation', 0.5, 'Step 19 duration');
+tuneSeconds('presentation', 0.36, 'Step 20 duration');
+tuneSeconds('presentation', 0.5, 'Step 21 duration');
+tuneSeconds('presentation', 0.36, 'Step 22 duration');
+tuneSeconds('presentation', 0.48, 'Step 23 duration');

@@ -1102,3 +1102,28 @@ export class Playhead extends Component {
     </Choreo>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('playhead', PILL, 'PILL');
+tuneSpring('playhead', KNOB_S, 'KNOB_S');
+tuneSpring('playhead', LIT, 'LIT');
+tuneSpring('playhead', APP, 'APP');
+tuneSpring('playhead', RECEIPT, 'RECEIPT');
+tuneSeconds('playhead', 0.34, 'Step 1 duration');
+tuneSeconds('playhead', 0.62, 'Step 2 duration');
+tuneSeconds('playhead', 0.22, 'Step 3 duration');
+tuneSeconds('playhead', 0.42, 'Step 4 duration');
+tuneSeconds('playhead', 0.36, 'Step 5 duration');
+tuneSeconds('playhead', 0.52, 'Step 6 duration');
+tuneSeconds('playhead', 0.22, 'Step 7 duration');
+tuneSeconds('playhead', 0.42, 'Step 8 duration');
+tuneSeconds('playhead', 0.42, 'Step 9 duration');
+tuneSeconds('playhead', 0.6, 'Step 10 duration');
+tuneSeconds('playhead', 0.24, 'Step 11 duration');
+tuneSeconds('playhead', 0.42, 'Step 12 duration');
+tuneSeconds('playhead', 0.9, 'Step 13 duration');
+tuneSeconds('playhead', 0.56, 'Step 14 duration');
+tuneSeconds('playhead', 0.22, 'Step 15 duration');
+tuneSeconds('playhead', 0.42, 'Step 16 duration');
+tuneSeconds('playhead', 0.48, 'Step 17 duration');
+tuneSeconds('playhead', 0.46, 'Step 18 duration');

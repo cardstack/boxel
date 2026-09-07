@@ -198,3 +198,6 @@ export class Subdivision extends Component {
     return `top:calc(${this.row}% + var(--seam-gap) / 2)`;
   }
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('subdivision', settle, 'settle');

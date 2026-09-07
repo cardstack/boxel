@@ -445,3 +445,7 @@ function verdictId(shot: { id: string }) {
 function heartId(shot: { id: string }) {
   return `heart-${shot.id}`;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('camera', carry, 'carry');
+tuneSpring('camera', settle, 'settle');

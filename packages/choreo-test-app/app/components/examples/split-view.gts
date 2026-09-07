@@ -69,3 +69,6 @@ export class SplitView extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('split', firm, 'firm');

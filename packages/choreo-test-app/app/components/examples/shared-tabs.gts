@@ -54,3 +54,6 @@ export class SharedTabs extends Component {
 function isOn(tab: Tab, selected: Tab) {
   return tab === selected;
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('tabs', pill, 'pill');

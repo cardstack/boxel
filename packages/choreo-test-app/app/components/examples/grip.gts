@@ -712,3 +712,7 @@ export class Grip extends Component {
 }
 
 export default Grip;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneObject('grip', RETURN, 'dragTransition');
+tuneMotion('grip', SEAT_SPRING, 'SEAT_SPRING');

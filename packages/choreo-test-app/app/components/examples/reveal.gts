@@ -213,3 +213,8 @@ function everyPass(root: Element | undefined) {
 function bar(fraction: number) {
   return { scaleX: fraction };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('reveal', sweep, 'sweep');
+tuneMotion('reveal', rise, 'rise');
+tuneMotion('reveal', fill, 'fill');

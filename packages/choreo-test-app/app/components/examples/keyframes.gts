@@ -51,3 +51,6 @@ export const Keyframes = <template>
     </div>
   </div>
 </template>;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('keyframes', transition, 'transition');

@@ -197,3 +197,7 @@ export class DragWell extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneNumber('drag', 0.12, 'dragElastic');
+tuneObject('drag', dragTransition, 'dragTransition');

@@ -92,3 +92,6 @@ function hasSep(id: string) {
 function indexOf(id: string) {
   return path.indexOf(id as (typeof path)[number]);
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('trail', spring, 'spring');

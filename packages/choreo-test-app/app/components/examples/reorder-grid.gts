@@ -104,3 +104,7 @@ export class ReorderGrid extends Component {
 function tileStyle(wash: string) {
   return { background: wash };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneObject('grid', snap, 'ReorderItem transition 1');
+tuneObject('grid', whileDrag, 'ReorderItem whileDrag 2');

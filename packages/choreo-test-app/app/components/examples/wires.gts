@@ -448,3 +448,8 @@ export class Wires extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSpring('wires', GLIDE, 'GLIDE');
+tuneSeconds('wires', 0.28, 'Step 1 duration');
+tuneSeconds('wires', 0.32, 'Step 2 duration');

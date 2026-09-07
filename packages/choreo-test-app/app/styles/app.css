@@ -14802,28 +14802,17 @@ body.is-theater .page {
   }
 }
 
-/* Variable names and their units sit above the value, never underneath it. */
-.workbench-dials .dialkit-slider {
-  min-height: 58px;
-}
+/* Keep DialKit's compact single-line rows, reserving room for the value. */
 .workbench-dials .dialkit-slider-label {
-  top: 8px;
-  right: 10px;
-  transform: none;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: normal;
+  max-width: calc(100% - 92px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: block;
 }
 .workbench-dials .dialkit-slider-value {
-  top: auto;
-  bottom: 7px;
-  transform: none;
+  max-width: 78px;
   font-variant-numeric: tabular-nums;
-}
-.workbench-dials .dialkit-slider-input {
-  top: auto;
-  bottom: 5px;
-  transform: none;
 }
 
 body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
@@ -14846,11 +14835,6 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
   height: 100%;
 }
 
-.workbench-dials .dialkit-slider-wrapper {
-  height: 58px;
-  min-height: 58px;
-}
-
 .workbench-dials
   .dialkit-slider[aria-label$='Duration']
   .dialkit-slider-value::after {
@@ -14859,5 +14843,12 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
 
 /* Existing physics panels share their store with the adjacent native root. */
 .workbench-stage .dial-spike {
+  display: none;
+}
+
+/* A multi-keyframe loop uses an easing curve; Motion springs accept two targets. */
+[data-demo-parameters='keyframes']
+  .workbench-dials
+  .dialkit-labeled-control:has(> .dialkit-segmented) {
   display: none;
 }

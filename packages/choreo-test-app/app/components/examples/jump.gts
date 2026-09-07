@@ -607,3 +607,8 @@ export class Jump extends Component {
 }
 
 export default Jump;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSeconds('jump', 0.5, 'Scroll duration 1');
+tuneSeconds('jump', 0.9, 'Raise duration 2');
+tuneSeconds('jump', 0.7, 'Hold duration 3');

@@ -2899,3 +2899,6 @@ export class Mockup extends Component {
 }
 
 export default Mockup;
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('mockup', FADE, 'FADE');

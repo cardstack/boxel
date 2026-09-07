@@ -273,3 +273,8 @@ function isOpen(photo: Photo, open: Photo | null) {
 function photoStyle(photo: Photo) {
   return { background: photo.wash, borderRadius: '18px' };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('lightbox', spring, 'spring');
+tuneMotion('lightbox', fadeTween, 'fadeTween');
+tuneMotion('lightbox', detailsTween, 'detailsTween');

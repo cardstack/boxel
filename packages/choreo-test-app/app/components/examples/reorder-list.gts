@@ -121,3 +121,7 @@ function isOn(id: string, playing?: string) {
 function trackStyle(hue: string) {
   return { '--hue': hue };
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneObject('reorder', snap, 'ReorderItem transition 1');
+tuneObject('reorder', whileDrag, 'ReorderItem whileDrag 2');

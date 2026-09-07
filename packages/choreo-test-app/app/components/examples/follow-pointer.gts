@@ -168,3 +168,8 @@ export class FollowPointer extends Component {
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneMotion('pointer', loose, 'Halo spring');
+tuneMotion('pointer', mid, 'Ring spring');
+tuneMotion('pointer', tight, 'Pointer spring');

@@ -1188,3 +1188,8 @@ export class InlineEdit extends Component {
     </div>
   </template>
 }
+
+// Declare the demo variables before the first interactive Choreo pass.
+tuneSeconds('inline-edit', MOVE, 'Crossing duration 1');
+tuneSeconds('inline-edit', MOVE, 'MOVE duration');
+tuneSeconds('inline-edit', LEAVE, 'LEAVE duration');
