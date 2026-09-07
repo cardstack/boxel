@@ -261,16 +261,21 @@ async function selectModel(page: Page, requested: string) {
   return matches[0].name;
 }
 
-// A new room is in Act mode by default, and the runner must not touch the
-// toggle. It only reports what the toggle shows, so a room that ends up in Ask
-// mode (where every tool and patch waits for a click nobody makes) is visible
-// in the log.
-async function reportMode(page: Page, requestedModel: string) {
-  let selected = page.locator('[data-test-llm-mode-option].selected');
-  if ((await selected.count()) > 0) {
-    let mode = await selected.first().getAttribute('data-test-llm-mode-option');
-    console.log(`[smoke] ${requestedModel}: mode toggle shows ${mode}`);
+// Put the room in Act mode right after the model is picked. In Ask mode every
+// tool and patch waits for a click nobody makes. The toggle renders only once
+// the room knows its model, a moment after the pick, so wait for it rather
+// than reading "not there yet" as "not needed"; then confirm the click took.
+async function ensureActMode(page: Page, requestedModel: string) {
+  let act = page.locator('[data-test-llm-mode-option="act"]');
+  await act.waitFor({ state: 'visible', timeout: 60_000 });
+  if (!(await act.evaluate((el) => el.classList.contains('selected')))) {
+    await act.click();
   }
+  await expect(act, `${requestedModel}: room is in Act mode`).toHaveClass(
+    /selected/,
+    { timeout: 30_000 },
+  );
+  console.log(`[smoke] ${requestedModel}: mode toggle shows act`);
 }
 
 // The prompt must go out while the tab is inside the new workspace: the host
@@ -724,8 +729,8 @@ async function runModel(
     result.roomId = await openRoom(page);
     step = 'select model';
     await selectModel(page, requestedModel);
-    step = 'read mode toggle';
-    await reportMode(page, requestedModel);
+    step = 'set act mode';
+    await ensureActMode(page, requestedModel);
     step = 'confirm the tab is inside the new workspace';
     await ensureInsideWorkspace(page, result.realmUrl);
     step = 'send prompt';
