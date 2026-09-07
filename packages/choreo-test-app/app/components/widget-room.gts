@@ -1,5 +1,6 @@
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -917,11 +918,11 @@ export class WidgetRoom extends Component {
           </article>
         {{/each}}
       </div>
-      <header class="wr-header"><button
+      <header class="wr-header"><LinkTo
           class="wr-brand"
-          type="button"
-          {{on "click" this.overview}}
-        ><ChoreoMark /><span><strong>Choreo</strong><small>BY CARDSTACK</small></span></button><div
+          @route="index"
+          aria-label="Choreo home"
+        ><ChoreoMark /><span><strong>Choreo</strong><small>BY CARDSTACK</small></span></LinkTo><div
           class="wr-header-actions"
         ><button
             type="button"

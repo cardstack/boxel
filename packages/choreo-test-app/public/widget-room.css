@@ -313,6 +313,8 @@ body.in-widget-room {
   pointer-events: auto;
 }
 .wr-shell .wr-brand {
+  color: #f3ece3;
+  text-decoration: none;
   display: flex;
   align-items: center;
   gap: 11px;
