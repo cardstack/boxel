@@ -2,9 +2,14 @@ import type { TOC } from '@ember/component/template-only';
 import { modifier } from 'ember-modifier';
 import type { DemoEntry } from 'test-app/lib/catalog';
 import { restWhenOff } from 'test-app/lib/onstage';
+import { forceDarkTheme } from 'test-app/lib/theme';
 const embed = modifier(() => {
+  const releaseTheme = forceDarkTheme();
   document.body.classList.add('widget-embedded');
-  return () => document.body.classList.remove('widget-embedded');
+  return () => {
+    document.body.classList.remove('widget-embedded');
+    releaseTheme();
+  };
 });
 <template>
   <style>

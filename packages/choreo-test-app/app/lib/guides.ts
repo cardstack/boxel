@@ -16,6 +16,7 @@ import spatialCameras from '../content/guides/spatial-cameras.md?raw';
 import spatialDom from '../content/guides/spatial-dom.md?raw';
 import spatialGallery from '../content/guides/spatial-gallery.md?raw';
 import spatialStart from '../content/guides/spatial-start.md?raw';
+import { demoGuides } from './demo-guides';
 import { referenceGuides } from './guide-reference';
 
 export interface Guide {
@@ -257,6 +258,7 @@ const introductoryGuides = [
 export const guides: Guide[] = guideSections.flatMap((section) => [
   ...introductoryGuides.filter((item) => item.section === section.id),
   ...referenceGuides.filter((item) => item.section === section.id),
+  ...demoGuides.filter((item) => item.section === section.id),
 ]);
 
 export function findGuide(slug: string) {

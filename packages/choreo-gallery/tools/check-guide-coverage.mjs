@@ -134,3 +134,57 @@ if (gaps.length) {
 console.log(
   `${actual.size} API/vocabulary entries mapped; ${pages.size} guides meet ${inventory.minimumProseWords} prose words; all preambles, section goals, and internal guide links pass.`,
 );
+
+const lessons = JSON.parse(
+  fs.readFileSync(
+    path.join(root, 'test-app/app/content/demo-lessons.json'),
+    'utf8',
+  ),
+);
+function literalIds(tree) {
+  const ids = new Set();
+  function visit(node) {
+    if (
+      ts.isPropertyAssignment(node) &&
+      node.name.getText(tree) === 'id' &&
+      ts.isStringLiteral(node.initializer)
+    ) {
+      ids.add(node.initializer.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return ids;
+}
+const demoIds = literalIds(source('test-app/app/lib/catalog.ts'));
+assert.equal(
+  new Set(lessons.map((lesson) => lesson.id)).size,
+  lessons.length,
+  'Duplicate demo lesson',
+);
+assert.deepEqual(
+  lessons.map((lesson) => lesson.id).sort(),
+  [...demoIds].sort(),
+  'Each catalog demo needs one source-reviewed teaching lesson',
+);
+const embedded = new Set([
+  ...literalIds(source('test-app/app/lib/guides.ts')),
+  ...literalIds(source('test-app/app/lib/guide-reference.ts')),
+  ...literalIds(source('test-app/app/lib/demo-guides.ts')),
+]);
+for (const lesson of lessons) {
+  assert.ok(embedded.has(lesson.id), `${lesson.id} needs a guide embed`);
+  assert.ok(
+    pages.has(lesson.guide),
+    `${lesson.id} has an unknown concept guide`,
+  );
+  for (const field of ['concept', 'why', 'experiment', 'pitfall', 'combine']) {
+    assert.ok(
+      typeof lesson[field] === 'string' && lesson[field].trim(),
+      `${lesson.id} needs ${field}`,
+    );
+  }
+}
+console.log(
+  `${demoIds.size} demos have guide embeds and complete teaching records.`,
+);

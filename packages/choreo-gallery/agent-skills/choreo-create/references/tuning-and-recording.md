@@ -19,6 +19,21 @@ Existing components:
 
 For a new demo, declare named variables in the demo code and let DialKit supply their values. Use `tuneNumber(demoId, defaultValue, "variableName (px)", min, max, step)` for a numeric variable, or `tuneSpring(demoId, springConstant, "springName")` for an existing spring. The name, default, and consumer must be traceable at the call site. Label durations in seconds, positions in pixels or explicit scene units, angles in degrees, and scales as multipliers. Round slider bounds so floating-point multiplication cannot create excessive display precision. Expose actual semantic parameters rather than merely recoloring the container. Good examples are spring duration/bounce, departure distance, stagger, camera framing, and simulation force. Apply values to the existing renderer or timeline. Keep a route out of experiments: reset must recover the original defaults.
 
+## Live edits and authored presets
+
+Timing-only changes need the workbench's `live-demo-motion.ts` adapter after
+`postRender`; changed targets already use Motion's normal update path. Reuse the
+existing visual elements and preserve repeating phase. Do not remount the demo
+for every slider change. Register variables needed by a lazily evaluated Choreo
+pass before interaction so the initial panel is usable.
+
+`demo-presets.ts` stores explicit named values per demo, not a generic multiplier.
+Seed the native Versions menu after those definitions exist, suppress temporary
+seeding notifications, and restore the prior values afterward. Version 1 retains
+source defaults. Check preset ranges and actual consumers; a car's transition
+preset is not a simulation grip control. Use `scripts/check-demo-presets.mjs` and
+`scripts/check-demo-live-controls.mjs` against the dev server for relevant edits.
+
 ## Clock Ownership
 
 An interactive component should remain interactive until a recorder explicitly takes ownership. `choreo-player` accepts `runs()` and an optional `prepare()` hook; it must not pause every run discovered on the page.

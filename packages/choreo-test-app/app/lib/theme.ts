@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 export type ThemeMode = 'auto' | 'dark' | 'light';
 
 const KEY = 'choreo-theme';
+let darkScopes = 0;
 
 class ThemeSettings {
   @tracked mode: ThemeMode = read();
@@ -25,13 +26,24 @@ function apply(mode: ThemeMode) {
         ? 'light'
         : 'dark'
       : mode;
-  document.documentElement.setAttribute('data-theme', resolved);
+  document.documentElement.setAttribute(
+    'data-theme',
+    darkScopes ? 'dark' : resolved
+  );
 }
 
 export const theme = new ThemeSettings();
 
-// first paint already matches a stored choice
+// Apply before the route mounts, including a direct visit to the dark gallery.
 apply(theme.mode);
+if (
+  typeof window !== 'undefined' &&
+  /\/_widgets(?:[/?#]|$)|\/_widget\//.test(
+    window.location.pathname + window.location.hash
+  )
+) {
+  document.documentElement.setAttribute('data-theme', 'dark');
+}
 if (typeof window !== 'undefined') {
   window
     .matchMedia('(prefers-color-scheme: light)')
@@ -66,4 +78,19 @@ export function setThemeMode(mode: ThemeMode) {
 
 export function toggleTheme() {
   setThemeMode(theme.mode === 'dark' ? 'light' : 'dark');
+}
+
+/** Gallery presentation owns its palette without changing the saved preference. */
+export function forceDarkTheme() {
+  darkScopes++;
+  apply(theme.mode);
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    darkScopes--;
+    apply(theme.mode);
+  };
 }

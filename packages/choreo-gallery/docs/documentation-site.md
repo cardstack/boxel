@@ -82,3 +82,16 @@ Version 1 restores the source defaults; choosing a look keeps the demo mounted.
 Add presets only after their variables are registered, and keep all numeric
 values inside their declared ranges. Run `node scripts/check-demo-presets.mjs`
 against the development server to exercise both looks and restoration.
+
+Teaching coverage is tracked in `test-app/app/content/demo-lessons.json`. Each
+catalog example has a concept explanation, an experiment, a pitfall, a composition
+idea and a concept-guide link. The shared GuideDemo renders these beside the
+example code. Seven focused walkthroughs are registered in `demo-guides.ts`.
+`docs:check` verifies that all catalog examples remain embedded and have complete
+teaching records; prose correctness still requires source review.
+
+`docs/docs-studies-plan.md` specifies the planned docs-only spatial and film
+studies. Keep these separate from shipped demo coverage until implemented.
+The 3D room and its tile frames force a dark palette without overwriting the
+visitor’s saved theme. `scripts/check-guide-lessons.mjs` checks real embedded
+controls and this gallery theme behaviour against the development server.

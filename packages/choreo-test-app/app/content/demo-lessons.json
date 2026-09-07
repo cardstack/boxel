@@ -1,0 +1,407 @@
+[
+  {
+    "id": "playhead",
+    "guide": "film-transport",
+    "concept": "One state reducer serves clicks and seeking",
+    "why": "Buttons and the transport use the same semantic actions. Seeking folds the actions before the requested time into application state, so the view and the score cannot silently describe different apps.",
+    "experiment": "Open a control, scrub before its action, then forward again. Compare the reconstructed selection and switch state with an ordinary click.",
+    "pitfall": "Replaying old pointer events at wall-clock speed makes backward seeking depend on history.",
+    "combine": "Combine with build-order when a reproducible app interaction needs named visual beats."
+  },
+  {
+    "id": "lightbox",
+    "guide": "core-layout",
+    "concept": "Identity survives a change of context",
+    "why": "The thumbnail and detail share layout identity. The expanding content carries attention while a slower scrim establishes the modal context; the exit has a different, shorter fade.",
+    "experiment": "Open two different photos and close during expansion. Compare Dreamy expansion with Quick peek and watch the background settle after the content.",
+    "pitfall": "Reading the selected photo from live state during its exit can replace the departing content.",
+    "combine": "Combine with presence to retain outgoing content and with camera when the original grid should stay visible."
+  },
+  {
+    "id": "inbox",
+    "guide": "interactive-beacons",
+    "concept": "A destination can be a place rather than an item",
+    "why": "Compose and Trash are beacons outside the list region. A row borrows their bounds without turning the toolbar controls into participants or stretching the trash can.",
+    "experiment": "Delete a row, then change another row before the flight finishes. Compare the departing row with the neighbours closing its gap.",
+    "pitfall": "Using layoutId for the bin makes an identity morph where the intent is a flight to a location.",
+    "combine": "Combine with far matching when the destination really contains a persistent copy of the same item."
+  },
+  {
+    "id": "inline-edit",
+    "guide": "interactive-crossings",
+    "concept": "Content can change inside one continuous box",
+    "why": "The read view and edit view have different markup but occupy one meaningful record. Crossing coordinates their skins with the box movement; the easing includes acceleration because editing is a considered transition.",
+    "experiment": "Toggle editing while a field is moving, change a value, and exit. Look for preserved content and a box that lands at its actual form size.",
+    "pitfall": "Replacing a live form with a screenshot loses caret, scroll and interactive continuity.",
+    "combine": "Combine with a shared-layout selection marker while keeping form controls outside drag initiation."
+  },
+  {
+    "id": "sequence",
+    "guide": "interactive-timelines",
+    "concept": "Order and geometry have separate owners",
+    "why": "The outgoing details fade before movement and the incoming details appear afterward. Layout projection owns the grid-item geometry; Choreo owns the phases and temporary stacking order.",
+    "experiment": "Switch the open card twice before the first sequence settles. Watch which detail leaves first and whether the new selection becomes the final state.",
+    "pitfall": "Animating a grid item's width directly can disturb every track. Do not add a second geometry animation over layout projection.",
+    "combine": "Combine with gates when a person should advance a sequence one idea at a time."
+  },
+  {
+    "id": "interrupt",
+    "guide": "core-springs",
+    "concept": "A new target need not mean a new start",
+    "why": "The loose spring leaves time to retarget it while moving. Its velocity participates in the next response; the timed comparison exposes the difference between continuity and starting a new fixed curve.",
+    "experiment": "Alternate targets mid-flight using Spring tug, then Fast catch. Follow the direction immediately after each reversal, not just the arrival time.",
+    "pitfall": "Disabling input until settlement hides the interruption problem instead of solving it.",
+    "combine": "Combine with far matching to test continuity while the same item changes region."
+  },
+  {
+    "id": "slides",
+    "guide": "interactive-slides",
+    "concept": "Stable roles connect changing compositions",
+    "why": "A shared plate and repeated text keep identity between slides while slide-specific copy enters and leaves. The plate is sized as a real box so its gradient does not stretch with a snapshot.",
+    "experiment": "Move forward, reverse mid-transition, and compare the plate edge with the departing sentence. Try Elastic typography and Editorial snap.",
+    "pitfall": "Giving every slide a wholly unrelated identity turns a meaningful rearrangement into disconnected entrances.",
+    "combine": "Combine with presentation gates for click-paced reveals within a slide."
+  },
+  {
+    "id": "mockup",
+    "guide": "spatial-start",
+    "concept": "A projected screen can remain real DOM",
+    "why": "WebGL owns the device mesh while CSS projection places a live interface on its screen. The score cues app actions and chooses the camera, allowing one interface to be examined in 2D and 3D.",
+    "experiment": "Switch to 3D before opening an app. Interact with the screen near its corners and compare the hit position with its projected visual position.",
+    "pitfall": "A screenshot texture can resemble a screen while losing selection, focus and input. Projection and hit testing must agree.",
+    "combine": "Combine with long-take for a readable inner camera and a restrained outer device camera."
+  },
+  {
+    "id": "sylva",
+    "guide": "spatial-paths",
+    "concept": "A camera path and its response are different things",
+    "why": "The tour supplies desired framing while cascaded camera and aim responses shape how it reaches that framing. The host renders the scene; its chase model is not a replacement for a Choreo score.",
+    "experiment": "Compare Dream glide and Brisk tracking around a change of direction. Watch whether position and aim arrive together and whether the subject remains readable.",
+    "pitfall": "Calling a history-dependent chased frame an exact seek is misleading; recording needs a defined reconstruction policy.",
+    "combine": "Combine with Film transport only after defining how camera state is reconstructed at a requested timestamp."
+  },
+  {
+    "id": "towers",
+    "guide": "film-picture",
+    "concept": "A film directs a picture through a contract",
+    "why": "The renderer owns the architecture, lighting and rendering work. The Film score requests framing and picture capabilities, making the camera and treatment independently tunable.",
+    "experiment": "Compare Into the mist with Clear architecture at the same shot. Separate the effect of rig height from the effect of haze and grade.",
+    "pitfall": "Advancing before the model or picture is ready can capture an empty frame even when the timeline time is correct.",
+    "combine": "Combine with world annotations when a label must stay attached to part of a building."
+  },
+  {
+    "id": "camera",
+    "guide": "spatial-frame",
+    "concept": "Move the view to explain a relationship",
+    "why": "Framing computes pan and zoom from resting layout bounds. The selected photo remains part of the same collection, and the callout appears beside the frame rather than covering the subject.",
+    "experiment": "Select a second photo during the dive. Observe whether its final framing uses the photo's real bounds rather than its transient screen position.",
+    "pitfall": "Measuring a transformed intermediate box can feed camera motion back into its own next target.",
+    "combine": "Combine with spatial paths when several purposeful framings should form a guided route."
+  },
+  {
+    "id": "presentation",
+    "guide": "interactive-gates",
+    "concept": "One click can express one thought",
+    "why": "Gates divide a score into semantic advances. Parallel work and small offsets let related pieces appear together rather than making the presenter click once per element.",
+    "experiment": "Advance a gate, reverse, and advance again. Check that related elements form one beat and that already revealed content remains coherent.",
+    "pitfall": "Replacing gates with timeouts divorces the presenter from the score and makes pause or reverse unreliable.",
+    "combine": "Combine with slides for section changes and build-order for named dependencies inside each beat."
+  },
+  {
+    "id": "wires",
+    "guide": "interactive-tethers",
+    "concept": "Connections follow moving endpoints",
+    "why": "A tether derives the wire from endpoint geometry during motion. Stable thread identity lets connected paths retarget instead of tearing down and fading in each time a node moves.",
+    "experiment": "Move a connected node again before it lands. Track the endpoint and the bend of each wire through the interruption.",
+    "pitfall": "Tweening a separately guessed SVG path cannot reliably match an interrupted spring-driven endpoint.",
+    "combine": "Combine with escort when a badge, shadow and connecting line must follow the same moving item."
+  },
+  {
+    "id": "escort",
+    "guide": "interactive-follow",
+    "concept": "Derived motion stays attached without guessing a curve",
+    "why": "The badge and shadow are derived from the card's current driven values and the pass's measurements. They do not run independent tweens that merely happen to have similar durations.",
+    "experiment": "Send the card to another bay halfway through a flight. Watch the badge corner and shadow during the reversal, then compare the two presets.",
+    "pitfall": "Reading layout every frame adds work and can sample transformed positions; duplicating the spring curve drifts under retargeting.",
+    "combine": "Combine with tethers for a connector that follows the same subject through a workspace."
+  },
+  {
+    "id": "grid",
+    "guide": "core-reorder-grid",
+    "concept": "Reordering preserves a tile while neighbours move",
+    "why": "ReorderGroup owns the ordered values and each item owns a stable value. The grabbed cover stays under the pointer while projection moves the other covers into their new places.",
+    "experiment": "Drag diagonally across a row boundary, reverse, and release. Compare Playful pickup and Precise pickup while following one cover's colour.",
+    "pitfall": "Index keys make identity follow a position rather than a cover, causing state to jump between items.",
+    "combine": "Combine with presence for removal, keeping data identity stable through both reorder and exit."
+  },
+  {
+    "id": "tabs",
+    "guide": "core-shared-layout",
+    "concept": "One visual marker can travel between distinct nodes",
+    "why": "The selected tab renders a marker with one shared layoutId. LayoutGroup scopes the relationship so the receiver can animate from the previous marker bounds even though selection creates a different node.",
+    "experiment": "Switch between distant tabs quickly. Follow the marker and compare Jelly tab with Magnetic tab; the selected label updates immediately while the marker catches up.",
+    "pitfall": "A shared layoutId is not a unique DOM id; reusing it across unrelated tab groups can create unintended matches.",
+    "combine": "Combine with Presence when adding content panels that must remain mounted during their exits. The current demo isolates the marker itself."
+  },
+  {
+    "id": "far",
+    "guide": "interactive-regions",
+    "concept": "Identity can cross a region boundary",
+    "why": "A matching bare id leaving one region and arriving in another pairs across the render pass. The receiver carries the previous bounds, while each region retains its own scene ownership.",
+    "experiment": "Move an item between bays and interrupt the flight. Toggle matching to compare one continuous move with separate removal and insertion.",
+    "pitfall": "Prefixing the id with the region name prevents the cross-region identity match.",
+    "combine": "Combine with beacons for toolbar destinations that are locations rather than receiving items."
+  },
+  {
+    "id": "crossing",
+    "guide": "interactive-crossings",
+    "concept": "The interior can stay live during a transformation",
+    "why": "Crossing blends two skins inside a moving box while unregistered video, scrolling content and animated marks continue to run. This tests continuity that a still image cannot demonstrate.",
+    "experiment": "Watch the moving mark and scroll the pane while the container crosses. Compare the internal motion before, during and after the transition.",
+    "pitfall": "View-transition snapshots freeze live descendants for the snapshot's duration.",
+    "combine": "Combine with inline editing when a read view changes into an interactive form without losing continuity."
+  },
+  {
+    "id": "subdivision",
+    "guide": "core-layout",
+    "concept": "Direct manipulation and settlement need different rules",
+    "why": "During a seam drag, instantLayoutTransition applies pointer-driven layout immediately. On release the rounded track sizes update outside that wrapper, letting the same layout participants spring into place.",
+    "experiment": "Drag a seam slowly, then release between round percentages. The seam should track the finger exactly and only the final correction should spring.",
+    "pitfall": "Smoothing every pointer update makes the handle lag; making every update instant also removes the useful release settlement.",
+    "combine": "Combine with reorder when users can both resize regions and rearrange their contents."
+  },
+  {
+    "id": "drag",
+    "guide": "core-drag",
+    "concept": "Constraints and momentum answer different questions",
+    "why": "Constraints define the permitted area, elasticity controls how the edge feels, and the release transition shapes the return or continuation. These are separate variables rather than one generic spring.",
+    "experiment": "Pull beyond an edge with Rubber tether, then repeat with Magnetic well. Release at different velocities and compare the edge response.",
+    "pitfall": "Changing visual styling alone does not tune a drag interaction; tune the values consumed by the drag session.",
+    "combine": "Combine with grip when interactive content requires a dedicated handle to start dragging."
+  },
+  {
+    "id": "rack",
+    "guide": "interactive-gates",
+    "concept": "A scrubbed score can visit several arrangements",
+    "why": "The score includes intermediate arrangements, rather than starting a new layout pass for every notch. The transport samples that one score so reverse travel can visit the same poses.",
+    "experiment": "Scrub slowly from letter order into the plotted arrangement, then reverse halfway. Track a single tile through the intermediate positions.",
+    "pitfall": "Rebuilding a separate score at each notch introduces render gaps and makes quick scrubbing outrun the choreography.",
+    "combine": "Combine with named build dependencies when the explanation needs both spatial arrangements and readable milestones."
+  },
+  {
+    "id": "sheet",
+    "guide": "core-drag",
+    "concept": "A detent can be an interface mode",
+    "why": "The sheet's release chooses among detents, and each detent changes how a share target is presented. The throw predicts intent while shared identity connects the different representations.",
+    "experiment": "Release at similar positions with different velocities. Check which mode wins and whether the same target remains recognizable after the sheet settles.",
+    "pitfall": "Choosing a detent only from the final pointer position ignores release velocity; excessive prediction makes the sheet feel uncontrollable.",
+    "combine": "Combine with presence and layout to retain departing modes until their transitions complete."
+  },
+  {
+    "id": "split",
+    "guide": "interactive-property-steps",
+    "concept": "Geometry can be a measured dependency",
+    "why": "The content's left offset is derived from the sidebar's before and after widths. A property function expresses that relationship without maintaining a duplicate numeric width in application state.",
+    "experiment": "Expand and collapse the sidebar while it moves. Inspect whether the content edge remains aligned with the measured sidebar edge.",
+    "pitfall": "A hard-coded offset becomes stale when text, viewport or sidebar content changes.",
+    "combine": "Combine with camera framing when the available reading area changes with a panel."
+  },
+  {
+    "id": "reorder",
+    "guide": "core-reorder",
+    "concept": "Order is application state, motion explains its change",
+    "why": "The group updates the values array while each track keeps stable identity. A lifted row remains recognizable as neighbours make room around it.",
+    "experiment": "Move the same track upward and then downward without releasing. Change the pickup preset and distinguish the active row from displaced neighbours.",
+    "pitfall": "Updating only DOM order or using array positions as identities separates the visual order from the application's data.",
+    "combine": "Combine with a handle-driven drag when rows contain inputs or selection controls."
+  },
+  {
+    "id": "layout",
+    "guide": "core-layout",
+    "concept": "The same node can animate between measured layouts",
+    "why": "Changing layout state lets projection compare the element's previous and next boxes. Motion-owned radius and related styles allow correction while the box changes shape.",
+    "experiment": "Toggle repeatedly at different viewport widths. Watch the corners and text while comparing Rubber layout with Crisp shuffle.",
+    "pitfall": "A stylesheet-only radius may distort during scaling because the engine was never told to correct it.",
+    "combine": "Combine with shared layout for continuity when the representation moves to a different node."
+  },
+  {
+    "id": "lists",
+    "guide": "interactive-regions",
+    "concept": "A transfer also reshapes its surroundings",
+    "why": "A counterpart match carries the moved name across lists while the containing columns resize on the same spring. The choreography expresses the transfer and its effects as one pass.",
+    "experiment": "Transfer a name, then move another before the first lands. Follow the arriving name and both column boundaries.",
+    "pitfall": "Animating the flyer alone leaves the rest of the interface jumping abruptly around it.",
+    "combine": "Combine with inbox beacons for actions whose endpoints are outside either list."
+  },
+  {
+    "id": "stagger",
+    "guide": "core-variants",
+    "concept": "A parent state can orchestrate its descendants",
+    "why": "The group propagates a named state and schedules children with a stagger. Each child supplies its own target and spring, so ordering and response remain independently editable.",
+    "experiment": "Compare Popcorn with Domino ripple, then reduce the stagger while leaving the child spring unchanged. Notice which part controls order and which controls bounce.",
+    "pitfall": "Hard-coding a delay from stale array indices makes order disagree with the rendered collection.",
+    "combine": "Combine with presence when the staggered collection also inserts and removes items."
+  },
+  {
+    "id": "trail",
+    "guide": "core-presence",
+    "concept": "Removing a breadcrumb changes the path and its layout",
+    "why": "Presence keeps popped crumbs alive for their exits while popLayout releases their slots immediately. The retained crumbs use layout projection to close the path without waiting for the old nodes to disappear.",
+    "experiment": "Push to the deepest path, then select an earlier crumb. Watch several removed crumbs leave while the retained path settles. Compare the two spring presets.",
+    "pitfall": "Reading the current depth to label a departing crumb can change its meaning during exit. Keep the departing label on the item yielded by Presence.",
+    "combine": "Combine with shared tabs when both a path and a selection marker should communicate navigation without a full page transition."
+  },
+  {
+    "id": "jump",
+    "guide": "interactive-raise-scroll",
+    "concept": "Motion can help a person locate an unknown result",
+    "why": "Scroll reveals where the next failure sits in a long run, Raise gives that result temporary emphasis, and Hold keeps attention there long enough to read it.",
+    "experiment": "Advance to successive failures and notice distance and clustering. Compare Scenic jump with Jump cut without losing the highlighted target.",
+    "pitfall": "Scrolling to a destination already obvious beside the button adds movement without teaching location.",
+    "combine": "Combine with gates when each discovered result becomes the next step in a guided explanation."
+  },
+  {
+    "id": "keyframes",
+    "guide": "core-tweens",
+    "concept": "Intermediate values are part of the design",
+    "why": "The morph follows explicit rotation, scale and lift arrays. An easing curve controls progress through those targets; changing duration alone should retime the same running loop.",
+    "experiment": "Compare Helicopter and Moon hop. Change lift while the loop runs and watch the existing shape rather than a reset copy.",
+    "pitfall": "A multi-target keyframe animation cannot simply be switched to a two-target spring generator.",
+    "combine": "Combine with SVG path drawing for a synchronized shape and line treatment."
+  },
+  {
+    "id": "long-take",
+    "guide": "spatial-camera3d",
+    "concept": "Two cameras can share a semantic shot list",
+    "why": "The inner 2D camera moves across an unchanged drawing while the outer 3D camera makes a restrained device movement. Both derive their durations from move plus hold in the same shot data.",
+    "experiment": "Compare Gallery stroll and Express tour. Check that the inner explanation and outer movement change pace together.",
+    "pitfall": "Independent duration constants let nested cameras drift apart even when they begin together.",
+    "combine": "Combine with Film chapters when the continuous shot must sit inside a longer narrative."
+  },
+  {
+    "id": "sagrada",
+    "guide": "film-picture",
+    "concept": "Framing and treatment can vary without rebuilding the model",
+    "why": "The film requests picture operations from the architectural renderer. Rig height changes the camera relationship, while grade strength changes treatment rather than geometry.",
+    "experiment": "Compare Cathedral gaze and Stone study at a held view. Identify which visible change comes from camera height and which comes from grading.",
+    "pitfall": "Treating asset readiness as a fixed delay can produce blank starts on a slower device.",
+    "combine": "Combine with trace and world annotations when the narration refers to a particular architectural feature."
+  },
+  {
+    "id": "grip",
+    "guide": "core-drag-handles",
+    "concept": "The drag handle protects the rest of the card",
+    "why": "The card disables its default drag listener, and a separate grip starts the drag controls. That leaves the note field and phone number usable as normal interactive content.",
+    "experiment": "Edit a note, select a phone number, and then drag only by the corner. Compare the release distance under Slippery grip and Sticky grip.",
+    "pitfall": "Starting a drag from every pointerdown steals caret placement and text selection from the form.",
+    "combine": "Combine with reorder for editable lists whose rows move only from a deliberate handle."
+  },
+  {
+    "id": "gestures",
+    "guide": "core-input",
+    "concept": "Related layers can share state without sharing one transition",
+    "why": "The body and glow inherit hover and press variants. Scale uses a spring while colour and light use their own tweens, so a physical squeeze and a lighting response remain distinct.",
+    "experiment": "Hold the globe under Rubber sun, release, then try Quiet pulse. Compare the shape response with how long the light takes to settle.",
+    "pitfall": "Applying one generic transition to all properties removes the intentional difference between movement and illumination.",
+    "combine": "Combine with a pointer follower, keeping keyboard focus and activation usable without hover."
+  },
+  {
+    "id": "presence",
+    "guide": "core-presence",
+    "concept": "Exit lifetime affects layout as well as visibility",
+    "why": "Presence retains removed content until its longest exit finishes. Sync, wait and popLayout differ in when arrivals and surrounding layout can proceed.",
+    "experiment": "Remove a notice in each mode. Watch its slot after opacity falls, then change the exit timing to see how an invisible leaver can still occupy space.",
+    "pitfall": "A long transform after a short fade leaves an invisible item holding layout. Keep the exit's visual and structural lifetimes intentional.",
+    "combine": "Combine with layout for neighbour movement and preserve the yielded item's data throughout exit."
+  },
+  {
+    "id": "parallax",
+    "guide": "core-scroll",
+    "concept": "Several mappings can give one scroll value depth",
+    "why": "Each layer derives a transform from the same progress source. Different travel distances and rotations create relative motion without needing separate scroll listeners for every layer.",
+    "experiment": "Compare Deep layers and Gentle depth at the same scroll position. Stop scrolling and inspect whether the resulting composition remains readable.",
+    "pitfall": "Large transforms can move essential text outside the reading area; depth should not hide the content it is meant to explain.",
+    "combine": "Combine with reveal for discrete arrivals while continuous layers remain scroll-driven."
+  },
+  {
+    "id": "enter",
+    "guide": "core-targets",
+    "concept": "Arrival can use different property responses",
+    "why": "The notice has explicit initial and target values. Scale and vertical movement use springs while opacity uses a short tween, and a second arrival can be offset without duplicating the component.",
+    "experiment": "Compare Jack in the box and Polite entrance. Follow the text baseline and the opacity separately during the first appearance.",
+    "pitfall": "Binding a style attribute on the same element can overwrite Motion's transform during a Glimmer update.",
+    "combine": "Combine with presence when the same notice also needs a retained exit."
+  },
+  {
+    "id": "reveal",
+    "guide": "core-reveal",
+    "concept": "An arrival should reveal the meaning of a value",
+    "why": "A row entering view brings its label, bar and numeric readout into attention. The bar uses a fixed domain, so a larger displayed value means the same thing in every row.",
+    "experiment": "Scroll one row into view, then compare it with another. Try Curtain call and Flash reveal while checking that the final values remain readable.",
+    "pitfall": "Normalizing each bar against a changing local maximum makes visually equal lengths mean different quantities.",
+    "combine": "Combine with parallax when continuous depth and discrete data arrivals serve different purposes."
+  },
+  {
+    "id": "drift",
+    "guide": "interactive-drift",
+    "concept": "A simulation and a transition have different responsibilities",
+    "why": "The car's continuous driving model owns steering, grip and velocity. Choreo handles discrete changes around that world, such as arrival and rearrangement; a spring preset does not replace the driving loop.",
+    "experiment": "Hold the pointer on the track, change the car's own grip controls, and drive again. Use Bouncy parking and Precision parking to compare the surrounding transitions separately.",
+    "pitfall": "Calling a transition duration the car's handling parameter confuses the simulation with its presentation.",
+    "combine": "Combine with a guided explanation that pauses at a reproducible driving condition rather than pretending a fresh throw is identical."
+  },
+  {
+    "id": "hang",
+    "guide": "interactive-hang",
+    "concept": "Release velocity is information that layout cannot provide",
+    "why": "The gesture snapshot supplies where the puck was released and how fast it was moving. Game logic chooses a legal destination, then Choreo stages the travel and follow-up instead of delegating everything to free inertia.",
+    "experiment": "Flick from a similar release point at two speeds. Compare the resulting travel, then try Rubber hang and Decisive release for the transition response.",
+    "pitfall": "Enabling automatic drag momentum as well as scored travel gives two systems ownership of the released puck.",
+    "combine": "Combine with Follow for a label or shadow that must stay attached during the throw."
+  },
+  {
+    "id": "header",
+    "guide": "core-header",
+    "concept": "Direction needs hysteresis and boundary handling",
+    "why": "The header responds to sustained travel in a direction rather than every tiny delta. The scroll position is clamped and edge zones prevent rubber-band recoil from looking like deliberate reverse scrolling.",
+    "experiment": "Scroll down, reverse slightly, then reverse decisively. Repeat near the top and bottom and compare Floating header with Instant response.",
+    "pitfall": "Using the raw sign of every scroll delta makes the bar flicker under trackpad noise and iOS overscroll.",
+    "combine": "Combine with reveal while keeping the primary navigation reachable and the page's content position stable."
+  },
+  {
+    "id": "fold",
+    "guide": "interactive-commands",
+    "concept": "Commands and their ledger can come from one schedule",
+    "why": "One command array generates both Perform steps and the displayed ledger. Each command's moment is derived from the holds before it, avoiding a second independent set of timestamps.",
+    "experiment": "Play, seek backward across a command, and advance again. Compare the visible ledger with the actual folded state.",
+    "pitfall": "An arbitrary side effect is not automatically reversible; define how the command's semantic state is rebuilt at a timestamp.",
+    "combine": "Combine with playhead so ordinary button actions and recorded actions use the same reducer."
+  },
+  {
+    "id": "path",
+    "guide": "core-tweens",
+    "concept": "A drawn path can explain order and direction",
+    "why": "The ring and spark have separate drawing transitions. Normalized path progress reveals the SVG geometry over time, while the curve and duration decide the character of the stroke.",
+    "experiment": "Compare Slow signature and Electric sketch. Pause attention on where the stroke begins and whether the spark leads or follows the ring.",
+    "pitfall": "Animating a path's visual appearance without preserving its final static shape can make reduced-motion output unreadable.",
+    "combine": "Combine with build-order to start a stroke with or after a named beat."
+  },
+  {
+    "id": "pointer",
+    "guide": "core-motion-values",
+    "concept": "A follower needs a resting rule as well as a chase rule",
+    "why": "The pointer, ring and halo use different springs while chasing the same input. When input leaves, they return toward the centre instead of remaining stranded at the last edge.",
+    "experiment": "Move sharply, stop, and leave the stage. Compare Comet tail with Magnetic pointer and watch the order in which the followers return.",
+    "pitfall": "Keeping the last pointer coordinate as the permanent target leaves the demo looking stuck after exit.",
+    "combine": "Combine with gestures to distinguish the input location from the control's hover and press states."
+  },
+  {
+    "id": "build-order",
+    "guide": "film-schedule",
+    "concept": "Named dependencies express intent better than absolute times",
+    "why": "The builds name one another with with and after relationships. The compiler resolves start times, and the transport reads those times back instead of recomputing a parallel schedule.",
+    "experiment": "Lengthen an earlier build and inspect the dependent starts. Compare Show each beat with Rapid assembly while keeping the dependency graph unchanged.",
+    "pitfall": "Maintaining manual timestamps beside the template causes the displayed timeline to disagree with the actual score.",
+    "combine": "Combine with presentation gates when some boundaries wait for a person and others follow named build dependencies."
+  }
+]

@@ -40,16 +40,15 @@ bitmaps. Anything alive — running animations, video, canvas — freezes for
 the duration. The gallery's filter deliberately uses `layout=true` +
 `<LayoutGroup>` instead so two dozen live demos keep running while their
 cards fly (see the comment block in `test-app/app/components/gallery.gts`).
-Rule: **same-page state change → layout animation; cross-page navigation →
-view transition.**
+Choose by content ownership: use layout for same-view geometry, Choreo route
+crossings for live DOM continuity, and view transitions when snapshot behaviour
+is intentional. A route change alone does not imply a snapshot.
 
 ## This app's route transition
 
-The gallery ⇄ demo navigation is a full Magic Move recipe with a dozen
-load-bearing subtleties (the veil, the root-snapshot rule, the
-container-naming freeze, pausing live animations, polled completion, …).
-That has its own skill: **`magic-move-navigation`**. Read it before
-touching `test-app/app/routes/application.ts` or adding a paired element.
+The gallery uses `<Choreo @route>` to cross real DOM, with shared participant
+identities and a declared timeline. Read `magic-move-navigation` before changing
+that implementation. The old animateView/veil orchestration was removed.
 
 ## When NOT
 

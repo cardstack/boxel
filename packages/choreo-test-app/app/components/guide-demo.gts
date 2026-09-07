@@ -4,6 +4,8 @@ import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import lessons from 'test-app/content/demo-lessons.json';
+import { findDemo } from 'test-app/lib/catalog';
 import type { Guide } from 'test-app/lib/guides';
 
 interface Signature {
@@ -12,6 +14,12 @@ interface Signature {
 export class GuideDemo extends Component<Signature> {
   @service declare router: RouterService;
   @tracked active = true;
+  get lesson() {
+    return lessons.find((lesson) => lesson.id === this.args.demo.id);
+  }
+  get example() {
+    return findDemo(this.args.demo.id);
+  }
   get url() {
     return this.router.urlFor('demo-lab', this.args.demo.id, {
       queryParams: { embedded: true },
@@ -40,6 +48,22 @@ export class GuideDemo extends Component<Signature> {
           >{{@demo.title}}</strong><span>Open the real demo with live controls</span></button>{{/if}}
       <p>{{@demo.instruction}}
         <LinkTo @route="demo-lab" @model={{@demo.id}}>Open the playground ↗</LinkTo></p>
+      {{#if this.lesson}}{{#let this.lesson as |lesson|}}
+          <div class="guide-prose demo-lesson" data-demo-lesson={{lesson.id}}>
+            <h3>{{lesson.concept}}</h3>
+            <p>{{lesson.why}}</p>
+            <p><strong>Try it.</strong> {{lesson.experiment}}</p>
+            <p><strong>Watch out.</strong> {{lesson.pitfall}}</p>
+            <p><strong>Build on it.</strong> {{lesson.combine}}</p>
+            <p><strong>APIs in this example:</strong>
+              {{#each this.example.apis as |api|}} <code>{{api}}</code>{{/each}}
+            </p>
+            <details><summary>Example code</summary><pre><code
+                >{{this.example.sample}}</code></pre></details>
+            <LinkTo @route="docs.topic" @model={{lesson.guide}}>Read the concept
+              guide →</LinkTo>
+          </div>
+        {{/let}}{{/if}}
     </section>
   </template>
 }

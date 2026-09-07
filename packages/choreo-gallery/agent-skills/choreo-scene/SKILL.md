@@ -85,7 +85,7 @@ in another), and cross-region measurement: `docs/nested-choreo.md`.
 ## When NOT
 
 One element, no ordering, no cross-element measurement → `motion-element` /
-`motion-presence`. A pure layout move → `motion-layout`. Route changes →
+`motion-presence`. A pure layout move → `motion-layout`. Live route crossings → `magic-move-navigation`; intentional snapshots →
 `motion-page-transition`.
 
 Canonical demos: `inbox.gts` (beacons), `sequence.gts`, `interrupt.gts`,

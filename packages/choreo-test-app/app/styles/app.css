@@ -14852,3 +14852,20 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
   .dialkit-labeled-control:has(> .dialkit-segmented) {
   display: none;
 }
+
+.demo-lesson {
+  padding: 0 20px 24px;
+}
+.demo-lesson details {
+  margin: 16px 0;
+}
+.demo-lesson summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.demo-lesson code {
+  overflow-wrap: anywhere;
+}
+.demo-lesson pre code {
+  overflow-wrap: normal;
+}

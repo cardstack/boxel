@@ -9,6 +9,7 @@ import { ChoreoMark } from 'test-app/components/choreo-mark';
 import config from 'test-app/config/environment';
 import { cameraCss, perspective } from 'test-app/lib/css3d';
 import { restWhenOff } from 'test-app/lib/onstage';
+import { forceDarkTheme } from 'test-app/lib/theme';
 import { moveRoomCamera } from 'test-app/lib/widget-camera';
 import {
   galleryArchitecture,
@@ -825,6 +826,8 @@ export class WidgetRoom extends Component {
       document.body.classList.remove('in-widget-room');
     };
   });
+  darkPalette = modifier(() => forceDarkTheme());
+
   <template>
     <link rel="stylesheet" href={{this.stylesheet}} />
     <section
@@ -834,6 +837,7 @@ export class WidgetRoom extends Component {
         {{if this.selected 'has-selection'}}
         {{if this.stop 'has-guide'}}"
       aria-label="Choreo spatial demo room"
+      {{this.darkPalette}}
     >
       <div class="wr-viewport" {{this.setup}}>
         <div class="wr-scene-layer"><div class="wr-world">
