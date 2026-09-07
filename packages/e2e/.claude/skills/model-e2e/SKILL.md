@@ -70,10 +70,11 @@ nothing.
 When one appears:
 
 1. **Stop the generation, but only when it has clearly gone sideways.** The
-   runner does this itself for a failed or invalid pill, an error alert,
-   git-style markers, the same tool call repeated three times, a pill stuck
-   past the host's two-minute tool timeout, and the 15-minute safety clock
-   (verdict notes start with "stopped early"). It never stops a run for being
+   runner does this itself for a second failed or invalid pill or error alert
+   (one is something the model can notice and correct), git-style markers, the
+   same tool call repeated three times, a pill stuck past the host's two-minute
+   tool timeout, a turn that streams nothing for three minutes, and the
+   15-minute safety clock (verdict notes start with "stopped early"). It never stops a run for being
    slow, long, or expensive: those are graded afterwards, and cutting them
    hides what the model would have done next. For anything the runner does
    not catch, click Stop in the panel only when you can name what went wrong.
@@ -151,6 +152,10 @@ Verdicts:
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be
   fine; the tab froze. Keep the room id, this is a repro for a host bug.
+- `bot-failure` — the bot showed "Generating results" with no new text for
+  three minutes: the request between the ai-bot and the provider never came
+  back. The ai-bot has no timeout of its own for this. Not the model's doing;
+  check the ai-bot's terminal for the request error.
 - `runner-failure` — the script itself broke (a selector, a timeout on the UI).
   The step name is in the notes. Fix the runner, not the model.
 

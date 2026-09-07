@@ -26,6 +26,10 @@ const MAX_MINUTES = Number(process.env.SMOKE_MAX_MINUTES ?? 15);
 // A pill that stays in "applying" this long is a stuck host, not a slow tool:
 // the host's own tool timeout is two minutes.
 const STUCK_APPLYING_MS = 150_000;
+// A turn that shows "Generating results" with no new text for this long is a
+// stalled request between the ai-bot and the provider; the bot has no timeout
+// of its own for it.
+const STALLED_GENERATION_MS = 180_000;
 // The bot starts its next message within a second or two of a tool result or
 // a patch landing; the correctness check takes a few seconds more. Idle has
 // to hold this long before it counts.
@@ -39,7 +43,12 @@ const MODELS = (process.env.SMOKE_MODELS ?? 'Claude Sonnet 4.6')
   .map((m) => m.trim())
   .filter(Boolean);
 
-type Verdict = 'pass' | 'model-failure' | 'host-failure' | 'runner-failure';
+type Verdict =
+  | 'pass'
+  | 'model-failure'
+  | 'host-failure'
+  | 'bot-failure'
+  | 'runner-failure';
 
 interface RunResult {
   requestedModel: string;
@@ -52,7 +61,13 @@ interface RunResult {
   cardRendered: string | undefined;
   renderedIn: 'stack' | 'preview' | undefined;
   durationSeconds: number;
-  stoppedBy: 'idle' | 'wall-clock' | 'stuck' | 'irregularity' | 'error';
+  stoppedBy:
+    | 'idle'
+    | 'wall-clock'
+    | 'stuck'
+    | 'stalled'
+    | 'irregularity'
+    | 'error';
   irregularities: string[];
   analysis: RoomAnalysis | undefined;
   screenshot: string | undefined;
@@ -183,9 +198,18 @@ async function selectModel(page: Page, requested: string) {
   let items = page.locator('[data-test-llm-select-item]');
   await items.first().waitFor();
   let names = await items.locator('.llm-name').allTextContents();
-  let matches = names
-    .map((name, index) => ({ name: name.trim(), index }))
-    .filter((o) => o.name.toLowerCase().includes(requested.toLowerCase()));
+  let wanted = requested.toLowerCase();
+  let all = names.map((name, index) => ({ name: name.trim(), index }));
+  // "GPT-5.4" must not also match "GPT-5.4 Mini": prefer an option whose name
+  // is exactly the request, or ends with it as a whole word (the vendor prefix
+  // is optional), and only then fall back to a substring match.
+  let escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let exact = all.filter((o) => o.name.toLowerCase() === wanted);
+  let suffix = all.filter((o) =>
+    new RegExp(`(^|[:\\s])${escaped}$`, 'i').test(o.name),
+  );
+  let substring = all.filter((o) => o.name.toLowerCase().includes(wanted));
+  let matches = exact.length ? exact : suffix.length ? suffix : substring;
   if (matches.length !== 1) {
     await page.keyboard.press('Escape');
     throw new Error(
@@ -257,6 +281,9 @@ interface Activity {
   applying: number;
   generating: boolean;
   errorAlerts: number;
+  // Length of all bot text on the page: a turn that is "generating" while this
+  // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
+  botTextLength: number;
   // Signs that the run has already gone wrong and every further turn is
   // wasted money: a failed or invalid tool pill, an error alert, or a
   // SEARCH/REPLACE block in git-conflict syntax (the host cannot apply it).
@@ -280,11 +307,14 @@ async function readActivity(page: Page): Promise<Activity> {
     let failed = q('[data-test-apply-state="failed"]');
     let invalid = q('[data-test-apply-state="invalid"]');
     let errorAlerts = q('[data-test-boxel-alert="error"]');
-    if (failed)
-      irregularities.push(`${failed} tool call(s) or patch(es) failed`);
-    if (invalid)
-      irregularities.push(`${invalid} tool call(s) rejected as invalid`);
-    if (errorAlerts) irregularities.push(`${errorAlerts} error alert(s) shown`);
+    // One failed or rejected call is something a model can notice and correct
+    // (the host tells it what was wrong); two is a run going sideways.
+    if (failed >= 2)
+      irregularities.push(`${failed} tool calls or patches failed`);
+    if (invalid >= 2)
+      irregularities.push(`${invalid} tool calls rejected as invalid`);
+    if (errorAlerts >= 2)
+      irregularities.push(`${errorAlerts} error alerts shown`);
     let gitStyle = Array.from(
       document.querySelectorAll('[data-test-ai-message-content]'),
     ).filter((el) => (el.textContent ?? '').includes('<<<<<<< SEARCH')).length;
@@ -317,6 +347,11 @@ async function readActivity(page: Page): Promise<Activity> {
       generating,
       errorAlerts,
       irregularities,
+      botTextLength: Array.from(
+        document.querySelectorAll(
+          '[data-test-ai-message-content], [data-test-reasoning]',
+        ),
+      ).reduce((sum, el) => sum + (el.textContent ?? '').length, 0),
     };
   });
 }
@@ -339,9 +374,21 @@ async function waitForIdle(
   let deadline = Date.now() + MAX_MINUTES * 60_000;
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
+  let flatSince: number | undefined;
+  let lastTextLength = -1;
   for (;;) {
     let now = Date.now();
     let activity = await readActivity(page);
+    if (activity.generating && activity.botTextLength === lastTextLength) {
+      flatSince ??= now;
+      if (now - flatSince > STALLED_GENERATION_MS) {
+        await stopGeneration(page);
+        return { stoppedBy: 'stalled', irregularities: [] };
+      }
+    } else {
+      flatSince = undefined;
+    }
+    lastTextLength = activity.botTextLength;
     if (activity.irregularities.length > 0) {
       // Something already went wrong. Letting the model carry on only spends
       // more turns on a broken path; stop it and read the room instead.
@@ -463,6 +510,12 @@ function classify(
     reasons.push('a tool pill stayed in "applying" past the host tool timeout');
     return { verdict: 'host-failure', reasons };
   }
+  if (stoppedBy === 'stalled') {
+    reasons.push(
+      `the bot showed "Generating results" with nothing streamed for ${STALLED_GENERATION_MS / 1000}s: the provider is either hung or reasoning without streaming; the room shows whether the turn completed later`,
+    );
+    return { verdict: 'bot-failure', reasons };
+  }
   if (analysis.unansweredToolCalls > 0) {
     reasons.push(
       `${analysis.unansweredToolCalls} tool call(s) never got a result`,
@@ -544,7 +597,9 @@ function grade(result: RunResult): { grade: Grade; misses: string[] } {
   return { grade: misses.length ? '⚠️ WARNING' : '✅ GOOD', misses };
 }
 
-test.describe.configure({ mode: 'serial' });
+// Not `serial`: serial mode skips every remaining test after one failure, and
+// a sweep must keep going when one model fails. Runs are still one at a time,
+// the config has a single worker.
 
 test.beforeAll(async () => {
   await mkdir(RESULTS_DIR, { recursive: true });
