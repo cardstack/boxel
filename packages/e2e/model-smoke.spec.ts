@@ -355,10 +355,12 @@ async function readActivity(page: Page): Promise<Activity> {
     let failed = q('[data-test-apply-state="failed"]');
     let invalid = q('[data-test-apply-state="invalid"]');
     let errorAlerts = q('[data-test-boxel-alert="error"]');
-    // One turn with a failed or rejected call is something a model can notice
-    // and correct (the host tells it what was wrong); failures in two separate
-    // turns is a run going sideways. Count turns, not pills: one fix reply can
-    // carry several blocks that all fail together.
+    // A failed or rejected call is something a model can notice and correct:
+    // the host tells it what was wrong, and a normal repair takes two or three
+    // rounds, each of which can fail once more before it lands. Only a fourth
+    // failing turn reads as a run going sideways; stopping at two cut off a
+    // Haiku run two seconds before its card appeared. Count turns, not pills:
+    // one fix reply can carry several blocks that all fail together.
     let messagesWithFailures = Array.from(
       document.querySelectorAll('[data-test-message-idx]'),
     ).filter(
@@ -367,7 +369,7 @@ async function readActivity(page: Page): Promise<Activity> {
           '[data-test-apply-state="failed"], [data-test-apply-state="invalid"]',
         ) || m.querySelector('[data-test-boxel-alert="error"]'),
     ).length;
-    if (messagesWithFailures >= 2) {
+    if (messagesWithFailures >= 4) {
       irregularities.push(
         `${messagesWithFailures} turns had a failed or rejected tool call or patch (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
