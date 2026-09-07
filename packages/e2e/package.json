@@ -7,7 +7,7 @@
   "description": "Drives the real local Boxel stack through Playwright and asks each model to build and show a hello-world card. See README.md.",
   "scripts": {
     "smoke": "playwright test -c playwright.config.ts",
-    "smoke:headed": "playwright test -c playwright.config.ts --headed",
+    "smoke:headed": "SMOKE_WORKERS=1 playwright test -c playwright.config.ts --headed",
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

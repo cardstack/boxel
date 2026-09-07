@@ -52,7 +52,11 @@ A run also prints the table at the end.
    tool with no result, the tab left the workspace). Keeps the room id so the
    room can be inspected afterwards.
 
-Runs are serial: one browser tab is the bottleneck, and the ai-bot serialises
-work per room anyway.
+Models run in parallel, `SMOKE_WORKERS` at a time (default 5), each in its own
+browser context, workspace, and room; the ai-bot works rooms concurrently. All
+workers log in as the same user, so their starts are staggered
+(`SMOKE_STAGGER_SECONDS`, default 20) to keep the room-opening steps apart, and
+a run fails itself if a second prompt shows up in its room. `smoke:headed` runs
+one worker so there is one window to watch.
 
 The `model-e2e` skill in `.claude/skills/model-e2e/SKILL.md` explains the benchmarks and how to read a run.

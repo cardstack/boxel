@@ -38,6 +38,13 @@ const QUIET_WINDOW_MS = 10_000;
 // Models are given by the name the picker shows (substring, case-insensitive),
 // because picker options are keyed by ModelConfiguration card id, not model id.
 // The model id actually used is read back from the room and recorded.
+// Workers start this far apart. Every worker logs in as the same user, and
+// the host opens that user's most recent room; if it is empty the runner uses
+// it. Two tabs reaching that step at the same moment would share a room, so
+// the starts are staggered to keep the room steps apart.
+const STAGGER_MS = Number(process.env.SMOKE_STAGGER_SECONDS ?? 20) * 1000;
+let staggered = false;
+
 const MODELS = (process.env.SMOKE_MODELS ?? 'Claude Sonnet 4.6')
   .split(',')
   .map((m) => m.trim())
@@ -273,6 +280,10 @@ async function sendPrompt(page: Page, roomId: string, prompt: string) {
   await expect(
     page.locator(`[data-test-message-field="${roomId}"]`),
   ).toHaveValue('');
+  // With parallel workers on one account, a second tab could have landed in
+  // this same empty room. Then two prompts share it and neither result means
+  // anything; fail the run rather than grade a mixed room.
+  await expect(page.locator('[data-test-user-message]')).toHaveCount(1);
 }
 
 interface Activity {
@@ -638,6 +649,10 @@ for (let requestedModel of MODELS) {
     let credentials: Awaited<ReturnType<typeof loginWithPassword>> | undefined;
     let step = 'start';
     try {
+      if (!staggered) {
+        staggered = true;
+        await page.waitForTimeout(test.info().parallelIndex * STAGGER_MS);
+      }
       step = 'login';
       credentials = await loginViaLocalStorage(page);
       // Human-readable stamp so the workspace list reads "Smoke Claude Opus

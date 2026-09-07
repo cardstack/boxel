@@ -8,8 +8,10 @@ import { join } from 'node:path';
 export default defineConfig({
   testDir: import.meta.dirname,
   testMatch: /model-smoke\.spec\.ts/,
-  fullyParallel: false,
-  workers: 1,
+  // One test per model; models run in parallel, `SMOKE_WORKERS` at a time
+  // (default 5). Headed runs use one worker: `smoke:headed` sets it.
+  fullyParallel: true,
+  workers: Number(process.env.SMOKE_WORKERS ?? 5),
   retries: 0,
   // One model can legitimately take several minutes (reads, writes, the
   // correctness check). The spec bounds a run itself; this is the backstop.
