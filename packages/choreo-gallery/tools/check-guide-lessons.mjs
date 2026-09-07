@@ -30,7 +30,7 @@ try {
       .waitFor();
     await p
       .frameLocator('.guide-demo iframe')
-      .locator('.dialkit-slider')
+      .locator('.workbench-dials .dialkit-slider')
       .first()
       .waitFor();
     assert.ok(await p.locator('[data-demo-lesson] details').count());
