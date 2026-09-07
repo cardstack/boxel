@@ -115,9 +115,11 @@ benchmarks, and the room id.
 The grade is the one-word answer per model:
 
 - ✅ **GOOD** — passed and inside every benchmark below.
-- ⚠️ **WARNING** — passed, but missed a benchmark: more than 5 turns, more
-  than one mode switch, over $0.20, over 120 s, a patch or tool call failed on
-  the way, or a turn missed the prompt cache. The notes say which.
+- 🟡 **ROUGH** — it worked, but not cleanly: the card rendered and a
+  benchmark was missed on the way (more than 5 turns, more than one mode
+  switch, over $0.20, over 120 s, a failed patch or tool call, or a turn that
+  missed the prompt cache). The model is usable; the notes say where it wastes
+  effort or money. Not an alarm.
 - ❌ **FAIL** — no card rendered, or the run was stopped (irregularity, stuck
   pill, safety clock, runner error).
 

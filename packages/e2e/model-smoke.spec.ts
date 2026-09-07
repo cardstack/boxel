@@ -621,9 +621,9 @@ function classify(
 }
 
 // The one-word answer per model. GOOD: passed and inside every benchmark.
-// WARNING: passed, but a benchmark was missed (more turns, switches, cost, or
+// ROUGH: passed, but a benchmark was missed (more turns, switches, cost, or
 // time than a good run needs). FAIL: no card, or the run had to be stopped.
-type Grade = '✅ GOOD' | '⚠️ WARNING' | '❌ FAIL';
+type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
 
 const BENCHMARKS = {
   maxTurns: 5,
@@ -665,7 +665,7 @@ function grade(result: RunResult): { grade: Grade; misses: string[] } {
   if (a.cacheMisses > 0) {
     misses.push(`${a.cacheMisses} turn(s) missed the prompt cache`);
   }
-  return { grade: misses.length ? '⚠️ WARNING' : '✅ GOOD', misses };
+  return { grade: misses.length ? '🟡 ROUGH' : '✅ GOOD', misses };
 }
 
 // Not `serial`: serial mode skips every remaining test after one failure, and
