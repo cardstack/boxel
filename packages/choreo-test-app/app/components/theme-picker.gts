@@ -1,29 +1,62 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { theme, toggleTheme } from 'test-app/lib/theme';
+import { setThemeMode, theme, type ThemeMode } from 'test-app/lib/theme';
 
-function isLight() {
-  return theme.mode === 'light';
+function is(value: ThemeMode) {
+  return theme.mode === value;
 }
-
+function label() {
+  return { auto: 'Auto', light: 'Light', dark: 'Dark' }[theme.mode];
+}
+function choose(value: ThemeMode, event: Event) {
+  setThemeMode(value);
+  (event.currentTarget as HTMLElement)
+    .closest('details')
+    ?.removeAttribute('open');
+}
+function dismiss(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    const menu = event.currentTarget as HTMLDetailsElement;
+    menu.removeAttribute('open');
+    menu.querySelector('summary')?.focus();
+  }
+}
 export const ThemePicker = <template>
-  <button
-    type="button"
-    class="theme-toggle"
-    aria-label="Switch to {{if (isLight) 'dark' 'light'}} mode"
-    title="Switch to {{if (isLight) 'dark' 'light'}} mode"
-    {{on "click" toggleTheme}}
+  <details
+    name="header-preferences"
+    class="header-picker"
+    {{on "keydown" dismiss}}
   >
-    {{#if (isLight)}}
-      <svg class="theme-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="4.5" />
-        <path
-          d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.36 5.64l-2.12 2.12M7.76 16.24l-2.12 2.12M18.36 18.36l-2.12-2.12M7.76 7.76L5.64 5.64"
-        />
-      </svg>
-    {{else}}
-      <svg class="theme-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M20.4 14.7A8.5 8.5 0 1 1 9.3 3.6a6.8 6.8 0 0 0 11.1 11.1Z" />
-      </svg>
-    {{/if}}
-  </button>
+    <summary
+      class="header-picker-pill"
+      aria-label="Appearance"
+      title="Appearance"
+    >
+      <span aria-hidden="true" class="header-picker-icon">◐</span>
+      <span>{{label}}</span><span
+        aria-hidden="true"
+        class="header-picker-chevron"
+      >⌄</span>
+    </summary>
+    <div class="header-picker-menu">
+      <span class="header-picker-label">Appearance</span>
+      <div class="header-picker-segments" role="group" aria-label="Appearance">
+        <button
+          type="button"
+          aria-pressed={{is "auto"}}
+          {{on "click" (fn choose "auto")}}
+        >Auto</button>
+        <button
+          type="button"
+          aria-pressed={{is "light"}}
+          {{on "click" (fn choose "light")}}
+        >Light</button>
+        <button
+          type="button"
+          aria-pressed={{is "dark"}}
+          {{on "click" (fn choose "dark")}}
+        >Dark</button>
+      </div>
+    </div>
+  </details>
 </template>;

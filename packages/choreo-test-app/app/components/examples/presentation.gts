@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import type { ChoreoContext } from 'glimmer-motion';
 import { beacon, Choreo, motion, Presence } from 'glimmer-motion';
+import { tuneMotion, tuneSeconds } from 'test-app/lib/demo-tuning';
 
 const IN = 0.32;
 /** the beat one element trails another INSIDE a single gate — the whole
@@ -543,7 +544,7 @@ export class Presentation extends Component {
                 initial=this.xfadeIn
                 animate=this.xfadeOn
                 exit=this.xfadeOut
-                transition=this.xfadeT
+                transition=(tuneMotion "presentation" this.xfadeT "xfadeT")
               }}
             >
               <Presence @items={{HOLD}} @key={{holdKey}} as |_scene hh|>
@@ -602,14 +603,22 @@ export class Presentation extends Component {
                               <c.Tween
                                 @of={{c.id "s0-eye"}}
                                 @opacity={{array 0 1}}
-                                @duration={{IN}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  IN
+                                  "IN duration"
+                                }}
                                 @ease="easeOut"
                               />
                               <c.Tween
                                 @of={{c.id "s0-title"}}
                                 @opacity={{array 0 1}}
                                 @y={{array 18 0}}
-                                @duration={{0.52}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.52
+                                  "Step 1 duration"
+                                }}
                                 @ease="easeOut"
                               />
                             </c.Parallel>
@@ -618,7 +627,11 @@ export class Presentation extends Component {
                               @of={{c.id "s0-kicker"}}
                               @opacity={{array 0 1}}
                               @y={{array 8 0}}
-                              @duration={{IN}}
+                              @duration={{tuneSeconds
+                                "presentation"
+                                IN
+                                "IN duration"
+                              }}
                               @ease="easeOut"
                             />
                             <c.Gate />
@@ -630,7 +643,11 @@ export class Presentation extends Component {
                                 @of={{c.id "s0-title-b"}}
                                 @opacity={{array 0 1}}
                                 @y={{array 34 0}}
-                                @duration={{0.66}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.66
+                                  "Step 2 duration"
+                                }}
                                 @ease={{GLIDE}}
                               />
                               <c.Tween
@@ -638,7 +655,11 @@ export class Presentation extends Component {
                                 @scaleX={{array 0 1}}
                                 @opacity={{array 0 1}}
                                 @delay={{0.2}}
-                                @duration={{0.62}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.62
+                                  "Step 3 duration"
+                                }}
                                 @ease={{GLIDE}}
                               />
                             </c.Parallel>
@@ -647,7 +668,11 @@ export class Presentation extends Component {
                               @of={{c.id "s0-stamp"}}
                               @opacity={{array 0 1 1}}
                               @scale={{array 0.86 1.08 1}}
-                              @duration={{PULSE}}
+                              @duration={{tuneSeconds
+                                "presentation"
+                                PULSE
+                                "PULSE duration"
+                              }}
                               @ease="easeOut"
                             />
                           </c.Sequence>
@@ -677,21 +702,33 @@ export class Presentation extends Component {
                               <c.Tween
                                 @of={{c.id "s1-num"}}
                                 @opacity={{array 0 1}}
-                                @duration={{0.48}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.48
+                                  "Step 4 duration"
+                                }}
                                 @ease="easeOut"
                               />
                               <c.Tween
                                 @of={{c.id "s1-plate"}}
                                 @opacity={{array 0 1}}
                                 @scale={{array 0.92 1}}
-                                @duration={{0.56}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.56
+                                  "Step 5 duration"
+                                }}
                                 @ease="easeOut"
                               />
                               <c.Tween
                                 @of={{c.id "s1-hed"}}
                                 @opacity={{array 0 1}}
                                 @y={{array 14 0}}
-                                @duration={{0.48}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.48
+                                  "Step 6 duration"
+                                }}
                                 @ease="easeOut"
                               />
                             </c.Parallel>
@@ -726,14 +763,22 @@ export class Presentation extends Component {
                                 <n.Tween
                                   @of={{n.id "cell-a"}}
                                   @y={{array 18 0}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 7 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "t-a"}}
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.72 1.14 1}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -741,14 +786,22 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @by="word"
                                   @stagger={{0.05}}
-                                  @duration={{0.4}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.4
+                                    "Step 8 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "r-a"}}
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
-                                  @duration={{0.52}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.52
+                                    "Step 9 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                               </n.Parallel>
@@ -757,14 +810,22 @@ export class Presentation extends Component {
                                 <n.Tween
                                   @of={{n.id "cell-b"}}
                                   @y={{array 18 0}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 10 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "t-b"}}
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.72 1.14 1}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -772,14 +833,22 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @by="word"
                                   @stagger={{0.05}}
-                                  @duration={{0.4}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.4
+                                    "Step 11 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "r-b"}}
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
-                                  @duration={{0.52}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.52
+                                    "Step 12 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 {{! the third line rides in on the same gate,
@@ -789,7 +858,11 @@ export class Presentation extends Component {
                                   @of={{n.id "cell-c"}}
                                   @y={{array 18 0}}
                                   @delay={{CHASE}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 13 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -797,7 +870,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.72 1.14 1}}
                                   @delay={{CHASE}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -806,7 +883,11 @@ export class Presentation extends Component {
                                   @by="word"
                                   @stagger={{0.05}}
                                   @delay={{CHASE}}
-                                  @duration={{0.4}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.4
+                                    "Step 14 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -814,7 +895,11 @@ export class Presentation extends Component {
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
                                   @delay={{CHASE}}
-                                  @duration={{0.52}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.52
+                                    "Step 15 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                               </n.Parallel>
@@ -871,7 +956,11 @@ export class Presentation extends Component {
                             <c.Tween
                               @of={{c.id "s2-hed"}}
                               @opacity={{array 0 1}}
-                              @duration={{IN}}
+                              @duration={{tuneSeconds
+                                "presentation"
+                                IN
+                                "IN duration"
+                              }}
                               @ease="easeOut"
                             />
                             <c.Gate />
@@ -880,7 +969,11 @@ export class Presentation extends Component {
                                 @of={{c.id "s2-line"}}
                                 @pathLength={{array 0 1}}
                                 @opacity={{array 0 1}}
-                                @duration={{FLIGHT}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  FLIGHT
+                                  "FLIGHT duration"
+                                }}
                                 @ease={{GLIDE}}
                               />
                               <c.Move
@@ -888,13 +981,21 @@ export class Presentation extends Component {
                                 @from={{c.beacon "s2-shore"}}
                                 @path={{HOP_RIDE}}
                                 @size={{false}}
-                                @duration={{FLIGHT}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  FLIGHT
+                                  "FLIGHT duration"
+                                }}
                                 @ease={{GLIDE}}
                               />
                               <c.Tween
                                 @of={{c.id "s2-hull"}}
                                 @opacity={{array 0 1}}
-                                @duration={{0.2}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.2
+                                  "Step 16 duration"
+                                }}
                               />
                               {{! The week on ONE gate. @stagger walks its
                                   ladder across every sprite the role matched,
@@ -908,14 +1009,22 @@ export class Presentation extends Component {
                                 @y={{array 6 0}}
                                 @stagger={{0.13}}
                                 @delay={{0.34}}
-                                @duration={{IN}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  IN
+                                  "IN duration"
+                                }}
                                 @ease="easeOut"
                               />
                               <c.Tween
                                 @of={{c.id "s2-cap"}}
                                 @opacity={{array 0 1}}
                                 @delay={{0.96}}
-                                @duration={{IN}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  IN
+                                  "IN duration"
+                                }}
                               />
                             </c.Parallel>
                           </c.Sequence>
@@ -933,7 +1042,11 @@ export class Presentation extends Component {
                             <c.Tween
                               @of={{c.id "s3-idx"}}
                               @opacity={{array 0 1}}
-                              @duration={{IN}}
+                              @duration={{tuneSeconds
+                                "presentation"
+                                IN
+                                "IN duration"
+                              }}
                               @ease="easeOut"
                             />
                           </c.Sequence>
@@ -971,28 +1084,44 @@ export class Presentation extends Component {
                                   @of={{n.id "m1"}}
                                   @opacity={{array 0 1}}
                                   @y={{array 22 0}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m1-num"}}
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.8 1.12 1}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m1-title"}}
                                   @opacity={{array 0 1}}
                                   @y={{array 10 0}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m1-rule"}}
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 17 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1000,7 +1129,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @by="word"
                                   @stagger={{0.04}}
-                                  @duration={{0.36}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.36
+                                    "Step 18 duration"
+                                  }}
                                 />
                               </n.Parallel>
                               <n.Gate />
@@ -1010,28 +1143,44 @@ export class Presentation extends Component {
                                   @of={{n.id "m2"}}
                                   @opacity={{array 0 1}}
                                   @y={{array 22 0}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m2-num"}}
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.8 1.12 1}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m2-title"}}
                                   @opacity={{array 0 1}}
                                   @y={{array 10 0}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
                                   @of={{n.id "m2-rule"}}
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 19 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1039,7 +1188,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @by="word"
                                   @stagger={{0.04}}
-                                  @duration={{0.36}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.36
+                                    "Step 20 duration"
+                                  }}
                                 />
                                 {{! the third move chases the second on the
                                     SAME gate — the system reads as a set
@@ -1050,7 +1203,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @y={{array 22 0}}
                                   @delay={{CHASE}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1058,7 +1215,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1 1}}
                                   @scale={{array 0.8 1.12 1}}
                                   @delay={{CHASE}}
-                                  @duration={{PULSE}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    PULSE
+                                    "PULSE duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1066,7 +1227,11 @@ export class Presentation extends Component {
                                   @opacity={{array 0 1}}
                                   @y={{array 10 0}}
                                   @delay={{CHASE}}
-                                  @duration={{GROUP}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    GROUP
+                                    "GROUP duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1074,7 +1239,11 @@ export class Presentation extends Component {
                                   @scaleX={{array 0 1}}
                                   @opacity={{array 0 1}}
                                   @delay={{CHASE}}
-                                  @duration={{0.5}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.5
+                                    "Step 21 duration"
+                                  }}
                                   @ease="easeOut"
                                 />
                                 <n.Tween
@@ -1083,7 +1252,11 @@ export class Presentation extends Component {
                                   @by="word"
                                   @stagger={{0.04}}
                                   @delay={{CHASE}}
-                                  @duration={{0.36}}
+                                  @duration={{tuneSeconds
+                                    "presentation"
+                                    0.36
+                                    "Step 22 duration"
+                                  }}
                                 />
                               </n.Parallel>
                             </n.Sequence>
@@ -1128,14 +1301,22 @@ export class Presentation extends Component {
                                 @of={{c.id "s4-hed"}}
                                 @opacity={{array 0 1}}
                                 @y={{array 12 0}}
-                                @duration={{0.48}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  0.48
+                                  "Step 23 duration"
+                                }}
                                 @ease="easeOut"
                               />
                               <c.Tween
                                 @of={{c.id "s4-l1"}}
                                 @opacity={{array 0 1}}
                                 @delay={{0.42}}
-                                @duration={{IN}}
+                                @duration={{tuneSeconds
+                                  "presentation"
+                                  IN
+                                  "IN duration"
+                                }}
                                 @ease="easeOut"
                               />
                             </c.Parallel>
@@ -1144,7 +1325,11 @@ export class Presentation extends Component {
                               @of={{c.id "s4-seal"}}
                               @opacity={{array 0 1 1}}
                               @scale={{array 0.86 1.08 1}}
-                              @duration={{PULSE}}
+                              @duration={{tuneSeconds
+                                "presentation"
+                                PULSE
+                                "PULSE duration"
+                              }}
                               @ease="easeOut"
                             />
                           </c.Sequence>

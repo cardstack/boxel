@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { layoutChange, motion, Presence } from 'glimmer-motion';
+import { tuneMotion, tuneNumber } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -150,7 +151,10 @@ export class Sheet extends Component {
           class="sheet-scrim"
           aria-label="Close"
           tabindex={{if this.isApp "0" "-1"}}
-          {{motion animate=this.scrim transition=fade}}
+          {{motion
+            animate=this.scrim
+            transition=(tuneMotion "sheet" fade "fade")
+          }}
           {{on "click" this.close}}
         ></button>
 
@@ -159,10 +163,10 @@ export class Sheet extends Component {
           {{motion
             initial=this.docked
             animate=this.pose
-            transition=settle
+            transition=(tuneMotion "sheet" settle "settle")
             drag="y"
             dragConstraints=this.limits
-            dragElastic=0.05
+            dragElastic=(tuneNumber "sheet" 0.05 "dragElastic")
             dragMomentum=false
             onDragStart=this.grab
             onDragEnd=this.land
@@ -182,7 +186,10 @@ export class Sheet extends Component {
               <button
                 type="button"
                 class="share-tile is-{{t.id}}"
-                {{motion layout=true transition=settle}}
+                {{motion
+                  layout=true
+                  transition=(tuneMotion "sheet" settle "settle")
+                }}
               >
                 <span class="share-mark" {{motion layout="position"}}>
                   <Glyph @name={{t.glyph}} />
@@ -211,7 +218,7 @@ export class Sheet extends Component {
                   initial=enters
                   animate=here
                   exit=leaves
-                  transition=fade
+                  transition=(tuneMotion "sheet" fade "fade")
                 }}
               >{{row.label}}</button>
             </Presence>

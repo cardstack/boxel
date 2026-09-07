@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import type { ChoreoRun, Sprite } from 'glimmer-motion';
 import { afterSettle, Choreo, motion } from 'glimmer-motion';
+import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -991,43 +992,43 @@ export class Rack extends Component {
                   @of={{array (c.role "tile") (c.role "blank")}}
                   @x={{this.xs}}
                   @y={{this.ys}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "vowels"}}
                   @opacity={{this.fadeVowels}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "bag"}}
                   @opacity={{this.fadeBag}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "points"}}
                   @opacity={{this.fadePoints}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "plot"}}
                   @opacity={{this.fadePlot}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "blank"}}
                   @opacity={{this.fadeBlank}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
                 <c.Tween
                   @of={{c.role "game"}}
                   @opacity={{this.fadeGame}}
-                  @duration={{SPAN}}
+                  @duration={{tuneSeconds "rack" SPAN "SPAN duration"}}
                   @ease={{LINEAR}}
                 />
               </c.Parallel>

@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { instantLayoutTransition, layoutChange, motion } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const tiles = [
   { id: 'atlas', label: 'Atlas', stock: 'Kiln floor' },
@@ -131,11 +132,24 @@ export class Subdivision extends Component {
             type="button"
             class={{if (this.isOn tile.id) "sub-tile is-on" "sub-tile"}}
             data-test-tile={{tile.id}}
-            {{motion layout=true transition=settle}}
+            {{motion
+              layout=true
+              transition=(tuneMotion "subdivision" settle "settle")
+            }}
             {{on "click" (fn this.select tile.id)}}
           >
-            <b {{motion layout="position" transition=settle}}>{{tile.label}}</b>
-            <small {{motion layout="position" transition=settle}}>
+            <b
+              {{motion
+                layout="position"
+                transition=(tuneMotion "subdivision" settle "settle")
+              }}
+            >{{tile.label}}</b>
+            <small
+              {{motion
+                layout="position"
+                transition=(tuneMotion "subdivision" settle "settle")
+              }}
+            >
               {{tile.stock}}
             </small>
           </button>

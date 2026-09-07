@@ -21,6 +21,14 @@ real one.
 - `docs/guide.md` (tutorial), `README.md` (reference),
   `docs/choreography.md` + `docs/nested-choreo.md` (Choreo design).
 
+## Building from the Gallery
+
+For recreating demos, combining patterns into applications or films, or adding
+live DialKit controls, use `.claude/skills/choreo-create/SKILL.md`. Codex also
+discovers the same skill through `.agents/skills/choreo-create`. The documentation
+website at `/docs` teaches core glimmer-motion, interactive Choreo, spatial/3D
+Choreo, and recorded/film Choreo as four learning paths.
+
 ## Picking an animation pattern
 
 Before writing any animation, invoke the **`motion-pattern`** skill — it

@@ -1,3 +1,4 @@
+import { tuneNumber } from 'test-app/lib/demo-tuning';
 /**
  * ONE SHOT LIST, TWO CAMERAS.
  *
@@ -184,3 +185,17 @@ export const SHOTS: Shot[] = [
 export const RUNTIME = SHOTS.reduce((n, s) => n + s.move + s.hold, 0);
 
 export const GLIDE = [0.65, 0, 0.35, 1] as const;
+
+/** Both cameras consume the same duration variable, so tuning cannot split their clocks. */
+const tempo = () => tuneNumber('long-take', 1, 'shotTempo (×)', 0.25, 3, 0.05);
+tempo();
+export function tunedShots(): Shot[] {
+  const rate = tempo();
+  return rate === 1
+    ? SHOTS
+    : SHOTS.map((shot) => ({
+        ...shot,
+        move: shot.move / rate,
+        hold: shot.hold / rate,
+      }));
+}

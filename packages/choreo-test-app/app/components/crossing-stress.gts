@@ -12,6 +12,7 @@ import {
   to,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
+import { tuneMotion, tuneNumber } from 'test-app/lib/demo-tuning';
 import { factor } from 'test-app/lib/tempo';
 import { liveScroll, particles, playClip } from 'test-app/lib/xstress-live';
 
@@ -29,10 +30,12 @@ const BASE = 0.9;
 const EASE = [0.2, 0, 0, 1] as const;
 
 function t() {
-  const m = BASE * factor();
+  const m =
+    tuneNumber('crossing', BASE, 'Crossing duration', 0.05, 3, 0.01) * factor();
   return {
-    arrive: 0.55 * m,
-    leave: 0.42 * m,
+    arrive: tuneNumber('crossing', 0.55, 'Arrival fraction', 0.05, 1, 0.01) * m,
+    leave:
+      tuneNumber('crossing', 0.42, 'Departure fraction', 0.05, 1, 0.01) * m,
     move: m,
   };
 }
@@ -420,7 +423,7 @@ export class CrossingStress extends Component<CrossingStressSignature> {
             role="hero"
             style=(styles borderRadius=(radiusFor this.slide))
             animate=(to borderRadius=(radiusFor this.slide))
-            transition=plateTween
+            transition=(tuneMotion "crossing" plateTween "Plate radius")
           }}
         >
           {{#each deck as |s|}}

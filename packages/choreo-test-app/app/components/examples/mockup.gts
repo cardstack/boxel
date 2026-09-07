@@ -20,6 +20,7 @@ import { NotesApp } from 'test-app/components/mockup/notes';
 import { PhotosApp } from 'test-app/components/mockup/photos';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
+import { tuneMotion, tuneSeconds } from 'test-app/lib/demo-tuning';
 import { onStage } from 'test-app/lib/onstage';
 import type * as THREE from 'three';
 
@@ -2033,7 +2034,10 @@ export class Mockup extends Component {
                   class="mg-app"
                   data-open={{if this.open "yes" ""}}
                   style="--hue:{{this.shown.hue}}"
-                  {{motion animate=this.panel transition=this.swell}}
+                  {{motion
+                    animate=this.panel
+                    transition=(tuneMotion "mockup" this.swell "swell")
+                  }}
                 >
                   {{! THE APP ITSELF. Each one is an ordinary Glimmer
                       component with its own Choreo region inside — real
@@ -2045,7 +2049,10 @@ export class Mockup extends Component {
                   {{#if this.open}}
                     <div
                       class="mg-app-ui"
-                      {{motion animate=this.title transition=FADE}}
+                      {{motion
+                        animate=this.title
+                        transition=(tuneMotion "mockup" FADE "FADE")
+                      }}
                     >
                       <this.open.Ui />
                     </div>
@@ -2111,11 +2118,21 @@ export class Mockup extends Component {
                   @by={{true}}
                   @dolly={{1.22}}
                   @y={{-0.03}}
-                  @duration={{this.travel}}
+                  @duration={{tuneSeconds
+                    "mockup"
+                    this.travel
+                    "travel duration"
+                  }}
                   @ease={{this.glide}}
                 />
               {{else}}
-                <c.Wait @duration={{this.travel}} />
+                <c.Wait
+                  @duration={{tuneSeconds
+                    "mockup"
+                    this.travel
+                    "travel duration"
+                  }}
+                />
               {{/if}}
 
               {{! ONLY WHEN BOTH ARE ON. A stopped camera means someone is
@@ -2147,11 +2164,13 @@ export class Mockup extends Component {
                     @dolly={{beat.dolly}}
                     @x={{beat.x}}
                     @y={{beat.y}}
-                    @duration={{beat.t}}
+                    @duration={{tuneSeconds "mockup" beat.t "beat.t duration"}}
                     @ease={{this.glide}}
                   />
                 {{else}}
-                  <c.Wait @duration={{beat.t}} />
+                  <c.Wait
+                    @duration={{tuneSeconds "mockup" beat.t "beat.t duration"}}
+                  />
                 {{/if}}
               {{/each}}
 

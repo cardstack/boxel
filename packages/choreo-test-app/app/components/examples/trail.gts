@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const path = ['Kiln', 'Floor', 'Atlas', 'Night'] as const;
 
@@ -60,7 +61,7 @@ export class Trail extends Component {
               initial=initial
               animate=animate
               exit=exit
-              transition=spring
+              transition=(tuneMotion "trail" spring "spring")
             }}
           >
             {{#if (hasSep step.id)}}

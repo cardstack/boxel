@@ -18,6 +18,7 @@ import {
   MONTHS,
   TextField,
 } from 'test-app/components/pretui/fields';
+import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import {
   layoutWords,
   measureText,
@@ -1053,7 +1054,7 @@ export class InlineEdit extends Component {
         {{#if this.scored}}
           <c.Parallel>
             <c.Crossing
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "Crossing duration 1"}}
               @ease={{EASE}}
               @leave={{0.14}}
               @arrive={{0.28}}
@@ -1061,16 +1062,20 @@ export class InlineEdit extends Component {
             />
 
             {{! The background moves as boxes: real geometry, along its lane. }}
-            <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
+            <c.Move
+              @of={{c.moved "card"}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
+              @ease={{EASE}}
+            />
             {{#if this.boxesMove}}
               <c.Move
                 @of={{c.moved "card"}}
-                @duration={{MOVE}}
+                @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
                 @ease={{EASE}}
               />
               <c.Move
                 @of={{c.moved "plate"}}
-                @duration={{MOVE}}
+                @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
                 @ease={{EASE}}
               />
             {{/if}}
@@ -1079,34 +1084,38 @@ export class InlineEdit extends Component {
               own, and without a Move of its own it simply jumped }}
             <c.Move
               @of={{c.moved "avatar"}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Move
               @of={{c.moved "kicker"}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
-            <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
+            <c.Move
+              @of={{c.moved "rule"}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
+              @ease={{EASE}}
+            />
 
             {{! and its corners ride alongside, because a corner carried by a
               crop-scale is a corner that smears }}
             <c.Tween
               @of={{c.kept "plate"}}
               @borderRadius={{this.plateRadius}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.kept "avatar"}}
               @borderRadius={{this.avatarRadius}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.kept "shade"}}
               @opacity={{this.shade}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
 
@@ -1123,13 +1132,13 @@ export class InlineEdit extends Component {
               @letterSpacing={{this.wordTracking}}
               @color={{this.wordColor}}
               @opacity={{this.wordFade}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.kept "initials"}}
               @fontSize={{this.initialSize}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
 
@@ -1138,7 +1147,7 @@ export class InlineEdit extends Component {
             <c.Tween
               @of={{c.removed "control"}}
               @opacity={{FADE_OUT}}
-              @duration={{LEAVE}}
+              @duration={{tuneSeconds "inline-edit" LEAVE "LEAVE duration"}}
               @ease={{EASE}}
             />
 
@@ -1150,27 +1159,27 @@ export class InlineEdit extends Component {
             <c.Tween
               @of={{c.inserted "chip"}}
               @opacity={{FADE_IN}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.removed "chip"}}
               @opacity={{FADE_OUT}}
-              @duration={{LEAVE}}
+              @duration={{tuneSeconds "inline-edit" LEAVE "LEAVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.inserted "label"}}
               @opacity={{FADE_IN}}
               @y={{LABEL_IN}}
-              @duration={{MOVE}}
+              @duration={{tuneSeconds "inline-edit" MOVE "MOVE duration"}}
               @ease={{EASE}}
             />
             <c.Tween
               @of={{c.removed "label"}}
               @opacity={{FADE_OUT}}
               @y={{LABEL_OUT}}
-              @duration={{LEAVE}}
+              @duration={{tuneSeconds "inline-edit" LEAVE "LEAVE duration"}}
               @ease={{EASE}}
             />
           </c.Parallel>

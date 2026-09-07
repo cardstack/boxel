@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
 import type { Variants } from 'motion-dom';
+import { tuneVariants } from 'test-app/lib/demo-tuning';
 
 const keyOf = (item: { id: string }) => item.id;
 
@@ -54,10 +55,18 @@ export class Stagger extends Component {
       <Presence @items={{this.items}} @key={{keyOf}} @mode="wait" as |_dock h|>
         <div
           class="apps"
-          {{motion presence=h variants=grid initial="hidden" animate="show"}}
+          {{motion
+            presence=h
+            variants=(tuneVariants "stagger" grid "grid")
+            initial="hidden"
+            animate="show"
+          }}
         >
           {{#each apps as |app|}}
-            <div class="app-tile" {{motion variants=tile}}>
+            <div
+              class="app-tile"
+              {{motion variants=(tuneVariants "stagger" tile "tile")}}
+            >
               <span class="app-icon" style={{iconWash app.hue}}></span>
               <small>{{app.name}}</small>
             </div>

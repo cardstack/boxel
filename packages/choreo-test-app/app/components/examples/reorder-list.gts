@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { ReorderGroup, ReorderItem } from 'glimmer-motion';
+import { tuneObject } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -88,8 +89,12 @@ export class ReorderList extends Component {
             class={{if (isOn track.id this.playing) "track is-on" "track"}}
             @group={{group}}
             @value={{track}}
-            @transition={{snap}}
-            @whileDrag={{whileDrag}}
+            @transition={{tuneObject "reorder" snap "ReorderItem transition 1"}}
+            @whileDrag={{tuneObject
+              "reorder"
+              whileDrag
+              "ReorderItem whileDrag 2"
+            }}
             {{! a custom property, through the modifier — Motion owns a motion
                 element's inline style, so a bound style= attribute here would
                 be wiped by the next transform it writes }}

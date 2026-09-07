@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion } from 'glimmer-motion';
+import { tuneSeconds } from 'test-app/lib/demo-tuning';
 
 /**
  * Nine tests are red in a run of sixty. Find each one, mark it, and do not lose
@@ -532,7 +533,7 @@ export class Jump extends Component {
               <c.Scroll
                 @of={{c.id this.target}}
                 @align={{this.align}}
-                @duration={{0.5}}
+                @duration={{tuneSeconds "jump" 0.5 "Scroll duration 1"}}
                 @ease={{EASE}}
               />
               <c.Parallel>
@@ -544,7 +545,7 @@ export class Jump extends Component {
                 <c.Raise
                   @of={{c.id this.target}}
                   @shadow={{true}}
-                  @duration={{0.9}}
+                  @duration={{tuneSeconds "jump" 0.9 "Raise duration 2"}}
                 />
                 {{! and the mark. `@fill` holds it past the window when the
                     marks are being kept, which bridges the flight to the
@@ -561,7 +562,7 @@ export class Jump extends Component {
                 <c.Hold
                   @of={{c.id this.target}}
                   @backgroundColor="var(--bg-elev)"
-                  @duration={{0.7}}
+                  @duration={{tuneSeconds "jump" 0.7 "Hold duration 3"}}
                   @fill={{this.keep}}
                 />
               </c.Parallel>

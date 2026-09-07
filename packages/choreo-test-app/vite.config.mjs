@@ -63,7 +63,7 @@ vendorDraco();
  * served. The copy is gitignored.
  */
 function vendorDialkit() {
-  const from = join(dirname(require.resolve('dialkit/store')), '../styles.css');
+  const from = join(dirname(require.resolve('dialkit/vanilla')), 'styles.css');
   const dir = join(dirname(new URL(import.meta.url).pathname), 'public');
   mkdirSync(dir, { recursive: true });
   copyFileSync(from, join(dir, 'dialkit-theme.css'));

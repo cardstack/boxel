@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const keyOf = (item: { id: string }) => item.id;
 
@@ -76,7 +77,11 @@ export class Enter extends Component {
               initial=initial
               animate=animate
               exit=exit
-              transition=(bannerTransition note.late)
+              transition=(tuneMotion
+                "enter"
+                (bannerTransition note.late)
+                "bannerTransition note.late"
+              )
             }}
           >
             <span class="banner-mark" aria-hidden="true"></span>

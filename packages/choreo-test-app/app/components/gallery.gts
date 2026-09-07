@@ -414,6 +414,11 @@ export class Gallery extends Component {
                 {{motion id=(concat "lede-" demo.id) role="type"}}
               >{{demo.lede}}</span>
             </LinkTo>
+            <LinkTo
+              @route="demo-lab"
+              @model={{demo.id}}
+              class="gallery-tune-link"
+            >Tune demo ↗</LinkTo>
           </article>
         </Presence>
       </div>

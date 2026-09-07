@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const records = [
   {
@@ -78,19 +79,25 @@ export class LayoutToggle extends Component {
           {{#each records as |record|}}
             <div
               class="record"
-              {{motion layout=true transition=this.transition}}
+              {{motion
+                layout=true
+                transition=(tuneMotion "layout" this.transition "transition")
+              }}
             >
               <div
                 class="record-art"
                 {{motion
                   layout=true
                   style=(artStyle record.wash)
-                  transition=this.transition
+                  transition=(tuneMotion "layout" this.transition "transition")
                 }}
               ></div>
               <div
                 class="record-meta"
-                {{motion layout="position" transition=this.transition}}
+                {{motion
+                  layout="position"
+                  transition=(tuneMotion "layout" this.transition "transition")
+                }}
               >
                 <strong>{{record.title}}</strong>
                 <small>{{record.artist}}</small>

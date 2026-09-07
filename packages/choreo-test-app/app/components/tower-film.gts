@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { Film, IframePicture } from 'glimmer-motion/film';
 import { TowersScore } from 'test-app/components/films/towers-score';
 import config from 'test-app/config/environment';
+import { tuneNumber } from 'test-app/lib/demo-tuning';
 import {
   BUILD,
   GRADES,
@@ -13,6 +14,20 @@ import {
   VO_GAIN,
   WORLD_TYPE,
 } from 'test-app/lib/films/towers';
+
+// Declare the film variables before asynchronous picture loading.
+function rigMid() {
+  return tuneNumber('towers', 7.065, 'Camera rig height (units)', 1, 14, 0.001);
+}
+rigMid();
+function cloudHaze() {
+  return tuneNumber('towers', 0.17, 'Cloud haze', 0, 1, 0.01);
+}
+cloudHaze();
+function lutAmount() {
+  return tuneNumber('towers', LUT_AMOUNT, 'Color grade strength', 0, 1, 0.01);
+}
+lutAmount();
 
 export default class TowerFilm extends Component<{
   Args: { embed?: boolean };
@@ -68,9 +83,9 @@ export default class TowerFilm extends Component<{
           @assets={{this.assets}}
           @title="Towers"
           @standing={{STANDING}}
-          @rigMid={{7.065}}
-          @cloudHaze={{0.17}}
-          @lutAmount={{LUT_AMOUNT}}
+          @rigMid={{(rigMid)}}
+          @cloudHaze={{(cloudHaze)}}
+          @lutAmount={{(lutAmount)}}
           @grades={{this.grades}}
           @lookFx={{LOOK_FX}}
           @worldType={{this.worldType}}

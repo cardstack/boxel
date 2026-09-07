@@ -74,10 +74,10 @@ const wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
             <span class="brand-sub">by Cardstack</span>
           </span>
         </LinkTo>
-        {{! One link. Motion is credited in the hero's tagline and the test
-            runner is a development URL, not a destination — anything else here
-            competes with the one thing this bar is for. }}
-        <nav class="top-links">
+        <nav class="top-links" aria-label="Main navigation">
+          <LinkTo @route="index">Demos</LinkTo>
+          <LinkTo @route="docs">Docs</LinkTo>
+          <LinkTo @route="widget-room">3D Gallery</LinkTo>
           <TempoPicker />
           <ThemePicker />
           <a
@@ -115,6 +115,12 @@ const wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
                   @leave={{tt.leave}}
                   @arrive={{tt.arrive}}
                   @overlap={{0.18}}
+                />
+                <c.Tween
+                  @of={{c.onstage (c.inserted "guide-page")}}
+                  @opacity={{array 0 1}}
+                  @duration={{tt.arrive}}
+                  @ease={{EASE}}
                 />
                 {{! the hero's own exit — it RISES out rather than dissolving
                     in place, and the generic leave yields it to this step }}

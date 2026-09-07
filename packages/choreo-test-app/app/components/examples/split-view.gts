@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { type Changeset, Choreo, motion, type Sprite } from 'glimmer-motion';
+import { tuneSpring } from 'test-app/lib/demo-tuning';
 
 const firm = { damping: 34, stiffness: 420 };
 
@@ -54,11 +55,14 @@ export class SplitView extends Component {
         </section>
 
         <c.Parallel>
-          <c.Move @of={{c.id "split-bar"}} @spring={{firm}} />
+          <c.Move
+            @of={{c.id "split-bar"}}
+            @spring={{tuneSpring "split" firm "firm"}}
+          />
           <c.Spring
             @of={{c.id "split-content"}}
             @left={{this.leftRange}}
-            @spring={{firm}}
+            @spring={{tuneSpring "split" firm "firm"}}
           />
         </c.Parallel>
       </Choreo>

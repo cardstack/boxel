@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, spring, to } from 'glimmer-motion';
+import { tuneMotion, tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const slides = [0, 1, 2] as const;
 /** the one line that is not on every slide — it arrives and leaves */
@@ -155,18 +156,28 @@ export class Slides extends Component {
               id="plate"
               role="plate"
               animate=(to borderRadius=(radiusFor this.slide))
-              transition=radiusTween
+              transition=(tuneMotion "slides" radiusTween "radiusTween")
             }}
           ></span>
 
           <b
             class="slide-title"
-            {{motion id="title" role="type" layout=true transition=type}}
+            {{motion
+              id="title"
+              role="type"
+              layout=true
+              transition=(tuneMotion "slides" type "type")
+            }}
           >Kiln</b>
 
           <small
             class="slide-kicker"
-            {{motion id="kicker" role="type" layout=true transition=type}}
+            {{motion
+              id="kicker"
+              role="type"
+              layout=true
+              transition=(tuneMotion "slides" type "type")
+            }}
           >Night shift</small>
 
           {{#if this.note}}
@@ -181,20 +192,23 @@ export class Slides extends Component {
             {{! The plate's own box: left, top, width and height as real
                 values, so its gradient and shadow are re-rendered at every
                 size rather than stretched. }}
-            <c.Move @of={{c.moved "plate"}} @spring={{plate}} />
+            <c.Move
+              @of={{c.moved "plate"}}
+              @spring={{tuneSpring "slides" plate "plate"}}
+            />
 
             {{! The note is the only thing that comes and goes. It leaves fast
                 and arrives late, so the slide is never carrying two of them. }}
             <c.Tween
               @of={{c.removed "note"}}
               @opacity={{0}}
-              @duration={{0.14}}
+              @duration={{tuneSeconds "slides" 0.14 "Step 1 duration"}}
             />
             <c.Tween
               @of={{c.inserted "note"}}
               @opacity={{array 0 1}}
               @delay={{0.22}}
-              @duration={{0.26}}
+              @duration={{tuneSeconds "slides" 0.26 "Step 2 duration"}}
             />
           </c.Parallel>
         </Choreo>

@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion } from 'glimmer-motion';
+import { tuneSpring } from 'test-app/lib/demo-tuning';
 
 const quick = { damping: 26, stiffness: 320 };
 
@@ -59,12 +60,15 @@ export class Lists extends Component {
               would fade the flight instead of showing it. }}
           <c.Move
             @of={{c.kept "name"}}
-            @spring={{quick}}
+            @spring={{tuneSpring "lists" quick "quick"}}
             @size={{false}}
             @swap="none"
           />
           {{! the columns only change height — they never move }}
-          <c.Move @of={{c.moved "column"}} @spring={{quick}} />
+          <c.Move
+            @of={{c.moved "column"}}
+            @spring={{tuneSpring "lists" quick "quick"}}
+          />
           <c.Hold @of={{c.removed "name"}} @opacity={{0}} />
         </c.Parallel>
       </Choreo>

@@ -11,7 +11,8 @@ import {
   motion,
 } from 'glimmer-motion';
 import { Board } from 'test-app/components/long-take/board';
-import { BOARD, GLIDE, SHOTS } from 'test-app/components/long-take/shots';
+import type { SHOTS } from 'test-app/components/long-take/shots';
+import { BOARD, GLIDE, tunedShots } from 'test-app/components/long-take/shots';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import { observeStage, onStage } from 'test-app/lib/onstage';
@@ -251,7 +252,9 @@ export class LongTake extends Component {
     });
   };
 
-  readonly shots = SHOTS;
+  get shots() {
+    return tunedShots();
+  }
   readonly glide = GLIDE;
 
   /**
@@ -569,7 +572,7 @@ export class LongTake extends Component {
      * short stage is exactly the case the rule was meant to exclude. The
      * page and the card have different containers; ask which one this is.
      */
-    const onOwnPage = !!host.closest('.stage-wrap');
+    const onOwnPage = !!host.closest('.stage-wrap, .workbench-stage');
     this.roomy = onOwnPage;
     if (!onOwnPage) {
       this.cameraOn = false;

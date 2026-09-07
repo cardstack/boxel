@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { motion, scrollProgress } from 'glimmer-motion';
 import { transformValue } from 'motion-dom';
+import { tuneNumber } from 'test-app/lib/demo-tuning';
 
 export class Parallax extends Component {
   scroll = scrollProgress();
@@ -8,22 +9,41 @@ export class Parallax extends Component {
   progress = () => this.scroll.scrollYProgress.get();
 
   back = {
-    scale: transformValue(() => 1 + this.progress() * 0.28),
-    y: transformValue(() => this.progress() * -220),
+    scale: transformValue(
+      () =>
+        1 + this.progress() * tuneNumber('parallax', 0.28, 'Background zoom')
+    ),
+    y: transformValue(
+      () => this.progress() * tuneNumber('parallax', -220, 'Background travel')
+    ),
   };
   mid = {
-    rotate: transformValue(() => this.progress() * -12),
-    x: transformValue(() => this.progress() * 56),
-    y: transformValue(() => this.progress() * -150),
+    rotate: transformValue(
+      () => this.progress() * tuneNumber('parallax', -12, 'Plate rotation')
+    ),
+    x: transformValue(
+      () =>
+        this.progress() * tuneNumber('parallax', 56, 'Plate horizontal travel')
+    ),
+    y: transformValue(
+      () =>
+        this.progress() * tuneNumber('parallax', -150, 'Plate vertical travel')
+    ),
   };
   word = {
-    y: transformValue(() => this.progress() * -110),
+    y: transformValue(
+      () => this.progress() * tuneNumber('parallax', -110, 'Word travel')
+    ),
   };
   type = {
-    y: transformValue(() => this.progress() * -48),
+    y: transformValue(
+      () => this.progress() * tuneNumber('parallax', -48, 'Heading travel')
+    ),
   };
   card = {
-    y: transformValue(() => this.progress() * 20),
+    y: transformValue(
+      () => this.progress() * tuneNumber('parallax', 20, 'Card travel')
+    ),
   };
 
   <template>

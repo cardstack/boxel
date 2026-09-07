@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
+import { tuneNumber, tuneObject } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 const dragTransition = {
@@ -51,8 +52,8 @@ export class DragWell extends Component {
               drag=true
               dragConstraints=this.frame
               dragDirectionLock=this.lock
-              dragElastic=0.12
-              dragTransition=dragTransition
+              dragElastic=(tuneNumber "drag" 0.12 "dragElastic")
+              dragTransition=(tuneObject "drag" dragTransition "dragTransition")
               onDragStart=this.grab
               onDragEnd=this.release
             }}

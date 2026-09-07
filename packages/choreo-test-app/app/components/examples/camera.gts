@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import type { ChoreoContext } from 'glimmer-motion';
 import { Choreo, motion, spring } from 'glimmer-motion';
+import { tuneSpring } from 'test-app/lib/demo-tuning';
 
 /**
  * A photo library. The whole set sits on the glass at once — dive IN onto a
@@ -359,7 +360,7 @@ export class Camera extends Component {
             <c.Camera
               @fit={{if this.focus (c.id this.focus) null}}
               @margin={{FILL}}
-              @spring={{carry}}
+              @spring={{tuneSpring "camera" carry "carry"}}
               @steady={{array
                 (c.role "no")
                 (c.role "heart")
@@ -367,7 +368,10 @@ export class Camera extends Component {
               }}
             />
             {{! if a verdict reflows the sheet, every frame that moved tweens }}
-            <c.Move @of={{c.moved "frame"}} @spring={{settle}} />
+            <c.Move
+              @of={{c.moved "frame"}}
+              @spring={{tuneSpring "camera" settle "settle"}}
+            />
           </c.Parallel>
         </Choreo>
 

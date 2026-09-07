@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, spring } from 'glimmer-motion';
+import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const stations = [0, 1, 2, 3];
 
@@ -77,7 +78,7 @@ export class Interrupt extends Component {
                 opacities never sum back to solid — the flight visibly dims. }}
             <c.Move
               @of={{c.kept "puck"}}
-              @spring={{carry}}
+              @spring={{tuneSpring "interrupt" carry "carry"}}
               @size={{false}}
               @swap="none"
             />
@@ -109,7 +110,7 @@ export class Interrupt extends Component {
             </div>
             <c.Move
               @of={{c.kept "puck"}}
-              @duration={{TIMED}}
+              @duration={{tuneSeconds "interrupt" TIMED "TIMED duration"}}
               @ease="easeInOut"
               @size={{false}}
               @swap="none"

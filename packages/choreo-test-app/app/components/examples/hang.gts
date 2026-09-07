@@ -8,6 +8,7 @@ import { modifier } from 'ember-modifier';
 import type { DeriveContext } from 'glimmer-motion';
 import { beacon, Choreo, motion } from 'glimmer-motion';
 import { DialPanel } from 'test-app/components/dial-panel';
+import { tuneNumber, tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { Dial } from 'test-app/lib/dial';
 import { preventSelect } from 'test-app/lib/pointer';
 
@@ -540,7 +541,7 @@ export class Hang extends Component {
                     drag="x"
                     dragConstraints=this.pen
                     dragMomentum=false
-                    dragElastic=0.06
+                    dragElastic=(tuneNumber "hang" 0.06 "dragElastic")
                     onDrag=this.aim
                     onDragEnd=this.land
                   }}
@@ -594,7 +595,7 @@ export class Hang extends Component {
           <c.Move
             @of={{c.received "puck"}}
             @from={{c.gesture}}
-            @spring={{this.slide}}
+            @spring={{tuneSpring "hang" this.slide "slide"}}
             @size={{false}}
             @swap="none"
           />
@@ -603,33 +604,49 @@ export class Hang extends Component {
           <c.Move
             @of={{c.received "cradle"}}
             @from={{c.gesture}}
-            @spring={{HOME}}
+            @spring={{tuneSpring "hang" HOME "HOME"}}
             @size={{false}}
             @swap="none"
           />
 
           {{! the half either arrival claimed, parked in the orphan layer }}
-          <c.Tween @of={{c.counterpart}} @opacity={{0}} @duration={{0.1}} />
+          <c.Tween
+            @of={{c.counterpart}}
+            @opacity={{0}}
+            @duration={{tuneSeconds "hang" 0.1 "Step 1 duration"}}
+          />
 
           {{! The knock. Nothing told these to move: the collision sweep
               changed their seats and the changeset noticed. A different
               spring because it is a different event — a transferred shove
               is not a throw. }}
-          <c.Move @of={{c.moved "puck"}} @spring={{KNOCK}} @size={{false}} />
+          <c.Move
+            @of={{c.moved "puck"}}
+            @spring={{tuneSpring "hang" KNOCK "KNOCK"}}
+            @size={{false}}
+          />
 
           {{! and what the throw did NOT disturb dims for the length of it,
               so a four-puck chain reaction reads as one thing. Freeze this
               and you cannot tell what the throw touched. }}
-          <c.Hold @of={{c.still "puck"}} @opacity={{0.38}} @duration={{0.55}} />
+          <c.Hold
+            @of={{c.still "puck"}}
+            @opacity={{0.38}}
+            @duration={{tuneSeconds "hang" 0.55 "Hold duration 1"}}
+          />
 
           {{! shoved off the far end: removed, claimed by nobody, so it has
               nowhere to land. The beacon is the somewhere. }}
           <c.Move
             @of={{c.removed "puck"}}
             @to={{c.beacon "gutter"}}
-            @spring={{OFF}}
+            @spring={{tuneSpring "hang" OFF "OFF"}}
           />
-          <c.Tween @of={{c.removed "puck"}} @opacity={{0}} @duration={{0.42}} />
+          <c.Tween
+            @of={{c.removed "puck"}}
+            @opacity={{0}}
+            @duration={{tuneSeconds "hang" 0.42 "Step 2 duration"}}
+          />
 
           {{! the lead line, derived per frame from every puck on the board }}
           <c.Follow
@@ -637,7 +654,7 @@ export class Hang extends Component {
             @to={{c.kept "puck"}}
             @read={{lead}}
             @rest={{LEAD_REST}}
-            @duration={{1.6}}
+            @duration={{tuneSeconds "hang" 1.6 "Follow duration 2"}}
           />
 
           {{! the next puck into the pen, once the last one is away }}
@@ -645,7 +662,7 @@ export class Hang extends Component {
             @of={{c.inserted "cradle"}}
             @opacity={{array 0 1}}
             @scale={{array 0.5 1}}
-            @duration={{0.24}}
+            @duration={{tuneSeconds "hang" 0.24 "Step 3 duration"}}
             @delay={{0.12}}
           />
         </c.Parallel>

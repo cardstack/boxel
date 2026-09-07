@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import type { DragControls } from 'glimmer-motion';
 import { createDragControls, motion } from 'glimmer-motion';
+import { tuneMotion, tuneObject } from 'test-app/lib/demo-tuning';
 
 /**
  * Seat twelve people. Drag them by the corner, because the card is also a form.
@@ -577,7 +578,7 @@ export class Grip extends Component {
                   dragControls=(this.controlsFor guest.id)
                   dragListener=false
                   dragSnapToOrigin=true
-                  dragTransition=RETURN
+                  dragTransition=(tuneObject "grip" RETURN "dragTransition")
                   onPanSessionStart=this.session
                   onDragStart=(fn this.hoist guest.id)
                   onDrag=this.track
@@ -684,10 +685,10 @@ export class Grip extends Component {
                     {{motion
                       drag=true
                       dragSnapToOrigin=true
-                      dragTransition=RETURN
+                      dragTransition=(tuneObject "grip" RETURN "dragTransition")
                       initial=SEAT_IN
                       animate=SEAT_HERE
-                      transition=SEAT_SPRING
+                      transition=(tuneMotion "grip" SEAT_SPRING "SEAT_SPRING")
                       onPanSessionStart=this.session
                       onDragStart=(fn this.hoist guest.id)
                       onDrag=this.track

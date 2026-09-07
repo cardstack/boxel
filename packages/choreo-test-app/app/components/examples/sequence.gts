@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion } from 'glimmer-motion';
+import { tuneMotion, tuneSeconds } from 'test-app/lib/demo-tuning';
 
 const cards = [
   {
@@ -72,7 +73,7 @@ export class Sequence extends Component {
               id=card.id
               role=(roleOf card this.open)
               layout=true
-              transition=soft
+              transition=(tuneMotion "sequence" soft "soft")
               style=(cardStyle card)
             }}
             {{on "click" (fn this.toggle card)}}
@@ -95,7 +96,13 @@ export class Sequence extends Component {
                 lightbox needed `width: fit-content` on BOTH members for exactly
                 this reason — two boxes of different shape cannot scale into one
                 another without distortion. }}
-            <span class="study-name" {{motion layout=true transition=soft}}>
+            <span
+              class="study-name"
+              {{motion
+                layout=true
+                transition=(tuneMotion "sequence" soft "soft")
+              }}
+            >
               {{card.label}}
             </span>
             {{#if (isOpen card this.open)}}
@@ -131,7 +138,7 @@ export class Sequence extends Component {
             <c.Tween
               @of={{c.removed "card-content"}}
               @opacity={{0}}
-              @duration={{0.22}}
+              @duration={{tuneSeconds "sequence" 0.22 "Step 1 duration"}}
             />
           </c.Parallel>
 
@@ -142,12 +149,15 @@ export class Sequence extends Component {
           of that move; the new details fade in partway THROUGH it rather than
           after it, so the card arrives already carrying its content. }}
           <c.Parallel>
-            <c.Wait @of={{c.all}} @duration={{0.56}} />
+            <c.Wait
+              @of={{c.all}}
+              @duration={{tuneSeconds "sequence" 0.56 "Step 2 duration"}}
+            />
             <c.Tween
               @of={{c.inserted "card-content"}}
               @opacity={{array 0 1}}
               @delay={{0.17}}
-              @duration={{0.3}}
+              @duration={{tuneSeconds "sequence" 0.3 "Step 3 duration"}}
             />
           </c.Parallel>
         </c.Sequence>

@@ -1,15 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 
-/**
- * The whole app's color scheme — every demo included, since they all draw
- * from the same `--bg`/`--ink`/`--line` ladder in app.css rather than
- * hardcoding their own colors.
- *
- * Dark is the default, full stop — it is the palette every demo was actually
- * designed against. Light is there for whoever wants it, remembered once
- * they pick it, but nothing here goes looking at the OS to decide for them.
- */
-export type ThemeMode = 'dark' | 'light';
+/** Appearance preference; auto follows the operating system. */
+export type ThemeMode = 'auto' | 'dark' | 'light';
 
 const KEY = 'choreo-theme';
 
@@ -20,20 +12,41 @@ class ThemeSettings {
 function read(): ThemeMode {
   const stored =
     typeof localStorage === 'undefined' ? null : localStorage.getItem(KEY);
-  return stored === 'light' ? 'light' : 'dark';
+  return stored === 'light' || stored === 'auto' ? stored : 'dark';
 }
 
 function apply(mode: ThemeMode) {
   if (typeof document === 'undefined') {
     return;
   }
-  document.documentElement.setAttribute('data-theme', mode);
+  const resolved =
+    mode === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: light)').matches
+        ? 'light'
+        : 'dark'
+      : mode;
+  document.documentElement.setAttribute('data-theme', resolved);
 }
 
 export const theme = new ThemeSettings();
 
 // first paint already matches a stored choice
 apply(theme.mode);
+if (typeof window !== 'undefined') {
+  window
+    .matchMedia('(prefers-color-scheme: light)')
+    .addEventListener('change', () => {
+      if (theme.mode === 'auto') {
+        apply('auto');
+      }
+    });
+  window.addEventListener('storage', (event) => {
+    if (event.key === KEY) {
+      theme.mode = read();
+      apply(theme.mode);
+    }
+  });
+}
 
 export function setThemeMode(mode: ThemeMode) {
   theme.mode = mode;

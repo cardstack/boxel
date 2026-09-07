@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { motion } from 'glimmer-motion';
 import { animate } from 'motion';
 import { motionValue } from 'motion-dom';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 
 const tight = { damping: 24, stiffness: 480, type: 'spring' } as const;
@@ -52,12 +53,12 @@ export class FollowPointer extends Component {
       box.height / -2,
       box.height / 2
     );
-    void animate(this.x, x, tight);
-    void animate(this.y, y, tight);
-    void animate(this.rx, x, mid);
-    void animate(this.ry, y, mid);
-    void animate(this.hx, x, loose);
-    void animate(this.hy, y, loose);
+    void animate(this.x, x, tuneMotion('pointer', tight, 'Pointer spring'));
+    void animate(this.y, y, tuneMotion('pointer', tight, 'Pointer spring'));
+    void animate(this.rx, x, tuneMotion('pointer', mid, 'Ring spring'));
+    void animate(this.ry, y, tuneMotion('pointer', mid, 'Ring spring'));
+    void animate(this.hx, x, tuneMotion('pointer', loose, 'Halo spring'));
+    void animate(this.hy, y, tuneMotion('pointer', loose, 'Halo spring'));
   };
 
   move = (event: PointerEvent) => {
@@ -75,12 +76,44 @@ export class FollowPointer extends Component {
    * same way they do when chasing.
    */
   private release = () => {
-    void animate(this.x, 0, homing);
-    void animate(this.y, 0, homing);
-    void animate(this.rx, 0, { ...homing, visualDuration: 0.72 });
-    void animate(this.ry, 0, { ...homing, visualDuration: 0.72 });
-    void animate(this.hx, 0, { ...homing, visualDuration: 0.84 });
-    void animate(this.hy, 0, { ...homing, visualDuration: 0.84 });
+    void animate(this.x, 0, tuneMotion('pointer', homing, 'Return spring'));
+    void animate(this.y, 0, tuneMotion('pointer', homing, 'Return spring'));
+    void animate(
+      this.rx,
+      0,
+      tuneMotion(
+        'pointer',
+        { ...homing, visualDuration: 0.72 },
+        'Ring return spring'
+      )
+    );
+    void animate(
+      this.ry,
+      0,
+      tuneMotion(
+        'pointer',
+        { ...homing, visualDuration: 0.72 },
+        'Ring return spring'
+      )
+    );
+    void animate(
+      this.hx,
+      0,
+      tuneMotion(
+        'pointer',
+        { ...homing, visualDuration: 0.84 },
+        'Halo return spring'
+      )
+    );
+    void animate(
+      this.hy,
+      0,
+      tuneMotion(
+        'pointer',
+        { ...homing, visualDuration: 0.84 },
+        'Halo return spring'
+      )
+    );
   };
 
   leave = (event: PointerEvent) => {
@@ -106,9 +139,27 @@ export class FollowPointer extends Component {
       {{on "pointercancel" this.lift}}
       {{on "selectstart" preventSelect}}
     >
-      <div class="follow-halo" {{motion style=this.halo}}></div>
-      <div class="follow-ring" {{motion style=this.ring}}></div>
-      <div class="follow-orb" {{motion style=this.cursor}}></div>
+      <div
+        class="follow-halo"
+        {{motion
+          style=this.halo
+          transition=(tuneMotion "pointer" loose "Halo spring")
+        }}
+      ></div>
+      <div
+        class="follow-ring"
+        {{motion
+          style=this.ring
+          transition=(tuneMotion "pointer" mid "Ring spring")
+        }}
+      ></div>
+      <div
+        class="follow-orb"
+        {{motion
+          style=this.cursor
+          transition=(tuneMotion "pointer" tight "Pointer spring")
+        }}
+      ></div>
       <span class="follow-hint">move</span>
     </div>
   </template>

@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const keyOf = (item: { id: string }) => item.id;
 const draw = { opacity: 1, pathLength: 1 };
@@ -48,7 +49,7 @@ export class PathDraw extends Component {
               initial=ringIn
               animate=draw
               exit=hide
-              transition=ring
+              transition=(tuneMotion "path" ring "ring")
             }}
           />
           <path
@@ -58,7 +59,7 @@ export class PathDraw extends Component {
               initial=sparkIn
               animate=draw
               exit=hide
-              transition=spark
+              transition=(tuneMotion "path" spark "spark")
             }}
           />
         </svg>

@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion, scrollProgress } from 'glimmer-motion';
+import { tuneMotion } from 'test-app/lib/demo-tuning';
 
 const tween = { duration: 0.24, ease: [0.22, 1, 0.36, 1] } as const;
 
@@ -113,7 +114,10 @@ export class HideHeader extends Component {
             animated, and the transition beside it would never be consulted }}
         <header
           class="chat-bar"
-          {{motion animate=this.header transition=tween}}
+          {{motion
+            animate=this.header
+            transition=(tuneMotion "header" tween "tween")
+          }}
         >
           <span class="chat-back" aria-hidden="true"></span>
           <span class="chat-face">
