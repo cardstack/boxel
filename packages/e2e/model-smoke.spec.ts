@@ -253,11 +253,14 @@ async function selectModel(page: Page, requested: string) {
   await expect(page.locator('[data-test-llm-select-selected]')).toContainText(
     matches[0].name,
   );
-  // The picker is a pill menu that stays expanded after a choice; close it so
-  // it does not cover the mode toggle or the screenshot.
+  // The picker stays expanded after a choice and hides the mode toggle while
+  // it is open. Escape does not close it; a second click on the pill does.
   if ((await page.locator('[data-test-llm-select-item]').count()) > 0) {
-    await page.keyboard.press('Escape');
+    await page.locator('[data-test-llm-select-selected]').click();
   }
+  await expect(page.locator('[data-test-llm-select-item]')).toHaveCount(0, {
+    timeout: 15_000,
+  });
   return matches[0].name;
 }
 
