@@ -56,7 +56,7 @@ A run also prints the table at the end.
 Models run in parallel, `SMOKE_WORKERS` at a time (default 5), each in its own
 browser context, workspace, and room; the ai-bot works rooms concurrently. All
 workers log in as the same user, so their starts are staggered
-(`SMOKE_STAGGER_SECONDS`, default 20) to keep the room-opening steps apart, and
+(`SMOKE_STAGGER_SECONDS`, default 40) to keep the room-opening steps apart, and
 a run fails itself if a second prompt shows up in its room. `smoke:headed` runs
 one worker so there is one window to watch.
 

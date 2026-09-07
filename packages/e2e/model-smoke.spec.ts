@@ -46,7 +46,7 @@ const QUIET_WINDOW_MS = 10_000;
 // the host opens that user's most recent room; if it is empty the runner uses
 // it. Two tabs reaching that step at the same moment would share a room, so
 // the starts are staggered to keep the room steps apart.
-const STAGGER_MS = Number(process.env.SMOKE_STAGGER_SECONDS ?? 20) * 1000;
+const STAGGER_MS = Number(process.env.SMOKE_STAGGER_SECONDS ?? 40) * 1000;
 let staggered = false;
 
 const MODELS = (process.env.SMOKE_MODELS ?? 'Claude Sonnet 4.6')

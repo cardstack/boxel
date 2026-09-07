@@ -56,7 +56,7 @@ Knobs (env vars):
 | `SMOKE_WORKERS` / `SMOKE_STAGGER_SECONDS` | 5 / 20                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                 |
 
 Models run in parallel, `SMOKE_WORKERS` at a time (default 5), starting
-`SMOKE_STAGGER_SECONDS` apart (default 20) because every worker uses the same
+`SMOKE_STAGGER_SECONDS` apart (default 40) because every worker uses the same
 matrix user and must not land in the same empty room. A sweep takes about as
 long as its slowest model. `smoke:headed` runs one worker.
 
