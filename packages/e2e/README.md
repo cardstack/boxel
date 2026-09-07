@@ -23,7 +23,12 @@ every model as a tab of one headed browser and runs them at once.
   are the stable handle; the model id actually used is read back from the room
   and recorded. Default: `Claude Sonnet 4.6`.
 - `SMOKE_PROMPT` — the prompt to send. Default: `create a hello world card and show it`.
-- `SMOKE_USER` / `SMOKE_PASSWORD` — local matrix user. Default `user` / `password`.
+- `SMOKE_USERS` / `SMOKE_PASSWORD` — comma-separated local matrix users, one per
+  model, all with the same password. Default `smoke1,…,smoke5` / `password`.
+  Register them once with `MATRIX_USERNAME=smoke1 MATRIX_PASSWORD=password pnpm
+register-test-user` in `packages/matrix` (repeat per user). Each user must be
+  different: the ai-bot serializes all generations of one user behind a
+  per-user cost lock, so two models on the same user take turns.
 - `SMOKE_HOST_URL`, `SMOKE_MATRIX_URL` — default `https://localhost:4200`,
   `http://localhost:8008`.
 - `SMOKE_MAX_MINUTES` (default 15) is a safety net only: a run still going after
@@ -53,11 +58,12 @@ A run also prints the table at the end.
    tool with no result, the tab left the workspace). Keeps the room id so the
    room can be inspected afterwards.
 
-Models run in parallel, `SMOKE_WORKERS` at a time (default 5), each in its own
-browser context, workspace, and room; the ai-bot works rooms concurrently. All
-workers log in as the same user, so their starts are staggered
-(`SMOKE_STAGGER_SECONDS`, default 40) to keep the room-opening steps apart, and
-a run fails itself if a second prompt shows up in its room. `smoke:headed` runs
-one worker so there is one window to watch.
+Models run in parallel, `SMOKE_WORKERS` at a time (default 5), each as its own
+matrix user in its own browser context, workspace, and room; the ai-bot works
+rooms of different users concurrently. Starts are staggered
+(`SMOKE_STAGGER_SECONDS`, default 40) to keep the dev server's first page loads
+apart, and a run fails itself if a second prompt shows up in its room.
+`smoke:headed` runs one worker so there is one window to watch; `smoke:tabs`
+opens one incognito window per model in a single browser.
 
 The `model-e2e` skill in `.claude/skills/model-e2e/SKILL.md` explains the benchmarks and how to read a run.

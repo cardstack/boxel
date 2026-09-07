@@ -50,15 +50,23 @@ Knobs (env vars):
 | `SMOKE_MODELS`                            | `Claude Sonnet 4.6`                                | comma-separated model names **as the picker shows them**; substring, case-insensitive, must match exactly one option (the picker keys options by ModelConfiguration card id, not model id — the model id actually used is read back from the room) |
 | `SMOKE_PROMPT`                            | `create a hello world card and show it`            | the prompt                                                                                                                                                                                                                                         |
 | `SMOKE_MAX_MINUTES`                       | 15                                                 | safety net only; a run still going after that is stopped. Pace is graded, never a reason to stop                                                                                                                                                   |
-| `SMOKE_USER` / `SMOKE_PASSWORD`           | `user` / `password`                                | local matrix login                                                                                                                                                                                                                                 |
+| `SMOKE_USERS` / `SMOKE_PASSWORD`          | `smoke1,…,smoke5` / `password`                     | one local matrix user per model, comma-separated, same password. Register once: `MATRIX_USERNAME=smoke1 MATRIX_PASSWORD=password pnpm register-test-user` in `packages/matrix`, per user. Two models on the same user take turns (see below)       |
 | `SMOKE_HOST_URL` / `SMOKE_MATRIX_URL`     | `https://localhost:4200` / `http://localhost:8008` | stack endpoints                                                                                                                                                                                                                                    |
 | `SMOKE_BOT_USER`                          | `@aibot:localhost`                                 | the ai-bot's matrix id                                                                                                                                                                                                                             |
 | `SMOKE_WORKERS` / `SMOKE_STAGGER_SECONDS` | 5 / 40                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                 |
 
 Models run in parallel, `SMOKE_WORKERS` at a time (default 5), starting
-`SMOKE_STAGGER_SECONDS` apart (default 40) because every worker uses the same
-matrix user and must not land in the same empty room. A sweep takes about as
-long as its slowest model. `smoke:headed` runs one worker.
+`SMOKE_STAGGER_SECONDS` apart (default 40) so the dev server's first page
+loads do not pile up. A sweep takes about as long as its slowest model.
+`smoke:headed` runs one worker; `smoke:tabs` opens one incognito window per
+model in one browser.
+
+Every model must run as a different matrix user. The ai-bot holds a per-user
+cost lock around the whole generation, across all rooms of that user, so a
+second prompt from the same user waits at "Thinking..." until the first
+model's turn ends. A sweep on one user is not a sweep: the slowest model sets
+the pace for all of them, and the runner reads the waiting rooms as stalled
+bot turns. The runner warns when there are more models than users.
 
 ## Watch the run
 
@@ -213,6 +221,9 @@ Known model profiles, so a result can be judged against expectations:
   thinking, so lower effort makes it avoid the one large write our workflow
   needs. At default (high) effort it overthinks for minutes instead. Not a
   usable default until the skills are rewritten for thinking-by-default models.
+- Grok 4.5: about nine minutes per turn for some 200 output tokens, streaming
+  reasoning the whole time. Unusable at that pace, and while it runs it holds
+  its user's cost lock, so never run it as the same user as another model.
 - GPT-5.4-mini: never writes. Asks permission, invents file reads that 404,
   stops after announcing the files. Not a building model.
 

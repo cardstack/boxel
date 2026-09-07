@@ -16,8 +16,23 @@ import { analyzeRoom, type RoomAnalysis } from './room-analysis.ts';
 const RESULTS_DIR = join(import.meta.dirname, 'smoke-results');
 const PROMPT =
   process.env.SMOKE_PROMPT ?? 'create a hello world card and show it';
-const USERNAME = process.env.SMOKE_USER ?? 'user';
+// One matrix user per model. The ai-bot runs every generation of one user
+// inside a per-user cost lock that spans all of that user's rooms, so two
+// models prompted as the same user take turns: the second waits, showing
+// "Thinking...", until the first model's turn ends. The users come from
+// `pnpm register-test-user` in packages/matrix (MATRIX_USERNAME=smoke1 ...).
+const USERS = (
+  process.env.SMOKE_USERS ??
+  process.env.SMOKE_USER ??
+  'smoke1,smoke2,smoke3,smoke4,smoke5'
+)
+  .split(',')
+  .map((u) => u.trim())
+  .filter(Boolean);
 const PASSWORD = process.env.SMOKE_PASSWORD ?? 'password';
+function userForModel(index: number): string {
+  return USERS[index % USERS.length];
+}
 const BOT_USER_ID = process.env.SMOKE_BOT_USER ?? '@aibot:localhost';
 // The only time-based stop, and a safety net rather than a benchmark: a run
 // that is still going after this long is not going to finish. Slow runs are
@@ -94,8 +109,8 @@ function slugify(s: string) {
     .replace(/^-|-$/g, '');
 }
 
-async function loginViaLocalStorage(page: Page) {
-  let credentials = await loginWithPassword(USERNAME, PASSWORD);
+async function loginViaLocalStorage(page: Page, username: string) {
+  let credentials = await loginWithPassword(username, PASSWORD);
   await page.context().addInitScript(
     (auth) => {
       window.localStorage.setItem('auth', JSON.stringify(auth));
@@ -651,6 +666,7 @@ test.beforeAll(async () => {
 async function runModel(
   page: Page,
   requestedModel: string,
+  username: string,
 ): Promise<RunResult> {
   let slug = slugify(requestedModel);
   let startedAt = Date.now();
@@ -684,7 +700,8 @@ async function runModel(
   let step = 'start';
   try {
     step = 'login';
-    credentials = await loginViaLocalStorage(page);
+    console.log(`[smoke] ${requestedModel} runs as @${username}`);
+    credentials = await loginViaLocalStorage(page, username);
     // Human-readable stamp so the workspace list reads "Smoke Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
@@ -781,21 +798,30 @@ async function runModel(
 // headed window. Same flow either way.
 const TABS_MODE = ['1', 'true'].includes(process.env.SMOKE_TABS ?? '');
 
+if (MODELS.length > USERS.length) {
+  console.warn(
+    `[smoke] ${MODELS.length} models but only ${USERS.length} users (SMOKE_USERS): models sharing a user run one after the other, not side by side`,
+  );
+}
+
 if (TABS_MODE) {
   test(`${MODELS.length} models in tabs: ${PROMPT}`, async ({
     browser,
     baseURL,
   }) => {
-    let context = await browser.newContext({
-      ignoreHTTPSErrors: true,
-      viewport: { width: 1600, height: 1000 },
-      baseURL: baseURL ?? undefined,
-    });
     let results = await Promise.all(
       MODELS.map(async (model, index) => {
         await new Promise((resolve) => setTimeout(resolve, index * STAGGER_MS));
+        // Each model gets its own context (an incognito window of the same
+        // browser): the login lives in localStorage, so one context can only
+        // be one user.
+        let context = await browser.newContext({
+          ignoreHTTPSErrors: true,
+          viewport: { width: 1600, height: 1000 },
+          baseURL: baseURL ?? undefined,
+        });
         let page = await context.newPage();
-        return runModel(page, model);
+        return runModel(page, model, userForModel(index));
       }),
     );
     let failed = results
@@ -804,16 +830,16 @@ if (TABS_MODE) {
     expect(failed, 'every model passes').toEqual([]);
   });
 } else {
-  for (let requestedModel of MODELS) {
+  MODELS.forEach((requestedModel, index) => {
     test(`${requestedModel}: ${PROMPT}`, async ({ page }) => {
       if (!staggered) {
         staggered = true;
         await page.waitForTimeout(test.info().parallelIndex * STAGGER_MS);
       }
-      let result = await runModel(page, requestedModel);
+      let result = await runModel(page, requestedModel, userForModel(index));
       expect(result.verdict, result.reasons.join('; ')).toBe('pass');
     });
-  }
+  });
 }
 
 test.afterAll(async () => {
