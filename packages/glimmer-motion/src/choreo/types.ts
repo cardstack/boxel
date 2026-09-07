@@ -217,6 +217,8 @@ export interface TweenStep extends StepBase {
   /** extra plays after the first; Infinity is an ambient loop, phase on the run clock */
   repeat?: number;
   repeatType?: 'loop' | 'mirror' | 'reverse';
+  /** Normalized keyframe offsets; omitted means evenly spaced. */
+  times?: number[];
 }
 export interface SpringStep extends StepBase {
   by?: DeliveryBy;

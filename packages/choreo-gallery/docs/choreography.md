@@ -211,3 +211,30 @@ timeline the legacy could only print as a matrix.
   does not strand orphans
 - **counterpart** — an inserted id matching a removed one carries the old
   element as `counterpart`
+
+### Nonuniform keyframe timing
+
+`c.Tween` accepts `@times`: normalized offsets from `0` to `1`, corresponding
+one-for-one to each property keyframe array. Offsets must be finite and strictly
+increasing, with at least two entries. Omit the argument for evenly spaced
+keyframes. Use repeated **values** at different offsets to create a hold.
+
+```hbs
+<c.Tween
+  @of={{c.id 'dot'}}
+  @x={{array 0 0 100 0 0}}
+  @times={{array 0 0.15 0.5 0.85 1}}
+  @duration={{8}}
+  @repeat={{this.forever}}
+/>
+```
+
+Here `this.forever` is `Infinity`. Easing applies between the explicit offsets.
+An infinite tween continues as ambient motion; it does not make an enclosing
+sequence repeat or extend a run's finite transport duration. Add a finite timing
+window when the run must be seekable. Playback, text delivery and numeric still
+sampling honor these offsets.
+
+The [Circle continuity guide](../test-app/app/content/guides/interactive-circle-loop.md)
+combines a parent zoom with stable circles that rearrange locally. Its playground
+is `/playground/circle-loop`; the same live example also appears in the 3D gallery and full tour.

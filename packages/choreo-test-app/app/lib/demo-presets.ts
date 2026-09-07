@@ -7,6 +7,28 @@ interface DemoPreset {
 
 /** Two authored looks per demo. Version 1 keeps the source defaults. */
 export const demoPresets: Record<string, DemoPreset[]> = {
+  'circle-loop': [
+    {
+      name: 'Soft Orbit',
+      values: {
+        'Cycle duration (s)': 12,
+        'Zoom (×)': 1.8,
+        'Grid spacing (px)': 85,
+        'Scatter radius (px)': 130,
+        'Field opacity (ratio)': 0.25,
+      },
+    },
+    {
+      name: 'Punchy Mosaic',
+      values: {
+        'Cycle duration (s)': 5,
+        'Zoom (×)': 3.6,
+        'Grid spacing (px)': 110,
+        'Scatter radius (px)': 210,
+        'Field opacity (ratio)': 0.6,
+      },
+    },
+  ],
   lightbox: [
     {
       name: 'Dreamy expansion',

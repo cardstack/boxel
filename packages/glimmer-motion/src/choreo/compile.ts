@@ -542,6 +542,7 @@ const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
   duration: ms / 1000,
   ease: step.ease ?? 'easeInOut',
   type: 'tween',
+  ...('times' in step && step.times ? { times: step.times } : {}),
 });
 const springTransition = (spec: SpringSpec | undefined) => ({
   ...(spec ?? DEFAULT_SPRING),
@@ -594,6 +595,28 @@ function resolveStep(
     switch (step.kind) {
       case 'tween': {
         const { target } = resolveTarget(step, sprite, cs);
+        if (step.times !== undefined) {
+          const times = step.times;
+          if (
+            times.length < 2 ||
+            times[0] !== 0 ||
+            times[times.length - 1] !== 1 ||
+            times.some(
+              (time, i) =>
+                !Number.isFinite(time) ||
+                time < 0 ||
+                time > 1 ||
+                (i > 0 && time <= times[i - 1]!),
+            ) ||
+            Object.values(target).some(
+              (value) => Array.isArray(value) && value.length !== times.length,
+            )
+          ) {
+            throw new Error(
+              'choreo: Tween times must increase from 0 to 1 and match every keyframe array',
+            );
+          }
+        }
         if (Object.keys(target).length) {
           // an infinite repeat is an ambient loop: it occupies one cycle of
           // the schedule and keeps playing past the run's end

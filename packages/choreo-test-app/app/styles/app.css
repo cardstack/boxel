@@ -14869,3 +14869,97 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
 .demo-lesson pre code {
   overflow-wrap: normal;
 }
+
+.circle-loop-stage {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  overflow: hidden;
+  background: #fafaf8;
+  border-radius: 16px;
+}
+.circle-loop-plane {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+.circle-loop-dot {
+  position: absolute;
+  left: -23px;
+  top: -23px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+.circle-loop-disc {
+  position: absolute;
+  left: -95px;
+  top: -95px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: #eaeae7;
+}
+.circle-loop-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 10px monospace;
+  letter-spacing: 0.2em;
+  color: #777;
+}
+
+.circle-loop-region {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* The room forces dark mode; the guide still follows the visitor's theme. */
+:root:not([data-theme='light']) .circle-loop-stage,
+[data-theme='dark'] .circle-loop-stage {
+  background: #1d1917;
+}
+:root:not([data-theme='light']) .circle-loop-disc,
+[data-theme='dark'] .circle-loop-disc {
+  background: #38312c;
+}
+:root:not([data-theme='light']) .circle-loop-caption,
+[data-theme='dark'] .circle-loop-caption {
+  color: #c4b4a5;
+}
+
+/* DialKit is supporting UI: align its type with the workbench's 11px copy. */
+.workbench-dials
+  :is(
+    .dialkit-folder-title,
+    .dialkit-slider-label,
+    .dialkit-slider-value,
+    .dialkit-slider-input,
+    .dialkit-segmented-button,
+    .dialkit-toggle-label,
+    .dialkit-button,
+    .dialkit-labeled-control-label,
+    .dialkit-action-button,
+    .dialkit-text-label,
+    .dialkit-text-input,
+    .dialkit-select-trigger,
+    .dialkit-select-label,
+    .dialkit-select-value,
+    .dialkit-select-option,
+    .dialkit-preset-trigger,
+    .dialkit-preset-name,
+    .dialkit-preset-save-btn,
+    .dialkit-preset-input,
+    .dialkit-color-label,
+    .dialkit-pad-label
+  ) {
+  font-size: 11px;
+}
+.workbench-dials .dialkit-folder-title-root {
+  font-size: 13px;
+}

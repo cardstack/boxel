@@ -403,5 +403,14 @@
     "experiment": "Lengthen an earlier build and inspect the dependent starts. Compare Show each beat with Rapid assembly while keeping the dependency graph unchanged.",
     "pitfall": "Maintaining manual timestamps beside the template causes the displayed timeline to disagree with the actual score.",
     "combine": "Combine with presentation gates when some boundaries wait for a person and others follow named build dependencies."
+  },
+  {
+    "id": "circle-loop",
+    "guide": "interactive-circle-loop",
+    "concept": "Two coordinate levels, one loop",
+    "why": "Stable circles retain their identity as a parent zoom and local rearrangements combine.",
+    "experiment": "Change grid spacing first, then zoom. Compare the local spacing with its magnified screen distance.",
+    "pitfall": "Repeating a tween does not repeat its enclosing sequence. Every track here contains a complete cycle.",
+    "combine": "Use the same parent-and-child separation to connect a data overview with a detail view."
   }
 ]
