@@ -390,6 +390,30 @@ body.in-widget-room {
 .wr-shell .wr-explore {
   background: transparent;
 }
+/* Keep the primary action bright: the generic dark hover fill cannot carry
+   its dark label. Secondary actions use a warm surface with light type. */
+.wr-shell .wr-primary:is(:hover, :focus-visible) {
+  background: #ff9466;
+  border-color: #ffb08c;
+  color: #20100a;
+  box-shadow: 0 0 0 1px #ffb08c33;
+}
+.wr-shell .wr-primary:active {
+  background: #ed743f;
+  border-color: #ff9466;
+  color: #20100a;
+  box-shadow: none;
+}
+.wr-shell .wr-explore:is(:hover, :focus-visible) {
+  background: #3c2c22;
+  border-color: #be8966;
+  color: #fff4e8;
+}
+.wr-shell .wr-explore:active {
+  background: #30231c;
+  border-color: #e99467;
+  color: #fff4e8;
+}
 .wr-footer {
   position: absolute;
   bottom: 0;
