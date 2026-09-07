@@ -139,19 +139,6 @@ export interface DemoEntry {
 
 export const catalog: DemoEntry[] = [
   {
-    id: 'circle-loop',
-    title: 'Circle continuity',
-    group: 'Choreo',
-    Example: CircleLoop,
-    slowmo: true,
-    lede: 'One mounted cast, two coordinate levels, one repeating score.',
-    apis: ['Choreo', 'c.Tween', 'c.Parallel', '@times', '@repeat'],
-    sample: `<c.Tween @of={{c.id 'dot'}}
-  @x={{array 0 0 100 0 0}}
-  @times={{array 0 0.15 0.5 0.85 1}}
-  @duration={{8}} @repeat={{this.forever}} />`,
-  },
-  {
     Example: Playhead,
     apis: ['c.run', 'run.time', '@name', 'at()', 'c.Spring'],
     group: 'Timeline',
@@ -1428,6 +1415,19 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
 <div {{motion animate=morph transition=transition}}></div>`,
     slowmo: true,
     title: 'Keyframes',
+  },
+  {
+    id: 'circle-loop',
+    title: 'Circle continuity',
+    group: 'Choreo',
+    Example: CircleLoop,
+    slowmo: true,
+    lede: 'One mounted cast, two coordinate levels, one repeating score.',
+    apis: ['Choreo', 'c.Tween', 'c.Parallel', '@times', '@repeat'],
+    sample: `<c.Tween @of={{c.id 'dot'}}
+  @x={{array 0 0 100 0 0}}
+  @times={{array 0 0.15 0.5 0.85 1}}
+  @duration={{8}} @repeat={{this.forever}} />`,
   },
   {
     Example: LongTake,
