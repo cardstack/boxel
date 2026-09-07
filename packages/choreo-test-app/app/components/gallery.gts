@@ -4,6 +4,7 @@ import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+import { DemoGuideLink } from 'test-app/components/demo-guide-link';
 import { catalog, groups } from 'test-app/lib/catalog';
 import {
   counterpartId,
@@ -414,11 +415,14 @@ export class Gallery extends Component {
                 {{motion id=(concat "lede-" demo.id) role="type"}}
               >{{demo.lede}}</span>
             </LinkTo>
-            <LinkTo
-              @route="demo-lab"
-              @model={{demo.id}}
-              class="gallery-tune-link"
-            >Tune demo ↗</LinkTo>
+            <div class="gallery-demo-links">
+              <LinkTo
+                @route="demo-lab"
+                @model={{demo.id}}
+                class="gallery-tune-link"
+              >Tune demo ↗</LinkTo>
+              <DemoGuideLink @id={{demo.id}} class="gallery-tune-link" />
+            </div>
           </article>
         </Presence>
       </div>

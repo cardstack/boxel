@@ -14963,3 +14963,18 @@ body.cf-embedded:not(.guide-demo-embedded):has(.demo-workbench) .topbar {
 .workbench-dials .dialkit-folder-title-root {
   font-size: 13px;
 }
+
+.demo-tune-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.gallery-demo-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+}
+.gallery-demo-links .gallery-tune-link {
+  border-top: 0;
+}

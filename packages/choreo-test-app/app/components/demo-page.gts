@@ -8,6 +8,7 @@ import { pageTitle } from 'ember-page-title';
 import { motion } from 'glimmer-motion';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
 import { CodeBox } from 'test-app/components/code-box';
+import { DemoGuideLink } from 'test-app/components/demo-guide-link';
 import { SpeedPicker } from 'test-app/components/speed-picker';
 import { type DemoEntry, neighbors } from 'test-app/lib/catalog';
 import { highlightSample } from 'test-app/lib/highlight';
@@ -155,7 +156,8 @@ export class DemoPage extends Component<{
         <p class="demo-tune-link"><LinkTo
             @route="demo-lab"
             @model={{@model.id}}
-          >Tune this demo with DialKit ↗</LinkTo></p>
+          >Tune this demo with DialKit ↗</LinkTo>
+          <DemoGuideLink @id={{@model.id}} /></p>
         <div class="stage-row">
           <div
             class="stage-wrap"
