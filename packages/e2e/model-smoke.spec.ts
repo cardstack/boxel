@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import {
   allRoomEvents,
   loginWithPassword,
-  stopGenerating,
   type MatrixEvent,
 } from './matrix-api.ts';
 import { analyzeRoom, type RoomAnalysis } from './room-analysis.ts';
@@ -740,14 +739,6 @@ async function runModel(
     let waited = await waitForIdle(page);
     result.stoppedBy = waited.stoppedBy;
     result.irregularities = waited.irregularities;
-    if (waited.stoppedBy !== 'idle') {
-      // Leaving a room mid-turn: stop the generation so it does not run on
-      // unattended, and so its per-user lock does not stall the next run
-      // that logs in as this user.
-      await stopGenerating(result.roomId, credentials.accessToken).catch((e) =>
-        console.warn(`[smoke] stopGenerating failed: ${e}`),
-      );
-    }
     step = 'check render';
 
     let rendered = await findRenderedCard(page, result.realmUrl);
@@ -782,10 +773,6 @@ async function runModel(
       // the page may be gone
     }
     if (result.roomId && credentials) {
-      // A runner error leaves the turn open too; see the same call above.
-      await stopGenerating(result.roomId, credentials.accessToken).catch(
-        () => undefined,
-      );
       try {
         let events = await allRoomEvents(
           result.roomId,

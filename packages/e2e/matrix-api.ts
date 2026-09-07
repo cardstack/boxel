@@ -90,30 +90,3 @@ export async function allRoomEvents(
   }
   return events;
 }
-
-// The same event the host's Stop button sends. The bot aborts the generation
-// it has running in the room. Sent when the runner leaves a room whose turn is
-// still open: an abandoned generation keeps running unattended, and the bot
-// holds a per-user lock for it that would stall this user's next room.
-export async function stopGenerating(
-  roomId: string,
-  accessToken: string,
-): Promise<void> {
-  let txn = `smoke-stop-${Date.now()}`;
-  let response = await fetch(
-    `${matrixUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/app.boxel.stopGenerating/${txn}`,
-    {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({}),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(
-      `stopGenerating failed for ${roomId}: ${response.status} ${await response.text()}`,
-    );
-  }
-}

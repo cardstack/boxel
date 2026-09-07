@@ -61,12 +61,6 @@ loads do not pile up. A sweep takes about as long as its slowest model.
 `smoke:headed` runs one worker; `smoke:tabs` opens one incognito window per
 model in one browser.
 
-When the runner leaves a room whose turn is still open (a stall, a stuck
-pill, an irregularity, a runner error), it sends the same stop event as the
-host's Stop button, so the abandoned generation does not run on unattended and
-its per-user cost lock does not stall the next run that logs in as that user.
-A run that ends on idle sends nothing.
-
 Every model must run as a different matrix user. The ai-bot holds a per-user
 cost lock around the whole generation, across all rooms of that user, so a
 second prompt from the same user waits at "Thinking..." until the first
