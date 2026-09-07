@@ -59,6 +59,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // Sometimes AI will patch cards directly as files (with search/replace blocks) so we need to check
     // whether the file is actually a card instance
 
+    let nonCardJsonError: string | undefined;
     if (targetType !== 'card' && input.targetRef.endsWith('.json')) {
       let inferredCardId = await this.checkIfFileIsACardInstance(
         input.targetRef,
@@ -66,6 +67,8 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (inferredCardId) {
         targetType = 'card';
         cardId = inferredCardId;
+      } else {
+        nonCardJsonError = await this.describeNonCardJson(input.targetRef);
       }
     }
 
@@ -94,7 +97,9 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       });
     }
 
-    if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
+    if (nonCardJsonError) {
+      errors = [nonCardJsonError];
+    } else if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
       errors = await this.collectModuleErrors(input.targetRef, roomId);
     } else if (targetType === 'card') {
       if (!cardId) {
@@ -283,6 +288,67 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     let summary =
       pieces.length > 0 ? pieces.join(' - ').trim() : 'Unknown card error';
     return `${cardId}: ${summary}`;
+  }
+
+  // A .json that was meant to be a card instance but is not a card document
+  // used to pass this check clean: the indexer stores it as a plain file, and
+  // the model only learns two turns later, from show-card's "Could not find".
+  // Models get this wrong in a handful of ways (no "data" wrapper, "type" set
+  // to the card's name instead of "card", no meta.adoptsFrom, a made-up
+  // "cardDef" link), so name what a card document needs. A .json with none of
+  // the card-shaped keys is left alone: not every JSON file is a card.
+  private async describeNonCardJson(
+    fileUrl: string,
+  ): Promise<string | undefined> {
+    let content: string;
+    try {
+      let source = await this.cardService.getSource(rri(fileUrl));
+      if (source.status !== 200) {
+        return undefined;
+      }
+      content = source.content;
+    } catch {
+      return undefined;
+    }
+    let doc: any;
+    try {
+      doc = JSON.parse(content);
+    } catch (e: any) {
+      return `${fileUrl} is not valid JSON: ${e?.message ?? e}`;
+    }
+    let candidate = doc?.data ?? doc;
+    let cardShaped =
+      candidate &&
+      typeof candidate === 'object' &&
+      ('attributes' in candidate || 'meta' in candidate || 'type' in candidate);
+    if (!cardShaped) {
+      return undefined;
+    }
+    let problems: string[] = [];
+    if (!('data' in (doc ?? {}))) {
+      problems.push(
+        'the document must be wrapped in a top-level "data" object',
+      );
+    }
+    if (candidate.type !== 'card') {
+      problems.push(
+        `"data.type" must be "card" (found ${JSON.stringify(candidate.type)})`,
+      );
+    }
+    let adoptsFrom = candidate.meta?.adoptsFrom;
+    if (
+      !adoptsFrom ||
+      typeof adoptsFrom.module !== 'string' ||
+      typeof adoptsFrom.name !== 'string'
+    ) {
+      problems.push(
+        '"data.meta.adoptsFrom" must name the definition, e.g. { "module": "../hello-world", "name": "HelloWorld" }',
+      );
+    }
+    if (problems.length === 0) {
+      return undefined;
+    }
+    return `${fileUrl} is not a card document, so it will not be indexed as a card and show-card cannot find it: ${problems.join('; ')}.`;
   }
 
   private async checkIfFileIsACardInstance(

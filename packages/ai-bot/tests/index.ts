@@ -2,6 +2,7 @@ import './qunit-bootstrap.ts'; // configures QUnit before any test registers
 import QUnit from 'qunit';
 import '../setup-logger.ts'; // This should be first
 import './response-parsing-test.ts';
+import './response-event-data-test.ts';
 import './history-construction-test.ts';
 import './prompt-construction-test.ts';
 import './code-patch-correctness-test.ts';

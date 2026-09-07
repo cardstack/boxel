@@ -3844,6 +3844,32 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
+  test('patch results reported with host-style block indexes still complete the turn', async () => {
+    // The host numbers a patch result by its position among all fenced code
+    // blocks in the message, so a message with example fences before its
+    // patches reports indexes like 4 and 5 for its two patches. The bot must
+    // not wait for indexes 0 and 1 that will never come.
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-code-blocks-offset-indexes.json',
+        ),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      true,
+      'both patches have a result, so the bot should respond',
+    );
+  });
+
   test('Responds to second code patch result when two patches were proposed', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
