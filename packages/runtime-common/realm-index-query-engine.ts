@@ -805,14 +805,24 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
   }
 
-  // The live instance's declared-screenshot manifest (undefined when not
-  // live, null when live but uncaptured) — the `?name=` serving route's
-  // addressing read; liveness gate and manifest in one narrow read.
+  // The live instance's declared-screenshot manifest with the row's
+  // canonical url (undefined when not live, manifest null when live but
+  // uncaptured) — the `?name=` serving route's addressing read; liveness
+  // gate, ledger spelling, and manifest in one narrow read.
   async liveInstanceScreenshots(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
+  }
+
+  // The file-row twin of `liveInstanceScreenshots` — the `?name=` route's
+  // fallback addressing read for paths that resolve to no live instance.
+  async liveFileScreenshots(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#indexQueryEngine.liveFileScreenshots(url, opts);
   }
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
@@ -2409,6 +2419,18 @@ function fileResourceFromIndex(
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
       ...fileMetaTimestamps(lastModified, createdAt),
+      // The file row's declared-screenshot manifest, joined here so a linked
+      // FileDef carries `meta.screenshots` the way a linked instance does
+      // (see the loadLinks instance branch) — a file's own GET stamps the
+      // same key via `fileMetaDocumentFromIndex`.
+      ...(fileEntry.screenshots && fileURL.href.startsWith(fileEntry.realmURL)
+        ? {
+            screenshots: screenshotsMetaFromManifest(fileEntry.screenshots, {
+              realmURL: fileEntry.realmURL,
+              instanceLocalPath: fileURL.href.slice(fileEntry.realmURL.length),
+            }),
+          }
+        : {}),
     },
     links: { self: fileURL.href },
   };

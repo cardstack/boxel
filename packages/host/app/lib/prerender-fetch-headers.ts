@@ -9,13 +9,26 @@ import {
 // SPA boots, and also by the host's prerender-shaped routes
 // (render.ts / module.ts / file-extract.ts / command-runner.ts) when
 // they activate — `__boxelRenderContext = true`. Read here so the
-// realm-server fetch wrappers can attach the marker header on
-// search calls only, narrowly scoping the signal to the endpoints
-// that need it. See realm.ts:DURING_PRERENDER_HEADER for the full
-// chain.
+// realm-server fetch wrappers can attach the marker header on search
+// calls and card writes only, narrowly scoping the signal to the
+// endpoints that act on it. See realm.ts:DURING_PRERENDER_HEADER for
+// the full chain and what each endpoint does with it.
 export function duringPrerenderHeaders(): Record<string, string> {
   let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
     .__boxelRenderContext;
+  return flag === true ? { [DURING_PRERENDER_HEADER]: '1' } : {};
+}
+
+// The same marker, for a card write rather than a search. Gated on the
+// command-runner route's own flag instead of `__boxelRenderContext`: a write
+// is only ever issued from a headless command (the render routes block
+// persistence outright), and `__boxelRenderContext` is also raised by host
+// tests around in-browser index renders, where an interactive save that
+// happened to coincide must keep answering from the index. See
+// realm.ts:DURING_PRERENDER_HEADER for what the realm does with it.
+export function headlessCommandWriteHeaders(): Record<string, string> {
+  let flag = (globalThis as unknown as { __boxelHeadlessCommand?: boolean })
+    .__boxelHeadlessCommand;
   return flag === true ? { [DURING_PRERENDER_HEADER]: '1' } : {};
 }
 

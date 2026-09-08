@@ -138,20 +138,22 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. The prerender pass captures only
-  // instance rows, so nothing stamps this on file-meta responses — the key
-  // exists so FileDef's `screenshotURLs` getter reads both kinds uniformly
-  // when file rows capture too.
+  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // row's prerendered manifest — the file-meta GET and linked-file resources
+  // join it exactly as a card+json GET joins an instance row's, so FileDef's
+  // `screenshotURLs` getter reads both kinds uniformly.
   screenshots?: ScreenshotsMeta;
 };
 
 // The single home for how a file's timestamps land in `meta`: the card key
 // names (`resourceCreatedAt`, not the legacy `attributes.createdAt` spelling),
 // mapped once. Every producer of a file-meta resource — the two indexed
-// builders and the filesystem fallback — spreads this so a hydrated FileDef
-// exposes them through `getCardMeta` / its getters, and a fourth producer can't
-// silently reintroduce the mapping omission. Callers resolve their own defaults
-// (the source values differ per path) and pass the two resolved values here.
+// builders, the filesystem fallback, and the extract-time builder the
+// prerender hydrates its FileDef from (host `buildFileResource`) — spreads
+// this so a hydrated FileDef exposes them through `getCardMeta` / its getters,
+// and another producer can't silently reintroduce the mapping omission.
+// Callers resolve their own defaults (the source values differ per path) and
+// pass the two resolved values here.
 export function fileMetaTimestamps(
   lastModified: number | undefined,
   createdAt: number | undefined,

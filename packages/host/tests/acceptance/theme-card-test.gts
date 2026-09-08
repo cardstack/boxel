@@ -649,6 +649,32 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
     });
 
+    test('dark mode preview keeps dark defaults for tokens the theme omits', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: themeCardId, format: 'isolated' }]],
+      });
+      // the scope element re-declares the contract at the card boundary, so it
+      // is where an omitted token resolves
+      let scopeSelector = `[data-test-card="${themeCardId}"] [data-test-theme-dashboard]`;
+      assert.strictEqual(
+        computedProperty(scopeSelector, '--canvas'),
+        '#f8f7fa',
+        'an omitted token resolves to the boxel light default',
+      );
+
+      await click('[data-test-mode="toggle-dark"]');
+      assert.strictEqual(
+        computedProperty(scopeSelector, '--canvas'),
+        '#1e1b26',
+        'an omitted token resolves to the boxel dark default in the dark preview',
+      );
+      assert.strictEqual(
+        computedProperty(scopeSelector, '--background'),
+        DARK_MODE_VARS.background,
+        'the theme still overrides the tokens it defines',
+      );
+    });
+
     test('dark mode variables apply when the ambient scheme is dark', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: themeCardId, format: 'isolated' }]],

@@ -174,6 +174,40 @@ module('Integration | preview', function (hooks) {
       .includesText('<meta property="og:type" content="article">');
   });
 
+  test('the default head template omits og:image for a base64 thumbnail', async function (assert) {
+    let { CardDef, CardInfoField } = cardApi;
+
+    class PlainCard extends CardDef {}
+
+    let base64Card = new PlainCard({
+      cardInfo: new CardInfoField({
+        name: 'Base64 Thumb',
+        cardThumbnailURL: 'data:image/png;base64,AAAA',
+      }),
+    });
+
+    class TestDriver extends GlimmerComponent<{ Args: { format?: Format } }> {
+      card = base64Card;
+
+      <template>
+        <CardRenderer @card={{this.card}} @format={{@format}} />
+      </template>
+    }
+
+    await renderComponent(TestDriver, 'head');
+
+    let rawMarkup =
+      document.querySelector('[data-test-head-markup]')?.textContent ?? '';
+    assert.notOk(
+      rawMarkup.includes('og:image'),
+      'a data: URI never reaches og:image',
+    );
+    assert.ok(
+      rawMarkup.includes('twitter:card" content="summary"'),
+      'the head falls back to the no-image twitter card',
+    );
+  });
+
   test('toggling between isolated and edit reuses the component instance when the templates are reference-equal', async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
