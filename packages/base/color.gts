@@ -1,9 +1,10 @@
-import { Component } from '@cardstack/base/card-api';
-import StringField from '@cardstack/base/string';
 import { Swatch } from '@cardstack/boxel-ui/components';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
+
+import { Component } from './card-api';
 import ColorPickerField from './color-field/components/color-picker-field';
+import StringField from './string';
 
 class View extends Component<typeof ColorField> {
   <template><Swatch @color={{@model}} @style='round' /></template>

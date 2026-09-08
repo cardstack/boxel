@@ -189,7 +189,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_run-command',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleRunCommand(args),
+    handleRunCommand({
+      dbAdapter: args.dbAdapter,
+      matrixClient: args.matrixClient,
+      prerenderer: args.prerenderer,
+      createPrerenderAuth,
+    }),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.post(
@@ -266,6 +271,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'card',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      matrixURL: args.matrixClient.matrixURL.href,
       createPrerenderAuth,
     }),
   );
@@ -276,6 +282,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'module',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      matrixURL: args.matrixClient.matrixURL.href,
       createPrerenderAuth,
     }),
   );
@@ -286,6 +293,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'file-extract',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      matrixURL: args.matrixClient.matrixURL.href,
       createPrerenderAuth,
     }),
   );

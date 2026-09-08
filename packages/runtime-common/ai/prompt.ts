@@ -251,7 +251,6 @@ export async function getPromptParts(
   let messages = await buildPromptForModel(
     history,
     aiBotUserId,
-    tools,
     skills,
     disabledSkillIds,
     client,
@@ -699,33 +698,6 @@ export function getRelevantCards(
     mostRecentlyAttachedCard: mostRecentlyAttachedCard,
     attachedCards: sortedCards,
   };
-}
-
-export function hasSomeAttachedCards(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): boolean {
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-
-    if (event.sender !== aiBotUserId) {
-      let { content } = event;
-      let attachedCards = (content as CardMessageContent).data?.attachedCards
-        ?.map((attachedCard: SerializedFileDef) =>
-          attachedCard.content
-            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
-            : undefined,
-        )
-        .filter((card) => card !== undefined);
-      if (attachedCards?.length) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 // A message's rendering must depend only on the message itself, never on
@@ -1566,7 +1538,6 @@ function toCheckCorrectnessResultContent(
 export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[] = [],
   skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
@@ -1674,7 +1645,6 @@ export async function buildPromptForModel(
   let contextContent = await buildContextMessage(
     history,
     aiBotUserId,
-    tools,
     disabledSkillIds,
   );
   // The context carries the current time, so its bytes change on every
@@ -2342,7 +2312,6 @@ export const buildCurrentTurnMediaParts = async (
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[],
   disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
@@ -2449,30 +2418,6 @@ export const buildContextMessage = async (
     result += `The user has no open cards.\n`;
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
-
-  // What grants card editing is a card-patch tool in the request —
-  // patch-fields supplied by a skill, or a legacy patchCardInstance sitting
-  // in an old room's history. Interactive messages themselves carry no
-  // tools, so nothing about the UI state (open cards, attachments) implies
-  // edit access. When cards are in play but no such tool is present, say so
-  // — otherwise the model proposes patches it has no way to apply. Reading
-  // the tools array here is cache-safe: this message trails the cache
-  // breakpoint and is re-serialized every turn anyway.
-  let hasCardPatchTool = tools.some((t) =>
-    CARD_PATCH_COMMAND_NAMES.has(t.function.name),
-  );
-  let currentMessageHasAttachedFiles = Boolean(
-    (lastEventWithContext as MatrixEventWithBoxelContext | undefined)?.content
-      ?.data?.attachedFiles?.length,
-  );
-  if (
-    !currentMessageHasAttachedFiles &&
-    !hasCardPatchTool &&
-    hasSomeAttachedCards(history, aiBotUserId)
-  ) {
-    result +=
-      'You are unable to edit any cards: no card-editing tool is available in this room. Editing becomes possible when the user enables a skill that provides one (such as patch-fields). Ask them to do that if they want changes made.';
-  }
 
   return result;
 };

@@ -262,6 +262,13 @@ export async function renderFileForIndexing({
     ...(clearCache ? { clearCache } : {}),
     ...(fileContentHash !== undefined ? { fileContentHash } : {}),
     ...(fileContentSize !== undefined ? { fileContentSize } : {}),
+    // The timestamps this visit writes to the file's index row. The extract
+    // stamps them onto its resource's `meta`, so the FileDef the fileRender
+    // pass hydrates reports the same `lastModified` / `resourceCreatedAt` a
+    // live file-meta read of the row does — and the prerendered HTML renders
+    // the same modified time a live render would.
+    fileLastModified: lastModified,
+    fileCreatedAt: resourceCreatedAt,
   };
 
   // Everything up to here — the file read, parse, and file-metadata lookups —

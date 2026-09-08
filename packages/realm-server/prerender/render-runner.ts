@@ -1666,6 +1666,7 @@ export class RenderRunner {
                   message:
                     error.error?.message ??
                     'declared screenshot capture failed',
+                  captureMs: Date.now() - stepStart,
                 },
               ],
             };

@@ -2110,6 +2110,7 @@ export async function captureDeclaredScreenshots(
   let finish = (
     resolved: ResolvedDeclaredEntry,
     item: ScreenshotCaptureItem,
+    captureMs: number,
   ) => {
     entries.push({
       name: resolved.name,
@@ -2122,6 +2123,7 @@ export async function captureDeclaredScreenshots(
       keyBy: resolved.keyBy,
       ...(resolved.payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
       base64: item.base64,
+      captureMs,
     });
   };
 
@@ -2165,23 +2167,33 @@ export async function captureDeclaredScreenshots(
         { type: resolved.imageType, background: resolved.background },
       ]),
     );
+    // One shared render serves the whole group, so each member records the
+    // group's elapsed time — an upper bound on its own share, but the right
+    // signal for "this slot's capture is slow" since the member cannot be
+    // captured without paying for the group render.
+    let groupStart = Date.now();
     let shot = await captureScreenshot(page, format, 0, {
       ...opts,
       captureSpec: { captures },
       entryOutput,
     });
+    let groupMs = Date.now() - groupStart;
     if ('type' in shot) {
       // A format group shares one render, so its failure fails every slot in
       // the group — but never the other groups or the visit.
       for (let resolved of group) {
-        errors.push({ name: resolved.name, message: renderErrorMessage(shot) });
+        errors.push({
+          name: resolved.name,
+          message: renderErrorMessage(shot),
+          captureMs: groupMs,
+        });
       }
       continue;
     }
     for (let item of shot.captures) {
       let resolved = group.find((g) => g.name === item.name);
       if (resolved) {
-        finish(resolved, item);
+        finish(resolved, item, groupMs);
       }
     }
   }
@@ -2190,20 +2202,23 @@ export async function captureDeclaredScreenshots(
     let originalViewport = page.viewport();
     try {
       for (let resolved of renderBased) {
+        let entryStart = Date.now();
         try {
           let outcome = await captureRenderBasedEntry(page, resolved, opts);
           if ('type' in outcome) {
             errors.push({
               name: resolved.name,
               message: renderErrorMessage(outcome),
+              captureMs: Date.now() - entryStart,
             });
           } else {
-            finish(resolved, outcome);
+            finish(resolved, outcome, Date.now() - entryStart);
           }
         } catch (e: any) {
           errors.push({
             name: resolved.name,
             message: e?.message ?? String(e),
+            captureMs: Date.now() - entryStart,
           });
         }
       }
