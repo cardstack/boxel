@@ -159,6 +159,11 @@ export function bxl(
   program: TemplateStringsArray,
   ...substitutions: unknown[]
 ): BxlProgram {
+  if (!Array.isArray(program) || !Array.isArray(program?.raw)) {
+    throw new Error(
+      `bxl is a template tag: write bxl\`…\` rather than calling it`,
+    );
+  }
   if (substitutions.length > 0) {
     throw new Error(
       `the bxl tag does not interpolate values; read the payload, the actor and the target inside the program with the params(), actor() and instance() builtins`,
@@ -187,6 +192,17 @@ export function linkTo<Def extends LinkableDefConstructor>(
   if (typeof def !== 'function') {
     throw new Error(
       `linkTo() takes a card class (or a thunk returning one, for a class declared later in the module)`,
+    );
+  }
+  // A thunk defers its class past this point; one named directly can be held
+  // to a kind that has a URL to link to.
+  if (
+    isDefConstructor(def) &&
+    !isSubclassOf(def, CardDef) &&
+    !isSubclassOf(def, FileDef)
+  ) {
+    throw new Error(
+      `linkTo() takes a card or file class — a link points at something with a URL`,
     );
   }
   return { $linkTo: def };
@@ -369,6 +385,11 @@ const REQUIRED_CLAUSE: Partial<Record<BaseOperationName, string>> = {
   query: 'query',
 };
 
+// Clauses that name a type rather than describe work. A raw program replaces
+// the work, so it does not replace these — a `create` driven by a program
+// still has to say what it creates.
+const TYPE_NAMING_KEYS: readonly string[] = ['of'];
+
 // Records a static declaration on the class it is declared on. Our decorators
 // are implemented by Babel, not TypeScript, so the signature differs from the
 // one TypeScript expects; a static-property decorator receives the
@@ -417,7 +438,7 @@ export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
 ): Record<string, OperationDeclaration> {
   let owner = defConstructorFor(classOrInstance, 'getOperations');
-  let operations: Record<string, OperationDeclaration> = {};
+  let operations = emptyOperationRecord();
   for (let base of impliedOperations(owner)) {
     // A base operation with nothing declared on it is the declaration
     // `{ base }`; the cast is only because a union does not narrow from a
@@ -480,7 +501,15 @@ function declaredOperations(
     }
     current = Object.getPrototypeOf(current);
   }
-  return Object.assign({}, ...levels);
+  return Object.assign(emptyOperationRecord(), ...levels);
+}
+
+// A record with no prototype. Operations are addressed by name — the realm
+// dispatches one from a name that arrived over the wire — so a name-keyed map
+// must not answer to `toString`, `constructor` or `__proto__` with something
+// that is not an operation.
+function emptyOperationRecord(): Record<string, OperationDeclaration> {
+  return Object.create(null) as Record<string, OperationDeclaration>;
 }
 
 function defConstructorFor(
@@ -596,11 +625,16 @@ function assertValidDeclaration(
       `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
     );
   }
-  // A file's metadata is content-derived and read-only, so it has no
-  // mutation surface for anything but `read` to reach.
-  if (base !== 'read' && isSubclassOf(owner, FileDef)) {
+  // An author may only specialize a base operation the def type actually
+  // carries. Read from the same list `getOperations` synthesizes: only a card
+  // has a mutation surface, and a file's metadata is content-derived and
+  // read-only.
+  let implied = impliedOperations(owner);
+  if (!implied.includes(base)) {
     throw new Error(
-      `${label}: a file's metadata is read-only, so only \`base: 'read'\` operations can be declared on it`,
+      `${label}: this def type carries only ${quoteList(
+        implied,
+      )}, so it cannot declare a "${base}" operation`,
     );
   }
   let clauseKeys = CLAUSE_KEYS[base];
@@ -625,7 +659,8 @@ function assertValidDeclaration(
     assertBxlProgram(label, 'input', declaration.input);
   }
   let usedClauses = clauseKeys.filter(
-    (clause) => declaration[clause] !== undefined,
+    (clause) =>
+      declaration[clause] !== undefined && !TYPE_NAMING_KEYS.includes(clause),
   );
   if (declaration.transformations !== undefined) {
     assertBxlProgram(label, 'transformations', declaration.transformations);
@@ -711,23 +746,67 @@ function assertValidClauses(
       );
     }
   }
-  if (declaration.of !== undefined && typeof declaration.of !== 'function') {
-    throw new Error(
-      `${label}: \`of\` must be the card class to create, or a thunk returning it`,
-    );
-  }
-  if (base === 'query' && declaration.query !== undefined) {
-    if (!isPlainObject(declaration.query)) {
+  if (declaration.of !== undefined) {
+    if (typeof declaration.of !== 'function') {
       throw new Error(
-        `${label}: \`query\` must be an object with \`filter\`, \`sort\`, \`page\` and \`realms\``,
+        `${label}: \`of\` must be the card class to create, or a thunk returning it`,
       );
     }
-    assertOnlyKeys(label, 'query', declaration.query, [
-      'filter',
-      'sort',
-      'page',
-      'realms',
-    ]);
+    // A thunk cannot be resolved this early, but a def class named directly
+    // can be held to the kind a create can mint.
+    if (
+      isDefConstructor(declaration.of) &&
+      !isSubclassOf(declaration.of, CardDef)
+    ) {
+      throw new Error(
+        `${label}: \`of\` must be a card class — only a card can be created`,
+      );
+    }
+  }
+  if (base === 'query' && declaration.query !== undefined) {
+    let query = declaration.query;
+    if (!isPlainObject(query) || Object.keys(query).length === 0) {
+      throw new Error(
+        `${label}: \`query\` must be an object with at least one of \`filter\`, \`sort\`, \`page\` and \`realms\``,
+      );
+    }
+    assertOnlyKeys(label, 'query', query, ['filter', 'sort', 'page', 'realms']);
+    if (query.page !== undefined) {
+      if (!isPlainObject(query.page)) {
+        throw new Error(
+          `${label}: \`query.page\` must be an object with \`size\` and \`cursor\``,
+        );
+      }
+      assertOnlyKeys(label, 'query.page', query.page, ['size', 'cursor']);
+      let size = query.page.size;
+      if (
+        size !== undefined &&
+        (typeof size !== 'number' || !Number.isInteger(size) || size < 1)
+      ) {
+        throw new Error(
+          `${label}: \`query.page.size\` must be a positive integer`,
+        );
+      }
+      if (
+        query.page.cursor !== undefined &&
+        (typeof query.page.cursor !== 'string' ||
+          query.page.cursor.length === 0)
+      ) {
+        throw new Error(`${label}: \`query.page.cursor\` must be a string`);
+      }
+    }
+    if (query.realms !== undefined) {
+      let realms = query.realms;
+      if (
+        !Array.isArray(realms) ||
+        realms.length === 0 ||
+        realms.some((realm) => typeof realm !== 'string' || realm.length === 0)
+      ) {
+        throw new Error(
+          `${label}: \`query.realms\` must be a non-empty array of realm URLs`,
+        );
+      }
+    }
   }
 }
 
@@ -748,6 +827,7 @@ function assertValidParamsSchema(label: string, schema: unknown): Set<string> {
           `${label}: param "${name}" must be a field class or linkTo(…)`,
         );
       }
+      assertOnlyKeys(label, `params.${name}`, type, ['$linkTo']);
     } else if (!isFieldDefConstructor(type)) {
       // A scalar param is typed by the field class that serializes it, so
       // any other function — a card class, a thunk, an unrelated callable —
@@ -783,22 +863,30 @@ function isFieldDefConstructor(value: unknown): boolean {
 // The rest is the plain-data invariant, enforced rather than assumed: a
 // declaration reaches the realm as JSON in a definition-cache entry, and
 // anything that does not survive that trip — `undefined`, a function, a
-// symbol, a bigint, a class instance whose fields JSON flattens away —
-// would leave the operation running against something other than what the
-// author wrote, silently. Classes are expected in exactly two slots: the def
-// a `create` names with `of`, and the def a query filters `on`.
+// symbol, a bigint, a non-finite number, a class instance whose fields JSON
+// flattens away, a cycle JSON refuses outright — would leave the operation
+// running against something other than what the author wrote, silently.
+//
+// A def class is legal in exactly the two slots that name a type: the `of` a
+// `create` targets, and the `on` a query filters against (at any depth, since
+// filters nest). Naming those slots individually is what keeps a thunk from
+// being mistaken for a value everywhere else in a query — a function under
+// `eq` would lower to nothing and match every card instead of one.
 function assertReferencesResolve(
   label: string,
   declaration: Record<string, unknown>,
   paramNames: Set<string>,
 ) {
-  let seen = new WeakSet<object>();
-  let walk = (node: unknown, path: string, defsAllowed: boolean) => {
+  // The current DFS path, not a memo: a node is unwound on the way back out,
+  // so a cycle is caught while the same object legitimately appearing twice
+  // is validated in each place it appears.
+  let ancestors = new Set<object>();
+  let walk = (node: unknown, path: string, slot: SlotKind) => {
     if (node === null) {
       return;
     }
     if (typeof node === 'function') {
-      if (defsAllowed) {
+      if (slot.definitionAllowed) {
         return;
       }
       throw new Error(
@@ -816,12 +904,18 @@ function assertReferencesResolve(
           `${label}: \`${path}\` is undefined; omit an optional key rather than declaring it as undefined`,
         );
       }
+      if (typeof node === 'number' && !Number.isFinite(node)) {
+        throw new Error(
+          `${label}: \`${path}\` is ${node}, which serializes as null`,
+        );
+      }
       return;
     }
-    if (seen.has(node)) {
-      return;
+    if (ancestors.has(node)) {
+      throw new Error(
+        `${label}: \`${path}\` refers back to a value that contains it; a declaration is a tree`,
+      );
     }
-    seen.add(node);
     if (isBxlMarker(node)) {
       assertBxlProgram(label, path, node);
       return;
@@ -830,33 +924,48 @@ function assertReferencesResolve(
       assertValidReference(label, path, node, paramNames);
       return;
     }
-    if (Array.isArray(node)) {
-      node.forEach((entry, index) =>
-        walk(entry, `${path}[${index}]`, defsAllowed),
-      );
-      return;
-    }
-    if (!isPlainObject(node)) {
+    if (!Array.isArray(node) && !isPlainObject(node)) {
       throw new Error(
         `${label}: \`${path}\` is ${describeValue(
           node,
         )}; a declaration carries plain objects, arrays and primitives`,
       );
     }
-    for (let [key, value] of Object.entries(node)) {
-      // The params schema holds field classes and linkTo markers rather than
-      // references, and is validated on its own terms.
-      if (path === '' && key === 'params') {
-        continue;
-      }
-      walk(
-        value,
-        path === '' ? key : `${path}.${key}`,
-        defsAllowed || (path === '' && (key === 'of' || key === 'query')),
+    ancestors.add(node);
+    if (Array.isArray(node)) {
+      node.forEach((entry, index) =>
+        walk(entry, `${path}[${index}]`, {
+          definitionAllowed: false,
+          inQuery: slot.inQuery,
+        }),
       );
+    } else {
+      for (let [key, value] of Object.entries(node)) {
+        // The params schema holds field classes and linkTo markers rather
+        // than references, and is validated on its own terms.
+        if (path === '' && key === 'params') {
+          continue;
+        }
+        let inQuery = slot.inQuery || (path === '' && key === 'query');
+        walk(value, path === '' ? key : `${path}.${key}`, {
+          definitionAllowed:
+            (path === '' && key === 'of') || (inQuery && key === 'on'),
+          inQuery,
+        });
+      }
     }
+    ancestors.delete(node);
   };
-  walk(declaration, '', false);
+  walk(declaration, '', { definitionAllowed: false, inQuery: false });
+}
+
+// Where in a declaration the walk currently is, in the only two terms it
+// changes behavior on.
+interface SlotKind {
+  // This slot names a type, so a def class (or a thunk returning one) belongs.
+  definitionAllowed: boolean;
+  // Somewhere inside a `query`, where a nested `on` names a type.
+  inQuery: boolean;
 }
 
 function describeValue(value: unknown): string {
@@ -948,6 +1057,7 @@ function assertBxlProgram(label: string, path: string, value: unknown) {
       `${label}: \`${path}\` must be a program written with the bxl tag`,
     );
   }
+  assertOnlyKeys(label, path, value as object, ['$bxl']);
 }
 
 function assertOnlyKeys(

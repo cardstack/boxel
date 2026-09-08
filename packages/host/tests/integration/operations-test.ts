@@ -389,7 +389,7 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /metadata is read-only/,
+      /carries only "read"/,
       'file metadata is content-derived, so it has no mutation surface',
     );
   });
@@ -441,7 +441,50 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       Object.keys(getDeclaredOperations(Report)),
       ['addComment'],
-      'a name-keyed store holds operations and nothing it might inherit',
+      'a rejected name leaves the store working',
+    );
+    for (let inherited of [
+      'toString',
+      'constructor',
+      '__proto__',
+      'valueOf',
+      'hasOwnProperty',
+    ]) {
+      assert.false(
+        inherited in getOperations(Report),
+        `a name-keyed record does not answer for ${inherited}`,
+      );
+      assert.false(
+        inherited in getDeclaredOperations(Report),
+        `nor does the declared-only record answer for ${inherited}`,
+      );
+    }
+    assert.true(
+      'addComment' in getOperations(Report),
+      'while still answering for the operations it holds',
+    );
+    assert.true(
+      'read' in getOperations(Report),
+      'and for the base operations its def type carries',
+    );
+  });
+
+  test('the decorator installs the declaration on the class', function (assert) {
+    class Report extends CardDef {
+      @operation static addComment = {
+        base: 'transform',
+        params: { body: StringField },
+        append: { to: 'comments', value: { body: params('body') } },
+      };
+    }
+    // The static is what `OperationsOf` types off, and what makes the
+    // name-collision check see an inherited operation on a subclass override.
+    // A decorator that recorded the declaration without returning a `value`
+    // descriptor would leave every other assertion in this file passing.
+    assert.strictEqual(
+      Report.addComment as unknown,
+      getDeclaredOperations(Report).addComment as unknown,
+      'the class carries the very declaration the reader returns',
     );
   });
 
@@ -654,6 +697,204 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('a def class is legal only where a slot names a type', function (assert) {
+    class Activity extends CardDef {}
+    class Classroom extends CardDef {
+      @operation static listActivities = {
+        base: 'query',
+        // A filter nests, so `on` names a type at any depth — and the thunk
+        // form works there.
+        query: {
+          filter: { any: [{ on: () => Activity }], eq: { status: 'open' } },
+        },
+      };
+      @operation static makeActivity = {
+        base: 'create',
+        of: Activity,
+        params: { title: StringField },
+        // `of` names the type rather than the work, so it stands alongside a
+        // raw program instead of competing with it.
+        transformations: bxl`.title = params("title");`,
+      };
+    }
+    let declarations = getDeclaredOperations(Classroom);
+    assert.strictEqual(
+      (declarations.makeActivity as OperationsModule.CreateOperationDeclaration)
+        .of,
+      Activity,
+      'a program-driven create still names what it creates',
+    );
+    assert.strictEqual(
+      typeof (
+        (
+          declarations.listActivities as OperationsModule.QueryOperationDeclaration
+        ).query as { filter: { any: { on: unknown }[] } }
+      ).filter.any[0].on,
+      'function',
+      'and a nested filter still names its type',
+    );
+
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: {
+              filter: { on: Activity, eq: { owner: (() => 1) as never } },
+            },
+          };
+        }
+        return Report;
+      },
+      /is a function; a declaration is data/,
+      'but a function anywhere else in a query would lower to nothing',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static makeOne = {
+            base: 'create',
+            of: StringField as never,
+          };
+        }
+        return Report;
+      },
+      /must be a card class/,
+      'and only a card can be created',
+    );
+    assert.throws(
+      () => linkTo(StringField as never),
+      /card or file class/,
+      'while a link points at something that has a URL',
+    );
+  });
+
+  test('a shared value is checked in every slot it appears', function (assert) {
+    assert.throws(
+      () => {
+        let shared = { on: CardDef };
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: shared },
+            output: { leak: shared },
+          };
+        }
+        return Report;
+      },
+      /is a function; a declaration is data/,
+      'validation does not memoize, so it cannot depend on key order',
+    );
+  });
+
+  test('a declaration must be a tree of finite values', function (assert) {
+    assert.throws(
+      () => {
+        let value: Record<string, unknown> = { body: 'x' };
+        value.self = value;
+        class Report extends CardDef {
+          @operation static escalate = {
+            base: 'transform',
+            set: value as never,
+          };
+        }
+        return Report;
+      },
+      /refers back to a value that contains it/,
+      'a cycle would throw when the declaration is serialized, far from here',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static escalate = {
+            base: 'transform',
+            set: { score: NaN },
+          };
+        }
+        return Report;
+      },
+      /serializes as null/,
+      'and a non-finite number would quietly become null',
+    );
+  });
+
+  test('a marker carries only its own key', function (assert) {
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static escalate = {
+            base: 'transform',
+            transformations: { $bxl: '.a = 1;', hook: () => 1 } as never,
+          };
+        }
+        return Report;
+      },
+      /is not a valid key/,
+      'a program marker is not a place to smuggle a value past the walk',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static addActivity = {
+            base: 'transform',
+            params: { activity: { $linkTo: CardDef, junk: 1 } as never },
+            append: { to: 'activities', value: card(params('activity')) },
+          };
+        }
+        return Report;
+      },
+      /is not a valid key/,
+      'nor is a link param, which the reference walk skips',
+    );
+  });
+
+  test('a named query is checked for the shape a search needs', function (assert) {
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = { base: 'query', query: {} };
+        }
+        return Report;
+      },
+      /at least one of/,
+      'a query with no query names no search',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { on: CardDef }, page: { size: 0 } },
+          };
+        }
+        return Report;
+      },
+      /must be a positive integer/,
+      'a page size is a count',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { on: CardDef }, realms: 'https://x/' as never },
+          };
+        }
+        return Report;
+      },
+      /non-empty array of realm URLs/,
+      'and realms is the fan-out list, not one realm',
+    );
+  });
+
+  test('the bxl tag reports being called as a function', function (assert) {
+    assert.throws(
+      () => (bxl as unknown as (parts: string[]) => unknown)(['.a = 1;']),
+      /template tag/,
+      'every reference constructor says what it wanted',
+    );
+  });
+
   test('getOperations rejects a target that is not a card definition', function (assert) {
     assert.throws(
       () => getOperations({} as never),
@@ -728,8 +969,16 @@ module('Integration | operations', function (hooks) {
       keyof OperationsModule.OperationsOf<typeof Report>
     >();
 
+    class Classroom extends CardDef {
+      @operation static addActivity = addActivity;
+    }
     assert.deepEqual(
-      Object.keys(addActivity.params),
+      Object.keys(
+        (
+          getDeclaredOperations(Classroom)
+            .addActivity as OperationsModule.TransformOperationDeclaration
+        ).params ?? {},
+      ),
       ['note', 'activity'],
       'a scalar param and a link param sit in the same schema',
     );
