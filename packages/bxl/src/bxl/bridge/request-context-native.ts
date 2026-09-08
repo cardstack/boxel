@@ -84,6 +84,19 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/**
+ * One key name, cut to {@link KEY_CHARS_IN_MESSAGE}.
+ *
+ * Cut by code point rather than by string index, so the cut cannot land
+ * inside a surrogate pair and leave a lone surrogate in the message.
+ */
+function truncateKey(key: string): string {
+  if (key.length <= KEY_CHARS_IN_MESSAGE) return key;
+  const points = [...key];
+  if (points.length <= KEY_CHARS_IN_MESSAGE) return key;
+  return `${points.slice(0, KEY_CHARS_IN_MESSAGE).join('')}…`;
+}
+
 function describeKeys(source: Record<string, unknown>): string {
   // Own properties, enumerable or not, because that is what `requireKey`
   // accepts — listing only the enumerable ones would omit a key that works.
@@ -104,11 +117,7 @@ function describeKeys(source: Record<string, unknown>): string {
   if (keys.length === 0) return 'it has no readable keys';
   const shown = keys.slice(0, KEYS_IN_MESSAGE);
   const rest = keys.length - shown.length;
-  const quoted = shown.map((key) =>
-    key.length > KEY_CHARS_IN_MESSAGE
-      ? `"${key.slice(0, KEY_CHARS_IN_MESSAGE)}…"`
-      : `"${key}"`,
-  );
+  const quoted = shown.map((key) => `"${truncateKey(key)}"`);
   return `it has ${quoted.join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
 }
 
@@ -141,7 +150,7 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
   if (!descriptor || value === undefined) {
     const hint = OPTIONAL_KEY_HINTS[slot];
     throw new JqEvaluateError(
-      `${call} asks for "${key}", which is not in ${
+      `${call} asks for "${truncateKey(key)}", which is not in ${
         SLOT_DESCRIPTIONS[slot]
       } — ${describeKeys(source)}.${hint ? ` ${hint}` : ''}`,
     );

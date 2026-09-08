@@ -234,15 +234,21 @@ function nonJsonTypeName(value: unknown): string | undefined {
       break;
   }
   if (Array.isArray(value)) return undefined;
-  // The built-in tag rather than the prototype or the constructor's name.
-  // It reports `Date`, `Map` and `URL` reliably, it is never empty — a
-  // constructor's `name` can be, which read as "no problem found" — and it
-  // says `Object` for every plain object, including one from another realm
-  // and one carrying a class's own data fields. Those hold nothing but JSON;
-  // rejecting them for their prototype refused data a host may legitimately
-  // send.
+  // The built-in tag rather than the prototype or the constructor's name. It
+  // reports `Date`, `Map` and `URL` reliably, and says `Object` for every
+  // plain object — including one from another realm and one carrying only a
+  // class's own data fields, which hold nothing but JSON and which a
+  // prototype test refused.
+  //
+  // A `Symbol.toStringTag` can rename the tag or blank it, so an empty tag is
+  // reported rather than read as "no problem found" — the failure mode a
+  // constructor's `name` had. The reverse, an exotic object branded `Object`,
+  // is not distinguishable from a plain one in JS and is not defended
+  // against: this guard is for a host's mistake, and a symbol-keyed brand
+  // cannot come from a JSON payload.
   const tag = Object.prototype.toString.call(value).slice(8, -1);
-  return tag === 'Object' ? undefined : tag;
+  if (tag === 'Object') return undefined;
+  return tag || 'an object with no type name';
 }
 
 /**

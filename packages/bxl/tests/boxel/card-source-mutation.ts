@@ -1,4 +1,10 @@
-import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
+import {
+  deepStrictEqual,
+  doesNotThrow,
+  ok,
+  strictEqual,
+  throws,
+} from 'node:assert';
 import {
   BxlMutationError,
   applyBxlMutationPlanToCardSource,
@@ -1450,6 +1456,59 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
     (error: unknown) =>
       error instanceof BxlMutationError && error.code === 'context-not-json',
     `a context holding ${String(notFinite)} is refused`,
+  );
+}
+
+// A `Symbol.toStringTag` can blank the built-in tag. An empty name has to be
+// reported rather than read as "no problem found", or a branded exotic value
+// reaches the document as itself.
+for (const exotic of [new Map([['k', 1]]), new Date(0)] as const) {
+  Object.defineProperty(exotic, Symbol.toStringTag, {
+    value: '',
+    configurable: true,
+  });
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-blank-tag',
+          context: { params: { payload: exotic } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError && error.code === 'context-not-json',
+    'an exotic value whose type name was blanked is still refused',
+  );
+}
+
+// A key name in a diagnostic is bounded, and cut by code point so the cut
+// cannot leave a lone surrogate in the message. Keys come from host data, so
+// a count cap alone still lets one key dominate its own error message.
+{
+  const longKey = `${'b'.repeat(59)}😀c`.repeat(20);
+  let message = '';
+  try {
+    mutateBxlCardSource(sourceFixture(), 'Image = params("nope");', {
+      schema,
+      programId: 'request-context-key-length',
+      context: { params: { [longKey]: 1 } } as never,
+      ...projectionOptions,
+    });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  ok(message.includes('…'), 'a long key name is truncated');
+  ok(!message.includes(longKey), 'the whole key does not reach the message');
+  ok(
+    message.length < 400,
+    `the message stays bounded, got ${message.length} characters`,
+  );
+  // `encodeURIComponent` throws `URIError` on a lone surrogate, which is what
+  // a cut landing inside a surrogate pair leaves behind.
+  doesNotThrow(
+    () => encodeURIComponent(message),
+    'truncating by code point leaves no lone surrogate in the message',
   );
 }
 
