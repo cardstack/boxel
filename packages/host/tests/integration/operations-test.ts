@@ -706,7 +706,7 @@ module('Integration | operations', function (hooks) {
         // A filter nests, so `on` names a type at any depth — and the thunk
         // form works there.
         query: {
-          filter: { any: [{ on: () => Activity }], eq: { status: 'open' } },
+          filter: { any: [{ on: () => Activity, eq: { status: 'open' } }] },
         },
       };
       @operation static makeActivity = {
