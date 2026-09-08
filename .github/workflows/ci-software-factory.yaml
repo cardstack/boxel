@@ -80,30 +80,30 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        # Browsers only. `install-deps` apt-installs 182 packages (114 MB) from
-        # Ubuntu's mirrors, and that half is what stalls: it has held a runner
-        # for as long as 170 minutes, and even bounded by a timeout it burned
-        # five Software Factory shards in a single day, each failing before any
-        # test ran.
-        #
-        # What it installs is fonts and GStreamer media codecs. These specs use
-        # Playwright's default Chromium and neither play media nor render
-        # non-Latin text, and the runner image already carries what Chromium
-        # links against — the Matrix suite in ci.yaml has always run Chromium
-        # with no deps step. Measured over all three shards without it: 62
-        # tests pass, the same as with it, and the step takes ~22s rather than
-        # timing out at five minutes.
+        # Browsers only. `install-deps` apt-installs fonts and GStreamer media
+        # codecs from Ubuntu's mirrors, and that half is what stalls a runner.
+        # These specs neither play media nor render non-Latin text, and the
+        # runner image already carries the libraries Chromium links against —
+        # the Matrix suite in ci.yaml runs Chromium with no deps step.
         #
         # If a future spec needs media playback or CJK glyphs, the failure will
         # be a missing codec or tofu boxes rather than a browser that cannot
         # launch — reinstate the deps step for that, ideally cached.
-        timeout-minutes: 10
-        # Chromium only. Bare `playwright install` fetches Firefox and WebKit
-        # too, which these specs never launch — and it is those browsers'
-        # libraries (libgtk-4, libgst*, libflite*) that Playwright's host
-        # validation then warns are missing, which reads alarmingly like a
-        # broken install rather than two unused browsers.
-        run: pnpm exec playwright install chromium
+        #
+        # A healthy fetch is well under a minute. The ceiling is here so that a
+        # wedged download fails this job instead of holding a runner.
+        timeout-minutes: 5
+        # Every launch in this job is headless and sets no channel — the
+        # Playwright specs, `boxel test`, and screenshot execution — and
+        # Playwright resolves that combination to `chromium-headless-shell`
+        # rather than to the full browser. `--only-shell` fetches the shell
+        # alone, which is what scripts/factory-setup.ts installs and what
+        # src/preflight.ts requires, so CI and the factory's own setup name the
+        # same target. Naming a browser also stops Playwright's host validation
+        # warning about Firefox's and WebKit's libraries (libgtk-4, libgst*,
+        # libflite*), which reads like a broken install rather than browsers
+        # nothing here launches.
+        run: pnpm exec playwright install --only-shell chromium
         working-directory: packages/software-factory
       - name: Run Node tests
         if: ${{ matrix.shard.index == 1 }}
