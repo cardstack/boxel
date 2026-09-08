@@ -2,6 +2,8 @@ import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistance } from 'date-fns';
+
+import { now as clockNow } from '@cardstack/runtime-common';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import type { Ready as ReadyFile } from '@cardstack/host/resources/file';
@@ -12,7 +14,10 @@ interface Args {
 
 export const LAST_SAVED_JUST_NOW_THRESHOLD_MS = 60 * 1000;
 
-export function formatLastSavedText(date: Date, now = Date.now()) {
+// Defaults to the shared clock rather than the real one: a test that pins the
+// instant also pins the timestamps its fixtures carry, and measuring those
+// against the wall clock reports a file saved in the future.
+export function formatLastSavedText(date: Date, now = clockNow()) {
   if (Math.abs(now - date.getTime()) < LAST_SAVED_JUST_NOW_THRESHOLD_MS) {
     return 'Last saved just now';
   }
