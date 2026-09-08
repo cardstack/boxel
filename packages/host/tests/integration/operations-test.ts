@@ -865,7 +865,7 @@ module('Integration | operations', function (hooks) {
         class Report extends CardDef {
           @operation static listSome = {
             base: 'query',
-            query: { filter: { on: CardDef }, page: { size: 0 } },
+            query: { filter: { type: CardDef }, page: { size: 0 } },
           };
         }
         return Report;
@@ -878,13 +878,179 @@ module('Integration | operations', function (hooks) {
         class Report extends CardDef {
           @operation static listSome = {
             base: 'query',
-            query: { filter: { on: CardDef }, realms: 'https://x/' as never },
+            query: { filter: { type: CardDef }, realms: 'https://x/' as never },
           };
         }
         return Report;
       },
       /non-empty array of realm URLs/,
       'and realms is the fan-out list, not one realm',
+    );
+  });
+
+  test('a query names a type only where the filter grammar has one', function (assert) {
+    class Activity extends CardDef {}
+    class Classroom extends CardDef {
+      // `type` is how the realm spells a pure card-type filter; `on` anchors a
+      // filter that carries a predicate. Both nest through `any`/`every`/`not`,
+      // and a sort entry names the type its `by` path is rooted in.
+      @operation static listAll = {
+        base: 'query',
+        query: {
+          filter: { any: [{ type: Activity }, { not: { type: Activity } }] },
+          sort: [{ by: 'title', on: Activity }],
+        },
+      };
+      @operation static listOpen = {
+        base: 'query',
+        query: { filter: { on: Activity, eq: { status: 'open' } } },
+      };
+      // A predicate holds field names, so a field genuinely called `on` is
+      // data and survives.
+      @operation static listRecent = {
+        base: 'query',
+        query: { filter: { on: Activity, range: { on: { gt: 1 } } } },
+      };
+    }
+    let declarations = getDeclaredOperations(Classroom);
+    let queryOf = (name: string) =>
+      (declarations[name] as OperationsModule.QueryOperationDeclaration)
+        .query as Record<string, never>;
+    assert.strictEqual(
+      (
+        queryOf('listAll') as unknown as {
+          filter: { any: { type: unknown }[] };
+        }
+      ).filter.any[0].type,
+      Activity,
+      'a pure card-type filter names the class itself',
+    );
+    assert.strictEqual(
+      (
+        queryOf('listAll') as unknown as {
+          sort: { on: unknown }[];
+        }
+      ).sort[0].on,
+      Activity,
+      'and so does a sort entry',
+    );
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(
+          (queryOf('listRecent') as unknown as { filter: { range: unknown } })
+            .filter.range,
+        ),
+      ),
+      { on: { gt: 1 } },
+      'a field named `on` under a predicate is data, not a type slot',
+    );
+
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { eq: { on: Activity, status: 'open' } } },
+          };
+        }
+        return Report;
+      },
+      /`query.filter.eq.on` is a function/,
+      'a class under a predicate would lower to nothing and match everything',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { on: StringField as never, eq: { a: 1 } } },
+          };
+        }
+        return Report;
+      },
+      /must be a card class/,
+      'and a type slot names a card',
+    );
+  });
+
+  test('a create names what it creates whichever form its work takes', function (assert) {
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static makeOne = {
+            base: 'create',
+            transformations: bxl`.title = "x";`,
+          } as never;
+        }
+        return Report;
+      },
+      /needs `of` to name what it creates/,
+      'a program computes fields without saying what kind of card to create',
+    );
+  });
+
+  test('a marker is identified by a key of its own', function (assert) {
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static escalate = {
+            base: 'transform',
+            // Inherited rather than own, so it serializes as `{}`.
+            set: { author: Object.create({ $ref: 'actor' }) as never },
+          };
+        }
+        return Report;
+      },
+      /a declaration carries plain objects, arrays and primitives/,
+      'a reference reached through a prototype is not a reference',
+    );
+    assert.throws(
+      () => {
+        let reference: Record<string, unknown> = { $ref: 'card' };
+        reference.value = reference;
+        class Report extends CardDef {
+          @operation static escalate = {
+            base: 'transform',
+            set: { owner: reference as never },
+          };
+        }
+        return Report;
+      },
+      /refers back to a value that contains it/,
+      'and a reference that contains itself is refused, not recursed into',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static addComment = {
+            base: 'transform',
+            params: { body: StringField },
+            append: {
+              to: 'comments',
+              value: {
+                body: { $ref: 'params', key: 'body', extra: 1 } as never,
+              },
+            },
+          };
+        }
+        return Report;
+      },
+      /"extra" is not a valid key/,
+      'a reference marker carries only what its constructor puts there',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static addActivity = {
+            base: 'transform',
+            params: { activity: { $linkTo: StringField } as never },
+            append: { to: 'activities', value: card(params('activity')) },
+          };
+        }
+        return Report;
+      },
+      /links to a card or file class/,
+      'a hand-written link marker is held to what linkTo requires',
     );
   });
 
@@ -970,19 +1136,19 @@ module('Integration | operations', function (hooks) {
       ],
       [
         'query with an unknown key',
-        { base: 'query', query: { filter: { on: CardDef }, junk: 1 } },
+        { base: 'query', query: { filter: { type: CardDef }, junk: 1 } },
         /"junk" is not a valid key for `query`/,
       ],
       [
         'query.page not an object',
-        { base: 'query', query: { filter: { on: CardDef }, page: 10 } },
+        { base: 'query', query: { filter: { type: CardDef }, page: 10 } },
         /`query.page` must be an object/,
       ],
       [
         'query.page.cursor',
         {
           base: 'query',
-          query: { filter: { on: CardDef }, page: { cursor: '' } },
+          query: { filter: { type: CardDef }, page: { cursor: '' } },
         },
         /`query.page.cursor` must be a string/,
       ],

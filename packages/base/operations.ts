@@ -490,8 +490,10 @@ export function getOperations(
 // distinction matters: what an author wrote, as opposed to what the def type
 // provides on its own.
 //
-// Every entry here went through the decorator's validation, so a clause the
-// declaration's base requires is present. That makes this the reader to
+// Every entry here went through the decorator's validation, so a clause that
+// names a type is present where its base requires one — a `create` says what
+// it creates whichever form its work takes. A clause that describes work may
+// be absent when a raw program replaces it. That makes this the reader to
 // lower from: lowering turns authored sugar into base-operation data plus
 // BXL, and a base operation reached with no declaration has nothing to
 // lower.
@@ -702,7 +704,8 @@ function assertValidDeclaration(
     (clause) =>
       declaration[clause] !== undefined && !TYPE_NAMING_KEYS.includes(clause),
   );
-  if (declaration.transformations !== undefined) {
+  let hasProgram = declaration.transformations !== undefined;
+  if (hasProgram) {
     assertBxlProgram(label, 'transformations', declaration.transformations);
     if (usedClauses.length > 0) {
       throw new Error(
@@ -711,9 +714,18 @@ function assertValidDeclaration(
         )}) or with a raw \`transformations\` program, not both`,
       );
     }
-  } else {
-    let required = REQUIRED_CLAUSE[base];
-    if (required !== undefined && declaration[required] === undefined) {
+  }
+  let required = REQUIRED_CLAUSE[base];
+  if (required !== undefined && declaration[required] === undefined) {
+    // A program replaces the work a clause describes, but not a clause that
+    // names a type: a program computes a new card's fields without saying
+    // what kind of card to create.
+    if (TYPE_NAMING_KEYS.includes(required)) {
+      throw new Error(
+        `${label}: a "${base}" operation needs \`${required}\` to name what it creates`,
+      );
+    }
+    if (!hasProgram) {
       throw new Error(
         `${label}: a "${base}" operation needs \`${required}\`, or a raw \`transformations\` program`,
       );
@@ -868,6 +880,16 @@ function assertValidParamsSchema(label: string, schema: unknown): Set<string> {
         );
       }
       assertOnlyKeys(label, `params.${name}`, type, ['$linkTo']);
+      let linked = (type as { $linkTo: unknown }).$linkTo;
+      if (
+        isDefConstructor(linked) &&
+        !isSubclassOf(linked, CardDef) &&
+        !isSubclassOf(linked, FileDef)
+      ) {
+        throw new Error(
+          `${label}: param "${name}" links to a card or file class — a link points at something with a URL`,
+        );
+      }
     } else if (!isFieldDefConstructor(type)) {
       // A scalar param is typed by the field class that serializes it, so
       // any other function — a card class, a thunk, an unrelated callable —
@@ -907,11 +929,12 @@ function isFieldDefConstructor(value: unknown): boolean {
 // flattens away, a cycle JSON refuses outright — would leave the operation
 // running against something other than what the author wrote, silently.
 //
-// A def class is legal in exactly the two slots that name a type: the `of` a
-// `create` targets, and the `on` a query filters against (at any depth, since
-// filters nest). Naming those slots individually is what keeps a thunk from
-// being mistaken for a value everywhere else in a query — a function under
-// `eq` would lower to nothing and match every card instead of one.
+// A def class is legal only where the grammar names a type: the `of` a
+// `create` targets, and a filter node's `on` or `type` (`type` is how the
+// realm spells a pure card-type filter). Those are positions, not key names —
+// under `eq` / `in` / `contains` / `range` / `matches` the keys are field
+// names, so an `on` there means a field called `on` and a class would lower
+// to nothing, leaving a saved search that matches every card instead of one.
 function assertReferencesResolve(
   label: string,
   declaration: Record<string, unknown>,
@@ -921,17 +944,24 @@ function assertReferencesResolve(
   // so a cycle is caught while the same object legitimately appearing twice
   // is validated in each place it appears.
   let ancestors = new Set<object>();
-  let walk = (node: unknown, path: string, slot: SlotKind) => {
+  let walk = (node: unknown, path: string, position: WalkPosition) => {
     if (node === null) {
       return;
     }
     if (typeof node === 'function') {
-      if (slot.definitionAllowed) {
-        return;
+      if (position !== 'type') {
+        throw new Error(
+          `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance() or card(), or a program with the bxl tag`,
+        );
       }
-      throw new Error(
-        `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance() or card(), or a program with the bxl tag`,
-      );
+      // A thunk defers its class past this point; one named directly is held
+      // to a kind a query can match or a create can mint.
+      if (isDefConstructor(node) && !isSubclassOf(node, CardDef)) {
+        throw new Error(
+          `${label}: \`${path}\` must be a card class — only a card has a type to name here`,
+        );
+      }
+      return;
     }
     if (typeof node !== 'object') {
       if (typeof node === 'symbol' || typeof node === 'bigint') {
@@ -960,8 +990,8 @@ function assertReferencesResolve(
       assertBxlProgram(label, path, node);
       return;
     }
-    if ('$ref' in node) {
-      assertValidReference(label, path, node, paramNames);
+    if (isReferenceMarker(node)) {
+      assertValidReference(label, path, node, paramNames, ancestors);
       return;
     }
     if (!Array.isArray(node) && !isPlainObject(node)) {
@@ -973,39 +1003,87 @@ function assertReferencesResolve(
     }
     ancestors.add(node);
     if (Array.isArray(node)) {
+      let elementPosition = positionInside(position);
       node.forEach((entry, index) =>
-        walk(entry, `${path}[${index}]`, {
-          definitionAllowed: false,
-          inQuery: slot.inQuery,
-        }),
+        walk(entry, `${path}[${index}]`, elementPosition),
       );
     } else {
       for (let [key, value] of Object.entries(node)) {
         // The params schema holds field classes and linkTo markers rather
         // than references, and is validated on its own terms.
-        if (path === '' && key === 'params') {
+        if (position === 'declaration' && key === 'params') {
           continue;
         }
-        let inQuery = slot.inQuery || (path === '' && key === 'query');
-        walk(value, path === '' ? key : `${path}.${key}`, {
-          definitionAllowed:
-            (path === '' && key === 'of') || (inQuery && key === 'on'),
-          inQuery,
-        });
+        walk(
+          value,
+          path === '' ? key : `${path}.${key}`,
+          positionUnder(position, key),
+        );
       }
     }
     ancestors.delete(node);
   };
-  walk(declaration, '', { definitionAllowed: false, inQuery: false });
+  walk(declaration, '', 'declaration');
 }
 
-// Where in a declaration the walk currently is, in the only two terms it
-// changes behavior on.
-interface SlotKind {
-  // This slot names a type, so a def class (or a thunk returning one) belongs.
-  definitionAllowed: boolean;
-  // Somewhere inside a `query`, where a nested `on` names a type.
-  inQuery: boolean;
+// Where in a declaration the walk currently is. Only the positions that
+// govern whether a def class belongs are named; everything else is data.
+type WalkPosition =
+  | 'declaration'
+  | 'value'
+  | 'type'
+  | 'query'
+  | 'filter'
+  | 'filterList'
+  | 'sortList'
+  | 'sortEntry';
+
+// The realm's filter grammar, followed structurally: a filter node carries an
+// optional `on` (or a `type`, for a pure card-type filter) and one predicate,
+// where `any` and `every` hold further filter nodes and `not` holds one. A
+// sort entry names the type its `by` path is rooted in. Anything else — the
+// field-name maps under the predicates, `page`, `realms` — is data.
+function positionUnder(position: WalkPosition, key: string): WalkPosition {
+  switch (position) {
+    case 'declaration':
+      if (key === 'of') {
+        return 'type';
+      }
+      return key === 'query' ? 'query' : 'value';
+    case 'query':
+      if (key === 'filter') {
+        return 'filter';
+      }
+      return key === 'sort' ? 'sortList' : 'value';
+    case 'filter':
+      if (key === 'on' || key === 'type') {
+        return 'type';
+      }
+      if (key === 'any' || key === 'every') {
+        return 'filterList';
+      }
+      return key === 'not' ? 'filter' : 'value';
+    case 'sortEntry':
+      return key === 'on' ? 'type' : 'value';
+    // A code ref written out by hand is plain data, and nothing below a
+    // value slot names a type.
+    case 'type':
+    case 'value':
+    case 'filterList':
+    case 'sortList':
+      return 'value';
+  }
+}
+
+function positionInside(position: WalkPosition): WalkPosition {
+  switch (position) {
+    case 'filterList':
+      return 'filter';
+    case 'sortList':
+      return 'sortEntry';
+    default:
+      return 'value';
+  }
 }
 
 function describeValue(value: unknown): string {
@@ -1030,7 +1108,13 @@ function assertValidReference(
   path: string,
   node: object,
   paramNames: Set<string>,
+  ancestors: Set<object>,
 ) {
+  if (ancestors.has(node)) {
+    throw new Error(
+      `${label}: \`${path}\` refers back to a value that contains it; a declaration is a tree`,
+    );
+  }
   let reference = node as Record<string, unknown>;
   switch (reference.$ref) {
     case 'params': {
@@ -1072,12 +1156,20 @@ function assertValidReference(
         }
         return;
       }
-      if (!isPlainObject(value) || !('$ref' in value)) {
+      if (!isReferenceMarker(value)) {
         throw new Error(
           `${label}: the card reference at \`${path}\` must carry a card URL or a reference to one`,
         );
       }
-      assertValidReference(label, `${path}.value`, value, paramNames);
+      ancestors.add(node);
+      assertValidReference(
+        label,
+        `${path}.value`,
+        value as object,
+        paramNames,
+        ancestors,
+      );
+      ancestors.delete(node);
       return;
     }
     default:
@@ -1128,12 +1220,14 @@ function assertOptionalReferenceKey(kind: string, key: unknown) {
   }
 }
 
+// A marker is identified by a key of its own. Reached through a prototype it
+// would validate here and then serialize as `{}`.
 function isReferenceMarker(value: unknown): boolean {
-  return isPlainObject(value) && '$ref' in (value as object);
+  return isPlainObject(value) && hasOwn(value, '$ref');
 }
 
 function isBxlMarker(value: unknown): boolean {
-  return isPlainObject(value) && '$bxl' in (value as object);
+  return isPlainObject(value) && hasOwn(value, '$bxl');
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
