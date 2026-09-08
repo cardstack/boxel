@@ -114,6 +114,19 @@ tail -200 "$process"
 # entries no service log can show, and they are listed in full; everything
 # else is only counted.
 section "traefik access log (4xx/5xx responses)"
+# traefik/traefik.yml is static configuration, read once at container start,
+# and scripts/start-traefik.sh leaves a running container alone. A container
+# started before the access log was enabled therefore records nothing, and an
+# empty log from it would read as "no failures". Traefik's API says whether the
+# running instance has the access log on, so the two are told apart.
+case "$(curl -s --max-time 5 http://localhost:4230/api/overview 2>/dev/null || true)" in
+  *'"accessLog":true'*) ;;
+  *'"accessLog":false'*)
+    echo "ACCESS LOG DISABLED in the running container: it was started before traefik/traefik.yml enabled it."
+    echo "Recreate it with: docker rm -f boxel-traefik && mise run infra:ensure-traefik"
+    ;;
+  *) echo "(could not read http://localhost:4230/api/overview; an empty log may mean the access log is off)" ;;
+esac
 total="$(wc -l < "$access" | tr -d ' ')"
 echo "${total} entries"
 if [ "$total" -gt 0 ]; then
