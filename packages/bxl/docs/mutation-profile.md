@@ -369,10 +369,12 @@ interface BxlMutationContext {
 }
 ```
 
-The host passes it as `context` on the plan options. A plan never shares
-structure with that object and is settled once made: every value a program
-reads is copied on its way into the result, so a host may keep and reuse its
-context object freely.
+The host passes it as `context` on the plan options, and may keep and reuse
+that object freely. A value is copied on its way to a program — a builtin is
+free to write into the argument it is handed, and the copy is what keeps those
+writes off the host's own object — and a written value is copied again on its
+way into the plan, so a plan never shares structure with the context and is
+settled once made.
 
 These are functions rather than `$`-prefixed bindings, matching the form an
 operation is authored in. The name `params` rather than the more obvious
@@ -408,10 +410,6 @@ silent unset these builtins refuse.
 An absent array entry is refused too, whether it is a hole or an explicit
 `undefined`. An absent object member serializes as absent, but an absent array
 entry serializes as `null` — a value the host never sent.
-
-A value a program reads is copied on its way to it, so a host may keep and
-reuse its context object: a builtin is free to write into the argument it is
-handed, and the copy is what keeps those writes off the host's own object.
 
 Only the `mutation` profile admits them. `derive` denies them because a stored
 derivation reused on later reads must not depend on whichever request last
