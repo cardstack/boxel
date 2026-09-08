@@ -11,6 +11,9 @@ import {
   type BxlCardSourceRelationship,
   type BxlMutationSchema,
 } from '../../src/mutation/index.ts';
+import { evaluateBxl } from '../../src/index.ts';
+import { mutationBuiltinLibraries } from '../../src/bxl/registry/index.ts';
+import { withRequestContext } from '../../src/jqtools/evaluate/runtimeState.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
 // array of them. Every assertion below is about a single one, addressed by its
@@ -1432,6 +1435,83 @@ for (const [typeName, value] of [
   );
 }
 
+// `NaN` and the infinities have no JSON form and would reach the document as
+// `null` — a value the host never sent.
+for (const notFinite of [NaN, Infinity, -Infinity] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-non-finite',
+          context: { params: { payload: notFinite } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError && error.code === 'context-not-json',
+    `a context holding ${String(notFinite)} is refused`,
+  );
+}
+
+// A plain object is plain whatever its prototype chain says: an object
+// carrying only a class's own data fields holds nothing but JSON, and
+// refusing it for its prototype would reject data a host may legitimately
+// send. The check reads the built-in tag, not the constructor.
+class DataOnlyActor {
+  id = 'user:ada';
+}
+strictEqual(
+  (
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-plain-tag',
+        context: { params: { payload: new DataOnlyActor() } } as never,
+      },
+    ).output as { blob: { id: string } }
+  ).blob.id,
+  'user:ada',
+  'an object holding only its own data fields is accepted',
+);
+
+// Shared structure is walked once per object, not once per path to it. A
+// graph that merely shares subtrees has exponentially many paths, so a walk
+// without that memo does exponentially many reads rather than hanging
+// outright — counted here so the assertion cannot be timing-dependent.
+{
+  let sharedReads = 0;
+  const shared: Record<string, unknown> = {};
+  Object.defineProperty(shared, 'leaf', {
+    enumerable: true,
+    get() {
+      sharedReads += 1;
+      return 1;
+    },
+  });
+  let graph: unknown = shared;
+  for (let level = 0; level < 20; level += 1) {
+    graph = { left: graph, right: graph };
+  }
+  // A program that never names the context, so the only reads are the
+  // plan-time check's own.
+  prepareBxlMutation('.copy = "unrelated";', {
+    targetKind: 'card',
+    syntax: 'solidified',
+    schema: contextSchema,
+  }).plan(
+    { blob: null, copy: null },
+    {
+      programId: 'request-context-shared-structure',
+      context: { params: { payload: graph } } as never,
+    },
+  );
+  strictEqual(
+    sharedReads,
+    1,
+    'a shared subtree is validated once, not once per path reaching it',
+  );
+}
+
 // The walk reaches nested values and does not loop on a cycle.
 throws(
   () =>
@@ -1507,6 +1587,151 @@ deepStrictEqual(readableResult.document.data.attributes?.tags, [
   'typed',
 ]);
 strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
+
+// How a key is read, and how the diagnostic lists keys. Both are properties
+// of the accessor protocol rather than of any value, so they need host
+// objects that observe being read.
+{
+  const readProbe = prepareBxlMutation('.title = actor("lazy");', {
+    targetKind: 'card',
+    syntax: 'solidified',
+    schema: {
+      fields: [
+        {
+          key: 'title',
+          label: 'Title',
+          path: ['title'],
+          fieldType: 'contains',
+          writable: true,
+        },
+      ],
+    },
+  });
+
+  // An accessor is read once per lookup, and the program receives the value
+  // that was checked — not whatever a second read would return.
+  let reads = 0;
+  const counting: Record<string, unknown> = { id: 'user:ada' };
+  Object.defineProperty(counting, 'lazy', {
+    enumerable: true,
+    get() {
+      reads += 1;
+      return `read-${reads}`;
+    },
+  });
+  const readPlan = readProbe.plan(
+    { title: null },
+    {
+      programId: 'request-context-single-read',
+      context: { actor: counting } as never,
+    },
+  );
+  strictEqual(
+    (readPlan.output as { title: string }).title,
+    'read-2',
+    'the program gets the value the lookup checked, not a later re-read',
+  );
+  strictEqual(
+    reads,
+    2,
+    'one read for the plan-time context check and one for the lookup, never a third',
+  );
+
+  // The listing names what is actually readable: an own non-enumerable key
+  // works, so it is listed, while a key held with `undefined` does not.
+  const mixed: Record<string, unknown> = { visible: 1, absent: undefined };
+  Object.defineProperty(mixed, 'hidden', {
+    enumerable: false,
+    value: 'readable',
+  });
+  strictEqual(
+    mutateBxlCardSource(sourceFixture(), 'Image = params("hidden");', {
+      schema,
+      programId: 'request-context-non-enumerable',
+      context: { params: mixed } as never,
+      ...projectionOptions,
+    }).document.data.attributes?.image,
+    'readable',
+    'an own non-enumerable key is readable',
+  );
+  throws(
+    () =>
+      mutateBxlCardSource(sourceFixture(), 'Image = params("nope");', {
+        schema,
+        programId: 'request-context-listing',
+        context: { params: mixed } as never,
+        ...projectionOptions,
+      }),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.message.includes('"hidden"') &&
+      error.message.includes('"visible"') &&
+      !error.message.includes('"absent"'),
+    'the listing names every readable key and no unreadable one',
+  );
+
+  // Producing that diagnostic must not invoke host accessors, or one throwing
+  // getter anywhere in the object replaces the message with its own error.
+  const trapped: Record<string, unknown> = { ok: 1 };
+  Object.defineProperty(trapped, 'trap', {
+    enumerable: true,
+    get() {
+      throw new Error('accessor must not run for a diagnostic');
+    },
+  });
+  throws(
+    () =>
+      prepareBxlMutation('.title = params("nope");', {
+        targetKind: 'card',
+        syntax: 'solidified',
+        schema: {
+          fields: [
+            {
+              key: 'title',
+              label: 'Title',
+              path: ['title'],
+              fieldType: 'contains',
+              writable: true,
+            },
+          ],
+        },
+      }).plan(
+        { title: null },
+        {
+          programId: 'request-context-diagnostic-accessors',
+          // The plan-time check reads accessors and reports this one; what
+          // matters is that the message below is the one it produces.
+          context: { params: { ok: 1 } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      /asks for "nope"/.test(error.message),
+    'a missing key reports as a missing key',
+  );
+  ok(
+    (() => {
+      try {
+        // Reached directly, so the plan-time check is not in the way and the
+        // diagnostic itself has to survive the throwing accessor.
+        withRequestContext({ params: trapped }, () =>
+          evaluateBxl('params("nope")', null, {
+            libraries: mutationBuiltinLibraries(),
+          }),
+        );
+        return false;
+      } catch (error) {
+        return (
+          error instanceof Error &&
+          /asks for "nope"/.test(error.message) &&
+          error.message.includes('"trap"') &&
+          !error.message.includes('accessor must not run')
+        );
+      }
+    })(),
+    'the diagnostic lists a throwing accessor without invoking it',
+  );
+}
 
 // A payload key named after a field of the card being edited. Readable syntax
 // resolves a quoted string against the field labels, so this is the case where

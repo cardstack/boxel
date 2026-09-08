@@ -323,6 +323,7 @@ export type {
   BxlCardSourceResource,
   BxlCardSourceSchemaOptions,
   BxlMutationContext,
+  BxlMutationJsonObject,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,

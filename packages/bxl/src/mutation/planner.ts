@@ -203,18 +203,22 @@ function objectId(value: BxlMutationJson | undefined): string | undefined {
  * Describe a value that is not JSON, or `undefined` when it is.
  *
  * `BxlMutationContext` declares the context as JSON, but a type is not a
- * runtime guarantee: `structuredClone` faithfully preserves a `Date`, `Map`,
- * `Set`, `RegExp`, `TypedArray` or class instance, and a `bigint` survives as
- * itself, so any of them reaches a program and can be written into the
- * document. A `bigint` is the sharpest edge — `params("v") | tostring` on one
- * yields `undefined`, which is the silent unset these builtins exist to
- * refuse — but a live `Map` in a plan is no better.
+ * runtime guarantee: a `Date`, `Map`, `Set`, `RegExp` or `TypedArray` reaches
+ * a program as itself and can be written into the document, and so does a
+ * `bigint`. The `bigint` is the sharpest edge — `params("v") | tostring` on
+ * one yields `undefined`, the silent unset these builtins exist to refuse —
+ * but a live `Map` in a plan is no better, and `NaN` reaching a document as
+ * `null` is a value the host never sent.
  */
 function nonJsonTypeName(value: unknown): string | undefined {
   if (value === null) return undefined;
   switch (typeof value) {
     case 'boolean':
+      return undefined;
     case 'number':
+      // `NaN` and the infinities have no JSON form and serialize to `null`,
+      // which is a value the host did not send appearing in the document.
+      return Number.isFinite(value) ? undefined : String(value);
     case 'string':
       return undefined;
     case 'bigint':
@@ -230,11 +234,15 @@ function nonJsonTypeName(value: unknown): string | undefined {
       break;
   }
   if (Array.isArray(value)) return undefined;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype === Object.prototype || prototype === null) return undefined;
-  // Named by constructor rather than described in prose, so the message needs
-  // no article and reads the same for `Map`, `URL` and a host's own class.
-  return (value as object).constructor?.name ?? 'a non-plain object';
+  // The built-in tag rather than the prototype or the constructor's name.
+  // It reports `Date`, `Map` and `URL` reliably, it is never empty — a
+  // constructor's `name` can be, which read as "no problem found" — and it
+  // says `Object` for every plain object, including one from another realm
+  // and one carrying a class's own data fields. Those hold nothing but JSON;
+  // rejecting them for their prototype refused data a host may legitimately
+  // send.
+  const tag = Object.prototype.toString.call(value).slice(8, -1);
+  return tag === 'Object' ? undefined : tag;
 }
 
 /**
@@ -246,7 +254,12 @@ function nonJsonTypeName(value: unknown): string | undefined {
  * rather than leaving the type declaration as the sole guard.
  */
 function assertJsonContext(context: BxlMutationContext) {
-  const seen = new Set<unknown>();
+  // Two sets, because they answer different questions. `ancestors` is the
+  // current path and finds a cycle; `cleared` is every object already walked
+  // and keeps shared structure from being walked once per route to it —
+  // without it a graph that merely shares subtrees costs exponential time.
+  const ancestors = new Set<unknown>();
+  const cleared = new Set<unknown>();
   const walk = (value: unknown, path: string) => {
     const typeName = nonJsonTypeName(value);
     if (typeName) {
@@ -260,7 +273,7 @@ function assertJsonContext(context: BxlMutationContext) {
       );
     }
     if (value === null || typeof value !== 'object') return;
-    if (seen.has(value)) {
+    if (ancestors.has(value)) {
       throw new BxlMutationError(
         'plan',
         'context-not-json',
@@ -269,7 +282,8 @@ function assertJsonContext(context: BxlMutationContext) {
           'hold a cycle.',
       );
     }
-    seen.add(value);
+    if (cleared.has(value)) return;
+    ancestors.add(value);
     if (Array.isArray(value)) {
       value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
     } else {
@@ -278,7 +292,8 @@ function assertJsonContext(context: BxlMutationContext) {
         walk((value as Record<string, unknown>)[key], `${path}.${key}`);
       }
     }
-    seen.delete(value);
+    ancestors.delete(value);
+    cleared.add(value);
   };
 
   for (const slot of ['params', 'actor', 'instance'] as const) {

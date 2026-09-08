@@ -32,6 +32,13 @@ import { JqArgumentError, JqEvaluateError } from '../../jqtools/errors.ts';
 /** How many key names an error message lists before it truncates. */
 const KEYS_IN_MESSAGE = 12;
 
+/**
+ * How much of one key name a message shows. Keys come from host data, so a
+ * count cap alone still lets a single long key dominate the message it is
+ * attached to.
+ */
+const KEY_CHARS_IN_MESSAGE = 60;
+
 type ContextSlot = keyof NativeRequestContext;
 
 /** What each slot holds, for error messages that say who should have set it. */
@@ -97,9 +104,12 @@ function describeKeys(source: Record<string, unknown>): string {
   if (keys.length === 0) return 'it has no readable keys';
   const shown = keys.slice(0, KEYS_IN_MESSAGE);
   const rest = keys.length - shown.length;
-  return `it has ${shown.map((key) => `"${key}"`).join(', ')}${
-    rest > 0 ? ` and ${rest} more` : ''
-  }`;
+  const quoted = shown.map((key) =>
+    key.length > KEY_CHARS_IN_MESSAGE
+      ? `"${key.slice(0, KEY_CHARS_IN_MESSAGE)}…"`
+      : `"${key}"`,
+  );
+  return `it has ${quoted.join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
 }
 
 function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
@@ -119,9 +129,12 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
   // intent that unsets the field. That is the silent failure these builtins
   // exist to refuse. A JSON `null` is a real value and passes through.
   //
-  // The descriptor supplies both the ownership answer and the value, so a
-  // getter is invoked once and the program receives the value that was
-  // checked rather than whatever a second read returns.
+  // The descriptor supplies both the ownership answer and the value, so this
+  // function reads an accessor once and hands back the value it checked
+  // rather than whatever a second read would return. A host that supplies a
+  // non-idempotent accessor still gets one read here and another from the
+  // plan-time context check, which is a reason for a context to be plain
+  // data.
   const descriptor = Object.getOwnPropertyDescriptor(source, key);
   const value =
     descriptor && !('value' in descriptor) ? source[key] : descriptor?.value;
