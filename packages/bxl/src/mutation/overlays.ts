@@ -50,18 +50,30 @@ interface OverlayAnchor {
 }
 
 export interface OverlayIndex {
+  /** The stored document, which answers a path ahead of any overlay. */
+  readonly stored: BxlMutationJson;
   /** Dotted path to the tier that supplied the value there. */
   readonly coverage: ReadonlyMap<string, BxlMutationOverlayTier>;
   /** Dotted path to what the host could not supply there, and why. */
   readonly unavailable: ReadonlyMap<string, BxlMutationUnavailableOverlay>;
+  /** Every supplied path, longest first, for undoing the merge. */
+  readonly supplied: readonly BxlMutationPath[];
+  /** Proper ancestors of a supplied path, so a read spanning one is cheap to spot. */
+  readonly covers: ReadonlySet<string>;
+  /** Proper ancestors of a supplied *computed* path: containers of computed values. */
+  readonly coversComputed: ReadonlySet<string>;
   readonly anchors: readonly OverlayAnchor[];
   /** True when no overlay layer participates, so every read is a source read. */
   readonly empty: boolean;
 }
 
 export const EMPTY_OVERLAY_INDEX: OverlayIndex = {
+  stored: null,
   coverage: new Map(),
+  supplied: [],
   unavailable: new Map(),
+  covers: new Set(),
+  coversComputed: new Set(),
   anchors: [],
   empty: true,
 };
@@ -124,6 +136,9 @@ export function mergeBxlMutationOverlays(
   }
 
   const coverage = new Map<string, BxlMutationOverlayTier>();
+  const supplied: BxlMutationPath[] = [];
+  const covers = new Set<string>();
+  const coversComputed = new Set<string>();
   const anchors: OverlayAnchor[] = [];
   const anchored = new Set<string>();
   for (const tier of OVERLAY_TIERS) {
@@ -142,6 +157,12 @@ export function mergeBxlMutationOverlays(
       }
       setAt(root, leaf.path, leaf.value);
       coverage.set(key, tier);
+      supplied.push(leaf.path);
+      for (let length = 1; length < leaf.path.length; length++) {
+        const ancestor = overlayPathKey(leaf.path.slice(0, length));
+        covers.add(ancestor);
+        if (tier === 'computed') coversComputed.add(ancestor);
+      }
     }
   }
 
@@ -155,8 +176,12 @@ export function mergeBxlMutationOverlays(
   return {
     root,
     index: {
+      stored,
       coverage,
+      supplied: supplied.sort((left, right) => right.length - left.length),
       unavailable,
+      covers,
+      coversComputed,
       anchors,
       empty: coverage.size === 0 && unavailable.size === 0,
     },
@@ -164,11 +189,15 @@ export function mergeBxlMutationOverlays(
 }
 
 /**
- * Which layer answers a read, and with what. A path the host declared
- * unavailable reports `unavailable` — including paths nested inside it, since
- * the host could not supply the subtree either. Otherwise an overlay answers
- * when it supplied the path, when the read sits inside a value an overlay
- * supplied, or when the value returned carries overlay-supplied descendants.
+ * Which layer answers a read, and with what.
+ *
+ * The stored document answers first: where it holds a value of its own, the
+ * read is a source read whatever the overlays say — a host that could not
+ * supply the fields of a linked Card has said nothing about the stored edge.
+ * Below that, an overlay answers when it supplied the path, when the read sits
+ * inside a value an overlay supplied, or when the value returned carries
+ * overlay-supplied descendants. A path the host declared unavailable, or one
+ * nested inside such a path, reports `unavailable`.
  */
 export function classifyOverlayRead(
   index: OverlayIndex,
@@ -179,7 +208,9 @@ export function classifyOverlayRead(
   unavailable?: BxlMutationUnavailableOverlay;
 } {
   const key = overlayPathKey(path);
-  if (index.empty) return { event: read(key, 'source', value) };
+  if (index.empty || storedAnswers(index.stored, path)) {
+    return { event: read(key, 'source', value) };
+  }
   const declared = selfOrAncestor(index.unavailable, path);
   if (declared) {
     return {
@@ -189,10 +220,34 @@ export function classifyOverlayRead(
   }
   const covered = selfOrAncestor(index.coverage, path);
   if (covered) return { event: read(key, covered, value) };
-  for (const [supplied, tier] of index.coverage) {
-    if (isWithin(supplied, key)) return { event: read(key, tier, value) };
+  if (index.covers.has(key)) {
+    return { event: read(key, tierUnder(index, path), value) };
   }
   return { event: read(key, 'source', value) };
+}
+
+function read(
+  path: string,
+  tier: BxlMutationReadEvent['tier'],
+  value: BxlMutationJson | undefined,
+): BxlMutationReadEvent {
+  return {
+    path,
+    tier,
+    outcome: value === undefined || value === null ? 'null' : 'value',
+  };
+}
+
+/** The tier that supplied the first value found beneath a path. */
+function tierUnder(
+  index: OverlayIndex,
+  path: BxlMutationPath,
+): BxlMutationOverlayTier {
+  const key = overlayPathKey(path);
+  for (const [supplied, tier] of index.coverage) {
+    if (isWithin(supplied, key)) return tier;
+  }
+  return 'computed';
 }
 
 /** What an index holds at a path, or at the nearest ancestor that carries one. */
@@ -208,24 +263,16 @@ function selfOrAncestor<Entry>(
   return undefined;
 }
 
-function read(
-  path: string,
-  tier: BxlMutationReadEvent['tier'],
-  value: BxlMutationJson | undefined,
-): BxlMutationReadEvent {
-  return {
-    path,
-    tier,
-    outcome: value === undefined || value === null ? 'null' : 'value',
-  };
-}
-
 /**
- * The overlay tier that owns a write location, if any. A write lands on an
- * overlay when it targets a path an overlay supplied, a path nested inside
- * one, or a path the host declared unavailable. Writing to an *ancestor* of an
- * overlay path stays a stored write — replacing a `linksTo` edge is a change
- * to the Card's own document, not a write through the link.
+ * The overlay tier that owns a write location, if any. Only values an overlay
+ * actually supplied are read-only; a path the host merely declared unavailable
+ * carries no value and so refuses nothing on its own.
+ *
+ * A write lands on an overlay when it targets a supplied path or one nested
+ * inside it, and — for computed values only — when it replaces a container
+ * whose contents are computed. Writing an *ancestor* of a linked value stays a
+ * stored write: replacing a `linksTo` edge changes the Card's own document,
+ * not the Card on the far side of the link.
  */
 export function overlayWriteOwner(
   index: OverlayIndex,
@@ -234,18 +281,23 @@ export function overlayWriteOwner(
   if (index.empty) return undefined;
   for (let length = path.length; length >= 1; length--) {
     const owner = overlayPathKey(path.slice(0, length));
-    const tier =
-      index.coverage.get(owner) ?? index.unavailable.get(owner)?.tier;
+    const tier = index.coverage.get(owner);
     if (tier) return { path: owner, tier };
   }
+  const key = overlayPathKey(path);
+  if (index.coversComputed.has(key)) return { path: key, tier: 'computed' };
   return undefined;
 }
 
 /**
  * Undo the merge, so a plan's `output` is the stored document the program
- * produced rather than the layered view the program read. An anchor a
- * statement wrote to — or wrote inside — belongs to the program now and is
- * left alone.
+ * produced rather than the layered view the program read.
+ *
+ * Supplied values are removed leaf by leaf, then each container the merge
+ * created is restored. Anything a statement wrote to — or wrote inside —
+ * belongs to the program and is left as the program left it, so a write to a
+ * stored sibling keeps its own value without keeping the overlay leaves
+ * alongside it.
  */
 export function restoreOverlayAnchors(
   root: BxlMutationJson,
@@ -254,19 +306,29 @@ export function restoreOverlayAnchors(
 ): BxlMutationJson {
   if (index.anchors.length === 0) return root;
   const writtenKeys = written.map(overlayPathKey);
+  const ownedByProgram = (key: string): boolean =>
+    writtenKeys.some((target) => target === key || isWithin(key, target));
+
+  for (const leaf of index.supplied) {
+    if (ownedByProgram(overlayPathKey(leaf))) continue;
+    restore(root, index.stored, leaf);
+  }
   for (const anchor of index.anchors) {
     const key = overlayPathKey(anchor.path);
-    if (
-      writtenKeys.some(
-        (target) =>
-          target === key || isWithin(target, key) || isWithin(key, target),
-      )
-    ) {
-      continue;
-    }
-    if (!hasAt(root, anchor.path.slice(0, -1))) continue;
-    if (anchor.existed) setAt(root, anchor.path, anchor.previous ?? null);
-    else if (hasAt(root, anchor.path)) deleteAt(root, anchor.path);
+    if (ownedByProgram(key)) continue;
+    if (writtenKeys.some((target) => isWithin(target, key))) continue;
+    restore(root, index.stored, anchor.path);
   }
   return root;
+}
+
+/** Put a path back to what the stored document held there. */
+function restore(
+  root: BxlMutationJson,
+  stored: BxlMutationJson,
+  path: BxlMutationPath,
+): void {
+  if (!hasAt(root, path.slice(0, -1))) return;
+  if (hasAt(stored, path)) setAt(root, path, valueAt(stored, path) ?? null);
+  else if (hasAt(root, path)) deleteAt(root, path);
 }

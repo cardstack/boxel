@@ -1322,6 +1322,40 @@ strictEqual(notSearchable.code, 'snapshot-unavailable');
 strictEqual(notSearchable.details?.path, 'cardInfo.theme');
 strictEqual(notSearchable.details?.reason, 'not-searchable');
 
+// A marker says what the host could not supply from the index; it says nothing
+// about the Card's own document. The stored relationship edge still answers.
+const shadowedEdge: BxlMutationOverlays = {
+  unavailable: [
+    { path: 'cardInfo.theme', tier: 'linked', reason: 'not-searchable' },
+  ],
+};
+strictEqual(
+  overlayMutation('.image = .cardInfo.theme.id;', { overlays: shadowedEdge })
+    .document.data.attributes?.image,
+  'https://example.test/Theme/original',
+);
+strictEqual(
+  relationship(
+    overlayMutation(`.cardInfo.theme = card(${JSON.stringify(darkTheme)});`, {
+      overlays: shadowedEdge,
+      resolveCard: (id) => (id === darkTheme ? { id } : undefined),
+    }).document,
+    'cardInfo.theme',
+  ).links?.self,
+  darkTheme,
+);
+
+// A computed value the overlay supplies as a container is read-only whole:
+// replacing or deleting the container is a write to computed values.
+const computedContainer: BxlMutationOverlays = {
+  computeds: { computedLabel: { text: 'TypeScript · language' } },
+};
+for (const program of ['.computedLabel = "written";', 'del(.computedLabel);']) {
+  const refused = overlayError(program, { overlays: computedContainer });
+  strictEqual(refused.code, 'computed-read-only');
+  strictEqual(refused.details?.path, 'computedLabel');
+}
+
 // An assert over an overlay value must say it accepts a stale answer.
 const bareAssert = overlayError(
   'assert(.computedLabel == "TypeScript · language"; "wrong label");',
@@ -1362,6 +1396,13 @@ deepStrictEqual(bestEffortUnavailable.details, {
 
 throws(
   () => overlayMutation('assert(.image; "m"; { best: "effort" });'),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'assert-option-invalid',
+);
+// The option exists only to opt in; `assert/2` is how an assert says it wants
+// stored values, so there is one spelling of each behavior.
+throws(
+  () => overlayMutation('assert(.image; "m"; { snapshot: false });'),
   (error) =>
     error instanceof BxlMutationError && error.code === 'assert-option-invalid',
 );
@@ -1408,6 +1449,92 @@ strictEqual(
 );
 // Without a computed overlay the write to a computed Field stays a no-op.
 strictEqual(withoutOverlays.plan.statements[2].affected, 0);
+
+// The card-source projection fills every schema Field, so these two rules —
+// what an overlay leaves behind under a container the merge created, and which
+// branches of an expression count as read — are exercised against the planner
+// directly, where a Field can be genuinely absent.
+const branchingSchema = {
+  fields: [
+    { key: 'image', label: 'Image', kind: 'scalar' as const, writable: true },
+    { key: 'flag', label: 'Flag', kind: 'scalar' as const, writable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      kind: 'scalar' as const,
+      writable: false,
+      writeBehavior: 'skip' as const,
+    },
+    {
+      key: 'profile',
+      label: 'Profile',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'name', label: 'Name', kind: 'scalar' as const, writable: true },
+      ],
+    },
+  ],
+};
+
+function plannerRun(
+  source: string,
+  overlays: BxlMutationOverlays,
+  onRead?: (event: BxlMutationReadEvent) => void,
+) {
+  return prepareBxlMutation(source, {
+    targetKind: 'card',
+    schema: branchingSchema,
+    syntax: 'solidified',
+  }).plan(
+    { image: 'a', flag: true, profile: null },
+    { programId: 'overlay-planner', overlays, onRead },
+  );
+}
+
+// A write to a stored sibling keeps its own value and still sheds the overlay
+// leaves that shared the container the merge created for them.
+const derivedProfile: BxlMutationOverlays = {
+  computeds: { profile: { derived: 'from the index' } },
+};
+deepStrictEqual(plannerRun('.profile.name = "Ada";', derivedProfile).output, {
+  image: 'a',
+  flag: true,
+  profile: { name: 'Ada' },
+});
+deepStrictEqual(
+  plannerRun('.image = .profile.derived;', derivedProfile).output,
+  { image: 'from the index', flag: true, profile: null },
+);
+
+// A path read only on the branch not taken must not refuse the program.
+const statusMissing: BxlMutationOverlays = {
+  unavailable: [{ path: 'status', tier: 'computed', reason: 'not-indexed' }],
+};
+const branchEvents: BxlMutationReadEvent[] = [];
+strictEqual(
+  plannerRun(
+    '.image = (if .flag then "taken" else .status end);',
+    statusMissing,
+    (event) => branchEvents.push(event),
+  ).output.image,
+  'taken',
+);
+strictEqual(
+  plannerRun('.image = (.flag // .status);', statusMissing).output.image,
+  true,
+);
+deepStrictEqual(branchEvents, [
+  { path: 'flag', tier: 'source', outcome: 'value' },
+]);
+// The condition itself runs every time, so it is read every time.
+throws(
+  () =>
+    plannerRun('.image = (if .status then "y" else "n" end);', statusMissing),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'snapshot-unavailable',
+);
 
 console.log(
   'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, stale-plan safety, and read-only computed/linked overlays passed',

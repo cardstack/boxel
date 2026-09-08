@@ -804,15 +804,31 @@ const INPUT_PRESERVING_FILTERS: ReadonlySet<string> = new Set([
   'card/1',
   'first/1',
   'has/1',
-  'IF/2',
-  'IF/3',
   'last/1',
   'not/0',
   'select/1',
 ]);
 
-function isInputPreservingFilter(name: string): boolean {
-  return INPUT_PRESERVING_FILTERS.has(name) || name.startsWith('IFS/');
+const SHORT_CIRCUIT_OPERATORS: ReadonlySet<string> = new Set([
+  '//',
+  'and',
+  'or',
+]);
+
+/**
+ * `IF`/`IFS` evaluate their branches conditionally, so only the condition
+ * positions are read on every run: argument 0 of `IF`, and the even-indexed
+ * arguments of `IFS`.
+ */
+function isConditionalFilter(name: string): boolean {
+  return name.startsWith('IF/') || name.startsWith('IFS/');
+}
+
+function conditionArguments(
+  node: FilterAst & { args: ExpressionAst[] },
+): ExpressionAst[] {
+  if (node.name.startsWith('IF/')) return node.args.slice(0, 1);
+  return node.args.filter((_argument, index) => index % 2 === 0);
 }
 
 /** The path an index chain addresses, when every segment of it is static. */
@@ -838,6 +854,12 @@ function staticPathOf(node: ExpressionAst): BxlMutationPath | undefined {
  * prefix stands in for what lies below — `.tags[].name` reports `tags`. Under-
  * reporting costs a telemetry event; over-reporting would refuse a program
  * over a path it never read.
+ *
+ * A sub-expression counts only when it is evaluated every time the containing
+ * expression is. A conditional branch — `if`/`else`, a `try` body, the right
+ * side of `//`, `and` or `or`, an `IF`/`IFS` result — is skipped, because a
+ * path read only on the branch not taken must not refuse the program or report
+ * a read that never happened.
  *
  * The empty path is a read of the expression's own input, which is the Card
  * root for most expressions and the assigned location for the value side of
@@ -883,12 +905,16 @@ export function collectMutationReadPaths(
         return;
       case 'binary': {
         walk(node.left, prefix);
-        if (node.operator !== '|') {
-          walk(node.right, prefix);
+        if (node.operator === '|') {
+          const left = staticPathOf(node.left);
+          if (left) walk(node.right, [...prefix, ...left]);
           return;
         }
-        const left = staticPathOf(node.left);
-        if (left) walk(node.right, [...prefix, ...left]);
+        // `//`, `and` and `or` reach their right side only when the left side
+        // has not already decided the result.
+        if (!SHORT_CIRCUIT_OPERATORS.has(node.operator)) {
+          walk(node.right, prefix);
+        }
         return;
       }
       case 'object':
@@ -899,19 +925,13 @@ export function collectMutationReadPaths(
         return;
       case 'if':
         walk(node.cond, prefix);
-        walk(node.then, prefix);
-        for (const elif of node.elifs ?? []) {
-          walk(elif.cond, prefix);
-          walk(elif.then, prefix);
-        }
-        if (node.else) walk(node.else, prefix);
         return;
       case 'try':
-        walk(node.body, prefix);
-        if (node.catch) walk(node.catch, prefix);
         return;
       case 'filter':
-        if (isInputPreservingFilter(node.name)) {
+        if (isConditionalFilter(node.name)) {
+          for (const arg of conditionArguments(node)) walk(arg, prefix);
+        } else if (INPUT_PRESERVING_FILTERS.has(node.name)) {
           for (const arg of node.args) walk(arg, prefix);
         }
         return;
@@ -940,7 +960,7 @@ export function collectMutationReadPaths(
 export function readAssertSnapshotOption(
   argument: ParsedMutationArgument,
   statement: number,
-): boolean {
+): true {
   const { ast } = argument;
   const entry =
     ast.type === 'object' && ast.entries.length === 1
@@ -951,16 +971,17 @@ export function readAssertSnapshotOption(
     !entry ||
     entry.key !== 'snapshot' ||
     value === undefined ||
-    value.type !== 'bool'
+    value.type !== 'bool' ||
+    value.value !== true
   ) {
     throw new BxlMutationError(
       'parse',
       'assert-option-invalid',
       statement,
-      'assert accepts one option record, written as the literal { snapshot: true }.',
+      'assert accepts one option record, written as the literal { snapshot: true }. Omit the option for an assert that requires stored values.',
     );
   }
-  return value.value;
+  return true;
 }
 
 export function parseBxlMutationProgram(

@@ -276,21 +276,34 @@ An author addresses stored, computed, and linked values through the same
 - **The stored document wins.** An overlay answers a path only where the
   stored document holds nothing — an absent key or a `null`, which is what a
   Card holds at a path it never persists. An overlay's stale copy of a stored
-  value never displaces the stored one.
-- **Overlay values are read-only.** A write that lands on a computed path
+  value never displaces the stored one, and neither does an `unavailable`
+  marker: a host that could not supply a linked Card's Fields has said nothing
+  about the stored edge that points at it.
+- **Overlay values are read-only.** A write that lands on a computed value
   fails with `computed-read-only`, and one that lands on a linked Card's Field
-  fails with `write-through-link`, each naming the path. Replacing the
-  relationship edge itself stays an ordinary write to the Card's own document.
+  fails with `write-through-link`, each naming the path. A computed value the
+  overlay supplies as a container is read-only whole, so replacing or deleting
+  the container is refused too. Writing an *ancestor* of a linked value stays
+  an ordinary write: replacing a relationship edge changes the Card's own
+  document, not the Card on the far side of the link.
 - **An unavailable read fails loudly.** `unavailable` entries name what the
   host could not supply and why (`not-indexed`, `not-searchable`,
   `key-absent`), covering the paths nested inside them. Reading one raises
   `snapshot-unavailable` carrying `{ path, tier, reason }` rather than leaking
-  a `null` into a write or a precondition.
+  a `null` into a write or a precondition. A marker carries no value, so it
+  refuses no writes on its own.
 - **An assert over an overlay says so.** Overlay values can lag the stored
   document by an indexing round, so an `assert` that reads one requires the
   three-argument form `assert(condition, message, { snapshot: true })`; without
   it the statement fails with `assert-snapshot-required`. With it, an
-  unavailable read fails the assert with the author's own message.
+  unavailable read fails the assert with the author's own message. The literal
+  `{ snapshot: true }` is the only accepted option record — `assert/2` is how
+  an assert says it requires stored values.
+- **Only what a program actually reads counts.** Reads are the paths an
+  expression resolves on every run. A conditional branch — `if`/`else`, the
+  right side of `//`, `and` or `or`, an `IF`/`IFS` result — is not one, so a
+  path read only on the branch not taken neither refuses the program nor
+  reports a read that never happened.
 - **Every read is reported.** `onRead` fires once per path a program's
   expressions resolve, in program order, with the tier that answered
   (`source`, `computed`, `linked`) and the outcome (`value`, `null`,
