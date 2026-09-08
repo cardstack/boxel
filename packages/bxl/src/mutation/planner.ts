@@ -35,9 +35,9 @@ import {
 } from './json-path.ts';
 import {
   classifyOverlayRead,
+  EMPTY_OVERLAY_INDEX,
   mergeBxlMutationOverlays,
   overlayWriteOwner,
-  restoreOverlayAnchors,
   type OverlayIndex,
 } from './overlays.ts';
 import {
@@ -46,6 +46,7 @@ import {
   type BxlMutationFieldType,
   type BxlMutationIntent,
   type BxlMutationJson,
+  type BxlMutationOverlays,
   type BxlMutationPath,
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
@@ -90,23 +91,29 @@ interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
+  /** The host's overlay values, if any, as supplied to `plan`. */
+  source?: BxlMutationOverlays;
+  /** What the overlays answer for, against the document as it now stands. */
   overlays: OverlayIndex;
   onRead?: (event: BxlMutationReadEvent) => void;
-  /**
-   * The working document with overlay values removed, refreshed before each
-   * statement. Intents record what the Card stored, never what an overlay
-   * answered a read with.
-   */
-  storedView: BxlMutationJson;
 }
 
-/** What the Card holds at a location, with no overlay value standing in. */
-function storedBefore(
-  location: ResolvedLocation,
+/**
+ * The document an expression is evaluated against: the Card's own document
+ * with the overlays layered under it.
+ *
+ * The planner's working state is the Card's document alone, so a plan's output
+ * and its intents carry stored values without anything having to be undone.
+ * The view exists only for the duration of an evaluation, and shares the
+ * working document's shape — an overlay never adds or retypes a container —
+ * so a path resolved in one addresses the same element in the other.
+ */
+function readView(
+  root: BxlMutationJson,
   context: PlannerContext,
-): BxlMutationJson | undefined {
-  if (context.overlays.empty) return location.value;
-  return valueAt(context.storedView, location.path);
+): BxlMutationJson {
+  if (context.overlays.empty) return root;
+  return mergeBxlMutationOverlays(root, context.source).root;
 }
 
 /**
@@ -265,7 +272,11 @@ function resolveLocations(
 ): ResolvedLocation[] {
   let items: Item[];
   try {
-    items = evaluateItems(argument.ast, [createItem(root)], context);
+    items = evaluateItems(
+      argument.ast,
+      [createItem(readView(root, context))],
+      context,
+    );
   } catch (error) {
     throw new BxlMutationError(
       'plan',
@@ -660,7 +671,7 @@ function planAssignment(
     if (statement.operator === '=') {
       next = evaluateSingleJson(
         statement.value,
-        output,
+        readView(output, context),
         context,
         statement.statement,
       );
@@ -675,7 +686,7 @@ function planAssignment(
     } else {
       const right = evaluateSingleJson(
         statement.value,
-        output,
+        readView(output, context),
         context,
         statement.statement,
       );
@@ -731,13 +742,10 @@ function planAssignment(
         'card(id) may only be assigned to a relationship Field.',
       );
     }
-    const before = storedBefore(location, context);
     const intent: BxlMutationIntent = {
       op: 'set',
       path: [...location.path],
-      ...(location.exists && before !== undefined
-        ? { before: clone(before) }
-        : {}),
+      ...(location.exists ? { before: clone(location.value!) } : {}),
       after: clone(next as BxlMutationJson),
     };
     intents.push(intent);
@@ -769,7 +777,13 @@ function jsonValue(
   statement: number,
   reads: ReadContext = {},
 ): BxlMutationJson | CardReference {
-  return evaluateSingleJson(argument, root, context, statement, reads);
+  return evaluateSingleJson(
+    argument,
+    readView(root, context),
+    context,
+    statement,
+    reads,
+  );
 }
 
 function planCall(
@@ -786,9 +800,13 @@ function planCall(
       const bestEffort =
         statement.args.length === 3 &&
         readAssertSnapshotOption(statement.args[2]!, number);
-      const reads = recordReads(statement.args[0]!, root, context, number, {
-        policy: 'best-effort',
-      });
+      const reads = recordReads(
+        statement.args[0]!,
+        readView(root, context),
+        context,
+        number,
+        { policy: 'best-effort' },
+      );
       if (reads.overlay && !bestEffort) {
         const overlay = reads.events.find((event) => event.tier !== 'source')!;
         throw new BxlMutationError(
@@ -803,7 +821,11 @@ function planCall(
       // `snapshot-unavailable`, so the author's wording reaches the caller.
       const condition = reads.unavailable
         ? []
-        : evaluateItems(statement.args[0]!.ast, [createItem(root)], context);
+        : evaluateItems(
+            statement.args[0]!.ast,
+            [createItem(readView(root, context))],
+            context,
+          );
       if (
         reads.unavailable ||
         condition.length !== 1 ||
@@ -869,7 +891,7 @@ function planCall(
       intents.push({
         op: 'set',
         path: location.path,
-        before: clone(storedBefore(location, context) ?? null),
+        before: clone(location.value!),
         after: clone(value as BxlMutationJson),
       });
       output = setAt(output, location.path, value as BxlMutationJson);
@@ -962,7 +984,7 @@ function planCall(
           intents.push({
             op: 'delete',
             path: location.path,
-            before: clone(storedBefore(location, context) ?? null),
+            before: clone(location.value!),
           });
         }
         output = deleteAt(output, location.path);
@@ -1358,7 +1380,6 @@ export function prepareBxlMutation(
           'The loaded Card revision does not match baseRevision.',
         );
       }
-      const overlays = mergeBxlMutationOverlays(snapshot, planOptions.overlays);
       const context: PlannerContext = {
         prepare: preparedOptions,
         plan: {
@@ -1367,20 +1388,23 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
-        overlays: overlays.index,
+        ...(planOptions.overlays ? { source: planOptions.overlays } : {}),
+        overlays: EMPTY_OVERLAY_INDEX,
         ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
-        storedView: overlays.root,
       };
       const before = clone(snapshot);
-      let working = overlays.root;
-      const written: BxlMutationPath[] = [];
+      let working = clone(snapshot);
       const statementPlans: BxlMutationStatementPlan[] = [];
 
       for (const statement of parsed.statements) {
         const draft = clone(working);
-        context.storedView = overlays.index.empty
-          ? draft
-          : restoreOverlayAnchors(clone(working), overlays.index, written);
+        // Rebuild the index against the document as this statement finds it,
+        // so what an overlay answers for is described in the positions the
+        // statement will address rather than the ones it started life in.
+        context.overlays = mergeBxlMutationOverlays(
+          draft,
+          planOptions.overlays,
+        ).index;
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
           result =
@@ -1413,7 +1437,6 @@ export function prepareBxlMutation(
           }
         }
         working = result.root;
-        written.push(...result.plan.paths);
         statementPlans.push(result.plan);
       }
 
@@ -1428,7 +1451,7 @@ export function prepareBxlMutation(
           .map((path) => [pathKey(path), path]),
       );
       const paths = [...pathMap.values()];
-      const output = restoreOverlayAnchors(working, overlays.index, paths);
+      const output = working;
       return {
         language: 'bxl-mutation/1',
         programId: planOptions.programId,

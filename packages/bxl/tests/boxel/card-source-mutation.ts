@@ -1603,7 +1603,10 @@ const collectionSnapshot = {
   image: 'stored',
   summary: null,
   tags: ['language', 'web'],
-  rows: [{ qty: 2, total: null }],
+  rows: [
+    { qty: 2, total: null },
+    { qty: 3, total: null },
+  ],
 };
 
 function collectionPlan(source: string, overlays?: BxlMutationOverlays) {
@@ -1718,7 +1721,108 @@ strictEqual(
 deepStrictEqual(
   collectionPlan('.rows = [];', { computeds: { rows: [{ total: 20 }] } })
     .intents,
-  [{ op: 'set', path: ['rows'], before: [{ qty: 2, total: null }], after: [] }],
+  [
+    {
+      op: 'set',
+      path: ['rows'],
+      before: [
+        { qty: 2, total: null },
+        { qty: 3, total: null },
+      ],
+      after: [],
+    },
+  ],
+);
+
+// A statement that renumbers a collection an overlay has filled into. The
+// planner's working document is the Card's own, so a position always means the
+// same element in both — nothing has to be mapped back afterwards.
+const rowsFilled: BxlMutationOverlays = {
+  computeds: { rows: [{ total: 20 }, { total: 30 }] },
+};
+const holesFilled: BxlMutationOverlays = {
+  computeds: { tags: ['from-index-0', 'from-index-1'] },
+};
+for (const [source, overlays] of [
+  ['del(.rows[0]);', rowsFilled],
+  ['prepend(.rows; {"qty": 1});', rowsFilled],
+  ['move_item_to_end(.rows[0]; .rows);', rowsFilled],
+  ['insert_item_before({"qty": 9}; .rows[1]);', rowsFilled],
+  ['del(.tags[0]);', holesFilled],
+  ['prepend(.tags; "new");', holesFilled],
+] as const) {
+  deepStrictEqual(
+    collectionPlan(source, overlays).output,
+    collectionPlan(source).output,
+    source,
+  );
+  deepStrictEqual(
+    collectionPlan(source, overlays).intents,
+    collectionPlan(source).intents,
+    source,
+  );
+}
+
+// The positions an overlay answers for are equally the ones a later statement
+// addresses, so a program that shifts a collection and then writes into it is
+// not refused over a position the overlay used to occupy.
+deepStrictEqual(
+  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;', rowsFilled).output,
+  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;').output,
+);
+
+// `first` stops at its first output and `last` has to reach the end, so only
+// `first`'s later comma branches are conditional. Both otherwise read what
+// they are given, and the guards see it.
+const derivedOnly: BxlMutationOverlays = {
+  computeds: { summary: { text: 'derived' } },
+};
+for (const expression of ['.summary.text', 'first(.summary.text)']) {
+  strictEqual(
+    collectionError(`assert(${expression} == "derived"; "m");`, derivedOnly)
+      .code,
+    'assert-snapshot-required',
+    expression,
+  );
+}
+// A comma branch inside `first` may never run, so it is not a read.
+strictEqual(
+  collectionPlan('.image = first(.tags[0], .summary.text);', derivedOnly)
+    .affected,
+  1,
+);
+
+// A pipe whose left side is a static path is proven, and reported under it.
+strictEqual(
+  collectionError('assert((.summary | .text) == "derived"; "m");', derivedOnly)
+    .code,
+  'assert-snapshot-required',
+);
+
+// The walk reports a lower bound: a path reached through a shape it cannot
+// decompose — a computed key, `getpath`, a variable binding — is not proven,
+// so the guards say nothing about it and the assert is allowed to stand. This
+// is the documented limit of a syntactic walk, not an oversight; the read
+// still sees the layered value.
+for (const expression of [
+  'getpath(["summary","text"])',
+  '.[("sum" + "mary")].text',
+]) {
+  const unproven = collectionPlan(
+    `assert(${expression} == "derived"; "m");\n.image = "not refused";`,
+    derivedOnly,
+  );
+  strictEqual(unproven.affected, 1, expression);
+}
+
+// `{ "snapshot": true }` is the same record as `{ snapshot: true }`.
+strictEqual(
+  collectionPlan(
+    'assert(.summary.text == "derived"; "m"; { "snapshot": true });\n' +
+      '.image = "asserted";',
+    derivedOnly,
+  ).affected,
+  1,
 );
 
 // The overlay layer is inert without overlays: no index, no grafts, and the

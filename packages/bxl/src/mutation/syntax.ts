@@ -803,9 +803,22 @@ function argument(
 const INPUT_PRESERVING_FILTERS: ReadonlySet<string> = new Set([
   'card/1',
   'has/1',
+  'last/1',
   'not/0',
   'select/1',
 ]);
+
+/**
+ * `first(f)` stops at f's first output, so only the first branch of a comma
+ * inside it is certain to run. Every other input-preserving builtin above
+ * consumes its argument whole — `last/1` included, which has to reach the end
+ * of the stream to know what the last value was.
+ */
+function firstOperand(node: ExpressionAst): ExpressionAst {
+  return node.type === 'binary' && node.operator === ','
+    ? firstOperand(node.left)
+    : node;
+}
 
 const SHORT_CIRCUIT_OPERATORS: ReadonlySet<string> = new Set([
   '//',
@@ -850,9 +863,16 @@ function staticPathOf(node: ExpressionAst): BxlMutationPath | undefined {
  * A sub-expression counts only when it is evaluated every time the containing
  * expression is. Anything conditional is skipped — `if`/`else`, a `try` body,
  * the right side of `//`, `and` or `or`, everything after the first argument
- * of `IF`/`IFS`, and the later operands of a short-circuiting builtin — because
- * a path read only on the branch not taken must not refuse the program or
- * report a read that never happened.
+ * of `IF`/`IFS`, and the branches of a comma inside `first` — because a path
+ * read only on the branch not taken must not refuse the program or report a
+ * read that never happened.
+ *
+ * What the walk reports is therefore a lower bound, not the complete set. A
+ * path reached through a variable binding, `reduce`/`foreach`, a computed key,
+ * `getpath`, `..`, or any builtin outside the input-preserving set above is
+ * not proven and not reported. Reads through those shapes see the same layered
+ * values as any other read; they are simply not the ones the overlay guards
+ * can speak about.
  *
  * The empty path is a read of the expression's own input, which is the Card
  * root for most expressions and the assigned location for the value side of
@@ -924,6 +944,8 @@ export function collectMutationReadPaths(
       case 'filter':
         if (isConditionalFilter(node.name)) {
           if (node.args[0]) walk(node.args[0], prefix);
+        } else if (node.name === 'first/1' && node.args[0]) {
+          walk(firstOperand(node.args[0]), prefix);
         } else if (INPUT_PRESERVING_FILTERS.has(node.name)) {
           for (const arg of node.args) walk(arg, prefix);
         }
@@ -960,9 +982,17 @@ export function readAssertSnapshotOption(
       ? ast.entries[0]
       : undefined;
   const value = entry?.value;
+  // `{ snapshot: … }` and `{ "snapshot": … }` are the same record; a generated
+  // program is as likely to quote the key as not.
+  const key =
+    typeof entry?.key === 'string'
+      ? entry.key
+      : entry?.key?.type === 'str' && !entry.key.interpolated
+        ? entry.key.value
+        : undefined;
   if (
     !entry ||
-    entry.key !== 'snapshot' ||
+    key !== 'snapshot' ||
     value === undefined ||
     value.type !== 'bool' ||
     value.value !== true

@@ -317,12 +317,18 @@ An author addresses stored, computed, and linked values through the same
   unavailable read fails the assert with the author's own message. The literal
   `{ snapshot: true }` is the only accepted option record — `assert/2` is how
   an assert says it requires stored values.
-- **Only what a program actually reads counts.** Reads are the paths an
-  expression resolves on every run. Anything conditional is not one — `if`/
-  `else`, the right side of `//`, `and` or `or`, everything after the first
-  argument of `IF`/`IFS`, and the later operands of a short-circuiting builtin
-  — so a path read only on the branch not taken neither refuses the program nor
-  reports a read that never happened.
+- **The guards see the paths a program can be *proven* to read.** Reads are
+  collected by walking an expression, and the walk reports a lower bound. It
+  skips anything conditional — `if`/`else`, the right side of `//`, `and` or
+  `or`, everything after the first argument of `IF`/`IFS`, a comma branch
+  inside `first` — because a path read only on the branch not taken must not
+  refuse the program. It also cannot see through a variable binding,
+  `reduce`/`foreach`, a computed key, `getpath`, `..`, or a builtin that may
+  re-root its argument. A read reached that way sees the same layered value as
+  any other, but the three guarantees above — the loud unavailable failure, the
+  assert opt-in, and the read event — do not speak for it. Treat them as
+  catching the ordinary `.path` spelling, not as a boundary that cannot be
+  stepped around.
 - **Every read is reported.** `onRead` fires once per path a program's
   expressions resolve, in program order, with the tier that answered
   (`source`, `computed`, `linked`) and the outcome (`value`, `null`,
@@ -330,8 +336,11 @@ An author addresses stored, computed, and linked values through the same
 
 Overlays are additive: a plan built without them behaves exactly as one built
 before they existed. A plan's `output`, and the `before` recorded on every
-intent, carry stored values only — an overlay answers reads, and never stands
-in for what the Card held. The planner
+intent, carry stored values only — the planner's working state is the Card's
+own document, and the layered view exists only for the duration of an
+expression's evaluation, so an overlay answers reads without ever standing in
+for what the Card held. That also means a position means the same element in
+both: a program that renumbers a collection renumbers the view with it. The planner
 receives overlay values already fetched by the host; it never queries the index
 itself.
 
@@ -1019,7 +1028,7 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `execution-identity-conflict`, `limit-exceeded`;
 - `stream-incomplete`, `commit-failed`, `rollback-conflict`;
 - `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
-  `assert-snapshot-required`.
+  `assert-snapshot-required`, `assert-option-invalid`.
 
 ## Additional use cases covered by this contract
 
