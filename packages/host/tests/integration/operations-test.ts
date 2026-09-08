@@ -1018,6 +1018,75 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('a declared query is checked against the realm grammar itself', function (assert) {
+    class Activity extends CardDef {}
+    class Report extends CardDef {
+      @operation static search = {
+        base: 'query',
+        params: { term: StringField },
+        query: {
+          filter: { type: Activity },
+          // A payload may supply the full-text term.
+          queryString: params('term'),
+        },
+      };
+    }
+    assert.strictEqual(
+      (
+        (
+          getDeclaredOperations(Report)
+            .search as OperationsModule.QueryOperationDeclaration
+        ).query as { queryString: { $ref: string } }
+      ).queryString.$ref,
+      'params',
+      'a query carrying a reference is left to the placement rule',
+    );
+
+    // With no reference to stand in for a concrete value, the realm's own
+    // validator sees the query — so a shape it would reject at invocation is
+    // rejected where the class is defined.
+    assert.throws(
+      () => {
+        class Listing extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            // An `any` element is a filter node, so it needs a predicate.
+            query: { filter: { any: [{ on: Activity }] } },
+          };
+        }
+        return Listing;
+      },
+      /is not a query the realm accepts/,
+      'a filter node with no predicate is not a filter',
+    );
+    assert.throws(
+      () => {
+        class Listing extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { type: Activity }, sort: [{ by: 'title' }] },
+          };
+        }
+        return Listing;
+      },
+      /is not a query the realm accepts/,
+      'and a sort by a card field names the type it is rooted in',
+    );
+    assert.throws(
+      () => {
+        class Listing extends CardDef {
+          @operation static listSome = {
+            base: 'query',
+            query: { filter: { type: Activity }, queryString: 42 as never },
+          };
+        }
+        return Listing;
+      },
+      /`query.queryString` must be a search term/,
+      'a full-text term is a string, or a reference to one',
+    );
+  });
+
   test('a create names what it creates whichever form its work takes', function (assert) {
     assert.throws(
       () => {

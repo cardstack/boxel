@@ -1,3 +1,5 @@
+import { assertQuery, InvalidQueryError } from '@cardstack/runtime-common';
+
 import {
   BaseDef,
   CardDef,
@@ -258,9 +260,15 @@ export type OperationOutput =
 // code ref is derived when the declaration is lowered; a query that filters on
 // the very class it is declared on takes the thunk form, since the class
 // binding is not yet initialized while its own statics are being built.
+// The realm's query, restricted to what a saved search declares. `realm` in
+// the singular is left out because a declared query's scope is the fan-out
+// list; `asData` and `fields` are left out because a query operation answers
+// with entry rows, a different response shape than a data query.
 export interface QueryDeclaration {
   readonly filter?: OperationQueryValue;
   readonly sort?: OperationQueryValue;
+  // The full-text term, which a payload may supply.
+  readonly queryString?: string | ParamsReference | ActorReference;
   // The realm pages by offset: `size` is the page length and `number` is the
   // 0-based page. There is no cursor paging to declare — the index generation
   // a request is pinned to is the server's to mint, not the author's.
@@ -741,7 +749,80 @@ function assertValidDeclaration(
     );
   }
   assertReferencesResolve(label, declaration, paramNames);
+  if (base === 'query') {
+    assertQueryIsWellFormed(label, declaration.query);
+  }
 }
+
+// The realm's own validator, consulted as a second opinion on a declared
+// query.
+//
+// The placement rule in the walk above encodes where the filter grammar puts
+// a type, which means it has to stay in step with a grammar defined
+// elsewhere. This hands the query to `assertQuery` — that grammar's one
+// definition — with every def class swapped for a sentinel that reads as a
+// code ref where a type belongs and as a function everywhere else. The realm
+// therefore re-checks both the placement and the rest of the shape, so a
+// grammar this module has not kept up with surfaces here rather than at
+// invocation.
+//
+// Skipped when the query carries a typed reference: a reference stands in for
+// a value the realm types concretely — a `matches` string, an `in` array — so
+// before lowering resolves it, the realm would reject the shape it has.
+function assertQueryIsWellFormed(label: string, query: unknown) {
+  if (!isPlainObject(query) || holdsReference(query)) {
+    return;
+  }
+  try {
+    assertQuery(withTypeSentinels(query));
+  } catch (error) {
+    if (error instanceof InvalidQueryError) {
+      throw new Error(
+        `${label}: \`query\` is not a query the realm accepts — ${error.message}`,
+      );
+    }
+    throw error;
+  }
+}
+
+function holdsReference(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some(holdsReference);
+  }
+  if (!isPlainObject(node)) {
+    return false;
+  }
+  if (hasOwn(node, '$ref') || hasOwn(node, '$bxl')) {
+    return true;
+  }
+  return Object.values(node).some(holdsReference);
+}
+
+// A def class stands in for the code ref lowering derives from it. The
+// sentinel satisfies the realm's code-ref check, which reads `module` and
+// `name`, while carrying a function as its first entry — the entry the
+// realm's JSON check reaches — so it is accepted exactly where a type belongs
+// and refused wherever a value does.
+function withTypeSentinels(node: unknown): unknown {
+  if (typeof node === 'function') {
+    return {
+      notJson: () => {},
+      module: TYPE_SLOT_SENTINEL,
+      name: TYPE_SLOT_SENTINEL,
+    };
+  }
+  if (Array.isArray(node)) {
+    return node.map(withTypeSentinels);
+  }
+  if (!isPlainObject(node)) {
+    return node;
+  }
+  return Object.fromEntries(
+    Object.entries(node).map(([key, value]) => [key, withTypeSentinels(value)]),
+  );
+}
+
+const TYPE_SLOT_SENTINEL = '$operation-type-slot';
 
 function assertValidClauses(
   label: string,
@@ -825,7 +906,24 @@ function assertValidClauses(
         `${label}: \`query\` must be an object with at least one of \`filter\`, \`sort\`, \`page\` and \`realms\``,
       );
     }
-    assertOnlyKeys(label, 'query', query, ['filter', 'sort', 'page', 'realms']);
+    assertOnlyKeys(label, 'query', query, [
+      'filter',
+      'sort',
+      'queryString',
+      'page',
+      'realms',
+    ]);
+    if (query.queryString !== undefined) {
+      let term = query.queryString;
+      if (
+        !(typeof term === 'string' && term.length > 0) &&
+        !isReferenceMarker(term)
+      ) {
+        throw new Error(
+          `${label}: \`query.queryString\` must be a search term, or a reference to one`,
+        );
+      }
+    }
     if (query.page !== undefined) {
       if (!isPlainObject(query.page)) {
         throw new Error(
