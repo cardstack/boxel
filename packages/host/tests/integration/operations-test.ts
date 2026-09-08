@@ -406,8 +406,42 @@ module('Integration | operations', function (hooks) {
         }
         return Report;
       },
-      /is already a static on this class/,
+      /already resolves on this class/,
       'an operation name that shadows a system static is refused',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          // @ts-expect-error a declaration is not what Function#toString is
+          @operation static toString = { base: 'read' };
+        }
+        return Report;
+      },
+      /already resolves on this class/,
+      'nor one that shadows something every class inherits',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static __proto__ = { base: 'read' };
+        }
+        return Report;
+      },
+      /already resolves on this class/,
+      'and least of all a name that would reset a prototype instead of keying a map',
+    );
+
+    class Report extends CardDef {
+      @operation static addComment = {
+        base: 'transform',
+        params: { body: StringField },
+        append: { to: 'comments', value: { body: params('body') } },
+      };
+    }
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Report)),
+      ['addComment'],
+      'a name-keyed store holds operations and nothing it might inherit',
     );
   });
 

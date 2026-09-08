@@ -502,12 +502,7 @@ function defConstructorFor(
 function ownDeclarations(
   owner: unknown,
 ): Record<string, OperationDeclaration> | undefined {
-  if (
-    !Object.prototype.hasOwnProperty.call(
-      owner as object,
-      operationDeclarations,
-    )
-  ) {
+  if (!hasOwn(owner as object, operationDeclarations)) {
     return undefined;
   }
   return (owner as Record<symbol, Record<string, OperationDeclaration>>)[
@@ -522,7 +517,10 @@ function recordDeclaration(
 ) {
   let declarations = ownDeclarations(owner);
   if (!declarations) {
-    declarations = {};
+    // A name-keyed store with no prototype: nothing an operation could be
+    // called is also an inherited member here, so a name can only ever add a
+    // key rather than reach something the store inherits.
+    declarations = Object.create(null) as Record<string, OperationDeclaration>;
     Object.defineProperty(owner, operationDeclarations, {
       value: declarations,
       configurable: true,
@@ -531,6 +529,10 @@ function recordDeclaration(
     });
   }
   declarations[key] = declaration;
+}
+
+function hasOwn(target: object, key: string | symbol): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key);
 }
 
 function isDefConstructor(target: unknown): target is typeof BaseDef {
@@ -559,17 +561,22 @@ function assertOperationTarget(target: unknown, key: string): typeof BaseDef {
 }
 
 // A name that already resolves on the class would shadow, or be shadowed by,
-// whatever provides it. An inherited operation of the same name is the one
-// exception: that is how a subclass overrides it.
+// whatever provides it — a system static like `displayName`, or something a
+// class inherits from `Function.prototype`. An inherited operation of the
+// same name is the one exception: that is how a subclass overrides it. The
+// exemption is an own-property test, because an `in` test against the merged
+// record answers true for every `Object.prototype` member (`toString`,
+// `constructor`, `__proto__`) and would wave through exactly the names that
+// must not become operations.
 function assertNameAvailable(owner: typeof BaseDef, key: string) {
   if (!(key in owner)) {
     return;
   }
-  if (key in declaredOperations(owner)) {
+  if (hasOwn(declaredOperations(owner), key)) {
     return;
   }
   throw new Error(
-    `${declarationLabel(owner, key)}: "${key}" is already a static on this class, so it cannot name an operation`,
+    `${declarationLabel(owner, key)}: "${key}" already resolves on this class, so it cannot name an operation`,
   );
 }
 
