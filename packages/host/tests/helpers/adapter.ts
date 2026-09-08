@@ -144,17 +144,6 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error('bug: loader needs to be set in test adapter');
     }
 
-    // Nothing to prepare means nothing to prepare it with. The loader here is
-    // constructed per test realm, so its module cache is empty and this import
-    // evaluates card-api and its whole graph — measured at ~280ms, paid on
-    // every setup whether or not there is an object to mark saved or shim.
-    // Contents given as source strings, and realms given no contents at all,
-    // populate nothing.
-    if (this.#potentialModulesAndInstances.length === 0) {
-      this.#ready.fulfill();
-      return;
-    }
-
     let cardApi = await this.#loader.import<CardAPI>(
       '@cardstack/base/card-api',
     );
