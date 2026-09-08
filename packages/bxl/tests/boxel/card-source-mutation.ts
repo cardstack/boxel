@@ -1493,6 +1493,15 @@ function plannerRun(
   );
 }
 
+/** The planner's output as a record, for reading one Field out of it. */
+function plannerOutput(
+  source: string,
+  overlays: BxlMutationOverlays,
+  onRead?: (event: BxlMutationReadEvent) => void,
+): Record<string, unknown> {
+  return plannerRun(source, overlays, onRead).output as Record<string, unknown>;
+}
+
 // A write to a stored sibling keeps its own value and still sheds the overlay
 // leaves that shared the container the merge created for them.
 const derivedProfile: BxlMutationOverlays = {
@@ -1514,15 +1523,15 @@ const statusMissing: BxlMutationOverlays = {
 };
 const branchEvents: BxlMutationReadEvent[] = [];
 strictEqual(
-  plannerRun(
+  plannerOutput(
     '.image = (if .flag then "taken" else .status end);',
     statusMissing,
     (event) => branchEvents.push(event),
-  ).output.image,
+  ).image,
   'taken',
 );
 strictEqual(
-  plannerRun('.image = (.flag // .status);', statusMissing).output.image,
+  plannerOutput('.image = (.flag // .status);', statusMissing).image,
   true,
 );
 deepStrictEqual(branchEvents, [
