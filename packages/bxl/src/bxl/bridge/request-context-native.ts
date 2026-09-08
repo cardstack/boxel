@@ -75,8 +75,13 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
 }
 
 function describeKeys(source: Record<string, unknown>): string {
-  const keys = Object.keys(source).sort();
-  if (keys.length === 0) return 'it has no keys';
+  // Only keys carrying a value are listed. A key present with `undefined` is
+  // not one a program can read, so naming it in the message would point the
+  // reader at a key that fails the same way the one they asked for did.
+  const keys = Object.keys(source)
+    .filter((key) => source[key] !== undefined)
+    .sort();
+  if (keys.length === 0) return 'it has no readable keys';
   const shown = keys.slice(0, KEYS_IN_MESSAGE);
   const rest = keys.length - shown.length;
   return `it has ${shown.map((key) => `"${key}"`).join(', ')}${
@@ -93,7 +98,12 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
     );
   }
   const source = slotObject(slot, call);
-  if (!Object.hasOwn(source, key)) {
+  // A key held with an explicit `undefined` counts as absent. `undefined` is
+  // not a JSON value, and yielding it would put it in front of the planner as
+  // one — writing an intent that unsets the field, which is the silent
+  // failure these builtins exist to refuse. A JSON `null` is a real value and
+  // passes through.
+  if (source[key] === undefined) {
     const hint = OPTIONAL_KEY_HINTS[slot];
     throw new JqEvaluateError(
       `${call} asks for "${key}", which is not in ${

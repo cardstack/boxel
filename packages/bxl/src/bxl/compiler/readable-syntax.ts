@@ -556,8 +556,18 @@ const PATH_RESERVED = new Set(['all', 'item', 'last', 'position', 'row']);
  * compile to `params(.image)` and read the card's own field instead of the
  * payload. Since a key and a field sharing a name is the common case rather
  * than an odd one, the quoted argument to these three stays a literal.
+ *
+ * Matched case-insensitively so the guard holds for whatever name dispatch
+ * settles on. These calls are case-sensitive today, like the mutation
+ * dialect's other calls — `Append` no more resolves than `Params` does — but
+ * a name that folds here without folding in this set would resolve the key
+ * against the field labels again, and silently.
  */
 const KEY_NAME_ARGUMENT_CALLS = new Set(['actor', 'instance', 'params']);
+
+function takesKeyNameArgument(name: string): boolean {
+  return KEY_NAME_ARGUMENT_CALLS.has(name.toLowerCase());
+}
 
 const POSITIONAL_SELECTOR_KEYWORDS = new Set([
   'first',
@@ -2321,7 +2331,7 @@ class Compiler {
     // A literal key name is passed through untouched rather than compiled as
     // an expression, so it cannot be resolved into a field path. A bare label
     // still compiles normally, which is how a computed key stays available.
-    if (KEY_NAME_ARGUMENT_CALLS.has(name) && ranges.length === 1) {
+    if (takesKeyNameArgument(name) && ranges.length === 1) {
       const [keyStart, keyEnd] = ranges[0];
       const keyToken = this.tokens[keyStart];
       if (keyEnd - keyStart === 1 && keyToken?.type === 'string') {

@@ -14,6 +14,9 @@ export type BxlMutationJson =
   | BxlMutationJson[]
   | { [key: string]: BxlMutationJson };
 
+/** A JSON object, as distinct from the other JSON shapes. */
+export type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
+
 export type BxlMutationPath = Array<string | number>;
 
 export type BxlMutationFieldType =
@@ -165,15 +168,17 @@ export interface BxlMutationPrepareOptions {
  *
  * Each slot is optional and a program that asks for one the host left out
  * fails rather than reading `null`, so a host supplies exactly the slots its
- * operation declares.
+ * operation declares. Every slot is a keyed object, because that is what the
+ * builtins can read a key out of — a bare string or array would type-check
+ * against a looser declaration and then fail every lookup at runtime.
  */
 export interface BxlMutationContext {
   /** What the caller sent, keyed by the operation's declared parameters. */
-  params?: BxlMutationJson;
+  params?: BxlMutationJsonObject;
   /** The authenticated caller. `id` is the stable principal. */
-  actor?: { id: string; [key: string]: BxlMutationJson | undefined };
+  actor?: { id: string; [key: string]: BxlMutationJson };
   /** The stored document the program is editing. */
-  instance?: BxlMutationJson;
+  instance?: BxlMutationJsonObject;
 }
 
 export interface BxlMutationPlanOptions {

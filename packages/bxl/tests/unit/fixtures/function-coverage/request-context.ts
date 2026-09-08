@@ -114,6 +114,22 @@ const cases: CoverageCase[] = [
     throws: /needs the stored document being edited/,
   },
   {
+    covers: 'actor/1',
+    source: 'actor("displayName")',
+    // A key held with an explicit `undefined` is absent, not a value:
+    // `undefined` is not JSON, and yielding it would reach the planner as a
+    // value and write an intent that unsets the field.
+    context: { actor: { id: 'user:ada', displayName: undefined } },
+    throws: /asks for "displayName".*it has "id"/,
+  },
+  {
+    covers: 'actor/1',
+    source: 'actor("displayName")',
+    // A JSON `null`, by contrast, is a real value and passes through.
+    context: { actor: { id: 'user:ada', displayName: null } },
+    expected: null,
+  },
+  {
     covers: 'instance/1',
     source: 'instance("nickname")',
     context,

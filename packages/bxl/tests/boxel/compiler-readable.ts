@@ -260,6 +260,15 @@ check('a bare label argument still compiles as an expression', () => {
   strictEqual(compiledWithSchema('params(Severity)'), 'params(.severity)');
 });
 
+check('a mixed-case spelling still holds the key literal', () => {
+  // These calls are case-sensitive, like the mutation dialect's others, so a
+  // mixed-case spelling resolves to no builtin either way. What matters is
+  // which way it fails: holding the key literal means it fails as an unknown
+  // function rather than quietly reading the card's own field.
+  strictEqual(compiledWithSchema('Params("Severity")'), 'Params("Severity")');
+  strictEqual(compiledWithSchema('ACTOR("name")'), 'ACTOR("name")');
+});
+
 check('every other call still resolves a quoted label', () => {
   // The exception is scoped to the three request-context builtins; the
   // label-resolving behavior everything else relies on is untouched.
