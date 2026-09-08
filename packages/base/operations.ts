@@ -1,5 +1,6 @@
 import {
   BaseDef,
+  CardDef,
   FieldDef,
   FileDef,
   type BaseDefConstructor,
@@ -53,11 +54,12 @@ import {
 // declared; the override then keeps its own literal types.
 // ============================================================================
 
-// The behaviors every declaration builds on. They are implied by the def type
-// rather than declared — a `CardDef` has all six, a `FileDef` only `read` —
-// so `getOperations` never synthesizes an entry for one. A declaration *named*
-// after a base op is an author's override of it and does come back, which is
-// how a card specializes its own `read` projection or `update` validation.
+// The behaviors every declaration builds on. Which of them a def carries is
+// implied by the def type rather than written in author code — a `CardDef`
+// has all six, a `FileDef` only `read`, a `FieldDef` none — so
+// `getOperations` synthesizes them. A declaration *named* after a base op is
+// an author's override of it and takes its place, which is how a card
+// specializes its own `read` projection or `update` validation.
 export const BASE_OPERATIONS = [
   'read',
   'create',
@@ -403,25 +405,70 @@ export const operation = function (
   };
 } as unknown as PropertyDecorator;
 
-// The one read path for `@operation` declarations: merges them by name up the
-// prototype chain, so a subclass adds new names and overrides inherited ones
-// wholesale, per name. Read through this rather than a class's static
-// directly — a plain property read sees only the nearest declaration and
-// drops everything an ancestor declared. The built-in base operations are
-// implied by the def type and are not included unless the author declared one
-// explicitly to override it.
+// Every operation a def carries: the base operations its def type implies,
+// plus everything its authors declared, with a declaration taking the place
+// of the base operation it names. This is the read path a caller wants —
+// dispatch, lowering and an invocation surface all need the whole set, and
+// which part of it came from author code is not something they branch on.
+//
+// `create` and `query` are type-scoped rather than instance-scoped: they come
+// back for a card def either way, but they target the type, not one instance.
 export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
 ): Record<string, OperationDeclaration> {
-  let owner =
-    typeof classOrInstance === 'function'
-      ? classOrInstance
-      : classOrInstance?.constructor;
-  if (typeof owner !== 'function' || !isDefConstructor(owner)) {
-    throw new Error(
-      `getOperations() takes a class that extends BaseDef, or an instance of one`,
-    );
+  let owner = defConstructorFor(classOrInstance, 'getOperations');
+  let operations: Record<string, OperationDeclaration> = {};
+  for (let base of impliedOperations(owner)) {
+    // A base operation with nothing declared on it is the declaration
+    // `{ base }`; the cast is only because a union does not narrow from a
+    // computed discriminant.
+    operations[base] = { base } as OperationDeclaration;
   }
+  return Object.assign(operations, declaredOperations(owner));
+}
+
+// Only what `@operation` declarations put on the def, merged by name up the
+// prototype chain so a subclass adds new names and overrides inherited ones
+// wholesale, per name. Read through this rather than a class's static
+// directly — a plain property read sees only the nearest declaration and
+// drops everything an ancestor declared. Use it over `getOperations` when the
+// distinction matters: what an author wrote, as opposed to what the def type
+// provides on its own.
+export function getDeclaredOperations(
+  classOrInstance: BaseDef | typeof BaseDef,
+): Record<string, OperationDeclaration> {
+  return declaredOperations(
+    defConstructorFor(classOrInstance, 'getDeclaredOperations'),
+  );
+}
+
+// Which base operations a def type carries. Overriding one is a matter of
+// declaring an operation by its name; nothing here is written in author code.
+function impliedOperations(
+  owner: typeof BaseDef,
+): readonly BaseOperationName[] {
+  if (isSubclassOf(owner, FieldDef)) {
+    // A field's instances have no URL, so nothing is invocable on one; field
+    // data is reached through the operations of the card that contains it.
+    return [];
+  }
+  if (isSubclassOf(owner, CardDef)) {
+    return BASE_OPERATIONS;
+  }
+  if (isSubclassOf(owner, FileDef)) {
+    // A file's metadata is content-derived and read-only: there is no
+    // JSON:API mutation surface for anything else to reach.
+    return READ_ONLY;
+  }
+  // The one operation every addressable def shares.
+  return READ_ONLY;
+}
+
+const READ_ONLY = ['read'] as const;
+
+function declaredOperations(
+  owner: typeof BaseDef,
+): Record<string, OperationDeclaration> {
   // Collect declaration levels base-most first so a subclass's entry lands
   // after (and thus overrides) its ancestor's.
   let levels: Record<string, OperationDeclaration>[] = [];
@@ -434,6 +481,22 @@ export function getOperations(
     current = Object.getPrototypeOf(current);
   }
   return Object.assign({}, ...levels);
+}
+
+function defConstructorFor(
+  classOrInstance: BaseDef | typeof BaseDef,
+  reader: string,
+): typeof BaseDef {
+  let owner =
+    typeof classOrInstance === 'function'
+      ? classOrInstance
+      : classOrInstance?.constructor;
+  if (typeof owner !== 'function' || !isDefConstructor(owner)) {
+    throw new Error(
+      `${reader}() takes a class that extends BaseDef, or an instance of one`,
+    );
+  }
+  return owner;
 }
 
 function ownDeclarations(
@@ -502,7 +565,7 @@ function assertNameAvailable(owner: typeof BaseDef, key: string) {
   if (!(key in owner)) {
     return;
   }
-  if (key in getOperations(owner)) {
+  if (key in declaredOperations(owner)) {
     return;
   }
   throw new Error(

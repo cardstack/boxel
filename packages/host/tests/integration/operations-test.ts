@@ -20,6 +20,7 @@ import type * as OperationsModule from '@cardstack/base/operations';
 let loader: Loader;
 let operation: (typeof OperationsModule)['operation'];
 let getOperations: (typeof OperationsModule)['getOperations'];
+let getDeclaredOperations: (typeof OperationsModule)['getDeclaredOperations'];
 let params: (typeof OperationsModule)['params'];
 let actor: (typeof OperationsModule)['actor'];
 let instance: (typeof OperationsModule)['instance'];
@@ -52,10 +53,19 @@ module('Integration | operations', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    ({ operation, getOperations, params, actor, instance, card, bxl, linkTo } =
-      await loader.import<typeof OperationsModule>(
-        '@cardstack/base/operations',
-      ));
+    ({
+      operation,
+      getOperations,
+      getDeclaredOperations,
+      params,
+      actor,
+      instance,
+      card,
+      bxl,
+      linkTo,
+    } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    ));
   });
 
   test('getOperations merges declarations up the prototype chain, subclass winning per name', function (assert) {
@@ -96,17 +106,32 @@ module('Integration | operations', function (hooks) {
     }
 
     assert.deepEqual(
-      Object.keys(getOperations(Report)).sort(),
+      Object.keys(getDeclaredOperations(Report)).sort(),
       ['addComment', 'escalate'],
       'a class sees the operations it declares',
     );
     assert.deepEqual(
-      Object.keys(getOperations(ExternalReport)).sort(),
+      Object.keys(getDeclaredOperations(ExternalReport)).sort(),
       ['addComment', 'escalate', 'listMine'],
       'a subclass sees its own operations and the ones it inherits',
     );
     assert.deepEqual(
-      getOperations(Report).escalate,
+      Object.keys(getOperations(ExternalReport)).sort(),
+      [
+        'addComment',
+        'create',
+        'delete',
+        'escalate',
+        'listMine',
+        'query',
+        'read',
+        'transform',
+        'update',
+      ],
+      'and reads them alongside the base operations its def type carries',
+    );
+    assert.deepEqual(
+      getDeclaredOperations(Report).escalate,
       {
         base: 'transform',
         transformations: { $bxl: '.status = "escalated";' },
@@ -140,10 +165,53 @@ module('Integration | operations', function (hooks) {
       getOperations(ExternalReport).escalate,
       'and reads the very declarations the class holds',
     );
+  });
+
+  test('the base operations a def type carries come back without being declared', function (assert) {
     assert.deepEqual(
       getOperations(CardDef),
+      {
+        read: { base: 'read' },
+        create: { base: 'create' },
+        update: { base: 'update' },
+        delete: { base: 'delete' },
+        query: { base: 'query' },
+        transform: { base: 'transform' },
+      },
+      'a card def carries all six, implied by the def type',
+    );
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(CardDef)),
+      [],
+      'none of which is written in author code',
+    );
+    assert.deepEqual(
+      getOperations(FileDef),
+      { read: { base: 'read' } },
+      "a file's metadata is read-only, so a file def carries only read",
+    );
+    assert.deepEqual(
+      getOperations(FieldDef),
       {},
-      'the built-in base operations are implied by the def type, not declared',
+      'a field has no URL, so nothing is invocable on one',
+    );
+
+    class Report extends CardDef {
+      // Specializing a base operation is a matter of declaring it by name.
+      @operation static read = {
+        base: 'read',
+        output: { title: true, comments: true },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(getOperations(Report).read)),
+      { base: 'read', output: { title: true, comments: true } },
+      'the declaration takes the place of the base operation it names',
+    );
+    assert.deepEqual(
+      Object.keys(getOperations(Report)).sort(),
+      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      'and adds no name, because it is that base operation',
     );
   });
 
@@ -307,7 +375,7 @@ module('Integration | operations', function (hooks) {
       @operation static readRedacted = { base: 'read', output: { name: true } };
     }
     assert.deepEqual(
-      Object.keys(getOperations(Attachment)),
+      Object.keys(getDeclaredOperations(Attachment)),
       ['readRedacted'],
       'a read operation is declarable on a file definition',
     );
@@ -455,7 +523,7 @@ module('Integration | operations', function (hooks) {
   test('getOperations rejects a target that is not a card definition', function (assert) {
     assert.throws(
       () => getOperations({} as never),
-      /takes a class that extends BaseDef/,
+      /getOperations\(\) takes a class that extends BaseDef/,
       'operations hang off a definition, so a plain object reads none',
     );
   });
@@ -537,7 +605,7 @@ module('Integration | operations', function (hooks) {
       'the key a reference names is carried in the marker and in its type',
     );
     assert.deepEqual(
-      Object.keys(getOperations(Report)),
+      Object.keys(getDeclaredOperations(Report)),
       ['addComment'],
       'a declaration written against the exported types is recorded like any other',
     );
