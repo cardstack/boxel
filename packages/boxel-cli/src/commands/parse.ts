@@ -107,6 +107,13 @@ const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
 const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'runtime-common')
   : join(PACKAGES_PATH, 'runtime-common');
+// `@cardstack/bxl` is card-facing — any card module may import it for a
+// `computeVia` formula — and its package `exports` point at `.ts` source
+// rather than emitted declarations, so the bundle is a source copy and
+// the alias targets it the same way the monorepo layout does.
+const BXL_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'bxl')
+  : join(PACKAGES_PATH, 'bxl', 'src');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -118,13 +125,32 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // The temp parse workspace needs the CLI's runtime deps resolvable so
 // glint can type-check card code: `@glint/ember-tsc` (and its
 // `-private/dsl`, which every compiled template imports), `content-tag`,
-// the packages card code commonly imports — `@glimmer/component`,
-// `@glimmer/tracking` — plus `qunit` / `qunit-dom` for `.test.gts`.
-// Imports outside that set surface as "Cannot find module …"; the fix is
-// adding the package as a boxel-cli dependency, not shimming it.
+// and every package the host runtime makes importable from card code.
 //
-// In the monorepo (no bundled-types) host's node_modules carries the full
-// transitive set in one place, so a single symlink suffices.
+// That last set is the one that matters for correctness, and it is not a
+// judgement call: it is the list the host shims onto the virtual network
+// in `packages/host/app/lib/externals.ts`. A card may import any of them
+// and run, so parse must be able to type-check any of them —
+// `ember-modifier`, `ember-concurrency`, `date-fns`, `lodash-es`, … Most
+// are declared boxel-cli dependencies; the rest resolve through a path
+// alias below, through glint's Ember environment, or through a generated
+// ambient declaration. `tests/card-runtime-packages.test.ts` fails when a
+// shimmed package is covered by none of those.
+//
+// A shim the CLI can't resolve is worse than a missing feature: glint
+// reports "Cannot find module …" against correct card code, inviting the
+// author to rewrite code that was never broken.
+//
+// One gap this cannot close: a workspace patch under `patchedDependencies`
+// applies in the monorepo only. `matrix-js-sdk`'s patch widens its event
+// interfaces, so a card typing an `app.boxel.*` matrix event checks clean
+// here and errors against a published install's unpatched declarations.
+//
+// In the monorepo (no bundled-types) host's node_modules carries most of
+// the set in one place, so a single symlink covers it. Host doesn't
+// declare quite everything it shims, so a package host reaches only
+// transitively — or not at all — can resolve in a published install and
+// not in monorepo dev.
 const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
 
 // In a published install those deps can be split across dirs. Usually
@@ -139,11 +165,13 @@ const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
 // The set to link is exactly the CLI's own declared `dependencies`: each
 // is there so card code (or a `.test.gts`) can resolve it —
 // `@glint/ember-tsc`, `content-tag`, `@glimmer/*`, `qunit`, `qunit-dom`,
-// `@types/qunit`, `@universal-ember/test-support`, … Deriving the list
-// from package.json (rather than hand-maintaining one) keeps it from
-// silently drifting out of date — a curated list already dropped
-// `@types/qunit` and `@universal-ember/test-support`, each a
-// published-install-only "Cannot find module" regression.
+// `@types/qunit`, `@universal-ember/test-support`, the host's card-facing
+// shim set, … Deriving the list from package.json rather than
+// hand-maintaining one keeps it from silently drifting out of date.
+//
+// `@types/*` entries earn their place here: a package that ships no
+// declarations of its own (`lodash-es`, `rsvp`) type-checks only when its
+// `@types` counterpart is linked alongside it.
 const CLI_DEPENDENCY_PACKAGES = (() => {
   try {
     let pkg = JSON.parse(
@@ -626,6 +654,14 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
+          // Bundled `@cardstack/bxl` source imports its siblings by
+          // explicit `.ts` specifier. Without this each of those is a
+          // TS5097 — none reaches the caller (they're outside the temp
+          // dir, so the loop below drops them), but they still count
+          // toward `totalDiagnosticLines`, which is what tells a real
+          // "glint resolved nothing" breakage from a clean run. Safe
+          // under `noEmit`, and it keeps that signal meaningful.
+          allowImportingTsExtensions: true,
           // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
           // Workspaces routinely include `.test.gts` files that call
           // `assert.dom(...)` without importing qunit-dom directly (they
@@ -642,9 +678,16 @@ async function runGlintCheck(
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
             '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
+            '@cardstack/bxl': [`${BXL_PATH}/index`],
+            '@cardstack/bxl/*': [`${BXL_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
-            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
+            // The host registers each tool module under both its
+            // `tools/` specifier and the pre-rename `commands/` one, so
+            // card content that still carries the old spelling loads.
+            // Both aliases therefore target `tools/`, which is where the
+            // modules live.
+            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
             // Card code imports host tools as
             // `@cardstack/boxel-host/tools/<name>`.
             '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],

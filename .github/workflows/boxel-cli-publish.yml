@@ -37,6 +37,12 @@ on:
     branches: [main]
     paths:
       - "packages/boxel-cli/**"
+      # `bundled-types/bxl` is a copy of `packages/bxl/src`, and it is the
+      # type surface `boxel parse` checks a card's `computeVia` formulas
+      # against. A BXL export the copy predates is one the host serves and
+      # the published CLI rejects — the false diagnostic this bundle
+      # exists to prevent — so a BXL change has to cut a release too.
+      - "packages/bxl/src/**"
   workflow_dispatch:
     inputs:
       confirm:

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import sinon from 'sinon';
@@ -54,7 +55,7 @@ function signedPost(
   return req.send(rawBody);
 }
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('POST /_delegate-session', function (hooks) {
     let request: SuperTest<Test>;
 

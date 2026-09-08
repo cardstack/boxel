@@ -28,7 +28,8 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
   </template>
 
   private get styles() {
-    let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
+    let { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing } =
+      this.args.model;
     let styles = [];
     if (fontFamily) {
       styles.push(`font-family: ${fontFamily}`);
@@ -42,6 +43,9 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
     if (lineHeight) {
       styles.push(`line-height: ${lineHeight}`);
     }
+    if (letterSpacing) {
+      styles.push(`letter-spacing: ${letterSpacing}`);
+    }
     return sanitizeHtmlSafe(styles.join('; '));
   }
 }
@@ -53,6 +57,7 @@ export default class TypographyField extends FieldDef {
   @field fontSize = contains(CSSValueField);
   @field fontWeight = contains(CSSValueField);
   @field lineHeight = contains(CSSValueField);
+  @field letterSpacing = contains(CSSValueField);
   @field sampleText = contains(StringField);
 
   get fieldEntries(): CssVariableEntry[] | undefined {
@@ -118,12 +123,14 @@ export default class TypographyField extends FieldDef {
 
   static edit = class Edit extends Component<typeof TypographyField> {
     private get styles() {
-      let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
+      let { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing } =
+        this.args.model;
       let styles = [];
       if (fontFamily) styles.push(`font-family: ${fontFamily}`);
       if (fontSize) styles.push(`font-size: ${fontSize}`);
       if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
       if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+      if (letterSpacing) styles.push(`letter-spacing: ${letterSpacing}`);
       return sanitizeHtmlSafe(styles.join('; '));
     }
 
@@ -150,6 +157,11 @@ export default class TypographyField extends FieldDef {
           </FieldContainer>
           <FieldContainer @label='Line Height' @vertical={{true}}>
             <@fields.lineHeight />
+          </FieldContainer>
+        </div>
+        <div class='typography-edit-row typography-edit-row--2col'>
+          <FieldContainer @label='Letter Spacing' @vertical={{true}}>
+            <@fields.letterSpacing />
           </FieldContainer>
         </div>
         <FieldContainer @label='Sample Text' @vertical={{true}}>
@@ -202,6 +214,7 @@ export default class TypographyField extends FieldDef {
         { key: 'fontSize', label: 'Font size' },
         { key: 'fontWeight', label: 'Font weight' },
         { key: 'lineHeight', label: 'Line height' },
+        { key: 'letterSpacing', label: 'Letter spacing' },
       ];
       for (let { key, label } of labels) {
         let value = model[key] as string | undefined;

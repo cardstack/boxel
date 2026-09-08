@@ -16,5 +16,6 @@ import './credit-tracking-test.ts';
 import './user-delegated-realm-server-session-test.ts';
 import './read-realm-file-test.ts';
 import './read-realm-file-fulfillment-test.ts';
+import './chat-completion-request-test.ts';
 
 QUnit.start();
