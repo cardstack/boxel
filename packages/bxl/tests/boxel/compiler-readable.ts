@@ -12,6 +12,7 @@
 
 import { strictEqual } from 'node:assert';
 import { compileBxl, evaluateBxl } from '../../src/index.ts';
+import type { ReadableSchema } from '../../src/index.ts';
 import {
   baselinePatient,
   fuzzShellRecord,
@@ -218,6 +219,51 @@ check('§11 explicit { readableSyntax: false } accepts pure jq', () => {
     readableSyntax: false,
   });
   strictEqual(result.value, 'Moderate');
+});
+
+// ----------------------------------------------------------------
+// Request-context builtins: the key argument is a name, not a label.
+
+const patientSchema: ReadableSchema = {
+  fields: [
+    { key: 'severity', label: 'Severity', path: ['severity'] },
+    { key: 'name', label: 'Name', path: ['name'] },
+  ],
+};
+const compiledWithSchema = (src: string) =>
+  compileBxl(src, { schema: patientSchema }).source;
+
+check('params/actor/instance keep a literal key that names a field', () => {
+  // A quoted string is normally resolved against the schema's field labels,
+  // which is how a multi-word label is written. For these three the argument
+  // names a key in the payload, the caller, or the stored document, so it has
+  // to survive even when a field of the same name exists — otherwise
+  // `params("Severity")` would read the card's own severity.
+  strictEqual(compiledWithSchema('params("Severity")'), 'params("Severity")');
+  strictEqual(compiledWithSchema('actor("name")'), 'actor("name")');
+  strictEqual(compiledWithSchema('instance("Name")'), 'instance("Name")');
+});
+
+check('a key with characters a label could not have survives', () => {
+  strictEqual(compiledWithSchema('params("order-id")'), 'params("order-id")');
+  strictEqual(compiledWithSchema('params("a b")'), 'params("a b")');
+});
+
+check('the no-argument forms compile unchanged', () => {
+  strictEqual(compiledWithSchema('actor()'), 'actor()');
+  strictEqual(compiledWithSchema('instance()'), 'instance()');
+});
+
+check('a bare label argument still compiles as an expression', () => {
+  // Only a quoted key is held literal. A bare label is a field reference, so
+  // a computed key remains expressible.
+  strictEqual(compiledWithSchema('params(Severity)'), 'params(.severity)');
+});
+
+check('every other call still resolves a quoted label', () => {
+  // The exception is scoped to the three request-context builtins; the
+  // label-resolving behavior everything else relies on is untouched.
+  strictEqual(compiledWithSchema('UPPER("Name")'), 'UPPER(.name)');
 });
 
 // ----------------------------------------------------------------

@@ -21,6 +21,7 @@ import { formulaMathCases } from './formula-math.ts';
 import { formulaStatisticalCases } from './formula-statistical.ts';
 import { formulaStatsCases } from './formula-stats.ts';
 import { formulaTextCases } from './formula-text.ts';
+import { requestContextCases } from './request-context.ts';
 import { validationCases } from './validation.ts';
 
 export const functionCoverageCases: CoverageCase[] = [
@@ -38,6 +39,7 @@ export const functionCoverageCases: CoverageCase[] = [
   ...formulaFinancialCases,
   ...validationCases,
   ...authorizationCases,
+  ...requestContextCases,
 ];
 
 /**

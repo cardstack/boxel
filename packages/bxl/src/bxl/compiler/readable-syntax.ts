@@ -546,6 +546,19 @@ const JQ_ZERO_ARG_CASE_FOLD_FILTERS = new Set([
 
 const PATH_RESERVED = new Set(['all', 'item', 'last', 'position', 'row']);
 
+/**
+ * Calls whose argument names a key rather than describing a value: the
+ * request-context builtins.
+ *
+ * Readable syntax otherwise resolves a quoted string against the schema's
+ * field labels — that is how a multi-word label like `"Packing Notes"` is
+ * written — so `params("Image")` on a card with an `Image` field would
+ * compile to `params(.image)` and read the card's own field instead of the
+ * payload. Since a key and a field sharing a name is the common case rather
+ * than an odd one, the quoted argument to these three stays a literal.
+ */
+const KEY_NAME_ARGUMENT_CALLS = new Set(['actor', 'instance', 'params']);
+
 const POSITIONAL_SELECTOR_KEYWORDS = new Set([
   'first',
   'last',
@@ -2303,6 +2316,22 @@ class Compiler {
       );
       this.index = close + 1;
       return compiledLet;
+    }
+
+    // A literal key name is passed through untouched rather than compiled as
+    // an expression, so it cannot be resolved into a field path. A bare label
+    // still compiles normally, which is how a computed key stays available.
+    if (KEY_NAME_ARGUMENT_CALLS.has(name) && ranges.length === 1) {
+      const [keyStart, keyEnd] = ranges[0];
+      const keyToken = this.tokens[keyStart];
+      if (keyEnd - keyStart === 1 && keyToken?.type === 'string') {
+        this.index = close + 1;
+        return {
+          source: `${name}(${keyToken.raw ?? JSON.stringify(keyToken.value)})`,
+          changed: originalName !== name,
+          warnings: [],
+        };
+      }
     }
 
     // Thread the caller's `.` scope through into each argument's compile.

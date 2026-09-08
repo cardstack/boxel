@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -11,7 +11,10 @@ import {
   type Item,
   isTrue,
 } from '../jqtools/evaluate/utils/utils.ts';
-import { withRuntimeDiagnostics } from '../jqtools/evaluate/runtimeState.ts';
+import {
+  withRequestContext,
+  withRuntimeDiagnostics,
+} from '../jqtools/evaluate/runtimeState.ts';
 import type {
   ExpressionAst,
   NormalBinaryOperator,
@@ -25,6 +28,7 @@ import {
 } from './syntax.ts';
 import {
   BxlMutationError,
+  type BxlMutationContext,
   type BxlMutationField,
   type BxlMutationFieldType,
   type BxlMutationIntent,
@@ -71,6 +75,13 @@ interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
+  /**
+   * The planner's own copy of the request context, taken once per plan. A
+   * value a program reads out of it can end up written into the document, so
+   * copying here keeps the host's object from being aliased by the result —
+   * and keeps a later edit to that object from changing a plan already made.
+   */
+  requestContext?: BxlMutationContext;
 }
 
 function clone<T>(value: T): T {
@@ -187,10 +198,17 @@ function evaluateItems(
   input: Item[],
   context: PlannerContext,
 ): Item[] {
-  const runtime = withRuntimeDiagnostics(
-    () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
-    context.prepare.runtimeLimits,
-  );
+  const evaluate = () =>
+    withRuntimeDiagnostics(
+      () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
+      context.prepare.runtimeLimits,
+    );
+  // Scoped outside the diagnostics frame, and around every statement's
+  // evaluation, so `params`/`actor`/`instance` read this plan's context
+  // wherever in the program they appear.
+  const runtime = context.requestContext
+    ? withRequestContext(context.requestContext, evaluate)
+    : evaluate();
   if (runtime.error) throw runtime.error;
   return runtime.result ?? [];
 }
@@ -1243,7 +1261,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    mutationBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({
@@ -1287,6 +1305,9 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
+        requestContext: planOptions.context
+          ? clone(planOptions.context)
+          : undefined,
       };
       const before = clone(snapshot);
       let working = clone(snapshot);

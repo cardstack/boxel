@@ -61,6 +61,7 @@ export type {
 export { BxlMutationError } from './types.ts';
 
 export type {
+  BxlMutationContext,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,

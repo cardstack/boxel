@@ -20,6 +20,7 @@ import {
 import { formulaContribJqFilters } from '../bridge/formula-contrib-jq.ts';
 import { formulaContribNativeFilters } from '../bridge/formula-contrib-native.ts';
 import { authorizationLibrary } from './authorization.ts';
+import { requestContextLibrary } from './request-context.ts';
 
 export const formulaLibrary: BuiltinLibrary = {
   jq: formulaContribJqFilters,
@@ -30,6 +31,7 @@ export const BXL_REGISTRY: Record<string, BuiltinLibrary> = {
   ...CORE_REGISTRY,
   authorization: authorizationLibrary,
   formula: formulaLibrary,
+  'request-context': requestContextLibrary,
 };
 
 /**
@@ -44,6 +46,7 @@ export const BUILTIN_LIBRARY_NAMES = [
   'core',
   'authorization',
   'formula',
+  'request-context',
   'formula-statistical',
   'formula-bessel',
   'formula-engineering',
@@ -61,6 +64,7 @@ export const EAGER_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'core',
   'authorization',
   'formula',
+  'request-context',
 ];
 
 /** The lazily chunked libraries, as the complement of the eager ones. */
@@ -73,6 +77,29 @@ export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'core',
   'formula',
 ];
+
+/**
+ * The library set a mutation program resolves against: whatever the caller
+ * asked for, plus the request-context builtins the mutation dialect always
+ * offers.
+ *
+ * Appending, rather than naming a fixed list, is what keeps the lazy formula
+ * families reachable from a mutation program: `loadAllFormulaExtensions`
+ * appends them to {@link DEFAULT_BUILTIN_LIBRARIES} in place, so a separate
+ * default here would freeze the set as it stood before those chunks loaded.
+ *
+ * `request-context` is deliberately not in {@link DEFAULT_BUILTIN_LIBRARIES}.
+ * A card's computed fields resolve against that list, and `params`/`actor`/
+ * `instance` have no meaning there — the `derive` profile denies them, and
+ * leaving them unresolvable means a computed field cannot even name one.
+ */
+export function mutationBuiltinLibraries(
+  libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
+): BuiltinLibraryName[] {
+  return libraries.includes('request-context')
+    ? [...libraries]
+    : [...libraries, 'request-context'];
+}
 
 const resolvedRegistryCache = new Map<string, ResolvedBuiltinRegistry>();
 

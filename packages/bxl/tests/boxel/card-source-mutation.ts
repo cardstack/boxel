@@ -1187,6 +1187,224 @@ strictEqual(
   computedSkip.document.data.attributes?.image,
   'computed-write-was-skipped',
 );
+// The request-context builtins. A card operation reads the caller's payload
+// through `params`, the caller through `actor`, and the stored document
+// through `instance`; the host supplies all three through `context`.
+const requestContext = {
+  params: { tag: 'typed', expectedStatus: 'language', caption: 'from Ada' },
+  actor: { id: 'user:ada', displayName: 'Ada' },
+  instance: { id: 'https://example.test/TierItem/typescript', revision: 7 },
+};
+
+const contextSource = sourceFixture();
+const contextResult = mutateBxlCardSource(
+  contextSource,
+  'assert(.tags[0] == params("expectedStatus"), "tags must still lead with the language");\n' +
+    'append(.tags; params("tag"));\n' +
+    'append(.tags; actor("id"));\n' +
+    '.image = instance("id");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-builtins',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(
+  contextResult.document.data.attributes?.tags,
+  ['language', 'web', 'typed', 'user:ada'],
+  'append reads the payload through params and the caller through actor',
+);
+strictEqual(
+  contextResult.document.data.attributes?.image,
+  'https://example.test/TierItem/typescript',
+  'instance("id") is usable as a written value',
+);
+deepStrictEqual(
+  contextSource,
+  sourceFixture(),
+  'the input source document is still immutable',
+);
+
+// `actor()` and `instance()` with no argument hand the program the whole
+// object, so a caption can be composed from several of its fields.
+const wholeObjectResult = mutateBxlCardSource(
+  sourceFixture(),
+  '.image = actor().displayName + " · " + (instance().revision | tostring);',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-whole-objects',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(wholeObjectResult.document.data.attributes?.image, 'Ada · 7');
+
+// A false `assert` reading the payload fails the program rather than the
+// builtin: the value arrived, the precondition did not hold.
+throws(
+  () =>
+    mutateBxlCardSource(
+      sourceFixture(),
+      'assert(.tags[0] == params("tag"), "tags must lead with the new tag");',
+      {
+        schema,
+        syntax: 'solidified',
+        programId: 'request-context-assert-fails',
+        context: requestContext,
+        ...projectionOptions,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /tags must lead with the new tag/.test(error.message),
+  'assert reads the payload and still fails on a false precondition',
+);
+
+// A host that supplies no context at all gets an error naming the call, not a
+// program that quietly appended `null`.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; params("tag"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-missing',
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /params\(key\) needs a request context/.test(error.message),
+  'a program naming params without a context fails',
+);
+
+// The same for a slot the host left out of the context it did supply.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-missing-slot',
+      context: { params: requestContext.params },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /actor\(key\) needs the caller identity/.test(error.message),
+  'a program naming actor without an actor in the context fails',
+);
+
+// The operation layer validates declared keys before a program runs; this is
+// the backstop, and it names the keys that are there.
+throws(
+  () =>
+    mutateBxlCardSource(
+      sourceFixture(),
+      'append(.tags; params("undeclared"));',
+      {
+        schema,
+        syntax: 'solidified',
+        programId: 'request-context-undeclared-key',
+        context: requestContext,
+        ...projectionOptions,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /params\(key\) asks for "undeclared"/.test(error.message) &&
+    /"caption", "expectedStatus", "tag"/.test(error.message),
+  'an undeclared payload key fails and the error lists the declared ones',
+);
+
+// The plan holds the values the program read, not a live view of the host's
+// object: a host that reuses its context object cannot change a plan already
+// made, and the produced document shares no structure with it.
+const mutablePayload = { tag: 'first' };
+const mutableContext = { params: mutablePayload, actor: { id: 'user:ada' } };
+const snapshotResult = mutateBxlCardSource(
+  sourceFixture(),
+  'append(.tags; params("tag"));',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-copied',
+    context: mutableContext,
+    ...projectionOptions,
+  },
+);
+mutablePayload.tag = 'mutated-after-the-fact';
+deepStrictEqual(snapshotResult.document.data.attributes?.tags, [
+  'language',
+  'web',
+  'first',
+]);
+
+// A program that names none of the builtins behaves the same whether or not a
+// context is supplied.
+const withoutContext = mutateBxlCardSource(
+  sourceFixture(),
+  'append(.tags; "plain");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-unused-absent',
+    ...projectionOptions,
+  },
+);
+const withContext = mutateBxlCardSource(
+  sourceFixture(),
+  'append(.tags; "plain");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-unused-absent',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(withContext.document, withoutContext.document);
+deepStrictEqual(withContext.plan, withoutContext.plan);
+
+// Readable syntax reaches the same builtins: the compiler passes an unknown
+// call name straight through, so `params("tag")` needs no compiler change.
+const readableResult = mutateBxlCardSource(
+  sourceFixture(),
+  'append(Tags, params("tag"));\nImage = actor("id");',
+  {
+    schema,
+    programId: 'request-context-readable',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(readableResult.document.data.attributes?.tags, [
+  'language',
+  'web',
+  'typed',
+]);
+strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
+
+// A payload key named after a field of the card being edited. Readable syntax
+// resolves a quoted string against the field labels, so this is the case where
+// the key has to win: reading the card's own `image` here would silently write
+// the value the program was replacing.
+const collidingResult = mutateBxlCardSource(
+  sourceFixture(),
+  'Image = params("image");',
+  {
+    schema,
+    programId: 'request-context-key-shadows-field',
+    context: { params: { image: 'https://cdn.example.test/from-payload.svg' } },
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  collidingResult.document.data.attributes?.image,
+  'https://cdn.example.test/from-payload.svg',
+  'a payload key named after a field reads the payload, not the field',
+);
+
 console.log(
-  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, and stale-plan safety passed',
+  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, request-context builtins, and stale-plan safety passed',
 );

@@ -1,8 +1,10 @@
 import type { ReadableSchema } from '../../../../src/index.ts';
 import {
   DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   type BuiltinLibraryName,
 } from '../../../../src/bxl/registry/index.ts';
+import type { NativeRequestContext } from '../../../../src/jqtools/evaluate/runtimeState.ts';
 
 /**
  * The library set a card gets. `DEFAULT_BUILTIN_LIBRARIES` is the array the
@@ -105,6 +107,12 @@ export interface CoverageCase extends Expectation {
    */
   readableSyntax?: boolean;
   /**
+   * Request context to scope around the evaluation, for the builtins that
+   * read one. A case that omits it evaluates outside every scope, which is
+   * how the no-context error path is reached.
+   */
+  context?: NativeRequestContext;
+  /**
    * States that this function is known not to behave as the case asserts,
    * and why. The assertion stays as the correct answer — Excel's, jq's, or
    * validator.js's — and the suite inverts it: the case must keep failing
@@ -144,4 +152,18 @@ export const AUTHORIZATION_LIBRARIES: BuiltinLibraryName[] = [
 /** Marks a case as reaching the authorization surface, which only that set exposes. */
 export function inAuthorizationLibraries(entry: CoverageCase): CoverageCase {
   return { libraries: AUTHORIZATION_LIBRARIES, ...entry };
+}
+
+/**
+ * The libraries a mutation program resolves against — the card set plus the
+ * request-context builtins the mutation dialect adds. Derived through the same
+ * function `prepareBxlMutation` calls, so the set the gate enumerates is the
+ * set a mutation program actually gets.
+ */
+export const MUTATION_LIBRARIES: BuiltinLibraryName[] =
+  mutationBuiltinLibraries(CARD_LIBRARIES);
+
+/** Marks a case as reaching the request-context builtins. */
+export function inMutationLibraries(entry: CoverageCase): CoverageCase {
+  return { libraries: MUTATION_LIBRARIES, ...entry };
 }

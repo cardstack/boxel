@@ -21,7 +21,7 @@ import { FORMULA_BESSEL_FILTERS } from '../../../../src/bxl/bridge/formula-besse
 import { FORMULA_ENGINEERING_FILTERS } from '../../../../src/bxl/bridge/formula-engineering-manifest.ts';
 import { FORMULA_FINANCIAL_FILTERS } from '../../../../src/bxl/bridge/formula-financial-manifest.ts';
 import { VALIDATION_FILTERS } from '../../../../src/bxl/bridge/validation-manifest.ts';
-import { AUTHORIZATION_LIBRARIES } from './case.ts';
+import { AUTHORIZATION_LIBRARIES, MUTATION_LIBRARIES } from './case.ts';
 
 /**
  * The filters each lazy chunk promises. These sets are what the auto-loaders
@@ -102,6 +102,20 @@ export const SHADOWED_BUILTINS = new Map<string, string>([
       'jq-index-shadowed-by-excel.',
   ],
 ]);
+
+/**
+ * The library sets BXL ships, which is what every per-set invariant below is
+ * checked against: what a card resolves, what the authorization runtime
+ * resolves, and what a mutation program resolves. A set left out here would
+ * let a library's names skip these checks entirely.
+ */
+const SHIPPED_LIBRARY_SETS = (
+  cardLibraries: BuiltinLibraryName[],
+): BuiltinLibraryName[][] => [
+  cardLibraries,
+  AUTHORIZATION_LIBRARIES,
+  MUTATION_LIBRARIES,
+];
 
 /** Every name a program can reach, public or private, across `libraries`. */
 export function reachableNames(libraries: BuiltinLibraryName[]): Set<string> {
@@ -203,7 +217,7 @@ export function registryGateFailures(
   // so a name falling off the public list keeps its coverage requirement and
   // surfaces here instead — as a name callable without being advertised,
   // which is a decision rather than an accident.
-  for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
+  for (const libraries of SHIPPED_LIBRARY_SETS(cardLibraries)) {
     const resolved = resolveBuiltinRegistry(libraries);
     const published = new Set(resolved.publicNames);
     const unrecorded = [...reachableNames(libraries)]
@@ -222,7 +236,7 @@ export function registryGateFailures(
   // and the evaluator, so a native that shares a key with one can never run.
   // Coverage credits whichever the program reached, which means the pair
   // looks exercised while half of it is dead.
-  for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
+  for (const libraries of SHIPPED_LIBRARY_SETS(cardLibraries)) {
     const resolved = resolveBuiltinRegistry(libraries);
     const shadowed = Object.keys(resolved.native)
       .filter((name) => name in resolved.jq)
@@ -243,7 +257,7 @@ export function registryGateFailures(
   // the one a caller means. Each collision is a decision about which
   // library's version of a name the platform answers to, so each is recorded.
   const collisions = new Set<string>();
-  for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
+  for (const libraries of SHIPPED_LIBRARY_SETS(cardLibraries)) {
     for (const kind of ['jq', 'native'] as const) {
       const owner = new Map<string, string>();
       for (const library of libraries) {
