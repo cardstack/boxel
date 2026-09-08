@@ -303,7 +303,10 @@ An author addresses stored, computed, and linked values through the same
   the ones only they can answer. A Field the Card leaves unset therefore
   arrives as a `null` in both, and a `null` supplies nothing — claiming it
   would make an ordinary writable Field read-only for no reason. A host can
-  pass either column wholesale without narrowing it first. An `unavailable`
+  pass either column wholesale without narrowing it first — `search_doc`'s own
+  bookkeeping keys, which start with an underscore where a Field key never
+  does, are index columns rather than Field values and are dropped. An
+  `unavailable`
   entry, by contrast, is refused rather than guessed at: a missing or
   misspelled `path`, `tier`, or `reason` raises `overlay-invalid`, because a
   marker the planner cannot read is a read it would wrongly allow.

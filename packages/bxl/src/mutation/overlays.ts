@@ -49,6 +49,14 @@ function isForbidden(path: BxlMutationPath): boolean {
   return path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment)));
 }
 
+/**
+ * Whether a path names an index column rather than a Field. The index keys its
+ * own bookkeeping with a leading underscore, which a Field key never carries.
+ */
+function isBookkeeping(path: BxlMutationPath): boolean {
+  return String(path[0]).startsWith('_');
+}
+
 const OVERLAY_TIER_NAMES = new Set<string>(OVERLAY_TIERS);
 const OVERLAY_REASONS = new Set([
   'not-indexed',
@@ -267,6 +275,11 @@ export function mergeBxlMutationOverlays(
       // Field read-only for no reason.
       if (leaf.value === null) continue;
       if (isForbidden(leaf.path)) continue;
+      // `search_doc` carries the index's own bookkeeping beside the Card's
+      // searchable Fields — a title it derived, the Card's type, whether the
+      // row is an instance. None of those is a Field, and a Card declares
+      // none of them, so they are not the Card's to answer for.
+      if (isBookkeeping(leaf.path)) continue;
       const key = overlayPathKey(leaf.path);
       // The stored document wins over both tiers, and computeds over linked —
       // for a whole subtree, so a later tier cannot replace a value an earlier

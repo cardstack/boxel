@@ -2146,6 +2146,29 @@ strictEqual(
   1,
 );
 
+// `search_doc` carries the index's own bookkeeping beside the Card's
+// searchable Fields. A Card declares none of it, so passing the column
+// wholesale neither adds Fields to the Card nor makes reading it an overlay
+// read — otherwise every whole-Card read on every Card would need the opt-in.
+const searchDocShape: BxlMutationOverlays = {
+  linked: {
+    _title: 'derived title',
+    _cardType: 'Card',
+    _isCardInstanceFile: true,
+  },
+};
+deepStrictEqual(
+  collectionPlan('.image = (. | tostring);', searchDocShape).output,
+  collectionPlan('.image = (. | tostring);').output,
+);
+strictEqual(
+  collectionPlan(
+    'assert((. | keys | length) > 0; "m");\n.image = "ran";',
+    searchDocShape,
+  ).affected,
+  1,
+);
+
 // A list is one value, not a place to descend into. A projection manufactures
 // an empty list for a list Field the Card never persists, so an empty list is
 // an absence like a `null`: a computed `containsMany` reads as the overlay
