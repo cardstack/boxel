@@ -905,6 +905,17 @@ module('Integration | operations', function (hooks) {
         base: 'query',
         query: { filter: { on: Activity, eq: { status: 'open' } } },
       };
+      @operation static listEvery = {
+        base: 'query',
+        query: {
+          filter: {
+            every: [
+              { on: Activity, eq: { status: 'open' } },
+              { on: Activity, range: { views: { gt: 10 } } },
+            ],
+          },
+        },
+      };
       // A predicate holds field names, so a field genuinely called `on` is
       // data and survives.
       @operation static listRecent = {
@@ -924,6 +935,15 @@ module('Integration | operations', function (hooks) {
       ).filter.any[0].type,
       Activity,
       'a pure card-type filter names the class itself',
+    );
+    assert.strictEqual(
+      (
+        queryOf('listEvery') as unknown as {
+          filter: { every: { on: unknown }[] };
+        }
+      ).filter.every[0].on,
+      Activity,
+      'and `every` holds filter nodes the same way `any` does',
     );
     assert.strictEqual(
       (

@@ -261,7 +261,10 @@ export type OperationOutput =
 export interface QueryDeclaration {
   readonly filter?: OperationQueryValue;
   readonly sort?: OperationQueryValue;
-  readonly page?: { readonly size?: number; readonly cursor?: string };
+  // The realm pages by offset: `size` is the page length and `number` is the
+  // 0-based page. There is no cursor paging to declare — the index generation
+  // a request is pinned to is the server's to mint, not the author's.
+  readonly page?: { readonly size: number; readonly number?: number };
   readonly realms?: readonly string[];
 }
 
@@ -270,8 +273,8 @@ export type OperationQueryValue =
   | number
   | boolean
   | null
-  | BaseDefConstructor
-  | (() => BaseDefConstructor)
+  | LinkableDefConstructor
+  | (() => LinkableDefConstructor)
   | OperationReference
   | readonly OperationQueryValue[]
   | { readonly [key: string]: OperationQueryValue };
@@ -826,25 +829,28 @@ function assertValidClauses(
     if (query.page !== undefined) {
       if (!isPlainObject(query.page)) {
         throw new Error(
-          `${label}: \`query.page\` must be an object with \`size\` and \`cursor\``,
+          `${label}: \`query.page\` must be an object with \`size\` and an optional \`number\``,
         );
       }
-      assertOnlyKeys(label, 'query.page', query.page, ['size', 'cursor']);
+      assertOnlyKeys(label, 'query.page', query.page, ['size', 'number']);
+      // A page with no length pages nothing: the offset the realm computes is
+      // a multiple of `size`.
       let size = query.page.size;
-      if (
-        size !== undefined &&
-        (typeof size !== 'number' || !Number.isInteger(size) || size < 1)
-      ) {
+      if (typeof size !== 'number' || !Number.isInteger(size) || size < 1) {
         throw new Error(
           `${label}: \`query.page.size\` must be a positive integer`,
         );
       }
+      let pageNumber = query.page.number;
       if (
-        query.page.cursor !== undefined &&
-        (typeof query.page.cursor !== 'string' ||
-          query.page.cursor.length === 0)
+        pageNumber !== undefined &&
+        (typeof pageNumber !== 'number' ||
+          !Number.isInteger(pageNumber) ||
+          pageNumber < 0)
       ) {
-        throw new Error(`${label}: \`query.page.cursor\` must be a string`);
+        throw new Error(
+          `${label}: \`query.page.number\` must be a whole number, counting from 0`,
+        );
       }
     }
     if (query.realms !== undefined) {
@@ -955,10 +961,15 @@ function assertReferencesResolve(
         );
       }
       // A thunk defers its class past this point; one named directly is held
-      // to a kind a query can match or a create can mint.
-      if (isDefConstructor(node) && !isSubclassOf(node, CardDef)) {
+      // to a kind that has a type to name. A field is addressed through the
+      // card that contains it and has no type row of its own.
+      if (
+        isDefConstructor(node) &&
+        !isSubclassOf(node, CardDef) &&
+        !isSubclassOf(node, FileDef)
+      ) {
         throw new Error(
-          `${label}: \`${path}\` must be a card class — only a card has a type to name here`,
+          `${label}: \`${path}\` must be a card or file class — a field has no type of its own to name`,
         );
       }
       return;
