@@ -415,11 +415,17 @@ module('Unit | file-formats', function (hooks) {
       const PINNED = 1_768_478_400;
       const DAY = 86_400;
 
+      // Restored rather than deleted: the suite pins the clock once at
+      // startup, so deleting it here would drop every later test in the shard
+      // back onto the wall clock while their fixtures still carry pinned
+      // timestamps.
+      let suitePin: number | undefined;
       hooks.beforeEach(function () {
+        suitePin = (globalThis as { __boxelNow?: number }).__boxelNow;
         (globalThis as { __boxelNow?: number }).__boxelNow = PINNED * 1000;
       });
       hooks.afterEach(function () {
-        delete (globalThis as { __boxelNow?: number }).__boxelNow;
+        (globalThis as { __boxelNow?: number }).__boxelNow = suitePin;
       });
 
       test('measures from the pinned instant rather than the real clock', function (assert) {

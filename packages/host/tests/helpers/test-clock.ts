@@ -31,30 +31,31 @@ export function pinTestClock() {
   (globalThis as { __boxelNow?: number }).__boxelNow = TEST_CLOCK_INSTANT;
 }
 
-// A fixture file's recorded mtime.
+// A realm's fixture mtimes, as a fresh sequence per adapter.
 //
-// These cannot all be the pinned instant. The indexer decides what a
-// from-scratch pass has to revisit by comparing a file's mtime against the one
-// on its index row and skipping where they match, so a write that leaves the
-// mtime alone is a change the indexer cannot see — which is what
-// `scripts/normalize-realm-mtimes.mjs` exists to keep working, and what a
-// single frozen stamp would defeat.
+// Two constraints pull against each other here.
 //
-// So they advance, one second per stamp, from far enough below the pinned
-// instant that a suite would have to write tens of thousands of files in one
-// page load to reach it. Staying below matters: a mtime after the pinned
-// instant is in the future, and a file with a future mtime renders as an
-// absolute date rather than an age. Staying within the same day matters too —
-// that is what keeps these files reading as `today`, which is what they read
-// as when both the clock and the stamp were the real one.
-const FIXTURE_MTIME_FLOOR =
-  Math.floor(TEST_CLOCK_INSTANT / 1000) - 12 * 60 * 60;
-const FIXTURE_MTIME_CEILING = Math.floor(TEST_CLOCK_INSTANT / 1000) - 1;
-let fixtureMtimeCounter = 0;
+// They must advance: the indexer decides what a from-scratch pass has to
+// revisit by comparing a file's mtime against the one on its index row and
+// skipping where they match, so a write that leaves the mtime alone is an edit
+// it cannot see.
+//
+// They must also stay within a minute of the pinned instant, because
+// `formatLastSavedText` calls anything closer than that "just now" and the
+// inspector asserts a seeded fixture reads that way — which it did when both
+// the clock and the stamp were the real one, the files having been written
+// moments earlier.
+//
+// A minute of one-second steps is only sixty values, which a whole shard would
+// exhaust immediately. Per adapter it is ample: a realm seeds once and a test
+// writes a handful of times. Sequences in different realms overlap, which
+// costs nothing — the comparison that matters is between a file and its own
+// index row.
+const FIXTURE_MTIME_SPAN_S = 59;
 
-export function nextFixtureMtime(): number {
-  return Math.min(
-    FIXTURE_MTIME_FLOOR + fixtureMtimeCounter++,
-    FIXTURE_MTIME_CEILING,
-  );
+export function createFixtureMtimeSequence(): () => number {
+  let pinnedSeconds = Math.floor(TEST_CLOCK_INSTANT / 1000);
+  let step = 0;
+  return () =>
+    Math.min(pinnedSeconds - FIXTURE_MTIME_SPAN_S + step++, pinnedSeconds - 1);
 }
