@@ -88,6 +88,9 @@ module('Integration | query-field relationship status', function (hooks) {
         'test-cards.gts': { Person, Host },
         'Person/one.json': new Person({ name: 'Anchor' }),
         'Person/two.json': new Person({ name: 'Anchor' }),
+        // Deliberately outside the query. A live search can never return this
+        // card, so its presence in the field is proof a document put it there.
+        'Person/three.json': new Person({ name: 'Different' }),
         'Host/anchor.json': new Host({ cardTitle: 'Anchor' }),
       },
     });
@@ -103,6 +106,46 @@ module('Integration | query-field relationship status', function (hooks) {
     let host = (await getService('store').get(HOST_URL)) as CardDefType;
     await settled();
     return host;
+  }
+
+  // The document the realm serves for the host card, which carries every
+  // query-backed field resolved as of that read.
+  async function fetchHostDoc(): Promise<any> {
+    let response = await getService('network').authedFetch(HOST_URL, {
+      headers: { Accept: 'application/vnd.card+json' },
+    });
+    return await response.json();
+  }
+
+  // Add `Person/three` to the host document's `matches`, spelled the way the
+  // realm spells the members it already carries: the resolved instance in
+  // `included`, an id in the umbrella relationship's `data`, a per-member
+  // `matches.N` entry (which is what the deserializer reads), and a match total
+  // covering all three, so the document describes three matches rather than
+  // contradicting itself.
+  function spliceThirdMember(hostDoc: any): void {
+    let relationships = hostDoc.data.relationships;
+    let template = hostDoc.included?.find((resource: { id: string }) =>
+      resource.id.endsWith('Person/one'),
+    );
+    if (!template) {
+      throw new Error(
+        `expected the host document to carry Person/one as a resolved member of 'matches'; included ids were ${JSON.stringify(
+          (hostDoc.included ?? []).map((r: { id: string }) => r.id),
+        )}`,
+      );
+    }
+    let spliced = JSON.parse(JSON.stringify(template));
+    spliced.id = template.id.replace('Person/one', 'Person/three');
+    hostDoc.included.push(spliced);
+
+    let umbrella = relationships.matches;
+    umbrella.data.push({ type: 'card', id: spliced.id });
+    umbrella.meta = { ...umbrella.meta, total: umbrella.data.length };
+    relationships[`matches.${umbrella.data.length - 1}`] = {
+      links: { self: spliced.id },
+      data: { type: 'card', id: spliced.id },
+    };
   }
 
   test('a singular query-backed field reports the one slot it surfaces, not the whole result set', async function (this: RenderingTestContext, assert) {
@@ -260,6 +303,214 @@ module('Integration | query-field relationship status', function (hooks) {
     assert.strictEqual(status.membership?.length, 1);
     assert.strictEqual(status.totalMatchCount, undefined);
     assert.false(status.isPartial);
+  });
+
+  test('a document fetched after the field resolved hands it the fresher result set', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field resolves to the two cards the query matches',
+    );
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      2,
+      'and reports the count the indexer resolved it under',
+    );
+
+    // Start from the document the realm actually serves — the server resolves
+    // query fields at read time, so this carries `matches` already resolved —
+    // and splice in a third member.
+    let hostDoc = await fetchHostDoc();
+    spliceThirdMember(hostDoc);
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    // The count is what proves the document reached the resource. Membership
+    // cannot: deserializing the document deposits the spliced member in the
+    // store, and a live search's result set is reconciled against store
+    // residency, so the client-side merge adds a resident matching card to the
+    // displayed set whether or not anything superseded the result set. The
+    // match count comes off the resource's own meta, which only an applied
+    // result set moves.
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.totalMatchCount,
+      3,
+      'the newer document supersedes the result set the resource was holding',
+    );
+    assert.strictEqual(
+      matches.membership?.length,
+      3,
+      'and the field surfaces all three members',
+    );
+    assert.true(
+      matches.membership?.some(
+        (member) =>
+          member.kind === 'present' &&
+          member.reference.endsWith('Person/three'),
+      ),
+      'including the one the document introduced',
+    );
+  });
+
+  test('a document reporting a higher match count refreshes a page-clamped field', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    let before = getRelationshipMembershipState(host, 'firstMatch');
+    assert.strictEqual(before.totalMatchCount, 2, 'two matches are reported');
+
+    // `firstMatch` holds one row whatever its query matches, so a match count
+    // that moves leaves its rows and its query URL untouched — the count is the
+    // only thing that changed, and it is what says the rows fall short.
+    let hostDoc = await fetchHostDoc();
+    hostDoc.data.relationships.firstMatch.meta = { total: 3 };
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    let after = getRelationshipMembershipState(host, 'firstMatch');
+    assert.strictEqual(
+      after.membership?.length,
+      1,
+      'the field still holds the one row its page allowed',
+    );
+    assert.strictEqual(
+      after.totalMatchCount,
+      3,
+      'against the count the newer document reports',
+    );
+    assert.true(after.isPartial, 'so the shortfall is still reported');
+
+    // The field tracks whichever document arrived last rather than latching on
+    // the identities it has seen, so a count that moves back is applied too.
+    await updateFromSerialized(host as any, await fetchHostDoc());
+    await settled();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'firstMatch').totalMatchCount,
+      2,
+      'and a document restoring the earlier count is applied in turn',
+    );
+  });
+
+  test('a document resolved before the result set the field holds is declined', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    // Derived from whatever the realm stamped, so the two documents order
+    // against each other and against the one the field already resolved from,
+    // whether or not this harness stamps a generation at all.
+    let hostDoc = await fetchHostDoc();
+    let newerGeneration = (hostDoc.data.meta.generation ?? 0) + 10;
+    hostDoc.data.meta.generation = newerGeneration;
+    spliceThirdMember(hostDoc);
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      3,
+      'the field holds the set that document resolved',
+    );
+
+    // A read that was already in flight when the newer one landed. It is not
+    // news, and taking it would walk the field backwards — the failure the
+    // handover has to avoid, because it has no other way to tell a document
+    // that arrived late from one that resolved late.
+    let staleDoc = await fetchHostDoc();
+    staleDoc.data.meta.generation = newerGeneration - 1;
+
+    await updateFromSerialized(host as any, staleDoc);
+    await settled();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').totalMatchCount,
+      3,
+      'the older document does not displace it',
+    );
+  });
+
+  // Guards the gate rather than the handover: it holds trivially where nothing
+  // is handed over at all, and its job is to catch a gate that stops requiring
+  // an indexer-resolved umbrella.
+  test('a document that did not resolve the field cannot displace a result set', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let host = await loadHost();
+
+    // `links.search` is written only where the indexer resolved the field, so
+    // its absence marks a relationship this document is not authoritative
+    // about — a raw source file's own `data`, say. Stripping it while narrowing
+    // the field to a single member makes displacement unmistakable: a field
+    // that took this document's word for its membership would drop to one.
+    let hostDoc = await fetchHostDoc();
+    let relationships = hostDoc.data.relationships;
+    delete relationships.matches.links.search;
+    relationships.matches.data = [relationships.matches.data[0]];
+    relationships.matches.meta = { total: 1 };
+    delete relationships['matches.1'];
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field keeps the result set the indexer resolved',
+    );
+  });
+
+  test('a document reporting an unreachable realm sends the field back to a live query', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let network = getService('network');
+    let host = await loadHost();
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field resolves from the document without querying',
+    );
+
+    let searchRequests: string[] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        searchRequests.push(request.url);
+      }
+      // Fall through to the realm-server mock.
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    try {
+      // A realm that failed contributes its error and no rows, so what this
+      // document carries is a floor rather than an answer. Resolving from it
+      // and stopping there would leave the field short with nothing scheduled
+      // to correct it.
+      let hostDoc = await fetchHostDoc();
+      let matches = hostDoc.data.relationships.matches;
+      matches.meta = {
+        ...matches.meta,
+        errors: [
+          {
+            realm: 'http://unreachable-realm/test/',
+            type: 'realm-unreachable',
+            message: 'realm did not answer',
+          },
+        ],
+      };
+
+      await updateFromSerialized(host as any, hostDoc);
+      await settled();
+
+      assert.strictEqual(
+        searchRequests.length,
+        1,
+        'the field runs the query the failed realm left unanswered',
+      );
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
   });
 
   test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {

@@ -2091,6 +2091,15 @@ export class RenderRunner {
           // parent render model's instance, which the fileRender transitions
           // above have set to the hydrated FileDef — so the roster here is
           // the file family's `static screenshots`, not the card's.
+          //
+          // Unlike the card half, no `#refreshCapturedDeps` follows these
+          // captures — deliberately: a file row's deps are the extract
+          // pass's, and a poster component decodes the file itself, which is
+          // already the row. The cost falls on any family whose capture-only
+          // component loads *linked* data: those loads never fan into the
+          // file row's deps, so edits to that data won't invalidate the
+          // capture. A family like that needs this gate to grow the card
+          // half's re-snapshot before it can rely on recapture.
           let fileScreenshots: DeclaredScreenshotVisitResult | undefined;
           if (
             !fileShortCircuit &&

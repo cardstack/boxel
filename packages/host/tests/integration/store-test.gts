@@ -2140,6 +2140,135 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a create gives the instance a remote identity the rest of the store can use', async function (assert) {
+    // Deliberately not put in the store first: the identity-map registration
+    // and the autosave subscription asserted below are the create's own doing,
+    // and `add` would have supplied both before any save ran.
+    let instance = new PersonDef({ name: 'Sequence' });
+    let instanceLocalId = instance[localId];
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'the realm is not subscribed before the create',
+    );
+
+    let result = await (storeService as any).persistAndUpdate(instance);
+    assert.true(isCardInstance(result), 'the create resolved to the instance');
+
+    // The realm named the card, and the store left it reachable under both the
+    // id the browser picked and the one the realm assigned.
+    assert.ok(
+      instance.id?.startsWith(testRealmURL),
+      'the instance took a remote id in the realm',
+    );
+    assert.strictEqual(
+      storeService.peek(instanceLocalId),
+      instance,
+      'the local id still resolves to this instance',
+    );
+    assert.strictEqual(
+      storeService.peek(instance.id!),
+      instance,
+      'the remote id resolves to the same instance',
+    );
+    assert.true(
+      subscriptions.has(testRealmURL),
+      "the store is listening for the realm's index events",
+    );
+
+    let cardPath = `${instance.id!.substring(testRealmURL.length)}.json`;
+    assert.ok(
+      await testRealmAdapter.openFile(cardPath),
+      'the realm holds the created card',
+    );
+
+    // Autosave is live on the instance the create just named, so an edit
+    // reaches the realm without anyone asking for a save.
+    (instance as any).name = 'Sequence Edited';
+    await waitUntil(
+      () => storeService.getSaveState(instanceLocalId)?.lastSaved,
+      { timeout: 10000 },
+    );
+    await settled();
+    let file = await testRealmAdapter.openFile(cardPath);
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Sequence Edited',
+      'an edit after the create autosaves to the realm',
+    );
+  });
+
+  test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
+    // Driven through `persistAndUpdate` rather than `save`, because the
+    // autosave queue awaits the in-flight mutation before it saves at all —
+    // it never reaches the window the mutation lock covers, which is the
+    // window under test here.
+    let instance = new PersonDef({ name: 'Overlap' });
+    await storeService.add(instance, { doNotPersist: true });
+
+    // Hold the POST open so the second save is guaranteed to arrive while the
+    // create is still in flight — the window the per-instance mutation lock
+    // exists to cover. Without it the second save serializes a card that still
+    // has no remote id and issues a second create for a card the realm has
+    // already named, rather than updating it.
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let methods: string[] = [];
+    let reachedPost = new Deferred<void>();
+    let releasePost = new Deferred<void>();
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (args?.method !== 'POST' && args?.method !== 'PATCH') {
+        return originalFetchJSON(url, args);
+      }
+      methods.push(args.method);
+      if (args.method === 'POST') {
+        reachedPost.fulfill();
+        await releasePost.promise;
+      }
+      return originalFetchJSON(url, args);
+    };
+
+    try {
+      let creating = (storeService as any).persistAndUpdate(instance);
+      // `persistAndUpdate` absorbs its errors and resolves to a card error, so
+      // a create that dies before its POST would otherwise leave this parked on
+      // `reachedPost` until the qunit timeout, with nothing saying why. Racing
+      // the two turns that into an assertion failure naming the error.
+      let reachedPostFirst = await Promise.race([
+        reachedPost.promise.then(() => true),
+        creating.then(() => false),
+      ]);
+      assert.true(
+        reachedPostFirst,
+        `the create reached its POST (resolved early as: ${JSON.stringify(
+          await Promise.race([creating, Promise.resolve('still in flight')]),
+        )})`,
+      );
+      let overlapping = (storeService as any).persistAndUpdate(instance);
+      releasePost.fulfill();
+      await Promise.all([creating, overlapping]);
+    } finally {
+      releasePost.fulfill();
+      delete cardService.fetchJSON;
+    }
+    await settled();
+
+    assert.deepEqual(
+      methods,
+      ['POST', 'PATCH'],
+      'the overlapping save waited for the remote id and updated the created card',
+    );
+    assert.ok(
+      await testRealmAdapter.openFile(
+        `${instance.id!.substring(testRealmURL.length)}.json`,
+      ),
+      'the realm holds the created card',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([

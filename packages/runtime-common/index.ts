@@ -1296,6 +1296,7 @@ export * from './published-realm-url.ts';
 export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
+export * from './loader-epoch.ts';
 export * from './definitions.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';

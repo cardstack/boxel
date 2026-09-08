@@ -698,21 +698,12 @@ export default class RenderRoute extends Route<Model> {
     this.#scheduleReady(model);
   }
 
-  // The render context's `meta.screenshots`: derived from the class's
-  // declared roster rather than a persisted manifest, so a card's own
-  // rendered output can embed its declared captures' durable URLs
-  // (`screenshotURLs`) even on the instance's very first prerender pass —
-  // captures run later in that same pass, after the display-format renders,
-  // so a manifest join could never see them. A URL embedded ahead of its
-  // capture 404s with a short max-age until the capture lands, then
-  // self-heals; live loads instead join the real manifest server-side
-  // (`getCard`), preserving `undefined` as the not-captured absence signal.
-  // Roster entries carry no `hash` for the same reason — no capture is being
-  // asserted.
-  // The file rendering's variant of `declarationScreenshotsMeta` below: the
-  // roster comes from the file's FileDef family class (resolved by
-  // extension), and the addressed path keeps its extension — a file row's
-  // captures are keyed by the file's own URL, only instance ids shed `.json`.
+  // The file rendering's variant of `declarationScreenshotsMeta` below (see
+  // that comment for the shared rationale — declaration-derived rosters,
+  // 404-then-self-heal, no `hash`): the roster comes from the file's FileDef
+  // family class (resolved by extension), and the addressed path keeps its
+  // extension — a file row's captures are keyed by the file's own URL, only
+  // instance ids shed `.json`.
   //
   // Absent `realmURL` is a deliberate no-op, not a defensive default: the
   // in-browser prerender twin stashes no realm on purpose — it never
@@ -769,6 +760,17 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
+  // The render context's `meta.screenshots`: derived from the class's
+  // declared roster rather than a persisted manifest, so a card's own
+  // rendered output can embed its declared captures' durable URLs
+  // (`screenshotURLs`) even on the instance's very first prerender pass —
+  // captures run later in that same pass, after the display-format renders,
+  // so a manifest join could never see them. A URL embedded ahead of its
+  // capture 404s with a short max-age until the capture lands, then
+  // self-heals; live loads instead join the real manifest server-side
+  // (`getCard`), preserving `undefined` as the not-captured absence signal.
+  // Roster entries carry no `hash` for the same reason — no capture is being
+  // asserted.
   private async declarationScreenshotsMeta(
     doc: LooseSingleCardDocument,
     canonicalId: string,
