@@ -3364,94 +3364,137 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<CardDef | CardErrorJSONAPI> {
     let waiterLabel = `persistAndUpdate ${instance.id ?? instance[localIdSymbol]}`;
     return await this.withTestWaiters(waiterLabel, async () => {
+      // Sampled before the mutation lock is taken, so a save that queues behind
+      // an in-flight create of the same instance counts as a create as well: it
+      // PATCHes the card the create named, then re-runs the identity assignment
+      // against that same id.
       let isNew = !instance.id;
-      let inflightMutation = this.inflightCardMutations.get(
+      return await this.withCardMutationLock(
         instance[localIdSymbol],
-      );
-      if (inflightMutation) {
-        // the local instance is always up-to-date, but things can get messy if
-        // we try to update an instance that is in the process of being created on
-        // the server, because then it still looks like to the client another
-        // POST should be issued when instead we really want to PATCH.
-        await inflightMutation;
-      }
-      let deferred = new Deferred<void>();
-      this.inflightCardMutations.set(instance[localIdSymbol], deferred.promise);
-      try {
-        let doc = await this.cardService.serializeCard(instance, {
-          // for a brand new card that has no id yet, we don't know what we are
-          // relativeTo because its up to the realm server to assign us an ID, so
-          // URL's should be absolute
-          useAbsoluteURL: true,
-          withIncluded: true,
-          omitQueryFields: true,
-        });
+        async () => {
+          try {
+            let doc = await this.cardService.serializeCard(instance, {
+              // for a brand new card that has no id yet, we don't know what we are
+              // relativeTo because its up to the realm server to assign us an ID, so
+              // URL's should be absolute
+              useAbsoluteURL: true,
+              withIncluded: true,
+              omitQueryFields: true,
+            });
 
-        // send doc over the wire with absolute URL's. The realm server will convert
-        // to relative URL's as it serializes the cards
-        let realmURL = instance[realmURLSymbol];
-        // in the case where we get no realm URL from the card, we are dealing with
-        // a new card instance that does not have a realm URL yet.
-        if (!realmURL) {
-          let defaultRealmHref =
-            opts?.realm ?? this.realm.defaultWritableRealm?.path;
-          if (!defaultRealmHref) {
-            throw new Error('Could not find a writable realm');
+            // send doc over the wire with absolute URL's. The realm server will convert
+            // to relative URL's as it serializes the cards
+            let realmURL = instance[realmURLSymbol];
+            // in the case where we get no realm URL from the card, we are dealing with
+            // a new card instance that does not have a realm URL yet.
+            if (!realmURL) {
+              let defaultRealmHref =
+                opts?.realm ?? this.realm.defaultWritableRealm?.path;
+              if (!defaultRealmHref) {
+                throw new Error('Could not find a writable realm');
+              }
+              realmURL = new URL(defaultRealmHref);
+            }
+            let json = await this.saveCardDocument(doc, {
+              realm: realmURL.href,
+              localDir: opts?.localDir,
+              clientRequestId: opts?.clientRequestId,
+            });
+
+            let api = await this.cardService.getAPI();
+            // the store state represents the latest state and the server state is
+            // potentially out-of-date. As such we only merge the server state that
+            // the store does not know about specifically remote ID's and realm
+            // meta. the attributes and relationships state from the server are
+            // thrown away since the store has a more recent version of these.
+            if (needsServerStateMerge(instance, json)) {
+              let serverState = cloneDeep(json);
+              delete serverState.data.attributes;
+              delete serverState.data.relationships;
+              await api.updateFromSerialized(instance, serverState, this.store);
+            }
+            if (isNew) {
+              await this.assignRemoteIdentity(instance, json.data.id!);
+            }
+            if (this.onSaveSubscriber) {
+              this.onSaveSubscriber(
+                this.network.virtualNetwork.toURL(json.data.id!),
+                json,
+              );
+            }
+            return instance;
+          } catch (err) {
+            console.error(`Failed to save ${instance.id}: `, err);
+            let errorResponse = processCardError(
+              instance.id ?? instance[localIdSymbol],
+              err,
+            );
+            let cardError = errorResponse.errors[0];
+            this.setIdentityContext(cardError);
+            let remoteId = cardError.meta?.remoteId;
+            if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+              this.store.addCardInstanceOrError(remoteId, cardError);
+            }
+            return cardError;
           }
-          realmURL = new URL(defaultRealmHref);
-        }
-        let json = await this.saveCardDocument(doc, {
-          realm: realmURL.href,
-          localDir: opts?.localDir,
-          clientRequestId: opts?.clientRequestId,
-        });
-
-        let api = await this.cardService.getAPI();
-        // the store state represents the latest state and the server state is
-        // potentially out-of-date. As such we only merge the server state that
-        // the store does not know about specifically remote ID's and realm
-        // meta. the attributes and relationships state from the server are
-        // thrown away since the store has a more recent version of these.
-        if (needsServerStateMerge(instance, json)) {
-          let serverState = cloneDeep(json);
-          delete serverState.data.attributes;
-          delete serverState.data.relationships;
-          await api.updateFromSerialized(instance, serverState, this.store);
-        }
-        if (isNew) {
-          api.setId(instance, json.data.id!);
-          this.subscribeToRealm(rri(instance.id));
-          this.operatorModeStateService.handleCardIdAssignment(
-            instance[localIdSymbol],
-          );
-          await this.updateForeignConsumersOf(instance);
-          this.setIdentityContext(instance);
-          await this.startAutoSaving(instance);
-        }
-        if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(
-            this.network.virtualNetwork.toURL(json.data.id!),
-            json,
-          );
-        }
-        return instance;
-      } catch (err) {
-        console.error(`Failed to save ${instance.id}: `, err);
-        let errorResponse = processCardError(
-          instance.id ?? instance[localIdSymbol],
-          err,
-        );
-        let cardError = errorResponse.errors[0];
-        this.setIdentityContext(cardError);
-        let remoteId = cardError.meta?.remoteId;
-        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
-          this.store.addCardInstanceOrError(remoteId, cardError);
-        }
-        return cardError;
-      } finally {
-        deferred.fulfill();
-      }
+        },
+      );
     });
+  }
+
+  // Serializes mutations of one instance, keyed by its local id, so a save
+  // issued while a create of the same instance is still in flight waits for
+  // the realm-assigned id and issues a PATCH rather than a second POST.
+  //
+  // The map entry is overwritten rather than chained: callers that arrive
+  // while a mutation is in flight all await that same promise and are then
+  // released together, so each mutation is serialized against the one in
+  // flight when it arrived, not against its queued peers. Entries are never
+  // deleted; a settled promise left in the map costs the next caller a
+  // microtask and nothing else.
+  private async withCardMutationLock<T>(
+    localId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    let inflightMutation = this.inflightCardMutations.get(localId);
+    if (inflightMutation) {
+      await inflightMutation;
+    }
+    let deferred = new Deferred<void>();
+    this.inflightCardMutations.set(localId, deferred.promise);
+    try {
+      return await fn();
+    } finally {
+      deferred.fulfill();
+    }
+  }
+
+  // Promotes an instance the realm has just named from local-id-only to fully
+  // addressable. The steps are ordered and every one of them is required, so
+  // any code path that learns a new instance's remote id routes through here
+  // rather than repeating them:
+  //
+  //   1. the instance takes the remote id;
+  //   2. the store subscribes to its realm's index events;
+  //   3. a stack showing the instance switches the URL bar to the remote id;
+  //   4. consumers in *other* realms re-save so their links to this instance
+  //      resolve to the remote id instead of the local one;
+  //   5. the identity map indexes the instance under both ids, so lookups by
+  //      either return this same object;
+  //   6. autosave takes over subsequent edits.
+  private async assignRemoteIdentity(
+    instance: CardDef,
+    remoteId: RealmResourceIdentifier,
+  ) {
+    let api = await this.cardService.getAPI();
+    api.setId(instance, remoteId);
+    this.subscribeToRealm(rri(instance.id));
+    this.operatorModeStateService.handleCardIdAssignment(
+      instance[localIdSymbol],
+    );
+    await this.updateForeignConsumersOf(instance);
+    this.setIdentityContext(instance);
+    await this.startAutoSaving(instance);
   }
 
   // in the case we are making a cross realm relationship with a link that
