@@ -1,5 +1,6 @@
 import {
   click,
+  fillIn,
   settled,
   waitUntil,
   type RenderingTestContext,
@@ -8,8 +9,13 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import {
+  PermissionsContextName,
+  type Permissions,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common';
 
+import { provideConsumeContext } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -203,6 +209,7 @@ module('Integration | structured-theme', function (hooks) {
   let StructuredTheme: typeof StructuredThemeModule.default;
   let ThemeVarField: typeof StructuredThemeVarsModule.default;
   let ThemeTypographyField: typeof StructuredThemeVarsModule.ThemeTypographyField;
+  let CustomCssVariable: typeof StructuredThemeVarsModule.CustomCssVariable;
   let TypographyField: typeof TypographyFieldModule.default;
 
   hooks.beforeEach(async function () {
@@ -217,6 +224,7 @@ module('Integration | structured-theme', function (hooks) {
     );
     ThemeVarField = themeVarsModule.default;
     ThemeTypographyField = themeVarsModule.ThemeTypographyField;
+    CustomCssVariable = themeVarsModule.CustomCssVariable;
     TypographyField = (
       await loader.import<typeof TypographyFieldModule>(
         '@cardstack/base/typography',
@@ -400,6 +408,43 @@ module('Integration | structured-theme', function (hooks) {
     }
   });
 
+  test('the isolated preview lists the custom variables of the previewed color scheme', async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({
+        background: '#ffffff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+          new CustomCssVariable({ name: '', value: 'no name' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    assert
+      .dom('[data-test-theme-custom-var]')
+      .exists({ count: 1 }, 'an entry with no name emits no variable to list');
+    assert.dom('[data-test-theme-custom-var-name]').hasText('--motion-fast');
+    assert.dom('[data-test-theme-custom-var-value]').hasText('100ms');
+    assert
+      .dom('[data-test-theme-custom-vars-list] [data-test-boxel-copy-button]')
+      .exists('the list can be copied as a CSS block');
+  });
+
+  test('the isolated preview omits the custom variables list when the theme defines none', async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({ background: '#ffffff' }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    assert.dom('[data-test-theme-custom-vars-list]').doesNotExist();
+  });
+
   test('unset variables in the isolated preview show the value they inherit from the Boxel defaults', async function (this: RenderingTestContext, assert) {
     let loader: Loader = getService('loader-service').loader;
     let card = new StructuredTheme({
@@ -531,6 +576,153 @@ module('Integration | structured-theme', function (hooks) {
     assert.false(
       css.includes('sample-text'),
       'sample text is not emitted as a variable',
+    );
+  });
+
+  test('setCss keeps properties with no declared field as custom variables', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({}),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    assert.true(
+      card.setCss(`:root {
+  --background: #ffffff;
+  --motion-fast: 100ms;
+}
+.dark {
+  --background: #000000;
+  --motion-fast: 200ms;
+}`),
+    );
+    assert.strictEqual(card.rootVariables.background, '#ffffff');
+    assert.deepEqual(
+      card.rootVariables.customCssVariables.map(({ name, value }) => [
+        name,
+        value,
+      ]),
+      [['motion-fast', '100ms']],
+      'the unrecognized property survives the import instead of being dropped',
+    );
+    assert.deepEqual(
+      card.darkModeVariables.customCssVariables.map(({ name, value }) => [
+        name,
+        value,
+      ]),
+      [['motion-fast', '200ms']],
+      'each color scheme keeps its own value for the same token',
+    );
+    let css = card.cssVariables ?? '';
+    assert.true(
+      css.includes('--motion-fast: 100ms'),
+      `expected the light-mode value in: ${css}`,
+    );
+    assert.true(
+      css.includes('--motion-fast: 200ms'),
+      `expected the dark-mode value in: ${css}`,
+    );
+  });
+
+  test('a re-imported custom variable is updated in place rather than duplicated', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    card.setCss(':root { --motion-fast: 300ms; --shape-radius: 0.5rem; }');
+    assert.deepEqual(
+      card.rootVariables.customCssVariables.map(({ name, value }) => [
+        name,
+        value,
+      ]),
+      [
+        ['motionFast', '300ms'],
+        ['shape-radius', '0.5rem'],
+      ],
+      'the existing entry takes the new value and the new token is appended',
+    );
+  });
+
+  test('resetCss clears the custom variables of both color schemes', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({
+        background: '#ffffff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '200ms' }),
+        ],
+      }),
+    });
+    card.resetCss();
+    assert.strictEqual(card.rootVariables.customCssVariables.length, 0);
+    assert.strictEqual(card.darkModeVariables.customCssVariables.length, 0);
+    assert.strictEqual(card.rootVariables.background, null);
+    assert.notOk(card.cssVariables, 'no variables are left to emit');
+  });
+
+  test('a declared field wins a name collision with a custom variable', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({
+        background: '#ffffff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'background', value: '#ff0000' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    let css = card.cssVariables ?? '';
+    assert.true(
+      css.includes('--background: #ffffff'),
+      `expected the declared field value in: ${css}`,
+    );
+    assert.false(css.includes('#ff0000'), 'the custom entry is not emitted');
+  });
+  test('custom variables can be added, edited and removed in the theme editor', async function (this: RenderingTestContext, assert) {
+    let permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    let loader: Loader = getService('loader-service').loader;
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({ background: '#ffffff' }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-custom-css-variable-name="0"]')
+      .doesNotExist('no rows before a variable is added');
+
+    await click('[data-test-add-custom-css-variable]');
+    await fillIn('[data-test-custom-css-variable-name="0"]', 'motionFast');
+    await fillIn('[data-test-custom-css-variable-value="0"]', '100ms');
+
+    assert.deepEqual(
+      card.rootVariables.customCssVariables.map(({ name, value }) => [
+        name,
+        value,
+      ]),
+      [['motionFast', '100ms']],
+      'the typed name and value reach the model',
+    );
+    assert.true(
+      (card.cssVariables ?? '').includes('--motion-fast: 100ms'),
+      `expected the token in the generated CSS: ${card.cssVariables}`,
+    );
+
+    await click('[data-test-remove-custom-css-variable="0"]');
+    assert.strictEqual(
+      card.rootVariables.customCssVariables.length,
+      0,
+      'the row is removed from the model',
+    );
+    assert.false(
+      (card.cssVariables ?? '').includes('--motion-fast'),
+      'and stops being emitted',
     );
   });
 });

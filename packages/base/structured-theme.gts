@@ -9,6 +9,7 @@ import {
 import {
   eq,
   buildCssGroups,
+  buildCssVariableName,
   generateCssVariables,
   googleFontImportsFor,
   parseCssGroups,
@@ -29,6 +30,7 @@ import {
   type BaseDefComponent,
 } from './card-api';
 import ThemeVarField, {
+  CustomCssVariable,
   ThemeTypographyField,
 } from './structured-theme-variables';
 import {
@@ -96,7 +98,10 @@ export const withPreviewNavSection = (
   return [{ id: 'preview', navTitle: 'Preview' }, ...sections];
 };
 
-// Applies parsed CSS rules back onto the card fields for editing.
+// Applies parsed CSS rules back onto the card fields for editing. A property
+// with no declared field is kept as a custom variable rather than dropped:
+// the theme's CSS export emits those, so discarding them on import would lose
+// a token on every round trip.
 export const applyCssRulesToField = (
   field: ThemeVarField | undefined,
   rules: CssRuleMap | undefined,
@@ -111,17 +116,45 @@ export const applyCssRulesToField = (
   const lookup = new Map<string, string>(
     cssFields.map((f) => [f.cssVariableName, f.fieldName]),
   );
+  const custom = [...(field.customCssVariables ?? [])];
+  const customIndex = new Map<string, CustomCssVariable>(
+    custom.map((entry) => [buildCssVariableName(entry.name), entry]),
+  );
+  let customChanged = false;
   for (let [property, value] of rules.entries()) {
     const fieldName = lookup.get(property);
-    if (!fieldName) {
+    if (fieldName) {
+      (field as any)[fieldName] = value;
       continue;
     }
-    (field as any)[fieldName] = value;
+    const existing = customIndex.get(property);
+    if (existing) {
+      existing.value = value;
+      customChanged = true;
+      continue;
+    }
+    // stored without the `--` prefix, the convention the field's editor uses
+    let entry = new CustomCssVariable({
+      name: property.replace(/^--/, ''),
+      value,
+    });
+    custom.push(entry);
+    customIndex.set(property, entry);
+    customChanged = true;
+  }
+  if (customChanged) {
+    field.customCssVariables = custom;
   }
 };
 
 const resetCssVariables = (field: ThemeVarField | undefined) => {
-  let cssFields = field?.cssVariableFields;
+  if (!field) {
+    return;
+  }
+  if (field.customCssVariables?.length) {
+    field.customCssVariables = [];
+  }
+  let cssFields = field.cssVariableFields;
   if (!cssFields?.length) {
     return;
   }
@@ -492,11 +525,10 @@ export default class StructuredTheme extends Theme {
           parts.push(rows.join('\n'));
         }
       }
-      let rootEntries = model.rootVariables?.cssVariableFields ?? [];
+      let rootRules = model.rootVariables?.cssRuleMap;
       let rootRows: string[] = [];
-      for (let { name, value } of rootEntries) {
-        if (!value) continue;
-        rootRows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
+      for (let [name, value] of rootRules ?? []) {
+        rootRows.push(`- ${markdownEscape(name)}: \`${value}\``);
       }
       if (rootRows.length) {
         parts.push('## Root Variables');

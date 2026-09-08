@@ -9,6 +9,7 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type * as BrandFunctionalPaletteModule from '@cardstack/base/brand-functional-palette';
 import type * as BrandGuideModule from '@cardstack/base/brand-guide';
 import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
 
@@ -19,8 +20,9 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
   let loader: Loader;
   let BrandGuide: typeof BrandGuideModule.default;
   let CompoundColorField: typeof BrandGuideModule.CompoundColorField;
-  let CustomCssVariable: typeof BrandGuideModule.CustomCssVariable;
+  let CustomCssVariable: typeof StructuredThemeVarsModule.CustomCssVariable;
   let ThemeVarField: typeof StructuredThemeVarsModule.default;
+  let BrandFunctionalPalette: typeof BrandFunctionalPaletteModule.default;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -29,10 +31,14 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     );
     BrandGuide = brandGuideModule.default;
     CompoundColorField = brandGuideModule.CompoundColorField;
-    CustomCssVariable = brandGuideModule.CustomCssVariable;
-    ThemeVarField = (
-      await loader.import<typeof StructuredThemeVarsModule>(
-        '@cardstack/base/structured-theme-variables',
+    let themeVarsModule = await loader.import<typeof StructuredThemeVarsModule>(
+      '@cardstack/base/structured-theme-variables',
+    );
+    CustomCssVariable = themeVarsModule.CustomCssVariable;
+    ThemeVarField = themeVarsModule.default;
+    BrandFunctionalPalette = (
+      await loader.import<typeof BrandFunctionalPaletteModule>(
+        '@cardstack/base/brand-functional-palette',
       )
     ).default;
   });
@@ -45,9 +51,11 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
       .doesNotExist('hidden when no custom variables or palette entries exist');
 
     let cardWithVars = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
+        ],
+      }),
     });
     await renderCard(loader, cardWithVars, 'isolated');
     assert
@@ -67,12 +75,14 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
 
   test('custom CSS variable names are normalized and values are rendered, with incomplete entries filtered out', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: '', value: 'should-be-hidden' }),
-        new CustomCssVariable({ name: 'noValue', value: '' }),
-        new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif' }),
-        new CustomCssVariable({ name: 'spacing', value: '1.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: '', value: 'should-be-hidden' }),
+          new CustomCssVariable({ name: 'noValue', value: '' }),
+          new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif' }),
+          new CustomCssVariable({ name: 'spacing', value: '1.5rem' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'isolated');
 
@@ -100,10 +110,13 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
 
   test('custom-css section is hidden when all entries have missing name or value', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: 'noValue', value: '' }),
-        new CustomCssVariable({ name: '', value: 'noName' }),
-      ],
+      rootVariables: new ThemeVarField({
+        background: '#f6e6ee',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'noValue', value: '' }),
+          new CustomCssVariable({ name: '', value: 'noName' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'isolated');
 
@@ -134,10 +147,12 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
 
   test('trailing semicolons in custom CSS variable values are stripped in display and copy block', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif;' }),
-        new CustomCssVariable({ name: 'spacing', value: '1.5rem;;' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif;' }),
+          new CustomCssVariable({ name: 'spacing', value: '1.5rem;;' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'isolated');
 
@@ -168,11 +183,13 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
 
   test('customCssVariables appear in computed cssVariables with normalized names, empty-name entries excluded', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: '', value: 'should-be-excluded' }),
-        new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif' }),
-        new CustomCssVariable({ name: 'spacingSm', value: '0.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: '', value: 'should-be-excluded' }),
+          new CustomCssVariable({ name: 'myFont', value: 'Georgia, serif' }),
+          new CustomCssVariable({ name: 'spacingSm', value: '0.5rem' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'isolated');
 
@@ -188,6 +205,71 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     assert.notOk(
       css.includes('should-be-excluded'),
       'entry with empty name is excluded from cssVariables',
+    );
+  });
+
+  test('each color scheme carries its own custom variable values', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({
+        background: '#ffffff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+          new CustomCssVariable({ name: 'shapeRadius', value: '0.5rem' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({
+        background: '#000000',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '200ms' }),
+        ],
+      }),
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let css = card.cssVariables ?? '';
+    let root = css.slice(css.indexOf(':root'), css.indexOf('.dark'));
+    let dark = css.slice(css.indexOf('.dark'));
+    assert.true(
+      root.includes('--motion-fast: 100ms'),
+      `expected the light-mode value in :root: ${root}`,
+    );
+    assert.true(
+      dark.includes('--motion-fast: 200ms'),
+      `expected the dark-mode value in .dark: ${dark}`,
+    );
+    assert.true(
+      root.includes('--shape-radius: 0.5rem'),
+      'a token set only in the light scheme is emitted in :root',
+    );
+    assert.false(
+      dark.includes('--shape-radius'),
+      'it is not repeated in .dark, where it cascades in from :root',
+    );
+  });
+
+  test('a custom variable never overwrites the computed value of the other color scheme', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      functionalPalette: new BrandFunctionalPalette({
+        light: '#ffffff',
+        dark: '#000000',
+      }),
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'foreground', value: '#ff0000' }),
+        ],
+      }),
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let css = card.cssVariables ?? '';
+    let dark = css.slice(css.indexOf('.dark'));
+    assert.true(
+      css.slice(0, css.indexOf('.dark')).includes('--foreground: #ff0000'),
+      `expected the light-mode entry to hold the custom value: ${css}`,
+    );
+    assert.true(
+      dark.includes('--foreground: #ffffff'),
+      `expected .dark to keep the value computed from the functional palette: ${dark}`,
     );
   });
 

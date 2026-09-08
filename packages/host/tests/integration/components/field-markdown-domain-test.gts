@@ -69,6 +69,7 @@ module('Integration | field markdown domain', function (hooks) {
   let StructuredTheme: typeof StructuredThemeModule.default;
   let ThemeVarField: typeof StructuredThemeVarsModule.default;
   let ThemeTypographyField: typeof StructuredThemeVarsModule.ThemeTypographyField;
+  let CustomCssVariable: typeof StructuredThemeVarsModule.CustomCssVariable;
   let TextFileDef: typeof TextFileDefModule.TextFileDef;
   let TsFileDef: typeof TsFileDefModule.TsFileDef;
   let TypographyField: typeof TypographyFieldModule.default;
@@ -129,6 +130,7 @@ module('Integration | field markdown domain', function (hooks) {
       '@cardstack/base/structured-theme-variables',
     );
     ThemeVarField = themeVarsModule.default;
+    CustomCssVariable = themeVarsModule.CustomCssVariable;
     ThemeTypographyField = themeVarsModule.ThemeTypographyField;
     TextFileDef = (
       await loader.import<typeof TextFileDefModule>(
@@ -338,6 +340,9 @@ module('Integration | field markdown domain', function (hooks) {
       vars: new ThemeVarField({
         background: '#fff',
         foreground: '#000',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+        ],
       }),
     });
     await renderCard(loader, card, 'isolated');
@@ -352,6 +357,10 @@ module('Integration | field markdown domain', function (hooks) {
     assert.true(
       text.includes('- \\-\\-foreground: `#000`'),
       `expected foreground entry in: ${text}`,
+    );
+    assert.true(
+      text.includes('- \\-\\-motion\\-fast: `100ms`'),
+      `expected the custom variable entry in: ${text}`,
     );
     // Unpopulated fields (e.g. primary) should be omitted.
     assert.false(
@@ -611,6 +620,9 @@ module('Integration | field markdown domain', function (hooks) {
       }),
       rootVariables: new ThemeVarField({
         background: '#fff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+        ],
       }),
     });
     await renderCard(loader, card, 'markdown');
@@ -642,6 +654,10 @@ module('Integration | field markdown domain', function (hooks) {
     assert.true(
       text.includes('\\-\\-background'),
       `expected root var entry in: ${text}`,
+    );
+    assert.true(
+      text.includes('\\-\\-motion\\-fast: `100ms`'),
+      `expected the custom variable entry in: ${text}`,
     );
   });
 });

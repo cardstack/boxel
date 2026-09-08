@@ -31,6 +31,7 @@ import {
   sanitizeHtmlSafe,
   eq,
   CssVariableEntry,
+  type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
@@ -54,6 +55,10 @@ import {
   ResetButton,
   ThemeDashboardEmptyState,
 } from './default-templates/theme-dashboard';
+
+// `customCssVariables` lives on ThemeVarField, one list per color scheme;
+// re-exported for cards that import it from the brand guide.
+export { CustomCssVariable } from './structured-theme-variables';
 
 const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -438,76 +443,70 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     </div>
                   {{/if}}
                 {{else if (eq section.id 'custom-css')}}
-                  {{#if this.editMode}}
-                    <@fields.customCssVariables />
-                  {{else}}
-                    <p class='brand-guide-vars-description'>These variables are
-                      all of the custom CSS properties for usage by this theme
-                      only.</p>
-                    <div
-                      class='brand-guide-vars-box brand-guide-custom-css-block'
-                    >
-                      <CopyButton
-                        class='brand-guide-custom-css-block-copy-button'
-                        @textToCopy={{this.customCssVarsBlock}}
-                      />
-                      <dl class='brand-guide-vars'>
-                        {{#each this.paletteVarEntries as |entry|}}
-                          <dt class='var-row' data-test-brand-guide-palette-var>
-                            <code
-                              data-test-brand-guide-palette-var-name
-                            >{{entry.varName}}</code>
-                          </dt>
-                          <dd
-                            class='color-entry var-row'
-                            data-test-brand-guide-palette-swatch
-                          >
-                            <Swatch
-                              class='color-swatch-mini'
-                              @color={{entry.color.value}}
-                              @style='round'
-                            />
-                          </dd>
-                        {{/each}}
-                        {{#each this.customCssVarEntries as |entry|}}
-                          <dt class='var-row' data-test-brand-guide-css-var>
-                            <code
-                              data-test-brand-guide-css-var-name
-                            >{{entry.name}}</code>
-                          </dt>
-                          <dd class='var-row'>
-                            <code
-                              class='css-var-value'
-                              data-test-brand-guide-css-var-value
-                            >{{entry.value}}</code>
-                          </dd>
-                        {{/each}}
-                        {{#each this.brandImageAttachmentVarEntries as |entry|}}
-                          <dt
-                            class='var-row'
-                            data-test-brand-guide-image-attachment-var
-                          >
-                            <code
-                              data-test-brand-guide-image-attachment-varname
-                            >{{entry.varName}}</code>
-                          </dt>
-                          <dd
-                            class='var-row brand-image-attachment-var-dd'
-                            data-test-brand-guide-image-attachment-url
-                          >
-                            <img
-                              src={{entry.url}}
-                              alt={{entry.altText}}
-                              class='brand-image-attachment-thumb-mini'
-                            />
-                            <code
-                              class='css-var-value'
-                            >url({{entry.url}})</code>
-                          </dd>
-                        {{/each}}
-                      </dl>
-                    </div>
-                  {{/if}}
+                  <p class='brand-guide-vars-description'>These variables are
+                    all of the custom CSS properties for usage by this theme
+                    only.</p>
+                  <div
+                    class='brand-guide-vars-box brand-guide-custom-css-block'
+                  >
+                    <CopyButton
+                      class='brand-guide-custom-css-block-copy-button'
+                      @textToCopy={{this.customCssVarsBlock}}
+                    />
+                    <dl class='brand-guide-vars'>
+                      {{#each this.paletteVarEntries as |entry|}}
+                        <dt class='var-row' data-test-brand-guide-palette-var>
+                          <code
+                            data-test-brand-guide-palette-var-name
+                          >{{entry.varName}}</code>
+                        </dt>
+                        <dd
+                          class='color-entry var-row'
+                          data-test-brand-guide-palette-swatch
+                        >
+                          <Swatch
+                            class='color-swatch-mini'
+                            @color={{entry.color.value}}
+                            @style='round'
+                          />
+                        </dd>
+                      {{/each}}
+                      {{#each this.customCssVarEntries as |entry|}}
+                        <dt class='var-row' data-test-brand-guide-css-var>
+                          <code
+                            data-test-brand-guide-css-var-name
+                          >{{entry.name}}</code>
+                        </dt>
+                        <dd class='var-row'>
+                          <code
+                            class='css-var-value'
+                            data-test-brand-guide-css-var-value
+                          >{{entry.value}}</code>
+                        </dd>
+                      {{/each}}
+                      {{#each this.brandImageAttachmentVarEntries as |entry|}}
+                        <dt
+                          class='var-row'
+                          data-test-brand-guide-image-attachment-var
+                        >
+                          <code
+                            data-test-brand-guide-image-attachment-varname
+                          >{{entry.varName}}</code>
+                        </dt>
+                        <dd
+                          class='var-row brand-image-attachment-var-dd'
+                          data-test-brand-guide-image-attachment-url
+                        >
+                          <img
+                            src={{entry.url}}
+                            alt={{entry.altText}}
+                            class='brand-image-attachment-thumb-mini'
+                          />
+                          <code class='css-var-value'>url({{entry.url}})</code>
+                        </dd>
+                      {{/each}}
+                    </dl>
+                  </div>
                 {{else if (eq section.id 'import-css')}}
                   {{! the cardInfo editor in the header owns the name and
                   description, so the importer only handles CSS here }}
@@ -977,16 +976,19 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   ];
 
   private get sectionsWithContent() {
-    // the Card Container CSS reference and the UI component samples are
-    // display-only, so they stay out of the editor; every other field is
-    // editable whether or not it has content
+    // the Card Container CSS reference, the UI component samples, the fonts
+    // reference and the custom CSS listing are display-only, so they stay out
+    // of the editor — custom variables are edited in the variable block they
+    // belong to, under Brand Palette; every other field is editable whether or
+    // not it has content
     if (this.editMode) {
       return orderEditSections(
         this.sections.filter(
           (section) =>
             section.id !== 'card-container-css' &&
             section.id !== 'ui-components' &&
-            section.id !== 'fonts',
+            section.id !== 'fonts' &&
+            section.id !== 'custom-css',
         ),
         this.hasThemeCss,
       );
@@ -1101,15 +1103,26 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     return lines.join('\n');
   }
 
+  // The listing shows what the previewed scheme actually resolves to: dark
+  // mode inherits every light-mode token it does not itself override, the
+  // same way the generated `:root` / `.dark` blocks cascade.
   private get customCssVarEntries() {
-    if (!entriesToCssRuleMap || !this.args.model?.customCssVariables?.length) {
-      return [];
+    let rules = this.customCssRulesFor(this.isDarkMode);
+    return [...rules.entries()].map(([name, value]) => ({ name, value }));
+  }
+
+  private customCssRulesFor(isDarkMode: boolean): CssRuleMap {
+    let rules: CssRuleMap = new Map(
+      this.args.model?.rootVariables?.customCssRuleMap,
+    );
+    if (!isDarkMode) {
+      return rules;
     }
-    let rules = entriesToCssRuleMap(this.args.model?.customCssVariables);
-    return [...rules.entries()].map(([name, value]) => ({
-      name: buildCssVariableName(name),
-      value,
-    }));
+    for (let [name, value] of this.args.model?.darkModeVariables
+      ?.customCssRuleMap ?? []) {
+      rules.set(name, value);
+    }
+    return rules;
   }
 
   private get brandImageAttachmentVarEntries() {
@@ -1123,10 +1136,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   }
 
   private get hasCustomVariables() {
-    // unnamed palette entries emit no variables, so they must not count
+    // unnamed palette entries emit no variables, so they must not count;
+    // a token defined in either color scheme gives the section content, so
+    // toggling the preview mode never makes it appear or disappear
     return Boolean(
       this.paletteVarEntries.length ||
-      this.customCssVarEntries.length ||
+      this.customCssRulesFor(true).size ||
       this.brandImageAttachmentVarEntries.length,
     );
   }
@@ -1192,32 +1207,6 @@ export class CompoundColorField extends FieldDef {
       </div>
       <style scoped>
         .compound-color-edit {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp-sm);
-        }
-      </style>
-    </template>
-  };
-}
-
-export class CustomCssVariable extends FieldDef {
-  static displayName = 'Custom CSS Variable';
-  @field name = contains(StringField);
-  @field value = contains(StringField);
-
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <div class='custom-css-variable-edit'>
-        <FieldContainer @label='Variable Name' @vertical={{true}}>
-          <@fields.name />
-        </FieldContainer>
-        <FieldContainer @label='Value' @vertical={{true}}>
-          <@fields.value />
-        </FieldContainer>
-      </div>
-      <style scoped>
-        .custom-css-variable-edit {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: var(--boxel-sp-sm);
@@ -1368,15 +1357,6 @@ export default class BrandGuide extends DetailedStyleRef {
       if (!brandRules.has(varName)) brandRules.set(varName, `url(${url})`);
     }
 
-    // add custom CSS variables
-    for (let cssVar of this.customCssVariables ?? []) {
-      let name = cssVar.name?.trim();
-      let value = cssVar.value?.trim();
-      if (!name || !value) continue;
-      let varName = buildCssVariableName(name);
-      if (!brandRules.has(varName)) brandRules.set(varName, value);
-    }
-
     if (!brandRules.size) {
       return;
     }
@@ -1447,12 +1427,6 @@ export default class BrandGuide extends DetailedStyleRef {
   @field typography = contains(ThemeTypographyField);
   @field markUsage = contains(BrandLogo);
   @field brandImageAttachments = containsMany(CompoundImageField);
-  @field customCssVariables = containsMany(CustomCssVariable);
-
-  protected resetCssFields() {
-    super.resetCssFields();
-    this.customCssVariables = [];
-  }
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {

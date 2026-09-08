@@ -127,7 +127,41 @@
         "secondaryForeground": "var(--boxel-light, #FFFFFF)",
         "destructiveForeground": "#F8FAFC",
         "sidebarAccentForeground": "#0F172A",
-        "sidebarPrimaryForeground": "#0F172A"
+        "sidebarPrimaryForeground": "#0F172A",
+        "customCssVariables": [
+          {
+            "name": "sp-1",
+            "value": "var(--spacing)"
+          },
+          {
+            "name": "sp-2",
+            "value": "calc(var(--spacing) * 2)"
+          },
+          {
+            "name": "sp-3",
+            "value": "calc(var(--spacing) * 3)"
+          },
+          {
+            "name": "sp-4",
+            "value": "calc(var(--spacing) * 4)"
+          },
+          {
+            "name": "sp-6",
+            "value": "calc(var(--spacing) * 6)"
+          },
+          {
+            "name": "sp-8",
+            "value": "calc(var(--spacing) * 8)"
+          },
+          {
+            "name": "sp-12",
+            "value": "calc(var(--spacing) * 12)"
+          },
+          {
+            "name": "sp-16",
+            "value": "calc(var(--spacing) * 16)"
+          }
+        ]
       },
       "motionLanguage": "# Animation Physics: Mass Without Bounce\n\n**Elements have weight. Transitions have purpose.**\n\nWhile playful brands embrace elastic easing and overshoot, Box Elements move with industrial precision. Think heavy machinery that's perfectly calibrated\u2014smooth motion, hard stops, no wobble.\n\n## Motion Principles\n\n**1. Parallax Scrolling**  \nAs content scrolls, the background grid moves at 0.5x speed while foreground boxes move at 1x. This subtle depth cue makes flat UI feel spatially aware without requiring shadow-heavy 3D effects.\n\n**2. The Curtain Wipe**  \nPage transitions use solid color blocks (Teal or Lime) that slide up to cover the entire viewport before revealing new content. It's like a film cut, not a fade. This reinforces the Box Element's \"bounded space\" metaphor\u2014the screen itself is just another box.\n\n**3. No Bounce, Ever**  \nEasing functions use `cubic-bezier(0.2, 0, 0.2, 1)` (smooth deceleration to hard stop). No spring physics. No elastic snapback. When a Box Element arrives, it *arrives*. This communicates stability and precision.\n\n**4. Stagger Reveals**  \nWhen multiple boxes appear (e.g., loading a dashboard), they cascade in with 40ms delays between each. Not simultaneous. Not random. Ordered and predictable\u2014like watching a terminal compile output.\n\n**The whimsy:** Motion isn't decoration. It's information about system state. A drawer that slides open tells you where it came from. A box that fades in tells you nothing. Be opinionated about physics.",
       "technicalSpecs": "# Implementation Standards\n\n**How Box Elements get built.**\n\n## Border System\n\n- **Width:** Always `1px`. Never 2px. Never 0.5px.\n- **Color (Light):** `#E2E8F0` (nearly invisible)\n- **Color (Dark):** `#333333` (slightly brighter than container)\n- **Style:** Solid. No dashed, dotted, or gradient borders.\n\n## Border Radius\n\n- **Standard:** `0.625rem` (10px)\n- **Override:** Only for specific micro-components like Data Pills, which may use proportional radius at smaller scales\n- **Sharp corners:** Reserved for deliberate \"raw code\" contexts (e.g., syntax highlighting blocks)\n\n## Grid System\n\n- **Column count:** 12 (fluid)\n- **Gutter:** 24px (3\u00d7 base spacing unit)\n- **Visible grid:** Optional background pattern at `opacity: 0.1`\u20142px dots with 20px spacing\n- **Breakpoints:** 640px \u00b7 768px \u00b7 1024px \u00b7 1280px \u00b7 1536px\n\n## Glassmorphism Effects\n\nFor floating elements that need to maintain context:\n\n```css\nbackdrop-filter: blur(12px);\nbackground: rgba(255, 255, 255, 0.8); /* light mode */\nbackground: rgba(30, 30, 30, 0.8); /* dark mode */\n```\n\nUse sparingly. Primarily for sticky headers and modal overlays where seeing the grid beneath adds clarity.\n\n## Z-Index Hierarchy\n\n- **Base grid:** 0\n- **Box Elements:** 1\n- **Interactive elements (hover):** 2\n- **Floating panels:** 10\n- **Tooltips:** 100\n- **Modals:** 1000\n\nNo arbitrary values. If you need a new layer, define it in the system.\n\n## Shadow Protocol\n\n**Light mode:**  \nMinimal shadows for separation: `0 1px 2px 0 rgb(0 0 0 / 0.05)`\n\n**Dark mode:**  \nAlmost no shadows\u2014rely on luminance contrast instead. If shadow is needed: `0 1px 2px 0 rgb(0 0 0 / 0.5)`\n\n**Spec truth:** If implementation requires documentation longer than the code itself, simplify the system.",
@@ -241,41 +275,7 @@
       "historicalContext": null,
       "materialVocabulary": "# Materiality Without Skeuomorphism\n\n**Digital materials that feel real\u2014not realistic.**\n\nBoxel's material language draws from high-end productivity tools: the textured matte of a Leica camera, the precision of a Muji notebook, the honest surfaces of a ThinkPad keyboard.\n\n## Light Mode: Precision Paper\n\nIn light mode, Box Elements exist on a subtle grey surface (`#F8F7FA`) that mimics premium bond paper under soft office lighting. Shadows are minimal\u2014just enough to separate the white box from the neutral canvas. We're not simulating physical paper; we're capturing the *feeling* of working with quality materials.\n\n**Shadow strategy:** `0 1px 2px 0 rgb(0 0 0 / 0.05)`  \nBarely there. A whisper of separation.\n\n## Dark Mode: Matte Carbon\n\nIn dark mode, we embrace the flat dashboard aesthetic. No heavy shadows\u2014instead, we use **luminance contrast** to define layers. A `#1E1E1E` box on a `#0F0F0F` surface creates separation through brightness, not through simulated lighting.\n\nBorders become slightly *brighter* than their containers (`#333333` on `#1E1E1E`), creating a subtle glow effect that maintains the Box Element's structural legibility in low-light conditions.\n\n**The whimsy:** Dark mode isn't just inverted light mode. It's a different material state\u2014like switching from paper to carbon fiber. Same structural logic, different tactile presence.",
       "componentVocabulary": "# Standard Box Element Patterns\n\n**Reusable primitives for interface composition.**\n\n## The Mini-Card\n\nA compact Box Element (typically 240\u00d7120px) that displays a single data entity: a file, a transaction, a user, a metric. Contains:\n\n- **Corner label** (Mono, uppercase): Entity type or ID\n- **Primary content** (Sans, medium): The key value or name\n- **Metadata strip** (Mono, muted): Timestamp, status, or secondary info\n\nUse case: Dashboard tiles, file browsers, transaction logs.\n\n## The Toolbar\n\nA horizontal strip of square interaction boxes (32\u00d732px minimum). Each button is its own Box Element with a 1px border. No background fill on default state\u2014fill with Teal on hover, Lime on active.\n\nButtons sit edge-to-edge with no gap, creating a continuous bar. Think: the ribbon interface from Office, but with personality.\n\n## The Data Pill\n\nA tiny rounded tag (height: 20px, padding: 4px 8px) using Mono font. Border radius matches the base `0.625rem` but at smaller scale looks more pill-like. Used for status indicators (`ACTIVE`, `PENDING`), categories, or filter chips.\n\nKey distinction: Pills are *inline* elements. They live within other boxes, not as standalone containers.\n\n## The Splitter\n\nA draggable 1px border between two Box Elements that lets users resize their workspace. On hover, expands to 3px and shifts to Teal. Cursor becomes `col-resize` or `row-resize`.\n\nThis component makes the Box Element's promise literal: users can reshape the boundaries of their interface.\n\n**Component truth:** Every UI element should be composable. If you can't nest it or arrange it in a grid, it's not a Box Element\u2014it's an exception. Minimize exceptions.",
-      "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to the 4px grid)\n- Mono font for all metadata\u2014creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = accent/highlight, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system\u2014it's a collection of one-off solutions. Box Elements scale because their rules scale.",
-      "customCssVariables": [
-        {
-          "name": "sp-1",
-          "value": "var(--spacing)"
-        },
-        {
-          "name": "sp-2",
-          "value": "calc(var(--spacing) * 2)"
-        },
-        {
-          "name": "sp-3",
-          "value": "calc(var(--spacing) * 3)"
-        },
-        {
-          "name": "sp-4",
-          "value": "calc(var(--spacing) * 4)"
-        },
-        {
-          "name": "sp-6",
-          "value": "calc(var(--spacing) * 6)"
-        },
-        {
-          "name": "sp-8",
-          "value": "calc(var(--spacing) * 8)"
-        },
-        {
-          "name": "sp-12",
-          "value": "calc(var(--spacing) * 12)"
-        },
-        {
-          "name": "sp-16",
-          "value": "calc(var(--spacing) * 16)"
-        }
-      ]
+      "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to the 4px grid)\n- Mono font for all metadata\u2014creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = accent/highlight, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system\u2014it's a collection of one-off solutions. Box Elements scale because their rules scale."
     }
   }
 }

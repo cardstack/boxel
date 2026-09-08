@@ -19,7 +19,7 @@ module('Integration | brand-guide | edit view', function (hooks) {
   let loader: Loader;
   let BrandGuide: typeof BrandGuideModule.default;
   let CompoundColorField: typeof BrandGuideModule.CompoundColorField;
-  let CustomCssVariable: typeof BrandGuideModule.CustomCssVariable;
+  let CustomCssVariable: typeof StructuredThemeVarsModule.CustomCssVariable;
   let ThemeVarField: typeof StructuredThemeVarsModule.default;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -29,12 +29,11 @@ module('Integration | brand-guide | edit view', function (hooks) {
     );
     BrandGuide = brandGuideModule.default;
     CompoundColorField = brandGuideModule.CompoundColorField;
-    CustomCssVariable = brandGuideModule.CustomCssVariable;
-    ThemeVarField = (
-      await loader.import<typeof StructuredThemeVarsModule>(
-        '@cardstack/base/structured-theme-variables',
-      )
-    ).default;
+    let themeVarsModule = await loader.import<typeof StructuredThemeVarsModule>(
+      '@cardstack/base/structured-theme-variables',
+    );
+    CustomCssVariable = themeVarsModule.CustomCssVariable;
+    ThemeVarField = themeVarsModule.default;
   });
 
   function renderedSectionIds(element: Element) {
@@ -52,7 +51,6 @@ module('Integration | brand-guide | edit view', function (hooks) {
       'typography',
       'mark-usage',
       'brand-image-attachments',
-      'custom-css',
       'visual-dna',
       'inspirations',
       'import-css',
@@ -68,6 +66,11 @@ module('Integration | brand-guide | edit view', function (hooks) {
     assert
       .dom('[data-test-brand-guide-section="card-container-css"]')
       .doesNotExist();
+    assert
+      .dom('[data-test-brand-guide-section="custom-css"]')
+      .doesNotExist(
+        'the custom css listing is display-only: its editors live in the variable blocks',
+      );
     assert.dom('[data-test-import-theme]').exists();
     assert.dom('[data-test-reset]').exists();
   });
@@ -77,9 +80,11 @@ module('Integration | brand-guide | edit view', function (hooks) {
       brandColorPalette: [
         new CompoundColorField({ name: 'brand-blue', value: '#0050ff' }),
       ],
-      customCssVariables: [
-        new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'edit');
 
@@ -87,8 +92,10 @@ module('Integration | brand-guide | edit view', function (hooks) {
       .dom('[data-test-brand-guide-section="brand-palette"] input')
       .exists('brand color palette entries are editable');
     assert
-      .dom('[data-test-brand-guide-section="custom-css"] input')
-      .exists('custom CSS variables are editable');
+      .dom(
+        '[data-test-brand-guide-section="brand-palette"] [data-test-theme-custom-vars] input',
+      )
+      .exists('custom CSS variables are editable within the variable block');
     assert
       .dom('[data-test-brand-guide-css-var]')
       .doesNotExist('read-only custom CSS listing is not rendered in edit');
@@ -126,20 +133,32 @@ module('Integration | brand-guide | edit view', function (hooks) {
     assert.dom('[data-test-theme-nav] [data-test-mode]').exists();
   });
 
-  test('reset clears custom css variables along with the theme variables', async function (this: RenderingTestContext, assert) {
+  test('reset clears custom css variables in both color schemes along with the theme variables', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
-      customCssVariables: [
-        new CustomCssVariable({ name: 'spacingSm', value: '0.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        background: '#f6e6ee',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'spacingSm', value: '0.5rem' }),
+        ],
+      }),
+      darkModeVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'spacingSm', value: '0.75rem' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'edit');
 
     await click('[data-test-reset]');
     assert.strictEqual(
-      card.customCssVariables.length,
+      card.rootVariables.customCssVariables.length,
       0,
-      'custom css variables are cleared',
+      'light-mode custom css variables are cleared',
+    );
+    assert.strictEqual(
+      card.darkModeVariables.customCssVariables.length,
+      0,
+      'dark-mode custom css variables are cleared',
     );
     assert.notOk(
       card.rootVariables?.background,
@@ -149,9 +168,11 @@ module('Integration | brand-guide | edit view', function (hooks) {
 
   test('isolated view has no importer or reset button', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
-      customCssVariables: [
-        new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
-      ],
+      rootVariables: new ThemeVarField({
+        customCssVariables: [
+          new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
+        ],
+      }),
     });
     await renderCard(loader, card, 'isolated');
 

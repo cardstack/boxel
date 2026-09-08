@@ -1,18 +1,25 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { schedule } from '@ember/runloop';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import {
+  BoxelInput,
+  Button,
   CopyButton,
   FieldContainer,
+  IconButton,
   Pill,
   Swatch,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
+import { IconPlus, IconTrash } from '@cardstack/boxel-ui/icons';
 import {
   buildCssVariableName,
   entriesToCssRuleMap,
   markdownEscape,
+  not,
   sanitizeHtmlSafe,
   type CssVariableEntry,
   type CssRuleMap,
@@ -21,6 +28,7 @@ import {
 import {
   field,
   contains,
+  containsMany,
   Component,
   FieldDef,
   getFields,
@@ -28,6 +36,8 @@ import {
   type BaseDefComponent,
   type BoxComponent,
 } from './card-api';
+
+import { PermissionsConsumer } from './field-component';
 
 import ColorField from './color';
 import CSSValueField from './css-value';
@@ -48,6 +58,9 @@ const COLOR_VALUE_INPUT_HELP =
   'Use CSS color values such as hex (#ff00ff), rgb(...), hsl(...), or okhcl(...).';
 
 export const DEFAULT_THEME_SCALE = '1.333';
+
+// ThemeVarField fields that do not each stand for one CSS variable
+const NON_VARIABLE_FIELDS = ['customCssVariables'];
 
 const TYPESCALE_OPTIONS = [
   { value: '1.067', label: 'Minor Second (1.067)' },
@@ -589,6 +602,20 @@ export class FontPreviews extends GlimmerComponent<{
 }
 
 class Embedded extends Component<typeof ThemeVarField> {
+  // The contract tokens render as swatches from `fieldGroups`; a theme's own
+  // tokens hold arbitrary values, so they are listed as name/value text.
+  private get customVariables() {
+    return [...(this.args.model?.customCssRuleMap?.entries() ?? [])].map(
+      ([name, value]) => ({ name, value }),
+    );
+  }
+
+  private get customVariablesCssBlock() {
+    return this.customVariables
+      .map(({ name, value }) => `${name}: ${value};`)
+      .join('\n');
+  }
+
   <template>
     {{#each @model.fieldGroups as |group|}}
       <h4 class='field-group-title'>{{group.title}}</h4>
@@ -597,8 +624,89 @@ class Embedded extends Component<typeof ThemeVarField> {
       {{/if}}
       <FieldGrid class='field-group-grid' @fields={{group.fields}} />
     {{/each}}
+    {{#if this.customVariables.length}}
+      <section class='theme-custom-vars' data-test-theme-custom-vars-list>
+        <h4 class='field-group-title'>Custom Variables</h4>
+        <p class='field-group-description'>The CSS properties this theme defines
+          itself, beyond the contract tokens above.</p>
+        <div class='theme-custom-vars-box'>
+          <CopyButton
+            class='theme-custom-vars-copy-button'
+            @textToCopy={{this.customVariablesCssBlock}}
+          />
+          <dl class='theme-custom-vars-list'>
+            {{#each this.customVariables as |entry|}}
+              <dt class='theme-custom-var-row' data-test-theme-custom-var>
+                <code data-test-theme-custom-var-name>{{entry.name}}</code>
+              </dt>
+              <dd class='theme-custom-var-row'>
+                <code
+                  class='theme-custom-var-value'
+                  data-test-theme-custom-var-value
+                >{{entry.value}}</code>
+              </dd>
+            {{/each}}
+          </dl>
+        </div>
+      </section>
+    {{/if}}
     <style scoped>
       @layer baseComponent {
+        .theme-custom-vars {
+          /* own container so the stacked layout keys off this list's width */
+          container: theme-custom-vars / inline-size;
+          margin-bottom: var(--boxel-sp-2xl);
+        }
+        .theme-custom-vars-box {
+          position: relative;
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp);
+        }
+        .theme-custom-vars-copy-button {
+          position: absolute;
+          top: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
+        }
+        .theme-custom-vars-list {
+          display: grid;
+          grid-template-columns: max-content 1fr;
+          gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+        }
+        @container theme-custom-vars (width <= 400px) {
+          /* stack the name over its value so long names do not overflow */
+          .theme-custom-vars-list {
+            grid-template-columns: 1fr;
+          }
+        }
+        .theme-custom-vars-list dt {
+          font-weight: 600;
+        }
+        .theme-custom-vars-list dd {
+          margin: 0;
+          min-width: 0;
+        }
+        .theme-custom-var-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          min-width: 0;
+        }
+        .theme-custom-vars-list code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+        .theme-custom-var-value {
+          color: var(--muted-foreground);
+        }
         .field-group-title {
           margin-block: var(--boxel-sp);
           color: var(--muted-foreground);
@@ -865,6 +973,35 @@ class FieldGrid extends GlimmerComponent<{
       }
     </style>
   </template>
+}
+
+// A theme's own token (e.g. a motion or shape constant) that has no declared
+// field on ThemeVarField. It stays out of `cssVariableFields`, so the
+// declared-field machinery never sees it, and is emitted via `cssRuleMap`.
+export class CustomCssVariable extends FieldDef {
+  static displayName = 'Custom CSS Variable';
+  @field name = contains(StringField);
+  @field value = contains(StringField);
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <div class='custom-css-variable-edit'>
+        <FieldContainer @label='Variable Name' @vertical={{true}}>
+          <@fields.name />
+        </FieldContainer>
+        <FieldContainer @label='Value' @vertical={{true}}>
+          <@fields.value />
+        </FieldContainer>
+      </div>
+      <style scoped>
+        .custom-css-variable-edit {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp-sm);
+        }
+      </style>
+    </template>
+  };
 }
 
 export default class ThemeVarField extends FieldDef {
@@ -1212,14 +1349,23 @@ export default class ThemeVarField extends FieldDef {
   @field shadowInset = contains(CSSValueField, {
     description: 'Inset shadow for sunken wells and inputs.',
   });
+  @field customCssVariables = containsMany(CustomCssVariable, {
+    description:
+      "The theme's own CSS variables, for tokens that have no declared field (e.g. motion and shape constants). Each color scheme carries its own list, so a token whose value is the same in both belongs in the light-mode list alone, from where it cascades into dark mode.",
+  });
 
+  // Only the declared variable fields: `customCssVariables` is a list of
+  // name/value pairs rather than a single variable, so it is excluded here and
+  // handled by `customCssRuleMap`.
   get cssVariableFields(): CssVariableFieldEntry[] | undefined {
     let fields = getFields(this);
     if (!fields) {
       return;
     }
 
-    let fieldNames = Object.keys(fields)?.sort();
+    let fieldNames = Object.keys(fields)
+      ?.filter((fieldName) => !NON_VARIABLE_FIELDS.includes(fieldName))
+      ?.sort();
     if (!fieldNames?.length) {
       return;
     }
@@ -1371,11 +1517,39 @@ export default class ThemeVarField extends FieldDef {
     ];
   }
 
+  // Names are dasherized so `motionFast` and `motion-fast` land on the same
+  // variable, matching how the declared fields derive their names.
+  get customCssRuleMap(): CssRuleMap | undefined {
+    if (!entriesToCssRuleMap || !this.customCssVariables?.length) {
+      return;
+    }
+    let rules: CssRuleMap = new Map();
+    for (let [name, value] of entriesToCssRuleMap(
+      this.customCssVariables,
+    ).entries()) {
+      let variableName = buildCssVariableName(name);
+      if (!variableName) {
+        continue;
+      }
+      rules.set(variableName, value);
+    }
+    return rules.size ? rules : undefined;
+  }
+
   get cssRuleMap(): CssRuleMap | undefined {
     if (!entriesToCssRuleMap) {
       return;
     }
-    return entriesToCssRuleMap(this.cssVariableFields);
+    let rules = entriesToCssRuleMap(this.cssVariableFields);
+    // a declared field wins a name collision: it is the structured value the
+    // rest of the theme machinery reads
+    for (let [name, value] of this.customCssRuleMap?.entries() ?? []) {
+      if (rules.has(name)) {
+        continue;
+      }
+      rules.set(name, value);
+    }
+    return rules;
   }
 
   static edit = class Edit extends Component<typeof ThemeVarField> {
@@ -1428,6 +1602,27 @@ export default class ThemeVarField extends FieldDef {
         { label: 'Inset', value: m.shadowInset },
       ].filter((s) => s.value);
     }
+
+    private setName = (entry: CustomCssVariable, name: string) => {
+      entry.name = name;
+    };
+
+    private setValue = (entry: CustomCssVariable, value: string) => {
+      entry.value = value;
+    };
+
+    private addVariable = () => {
+      this.args.model.customCssVariables = [
+        ...(this.args.model.customCssVariables ?? []),
+        new CustomCssVariable(),
+      ];
+    };
+
+    private removeVariable = (entry: CustomCssVariable) => {
+      this.args.model.customCssVariables = (
+        this.args.model.customCssVariables ?? []
+      ).filter((candidate) => candidate !== entry);
+    };
 
     private get fontStack() {
       if (!this.args.model) {
@@ -2236,6 +2431,68 @@ export default class ThemeVarField extends FieldDef {
             </FieldContainer>
           </div>
         </section>
+
+        <section class='theme-var-edit-section' data-test-theme-custom-vars>
+          <h4 class='theme-var-edit-heading'>Custom Variables</h4>
+          <p class='theme-var-edit-hint'>
+            Tokens this theme defines itself, such as motion and shape
+            constants. A value entered here applies to this color scheme only; a
+            token whose value is the same in both belongs in the light-mode list
+            alone, from where it cascades into dark mode.
+          </p>
+          {{! a plural field nested in another field gets no built-in editor
+            (see contains-many-component's shouldRenderEditor), so the rows are
+            ours to render }}
+          <PermissionsConsumer as |permissions|>
+            {{#if @model.customCssVariables.length}}
+              <ul class='theme-var-custom-list'>
+                {{#each @model.customCssVariables as |entry index|}}
+                  <li class='theme-var-custom-row'>
+                    <FieldContainer @label='Variable Name' @vertical={{true}}>
+                      <BoxelInput
+                        @value={{entry.name}}
+                        @onInput={{fn this.setName entry}}
+                        @disabled={{not permissions.canWrite}}
+                        data-test-custom-css-variable-name={{index}}
+                      />
+                    </FieldContainer>
+                    <FieldContainer @label='Value' @vertical={{true}}>
+                      <BoxelInput
+                        @value={{entry.value}}
+                        @onInput={{fn this.setValue entry}}
+                        @disabled={{not permissions.canWrite}}
+                        data-test-custom-css-variable-value={{index}}
+                      />
+                    </FieldContainer>
+                    {{#if permissions.canWrite}}
+                      <IconButton
+                        @icon={{IconTrash}}
+                        @width='18'
+                        @height='18'
+                        class='theme-var-custom-remove'
+                        aria-label='Remove custom variable'
+                        {{on 'click' (fn this.removeVariable entry)}}
+                        data-test-remove-custom-css-variable={{index}}
+                      />
+                    {{/if}}
+                  </li>
+                {{/each}}
+              </ul>
+            {{/if}}
+            {{#if permissions.canWrite}}
+              <Button
+                class='theme-var-custom-add'
+                @kind='secondary'
+                @size='small'
+                {{on 'click' this.addVariable}}
+                data-test-add-custom-css-variable
+              >
+                <IconPlus width='12' height='12' role='presentation' />
+                Add Variable
+              </Button>
+            {{/if}}
+          </PermissionsConsumer>
+        </section>
       </div>
       <style scoped>
         .theme-var-edit {
@@ -2280,6 +2537,30 @@ export default class ThemeVarField extends FieldDef {
           margin: 0;
           font-size: var(--boxel-font-size-sm);
           color: var(--muted-foreground, var(--boxel-400));
+        }
+        .theme-var-custom-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-var-custom-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr auto;
+          align-items: end;
+          gap: var(--boxel-sp-sm);
+        }
+        .theme-var-custom-remove {
+          --icon-color: var(--muted-foreground, var(--boxel-400));
+          margin-bottom: var(--boxel-sp-5xs);
+        }
+        .theme-var-custom-add {
+          align-self: start;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
         }
         .theme-var-typescale-preview {
           display: flex;
@@ -2347,22 +2628,18 @@ export default class ThemeVarField extends FieldDef {
   static embedded: BaseDefComponent = Embedded;
 
   // CS-10787: emit a bulleted list of populated CSS variables — each entry
-  // is the CSS variable name paired with its value in inline code. Empty
-  // slots are skipped.
+  // is the CSS variable name paired with its value in inline code. Reads the
+  // rule map rather than the declared fields, so the theme's own custom tokens
+  // are summarized too; empty slots normalize away.
   static markdown = class Markdown extends Component<typeof ThemeVarField> {
     get text() {
-      let model = this.args.model;
-      if (!model) {
-        return '';
-      }
-      let entries = model.cssVariableFields ?? [];
-      if (!entries.length) {
+      let rules = this.args.model?.cssRuleMap;
+      if (!rules?.size) {
         return '';
       }
       let rows: string[] = [];
-      for (let { name, value } of entries) {
-        if (!value) continue;
-        rows.push(`- ${markdownEscape(name ?? '')}: \`${value}\``);
+      for (let [name, value] of rules.entries()) {
+        rows.push(`- ${markdownEscape(name)}: \`${value}\``);
       }
       return rows.join('\n');
     }
