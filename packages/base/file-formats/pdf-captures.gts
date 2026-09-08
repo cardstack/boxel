@@ -6,10 +6,15 @@
 // prerender pass — never part of the format API, so the live viewer stays a
 // native `<object>` with no pdf.js in the app's dependency graph.
 //
-// pdf.js loads from a pinned CDN build at capture time, the same delivery
-// the 3D family uses for three.js: the decoder is needed only inside the
-// capture render, and vendoring a PDF engine into the base realm would tax
-// every consumer for a poster only the prerender pass draws.
+// pdf.js loads from a pinned CDN build at capture time — via the browser's
+// native module loader, not the Boxel loader (see `loadPdfjs`). The decoder
+// is needed only inside the capture render, and vendoring a PDF engine into
+// the base realm would tax every consumer for a poster only the prerender
+// pass draws. Unlike the 3D family's live-render CDN loading, this fetch
+// happens on prerender infrastructure: CDN reachability from the prerender's
+// network is a standing requirement of this slot, and an unreachable CDN
+// surfaces as a bounded slot failure (retry-lane capped), never a blank
+// poster.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
@@ -23,6 +28,36 @@ interface CaptureSignature {
     model: any;
   };
   Element: HTMLElement;
+}
+
+// pdf.js loads through the browser's own module loader, deliberately
+// outside the Boxel loader: transpiled card code's `import()` is rewritten
+// into the loader's fetch-and-transpile pipeline, and pushing a
+// megabyte-scale engine through in-browser transpilation inside the
+// capture's bounded readiness window is a capture failure, not a load. The
+// indirection through `Function` is what keeps the transpiler's rewrite off
+// this one call; the browser fetches the pinned CORS-enabled ESM build
+// directly and caches it for the life of the pooled tab.
+const importNative = new Function('s', 'return import(s)') as (
+  s: string,
+) => Promise<any>;
+
+// Memoized so concurrent captures on one tab share a single load.
+let pdfjsPromise: Promise<any> | undefined;
+
+function loadPdfjs(): Promise<any> {
+  pdfjsPromise ??= importNative(
+    'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs',
+  ).then((pdfjs: any) => {
+    // Cross-origin `Worker` construction is blocked by the browser, so
+    // pdf.js falls back to loading this same URL as a module on the main
+    // thread (its "fake worker" path) — main-thread rasterization is the
+    // intended mode for a capture render, not an accident.
+    pdfjs.GlobalWorkerOptions.workerSrc =
+      'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs';
+    return pdfjs;
+  });
+  return pdfjsPromise;
 }
 
 export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
@@ -39,22 +74,23 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
       }
     };
     (async () => {
+      // Hoisted so the finally can release it: capture renders are route
+      // transitions on a pooled warm tab — one long-lived JS heap across
+      // many captures — so an undestroyed document accumulates until the
+      // tab recycles.
+      let doc: any;
       try {
         let url = fileResourceURL(this.args.model);
         if (!url) {
           return;
         }
-        let pdfjs: any =
-          // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-          await import('https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs');
-        pdfjs.GlobalWorkerOptions.workerSrc =
-          'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs';
+        let pdfjs: any = await loadPdfjs();
         let response = await fetch(url);
         if (!response.ok) {
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
-        let doc = await pdfjs.getDocument({ data, isEvalSupported: false })
+        doc = await pdfjs.getDocument({ data, isEvalSupported: false })
           .promise;
         let page = await doc.getPage(1);
         if (cancelled) {
@@ -78,12 +114,25 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
           canvasContext: canvas.getContext('2d'),
           viewport,
         }).promise;
-      } catch {
-        // A corrupt or unreadable document is an absent poster, not a broken
-        // capture render: readiness still resolves, the engine shoots the
-        // empty page, and byte-hash dedupe keeps the blank from churning.
-      } finally {
+        // Readiness resolves only on a painted page. A corrupt or
+        // unreadable document leaves `data-screenshot-pending` standing, so
+        // the engine's bounded wait fails this slot: no manifest entry
+        // lands, the fitted cell keeps the typed page placeholder, and the
+        // retry lane's failure cap bounds what a permanently unreadable
+        // file can cost. Resolving on failure would persist a blank white
+        // poster (the slot's default background) that the thumbnail seam
+        // would prefer over the placeholder.
         finish();
+      } catch {
+        // Intentionally not resolving readiness — see the comment above
+        // `finish()`.
+      } finally {
+        try {
+          await doc?.destroy?.();
+        } catch {
+          // Releasing a torn-down document must never mask the capture
+          // outcome.
+        }
       }
     })();
     return () => {

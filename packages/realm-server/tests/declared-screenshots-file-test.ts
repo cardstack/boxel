@@ -351,12 +351,7 @@ module(basename(import.meta.filename), function (hooks) {
         ),
       ),
     );
-    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
-    await realm.write('doc.pdf', pdfBytes);
-    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
-      afterJobId: baseline,
-      timeout: 60000,
-    });
+    await writeAndSettle('doc.pdf', pdfBytes);
 
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
@@ -382,6 +377,41 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/doc.pdf?name=poster`),
       `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('a corrupt PDF captures no poster and the fitted cell keeps the placeholder', async function (assert) {
+    // Not a PDF at all: the capture component's decode fails, readiness
+    // never resolves, and the slot's capture fails after the bounded wait —
+    // no manifest entry may land, or the blank white capture box would
+    // masquerade as a first page in every grid.
+    await writeAndSettle(
+      'broken.pdf',
+      new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.pdf`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an undecodable document',
+    );
+    let errors = (fileRow!.diagnostics as any)?.screenshotErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    assert.ok(
+      errors?.some((e) => e.name === 'poster'),
+      `the slot failure is recorded in diagnostics (got: ${JSON.stringify(errors)})`,
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.notOk(
+      fitted.includes(`_screenshot/broken.pdf?name=poster`),
+      'the fitted rendering keeps the typed placeholder, not a poster URL',
     );
   });
 
