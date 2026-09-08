@@ -396,8 +396,17 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   query: ['query'],
 };
 
-// Clauses without which a declaration names no work at all: a create with no
-// type to create, a query with no query.
+// Clauses without which an authored declaration names no work at all: a
+// create with no type to create, a query with no query.
+//
+// The rule is about what an author writes, not about every entry a reader
+// returns. A base operation reached with no declaration takes both of these
+// from the invocation instead — a plain `create` is called with the class and
+// carries the type in the request, a plain `query` is called with the query —
+// so the entries `getOperations` synthesizes for them are bare by design and
+// do not satisfy this. Anything that needs the guarantee this rule provides
+// is reading authored declarations, which is what `getDeclaredOperations`
+// returns.
 const REQUIRED_CLAUSE: Partial<Record<BaseOperationName, string>> = {
   create: 'of',
   query: 'query',
@@ -452,6 +461,13 @@ export const operation = function (
 //
 // `create` and `query` are type-scoped rather than instance-scoped: they come
 // back for a card def either way, but they target the type, not one instance.
+//
+// A synthesized entry is the bare `{ base }`: the base operations are the
+// executors, so there is nothing for an author to have said about one, and
+// what a plain `create` or `query` needs travels with the invocation rather
+// than the declaration. Read `declaration.base` to dispatch and this record
+// is uniform; reach for a clause and only authored declarations can be
+// relied on to carry one, so lower from `getDeclaredOperations`.
 export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
 ): Record<string, OperationDeclaration> {
@@ -473,6 +489,12 @@ export function getOperations(
 // drops everything an ancestor declared. Use it over `getOperations` when the
 // distinction matters: what an author wrote, as opposed to what the def type
 // provides on its own.
+//
+// Every entry here went through the decorator's validation, so a clause the
+// declaration's base requires is present. That makes this the reader to
+// lower from: lowering turns authored sugar into base-operation data plus
+// BXL, and a base operation reached with no declaration has nothing to
+// lower.
 export function getDeclaredOperations(
   classOrInstance: BaseDef | typeof BaseDef,
 ): Record<string, OperationDeclaration> {
