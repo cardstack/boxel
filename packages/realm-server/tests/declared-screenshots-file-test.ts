@@ -97,7 +97,7 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function writeAndSettle(path: string, content: string) {
+  async function writeAndSettle(path: string, content: string | Uint8Array) {
     let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
     await realm.write(path, content);
     await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
@@ -266,7 +266,45 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('the image family captures its declared thumb and rendition slots', async function (assert) {
+  test('a raster image captures its declared thumb and rendition slots', async function (assert) {
+    // A real 1×1 PNG: the meta extractor and the capture components decode
+    // actual bytes, and the slots are file-content-keyed.
+    await writeAndSettle(
+      'photo.png',
+      Uint8Array.from(
+        atob(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        ),
+        (c) => c.charCodeAt(0),
+      ),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}photo.png`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest, 'the image captures landed on the file row');
+    assert.deepEqual(
+      Object.keys(manifest!).sort(),
+      ['rendition-1280', 'rendition-640', 'thumb'],
+      'a raster declares the thumb plus both renditions',
+    );
+    assert.true(
+      manifest!.thumb.useAsThumbnail,
+      'the thumb slot feeds the thumbnail chain',
+    );
+    assert.strictEqual(manifest!.thumb.contentType, 'image/webp');
+    assert.strictEqual(
+      manifest!['rendition-640'].deviceScaleFactor,
+      1,
+      'renditions capture at their declared physical width',
+    );
+  });
+
+  test('a vector image captures only the thumb — the rendition slots live on RasterImageDef', async function (assert) {
     await writeAndSettle(
       'picture.svg',
       `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#0ea5e9"/></svg>`,
@@ -280,20 +318,14 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(fileRow, 'the file row exists');
     let manifest = fileRow!.screenshots as ScreenshotManifest | null;
     assert.ok(manifest, 'the image captures landed on the file row');
-    assert.deepEqual(Object.keys(manifest!).sort(), [
-      'rendition-1280',
-      'rendition-640',
-      'thumb',
-    ]);
+    assert.deepEqual(
+      Object.keys(manifest!),
+      ['thumb'],
+      'an SVG pays for no renditions: srcset excludes vectors and the fitted cell uses thumb, so nothing could consume them',
+    );
     assert.true(
       manifest!.thumb.useAsThumbnail,
       'the thumb slot feeds the thumbnail chain',
-    );
-    assert.strictEqual(manifest!.thumb.contentType, 'image/webp');
-    assert.strictEqual(
-      manifest!['rendition-640'].deviceScaleFactor,
-      1,
-      'renditions capture at their declared physical width',
     );
 
     // The fitted shell prefers the captured thumbnail: the view model reads

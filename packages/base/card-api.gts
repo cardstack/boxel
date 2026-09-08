@@ -150,7 +150,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
-import { IMAGE_FAMILY_SCREENSHOTS } from './file-formats/image-captures';
+import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -3876,12 +3876,13 @@ export class ImageDef extends FileDef {
   // only the renderer that draws its pixels.
   static previewComponent: FilePreviewComponent = ImagePreview;
 
-  // The family's captures: a `thumb` that feeds the thumbnail fallback chain
-  // and the fitted cell, plus the downscaled renditions the format
-  // templates' `srcset` reads. All file-content-keyed, so a metadata-only
-  // edit never re-decodes the pixels. See `image-captures` for the boxes and
-  // the capture-only components.
-  static screenshots: Record<string, ScreenshotSpec> = IMAGE_FAMILY_SCREENSHOTS;
+  // The family-wide capture: a `thumb` that feeds the thumbnail fallback
+  // chain and the fitted cell, for vectors and rasters alike. The srcset
+  // renditions are declared one level down on `RasterImageDef` — srcset
+  // excludes vectors, so an SVG must not pay for captures nothing reads.
+  // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
+  // See `image-captures` for the boxes and the capture-only components.
+  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
