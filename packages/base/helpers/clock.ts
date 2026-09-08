@@ -15,15 +15,6 @@
 // reach card code through whichever loader instance rendered it, which no call
 // site knows about. `__boxelRenderMode` and its neighbours already work this
 // way.
-export function now(): number {
-  let pinned = (globalThis as { __boxelNow?: unknown }).__boxelNow;
-  return typeof pinned === 'number' && Number.isFinite(pinned)
-    ? pinned
-    : Date.now();
-}
-
-// The same instant as a `Date`, for callers that would otherwise write
-// `new Date()`.
-export function nowDate(): Date {
-  return new Date(now());
-}
+// The implementation lives in runtime-common so the host app can read the
+// same instant; this is the path card code imports it by.
+export { now, nowDate } from '@cardstack/runtime-common';
