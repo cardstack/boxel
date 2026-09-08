@@ -103,28 +103,27 @@ function* overlayLeaves(
  * An overlay layers values *under* the stored document, so it may fill a place
  * the stored document leaves empty but never change what the stored document
  * already is. Grafting past a stored scalar would replace it with a container,
- * and grafting past the end of a stored array would renumber positions the
- * planner is about to compute collection indices against — so a leaf whose path
- * runs through either is dropped. Index drift between a Card and its indexed
- * copy is normal; it must not reshape the document a program plans over.
+ * so a leaf whose path runs through one is dropped.
+ *
+ * A path into a collection is dropped as well, whichever side the collection
+ * sits on. An overlay arrives keyed by position, and a position is an identity
+ * only while nothing moves: inserting, deleting, reordering or moving an item
+ * renumbers everything after it, and the indexed copy — written before the
+ * program ran — cannot say which row it meant. Contained items carry no id to
+ * re-key against. Reads inside a collection therefore see the Card's own
+ * values and nothing else.
  */
 function reachableInStored(
   stored: BxlMutationJson,
   path: BxlMutationPath,
 ): boolean {
+  if (path.some((segment) => typeof segment === 'number')) return false;
   for (let length = 0; length < path.length; length++) {
     const prefix = path.slice(0, length);
     if (!storedAnswers(stored, prefix)) return true;
     const container = valueAt(stored, prefix);
-    const segment = path[length]!;
-    if (Array.isArray(container)) {
-      if (typeof segment !== 'number' || segment >= container.length) {
-        return false;
-      }
-      continue;
-    }
+    if (Array.isArray(container)) return false;
     if (container === null || typeof container !== 'object') return false;
-    if (typeof segment !== 'string') return false;
   }
   return true;
 }
@@ -183,12 +182,14 @@ export function mergeBxlMutationOverlays(
       setAt(root, leaf.path, leaf.value);
       coverage.set(key, tier);
       supplied.push(leaf.path);
+      // A read of the whole document reaches every supplied value under it.
+      covers.add('');
       for (let length = 1; length < leaf.path.length; length++) {
         const prefix = leaf.path.slice(0, length);
         covers.add(overlayPathKey(prefix));
         // Only a container the merge created is a computed value in its own
-        // right. A stored collection that merely holds a computed Field in
-        // each row stays writable as a collection.
+        // right. A container the Card stores, into which an overlay merely
+        // filled a Field, stays the Card's to write.
         if (tier === 'computed' && !storedAnswers(stored, prefix)) {
           coversComputed.add(overlayPathKey(prefix));
         }
@@ -201,13 +202,17 @@ export function mergeBxlMutationOverlays(
   for (const entry of declared) {
     const path = normalizeOverlayPath(entry.path);
     if (path.length === 0) continue;
+    // Overlays do not participate inside a collection, so neither does an
+    // absence of one: the Card's own items are the whole answer there.
+    if (path.split('.').some((segment) => /^\d+$/.test(segment))) continue;
     const marker = { ...entry, path };
     unavailable.set(path, marker);
     const parts = path.split('.');
-    for (let length = 1; length < parts.length; length++) {
+    for (let length = 0; length < parts.length; length++) {
       const ancestor = parts.slice(0, length).join('.');
-      if (!unavailableUnder.has(ancestor))
+      if (!unavailableUnder.has(ancestor)) {
         unavailableUnder.set(ancestor, marker);
+      }
     }
   }
 
@@ -355,19 +360,19 @@ export function overlayWriteOwner(
 /**
  * What an update expression may actually write.
  *
- * `|=` is handed the layered value, so a row's own computed Fields are in
- * scope the same way they are anywhere else. What comes back is the Card's to
- * store, so every overlay value the expression merely carried along is put
- * back to what the Card holds:
+ * `|=` is handed the layered value, so a Field an overlay filled into a stored
+ * container is in scope the same way it is anywhere else. What comes back is
+ * the Card's to store, so every overlay value the expression merely carried
+ * along is put back to what the Card holds:
  *
  * - the expression passed the overlay value straight through — restore it;
  * - the expression left the Card's own value alone — nothing to do;
  * - the expression wrote something else there — that is a write to a
  *   read-only value, and it is refused rather than quietly dropped.
  *
- * An expression that reshapes a container along the way is refused outright:
- * once a collection is reordered or resized, a recorded position no longer
- * names the element it named, and guessing is how overlay values escape.
+ * Only paths an overlay supplied are settled, and no overlay reaches inside a
+ * collection, so an update that reorders or resizes one has nothing here to
+ * carry: its positions are the Card's own from end to end.
  */
 export function settleOverlayUpdate(
   index: OverlayIndex,
@@ -377,19 +382,16 @@ export function settleOverlayUpdate(
   produced: BxlMutationJson,
 ):
   | { value: BxlMutationJson }
-  | { refused: string; tier: BxlMutationOverlayTier }
-  | { reshaped: string } {
+  | { refused: string; tier: BxlMutationOverlayTier } {
   if (index.empty) return { value: produced };
-  const locationKey = overlayPathKey(location);
   let value = produced;
   for (const path of index.supplied) {
+    if (!startsWith(path, location)) continue;
     const key = overlayPathKey(path);
-    if (key !== locationKey && !isWithin(key, locationKey)) continue;
     const relative = path.slice(location.length);
     if (relative.length === 0) continue;
-    if (!arraysUnchanged(layered, value, relative)) return { reshaped: key };
     const carried = valueAt(value, relative);
-    if (equalJson(carried, valueAt(layered, relative))) {
+    if (sameValue(carried, valueAt(layered, relative))) {
       const held = stored ?? null;
       if (hasAt(held, relative)) {
         value = setAt(value, relative, valueAt(held, relative) ?? null);
@@ -398,32 +400,26 @@ export function settleOverlayUpdate(
       }
       continue;
     }
-    if (equalJson(carried, valueAt(stored ?? null, relative))) continue;
+    if (sameValue(carried, valueAt(stored ?? null, relative))) continue;
     return { refused: key, tier: index.coverage.get(key) ?? 'computed' };
   }
   return { value };
 }
 
+/** Whether a path lies at or below another. */
+function startsWith(path: BxlMutationPath, prefix: BxlMutationPath): boolean {
+  if (path.length < prefix.length) return false;
+  return prefix.every((segment, index) => path[index] === segment);
+}
+
 /**
- * Whether every collection on the way to an overlay value came back untouched.
- *
- * A position only names the same element while the collection holding it is
- * unchanged: reordering or resizing carries an overlay value to a place the
- * Card stores something else, and no comparison at the recorded positions can
- * see that it happened. So an update that rebuilds such a collection is
- * refused, and the author is pointed at the per-item form, whose location
- * sits below the collection and leaves nothing to reorder.
+ * Whether two readings of a place agree. A key the Card does not have and a
+ * key it stores as `null` are the same absence everywhere else in this module,
+ * and an expression that simply omits a key is not writing to it.
  */
-function arraysUnchanged(
-  layered: BxlMutationJson,
-  produced: BxlMutationJson,
-  path: BxlMutationPath,
+function sameValue(
+  left: BxlMutationJson | undefined,
+  right: BxlMutationJson | undefined,
 ): boolean {
-  for (let length = 0; length < path.length; length++) {
-    const prefix = path.slice(0, length);
-    const here = valueAt(layered, prefix);
-    if (!Array.isArray(here)) continue;
-    if (!equalJson(here, valueAt(produced, prefix))) return false;
-  }
-  return true;
+  return equalJson(left ?? null, right ?? null);
 }

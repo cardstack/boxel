@@ -1579,6 +1579,22 @@ const collectionSchema = {
       writable: true,
     },
     {
+      key: 'meta',
+      label: 'Meta',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'note', label: 'Note', kind: 'scalar' as const, writable: true },
+        {
+          key: 'stamp',
+          label: 'Stamp',
+          kind: 'scalar' as const,
+          writable: true,
+        },
+      ],
+    },
+    {
       key: 'rows',
       label: 'Rows',
       kind: 'array' as const,
@@ -1603,6 +1619,7 @@ const collectionSnapshot = {
   image: 'stored',
   summary: null,
   tags: ['language', 'web'],
+  meta: { note: 'kept', stamp: null },
   rows: [
     { qty: 2, total: null },
     { qty: 3, total: null },
@@ -1643,12 +1660,16 @@ function collectionError(
   throw new Error(`expected ${JSON.stringify(source)} to fail`);
 }
 
-// An overlay row past the end of a stored collection is dropped, so positions
-// stay the ones the Card will commit against.
-const extraRow: BxlMutationOverlays = {
+// An overlay never participates inside a collection. It arrives keyed by
+// position, and a position is an identity only while nothing moves: inserting,
+// deleting, reordering or moving an item renumbers everything after it, and an
+// indexed copy written before the program ran cannot say which item it meant.
+// Contained items carry no id to re-key against, so the Card's own items are
+// the whole answer there — whichever side of the path the collection sits on.
+const indexedTags: BxlMutationOverlays = {
   linked: { tags: ['language', 'web', 'from-the-index'] },
 };
-for (const overlays of [undefined, extraRow]) {
+for (const overlays of [undefined, indexedTags]) {
   strictEqual(
     collectionError('insert_at(.tags; 3; "new");', overlays).code,
     'insert-index-invalid',
@@ -1676,8 +1697,8 @@ deepStrictEqual(
   { ...collectionSnapshot, image: 'written' },
 );
 
-// A computed Field inside a stored collection is the schema's to answer for,
-// and leaves the collection holding it writable.
+// A computed Field inside a collection is the schema's to answer for, and the
+// collection holding it stays writable.
 const rowTotals: BxlMutationOverlays = {
   computeds: { rows: [{ total: 20 }, { total: 30 }] },
 };
@@ -1705,9 +1726,32 @@ deepStrictEqual(
   collectionSnapshot,
 );
 
-// Reads see an overlay wherever one participates in the value, including when
-// the stored document answers the container and the overlay filled a Field
-// inside it — otherwise an assert could reach index data without saying so.
+// An update is handed the layered value, so a Field an overlay filled into a
+// stored container is in scope. What comes back is settled against the Card's
+// own, so an overlay value the expression carried along is read but never
+// stored, and one it wrote over is refused rather than quietly dropped.
+const metaStamp: BxlMutationOverlays = {
+  computeds: { meta: { stamp: 'derived' } },
+};
+deepStrictEqual(
+  collectionOutput(
+    '.meta |= (. + {"note": (.note + " " + .stamp)});',
+    metaStamp,
+  ).meta,
+  { note: 'kept derived', stamp: null },
+);
+strictEqual(
+  collectionError('.meta |= (. + {"stamp": "mine"});', metaStamp).code,
+  'computed-read-only',
+);
+// An expression that simply omits the Field is not writing to it.
+deepStrictEqual(collectionOutput('.meta |= {"note": .note};', metaStamp).meta, {
+  note: 'kept',
+});
+
+// Reads report the layer that answered them. A collection is never one of
+// those layers, so reading one is a source read even where the host supplied a
+// value for every row.
 const rowEvents: BxlMutationReadEvent[] = [];
 prepareBxlMutation('.image = (.rows | tostring);', {
   targetKind: 'card',
@@ -1719,13 +1763,31 @@ prepareBxlMutation('.image = (.rows | tostring);', {
   onRead: (event) => rowEvents.push(event),
 });
 deepStrictEqual(rowEvents, [
-  { path: 'rows', tier: 'computed', outcome: 'value' },
+  { path: 'rows', tier: 'source', outcome: 'value' },
 ]);
+// So an assert over a collection stands on the Card's own values, with no
+// snapshot option to opt into.
 strictEqual(
-  collectionError('assert((.rows | length) == 1; "wrong count");', rowTotals)
-    .code,
-  'assert-snapshot-required',
+  collectionPlan(
+    'assert((.rows | length) == 2; "wrong count");\n.image = "asserted";',
+    rowTotals,
+  ).affected,
+  1,
 );
+// A read that does reach an overlay value still says which layer supplied it.
+const metaEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = .meta.stamp;', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-collection-covered-reads',
+  overlays: metaStamp,
+  onRead: (event) => metaEvents.push(event),
+});
+deepStrictEqual(metaEvents, [
+  { path: 'meta.stamp', tier: 'computed', outcome: 'value' },
+]);
 
 // An intent records what the Card stored, never what an overlay answered with.
 deepStrictEqual(
@@ -1744,20 +1806,23 @@ deepStrictEqual(
   ],
 );
 
-// A statement that renumbers a collection an overlay has filled into. The
-// planner's working document is the Card's own, so a position always means the
-// same element in both — nothing has to be mapped back afterwards.
-const rowsFilled: BxlMutationOverlays = {
-  computeds: { rows: [{ total: 20 }, { total: 30 }] },
-};
+// A statement that restructures a collection an overlay named values inside
+// plans, outputs and records intents exactly as it does with no overlays at
+// all — including every form that renumbers, resizes or reorders it. That
+// parity is the whole point of stopping the overlay layer at the boundary:
+// there is no recorded position left to go stale.
 const holesFilled: BxlMutationOverlays = {
   computeds: { tags: ['from-index-0', 'from-index-1'] },
 };
 for (const [source, overlays] of [
-  ['del(.rows[0]);', rowsFilled],
-  ['prepend(.rows; {"qty": 1});', rowsFilled],
-  ['move_item_to_end(.rows[0]; .rows);', rowsFilled],
-  ['insert_item_before({"qty": 9}; .rows[1]);', rowsFilled],
+  ['del(.rows[0]);', rowTotals],
+  ['prepend(.rows; {"qty": 1});', rowTotals],
+  ['move_item_to_end(.rows[0]; .rows);', rowTotals],
+  ['insert_item_before({"qty": 9}; .rows[1]);', rowTotals],
+  ['.rows[* .qty > 0] |= (. + {"qty": (.qty + (.total // 10))});', rowTotals],
+  ['.rows |= [.[1], .[0]];', rowTotals],
+  ['.rows |= (. + [{"qty": 9}]);', rowTotals],
+  ['.rows |= [.[0]];', rowTotals],
   ['del(.tags[0]);', holesFilled],
   ['prepend(.tags; "new");', holesFilled],
 ] as const) {
@@ -1773,11 +1838,10 @@ for (const [source, overlays] of [
   );
 }
 
-// The positions an overlay answers for are equally the ones a later statement
-// addresses, so a program that shifts a collection and then writes into it is
-// not refused over a position the overlay used to occupy.
+// The same holds across statements: a program that shifts a collection and
+// then writes into it is not refused over a position anything used to occupy.
 deepStrictEqual(
-  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;', rowsFilled).output,
+  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;', rowTotals).output,
   collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;').output,
 );
 
@@ -1835,50 +1899,6 @@ strictEqual(
   1,
 );
 
-// An update is handed the layered value, so a row's own computed Field is in
-// scope; what it returns is settled back against the Card's, so the computed
-// value is read but never stored.
-const rowUpdate = collectionPlan(
-  '.rows[* .qty > 0] |= (. + {"qty": (.qty + (.total // 0))});',
-  rowTotals,
-);
-deepStrictEqual(rowUpdate.output, {
-  ...collectionSnapshot,
-  rows: [
-    { qty: 22, total: null },
-    { qty: 33, total: null },
-  ],
-});
-// The `=` form cannot express this: its value expression reads from the root.
-deepStrictEqual(
-  collectionOutput('.rows[* .qty > 0].qty = (.qty + (.total // 0));', rowTotals)
-    .rows,
-  [
-    { qty: 0, total: null },
-    { qty: 0, total: null },
-  ],
-);
-// Writing a computed value from inside an update is refused, not dropped.
-strictEqual(
-  collectionError('.rows[* .qty > 0] |= (. + {"total": 1});', rowTotals).code,
-  'computed-read-only',
-);
-// An update that rebuilds a collection an overlay reaches into is refused:
-// once the rows move, a recorded position no longer names the element it
-// named, and no comparison can tell which values were carried where. The
-// per-item form above has nothing to reorder and stays available.
-for (const source of [
-  '.rows |= [.[1], .[0]];',
-  '.rows |= (. + [{"qty": 9}]);',
-  '.rows |= [.[0]];',
-]) {
-  strictEqual(
-    collectionError(source, rowTotals).code,
-    'update-shape-ambiguous',
-    source,
-  );
-}
-
 // A path a statement clears belongs to the program from then on. The index
 // carries a copy of every stored Field, so without that rule the overlay would
 // fill the hole straight back in and refuse the write that follows.
@@ -1895,10 +1915,19 @@ for (const overlays of [undefined, staleCopy]) {
   );
 }
 
-// A selector reads the document to choose what it matches, so index data
-// cannot settle a write set unremarked, and an unavailable value stops it.
+// A selector reads the document to choose what it matches, so a value the host
+// could not supply must not be allowed to quietly settle a write set.
+strictEqual(
+  collectionError('del(.tags[* . == "web"]);', {
+    unavailable: [{ path: 'tags', tier: 'linked', reason: 'not-searchable' }],
+  }).code,
+  'snapshot-unavailable',
+);
+// A selector over a collection reaches no overlay, so it has nothing to report
+// and decides on the Card's own values — matching exactly what it matches with
+// no overlays at all, here nothing.
 const selectorEvents: BxlMutationReadEvent[] = [];
-prepareBxlMutation('del(.rows[* .total > 0]);', {
+prepareBxlMutation('del(.rows[* .qty > 2]);', {
   targetKind: 'card',
   schema: collectionSchema,
   syntax: 'solidified',
@@ -1907,9 +1936,25 @@ prepareBxlMutation('del(.rows[* .total > 0]);', {
   overlays: rowTotals,
   onRead: (event) => selectorEvents.push(event),
 });
-deepStrictEqual(selectorEvents, [
-  { path: 'rows', tier: 'computed', outcome: 'value' },
-]);
+deepStrictEqual(selectorEvents, []);
+for (const overlays of [undefined, rowTotals]) {
+  strictEqual(
+    collectionError('del(.rows[* .total > 0]);', overlays).code,
+    'bulk-target-empty',
+  );
+}
+// A value the host could not supply stops the read that reaches it.
+strictEqual(
+  collectionError('.image = .meta.stamp;', {
+    unavailable: [
+      { path: 'meta.stamp', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).code,
+  'snapshot-unavailable',
+);
+// A marker inside a collection is dropped for the same reason a value there
+// is: the Card's own items already are the whole answer, so there is nothing
+// missing to report.
 strictEqual(
   collectionError('del(.rows[* .total > 0]);', {
     ...rowTotals,
@@ -1917,7 +1962,15 @@ strictEqual(
       { path: 'rows.0.total', tier: 'computed', reason: 'key-absent' },
     ],
   }).code,
-  'snapshot-unavailable',
+  'bulk-target-empty',
+);
+strictEqual(
+  collectionOutput('.image = ((.rows[0].total // "none") | tostring);', {
+    unavailable: [
+      { path: 'rows.0.total', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).image,
+  'none',
 );
 // A location that addresses one place selects nothing, so it adds no event.
 const directEvents: BxlMutationReadEvent[] = [];

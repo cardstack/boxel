@@ -280,10 +280,20 @@ An author addresses stored, computed, and linked values through the same
   only where the stored document holds nothing — an absent key or a `null`,
   which is what a Card holds at a path it never persists. An overlay's stale
   copy of a stored value never displaces the stored one. Nor may an overlay
-  *reshape* the Card: a value whose path runs past a stored scalar, or past the
-  end of a stored collection, is dropped rather than retyping the scalar or
-  renumbering the collection the planner is about to compute indices against.
-  Index drift is routine and must not change the document a program plans over.
+  *reshape* the Card: a value whose path runs past a stored scalar is dropped
+  rather than retyping the scalar. Index drift is routine and must not change
+  the document a program plans over.
+- **Overlays stop at a collection boundary.** An overlay value whose path runs
+  through an array is dropped, whichever side the array sits on. An overlay
+  arrives keyed by position, and a position is an identity only while nothing
+  moves: inserting, deleting, reordering or moving an item renumbers everything
+  after it, and a copy written before the program ran cannot say which item it
+  meant. Contained items carry no id to re-key against. So inside a collection
+  the Card's own items are the whole answer: reads there are source reads, an
+  `unavailable` marker there is dropped for the same reason, and every
+  collection operation plans exactly as it would with no overlays at all. A
+  computed Field inside a collection is the schema's to answer for, through
+  `writeBehavior: 'skip'`.
 - **Overlay values are read-only, and the schema answers first.** Where the
   schema already speaks for a Field, it decides: a Definition-derived schema
   marks every computed Field `writeBehavior: 'skip'`, so a write to one stays
@@ -293,10 +303,10 @@ An author addresses stored, computed, and linked values through the same
   `computed-read-only`, and one that lands on a linked Card's Field fails with
   `write-through-link`, each naming the path. A container the overlay supplies
   where the Card holds nothing is a computed value in its own right and is
-  read-only whole; a *stored* collection whose rows merely carry a computed
-  Field stays writable as a collection. Writing an *ancestor* of a linked value
-  likewise stays an ordinary write: replacing a relationship edge changes the
-  Card's own document, not the Card on the far side of the link.
+  read-only whole; a container the Card stores, into which an overlay merely
+  filled a Field, stays the Card's to write. Writing an *ancestor* of a linked
+  value likewise stays an ordinary write: replacing a relationship edge changes
+  the Card's own document, not the Card on the far side of the link.
 - **A read reports an overlay whenever one participates in its value** — the
   overlay supplied the path, the read sits inside a value it supplied, or the
   value returned carries overlay-supplied descendants. Reading a stored
@@ -318,22 +328,20 @@ An author addresses stored, computed, and linked values through the same
   `{ snapshot: true }` is the only accepted option record — `assert/2` is how
   an assert says it requires stored values.
 - **An update sees the layered value, and stores the Card's.** `|=` is handed
-  the location's value with the overlays under it, so a row's own computed
-  Field is in scope the same way it is anywhere else — which matters because
-  `=` evaluates its value expression against the Card root, so only `|=` can
-  write a value derived from the row it is updating. What the expression
-  returns is settled back against the Card before it is written: an overlay
-  value carried straight through is put back to what the Card holds, and an
-  expression that writes something else at that path is refused. An update
-  that rebuilds a collection an overlay reaches into fails with
-  `update-shape-ambiguous`, because once the items move a recorded position no
-  longer names the element it named; the per-item form (`.rows[* …] |= …`) has
-  nothing to reorder and stays available.
+  the location's value with the overlays under it, so a Field an overlay filled
+  into a stored container is in scope the same way it is anywhere else — which
+  matters because `=` evaluates its value expression against the Card root, so
+  only `|=` can write a value derived from the location it is updating. What
+  the expression returns is settled back against the Card before it is written:
+  an overlay value carried straight through is put back to what the Card holds,
+  an expression that simply omits the path is not writing to it, and one that
+  writes something else there is refused. Only paths an overlay supplied are
+  settled, and none of them lie inside a collection, so an update that reorders
+  or resizes one has nothing to carry.
 - **Choosing a write set is a read.** A `[* predicate]` selector consults the
-  document to decide what it matches, so its paths are reported and an
-  unavailable value stops it rather than quietly settling which rows a
-  statement deletes. A location that addresses one place selects nothing and
-  adds no event of its own.
+  document to decide what it matches, so an unavailable value stops it rather
+  than quietly settling which items a statement deletes. A location that
+  addresses one place selects nothing and adds no event of its own.
 - **A path a statement clears belongs to the program.** An overlay answers
   where the Card holds nothing, and a place the program emptied is not one of
   those — otherwise a stale index copy would fill it straight back in and
@@ -360,10 +368,8 @@ before they existed. A plan's `output`, and the `before` recorded on every
 intent, carry stored values only — the planner's working state is the Card's
 own document, and the layered view exists only for the duration of an
 expression's evaluation, so an overlay answers reads without ever standing in
-for what the Card held. That also means a position means the same element in
-both: a program that renumbers a collection renumbers the view with it. The planner
-receives overlay values already fetched by the host; it never queries the index
-itself.
+for what the Card held. The planner receives overlay values already fetched by
+the host; it never queries the index itself.
 
 ## Why a profile is needed
 
@@ -1049,8 +1055,7 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `execution-identity-conflict`, `limit-exceeded`;
 - `stream-incomplete`, `commit-failed`, `rollback-conflict`;
 - `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
-  `assert-snapshot-required`, `assert-option-invalid`,
-  `update-shape-ambiguous`.
+  `assert-snapshot-required`, `assert-option-invalid`.
 
 ## Additional use cases covered by this contract
 

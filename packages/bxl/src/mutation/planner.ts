@@ -143,20 +143,6 @@ function documentChanged(context: PlannerContext): void {
 }
 
 /**
- * The same view, skipped for an expression with nothing to read. Deriving it
- * costs a copy of the document, and a bulk statement would pay that per
- * location for a value expression that never looks at the Card.
- */
-function readViewFor(
-  argument: ParsedMutationArgument,
-  root: BxlMutationJson,
-  context: PlannerContext,
-): BxlMutationJson {
-  if (argument.readPaths.length === 0) return root;
-  return readView(root, context);
-}
-
-/**
  * What a statement's reads resolved to. `strict` reads raise
  * `snapshot-unavailable` on a path the host could not supply; a best-effort
  * assert takes the unavailability back instead and fails with its own message.
@@ -196,7 +182,6 @@ function recordReads(
   const prefix = reads.prefix ?? [];
   for (const relative of argument.readPaths) {
     const path = [...prefix, ...relative];
-    if (path.length === 0) continue;
     const resolved = classifyOverlayRead(
       context.overlays,
       path,
@@ -239,15 +224,6 @@ function settleUpdate(
     produced,
   );
   if ('value' in settled) return settled.value;
-  if ('reshaped' in settled) {
-    throw new BxlMutationError(
-      'validate',
-      'update-shape-ambiguous',
-      statement,
-      `This update changes the shape of the collection holding ${settled.reshaped}, so which values it kept cannot be told apart. Reorder with reorder_by, or update the Fields individually.`,
-      { details: { path: settled.reshaped } },
-    );
-  }
   throw new BxlMutationError(
     'validate',
     settled.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
@@ -354,7 +330,7 @@ function resolveLocations(
   statement: number,
   cardinality: 'one' | 'bulk' = argument.bulk ? 'bulk' : 'one',
 ): ResolvedLocation[] {
-  const view = readViewFor(argument, root, context);
+  const view = readView(root, context);
   // A selector reads the document to decide what it matches, so an unavailable
   // value cannot be allowed to quietly settle a write set. A location that
   // addresses one place directly selects nothing, and whatever it reads its
@@ -759,13 +735,14 @@ function planAssignment(
     if (statement.operator === '=') {
       next = evaluateSingleJson(
         statement.value,
-        readViewFor(statement.value, output, context),
+        readView(output, context),
         context,
         statement.statement,
       );
     } else if (statement.operator === '|=') {
-      // An update sees the layered value, so a row's own computed Fields are
-      // in scope; what it returns is settled back against the Card's.
+      // An update sees the layered value, so a Field an overlay filled into
+      // a stored container is in scope; what it returns is settled back
+      // against the Card's.
       const layered = (valueAt(readView(output, context), location.path) ??
         null) as BxlMutationJson;
       next = evaluateSingleJson(
@@ -787,7 +764,7 @@ function planAssignment(
     } else {
       const right = evaluateSingleJson(
         statement.value,
-        readViewFor(statement.value, output, context),
+        readView(output, context),
         context,
         statement.statement,
       );
@@ -882,7 +859,7 @@ function jsonValue(
 ): BxlMutationJson | CardReference {
   return evaluateSingleJson(
     argument,
-    readViewFor(argument, root, context),
+    readView(root, context),
     context,
     statement,
     reads,
