@@ -29,6 +29,7 @@ import type {
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
+import { createFixtureMtimeSequence } from './test-clock';
 
 import type { MockUtils } from './mock-matrix/_utils';
 import type {
@@ -36,7 +37,6 @@ import type {
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
 import type ms from 'ms';
-import { nextFixtureMtime } from './test-clock';
 
 interface Dir {
   kind: 'directory';
@@ -66,6 +66,8 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: FileWatcherEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
+  // Per adapter, so each realm's files stay inside the just-now window.
+  #nextMtime = createFixtureMtimeSequence();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
   #mockMatrixUtils: MockUtils;
 
@@ -81,7 +83,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.#paths = new RealmPaths(realmURL);
     this.#mockMatrixUtils = mockMatrixUtils;
 
-    let now = nextFixtureMtime();
+    let now = this.#nextMtime();
 
     for (let [path, content] of Object.entries(contents)) {
       let segments = path.split('/');
@@ -312,7 +314,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let updateEvent: FileWatcherEventContent;
 
-    let lastModified = nextFixtureMtime();
+    let lastModified = this.#nextMtime();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
     if (dir.contents[name]) {

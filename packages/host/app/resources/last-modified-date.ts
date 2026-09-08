@@ -2,9 +2,9 @@ import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistance } from 'date-fns';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { now as clockNow } from '@cardstack/runtime-common';
-import { Resource } from 'ember-modify-based-class-resource';
 
 import type { Ready as ReadyFile } from '@cardstack/host/resources/file';
 
