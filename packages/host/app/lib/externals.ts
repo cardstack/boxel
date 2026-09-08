@@ -213,6 +213,16 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: 'ethers',
     resolve: () => import('ethers'),
   });
+  // The PDF family's capture-only poster component rasterizes page 1 with
+  // pdf.js. Vendored behind an async shim (not fetched from a CDN inside the
+  // render) so realm indexing never depends on public-network reachability
+  // from the prerender, and lazy so the engine's chunk loads only when a
+  // capture render asks for it — the wrapper also wires a same-origin worker
+  // asset (see `../lib/pdfjs`).
+  virtualNetwork.shimAsyncModule({
+    id: 'pdfjs-dist',
+    resolve: () => import('../lib/pdfjs.js'),
+  });
   virtualNetwork.shimAsyncModule({
     id: 'uuid',
     resolve: () => import('uuid'),

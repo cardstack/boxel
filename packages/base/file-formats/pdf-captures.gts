@@ -6,15 +6,14 @@
 // prerender pass — never part of the format API, so the live viewer stays a
 // native `<object>` with no pdf.js in the app's dependency graph.
 //
-// pdf.js loads from a pinned CDN build at capture time — via the browser's
-// native module loader, not the Boxel loader (see `loadPdfjs`). The decoder
-// is needed only inside the capture render, and vendoring a PDF engine into
-// the base realm would tax every consumer for a poster only the prerender
-// pass draws. Unlike the 3D family's live-render CDN loading, this fetch
-// happens on prerender infrastructure: CDN reachability from the prerender's
-// network is a standing requirement of this slot, and an unreachable CDN
-// surfaces as a bounded slot failure (retry-lane capped), never a blank
-// poster.
+// pdf.js is the host's vendored copy, reached through the virtual network's
+// lazy `pdfjs-dist` shim (registered in the host's externals) rather than a
+// CDN fetch inside the render: this capture runs on prerender
+// infrastructure, where public-network reachability would otherwise be a
+// standing availability dependency of every realm that holds a PDF. The
+// import stays dynamic and capture-time so the engine's chunk never loads
+// for consumers of the family that don't capture — the live viewer remains
+// a native `<object>` with no pdf.js in its path.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
@@ -30,34 +29,14 @@ interface CaptureSignature {
   Element: HTMLElement;
 }
 
-// pdf.js loads through the browser's own module loader, deliberately
-// outside the Boxel loader: transpiled card code's `import()` is rewritten
-// into the loader's fetch-and-transpile pipeline, and pushing a
-// megabyte-scale engine through in-browser transpilation inside the
-// capture's bounded readiness window is a capture failure, not a load. The
-// indirection through `Function` is what keeps the transpiler's rewrite off
-// this one call; the browser fetches the pinned CORS-enabled ESM build
-// directly and caches it for the life of the pooled tab.
-const importNative = new Function('s', 'return import(s)') as (
-  s: string,
-) => Promise<any>;
-
-// Memoized so concurrent captures on one tab share a single load.
-let pdfjsPromise: Promise<any> | undefined;
-
-function loadPdfjs(): Promise<any> {
-  pdfjsPromise ??= importNative(
-    'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs',
-  ).then((pdfjs: any) => {
-    // Cross-origin `Worker` construction is blocked by the browser, so
-    // pdf.js falls back to loading this same URL as a module on the main
-    // thread (its "fake worker" path) — main-thread rasterization is the
-    // intended mode for a capture render, not an accident.
-    pdfjs.GlobalWorkerOptions.workerSrc =
-      'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs';
-    return pdfjs;
-  });
-  return pdfjsPromise;
+// The host's vendored pdf.js, resolved through the virtual network's lazy
+// shim. The wrapper behind the shim wires a same-origin worker asset, so
+// rasterization runs on a real worker rather than pdf.js's main-thread
+// fallback. The loader caches the shimmed module, so concurrent captures on
+// one warm tab share a single load.
+async function loadPdfjs(): Promise<any> {
+  // @ts-expect-error host-shimmed module; the virtual network resolves it
+  return await import('pdfjs-dist');
 }
 
 export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
