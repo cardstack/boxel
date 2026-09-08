@@ -27,9 +27,9 @@ import type {
 } from '@cardstack/runtime-common/realm';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
+import { createFixtureMtimeSequence } from './test-clock';
 
 import { createJWT, testRealmURL } from '.';
-import { createFixtureMtimeSequence } from './test-clock';
 
 import type { MockUtils } from './mock-matrix/_utils';
 import type {
