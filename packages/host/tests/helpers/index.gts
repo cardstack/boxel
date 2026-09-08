@@ -40,6 +40,7 @@ import {
   type Prerenderer,
   type RealmAction,
   type RealmAdapter,
+  type ResponseWithNodeStream,
   ri,
   rri,
   type RealmInfo,
@@ -1287,6 +1288,41 @@ export const createPrerenderAuth = (
   return JSON.stringify({});
 };
 
+const UNINDEXED_READ_EXEMPT_ACCEPT = 'application/vnd.card+source';
+
+// Wraps a realm's request handler so a read of an instance the boot index
+// would have provided fails loudly rather than returning nothing.
+export function guardIndexReads(
+  handler: (request: Request) => Promise<ResponseWithNodeStream | null>,
+  realmURL: string,
+  contents: RealmContents,
+): (request: Request) => Promise<ResponseWithNodeStream | null> {
+  let seeded = new Set(
+    Object.keys(contents ?? {})
+      .filter((path) => path.endsWith('.json'))
+      .map((path) => new URL(path, realmURL).href.replace(/\.json$/, '')),
+  );
+
+  return async (request: Request) => {
+    let accept = request.headers.get('accept') ?? '';
+    if (!accept.includes(UNINDEXED_READ_EXEMPT_ACCEPT)) {
+      let url = new URL(request.url);
+      if (url.pathname.endsWith('/_search')) {
+        throw new Error(
+          `this realm was created with skipBootIndex, so its index is empty and this search cannot match its seeded instances. Drop skipBootIndex from this test's setup.`,
+        );
+      }
+      let href = `${url.origin}${url.pathname}`.replace(/\.json$/, '');
+      if (seeded.has(href)) {
+        throw new Error(
+          `this realm was created with skipBootIndex, so ${href} was never indexed and reading it would return nothing. Drop skipBootIndex from this test's setup.`,
+        );
+      }
+    }
+    return handler(request);
+  };
+}
+
 async function setupTestRealm({
   contents,
   realmURL,
@@ -1428,7 +1464,20 @@ async function setupTestRealm({
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
-  virtualNetwork.mount(realm.maybeHandle);
+  // A realm that skipped its boot index serves its seeded instances from an
+  // index that was never built, so a read for one comes back empty instead of
+  // failing. That surfaces as a missing card or an empty result set far from
+  // its cause, so reject it here instead, where the option is visible.
+  //
+  // `maybeHandle` is the realm's request surface and the only route a test
+  // takes to it; the realm's own lookups go through its query engine directly
+  // and are unaffected. Instances written during a test are indexed
+  // incrementally, so only the seeded ones are refused.
+  virtualNetwork.mount(
+    skipBootIndex
+      ? guardIndexReads(realm.maybeHandle, realmURL, contents)
+      : realm.maybeHandle,
+  );
   await adapter.ready;
   await worker.run();
   await realm.start();
