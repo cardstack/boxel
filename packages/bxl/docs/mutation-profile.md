@@ -353,10 +353,12 @@ host resolved before the program ran:
 | `instance()` / `instance("key")` | the stored document, or one of its fields      |
 
 ```ts
+type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
+
 interface BxlMutationContext {
-  params?: JsonValue;
-  actor?: { id: string; [key: string]: JsonValue | undefined };
-  instance?: JsonValue;
+  params?: BxlMutationJsonObject;
+  actor?: { id: string; [key: string]: BxlMutationJson };
+  instance?: BxlMutationJsonObject;
 }
 ```
 
@@ -375,6 +377,12 @@ in the document as a missing comment author or a silently unset field. The
 operation layer validates declared keys before a program runs; the key check
 here is the backstop. `actor()` and `instance()` return the whole object, which
 is the reading to reach for when a key may legitimately be absent.
+
+A key is readable only if it is the object's own and its value is not
+`undefined`. A prototype-chain name would otherwise answer with a function,
+and `undefined` is not a JSON value — it would reach the planner as one and
+write an intent that unsets the field. A JSON `null` is a real value and reads
+as `null`.
 
 Only the `mutation` profile admits them. `derive` denies them because a stored
 derivation reused on later reads must not depend on whichever request last

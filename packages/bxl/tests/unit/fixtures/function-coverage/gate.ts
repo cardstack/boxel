@@ -223,7 +223,7 @@ export function registryGateFailures(
   );
   if (missingFromMutation.length > 0) {
     failures.push(
-      'the mutation library set is missing librarie(s) a card can reach, so ' +
+      'the mutation library set is missing libraries a card can reach, so ' +
         'a mutation program resolves a narrower surface than a computed ' +
         `field\n    ${missingFromMutation.join(', ')}`,
     );
