@@ -464,7 +464,12 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install
+        # Chromium only: playwright.config.ts declares no other project and no
+        # spec here launches Firefox or WebKit. Fetching them anyway makes
+        # Playwright's host validation warn that their libraries (libgtk-4,
+        # libgst*, libflite*) are missing, which reads like a broken install
+        # rather than two browsers this suite never uses.
+        run: pnpm exec playwright install chromium
         working-directory: packages/matrix
       # Warm the test images from the GHCR mirror so the services
       # below (and the Playwright synapse/smtp fixtures) start from a local
