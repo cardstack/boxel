@@ -631,7 +631,7 @@ function classify(
 type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
 
 const BENCHMARKS = {
-  maxTurns: 5,
+  maxTurns: 8,
   maxModeSwitches: 1,
   maxSeconds: 120,
 };

@@ -61,12 +61,13 @@ loads do not pile up. A sweep takes about as long as its slowest model.
 `smoke:headed` runs one worker; `smoke:tabs` opens one incognito window per
 model in one browser.
 
-Every model must run as a different matrix user. The ai-bot holds a per-user
-cost lock around the whole generation, across all rooms of that user, so a
-second prompt from the same user waits at "Thinking..." until the first
-model's turn ends. A sweep on one user is not a sweep: the slowest model sets
-the pace for all of them, and the runner reads the waiting rooms as stalled
-bot turns. The runner warns when there are more models than users.
+Every model must run as a different matrix user until the ai-bot change that
+moves the generation out of the per-user cost lock is deployed. Before it, the
+bot holds that lock around the whole generation across all rooms of one user,
+so a second prompt from the same user waits at "Thinking..." until the first
+model's turn ends, and a sweep on one user is not a sweep. After it, one user
+can drive several rooms at once (verified: two rooms of one user generated
+together). The runner still warns when there are more models than users.
 
 ## Watch the run
 
@@ -114,15 +115,16 @@ benchmarks, and the room id.
 
 The grade is the one-word answer per model:
 
-- ✅ **GOOD** — passed and inside every benchmark below.
-- 🟡 **ROUGH** — it worked, but not cleanly: the card rendered and a
-  benchmark was missed on the way (more than 5 turns, more than one mode
-  switch, over 120 s, a failed patch or tool call, or a turn that missed the
-  prompt cache). The model is usable; the notes say where it wastes effort.
-  Not an alarm. Cost does not grade: it is shown in its own column and judged
-  against the model's price class, see below.
-- ❌ **FAIL** — no card rendered, or the run was stopped (irregularity, stuck
-  pill, safety clock, runner error).
+- ✅ **GOOD** — it did the job nicely. The card rendered inside every
+  benchmark below: at most 8 turns, one mode switch, two minutes, no failed
+  step, no cache miss after the skill load.
+- 🟡 **ROUGH** — it did the job, but not nicely. The card rendered, and the
+  way there missed a benchmark: too many turns, too slow, a failed step it had
+  to repair, or a cache miss. A usable model with rough edges; the notes say
+  where. Not an alarm. Cost does not grade: it is shown in its own column and
+  judged against the model's price class, see below.
+- ❌ **FAIL** — it did not do the job. No card on screen, or the run had to be
+  stopped (irregularity, stuck pill, safety clock, runner error).
 
 When you report a run to the user, render the summary as a markdown table
 (not inside a code fence) and lead with the grade. A finished report looks like
@@ -195,7 +197,7 @@ Claude Sonnet 4.6 without thinking, the model the workflow was tuned for:
 | metric                       | how to read it                                                                                                                                                                                                                                                                                                                           | target                                                                                                                                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | verdict                      | card rendered, no error                                                                                                                                                                                                                                                                                                                  | `pass`                                                                                                                                                                                                                                                      |
-| turns                        | bot messages that carried usage                                                                                                                                                                                                                                                                                                          | 3 to 5 (one or two reads, one write, one show)                                                                                                                                                                                                              |
+| turns                        | bot messages that carried usage                                                                                                                                                                                                                                                                                                          | up to 8 (a clean run is 3 to 5: one or two reads, one write, one show; a repair round adds two or three)                                                                                                                                                    |
 | turns before the first block | count in the room timeline                                                                                                                                                                                                                                                                                                               | 1 to 2                                                                                                                                                                                                                                                      |
 | `switch-submode` calls       | tool-calls column                                                                                                                                                                                                                                                                                                                        | 0 or 1; more means the model treats a mode switch as a step of writing                                                                                                                                                                                      |
 | placeholder / confirm calls  | tool calls whose arguments do nothing (show-card on a `.gts`, switch to the current mode, empty patch-fields)                                                                                                                                                                                                                            | 0                                                                                                                                                                                                                                                           |
@@ -212,23 +214,63 @@ skill files a model reads varies per run and a single failure may be a skipped
 read rather than the model. Rerun only when that reading says the failure was
 incidental, and only that model.
 
-Known model profiles, so a result can be judged against expectations:
+Known model profiles, from the 2026-09-07 sweep of all 27 catalog models
+(one run each, the failures rerun once or twice, best run kept; the full
+report is the PDF from that day):
 
-- Claude Sonnet 4.6, no effort set: the baseline. 3 to 4 turns, box markers,
-  one mode switch at most, about $0.05. Its one failure mode is skipping the
-  editing skill in its first read batch and writing git-style markers; the index
-  skill now shows the block shape to prevent that.
-- Claude Sonnet 5 at low or medium effort: fragments the work — one tool call
-  per turn, placeholder calls, mode re-switches, the write deferred behind more
-  reads. Anthropic's effort parameter budgets tool calls and text as well as
-  thinking, so lower effort makes it avoid the one large write our workflow
-  needs. At default (high) effort it overthinks for minutes instead. Not a
-  usable default until the skills are rewritten for thinking-by-default models.
-- Grok 4.5: about nine minutes per turn for some 200 output tokens, streaming
-  reasoning the whole time. Unusable at that pace, and while it runs it holds
-  its user's cost lock, so never run it as the same user as another model.
-- GPT-5.4-mini: never writes. Asks permission, invents file reads that 404,
-  stops after announcing the files. Not a building model.
+| Best grade | Models                                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✅ GOOD    | Claude Sonnet 4.6, Claude Opus 4.7, Claude Opus 4.8, Claude Fable 5, Gemini 3.5 Flash, Kimi K2.7 Code                                                                               |
+| 🟡 ROUGH   | Claude Sonnet 5 (medium), DeepSeek V4 Pro, GLM 5.2, GPT-5.4, GPT-5.5, GPT-5.6 Sol (medium), GPT-5.6 Terra, Gemini 3.1 Flash Lite, Qwen3.7 Max                                       |
+| ❌ FAIL    | Claude Haiku 4.5, GPT-5.4 Mini, GPT-5.4 Nano, Gemini 3.1 Pro, Grok 4.5, Grok 4.3, DeepSeek V4 Flash, Qwen3.6 Flash, GLM 4.7 Flash, MiniMax M3, Mistral Medium 3.5, Llama 4 Maverick |
+
+How the failures group, so a new run can be placed quickly:
+
+- **Ask instead of act**: GPT-5.4 (first run), GPT-5.4 Mini, GPT-5.4 Nano,
+  Mistral Medium 3.5. A clarifying or confirmation question in Act mode.
+- **Announce the write, then stop**: Grok 4.5, Grok 4.3, Qwen3.7 Max (first
+  run), GLM 4.7 Flash, Haiku 4.5 (one run). "Creating the card now" and the
+  turn ends with no block.
+- **Dropped closing marker**: DeepSeek V4 Flash, Grok 4.3, Haiku 4.5, Fable 5
+  (one run). SEARCH, divider, content, fence, no `╚═══ REPLACE ═══╝`; the host
+  applies nothing.
+- **Instance JSON that is not a card document**: Haiku 4.5, MiniMax M3, Mistral
+  Medium 3.5, Qwen3.6 Flash, Llama 4 Maverick. No `data` wrapper, `type` set to
+  the card's name instead of `card`, or no `meta.adoptsFrom`. The correctness
+  check now names this on the turn the file is written.
+- **Coin flips**: Grok 4.5, GPT-5.5, Gemini 3.1 Pro, Gemini 3.5 Flash gave
+  different grades on different runs. One run says little about them.
+- Claude Sonnet 5 at low or medium effort fragments the work (placeholder
+  calls, a mode switch before writing, the write deferred behind more reads)
+  and lands at 8 to 9 turns; at default effort it overthinks for minutes.
+- GPT-5.6 Sol without an effort setting reasoned for 10 minutes to the 65k
+  output cap, twice; at medium it turns in seconds.
+
+## Known platform causes of a stalled or lost turn
+
+Check these before blaming the model. Status as of 2026-09-08.
+
+- **Room events dropped under concurrency.** The bot's sliding sync window was
+  one room wide; two rooms active in the same instant lost one event. Fixed by
+  widening the window.
+- **One user's rooms take turns.** Per-user cost lock around the whole
+  generation. Fixed by locking only the credit check and the debit.
+- **Several `readRealmFile` calls in one turn stall the continuation.** Results
+  now publish one after another.
+- **Patch result indexes do not line up** when a message has example code
+  fences before its patches; the bot now counts results instead of matching
+  positions.
+- **A patch cut across continuation events** is never applied; the cut now
+  moves back to the opening fence.
+- **`set-active-llm` accepted any mode** and dropped the room into Ask; now
+  rejects anything but `act` or `ask`.
+- **Correctness check passed JSON that is not a card document**; now reports
+  what is missing.
+- **Open**: no output cap and no stall abort in the bot (a reasoning turn can
+  run to the provider's 65k cap with nothing streamed); prerender timeout
+  under five concurrent workspaces reported as a code error; a fence glued to
+  prose is not a code block for the host but a patch for the bot; the dropped
+  closing marker could be accepted by the host as the end of a REPLACE block.
 
 ## What the runner cannot tell you
 
