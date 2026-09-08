@@ -36,7 +36,7 @@ import type {
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
 import type ms from 'ms';
-import { TEST_CLOCK_INSTANT } from './test-clock';
+import { nextFixtureMtime } from './test-clock';
 
 interface Dir {
   kind: 'directory';
@@ -81,7 +81,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.#paths = new RealmPaths(realmURL);
     this.#mockMatrixUtils = mockMatrixUtils;
 
-    let now = unixTime(TEST_CLOCK_INSTANT);
+    let now = nextFixtureMtime();
 
     for (let [path, content] of Object.entries(contents)) {
       let segments = path.split('/');
@@ -312,7 +312,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let updateEvent: FileWatcherEventContent;
 
-    let lastModified = unixTime(TEST_CLOCK_INSTANT);
+    let lastModified = nextFixtureMtime();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
     if (dir.contents[name]) {
