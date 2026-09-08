@@ -41,7 +41,7 @@ import {
 } from './fixtures/function-coverage/index.ts';
 import {
   AUTHORIZATION_LIBRARIES,
-  MUTATION_LIBRARIES,
+  mutationLibraries,
 } from './fixtures/function-coverage/case.ts';
 import {
   PRIVATE_BUILTINS,
@@ -67,13 +67,13 @@ const failures = registryGateFailures(libraries);
 const exposed = new Set([
   ...reachableNames(libraries),
   ...reachableNames(AUTHORIZATION_LIBRARIES),
-  ...reachableNames(MUTATION_LIBRARIES),
+  ...reachableNames(mutationLibraries()),
 ]);
 
 const published = new Set([
   ...resolveBuiltinRegistry(libraries).publicNames,
   ...resolveBuiltinRegistry(AUTHORIZATION_LIBRARIES).publicNames,
-  ...resolveBuiltinRegistry(MUTATION_LIBRARIES).publicNames,
+  ...resolveBuiltinRegistry(mutationLibraries()).publicNames,
 ]);
 const notPrivate = [...PRIVATE_BUILTINS.keys()]
   .filter((name) => !exposed.has(name) || published.has(name))

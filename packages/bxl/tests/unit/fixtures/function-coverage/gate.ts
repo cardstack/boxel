@@ -21,7 +21,7 @@ import { FORMULA_BESSEL_FILTERS } from '../../../../src/bxl/bridge/formula-besse
 import { FORMULA_ENGINEERING_FILTERS } from '../../../../src/bxl/bridge/formula-engineering-manifest.ts';
 import { FORMULA_FINANCIAL_FILTERS } from '../../../../src/bxl/bridge/formula-financial-manifest.ts';
 import { VALIDATION_FILTERS } from '../../../../src/bxl/bridge/validation-manifest.ts';
-import { AUTHORIZATION_LIBRARIES, MUTATION_LIBRARIES } from './case.ts';
+import { AUTHORIZATION_LIBRARIES, mutationLibraries } from './case.ts';
 
 /**
  * The filters each lazy chunk promises. These sets are what the auto-loaders
@@ -114,7 +114,7 @@ const SHIPPED_LIBRARY_SETS = (
 ): BuiltinLibraryName[][] => [
   cardLibraries,
   AUTHORIZATION_LIBRARIES,
-  MUTATION_LIBRARIES,
+  mutationLibraries(),
 ];
 
 /** Every name a program can reach, public or private, across `libraries`. */
@@ -210,6 +210,30 @@ export function registryGateFailures(
           `program runs\n    ${unlisted.join(', ')}`,
       );
     }
+  }
+
+  // The mutation set is the card set plus the request-context builtins, and
+  // it is resolved when asked rather than held in a constant. A set
+  // materialized before `loadAllFormulaExtensions` would silently drop the
+  // lazy families — leaving the gate enumerating a mutation surface narrower
+  // than the one a mutation program really resolves, while still passing.
+  const mutationSet = mutationLibraries();
+  const missingFromMutation = cardLibraries.filter(
+    (name) => !mutationSet.includes(name),
+  );
+  if (missingFromMutation.length > 0) {
+    failures.push(
+      'the mutation library set is missing librarie(s) a card can reach, so ' +
+        'a mutation program resolves a narrower surface than a computed ' +
+        `field\n    ${missingFromMutation.join(', ')}`,
+    );
+  }
+  if (!mutationSet.includes('request-context')) {
+    failures.push(
+      'the mutation library set does not include request-context, so the ' +
+        'params/actor/instance builtins are unreachable from a mutation ' +
+        'program',
+    );
   }
 
   // Every callable-but-unlisted name has to carry a reason. The gate

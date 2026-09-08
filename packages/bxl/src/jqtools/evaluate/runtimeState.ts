@@ -164,11 +164,27 @@ export function withRequestContext<T>(
   callback: () => T,
 ): T {
   requestContextStack.push(context);
+  let result: T;
   try {
-    return callback();
+    result = callback();
   } finally {
     requestContextStack.pop();
   }
+  // The scope is a synchronous stack, so it is already unwound by the time an
+  // async callback resumes: the evaluation would read whatever context is
+  // current then, which for concurrent requests is another request's. BXL
+  // evaluation is synchronous throughout, so this cannot happen today — it is
+  // refused loudly rather than left as a silent cross-request read for
+  // whoever first wraps an async callback.
+  if (typeof (result as { then?: unknown } | undefined)?.then === 'function') {
+    throw new JqEvaluateError(
+      'withRequestContext scopes a request context synchronously and was ' +
+        'given a callback that returned a promise. The context is unwound ' +
+        'before that promise settles, so the evaluation inside it would read ' +
+        "another request's context.",
+    );
+  }
+  return result;
 }
 
 /** The innermost scoped request context, or `undefined` outside them all. */

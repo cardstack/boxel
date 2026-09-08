@@ -107,6 +107,12 @@ export interface CoverageCase extends Expectation {
    */
   readableSyntax?: boolean;
   /**
+   * Resolve this case against the mutation library set, computed when the
+   * case runs. Set it through {@link inMutationLibraries} rather than by
+   * hand. Takes precedence over `libraries`.
+   */
+  mutationLibraries?: true;
+  /**
    * Request context to scope around the evaluation, for the builtins that
    * read one. A case that omits it evaluates outside every scope, which is
    * how the no-context error path is reached.
@@ -156,14 +162,24 @@ export function inAuthorizationLibraries(entry: CoverageCase): CoverageCase {
 
 /**
  * The libraries a mutation program resolves against — the card set plus the
- * request-context builtins the mutation dialect adds. Derived through the same
- * function `prepareBxlMutation` calls, so the set the gate enumerates is the
- * set a mutation program actually gets.
+ * request-context builtins the mutation dialect adds — derived through the
+ * same function `prepareBxlMutation` calls.
+ *
+ * Computed on each call rather than held in a constant. `CARD_LIBRARIES`
+ * aliases the array `loadAllFormulaExtensions` appends the lazy families to,
+ * so a set materialized while this module loads would be a snapshot from
+ * before that call and would claim mutation programs cannot reach the
+ * financial and statistical families. Every caller here runs after the load.
  */
-export const MUTATION_LIBRARIES: BuiltinLibraryName[] =
-  mutationBuiltinLibraries(CARD_LIBRARIES);
+export function mutationLibraries(): BuiltinLibraryName[] {
+  return mutationBuiltinLibraries(CARD_LIBRARIES);
+}
 
-/** Marks a case as reaching the request-context builtins. */
+/**
+ * Marks a case as reaching the request-context builtins. The set is resolved
+ * when the case runs, not when the table is built — the tables are
+ * constructed at module load, before the lazy families register.
+ */
 export function inMutationLibraries(entry: CoverageCase): CoverageCase {
-  return { libraries: MUTATION_LIBRARIES, ...entry };
+  return { ...entry, mutationLibraries: true };
 }

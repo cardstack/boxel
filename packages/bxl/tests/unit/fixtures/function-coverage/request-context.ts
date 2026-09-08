@@ -131,6 +131,20 @@ const cases: CoverageCase[] = [
   },
   {
     covers: 'instance/1',
+    source: 'instance("toString")',
+    // Only the object's own keys are readable. A prototype-chain name would
+    // otherwise answer with a function, which is not a JSON value at all.
+    context,
+    throws: /asks for "toString"/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("constructor")',
+    context,
+    throws: /asks for "constructor"/,
+  },
+  {
+    covers: 'instance/1',
     source: 'instance("nickname")',
     context,
     // An absent field on a stored document is ordinary, so the message names

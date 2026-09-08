@@ -81,6 +81,8 @@ function describeKeys(source: Record<string, unknown>): string {
   const keys = Object.keys(source)
     .filter((key) => source[key] !== undefined)
     .sort();
+  // `Object.keys` is already own-properties-only, so this matches what
+  // `requireKey` will accept.
   if (keys.length === 0) return 'it has no readable keys';
   const shown = keys.slice(0, KEYS_IN_MESSAGE);
   const rest = keys.length - shown.length;
@@ -98,12 +100,17 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
     );
   }
   const source = slotObject(slot, call);
-  // A key held with an explicit `undefined` counts as absent. `undefined` is
-  // not a JSON value, and yielding it would put it in front of the planner as
-  // one — writing an intent that unsets the field, which is the silent
-  // failure these builtins exist to refuse. A JSON `null` is a real value and
-  // passes through.
-  if (source[key] === undefined) {
+  // Two conditions, and both are load-bearing. The key has to be the
+  // object's own, or `instance("toString")` would answer with a function off
+  // the prototype chain; and its value has to be something other than
+  // `undefined`, which a key can be held with and which is not a JSON value —
+  // yielding it would put it in front of the planner as one, writing an
+  // intent that unsets the field. That is the silent failure these builtins
+  // exist to refuse. A JSON `null` is a real value and passes through.
+  if (
+    !Object.prototype.hasOwnProperty.call(source, key) ||
+    source[key] === undefined
+  ) {
     const hint = OPTIONAL_KEY_HINTS[slot];
     throw new JqEvaluateError(
       `${call} asks for "${key}", which is not in ${

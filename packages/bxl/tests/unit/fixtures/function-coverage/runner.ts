@@ -28,6 +28,7 @@ import {
 } from '../../../../src/jqtools/evaluate/filters/lib/nativeFilter.ts';
 import {
   CARD_LIBRARIES,
+  mutationLibraries,
   type CoverageCase,
   type Expectation,
   type ZoneContext,
@@ -210,7 +211,9 @@ function runInZone(
   libraries: BuiltinLibraryName[],
   context: ZoneContext,
 ): string | undefined {
-  const effective = testCase.libraries ?? libraries;
+  const effective = testCase.mutationLibraries
+    ? mutationLibraries()
+    : (testCase.libraries ?? libraries);
   recordResolvedBuiltinsFilter(effective);
   invoked.clear();
   let outputs: unknown[] | undefined;
