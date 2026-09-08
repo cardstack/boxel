@@ -513,6 +513,24 @@ test.describe('Host mode', () => {
 // rewrite-and-republish, which is what made these the suite's heaviest,
 // flakiest tests.
 test.describe('Host mode routing rules', () => {
+  // Both tests here publish a realm and then wait for its server-rendered HTML,
+  // and the two costs have to fit inside one budget. Publishing is the whole of
+  // `createAndPublishHostModeRealm` — register a user, create a realm, index it,
+  // post two card sources, create a card, publish — which on a loaded runner is
+  // tens of seconds; the marker waits that follow are 45s each, and the second
+  // test performs two of them.
+  //
+  // The suite default of 60s cannot hold that, and the way it fails is the
+  // problem: `waitForPublishedMarker` reports which of "realm not served" and
+  // "served without the marker" happened, and it can only do so if its own
+  // deadline arrives first. Under a budget smaller than the waits it guards, the
+  // test dies of the outer timeout instead and the reason is lost.
+  //
+  // So the invariant is that this budget exceeds the setup plus every marker
+  // wait a test performs. It matches the budget the shared `beforeAll` above
+  // gives the same publish work.
+  test.describe.configure({ timeout: 180_000 });
+
   // CS-10054 + CS-10055: routing rules in the realm config card resolve a
   // bare path (no .json extension) to a target card and render it in host
   // mode. This test fails until the host-mode request handler reads the
