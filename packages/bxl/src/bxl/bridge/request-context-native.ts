@@ -28,6 +28,7 @@ import {
   type NativeRequestContext,
 } from '../../jqtools/evaluate/runtimeState.ts';
 import { JqArgumentError, JqEvaluateError } from '../../jqtools/errors.ts';
+import { deepClone } from '../../jqtools/evaluate/utils/utils.ts';
 
 /** How many key names an error message lists before it truncates. */
 const KEYS_IN_MESSAGE = 12;
@@ -82,6 +83,24 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
     );
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * A value on its way to a program, copied.
+ *
+ * A builtin is free to write into its argument, and several do: the
+ * two-argument validator.js helpers merge their defaults into the options
+ * object they are handed, so `instance("v") | isEmail("a"; .)` would leave
+ * nine new keys on the host's own object. Copying here is what keeps the
+ * host's context out of reach of that, and of whichever builtin added next
+ * also writes into what it is given.
+ *
+ * `deepClone` returns a primitive as itself, so a program reading a string or
+ * a number pays nothing; the cost falls only where a structured value is
+ * actually read.
+ */
+function readable<T>(value: T): T {
+  return deepClone(value);
 }
 
 /**
@@ -147,6 +166,9 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(source, key);
   const value =
     descriptor && !('value' in descriptor) ? source[key] : descriptor?.value;
+  // The lookup reads the host's object; only what is handed back is copied,
+  // so the ownership and `undefined` checks above still see what the host
+  // actually holds.
   if (!descriptor || value === undefined) {
     const hint = OPTIONAL_KEY_HINTS[slot];
     throw new JqEvaluateError(
@@ -155,7 +177,7 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
       } — ${describeKeys(source)}.${hint ? ` ${hint}` : ''}`,
     );
   }
-  return value;
+  return readable(value);
 }
 
 const bareNativeFilters: Record<string, BareNativeFilter> = {
@@ -163,13 +185,13 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield requireKey('params', 'params(key)', key);
   },
   'actor/0': function* () {
-    yield slotObject('actor', 'actor()');
+    yield readable(slotObject('actor', 'actor()'));
   },
   'actor/1': function* (_input, key) {
     yield requireKey('actor', 'actor(key)', key);
   },
   'instance/0': function* () {
-    yield slotObject('instance', 'instance()');
+    yield readable(slotObject('instance', 'instance()'));
   },
   'instance/1': function* (_input, key) {
     yield requireKey('instance', 'instance(key)', key);

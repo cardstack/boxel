@@ -1459,6 +1459,95 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
   );
 }
 
+// A value handed to a program is a copy. A builtin is free to write into its
+// argument and several do — the two-argument validator.js helpers merge their
+// defaults into the options object they are given — so without this the
+// host's own context object would carry whatever a program's builtins wrote
+// into it.
+{
+  const hostInstance = { nested: { n: 1 } };
+  const handed = withRequestContext({ instance: hostInstance }, () =>
+    evaluateBxl('instance()', null, {
+      libraries: mutationBuiltinLibraries(),
+    }),
+  ).value as { nested: { n: number } };
+  ok(handed !== hostInstance, 'the whole slot is handed over as a copy');
+  ok(
+    handed.nested !== hostInstance.nested,
+    'the copy reaches nested objects, not just the top level',
+  );
+  handed.nested.n = 99;
+  strictEqual(
+    hostInstance.nested.n,
+    1,
+    'writing into what a program was handed does not reach the host object',
+  );
+
+  const hostPayload = { obj: { n: 1 } };
+  const key = withRequestContext({ params: hostPayload }, () =>
+    evaluateBxl('params("obj")', null, {
+      libraries: mutationBuiltinLibraries(),
+    }),
+  ).value as { n: number };
+  ok(key !== hostPayload.obj, 'a keyed read is handed over as a copy too');
+  key.n = 99;
+  strictEqual(
+    hostPayload.obj.n,
+    1,
+    'and writing into it leaves the host alone',
+  );
+}
+
+// An array entry cannot be absent the way an object member can: an absent
+// member serializes as absent, an absent entry serializes as `null` — a value
+// the host never sent. A hole reads as `undefined` and is refused the same
+// way.
+// Built rather than written as a literal: a sparse array literal is a lint
+// error, and the point is a genuine hole.
+const holed = new Array<unknown>(3);
+holed[0] = 1;
+holed[2] = 3;
+for (const [description, payload] of [
+  ['an explicit undefined entry', [1, undefined, 3]],
+  ['a hole', holed],
+  ['a nested undefined entry', [[undefined]]],
+] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-array-hole',
+          context: { params: { payload } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.code === 'context-not-json' &&
+      /has no value/.test(error.message),
+    `${description} in a context array is refused`,
+  );
+}
+
+// A `null` entry is a real value and passes. This writes the array whole, so
+// it needs a program that does not also index into what it wrote.
+deepStrictEqual(
+  (
+    prepareBxlMutation('.blob = params("payload");', {
+      targetKind: 'card',
+      syntax: 'solidified',
+      schema: contextSchema,
+    }).plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-array-null',
+        context: { params: { payload: [1, null, 3] } } as never,
+      },
+    ).output as { blob: unknown }
+  ).blob,
+  [1, null, 3],
+);
+
 // A `Symbol.toStringTag` can blank the built-in tag. An empty name has to be
 // reported rather than read as "no problem found", or a branded exotic value
 // reaches the document as itself.

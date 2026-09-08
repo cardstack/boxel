@@ -397,10 +397,21 @@ as `null`.
 
 The context is checked against that same standard before a program can reach
 it: a slot carrying anything a JSON document cannot hold — a `Date`, `Map`,
-`Set`, `RegExp`, `TypedArray`, `bigint`, function or class instance, at any
-depth — fails the plan with `context-not-json` naming the path. The type
-declares JSON, but a type is not a runtime guarantee, and a `bigint` read
-through `tostring` produces exactly the silent unset these builtins refuse.
+`Set`, `RegExp`, `TypedArray`, `URL` or any other value whose built-in type is
+neither a plain object nor an array, a `bigint`, a function, or a non-finite
+number, at any depth — fails the plan with `context-not-json` naming the path.
+An object carrying only its own data fields is a plain object whatever its
+prototype says, and is accepted. The type declares JSON, but a type is not a
+runtime guarantee, and a `bigint` read through `tostring` produces exactly the
+silent unset these builtins refuse.
+
+An absent array entry is refused too, whether it is a hole or an explicit
+`undefined`. An absent object member serializes as absent, but an absent array
+entry serializes as `null` — a value the host never sent.
+
+A value a program reads is copied on its way to it, so a host may keep and
+reuse its context object: a builtin is free to write into the argument it is
+handed, and the copy is what keeps those writes off the host's own object.
 
 Only the `mutation` profile admits them. `derive` denies them because a stored
 derivation reused on later reads must not depend on whichever request last

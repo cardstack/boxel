@@ -78,14 +78,16 @@ interface PlannerContext {
   /**
    * The request context as the host supplied it, held by reference.
    *
-   * Not copied: the planner already isolates the caller's object without
-   * help. Every value a program reads is copied on its way into the result by
-   * the per-statement `clone(working)` and by the intent recording, so
-   * neither `plan.output` nor `intents[].after` ever shares structure with
-   * the host's object — verified for a nested object read, for the same key
-   * read twice, and for a later statement writing through the value that was
-   * read. A copy here would deep-clone the whole stored document once per
-   * plan and change nothing.
+   * Not copied here: the builtins copy each value as they hand it to a
+   * program, which is what keeps the host's object out of the plan and out of
+   * reach of a builtin that writes into its argument. A copy at this boundary
+   * would clone the whole context once per plan whether a program reads any
+   * of it or not.
+   *
+   * On the way out, a written value is isolated by `setAt`'s own copy and by
+   * the structural inserts' — not by the per-statement `clone(working)`,
+   * which runs on entry to the *next* statement and so does not cover the
+   * last one.
    */
   requestContext?: BxlMutationContext;
 }
@@ -234,18 +236,16 @@ function nonJsonTypeName(value: unknown): string | undefined {
       break;
   }
   if (Array.isArray(value)) return undefined;
-  // The built-in tag rather than the prototype or the constructor's name. It
-  // reports `Date`, `Map` and `URL` reliably, and says `Object` for every
-  // plain object — including one from another realm and one carrying only a
-  // class's own data fields, which hold nothing but JSON and which a
-  // prototype test refused.
+  // The built-in tag decides. It reports `Date`, `Map` and `URL` reliably,
+  // and says `Object` for every plain object — one from another realm and one
+  // carrying only a class's own data fields included, since both hold nothing
+  // but JSON.
   //
   // A `Symbol.toStringTag` can rename the tag or blank it, so an empty tag is
-  // reported rather than read as "no problem found" — the failure mode a
-  // constructor's `name` had. The reverse, an exotic object branded `Object`,
-  // is not distinguishable from a plain one in JS and is not defended
-  // against: this guard is for a host's mistake, and a symbol-keyed brand
-  // cannot come from a JSON payload.
+  // reported rather than read as "no problem found". The reverse, an exotic
+  // object branded `Object`, is not distinguishable from a plain one in JS and
+  // is not defended against: this guard is for a host's mistake, and a
+  // symbol-keyed brand cannot come from a JSON payload.
   const tag = Object.prototype.toString.call(value).slice(8, -1);
   if (tag === 'Object') return undefined;
   return tag || 'an object with no type name';
@@ -291,7 +291,24 @@ function assertJsonContext(context: BxlMutationContext) {
     if (cleared.has(value)) return;
     ancestors.add(value);
     if (Array.isArray(value)) {
-      value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+      // An index loop, not `forEach`, which skips holes — and a hole reads as
+      // `undefined`, which an array cannot carry: an absent object member
+      // serializes as absent, but an absent array entry serializes as `null`,
+      // a value the host never sent.
+      for (let index = 0; index < value.length; index += 1) {
+        const entry: unknown = value[index];
+        if (entry === undefined) {
+          throw new BxlMutationError(
+            'plan',
+            'context-not-json',
+            1,
+            `The request context at ${path}[${index}] has no value. An ` +
+              'array entry cannot be absent the way an object member can — ' +
+              'it would reach the document as `null`.',
+          );
+        }
+        walk(entry, `${path}[${index}]`);
+      }
     } else {
       // Own properties, enumerable or not, matching what the builtins read.
       for (const key of Object.getOwnPropertyNames(value)) {

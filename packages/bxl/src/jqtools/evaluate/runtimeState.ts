@@ -173,10 +173,8 @@ export function withRequestContext<T>(
   // The scope is a synchronous stack, so it is already unwound by the time a
   // deferred callback resumes or a lazy result is pulled: the evaluation would
   // read whatever context is current then, which for concurrent requests is
-  // another request's. BXL evaluation is synchronous throughout and the
-  // planner materializes each statement's outputs before returning, so
-  // neither shape can arrive today — each is refused loudly rather than left
-  // as a silent cross-request read for whoever first writes one.
+  // another request's. Each shape is refused rather than left as a silent
+  // cross-request read.
   const deferred = deferredResultKind(result);
   if (deferred) {
     if (deferred === 'promise') {
