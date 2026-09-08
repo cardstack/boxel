@@ -273,25 +273,36 @@ const plan = prepared.plan(storedSnapshot, {
 An author addresses stored, computed, and linked values through the same
 `.path` syntax. The rules the planner enforces:
 
-- **The stored document wins.** An overlay answers a path only where the
-  stored document holds nothing — an absent key or a `null`, which is what a
-  Card holds at a path it never persists. An overlay's stale copy of a stored
-  value never displaces the stored one, and neither does an `unavailable`
-  marker: a host that could not supply a linked Card's Fields has said nothing
-  about the stored edge that points at it.
+- **The stored document wins, and keeps its shape.** An overlay answers a path
+  only where the stored document holds nothing — an absent key or a `null`,
+  which is what a Card holds at a path it never persists. An overlay's stale
+  copy of a stored value never displaces the stored one. Nor may an overlay
+  *reshape* the Card: a value whose path runs past a stored scalar, or past the
+  end of a stored collection, is dropped rather than retyping the scalar or
+  renumbering the collection the planner is about to compute indices against.
+  Index drift is routine and must not change the document a program plans over.
 - **Overlay values are read-only.** A write that lands on a computed value
   fails with `computed-read-only`, and one that lands on a linked Card's Field
-  fails with `write-through-link`, each naming the path. A computed value the
-  overlay supplies as a container is read-only whole, so replacing or deleting
-  the container is refused too. Writing an *ancestor* of a linked value stays
-  an ordinary write: replacing a relationship edge changes the Card's own
-  document, not the Card on the far side of the link.
+  fails with `write-through-link`, each naming the path. A container the
+  overlay supplies where the Card holds nothing is a computed value in its own
+  right and is read-only whole; a *stored* collection whose rows merely carry a
+  computed Field stays writable as a collection, with only that Field refused.
+  Writing an *ancestor* of a linked value likewise stays an ordinary write:
+  replacing a relationship edge changes the Card's own document, not the Card
+  on the far side of the link.
+- **A read reports an overlay whenever one participates in its value** — the
+  overlay supplied the path, the read sits inside a value it supplied, or the
+  value returned carries overlay-supplied descendants. Reading a stored
+  container whose Fields an overlay filled in is therefore an overlay read, not
+  a source read, so it cannot reach index data without saying so.
 - **An unavailable read fails loudly.** `unavailable` entries name what the
   host could not supply and why (`not-indexed`, `not-searchable`,
-  `key-absent`), covering the paths nested inside them. Reading one raises
-  `snapshot-unavailable` carrying `{ path, tier, reason }` rather than leaking
-  a `null` into a write or a precondition. A marker carries no value, so it
-  refuses no writes on its own.
+  `key-absent`). A marker at the read path, or nested under it, makes the read
+  `unavailable` — the subtree returned would be missing what the host could not
+  supply. A marker *above* the path applies only where the stored document has
+  nothing of its own there. Reading one raises `snapshot-unavailable` carrying
+  `{ path, tier, reason }` rather than leaking a `null` into a write or a
+  precondition. A marker carries no value, so it refuses no writes on its own.
 - **An assert over an overlay says so.** Overlay values can lag the stored
   document by an indexing round, so an `assert` that reads one requires the
   three-argument form `assert(condition, message, { snapshot: true })`; without
@@ -300,9 +311,10 @@ An author addresses stored, computed, and linked values through the same
   `{ snapshot: true }` is the only accepted option record — `assert/2` is how
   an assert says it requires stored values.
 - **Only what a program actually reads counts.** Reads are the paths an
-  expression resolves on every run. A conditional branch — `if`/`else`, the
-  right side of `//`, `and` or `or`, an `IF`/`IFS` result — is not one, so a
-  path read only on the branch not taken neither refuses the program nor
+  expression resolves on every run. Anything conditional is not one — `if`/
+  `else`, the right side of `//`, `and` or `or`, everything after the first
+  argument of `IF`/`IFS`, and the later operands of a short-circuiting builtin
+  — so a path read only on the branch not taken neither refuses the program nor
   reports a read that never happened.
 - **Every read is reported.** `onRead` fires once per path a program's
   expressions resolve, in program order, with the tier that answered
@@ -310,8 +322,9 @@ An author addresses stored, computed, and linked values through the same
   `unavailable`).
 
 Overlays are additive: a plan built without them behaves exactly as one built
-before they existed, and a plan's `output` carries stored values only — the
-overlay answers reads and never reaches the committed document. The planner
+before they existed. A plan's `output`, and the `before` recorded on every
+intent, carry stored values only — an overlay answers reads, and never stands
+in for what the Card held. The planner
 receives overlay values already fetched by the host; it never queries the index
 itself.
 

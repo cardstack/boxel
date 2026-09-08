@@ -1,6 +1,7 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
 import {
   BxlMutationError,
+  EMPTY_OVERLAY_INDEX,
   applyBxlMutationPlanToCardSource,
   mutateBxlCardSource,
   mutationSchemaForCardSource,
@@ -9,6 +10,7 @@ import {
   type BxlBoxelSourceDefinition,
   type BxlCardSourceDocument,
   type BxlCardSourceRelationship,
+  mergeBxlMutationOverlays,
   type BxlMutationOverlays,
   type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
@@ -1543,6 +1545,191 @@ throws(
     plannerRun('.image = (if .status then "y" else "n" end);', statusMissing),
   (error) =>
     error instanceof BxlMutationError && error.code === 'snapshot-unavailable',
+);
+
+// An overlay layers values *under* the stored document, so it may fill a place
+// the Card leaves empty but never change what the Card already is. Index drift
+// is routine — a `pristine_doc` or `search_doc` row can lag a write, carry an
+// extra collection row, or hold a value of a different shape — and none of it
+// may reshape the document a program plans over.
+const collectionSchema = {
+  fields: [
+    { key: 'image', label: 'Image', kind: 'scalar' as const, writable: true },
+    {
+      key: 'summary',
+      label: 'Summary',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'text', label: 'Text', kind: 'scalar' as const, writable: true },
+      ],
+    },
+    {
+      key: 'tags',
+      label: 'Tags',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+    },
+    {
+      key: 'rows',
+      label: 'Rows',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+      item: {
+        fields: [
+          { key: 'qty', label: 'Qty', kind: 'scalar' as const, writable: true },
+          {
+            key: 'total',
+            label: 'Total',
+            kind: 'scalar' as const,
+            writable: false,
+            writeBehavior: 'skip' as const,
+          },
+        ],
+      },
+    },
+  ],
+};
+const collectionSnapshot = {
+  image: 'stored',
+  summary: null,
+  tags: ['language', 'web'],
+  rows: [{ qty: 2, total: null }],
+};
+
+function collectionPlan(source: string, overlays?: BxlMutationOverlays) {
+  return prepareBxlMutation(source, {
+    targetKind: 'card',
+    schema: collectionSchema,
+    syntax: 'solidified',
+  }).plan(collectionSnapshot, {
+    programId: 'overlay-collection',
+    baseRevision: 'r1',
+    currentRevision: 'r1',
+    overlays,
+  });
+}
+
+function collectionError(
+  source: string,
+  overlays?: BxlMutationOverlays,
+): BxlMutationError {
+  try {
+    collectionPlan(source, overlays);
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`expected ${JSON.stringify(source)} to fail`);
+}
+
+// An overlay row past the end of a stored collection is dropped, so positions
+// stay the ones the Card will commit against.
+const extraRow: BxlMutationOverlays = {
+  linked: { tags: ['language', 'web', 'from-the-index'] },
+};
+for (const overlays of [undefined, extraRow]) {
+  strictEqual(
+    collectionError('insert_at(.tags; 3; "new");', overlays).code,
+    'insert-index-invalid',
+  );
+  deepStrictEqual(collectionPlan('del(.tags[0]);', overlays).output, {
+    ...collectionSnapshot,
+    tags: ['web'],
+  });
+  deepStrictEqual(
+    collectionPlan('move_item_to_end(.tags[0]; .tags);', overlays).intents,
+    [{ op: 'move', from: ['tags', 0], toCollection: ['tags'], toIndex: 1 }],
+  );
+  deepStrictEqual(collectionPlan('append(.tags; "z");', overlays).output, {
+    ...collectionSnapshot,
+    tags: ['language', 'web', 'z'],
+  });
+}
+
+// An overlay whose value has a different shape than the stored one is dropped
+// too: the stored value survives untouched.
+deepStrictEqual(
+  collectionPlan('.image = "written";', {
+    computeds: { image: { nested: 'wrong shape' }, tags: { 0: 'wrong shape' } },
+  }).output,
+  { ...collectionSnapshot, image: 'written' },
+);
+
+// A computed Field inside a stored collection makes that Field read-only, not
+// the collection holding it.
+const rowTotals: BxlMutationOverlays = { computeds: { rows: [{ total: 20 }] } };
+strictEqual(
+  collectionError('.rows[0].total = 9;', rowTotals).code,
+  'computed-read-only',
+);
+for (const source of [
+  'append(.rows; {"qty": 5});',
+  'del(.rows[0]);',
+  '.rows[0].qty = 9;',
+]) {
+  ok(collectionPlan(source, rowTotals).affected > 0, source);
+}
+// A container the overlay supplies where the Card holds nothing is a computed
+// value in its own right, and read-only whole.
+strictEqual(
+  collectionError('.summary = {"text": "x"};', {
+    computeds: { summary: { text: 'derived' } },
+  }).code,
+  'computed-read-only',
+);
+// A stale overlay copy of a value the Card does store neither answers reads
+// nor makes the Field read-only.
+deepStrictEqual(
+  collectionPlan('.image = .image;', { computeds: { image: 'stale' } }).output,
+  collectionSnapshot,
+);
+
+// Reads see an overlay wherever one participates in the value, including when
+// the stored document answers the container and the overlay filled a Field
+// inside it — otherwise an assert could reach index data without saying so.
+const rowEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (.rows | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-collection-reads',
+  overlays: rowTotals,
+  onRead: (event) => rowEvents.push(event),
+});
+deepStrictEqual(rowEvents, [
+  { path: 'rows', tier: 'computed', outcome: 'value' },
+]);
+strictEqual(
+  collectionError('assert((.rows | length) == 1; "wrong count");', rowTotals)
+    .code,
+  'assert-snapshot-required',
+);
+
+// An intent records what the Card stored, never what an overlay answered with.
+deepStrictEqual(
+  collectionPlan('.rows = [];', { computeds: { rows: [{ total: 20 }] } })
+    .intents,
+  [{ op: 'set', path: ['rows'], before: [{ qty: 2, total: null }], after: [] }],
+);
+
+// The overlay layer is inert without overlays: no index, no grafts, and the
+// planner's own view of the document is the snapshot it was handed.
+const inert = mergeBxlMutationOverlays(collectionSnapshot, undefined);
+strictEqual(inert.index, EMPTY_OVERLAY_INDEX);
+deepStrictEqual(inert.root, collectionSnapshot);
+ok(inert.root !== collectionSnapshot);
+strictEqual(
+  mergeBxlMutationOverlays(collectionSnapshot, {}).index,
+  EMPTY_OVERLAY_INDEX,
+);
+strictEqual(
+  mergeBxlMutationOverlays(collectionSnapshot, { unavailable: [] }).index,
+  EMPTY_OVERLAY_INDEX,
 );
 
 console.log(

@@ -56,6 +56,8 @@ export interface OverlayIndex {
   readonly coverage: ReadonlyMap<string, BxlMutationOverlayTier>;
   /** Dotted path to what the host could not supply there, and why. */
   readonly unavailable: ReadonlyMap<string, BxlMutationUnavailableOverlay>;
+  /** Proper ancestors of an unavailable path, to the marker nested under them. */
+  readonly unavailableUnder: ReadonlyMap<string, BxlMutationUnavailableOverlay>;
   /** Every supplied path, longest first, for undoing the merge. */
   readonly supplied: readonly BxlMutationPath[];
   /** Proper ancestors of a supplied path, so a read spanning one is cheap to spot. */
@@ -72,6 +74,7 @@ export const EMPTY_OVERLAY_INDEX: OverlayIndex = {
   coverage: new Map(),
   supplied: [],
   unavailable: new Map(),
+  unavailableUnder: new Map(),
   covers: new Set(),
   coversComputed: new Set(),
   anchors: [],
@@ -115,6 +118,39 @@ function anchorFor(
 }
 
 /**
+ * Whether an overlay may reach a path without disturbing the stored document's
+ * own shape.
+ *
+ * An overlay layers values *under* the stored document, so it may fill a place
+ * the stored document leaves empty but never change what the stored document
+ * already is. Grafting past a stored scalar would replace it with a container,
+ * and grafting past the end of a stored array would renumber positions the
+ * planner is about to compute collection indices against — so a leaf whose path
+ * runs through either is dropped. Index drift between a Card and its indexed
+ * copy is normal; it must not reshape the document a program plans over.
+ */
+function reachableInStored(
+  stored: BxlMutationJson,
+  path: BxlMutationPath,
+): boolean {
+  for (let length = 0; length < path.length; length++) {
+    const prefix = path.slice(0, length);
+    if (!storedAnswers(stored, prefix)) return true;
+    const container = valueAt(stored, prefix);
+    const segment = path[length]!;
+    if (Array.isArray(container)) {
+      if (typeof segment !== 'number' || segment >= container.length) {
+        return false;
+      }
+      continue;
+    }
+    if (container === null || typeof container !== 'object') return false;
+    if (typeof segment !== 'string') return false;
+  }
+  return true;
+}
+
+/**
  * Layer the host's read-only values under the stored document. Every overlay
  * leaf whose path the stored document does not answer is grafted in and
  * recorded, so a later read can say which tier answered and a write to that
@@ -149,6 +185,7 @@ export function mergeBxlMutationOverlays(
       const key = overlayPathKey(leaf.path);
       // The stored document wins over both tiers, and computeds over linked.
       if (coverage.has(key) || storedAnswers(stored, leaf.path)) continue;
+      if (!reachableInStored(stored, leaf.path)) continue;
       const anchor = anchorFor(stored, leaf.path);
       const anchorKey = overlayPathKey(anchor.path);
       if (!anchored.has(anchorKey)) {
@@ -159,18 +196,31 @@ export function mergeBxlMutationOverlays(
       coverage.set(key, tier);
       supplied.push(leaf.path);
       for (let length = 1; length < leaf.path.length; length++) {
-        const ancestor = overlayPathKey(leaf.path.slice(0, length));
-        covers.add(ancestor);
-        if (tier === 'computed') coversComputed.add(ancestor);
+        const prefix = leaf.path.slice(0, length);
+        covers.add(overlayPathKey(prefix));
+        // Only a container the merge created is a computed value in its own
+        // right. A stored collection that merely holds a computed Field in
+        // each row stays writable as a collection.
+        if (tier === 'computed' && !storedAnswers(stored, prefix)) {
+          coversComputed.add(overlayPathKey(prefix));
+        }
       }
     }
   }
 
   const unavailable = new Map<string, BxlMutationUnavailableOverlay>();
+  const unavailableUnder = new Map<string, BxlMutationUnavailableOverlay>();
   for (const entry of declared) {
     const path = normalizeOverlayPath(entry.path);
     if (path.length === 0) continue;
-    unavailable.set(path, { ...entry, path });
+    const marker = { ...entry, path };
+    unavailable.set(path, marker);
+    const parts = path.split('.');
+    for (let length = 1; length < parts.length; length++) {
+      const ancestor = parts.slice(0, length).join('.');
+      if (!unavailableUnder.has(ancestor))
+        unavailableUnder.set(ancestor, marker);
+    }
   }
 
   return {
@@ -180,6 +230,7 @@ export function mergeBxlMutationOverlays(
       coverage,
       supplied: supplied.sort((left, right) => right.length - left.length),
       unavailable,
+      unavailableUnder,
       covers,
       coversComputed,
       anchors,
@@ -191,13 +242,17 @@ export function mergeBxlMutationOverlays(
 /**
  * Which layer answers a read, and with what.
  *
- * The stored document answers first: where it holds a value of its own, the
- * read is a source read whatever the overlays say — a host that could not
- * supply the fields of a linked Card has said nothing about the stored edge.
- * Below that, an overlay answers when it supplied the path, when the read sits
- * inside a value an overlay supplied, or when the value returned carries
- * overlay-supplied descendants. A path the host declared unavailable, or one
- * nested inside such a path, reports `unavailable`.
+ * A read reports `unavailable` when the value it returns is missing something
+ * the host said it could not supply — a marker at the path, or one nested
+ * under it, since the returned subtree would be incomplete. A marker *above*
+ * the path only applies where the stored document has nothing of its own
+ * there: a host that could not supply a linked Card's Fields has said nothing
+ * about the stored edge pointing at it.
+ *
+ * Otherwise an overlay answers whenever one participates in the value: it
+ * supplied the path, the read sits inside a value it supplied, or the value
+ * returned carries overlay-supplied descendants. Only a read no overlay
+ * touches is a source read.
  */
 export function classifyOverlayRead(
   index: OverlayIndex,
@@ -208,22 +263,32 @@ export function classifyOverlayRead(
   unavailable?: BxlMutationUnavailableOverlay;
 } {
   const key = overlayPathKey(path);
-  if (index.empty || storedAnswers(index.stored, path)) {
-    return { event: read(key, 'source', value) };
-  }
-  const declared = selfOrAncestor(index.unavailable, path);
-  if (declared) {
-    return {
-      event: { path: key, tier: declared.tier, outcome: 'unavailable' },
-      unavailable: declared,
-    };
-  }
-  const covered = selfOrAncestor(index.coverage, path);
+  if (index.empty) return { event: read(key, 'source', value) };
+
+  const nested = index.unavailable.get(key) ?? index.unavailableUnder.get(key);
+  if (nested) return unavailableRead(key, nested);
+
+  const covered =
+    index.coverage.get(key) ??
+    selfOrAncestor(index.coverage, path) ??
+    (index.covers.has(key) ? tierUnder(index, key) : undefined);
   if (covered) return { event: read(key, covered, value) };
-  if (index.covers.has(key)) {
-    return { event: read(key, tierUnder(index, path), value) };
+
+  if (!storedAnswers(index.stored, path)) {
+    const above = selfOrAncestor(index.unavailable, path);
+    if (above) return unavailableRead(key, above);
   }
   return { event: read(key, 'source', value) };
+}
+
+function unavailableRead(
+  path: string,
+  entry: BxlMutationUnavailableOverlay,
+): { event: BxlMutationReadEvent; unavailable: BxlMutationUnavailableOverlay } {
+  return {
+    event: { path, tier: entry.tier, outcome: 'unavailable' },
+    unavailable: entry,
+  };
 }
 
 function read(
@@ -241,13 +306,12 @@ function read(
 /** The tier that supplied the first value found beneath a path. */
 function tierUnder(
   index: OverlayIndex,
-  path: BxlMutationPath,
-): BxlMutationOverlayTier {
-  const key = overlayPathKey(path);
+  key: string,
+): BxlMutationOverlayTier | undefined {
   for (const [supplied, tier] of index.coverage) {
     if (isWithin(supplied, key)) return tier;
   }
-  return 'computed';
+  return undefined;
 }
 
 /** What an index holds at a path, or at the nearest ancestor that carries one. */

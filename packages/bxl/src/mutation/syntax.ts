@@ -802,9 +802,7 @@ function argument(
  */
 const INPUT_PRESERVING_FILTERS: ReadonlySet<string> = new Set([
   'card/1',
-  'first/1',
   'has/1',
-  'last/1',
   'not/0',
   'select/1',
 ]);
@@ -816,19 +814,13 @@ const SHORT_CIRCUIT_OPERATORS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * `IF`/`IFS` evaluate their branches conditionally, so only the condition
- * positions are read on every run: argument 0 of `IF`, and the even-indexed
- * arguments of `IFS`.
+ * `IF` and `IFS` evaluate everything after their first argument
+ * conditionally — `IFS` lowers to a chain of `elif`, so even its later
+ * conditions run only when every earlier one was false. Argument 0 is the only
+ * part of either that runs on every pass.
  */
 function isConditionalFilter(name: string): boolean {
   return name.startsWith('IF/') || name.startsWith('IFS/');
-}
-
-function conditionArguments(
-  node: FilterAst & { args: ExpressionAst[] },
-): ExpressionAst[] {
-  if (node.name.startsWith('IF/')) return node.args.slice(0, 1);
-  return node.args.filter((_argument, index) => index % 2 === 0);
 }
 
 /** The path an index chain addresses, when every segment of it is static. */
@@ -856,10 +848,11 @@ function staticPathOf(node: ExpressionAst): BxlMutationPath | undefined {
  * over a path it never read.
  *
  * A sub-expression counts only when it is evaluated every time the containing
- * expression is. A conditional branch — `if`/`else`, a `try` body, the right
- * side of `//`, `and` or `or`, an `IF`/`IFS` result — is skipped, because a
- * path read only on the branch not taken must not refuse the program or report
- * a read that never happened.
+ * expression is. Anything conditional is skipped — `if`/`else`, a `try` body,
+ * the right side of `//`, `and` or `or`, everything after the first argument
+ * of `IF`/`IFS`, and the later operands of a short-circuiting builtin — because
+ * a path read only on the branch not taken must not refuse the program or
+ * report a read that never happened.
  *
  * The empty path is a read of the expression's own input, which is the Card
  * root for most expressions and the assigned location for the value side of
@@ -930,7 +923,7 @@ export function collectMutationReadPaths(
         return;
       case 'filter':
         if (isConditionalFilter(node.name)) {
-          for (const arg of conditionArguments(node)) walk(arg, prefix);
+          if (node.args[0]) walk(node.args[0], prefix);
         } else if (INPUT_PRESERVING_FILTERS.has(node.name)) {
           for (const arg of node.args) walk(arg, prefix);
         }

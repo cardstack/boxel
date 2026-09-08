@@ -37,6 +37,9 @@ export type {
   BxlUpdateViaOptions,
 } from './boxel-adapter.ts';
 
+export { EMPTY_OVERLAY_INDEX, mergeBxlMutationOverlays } from './overlays.ts';
+export type { OverlayIndex } from './overlays.ts';
+
 export {
   applyBxlMutationPlanToCardSource,
   mutateBxlCardSource,

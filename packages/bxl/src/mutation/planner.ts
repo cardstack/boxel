@@ -92,6 +92,21 @@ interface PlannerContext {
   registry: ResolvedBuiltinRegistry;
   overlays: OverlayIndex;
   onRead?: (event: BxlMutationReadEvent) => void;
+  /**
+   * The working document with overlay values removed, refreshed before each
+   * statement. Intents record what the Card stored, never what an overlay
+   * answered a read with.
+   */
+  storedView: BxlMutationJson;
+}
+
+/** What the Card holds at a location, with no overlay value standing in. */
+function storedBefore(
+  location: ResolvedLocation,
+  context: PlannerContext,
+): BxlMutationJson | undefined {
+  if (context.overlays.empty) return location.value;
+  return valueAt(context.storedView, location.path);
 }
 
 /**
@@ -700,10 +715,13 @@ function planAssignment(
         'card(id) may only be assigned to a relationship Field.',
       );
     }
+    const before = storedBefore(location, context);
     const intent: BxlMutationIntent = {
       op: 'set',
       path: [...location.path],
-      ...(location.exists ? { before: clone(location.value!) } : {}),
+      ...(location.exists && before !== undefined
+        ? { before: clone(before) }
+        : {}),
       after: clone(next as BxlMutationJson),
     };
     intents.push(intent);
@@ -835,7 +853,7 @@ function planCall(
       intents.push({
         op: 'set',
         path: location.path,
-        before: clone(location.value!),
+        before: clone(storedBefore(location, context) ?? null),
         after: clone(value as BxlMutationJson),
       });
       output = setAt(output, location.path, value as BxlMutationJson);
@@ -928,7 +946,7 @@ function planCall(
           intents.push({
             op: 'delete',
             path: location.path,
-            before: clone(location.value!),
+            before: clone(storedBefore(location, context) ?? null),
           });
         }
         output = deleteAt(output, location.path);
@@ -1335,13 +1353,18 @@ export function prepareBxlMutation(
         registry,
         overlays: overlays.index,
         ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
+        storedView: overlays.root,
       };
       const before = clone(snapshot);
       let working = overlays.root;
+      const written: BxlMutationPath[] = [];
       const statementPlans: BxlMutationStatementPlan[] = [];
 
       for (const statement of parsed.statements) {
         const draft = clone(working);
+        context.storedView = overlays.index.empty
+          ? draft
+          : restoreOverlayAnchors(clone(working), overlays.index, written);
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
           result =
@@ -1374,6 +1397,7 @@ export function prepareBxlMutation(
           }
         }
         working = result.root;
+        written.push(...result.plan.paths);
         statementPlans.push(result.plan);
       }
 
