@@ -741,9 +741,16 @@ function assertValidParamsSchema(label: string, schema: unknown): Set<string> {
           `${label}: param "${name}" must be a field class or linkTo(…)`,
         );
       }
-    } else if (typeof type !== 'function') {
+    } else if (!isFieldDefConstructor(type)) {
+      // A scalar param is typed by the field class that serializes it, so
+      // any other function — a card class, a thunk, an unrelated callable —
+      // would type the payload as something the endpoint cannot validate.
       throw new Error(
-        `${label}: param "${name}" must be a field class or linkTo(…)`,
+        `${label}: param "${name}" must be a field class or linkTo(…)${
+          isDefConstructor(type)
+            ? ', and a card or file identity is a linkTo(…) param'
+            : ''
+        }`,
       );
     }
     names.add(name);
@@ -751,18 +758,57 @@ function assertValidParamsSchema(label: string, schema: unknown): Set<string> {
   return names;
 }
 
-// Walks the declaration for typed references and validates each in place. A
-// reference to the payload only means something when the schema declares that
-// param, so an undeclared key is an authoring error caught here rather than a
-// runtime hole. References inside a raw program's text are BXL's to resolve.
+function isFieldDefConstructor(value: unknown): boolean {
+  return (
+    typeof value === 'function' &&
+    isSubclassOf(value as typeof BaseDef, FieldDef)
+  );
+}
+
+// Walks the declaration, validating each typed reference in place and holding
+// every other value to what a declaration can carry.
+//
+// A reference to the payload only means something when the schema declares
+// that param, so an undeclared key is an authoring error caught here rather
+// than a runtime hole. References inside a raw program's text are BXL's to
+// resolve.
+//
+// The rest is the plain-data invariant, enforced rather than assumed: a
+// declaration reaches the realm as JSON in a definition-cache entry, and
+// anything that does not survive that trip — `undefined`, a function, a
+// symbol, a bigint, a class instance whose fields JSON flattens away —
+// would leave the operation running against something other than what the
+// author wrote, silently. Classes are expected in exactly two slots: the def
+// a `create` names with `of`, and the def a query filters `on`.
 function assertReferencesResolve(
   label: string,
   declaration: Record<string, unknown>,
   paramNames: Set<string>,
 ) {
   let seen = new WeakSet<object>();
-  let walk = (node: unknown, path: string) => {
-    if (node == null || typeof node !== 'object') {
+  let walk = (node: unknown, path: string, defsAllowed: boolean) => {
+    if (node === null) {
+      return;
+    }
+    if (typeof node === 'function') {
+      if (defsAllowed) {
+        return;
+      }
+      throw new Error(
+        `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance() or card(), or a program with the bxl tag`,
+      );
+    }
+    if (typeof node !== 'object') {
+      if (typeof node === 'symbol' || typeof node === 'bigint') {
+        throw new Error(
+          `${label}: \`${path}\` is ${describeValue(node)}, which a declaration cannot carry`,
+        );
+      }
+      if (node === undefined) {
+        throw new Error(
+          `${label}: \`${path}\` is undefined; omit an optional key rather than declaring it as undefined`,
+        );
+      }
       return;
     }
     if (seen.has(node)) {
@@ -778,8 +824,17 @@ function assertReferencesResolve(
       return;
     }
     if (Array.isArray(node)) {
-      node.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+      node.forEach((entry, index) =>
+        walk(entry, `${path}[${index}]`, defsAllowed),
+      );
       return;
+    }
+    if (!isPlainObject(node)) {
+      throw new Error(
+        `${label}: \`${path}\` is ${describeValue(
+          node,
+        )}; a declaration carries plain objects, arrays and primitives`,
+      );
     }
     for (let [key, value] of Object.entries(node)) {
       // The params schema holds field classes and linkTo markers rather than
@@ -787,10 +842,31 @@ function assertReferencesResolve(
       if (path === '' && key === 'params') {
         continue;
       }
-      walk(value, path === '' ? key : `${path}.${key}`);
+      walk(
+        value,
+        path === '' ? key : `${path}.${key}`,
+        defsAllowed || (path === '' && (key === 'of' || key === 'query')),
+      );
     }
   };
-  walk(declaration, '');
+  walk(declaration, '', false);
+}
+
+function describeValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (typeof value === 'symbol') {
+    return 'a symbol';
+  }
+  if (typeof value === 'bigint') {
+    return 'a bigint';
+  }
+  if (typeof value === 'function') {
+    return 'a function';
+  }
+  let name = (value as { constructor?: { name?: string } })?.constructor?.name;
+  return name ? `a ${name} instance` : 'a non-plain object';
 }
 
 function assertValidReference(
@@ -904,7 +980,14 @@ function isBxlMarker(value: unknown): boolean {
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  // Plain means plain: a `Date` serializes to a string and a `Map` to `{}`,
+  // so a class instance cannot stand in for a declaration, a clause or a
+  // marker without losing what it holds.
+  let proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 function isBaseOperationName(value: unknown): value is BaseOperationName {

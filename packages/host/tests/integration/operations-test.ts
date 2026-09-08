@@ -520,6 +520,106 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('a param is typed by a field class, and nothing else', function (assert) {
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static addComment = {
+            base: 'transform',
+            params: { author: CardDef as never },
+            append: { to: 'comments', value: { author: params('author') } },
+          };
+        }
+        return Report;
+      },
+      /a card or file identity is a linkTo/,
+      'a card class types a link param, which is what linkTo declares',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static addComment = {
+            base: 'transform',
+            params: { body: (() => StringField) as never },
+            append: { to: 'comments', value: { body: params('body') } },
+          };
+        }
+        return Report;
+      },
+      /param "body" must be a field class or linkTo/,
+      'a scalar param takes the field class itself, not a thunk',
+    );
+  });
+
+  test('a declaration carries only what survives as data', function (assert) {
+    for (let [value, pattern, message] of [
+      [
+        () => 'escalated',
+        /is a function; a declaration is data/,
+        'a function would never reach the realm',
+      ],
+      [new Date(), /is a Date instance/, 'a date would flatten to a string'],
+      [
+        new Map(),
+        /is a Map instance/,
+        'a map would flatten to an empty object',
+      ],
+      [
+        undefined,
+        /omit an optional key rather than declaring it as undefined/,
+        'an undefined value would be dropped',
+      ],
+      [1n, /is a bigint/, 'a bigint cannot be serialized at all'],
+    ] as [never, RegExp, string][]) {
+      assert.throws(
+        () => {
+          class Report extends CardDef {
+            @operation static escalate = {
+              base: 'transform',
+              set: { status: value },
+            };
+          }
+          return Report;
+        },
+        pattern,
+        message,
+      );
+    }
+
+    class Activity extends CardDef {}
+    class Classroom extends CardDef {
+      // The two slots a def class is expected in: the type a create names,
+      // and the type a query filters on.
+      @operation static createActivity = {
+        base: 'create',
+        of: Activity,
+        params: { title: StringField },
+        fill: { title: params('title') },
+      };
+      @operation static listActivities = {
+        base: 'query',
+        query: { filter: { on: Activity, eq: { classroom: instance('id') } } },
+      };
+    }
+    let declarations = getOperations(Classroom);
+    assert.strictEqual(
+      (
+        declarations.createActivity as OperationsModule.CreateOperationDeclaration
+      ).of,
+      Activity,
+      'a create names the class it creates',
+    );
+    assert.strictEqual(
+      (
+        (
+          declarations.listActivities as OperationsModule.QueryOperationDeclaration
+        ).query as { filter: { on: unknown } }
+      ).filter.on,
+      Activity,
+      'and a query names the class it filters on',
+    );
+  });
+
   test('getOperations rejects a target that is not a card definition', function (assert) {
     assert.throws(
       () => getOperations({} as never),
