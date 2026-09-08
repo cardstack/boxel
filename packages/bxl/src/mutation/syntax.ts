@@ -35,8 +35,9 @@ export interface ParsedMutationArgument {
   explicitIndex: boolean;
   /**
    * The Card paths this argument reads, relative to the value it is evaluated
-   * against. Empty for location arguments, whose paths the planner resolves
-   * against the document instead.
+   * against. A location argument has them too: choosing a write set is a read
+   * of the document, and a selector's predicate is as much a read as anything
+   * in a value expression.
    */
   readPaths: BxlMutationPath[];
 }
@@ -787,7 +788,7 @@ function argument(
       canonical: parsed.canonical,
       bulk: location && source.includes('[*'),
       explicitIndex: location && /\[\s*-?\d+\s*\]/.test(source),
-      readPaths: location ? [] : collectMutationReadPaths(parsed.ast),
+      readPaths: collectMutationReadPaths(parsed.ast),
     },
     warnings: parsed.warnings,
   };

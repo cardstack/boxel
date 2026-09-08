@@ -317,6 +317,27 @@ An author addresses stored, computed, and linked values through the same
   unavailable read fails the assert with the author's own message. The literal
   `{ snapshot: true }` is the only accepted option record — `assert/2` is how
   an assert says it requires stored values.
+- **An update sees the layered value, and stores the Card's.** `|=` is handed
+  the location's value with the overlays under it, so a row's own computed
+  Field is in scope the same way it is anywhere else — which matters because
+  `=` evaluates its value expression against the Card root, so only `|=` can
+  write a value derived from the row it is updating. What the expression
+  returns is settled back against the Card before it is written: an overlay
+  value carried straight through is put back to what the Card holds, and an
+  expression that writes something else at that path is refused. An update
+  that rebuilds a collection an overlay reaches into fails with
+  `update-shape-ambiguous`, because once the items move a recorded position no
+  longer names the element it named; the per-item form (`.rows[* …] |= …`) has
+  nothing to reorder and stays available.
+- **Choosing a write set is a read.** A `[* predicate]` selector consults the
+  document to decide what it matches, so its paths are reported and an
+  unavailable value stops it rather than quietly settling which rows a
+  statement deletes. A location that addresses one place selects nothing and
+  adds no event of its own.
+- **A path a statement clears belongs to the program.** An overlay answers
+  where the Card holds nothing, and a place the program emptied is not one of
+  those — otherwise a stale index copy would fill it straight back in and
+  refuse the write that follows.
 - **The guards see the paths a program can be *proven* to read.** Reads are
   collected by walking an expression, and the walk reports a lower bound. It
   skips anything conditional — `if`/`else`, the right side of `//`, `and` or
@@ -1028,7 +1049,8 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `execution-identity-conflict`, `limit-exceeded`;
 - `stream-incomplete`, `commit-failed`, `rollback-conflict`;
 - `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
-  `assert-snapshot-required`, `assert-option-invalid`.
+  `assert-snapshot-required`, `assert-option-invalid`,
+  `update-shape-ambiguous`.
 
 ## Additional use cases covered by this contract
 

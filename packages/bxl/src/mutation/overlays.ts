@@ -1,4 +1,11 @@
-import { clone, hasAt, setAt, valueAt } from './json-path.ts';
+import {
+  clone,
+  deleteAt,
+  equalJson,
+  hasAt,
+  setAt,
+  valueAt,
+} from './json-path.ts';
 import type {
   BxlMutationJson,
   BxlMutationOverlayTier,
@@ -44,6 +51,8 @@ export interface OverlayIndex {
   readonly stored: BxlMutationJson;
   /** Dotted path to the tier that supplied the value there. */
   readonly coverage: ReadonlyMap<string, BxlMutationOverlayTier>;
+  /** The same paths as arrays, for walking into a value the overlays reach. */
+  readonly supplied: readonly BxlMutationPath[];
   /** Dotted path to what the host could not supply there, and why. */
   readonly unavailable: ReadonlyMap<string, BxlMutationUnavailableOverlay>;
   /** Proper ancestors of an unavailable path, to the marker nested under them. */
@@ -59,6 +68,7 @@ export interface OverlayIndex {
 export const EMPTY_OVERLAY_INDEX: OverlayIndex = {
   stored: null,
   coverage: new Map(),
+  supplied: [],
   unavailable: new Map(),
   unavailableUnder: new Map(),
   covers: new Set(),
@@ -134,6 +144,12 @@ function reachableInStored(
 export function mergeBxlMutationOverlays(
   stored: BxlMutationJson,
   overlays: BxlMutationOverlays | undefined,
+  /**
+   * Paths a program has already written to or cleared. An overlay speaks for
+   * a place the Card leaves empty, and a place the program emptied is not one
+   * of those — it is the program's, and the overlay must not fill it back in.
+   */
+  claimed: ReadonlySet<string> = new Set(),
 ): { root: BxlMutationJson; index: OverlayIndex } {
   const root = clone(stored);
   const declared = overlays?.unavailable ?? [];
@@ -147,6 +163,7 @@ export function mergeBxlMutationOverlays(
   }
 
   const coverage = new Map<string, BxlMutationOverlayTier>();
+  const supplied: BxlMutationPath[] = [];
   const covers = new Set<string>();
   const coversComputed = new Set<string>();
   for (const tier of OVERLAY_TIERS) {
@@ -161,9 +178,11 @@ export function mergeBxlMutationOverlays(
       if (storedAnswers(stored, leaf.path)) continue;
       if (coverage.has(key) || covers.has(key)) continue;
       if (selfOrAncestor(coverage, leaf.path) !== undefined) continue;
+      if (isClaimed(claimed, leaf.path)) continue;
       if (!reachableInStored(stored, leaf.path)) continue;
       setAt(root, leaf.path, leaf.value);
       coverage.set(key, tier);
+      supplied.push(leaf.path);
       for (let length = 1; length < leaf.path.length; length++) {
         const prefix = leaf.path.slice(0, length);
         covers.add(overlayPathKey(prefix));
@@ -197,6 +216,7 @@ export function mergeBxlMutationOverlays(
     index: {
       stored,
       coverage,
+      supplied,
       unavailable,
       unavailableUnder,
       covers,
@@ -281,6 +301,18 @@ function tierUnder(
   return undefined;
 }
 
+/** Whether a path, or anything above it, belongs to the program already. */
+function isClaimed(
+  claimed: ReadonlySet<string>,
+  path: BxlMutationPath,
+): boolean {
+  if (claimed.size === 0) return false;
+  for (let length = 1; length <= path.length; length++) {
+    if (claimed.has(overlayPathKey(path.slice(0, length)))) return true;
+  }
+  return false;
+}
+
 /** What an index holds at a path, or at the nearest ancestor that carries one. */
 function selfOrAncestor<Entry>(
   index: ReadonlyMap<string, Entry>,
@@ -318,4 +350,80 @@ export function overlayWriteOwner(
   const key = overlayPathKey(path);
   if (index.coversComputed.has(key)) return { path: key, tier: 'computed' };
   return undefined;
+}
+
+/**
+ * What an update expression may actually write.
+ *
+ * `|=` is handed the layered value, so a row's own computed Fields are in
+ * scope the same way they are anywhere else. What comes back is the Card's to
+ * store, so every overlay value the expression merely carried along is put
+ * back to what the Card holds:
+ *
+ * - the expression passed the overlay value straight through — restore it;
+ * - the expression left the Card's own value alone — nothing to do;
+ * - the expression wrote something else there — that is a write to a
+ *   read-only value, and it is refused rather than quietly dropped.
+ *
+ * An expression that reshapes a container along the way is refused outright:
+ * once a collection is reordered or resized, a recorded position no longer
+ * names the element it named, and guessing is how overlay values escape.
+ */
+export function settleOverlayUpdate(
+  index: OverlayIndex,
+  location: BxlMutationPath,
+  layered: BxlMutationJson,
+  stored: BxlMutationJson | undefined,
+  produced: BxlMutationJson,
+):
+  | { value: BxlMutationJson }
+  | { refused: string; tier: BxlMutationOverlayTier }
+  | { reshaped: string } {
+  if (index.empty) return { value: produced };
+  const locationKey = overlayPathKey(location);
+  let value = produced;
+  for (const path of index.supplied) {
+    const key = overlayPathKey(path);
+    if (key !== locationKey && !isWithin(key, locationKey)) continue;
+    const relative = path.slice(location.length);
+    if (relative.length === 0) continue;
+    if (!arraysUnchanged(layered, value, relative)) return { reshaped: key };
+    const carried = valueAt(value, relative);
+    if (equalJson(carried, valueAt(layered, relative))) {
+      const held = stored ?? null;
+      if (hasAt(held, relative)) {
+        value = setAt(value, relative, valueAt(held, relative) ?? null);
+      } else if (hasAt(value, relative)) {
+        value = deleteAt(value, relative);
+      }
+      continue;
+    }
+    if (equalJson(carried, valueAt(stored ?? null, relative))) continue;
+    return { refused: key, tier: index.coverage.get(key) ?? 'computed' };
+  }
+  return { value };
+}
+
+/**
+ * Whether every collection on the way to an overlay value came back untouched.
+ *
+ * A position only names the same element while the collection holding it is
+ * unchanged: reordering or resizing carries an overlay value to a place the
+ * Card stores something else, and no comparison at the recorded positions can
+ * see that it happened. So an update that rebuilds such a collection is
+ * refused, and the author is pointed at the per-item form, whose location
+ * sits below the collection and leaves nothing to reorder.
+ */
+function arraysUnchanged(
+  layered: BxlMutationJson,
+  produced: BxlMutationJson,
+  path: BxlMutationPath,
+): boolean {
+  for (let length = 0; length < path.length; length++) {
+    const prefix = path.slice(0, length);
+    const here = valueAt(layered, prefix);
+    if (!Array.isArray(here)) continue;
+    if (!equalJson(here, valueAt(produced, prefix))) return false;
+  }
+  return true;
 }

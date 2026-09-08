@@ -38,6 +38,7 @@ import {
   EMPTY_OVERLAY_INDEX,
   mergeBxlMutationOverlays,
   overlayWriteOwner,
+  settleOverlayUpdate,
   type OverlayIndex,
 } from './overlays.ts';
 import {
@@ -95,6 +96,12 @@ interface PlannerContext {
   source?: BxlMutationOverlays;
   /** What the overlays answer for, against the document as it now stands. */
   overlays: OverlayIndex;
+  /** Paths earlier statements have made their own. */
+  claimed: ReadonlySet<string>;
+  /** The layered view of the working document, and what it was built from. */
+  view?: { of: BxlMutationJson; revision: number; value: BxlMutationJson };
+  /** Bumped by every write, so a cached view is never handed back stale. */
+  revision: number;
   onRead?: (event: BxlMutationReadEvent) => void;
 }
 
@@ -113,7 +120,40 @@ function readView(
   context: PlannerContext,
 ): BxlMutationJson {
   if (context.overlays.empty) return root;
-  return mergeBxlMutationOverlays(root, context.source).root;
+  const cached = context.view;
+  if (cached && cached.of === root && cached.revision === context.revision) {
+    return cached.value;
+  }
+  const value = mergeBxlMutationOverlays(
+    root,
+    context.source,
+    context.claimed,
+  ).root;
+  context.view = { of: root, revision: context.revision, value };
+  return value;
+}
+
+/**
+ * Record that the working document changed, so the next read builds a fresh
+ * view. A bulk statement writes between locations and its value expression may
+ * read what an earlier location left behind.
+ */
+function documentChanged(context: PlannerContext): void {
+  context.revision++;
+}
+
+/**
+ * The same view, skipped for an expression with nothing to read. Deriving it
+ * costs a copy of the document, and a bulk statement would pay that per
+ * location for a value expression that never looks at the Card.
+ */
+function readViewFor(
+  argument: ParsedMutationArgument,
+  root: BxlMutationJson,
+  context: PlannerContext,
+): BxlMutationJson {
+  if (argument.readPaths.length === 0) return root;
+  return readView(root, context);
 }
 
 /**
@@ -135,6 +175,13 @@ interface RecordedReads {
 interface ReadContext {
   prefix?: BxlMutationPath;
   policy?: 'strict' | 'best-effort';
+  /**
+   * Report only reads an overlay answered. A location is resolved for every
+   * statement, and saying so each time would drown the log in the paths a
+   * program is plainly writing to; what matters is when index data helped
+   * choose the write set.
+   */
+  onlyOverlay?: boolean;
 }
 
 function recordReads(
@@ -155,6 +202,7 @@ function recordReads(
       path,
       valueAt(input, relative),
     );
+    if (reads.onlyOverlay && resolved.event.tier === 'source') continue;
     result.events.push(resolved.event);
     if (resolved.event.tier !== 'source') result.overlay = true;
     if (resolved.unavailable && !result.unavailable) {
@@ -173,6 +221,42 @@ function recordReads(
     );
   }
   return result;
+}
+
+/** Keep an update's result to what the Card can store. */
+function settleUpdate(
+  produced: BxlMutationJson,
+  layered: BxlMutationJson,
+  location: ResolvedLocation,
+  context: PlannerContext,
+  statement: number,
+): BxlMutationJson {
+  const settled = settleOverlayUpdate(
+    context.overlays,
+    location.path,
+    layered,
+    location.value,
+    produced,
+  );
+  if ('value' in settled) return settled.value;
+  if ('reshaped' in settled) {
+    throw new BxlMutationError(
+      'validate',
+      'update-shape-ambiguous',
+      statement,
+      `This update changes the shape of the collection holding ${settled.reshaped}, so which values it kept cannot be told apart. Reorder with reorder_by, or update the Fields individually.`,
+      { details: { path: settled.reshaped } },
+    );
+  }
+  throw new BxlMutationError(
+    'validate',
+    settled.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    settled.tier === 'computed'
+      ? `${settled.refused} is a computed value and cannot be written.`
+      : `${settled.refused} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: settled.refused, tier: settled.tier } },
+  );
 }
 
 /** Overlay values are read-only: a write that lands on one is refused. */
@@ -270,13 +354,17 @@ function resolveLocations(
   statement: number,
   cardinality: 'one' | 'bulk' = argument.bulk ? 'bulk' : 'one',
 ): ResolvedLocation[] {
+  const view = readViewFor(argument, root, context);
+  // A selector reads the document to decide what it matches, so an unavailable
+  // value cannot be allowed to quietly settle a write set. A location that
+  // addresses one place directly selects nothing, and whatever it reads its
+  // statement reads too.
+  if (argument.bulk) {
+    recordReads(argument, view, context, statement, { onlyOverlay: true });
+  }
   let items: Item[];
   try {
-    items = evaluateItems(
-      argument.ast,
-      [createItem(readView(root, context))],
-      context,
-    );
+    items = evaluateItems(argument.ast, [createItem(view)], context);
   } catch (error) {
     throw new BxlMutationError(
       'plan',
@@ -671,22 +759,35 @@ function planAssignment(
     if (statement.operator === '=') {
       next = evaluateSingleJson(
         statement.value,
-        readView(output, context),
+        readViewFor(statement.value, output, context),
         context,
         statement.statement,
       );
     } else if (statement.operator === '|=') {
+      // An update sees the layered value, so a row's own computed Fields are
+      // in scope; what it returns is settled back against the Card's.
+      const layered = (valueAt(readView(output, context), location.path) ??
+        null) as BxlMutationJson;
       next = evaluateSingleJson(
         statement.value,
-        (location.value ?? null) as BxlMutationJson,
+        layered,
         context,
         statement.statement,
         { prefix: location.path },
       );
+      if (!isCardReference(next)) {
+        next = settleUpdate(
+          next,
+          layered,
+          location,
+          context,
+          statement.statement,
+        );
+      }
     } else {
       const right = evaluateSingleJson(
         statement.value,
-        readView(output, context),
+        readViewFor(statement.value, output, context),
         context,
         statement.statement,
       );
@@ -732,6 +833,7 @@ function planAssignment(
         field.relationship.path,
         loadedCard(next.id, context, statement.statement),
       );
+      documentChanged(context);
       continue;
     }
     if (isCardReference(next)) {
@@ -750,6 +852,7 @@ function planAssignment(
     };
     intents.push(intent);
     output = setAt(output, location.path, next as BxlMutationJson);
+    documentChanged(context);
   }
   return { root: output, plan: statementPlan(statement, intents) };
 }
@@ -779,7 +882,7 @@ function jsonValue(
 ): BxlMutationJson | CardReference {
   return evaluateSingleJson(
     argument,
-    readView(root, context),
+    readViewFor(argument, root, context),
     context,
     statement,
     reads,
@@ -895,6 +998,7 @@ function planCall(
         after: clone(value as BxlMutationJson),
       });
       output = setAt(output, location.path, value as BxlMutationJson);
+      documentChanged(context);
       break;
     }
     case 'copy_value_to': {
@@ -927,6 +1031,7 @@ function planCall(
         path: destination.location.path,
       });
       output = setAt(output, destination.location.path, source.location.value!);
+      documentChanged(context);
       break;
     }
     case 'del': {
@@ -988,6 +1093,7 @@ function planCall(
           });
         }
         output = deleteAt(output, location.path);
+        documentChanged(context);
       }
       break;
     }
@@ -1042,6 +1148,7 @@ function planCall(
           index,
         });
         collection.splice(index, 0, loadedCard(value.id, context, number));
+        documentChanged(context);
       } else {
         if (isCardReference(value)) {
           throw new BxlMutationError(
@@ -1058,6 +1165,7 @@ function planCall(
           value: clone(value as BxlMutationJson),
         });
         collection.splice(index, 0, clone(value as BxlMutationJson));
+        documentChanged(context);
       }
       break;
     }
@@ -1094,6 +1202,7 @@ function planCall(
           index,
         });
         collection.splice(index, 0, loadedCard(value.id, context, number));
+        documentChanged(context);
       } else {
         if (isCardReference(value)) {
           throw new BxlMutationError(
@@ -1110,6 +1219,7 @@ function planCall(
           value: clone(value as BxlMutationJson),
         });
         collection.splice(index, 0, clone(value as BxlMutationJson));
+        documentChanged(context);
       }
       break;
     }
@@ -1187,6 +1297,7 @@ function planCall(
       }
       const sourceCollection = collectionAt(output, sourceCollectionPath);
       const [moved] = sourceCollection.splice(sourceIndex, 1);
+      documentChanged(context);
       if (moved === undefined)
         throw new BxlMutationError(
           'plan',
@@ -1195,6 +1306,7 @@ function planCall(
           'Move source no longer exists.',
         );
       sourceCollection.splice(targetIndex, 0, moved);
+      documentChanged(context);
       if (item.field.relationship) {
         const id = objectId(moved);
         if (!id)
@@ -1293,6 +1405,7 @@ function planCall(
       );
       const reordered = order.map((key) => byKey.get(JSON.stringify(key))!);
       collection.splice(0, collection.length, ...reordered);
+      documentChanged(context);
       intents.push({
         op: 'reorder',
         collection: target.location.path,
@@ -1380,6 +1493,7 @@ export function prepareBxlMutation(
           'The loaded Card revision does not match baseRevision.',
         );
       }
+      const claimed = new Set<string>();
       const context: PlannerContext = {
         prepare: preparedOptions,
         plan: {
@@ -1390,6 +1504,8 @@ export function prepareBxlMutation(
         registry,
         ...(planOptions.overlays ? { source: planOptions.overlays } : {}),
         overlays: EMPTY_OVERLAY_INDEX,
+        claimed,
+        revision: 0,
         ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
       };
       const before = clone(snapshot);
@@ -1400,11 +1516,11 @@ export function prepareBxlMutation(
         const draft = clone(working);
         // Rebuild the index against the document as this statement finds it,
         // so what an overlay answers for is described in the positions the
-        // statement will address rather than the ones it started life in.
-        context.overlays = mergeBxlMutationOverlays(
-          draft,
-          planOptions.overlays,
-        ).index;
+        // statement will address rather than the ones it started life in —
+        // minus whatever earlier statements have made their own.
+        context.overlays = planOptions.overlays
+          ? mergeBxlMutationOverlays(draft, planOptions.overlays, claimed).index
+          : EMPTY_OVERLAY_INDEX;
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
           result =
@@ -1437,6 +1553,7 @@ export function prepareBxlMutation(
           }
         }
         working = result.root;
+        for (const path of result.plan.paths) claimed.add(path.join('.'));
         statementPlans.push(result.plan);
       }
 

@@ -1622,6 +1622,14 @@ function collectionPlan(source: string, overlays?: BxlMutationOverlays) {
   });
 }
 
+/** The planner's output as a record, for reading one Field out of it. */
+function collectionOutput(
+  source: string,
+  overlays?: BxlMutationOverlays,
+): Record<string, unknown> {
+  return collectionPlan(source, overlays).output as Record<string, unknown>;
+}
+
 function collectionError(
   source: string,
   overlays?: BxlMutationOverlays,
@@ -1670,7 +1678,9 @@ deepStrictEqual(
 
 // A computed Field inside a stored collection is the schema's to answer for,
 // and leaves the collection holding it writable.
-const rowTotals: BxlMutationOverlays = { computeds: { rows: [{ total: 20 }] } };
+const rowTotals: BxlMutationOverlays = {
+  computeds: { rows: [{ total: 20 }, { total: 30 }] },
+};
 strictEqual(collectionPlan('.rows[0].total = 9;', rowTotals).affected, 0);
 for (const source of [
   'append(.rows; {"qty": 5});',
@@ -1824,6 +1834,118 @@ strictEqual(
   ).affected,
   1,
 );
+
+// An update is handed the layered value, so a row's own computed Field is in
+// scope; what it returns is settled back against the Card's, so the computed
+// value is read but never stored.
+const rowUpdate = collectionPlan(
+  '.rows[* .qty > 0] |= (. + {"qty": (.qty + (.total // 0))});',
+  rowTotals,
+);
+deepStrictEqual(rowUpdate.output, {
+  ...collectionSnapshot,
+  rows: [
+    { qty: 22, total: null },
+    { qty: 33, total: null },
+  ],
+});
+// The `=` form cannot express this: its value expression reads from the root.
+deepStrictEqual(
+  collectionOutput('.rows[* .qty > 0].qty = (.qty + (.total // 0));', rowTotals)
+    .rows,
+  [
+    { qty: 0, total: null },
+    { qty: 0, total: null },
+  ],
+);
+// Writing a computed value from inside an update is refused, not dropped.
+strictEqual(
+  collectionError('.rows[* .qty > 0] |= (. + {"total": 1});', rowTotals).code,
+  'computed-read-only',
+);
+// An update that rebuilds a collection an overlay reaches into is refused:
+// once the rows move, a recorded position no longer names the element it
+// named, and no comparison can tell which values were carried where. The
+// per-item form above has nothing to reorder and stays available.
+for (const source of [
+  '.rows |= [.[1], .[0]];',
+  '.rows |= (. + [{"qty": 9}]);',
+  '.rows |= [.[0]];',
+]) {
+  strictEqual(
+    collectionError(source, rowTotals).code,
+    'update-shape-ambiguous',
+    source,
+  );
+}
+
+// A path a statement clears belongs to the program from then on. The index
+// carries a copy of every stored Field, so without that rule the overlay would
+// fill the hole straight back in and refuse the write that follows.
+const staleCopy: BxlMutationOverlays = { computeds: { image: 'stored' } };
+for (const overlays of [undefined, staleCopy]) {
+  deepStrictEqual(
+    collectionOutput('del(.image);\n.image = "mine";', overlays).image,
+    'mine',
+  );
+  deepStrictEqual(
+    collectionOutput('.image = null;\n.tags = [(.image // "gone")];', overlays)
+      .tags,
+    ['gone'],
+  );
+}
+
+// A selector reads the document to choose what it matches, so index data
+// cannot settle a write set unremarked, and an unavailable value stops it.
+const selectorEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('del(.rows[* .total > 0]);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-selector',
+  overlays: rowTotals,
+  onRead: (event) => selectorEvents.push(event),
+});
+deepStrictEqual(selectorEvents, [
+  { path: 'rows', tier: 'computed', outcome: 'value' },
+]);
+strictEqual(
+  collectionError('del(.rows[* .total > 0]);', {
+    ...rowTotals,
+    unavailable: [
+      { path: 'rows.0.total', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).code,
+  'snapshot-unavailable',
+);
+// A location that addresses one place selects nothing, so it adds no event.
+const directEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = "x";', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-direct',
+  overlays: rowTotals,
+  onRead: (event) => directEvents.push(event),
+});
+deepStrictEqual(directEvents, []);
+
+// The layered view is cached per statement and rebuilt after every write, so a
+// value expression reading what an earlier location of the same statement left
+// behind sees it. A missed invalidation would show up here as a stale read.
+for (const source of [
+  '.rows[* .qty > 0].qty = (.rows[0].qty + 100);',
+  '.rows[* .qty > 0].qty = (.rows | map(.qty) | add);',
+  'del(.rows[0]);\n.image = ((.rows | length) | tostring);',
+]) {
+  deepStrictEqual(
+    collectionPlan(source, rowTotals).output,
+    collectionPlan(source).output,
+    source,
+  );
+}
 
 // The overlay layer is inert without overlays: no index, no grafts, and the
 // planner's own view of the document is the snapshot it was handed.
