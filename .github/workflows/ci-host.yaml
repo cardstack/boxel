@@ -608,7 +608,9 @@ jobs:
       # but node-test and test index sequentially in that process, so
       # `/test/` can still be indexing. Without waiting on it, fast tests
       # race the indexer and render "Card Error: Not Found" into Percy
-      # snapshots.
+      # snapshots. That realm-server is the stack's second
+      # start-server-and-test stage, started once base is ready, so its wait
+      # is budgeted from then.
       #
       # `ci:wait-for-realms` fails fast, with Traefik diagnostics, when the
       # service stack exits or a route disappears mid-wait, instead of
@@ -619,7 +621,7 @@ jobs:
             realm=https://realm-server.ci.localhost/base/ \
             realm=https://realm-server.ci.localhost/skills/ \
             icons=https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js \
-            ready=https://realm-test.ci.localhost/test/ \
+            second-stage=https://realm-test.ci.localhost/test/ \
             stack-pid-file=/tmp/test-services.pid \
             stack-started-file=/tmp/test-services.started
 
