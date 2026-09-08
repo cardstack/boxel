@@ -63,20 +63,29 @@ if command -v ss >/dev/null 2>&1; then
 else
   listeners="$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null || true)"
 fi
-listening() {
-  printf '%s\n' "$listeners" | grep -qE ":$1([[:space:]]|$)"
+# Traefik dials host.docker.internal, the Docker host's gateway address, so a
+# service bound only to loopback is as unreachable from it as one that is not
+# listening at all. That case is named rather than folded into either.
+listener_state() {
+  local port=$1 bound
+  bound="$(printf '%s\n' "$listeners" | grep -E ":${port}([[:space:]]|$)" || true)"
+  if [ -z "$bound" ]; then
+    printf 'NOT LISTENING'
+  elif printf '%s\n' "$bound" | grep -qvE "(^|[[:space:]])(127\.[0-9.]+(%[[:alnum:]]+)?|\[::1\]|localhost):${port}([[:space:]]|$)"; then
+    printf 'listening'
+  else
+    printf 'LOOPBACK ONLY'
+  fi
 }
 for port in 80 443; do
-  if listening "$port"; then state=listening; else state="NOT LISTENING"; fi
-  printf '%-6s %-14s %s\n' "$port" "$state" "(traefik entrypoint)"
+  printf '%-6s %-14s %s\n' "$port" "$(listener_state "$port")" "(traefik entrypoint)"
 done
 named=0
 for f in "$dynamic_dir"/*.yml "$dynamic_dir"/*.yaml; do
   [ -e "$f" ] || continue
   while IFS= read -r port; do
     named=1
-    if listening "$port"; then state=listening; else state="NOT LISTENING"; fi
-    printf '%-6s %-14s %s\n' "$port" "$state" "$(basename "$f")"
+    printf '%-6s %-14s %s\n' "$port" "$(listener_state "$port")" "$(basename "$f")"
   done < <(grep -oE 'host\.docker\.internal:[0-9]+' "$f" | sed 's/.*://' | sort -un)
 done
 [ "$named" = 1 ] || echo "(no route file names an upstream port)"
