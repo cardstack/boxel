@@ -12,6 +12,7 @@ import {
   type BxlCardSourceRelationship,
   mergeBxlMutationOverlays,
   type BxlMutationOverlays,
+  type BxlMutationUnavailableOverlay,
   type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
 
@@ -1579,6 +1580,21 @@ const collectionSchema = {
       writable: true,
     },
     {
+      key: 'hints',
+      label: 'Hints',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+    },
+    {
+      key: 'extras',
+      label: 'Extras',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: false,
+      writeBehavior: 'skip' as const,
+    },
+    {
       key: 'meta',
       label: 'Meta',
       kind: 'object' as const,
@@ -1619,6 +1635,9 @@ const collectionSnapshot = {
   image: 'stored',
   summary: null,
   tags: ['language', 'web'],
+  // What a projection manufactures for a list Field the Card never persists.
+  hints: [],
+  extras: [],
   meta: { note: 'kept', stamp: null },
   rows: [
     { qty: 2, total: null },
@@ -2053,9 +2072,19 @@ for (const source of [
 // answer, so a Field the Card leaves unset arrives as a `null` in both — and
 // claiming it would make an ordinary writable Field read-only for no reason.
 const wholeDocument: BxlMutationOverlays = {
-  computeds: { image: null, summary: { text: 'derived' } },
+  // `summary` and `meta.stamp` are `null` in the Card too, so these are the
+  // leaves that would be claimed if a `null` counted as a value.
+  computeds: { image: null, summary: null, meta: { stamp: null } },
   linked: { tags: null, meta: { note: null } },
 };
+deepStrictEqual(
+  collectionOutput('.summary = {"text": "mine"};', wholeDocument).summary,
+  { text: 'mine' },
+);
+deepStrictEqual(collectionOutput('.meta.stamp = "mine";', wholeDocument).meta, {
+  note: 'kept',
+  stamp: 'mine',
+});
 deepStrictEqual(
   collectionOutput('.image = "written";', wholeDocument).image,
   'written',
@@ -2075,9 +2104,12 @@ deepStrictEqual(collectionPlan('append(.tags; "z");', wholeDocument).output, {
   ...collectionSnapshot,
   tags: ['language', 'web', 'z'],
 });
-// The Field only the index can answer is still covered by the same overlay.
+// A Field the index does answer, in the same overlay, is still covered.
 strictEqual(
-  collectionError('.summary = {"text": "x"};', wholeDocument).code,
+  collectionError('.summary = {"text": "x"};', {
+    ...wholeDocument,
+    computeds: { image: null, summary: { text: 'derived' } },
+  }).code,
   'computed-read-only',
 );
 
@@ -2090,6 +2122,21 @@ deepStrictEqual(
   { ...collectionSnapshot, tags: ['z'] },
 );
 strictEqual(({} as Record<string, unknown>).pwned, undefined);
+// Grafted onto a prototype, the value would read back at a path no overlay
+// supplied — and be reported as the Card's own.
+const hostileEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = ((.pwned // "clean") | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-prototype',
+  overlays: { computeds: hostileKey },
+  onRead: (event) => hostileEvents.push(event),
+});
+deepStrictEqual(hostileEvents, [
+  { path: 'pwned', tier: 'source', outcome: 'null' },
+]);
 strictEqual(
   collectionPlan('.tags = ["z"];', {
     unavailable: [
@@ -2099,19 +2146,30 @@ strictEqual(
   1,
 );
 
-// A list is one value, not a place to descend into. An overlay may hand over a
-// whole list the Card does not store — a computed `containsMany` — and that
-// list reads as itself and is read-only whole. A list the Card *does* store
-// wins, so no overlay position ever sits beside one of the Card's own items.
-const derivedList: BxlMutationOverlays = {
+// A list is one value, not a place to descend into. A projection manufactures
+// an empty list for a list Field the Card never persists, so an empty list is
+// an absence like a `null`: a computed `containsMany` reads as the overlay
+// supplied it, and is read-only whole.
+const derivedExtras: BxlMutationOverlays = {
   computeds: { extras: ['from-the-index', 'and-another'] },
 };
 strictEqual(
-  collectionOutput('.image = (.extras | tostring);', derivedList).image,
+  collectionOutput('.image = (.extras | tostring);', derivedExtras).image,
   '["from-the-index","and-another"]',
 );
+// The schema still answers first for the Field itself: it declares `extras`
+// computed, so a write to it is the intentional no-op it already was.
 strictEqual(
-  collectionError('append(.extras; "mine");', derivedList).code,
+  collectionPlan('append(.extras; "mine");', derivedExtras).affected,
+  0,
+);
+strictEqual(collectionPlan('.extras = [];', derivedExtras).affected, 0);
+// Where the schema has no opinion, the overlay is the backstop for a supplied
+// list the same as for any other value.
+strictEqual(
+  collectionError('append(.hints; "mine");', {
+    computeds: { hints: ['from-the-index'] },
+  }).code,
   'computed-read-only',
 );
 deepStrictEqual(
@@ -2120,16 +2178,72 @@ deepStrictEqual(
   }).output,
   { ...collectionSnapshot, tags: ['language', 'web', 'z'] },
 );
-// A position spelled as an object key is a position all the same, so a
-// collection the Card does not store stays empty rather than taking the
-// overlay's rows.
-const objectKeyedRows: BxlMutationOverlays = {
-  computeds: { extras: { 0: 'first', 1: 'second' } },
-};
+// A position spelled as an object key is a position all the same, so it is
+// dropped wherever it appears — including under a container the Card holds
+// nothing in, where nothing else would stop it.
 strictEqual(
-  collectionOutput('.image = ((.extras | length) | tostring);', objectKeyedRows)
-    .image,
+  collectionOutput('.image = ((.extras | length) | tostring);', {
+    computeds: { extras: { 0: 'first', 1: 'second' } },
+  }).image,
   '0',
+);
+strictEqual(
+  collectionOutput('.image = ((.meta.list // "none") | tostring);', {
+    computeds: { meta: { list: { 0: 'first' } } },
+  }).image,
+  'none',
+);
+// Nor is a list the Card stores reached into by a path that reads like a
+// Field name: it is the list being a list that stops the graft, not the
+// spelling of what comes after it. Were it grafted, the list would read as
+// carrying an overlay value.
+const listEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (.tags | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-into-list',
+  overlays: { computeds: { tags: { name: 'from-the-index' } } },
+  onRead: (event) => listEvents.push(event),
+});
+deepStrictEqual(listEvents, [
+  { path: 'tags', tier: 'source', outcome: 'value' },
+]);
+
+// An `unavailable` entry the planner cannot read is a read it would wrongly
+// allow, so it is refused rather than guessed at or quietly dropped.
+for (const entry of [
+  { path: 42, tier: 'computed', reason: 'key-absent' },
+  { path: null, tier: 'computed', reason: 'key-absent' },
+  { path: 'summary.text', tier: 'made-up', reason: 'key-absent' },
+  { path: 'summary.text', tier: 'computed', reason: 'made-up' },
+]) {
+  strictEqual(
+    collectionError('.image = "x";', {
+      unavailable: [entry as unknown as BxlMutationUnavailableOverlay],
+    }).code,
+    'overlay-invalid',
+    JSON.stringify(entry),
+  );
+}
+// A path named twice is answered by the last entry, at the path and above it
+// alike.
+deepStrictEqual(
+  collectionError('.image = .summary.text;', {
+    unavailable: [
+      { path: 'summary.text', tier: 'computed', reason: 'not-indexed' },
+      { path: 'summary.text', tier: 'linked', reason: 'key-absent' },
+    ],
+  }).details,
+  { path: 'summary.text', tier: 'linked', reason: 'key-absent' },
+);
+// The root has no name of its own, so a message says what it is.
+ok(
+  collectionError(
+    'assert((. | tostring) != ""; "m");',
+    derivedExtras,
+  ).message.includes('the whole Card'),
 );
 
 // Reaching a supplied value may take containers the Card does not hold either.

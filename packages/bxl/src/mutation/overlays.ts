@@ -6,13 +6,14 @@ import {
   setAt,
   valueAt,
 } from './json-path.ts';
-import type {
-  BxlMutationJson,
-  BxlMutationOverlayTier,
-  BxlMutationOverlays,
-  BxlMutationPath,
-  BxlMutationReadEvent,
-  BxlMutationUnavailableOverlay,
+import {
+  BxlMutationError,
+  type BxlMutationJson,
+  type BxlMutationOverlayTier,
+  type BxlMutationOverlays,
+  type BxlMutationPath,
+  type BxlMutationReadEvent,
+  type BxlMutationUnavailableOverlay,
 } from './types.ts';
 
 const OVERLAY_TIERS: readonly BxlMutationOverlayTier[] = ['computed', 'linked'];
@@ -48,18 +49,77 @@ function isForbidden(path: BxlMutationPath): boolean {
   return path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment)));
 }
 
+const OVERLAY_TIER_NAMES = new Set<string>(OVERLAY_TIERS);
+const OVERLAY_REASONS = new Set([
+  'not-indexed',
+  'not-searchable',
+  'key-absent',
+]);
+
+/**
+ * An `unavailable` entry describes something the planner will refuse a read
+ * over, so a malformed one is a host bug worth naming rather than a value to
+ * guess at or quietly ignore.
+ */
+function assertMarker(
+  entry: BxlMutationUnavailableOverlay,
+): BxlMutationUnavailableOverlay {
+  const described = describe(entry);
+  if (entry === null || typeof entry !== 'object') {
+    throw overlayInvalid(
+      `unavailable entries must be records; received ${described}.`,
+    );
+  }
+  if (typeof entry.path !== 'string') {
+    throw overlayInvalid(
+      `an unavailable entry's path must be a string; received ${describe(entry.path)}.`,
+    );
+  }
+  if (!OVERLAY_TIER_NAMES.has(entry.tier)) {
+    throw overlayInvalid(
+      `${entry.path} names an unknown overlay tier ${describe(entry.tier)}.`,
+    );
+  }
+  if (!OVERLAY_REASONS.has(entry.reason)) {
+    throw overlayInvalid(
+      `${entry.path} names an unknown reason ${describe(entry.reason)}.`,
+    );
+  }
+  return entry;
+}
+
+function describe(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (value === null || value === undefined) return String(value);
+  return typeof value;
+}
+
+function overlayInvalid(message: string): BxlMutationError {
+  return new BxlMutationError('plan', 'overlay-invalid', 0, message);
+}
+
 /** Whether a path lies below another. The root lies above everything. */
 function isWithin(candidate: string, ancestor: string): boolean {
   if (ancestor === '') return candidate.length > 0;
   return candidate.startsWith(`${ancestor}.`);
 }
 
-/** The stored document answers a read only where it holds a value of its own. */
+/**
+ * Whether the stored document holds a value of its own at a path.
+ *
+ * A `null` is not one: it is what a Card holds at a path it never persists.
+ * Neither is an empty list — a projection manufactures one for a list Field
+ * the Card holds nothing in, so it carries none of the Card's own values and
+ * an overlay answering there displaces nothing.
+ */
 function storedAnswers(
   stored: BxlMutationJson,
   path: BxlMutationPath,
 ): boolean {
-  return hasAt(stored, path) && valueAt(stored, path) !== null;
+  if (!hasAt(stored, path)) return false;
+  const value = valueAt(stored, path);
+  if (value === null) return false;
+  return !(Array.isArray(value) && value.length === 0);
 }
 
 /** One value an overlay supplies, at the path it sits at. */
@@ -147,11 +207,14 @@ function reachableInStored(
 ): boolean {
   if (path.some((segment) => INDEX_LIKE.test(String(segment)))) return false;
   for (let length = 0; length < path.length; length++) {
-    const prefix = path.slice(0, length);
-    if (!storedAnswers(stored, prefix)) return true;
-    const container = valueAt(stored, prefix);
+    const container = valueAt(stored, path.slice(0, length));
+    // Nothing of the Card's stands in the way, so the rest of the path is
+    // the overlay's to fill in.
+    if (container === undefined || container === null) return true;
+    // A list is never reached into, empty or not: the whole point is that no
+    // overlay value is ever laid beside one of the Card's own items.
     if (Array.isArray(container)) return false;
-    if (container === null || typeof container !== 'object') return false;
+    if (typeof container !== 'object') return false;
   }
   return true;
 }
@@ -233,15 +296,19 @@ export function mergeBxlMutationOverlays(
   const unavailable = new Map<string, BxlMutationUnavailableOverlay>();
   const unavailableUnder = new Map<string, BxlMutationUnavailableOverlay>();
   for (const entry of declared) {
-    const path = normalizeOverlayPath(entry.path);
+    const path = normalizeOverlayPath(assertMarker(entry).path);
     if (path.length === 0) continue;
     const parts = path.split('.');
     // Overlays do not participate inside a collection, so neither does an
     // absence of one: the Card's own items are the whole answer there.
     if (parts.some((segment) => INDEX_LIKE.test(segment))) continue;
     if (isForbidden(parts)) continue;
-    const marker = { ...entry, path };
-    unavailable.set(path, marker);
+    // A path named twice is answered by the last entry, at the path itself and
+    // everywhere under it alike.
+    unavailable.set(path, { ...entry, path });
+  }
+  for (const [path, marker] of unavailable) {
+    const parts = path.split('.');
     for (let length = 0; length < parts.length; length++) {
       const ancestor = parts.slice(0, length).join('.');
       if (!unavailableUnder.has(ancestor)) {
@@ -280,13 +347,22 @@ export function layerBxlMutationOverlays(
   root: BxlMutationJson,
   index: OverlayIndex,
 ): BxlMutationJson {
-  let layered = root;
+  let layered: Record<string, BxlMutationJson> | undefined;
+  // Containers this view owns. A node the document also holds is copied before
+  // it is written to; one already copied is written to directly, so laying
+  // many values costs each container once rather than once per value.
+  const owned = new Set<object>();
   for (const { path, value } of index.supplied) {
-    if (storedAnswers(layered, path)) continue;
-    if (!reachableInStored(layered, path)) continue;
-    layered = graft(layered, path, value);
+    const against: BxlMutationJson = layered ?? root;
+    if (storedAnswers(against, path)) continue;
+    if (!reachableInStored(against, path)) continue;
+    if (layered === undefined) {
+      layered = shallowCopy(root) as Record<string, BxlMutationJson>;
+      owned.add(layered);
+    }
+    graft(layered, path, value, owned);
   }
-  return layered;
+  return layered ?? root;
 }
 
 /** A copy of a container, one level deep. */
@@ -302,20 +378,25 @@ function shallowCopy(value: BxlMutationJson | undefined): BxlMutationJson {
  * the way down is addressed by key.
  */
 function graft(
-  root: BxlMutationJson,
+  root: Record<string, BxlMutationJson>,
   path: BxlMutationPath,
   value: BxlMutationJson,
-): BxlMutationJson {
-  const copy = shallowCopy(root) as Record<string, BxlMutationJson>;
-  let container = copy;
+  owned: Set<object>,
+): void {
+  let container = root;
   for (let length = 0; length < path.length - 1; length++) {
     const key = path[length] as string;
-    const next = shallowCopy(container[key]) as Record<string, BxlMutationJson>;
-    container[key] = next;
-    container = next;
+    const child = container[key];
+    if (child === null || typeof child !== 'object' || !owned.has(child)) {
+      const copy = shallowCopy(child) as Record<string, BxlMutationJson>;
+      owned.add(copy);
+      container[key] = copy;
+      container = copy;
+    } else {
+      container = child as Record<string, BxlMutationJson>;
+    }
   }
   container[path[path.length - 1] as string] = value;
-  return copy;
 }
 
 /**

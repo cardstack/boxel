@@ -196,11 +196,16 @@ function recordReads(
       'plan',
       'snapshot-unavailable',
       statement,
-      `The ${tier} value at ${path} is unavailable (${reason}).`,
+      `The ${tier} value at ${namePath(path)} is unavailable (${reason}).`,
       { details: { path, tier, reason } },
     );
   }
   return result;
+}
+
+/** How a path reads in a message. The root has no name of its own. */
+function namePath(path: string): string {
+  return path === '' ? 'the whole Card' : path;
 }
 
 /** Keep an update's result to what the Card can store. */
@@ -888,7 +893,7 @@ function planCall(
           'validate',
           'assert-snapshot-required',
           number,
-          `assert reads the ${overlay.tier} value at ${overlay.path}, which can lag the stored document. Mark the assert best-effort with { snapshot: true }.`,
+          `assert reads the ${overlay.tier} value at ${namePath(overlay.path)}, which can lag the stored document. Mark the assert best-effort with { snapshot: true }.`,
           { details: { path: overlay.path, tier: overlay.tier } },
         );
       }

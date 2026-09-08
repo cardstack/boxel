@@ -257,11 +257,19 @@ to, denormalized into `search_doc`. A host that does not instantiate Cards
 reads those columns itself and passes them to the planner as read-only
 overlays:
 
+Both overlays are keyed the way the snapshot is: by Field, from the Card's
+root. `search_doc` already has that shape. `pristine_doc` does not — it is the
+Card's JSON:API resource, so its Field values sit under `attributes`, and it
+has to be projected through the same adapter the snapshot came from before the
+planner will recognize a path in it:
+
 ```ts
+const computeds = snapshotBxlCardSource({ data: pristineDoc }, schema, options);
+
 const plan = prepared.plan(storedSnapshot, {
   programId: 'assistant:call_123',
   overlays: {
-    computeds: pristineDoc,
+    computeds,
     linked: searchDoc,
     unavailable: [
       { path: 'patient.name', tier: 'linked', reason: 'not-searchable' },
@@ -273,22 +281,32 @@ const plan = prepared.plan(storedSnapshot, {
 });
 ```
 
+Passing the raw resource instead is not an error the planner can raise: every
+Field path simply goes unanswered, while `attributes`, `meta`, `type` and
+`links` become computed values in their own right.
+
 An author addresses stored, computed, and linked values through the same
 `.path` syntax. The rules the planner enforces:
 
 - **The stored document wins, and keeps its shape.** An overlay answers a path
   only where the stored document holds nothing — an absent key or a `null`,
   which is what a Card holds at a path it never persists. An overlay's stale
-  copy of a stored value never displaces the stored one. Nor may an overlay
-  *reshape* the Card: a value whose path runs past a stored scalar is dropped
-  rather than retyping the scalar. Index drift is routine and must not change
-  the document a program plans over.
+  copy of a stored value never displaces the stored one. An empty list counts
+  as holding nothing, since a projection manufactures one for a list Field the
+  Card never persists and it carries none of the Card's own values either way.
+  Nor may an overlay *reshape* the Card: a value whose path runs past a stored
+  scalar is dropped rather than retyping the scalar, and no path is ever
+  followed *into* a list, empty or not. Index drift is routine and must not
+  change the document a program plans over.
 - **An overlay speaks only where it has something to say.** `pristine_doc` and
   `search_doc` are whole documents: they carry the Card's own Fields alongside
   the ones only they can answer. A Field the Card leaves unset therefore
   arrives as a `null` in both, and a `null` supplies nothing — claiming it
   would make an ordinary writable Field read-only for no reason. A host can
-  pass either column wholesale without narrowing it first.
+  pass either column wholesale without narrowing it first. An `unavailable`
+  entry, by contrast, is refused rather than guessed at: a missing or
+  misspelled `path`, `tier`, or `reason` raises `overlay-invalid`, because a
+  marker the planner cannot read is a read it would wrongly allow.
 - **An overlay is data, not a path a program spelled out.** It is read out of
   a column, so a key naming something on a JavaScript prototype
   (`__proto__`, `prototype`, `constructor`) is dropped, the same refusal the
@@ -1079,7 +1097,7 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `execution-identity-conflict`, `limit-exceeded`;
 - `stream-incomplete`, `commit-failed`, `rollback-conflict`;
 - `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
-  `assert-snapshot-required`, `assert-option-invalid`.
+  `assert-snapshot-required`, `assert-option-invalid`, `overlay-invalid`.
 
 ## Additional use cases covered by this contract
 
