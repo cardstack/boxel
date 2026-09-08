@@ -20,7 +20,10 @@ import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   prerenderSpawnedPriority,
 } from '../jobs/indexing.ts';
-import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
+import {
+  enqueuePrerenderHtmlJob,
+  skipsPrerenderHtml,
+} from '../jobs/prerender-html.ts';
 import type { Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
@@ -340,11 +343,6 @@ registerQueueJobDefinition({
   coalesce: chooseFromScratchCoalesceDecision,
 });
 
-function sameRealm(a: string, b: string): boolean {
-  let normalize = (url: string) => (url.endsWith('/') ? url : `${url}/`);
-  return normalize(a) === normalize(b);
-}
-
 const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   log,
   reportStatus,
@@ -391,13 +389,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
       onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
-        // Compared with a trailing slash forced on both sides. A realm's
-        // identity here is whichever of its `--fromUrl` / `--toUrl` pair its
-        // jobs carry — skills' index job names `https://…:4205/skills/` while
-        // base's names `https://cardstack.com/base/` — so the value has to be
-        // written to match, and a slash is the one difference not worth making
-        // someone debug.
-        if (skipPrerenderHtmlRealms?.some((url) => sameRealm(url, realmURL))) {
+        if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
           // Configured off for this realm. Says so out loud: a realm whose
           // HTML never renders reads, from every other vantage point, exactly
           // like one whose render is merely slow.
