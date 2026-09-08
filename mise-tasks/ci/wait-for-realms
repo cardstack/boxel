@@ -19,7 +19,7 @@
 #           time budget is measured from there rather than from this script's
 #           start, so however long the steps in between took, this script
 #           still gives up before the stack does.
-#
+
 # Every target is polled in the order given. Each non-200 answer is logged
 # with what the realm-server said it was waiting for (the `X-Boxel-Not-Ready`
 # header) or, for any other status, the content type and the first line of the
@@ -59,7 +59,9 @@ pid_file=""
 started_file=""
 
 usage() {
-  sed -n '4,20p' "$0" >&2
+  # The usage block is the header's first comment paragraph: from "# Usage:"
+  # to the blank line that ends it.
+  sed -n '/^# Usage:/,/^$/p' "$0" >&2
   exit 2
 }
 
@@ -86,7 +88,10 @@ if [ -n "$started_file" ] && [ -r "$started_file" ]; then
   fi
 fi
 deadline=$((origin + BUDGET_SECS))
-echo "budget: ${BUDGET_SECS}s from the stack's start, $(( $(date +%s) - origin ))s of it already spent"
+# Seconds since the stack started: the clock the budget is measured on, so
+# every timestamp in the log reads against the deadline a failure quotes.
+elapsed() { printf '%s' "$(( $(date +%s) - origin ))"; }
+echo "budget: ${BUDGET_SECS}s from the stack's start, $(elapsed)s of it already spent"
 
 # --- probing -----------------------------------------------------------------
 
@@ -204,11 +209,11 @@ wait_for_200() {
     attempt=$((attempt + 1))
     probe "$url"
     if [ "$code" = "200" ]; then
-      echo "t+${SECONDS}s  ${label} -> 200 (attempt ${attempt})"
+      echo "t+$(elapsed)s  ${label} -> 200 (attempt ${attempt})"
       mark_routed "$host"
       return 0
     fi
-    echo "t+${SECONDS}s  ${label} -> $(describe)"
+    echo "t+$(elapsed)s  ${label} -> $(describe)"
     if realm_server_answered; then
       mark_routed "$host"
     elif is_traefik_404 && was_routed "$host"; then
@@ -232,7 +237,7 @@ done
 for realm in "${realms[@]}"; do
   info_url="${realm%/}/${INFO_PATH}"
   probe "$info_url"
-  echo "t+${SECONDS}s  $(url_label "$info_url") -> $(describe)"
+  echo "t+$(elapsed)s  $(url_label "$info_url") -> $(describe)"
   if [ "$code" != "200" ]; then
     fail "$info_url" "public-read parity broken: $(url_label "$info_url") answered $(describe) without credentials"
   fi
@@ -250,4 +255,4 @@ if [ "${#ready_only[@]}" -gt 0 ]; then
   done
 fi
 
-echo "::notice::Environment-mode realms ready and publicly readable after ${SECONDS}s: ${realms[*]}"
+echo "::notice::Environment-mode realms ready and publicly readable at t+$(elapsed)s: ${realms[*]}"
