@@ -104,19 +104,35 @@ module(basename(import.meta.filename), function (hooks) {
     adapter.objects.set(objectKey, new Uint8Array([1, 2, 3]));
   }
 
-  async function seedTombstone(sourceURL: string, realmURL: string) {
+  async function seedIndexRow({
+    url,
+    fileAlias = url,
+    realmURL,
+    type = 'instance',
+    isDeleted,
+  }: {
+    url: string;
+    fileAlias?: string;
+    realmURL: string;
+    type?: 'instance' | 'file';
+    isDeleted: boolean;
+  }) {
     let { nameExpressions, valueExpressions } = asExpressions({
-      url: sourceURL,
-      file_alias: sourceURL,
+      url,
+      file_alias: fileAlias,
       realm_url: realmURL,
-      type: 'instance',
+      type,
       generation: 1,
-      is_deleted: true,
+      is_deleted: isDeleted,
     });
     await query(
       dbAdapter,
       insert('boxel_index', nameExpressions, valueExpressions),
     );
+  }
+
+  async function seedTombstone(sourceURL: string, realmURL: string) {
+    await seedIndexRow({ url: sourceURL, realmURL, isDeleted: true });
   }
 
   async function ledgerRows(): Promise<
@@ -207,6 +223,63 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.strictEqual(result.rowsDeleted, 1);
     assert.deepEqual(adapter.deleted, ['tombstoned-object']);
+  });
+
+  test('reclaims captures of a tombstoned source file', async function (assert) {
+    let now = Date.now();
+    // A file capture's ledger spelling keeps the extension
+    // (`screenshotLedgerSourceURL`), and a non-`.json` file has only a
+    // type-'file' index row — the tombstone arm must match it or these
+    // captures leak forever.
+    await seedLedgerRow({
+      sourceURL: 'http://test-realm/a/poster.pdf',
+      sourceGeneration: 5,
+      objectKey: 'tombstoned-file-object',
+      createdAt: now - 2 * DAY,
+    });
+    await seedIndexRow({
+      url: 'http://test-realm/a/poster.pdf',
+      realmURL: 'http://test-realm/a/',
+      type: 'file',
+      isDeleted: true,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 1);
+    assert.deepEqual(adapter.deleted, ['tombstoned-file-object']);
+  });
+
+  test('a tombstone matching only by alias never reclaims a live source', async function (assert) {
+    let now = Date.now();
+    // A live extensionless file `foo` whose alias a deleted `foo.json`
+    // instance shares: the tombstone matches the ledger spelling on
+    // `file_alias`, but the live row must veto the reclaim.
+    await seedLedgerRow({
+      sourceURL: 'http://test-realm/a/foo',
+      sourceGeneration: 3,
+      objectKey: 'live-file-object',
+      createdAt: now - 2 * DAY,
+    });
+    await seedIndexRow({
+      url: 'http://test-realm/a/foo',
+      realmURL: 'http://test-realm/a/',
+      type: 'file',
+      isDeleted: false,
+    });
+    await seedIndexRow({
+      url: 'http://test-realm/a/foo.json',
+      fileAlias: 'http://test-realm/a/foo',
+      realmURL: 'http://test-realm/a/',
+      type: 'instance',
+      isDeleted: true,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 0, 'the live source vetoes GC');
+    assert.deepEqual(adapter.deleted, []);
+    assert.ok(adapter.objects.has('live-file-object'));
   });
 
   test('ages out idle on-demand captures but never declared ones', async function (assert) {

@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 
 import {
   declaredCaptureSpecHash,
+  putMedia,
+  screenshotLedgerSourceURL,
   type ScreenshotManifest,
 } from '@cardstack/runtime-common';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
@@ -97,7 +99,7 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function writeAndSettle(path: string, content: string) {
+  async function writeAndSettle(path: string, content: string | Uint8Array) {
     let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
     await realm.write(path, content);
     await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
@@ -266,7 +268,45 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('the image family captures its declared thumb and rendition slots', async function (assert) {
+  test('a raster image captures its declared thumb and rendition slots', async function (assert) {
+    // A real 1×1 PNG: the meta extractor and the capture components decode
+    // actual bytes, and the slots are file-content-keyed.
+    await writeAndSettle(
+      'photo.png',
+      Uint8Array.from(
+        atob(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        ),
+        (c) => c.charCodeAt(0),
+      ),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}photo.png`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest, 'the image captures landed on the file row');
+    assert.deepEqual(
+      Object.keys(manifest!).sort(),
+      ['rendition-1280', 'rendition-640', 'thumb'],
+      'a raster declares the thumb plus both renditions',
+    );
+    assert.true(
+      manifest!.thumb.useAsThumbnail,
+      'the thumb slot feeds the thumbnail chain',
+    );
+    assert.strictEqual(manifest!.thumb.contentType, 'image/webp');
+    assert.strictEqual(
+      manifest!['rendition-640'].deviceScaleFactor,
+      1,
+      'renditions capture at their declared physical width',
+    );
+  });
+
+  test('a vector image captures only the thumb — the rendition slots live on RasterImageDef', async function (assert) {
     await writeAndSettle(
       'picture.svg',
       `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#0ea5e9"/></svg>`,
@@ -280,20 +320,14 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(fileRow, 'the file row exists');
     let manifest = fileRow!.screenshots as ScreenshotManifest | null;
     assert.ok(manifest, 'the image captures landed on the file row');
-    assert.deepEqual(Object.keys(manifest!).sort(), [
-      'rendition-1280',
-      'rendition-640',
-      'thumb',
-    ]);
+    assert.deepEqual(
+      Object.keys(manifest!),
+      ['thumb'],
+      'an SVG pays for no renditions: srcset excludes vectors and the fitted cell uses thumb, so nothing could consume them',
+    );
     assert.true(
       manifest!.thumb.useAsThumbnail,
       'the thumb slot feeds the thumbnail chain',
-    );
-    assert.strictEqual(manifest!.thumb.contentType, 'image/webp');
-    assert.strictEqual(
-      manifest!['rendition-640'].deviceScaleFactor,
-      1,
-      'renditions capture at their declared physical width',
     );
 
     // The fitted shell prefers the captured thumbnail: the view model reads
@@ -348,6 +382,116 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/doc.pdf?name=poster`),
       `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test("an alias-addressed request serves from the matched row's own ledger spelling", async function (assert) {
+    // A `.json` card is the one URL two live rows answer: the instance row
+    // (alias sheds `.json`) and the JsonFileDef file row (same alias). No
+    // realm-suppliable family can declare slots on `.json` — the extension
+    // registry is static — so the file row's manifest and ledger row are
+    // seeded here exactly as a slotted family's capture would persist them:
+    // manifest on the type-'file' prerendered row, ledger keyed on the file's
+    // own URL, extension intact. What this pins is the serving contract those
+    // writes rely on: the `?name=` route must derive the ledger key from the
+    // matched row's canonical `url`, never the request's spelling — an
+    // alias-addressed hit otherwise resolves the manifest and then misses the
+    // ledger — and a URL both rows answer must fall through the manifest-less
+    // instance row to the file row that actually holds the name.
+    await writeAndSettle(
+      'note.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { title: 'Note' },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
+      }),
+    );
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}note.json`,
+      'file',
+    );
+    assert.ok(fileRow, 'the .json URL has a file row');
+    let instanceRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}note.json`,
+      'instance',
+    );
+    assert.ok(instanceRow, 'and an instance row — both answer the URL');
+
+    let specHash = await posterSpecHash();
+    let bytes = new Uint8Array([...PNG_MAGIC, 1, 2, 3]);
+    let ledgerSourceURL = screenshotLedgerSourceURL(
+      `${testRealm}note.json`,
+      'file',
+    );
+    assert.strictEqual(
+      ledgerSourceURL,
+      `${testRealm}note.json`,
+      'a file capture keys on the extension-intact URL',
+    );
+    let { objectKey } = await putMedia(testDbAdapter, mediaCacheAdapter, {
+      realmURL: testRealm.href,
+      sourceURL: ledgerSourceURL,
+      captureSpecHash: specHash,
+      sourceGeneration: Number(fileRow!.generation),
+      bytes,
+      contentType: 'image/png',
+      lane: 'declared',
+    });
+    let manifest: ScreenshotManifest = {
+      poster: {
+        specHash,
+        objectKey,
+        contentType: 'image/png',
+        width: 320,
+        height: 240,
+        deviceScaleFactor: 2,
+      },
+    };
+    await testDbAdapter.execute(
+      `update prerendered_html set screenshots = $1 where url = $2 and type = 'file'`,
+      { bind: [JSON.stringify(manifest), `${testRealm}note.json`] },
+    );
+
+    // The alias spelling: the instance row is read first (no registered
+    // extension on the path), holds no `poster`, and the loop falls through
+    // to the file row — matched on `file_alias`, so only the row's own
+    // canonical url can key the ledger.
+    let aliasResponse = await realm.handle(
+      new Request(`${testRealm}_screenshot/note?name=poster`),
+    );
+    assert.strictEqual(
+      aliasResponse!.status,
+      200,
+      'the alias-addressed request serves the capture',
+    );
+    assert.strictEqual(
+      aliasResponse!.headers.get('etag'),
+      `"${objectKey}"`,
+      'and it is the seeded artifact',
+    );
+
+    // The extension spelling reads the file row first (`urlNamesFile`) and
+    // matches it on `url` directly.
+    let extensionResponse = await realm.handle(
+      new Request(`${testRealm}_screenshot/note.json?name=poster`),
+    );
+    assert.strictEqual(
+      extensionResponse!.status,
+      200,
+      'the extension-addressed request serves the same capture',
+    );
+    assert.strictEqual(
+      extensionResponse!.headers.get('etag'),
+      `"${objectKey}"`,
     );
   });
 

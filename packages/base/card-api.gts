@@ -150,7 +150,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
-import { IMAGE_FAMILY_SCREENSHOTS } from './file-formats/image-captures';
+import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -534,43 +534,77 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // the server's own result set rather than the reconciled one, so a locally
   // edited or created card can't be mistaken for a short page.
   readonly isPartial: boolean;
+  // Hand a running resource the result set a document fetched since it started
+  // carries. Optional: a store whose resources hold no state worth superseding
+  // implements no supersession.
+  reseed?(seed: StoreSearchSeed<T>): void;
+  // The identity of the seeded result set the resource holds, and `undefined`
+  // once a search has re-derived that set for itself. Read it to decide whether
+  // a seed is worth handing over: a remembered "last seed applied" would go on
+  // claiming a set the resource has since replaced, and would then skip a
+  // document restoring the earlier one.
+  readonly appliedSeedIdentity?: string;
 }
 
-export type GetSearchResourceFuncOpts = {
+// A result set a producer already resolved, handed to a search resource in
+// place of running the query. Generic in the row type so a `FileDef` search
+// seeds with file-meta rows rather than being narrowed to `CardDef`.
+export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
+  cards: T[];
+  // What this result set is, as against any other the same query could
+  // produce: two seeds sharing an identity assert the same thing, so a
+  // resource already holding one ignores the other. It has to cover
+  // everything the seed asserts and not just its rows — a page-clamped
+  // field whose match count moved holds the same row and a different
+  // answer.
+  identity?: string;
+  // The index generation this set was resolved at, and the realm whose counter
+  // that generation belongs to. Separate from the identity and doing a
+  // different job: the identity says whether two sets differ, these say which
+  // of them is newer. A generation counts writes within one realm, so it orders
+  // nothing without the realm that issued it.
+  //
+  // Keeping the generation out of the identity is deliberate — a realm
+  // generation moves on every write anywhere in the realm, so folding it in
+  // would make every set look different from every other and re-apply answers
+  // that had not changed.
+  generation?: number;
+  realm?: string;
+  searchURL?: string;
+  realms?: string[];
+  queryErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
+  // IDs the parent doc named in `relationships.{field}.data`. Used
+  // by the SearchResource when `cards` is empty and the parent
+  // skipped query-backed expansion — the resource loads each ID by
+  // URL instead of running a live re-query.
+  cardURLs?: string[];
+  // The result meta the seed was resolved under, chiefly `page.total` —
+  // the query's match count, which exceeds `cards.length` when the page
+  // ceiling clamped the expansion. Absent it, the resource takes the
+  // record count for the total and a truncated seed reads as complete.
+  meta?: QueryResultsMeta;
+  // The seed's match count is not knowable and must not be inferred from its
+  // rows — the producer resolved the field but deliberately reported no
+  // total, as a query-backed field does when one of its realms failed.
+  totalUnknown?: boolean;
+};
+
+export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: {
-    cards: CardDef[];
-    searchURL?: string;
-    realms?: string[];
-    queryErrors?: Array<{
-      realm: string;
-      type: string;
-      message: string;
-      status?: number;
-    }>;
-    // IDs the parent doc named in `relationships.{field}.data`. Used
-    // by the SearchResource when `cards` is empty and the parent
-    // skipped query-backed expansion — the resource loads each ID by
-    // URL instead of running a live re-query.
-    cardURLs?: string[];
-    // The result meta the seed was resolved under, chiefly `page.total` —
-    // the query's match count, which exceeds `cards.length` when the page
-    // ceiling clamped the expansion. Absent it, the resource takes the
-    // record count for the total and a truncated seed reads as complete.
-    meta?: QueryResultsMeta;
-    // The seed's match count is not knowable and must not be inferred from its
-    // rows — the producer resolved the field but deliberately reported no
-    // total, as a query-backed field does when one of its realms failed.
-    totalUnknown?: boolean;
-  };
+  seed?: StoreSearchSeed<T>;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: GetSearchResourceFuncOpts,
+  opts?: GetSearchResourceFuncOpts<T>,
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
@@ -3842,12 +3876,13 @@ export class ImageDef extends FileDef {
   // only the renderer that draws its pixels.
   static previewComponent: FilePreviewComponent = ImagePreview;
 
-  // The family's captures: a `thumb` that feeds the thumbnail fallback chain
-  // and the fitted cell, plus the downscaled renditions the format
-  // templates' `srcset` reads. All file-content-keyed, so a metadata-only
-  // edit never re-decodes the pixels. See `image-captures` for the boxes and
-  // the capture-only components.
-  static screenshots: Record<string, ScreenshotSpec> = IMAGE_FAMILY_SCREENSHOTS;
+  // The family-wide capture: a `thumb` that feeds the thumbnail fallback
+  // chain and the fitted cell, for vectors and rasters alike. The srcset
+  // renditions are declared one level down on `RasterImageDef` — srcset
+  // excludes vectors, so an SVG must not pay for captures nothing reads.
+  // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
+  // See `image-captures` for the boxes and the capture-only components.
+  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream

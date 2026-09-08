@@ -366,6 +366,78 @@ module('Integration | content-only file preview components', function (hooks) {
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
   });
 
+  test('ImagePreview offers no srcset for animatable formats (WebP/AVIF)', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // WebP and AVIF can animate, and no extracted signal says whether a
+    // given file does — a rendition of an animated one would be a frozen
+    // first frame, so the whole format sits out.
+    let webp = {
+      id: 'http://example.com/img/loop.webp',
+      url: 'http://example.com/img/loop.webp',
+      name: 'loop.webp',
+      contentType: 'image/webp',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/loop.webp?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{webp}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
+  test('ImagePreview offers no srcset for images narrower than the rendition canvas', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // The renditions' canvas is 4:3 with the image contained inside; under
+    // scale-down the browser sizes the canvas, so a portrait image's
+    // rendition would display at a fraction of the original's size.
+    let portrait = {
+      id: 'http://example.com/img/tall.png',
+      url: 'http://example.com/img/tall.png',
+      name: 'tall.png',
+      contentType: 'image/png',
+      width: 2250,
+      height: 3000,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+        'rendition-1280': {
+          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-1280',
+          width: 1280,
+          height: 960,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{portrait}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
   test('AudioPreview renders the waveform and player from a bare FileDef instance', async function (assert) {
     let { AudioPreview } = fileFormats;
     let audio = new AudioDef({
