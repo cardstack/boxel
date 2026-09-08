@@ -833,7 +833,7 @@ class Edit extends Component<typeof Spec> {
           <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         </:containedExamples>
         <:fileExamples>
-          <@fields.fileExamples />
+          <@fields.fileExamples @typeConstraint={{this.absoluteRef}} />
         </:fileExamples>
       </SpecExamplesSection>
 

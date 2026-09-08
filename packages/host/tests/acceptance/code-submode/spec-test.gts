@@ -1032,6 +1032,15 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-links-to-many="fileExamples"]')
       .exists('the file example editor is offered');
+
+    await click('[data-test-links-to-many="fileExamples"] [data-test-add-new]');
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .containsText(
+        'Choose Attachment File',
+        "the file chooser is narrowed to the spec's own file type",
+      );
+    await click('[data-test-choose-file-modal-cancel-button]');
   });
 
   test<TestContextWithSave>('have ability to create new spec instances', async function (assert) {

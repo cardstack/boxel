@@ -33,7 +33,7 @@ export default class GenerateReadmeSpecTool extends HostBaseTool<
 Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
 
 • **Summary**: Brief summary of what the spec does
-• **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
+• **Import**: Show the ES6 import statement of the spec. Omit .gts extension.
 • **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only display this section for card, field or file. A file def is referenced with linksTo/linksToMany and its instances are created by uploading a file, not in code.
 • **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
 
