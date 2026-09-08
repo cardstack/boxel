@@ -2472,9 +2472,9 @@ export class Realm {
         // leaves only the staleness these steps exist to remove, which the
         // index job's own invalidation still clears. They are caught
         // separately so a failure in one still leaves the other's benefit:
-        // the delete without the epoch is what this write path did before
-        // the epoch existed, and the epoch without the delete still stops a
-        // later invalidation from re-deriving the definition off a warm tab.
+        // the delete alone still drops the row a stale definition sits in,
+        // and the epoch alone still stops a later invalidation from
+        // re-deriving that definition off a warm tab.
         //
         // Deleting the cached definition only guarantees the next lookup
         // re-derives one; it says nothing about what that lookup derives it

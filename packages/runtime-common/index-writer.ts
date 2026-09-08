@@ -1872,10 +1872,22 @@ export class Batch {
   }
 
   private async applyBatchUpdates() {
+    // Reading the getter is what mints, so read it before asking whether it
+    // did. `loader_epoch` joins the upsert only when this batch minted one:
+    // the getter otherwise returns the token read at batch start, and writing
+    // that back would clobber any epoch minted after this batch began —
+    // including the one a concurrent module write minted for the definition
+    // it invalidated, whose whole purpose is to be current for the populate
+    // that follows the write rather than for the index pass. Omitted from the
+    // insert too; a realm's first row takes the column's own '0' default,
+    // which is the no-epoch-yet sentinel a fresh tab mismatches anyway.
+    let loaderEpoch = this.loaderEpoch;
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_generation: this.generation,
-      loader_epoch: this.loaderEpoch,
+      ...(this.#mintedLoaderEpoch === undefined
+        ? {}
+        : { loader_epoch: loaderEpoch }),
     } as RealmGenerationsTable);
     await this.#query([
       ...upsert(

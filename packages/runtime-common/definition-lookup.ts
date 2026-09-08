@@ -980,6 +980,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // persist. Retry only the second — the module is on disk, and the next
     // populate reads it under the post-invalidate generation.
     let moduleEntry: DefinitionCacheEntry | undefined;
+    // Set when the final attempt ended on a generation change rather than on
+    // an empty cache: the two are indistinguishable in the result and only
+    // this separates "no such module" from "every populate was discarded".
+    let exhaustedByInvalidation = false;
     for (let attempt = 0; attempt < POPULATE_RACE_MAX_ATTEMPTS; attempt++) {
       let snapshot = this.snapshotGeneration(
         resolvedRealmURL,
@@ -1008,12 +1012,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         log.debug(
           `definition populate for ${canonicalModuleURL} was discarded by a concurrent invalidation; retrying (attempt ${attempt + 2} of ${POPULATE_RACE_MAX_ATTEMPTS})`,
         );
+      } else {
+        exhaustedByInvalidation = true;
       }
     }
 
     if (!moduleEntry) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
-        cause: `Module entry not found for URL: ${codeRef.module}`,
+        cause: exhaustedByInvalidation
+          ? `Module entry not found for URL: ${codeRef.module} — every one of ${POPULATE_RACE_MAX_ATTEMPTS} populate attempts was discarded by a concurrent invalidation, so the module may be readable on disk and this is not evidence that the type is absent`
+          : `Module entry not found for URL: ${codeRef.module}`,
       });
     }
 

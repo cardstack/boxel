@@ -199,12 +199,13 @@ export default class ModuleRoute extends Route<Model> {
   // definition cache stores that under the rewritten module's URL.
   //
   // On the route rather than in `buildModuleModel`, which the route shares
-  // with card-prerender.gts. That component renders in the app's own tab,
-  // where the loader and store belong to the session and are already kept
-  // current by the file resources and realm subscriptions the app runs;
-  // replacing them out from under it would discard live state on a schedule
-  // the app has no part in. A tab that reached this route exists to serve
-  // renders and holds nothing else worth keeping.
+  // with card-prerender.gts. That component mounts only under `isTesting()`,
+  // so its renders run inside the test harness's own tab, sharing the loader
+  // and store with the application under test — state the harness and the
+  // app's own file resources and realm subscriptions already keep current.
+  // Replacing it from here would discard live state on a schedule neither
+  // has a part in. A tab that reached this route exists to serve renders and
+  // holds nothing else worth keeping.
   //
   // Held under its own key rather than the one routes/render.ts uses. Visits
   // thread the epoch their indexing batch minted, which is not committed
