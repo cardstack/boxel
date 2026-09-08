@@ -340,6 +340,11 @@ registerQueueJobDefinition({
   coalesce: chooseFromScratchCoalesceDecision,
 });
 
+function sameRealm(a: string, b: string): boolean {
+  let normalize = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+  return normalize(a) === normalize(b);
+}
+
 const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   log,
   reportStatus,
@@ -354,6 +359,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   virtualNetwork,
   queuePublisher,
   createPrerenderAuth,
+  skipPrerenderHtmlRealms,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, realmURL } = args;
@@ -385,6 +391,22 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
       onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+        // Compared with a trailing slash forced on both sides. A realm's
+        // identity here is whichever of its `--fromUrl` / `--toUrl` pair its
+        // jobs carry — skills' index job names `https://…:4205/skills/` while
+        // base's names `https://cardstack.com/base/` — so the value has to be
+        // written to match, and a slash is the one difference not worth making
+        // someone debug.
+        if (skipPrerenderHtmlRealms?.some((url) => sameRealm(url, realmURL))) {
+          // Configured off for this realm. Says so out loud: a realm whose
+          // HTML never renders reads, from every other vantage point, exactly
+          // like one whose render is merely slow.
+          log.info(
+            `${jobIdentity(jobInfo)} not spawning prerender_html for ${realmURL}: ` +
+              `the realm is listed in --skipPrerenderHtmlRealm`,
+          );
+          return;
+        }
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
