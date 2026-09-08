@@ -235,7 +235,10 @@ They remain readable and addressable, but any assignment, replacement,
 deletion, or collection operation targeting one produces no intent and reports
 zero affected values. The right-hand expression is not evaluated. This makes
 model-generated updates tolerant of derived Card Info fields without weakening
-the fail-closed behavior of query-backed or otherwise read-only Fields.
+the fail-closed behavior of query-backed or otherwise read-only Fields. Read-
+only overlays do not change this: a Field the schema speaks for is answered by
+the schema, so the same program plans the same way whether or not the Card is
+indexed.
 
 Relationship references are logical Card IDs in plans and source references at
 the persistence boundary. `resolveReference(reference, path)` expands authored
@@ -281,15 +284,19 @@ An author addresses stored, computed, and linked values through the same
   end of a stored collection, is dropped rather than retyping the scalar or
   renumbering the collection the planner is about to compute indices against.
   Index drift is routine and must not change the document a program plans over.
-- **Overlay values are read-only.** A write that lands on a computed value
-  fails with `computed-read-only`, and one that lands on a linked Card's Field
-  fails with `write-through-link`, each naming the path. A container the
-  overlay supplies where the Card holds nothing is a computed value in its own
-  right and is read-only whole; a *stored* collection whose rows merely carry a
-  computed Field stays writable as a collection, with only that Field refused.
-  Writing an *ancestor* of a linked value likewise stays an ordinary write:
-  replacing a relationship edge changes the Card's own document, not the Card
-  on the far side of the link.
+- **Overlay values are read-only, and the schema answers first.** Where the
+  schema already speaks for a Field, it decides: a Definition-derived schema
+  marks every computed Field `writeBehavior: 'skip'`, so a write to one stays
+  the intentional no-op described above whether or not the indexer has
+  answered. The overlay is the backstop for paths the schema has no opinion
+  about — there, a write that lands on a computed value fails with
+  `computed-read-only`, and one that lands on a linked Card's Field fails with
+  `write-through-link`, each naming the path. A container the overlay supplies
+  where the Card holds nothing is a computed value in its own right and is
+  read-only whole; a *stored* collection whose rows merely carry a computed
+  Field stays writable as a collection. Writing an *ancestor* of a linked value
+  likewise stays an ordinary write: replacing a relationship edge changes the
+  Card's own document, not the Card on the far side of the link.
 - **A read reports an overlay whenever one participates in its value** — the
   overlay supplied the path, the read sits inside a value it supplied, or the
   value returned carries overlay-supplied descendants. Reading a stored

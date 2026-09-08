@@ -531,8 +531,24 @@ function validateWritableLocations(
     );
   }
   return locations.map((location) => {
-    assertWritableOverlayPath(location.path, context, statement);
-    return resolveField(location.path, context, statement);
+    let field: FieldResolution;
+    try {
+      field = resolveField(location.path, context, statement);
+    } catch (error) {
+      // The overlay often has the more specific reason to refuse a path the
+      // schema rejects — a write through a link, which the schema can only
+      // report as traversal. Let it speak first.
+      assertWritableOverlayPath(location.path, context, statement);
+      throw error;
+    }
+    // The schema is the authority on the Fields a Card declares. Where it
+    // already answers a write with an intentional no-op, an overlay does not
+    // turn that into an error: the refusal is a backstop for paths the schema
+    // has no opinion about, not a second opinion about the ones it does.
+    if (field.writeBehavior !== 'skip') {
+      assertWritableOverlayPath(location.path, context, statement);
+    }
+    return field;
   });
 }
 

@@ -1269,14 +1269,18 @@ deepStrictEqual(
   ['https://example.test/typescript.svg'],
 );
 
-const computedWrite = overlayError('.computedLabel = "written";', {
-  overlays,
-});
-strictEqual(computedWrite.code, 'computed-read-only');
-deepStrictEqual(computedWrite.details, {
-  path: 'computedLabel',
-  tier: 'computed',
-});
+// The schema is the authority on the Fields a Card declares. A Definition-
+// derived schema marks every computed Field `writeBehavior: 'skip'`, so a
+// write to one stays the intentional no-op it is without overlays — the same
+// program plans the same way whether or not the indexer has answered.
+for (const overlaid of [undefined, overlays]) {
+  const skipped = overlayMutation('.computedLabel = "written";', {
+    overlays: overlaid,
+  });
+  strictEqual(skipped.plan.statements[0].affected, 0);
+  deepStrictEqual(skipped.plan.statements[0].intents, []);
+  strictEqual(skipped.document.data.attributes?.computedLabel, undefined);
+}
 
 const linkedWrite = overlayError('.cardInfo.theme.name = "written";', {
   overlays,
@@ -1347,15 +1351,17 @@ strictEqual(
   darkTheme,
 );
 
-// A computed value the overlay supplies as a container is read-only whole:
-// replacing or deleting the container is a write to computed values.
+// The same holds however the overlay shapes the value: a computed Field the
+// schema declares is the schema's to answer for.
 const computedContainer: BxlMutationOverlays = {
   computeds: { computedLabel: { text: 'TypeScript · language' } },
 };
 for (const program of ['.computedLabel = "written";', 'del(.computedLabel);']) {
-  const refused = overlayError(program, { overlays: computedContainer });
-  strictEqual(refused.code, 'computed-read-only');
-  strictEqual(refused.details?.path, 'computedLabel');
+  strictEqual(
+    overlayMutation(program, { overlays: computedContainer }).plan.affected,
+    0,
+    program,
+  );
 }
 
 // An assert over an overlay value must say it accepts a stale answer.
@@ -1659,13 +1665,10 @@ deepStrictEqual(
   { ...collectionSnapshot, image: 'written' },
 );
 
-// A computed Field inside a stored collection makes that Field read-only, not
-// the collection holding it.
+// A computed Field inside a stored collection is the schema's to answer for,
+// and leaves the collection holding it writable.
 const rowTotals: BxlMutationOverlays = { computeds: { rows: [{ total: 20 }] } };
-strictEqual(
-  collectionError('.rows[0].total = 9;', rowTotals).code,
-  'computed-read-only',
-);
+strictEqual(collectionPlan('.rows[0].total = 9;', rowTotals).affected, 0);
 for (const source of [
   'append(.rows; {"qty": 5});',
   'del(.rows[0]);',
@@ -1673,8 +1676,9 @@ for (const source of [
 ]) {
   ok(collectionPlan(source, rowTotals).affected > 0, source);
 }
-// A container the overlay supplies where the Card holds nothing is a computed
-// value in its own right, and read-only whole.
+// Where the schema has no opinion — a Field it declares writable, under which
+// an overlay supplied a value the Card does not store — the overlay is the
+// backstop that refuses the write.
 strictEqual(
   collectionError('.summary = {"text": "x"};', {
     computeds: { summary: { text: 'derived' } },
