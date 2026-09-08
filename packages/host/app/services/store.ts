@@ -1760,10 +1760,10 @@ export default class StoreService extends Service implements StoreInterface {
         // search has since re-derived, and a field-by-field forward that
         // dropped it would restore that re-application silently.
         identity?: string;
-        // Declared on this hop for the same reason as the identity: it is what
-        // orders a handed-over set against one the resource already holds, and
-        // a forward that dropped it would leave the handover with no ordering.
+        // What orders a handed-over set against one the resource already
+        // holds: the generation, and the realm whose counter it belongs to.
         generation?: number;
+        realm?: string;
         searchURL?: string;
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];

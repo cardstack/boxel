@@ -143,9 +143,13 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
           // produce. A resource already holding a seed with this identity
           // ignores the seed rather than re-applying it.
           identity?: string;
-          // The index generation the producer resolved this set at, which is
-          // what orders it against a set the resource already holds.
+          // The index generation the producer resolved this set at, and the
+          // realm whose counter it belongs to. Together they order this set
+          // against one the resource already holds — a generation counts
+          // writes within a single realm, so it means nothing without the
+          // realm that issued it.
           generation?: number;
+          realm?: string;
           searchURL?: string;
           realms?: string[];
           meta?: QueryResultsMeta;
@@ -231,14 +235,31 @@ export class SearchResource<
   // `instances`, so a search that cleared this has already dirtied what brought
   // the reader here.
   #appliedSeedIdentity: string | undefined;
-  // The index generation this resource's result set is known to reflect, as a
-  // floor. It is what orders a document against a search: both name a
-  // generation, so the newer of the two wins rather than whichever arrived
-  // last. Raised and never lowered, so a set whose generation cannot be
-  // established keeps the last floor established rather than reverting to
-  // none — that refuses a fresh document at worst, where the other direction
-  // would let a stale one overwrite a newer answer.
-  #resultGeneration: number | undefined;
+  // Per realm, the index generation this resource's result set is known to
+  // reflect, as a floor. It is what orders a document against a search: both
+  // name a generation, so the newer of the two wins rather than whichever
+  // arrived last. Each entry is raised and never lowered, so a set whose
+  // generation cannot be established keeps the floor already established
+  // rather than reverting to none — that refuses a fresh document at worst,
+  // where the other direction would let a stale one overwrite a newer answer.
+  //
+  // Keyed by realm because a generation counts writes within one realm and
+  // nothing else: `realm_generations` is per `realm_url`, so a document's
+  // generation and a search's are the same scale only when they came from the
+  // same realm. A query whose realms differ from its owner's would otherwise
+  // compare two unrelated sequences, and whichever ran ahead would decide every
+  // handover for that field — either declining all of them or none.
+  //
+  // Both sides are floors rather than exact resolution generations. A search
+  // is stamped with the generation of the event that woke it, and the index it
+  // then reads is at or after that. A document is stamped with the generation
+  // its owner's row was written at, which a query field's own membership never
+  // advances: dependencies reached only through a query context are left out of
+  // the row's deps, so a matching card changing never rewrites the owner. Both
+  // err toward declining a document that is in fact fresh. Making the document
+  // side exact means stamping the resolution's own generation on the umbrella
+  // relationship where the indexer resolves it.
+  #resultGenerations = new Map<string, number>();
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -490,7 +511,7 @@ export class SearchResource<
       // Recorded before the application starts, because the application itself
       // reads it to confirm it is still the seed the resource reports holding.
       this.#appliedSeedIdentity = seed.identity;
-      this.#raiseResultGeneration(seed.generation);
+      this.#raiseResultGeneration(seed.realm, seed.generation);
       this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
       this.#seedApplied = true;
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
@@ -576,15 +597,16 @@ export class SearchResource<
             if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
               return;
             }
-            // The generation the indexing pass committed. A search answering
-            // this event reads the index at or after it, so it stands as the
-            // floor for what the result set reflects.
+            // The generation the indexing pass committed, and the realm whose
+            // counter it belongs to. A search answering this event reads the
+            // index at or after it, so together they stand as the floor for
+            // what the result set reflects of that realm.
             let generation =
               'generation' in event && typeof event.generation === 'number'
                 ? event.generation
                 : undefined;
             this.trackStoreLoad(
-              this.search.perform(this.#previousQuery, generation),
+              this.search.perform(this.#previousQuery, generation, realm),
               'live-refresh',
             );
           }),
@@ -646,20 +668,21 @@ export class SearchResource<
     if (seed.identity && seed.identity === this.#appliedSeedIdentity) {
       return;
     }
-    // Older than what this resource holds, so it is not news — it is a read
-    // that was already in flight when a later one landed. Without this the
-    // handover has no ordering at all and the last arrival wins, which loses a
-    // completed search to a document resolved before it. Both generations have
-    // to be known to compare: where either is absent the identity check above
-    // decides alone, which is what this did before any generation was
-    // available.
+    // Older than what this resource holds for the realm the document came from,
+    // so it is not news — it is a read that was already in flight when a later
+    // one landed. Without this the handover has no ordering at all and the last
+    // arrival wins, which loses a completed search to a document resolved
+    // before it. The comparison needs a realm and a generation on both sides;
+    // absent any of them the identity check above decides alone.
+    let seedFloor =
+      seed.realm != null ? this.#resultGenerations.get(seed.realm) : undefined;
     if (
       seed.generation != null &&
-      this.#resultGeneration != null &&
-      seed.generation < this.#resultGeneration
+      seedFloor != null &&
+      seed.generation < seedFloor
     ) {
       this.#log.info(
-        `decline seed from generation ${seed.generation}; holding generation ${this.#resultGeneration}`,
+        `decline seed from generation ${seed.generation}; holding generation ${seedFloor} for realm ${seed.realm}`,
       );
       return;
     }
@@ -667,7 +690,7 @@ export class SearchResource<
     // first: the application confirms against this that it has not been
     // superseded.
     this.#appliedSeedIdentity = seed.identity;
-    this.#raiseResultGeneration(seed.generation);
+    this.#raiseResultGeneration(seed.realm, seed.generation);
     this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
     let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
     if (seed.searchURL && !hasQueryErrors) {
@@ -698,15 +721,20 @@ export class SearchResource<
     return this.#appliedSeedIdentity;
   }
 
-  // Move the floor up, never down. An unknown generation leaves it alone: it
-  // says nothing about what the set reflects, and lowering the floor to `none`
-  // would reopen the ordering the floor exists to close.
-  #raiseResultGeneration(generation: number | undefined): void {
-    if (generation == null) {
+  // Move one realm's floor up, never down. An unknown realm or generation
+  // leaves every floor alone: neither says anything about what the set
+  // reflects, and lowering a floor to `none` would reopen the ordering the
+  // floor exists to close.
+  #raiseResultGeneration(
+    realm: string | undefined,
+    generation: number | undefined,
+  ): void {
+    if (realm == null || generation == null) {
       return;
     }
-    if (this.#resultGeneration == null || generation > this.#resultGeneration) {
-      this.#resultGeneration = generation;
+    let current = this.#resultGenerations.get(realm);
+    if (current == null || generation > current) {
+      this.#resultGenerations.set(realm, generation);
     }
   }
 
@@ -1061,7 +1089,7 @@ export class SearchResource<
   );
 
   private search = restartableTask(
-    async (query: Query, generation?: number) => {
+    async (query: Query, generation?: number, realm?: string) => {
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
@@ -1101,7 +1129,7 @@ export class SearchResource<
           // restoring the very set the search moved off. What orders this set
           // against a later document is the generation instead.
           this.#appliedSeedIdentity = undefined;
-          this.#raiseResultGeneration(generation);
+          this.#raiseResultGeneration(realm, generation);
           this._meta = meta;
           this._errors = undefined;
           await this.updateInstances(instances, dependencyTrackingContext);
@@ -1177,6 +1205,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
           cards: T[];
           identity?: string;
           generation?: number;
+          realm?: string;
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];

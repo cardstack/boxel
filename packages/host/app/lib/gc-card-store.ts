@@ -104,6 +104,7 @@ type StoreHooks = {
             // orders the two when they do differ.
             identity?: string;
             generation?: number;
+            realm?: string;
           }
         | undefined;
     },

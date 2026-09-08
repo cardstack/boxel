@@ -69,10 +69,18 @@ interface QueryFieldState {
   // fetched after the resource started hand it a fresher result set.
   seedIdentity?: string;
   // The index generation the owner's document was serialized at, off
-  // `meta.generation`. What the resource compares against its own result set to
+  // `meta.generation`, and the realm that generation counts writes in, off
+  // `meta.realmURL`. What the resource compares against its own result set to
   // order the two, so a document read before a search that has since completed
   // does not overwrite it.
+  //
+  // A floor rather than the generation the field was resolved at: read-time
+  // resolution does not rewrite the owner's row, and a matching card changing
+  // never does either, since dependencies reached only through a query context
+  // are left out of that row's deps. It errs toward declining a document that
+  // is in fact fresh.
   seedGeneration?: number;
+  seedRealm?: string;
   // A document has been captured that no resource has been offered yet. Set by
   // every capture and cleared the first time a read acts on it, so a running
   // resource is offered a result set once per document fetched for the owner.
@@ -709,14 +717,17 @@ export function captureQueryFieldSeedData(
       ? seedTotal
       : undefined;
   fieldState.seedIdentity = seedIdentityFor(fieldState);
-  // The generation the row this document was serialized from was written at.
-  // Absent where the serialization did not come off the index — a freshly built
-  // resource that was never persisted — in which case the field's result set is
-  // ordered by identity alone, as it was before any generation was available.
-  let generation = (resource.meta as { generation?: unknown } | undefined)
-    ?.generation;
+  // The generation the row this document was serialized from was written at,
+  // and the realm that counter belongs to. Absent where the serialization did
+  // not come off the index — a freshly built resource that was never persisted
+  // — in which case the field's result set is ordered by identity alone.
+  let meta = resource.meta as
+    | { generation?: unknown; realmURL?: unknown }
+    | undefined;
   fieldState.seedGeneration =
-    typeof generation === 'number' ? generation : undefined;
+    typeof meta?.generation === 'number' ? meta.generation : undefined;
+  fieldState.seedRealm =
+    typeof meta?.realmURL === 'string' ? meta.realmURL : undefined;
   fieldState.seedHandoverPending = true;
 }
 
@@ -768,6 +779,7 @@ function queryFieldSeed(fieldState: QueryFieldState) {
     cards: seedRecords,
     identity: fieldState.seedIdentity,
     generation: fieldState.seedGeneration,
+    realm: fieldState.seedRealm,
     searchURL: seedSearchURL ?? undefined,
     realms: fieldState.seedRealms,
     queryErrors: fieldState.seedErrors,
