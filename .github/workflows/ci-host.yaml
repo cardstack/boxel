@@ -23,6 +23,9 @@ on:
       - ".github/actions/**"
       - "mise-tasks/**"
       - "packages/observability/scripts/**"
+      # Traefik's static config: every env-mode job routes through it and
+      # reads its access log in the diagnostics.
+      - "traefik/**"
   workflow_dispatch:
 
 concurrency:
