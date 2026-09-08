@@ -8,8 +8,11 @@
  *
  * They are functions rather than `$`-prefixed variables, matching the form
  * card operations are authored in, and named `params` rather than the more
- * obvious `input` because jq owns `input/0`: a second definition at that key
- * would hide jq's, which the mutation profile bans by name anyway.
+ * obvious `input` because the mutation profile denies `input`. Registry
+ * resolution is per `NAME/arity`, so an `input("key")` accessor would land at
+ * the free `input/1` and hide jq's `input/0` from nothing — but profile
+ * classification is by base name without arity, so it would be refused
+ * before it ran.
  *
  * Every failure here throws. A program that asks for a value the host did not
  * supply, or for a key that is not there, has a defect in it — answering
@@ -75,14 +78,22 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
 }
 
 function describeKeys(source: Record<string, unknown>): string {
-  // Only keys carrying a value are listed. A key present with `undefined` is
-  // not one a program can read, so naming it in the message would point the
-  // reader at a key that fails the same way the one they asked for did.
-  const keys = Object.keys(source)
-    .filter((key) => source[key] !== undefined)
+  // Own properties, enumerable or not, because that is what `requireKey`
+  // accepts — listing only the enumerable ones would omit a key that works.
+  // A key held with `undefined` is dropped, since naming it would point the
+  // reader at one that fails exactly as the key they asked for did.
+  //
+  // Read through descriptors rather than by indexing: a diagnostic must not
+  // invoke host getters, which would make one throwing getter anywhere in the
+  // object replace this message with its own error.
+  const keys = Object.getOwnPropertyNames(source)
+    .filter((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (!descriptor) return false;
+      // An accessor's value is unknown without calling it, so it is listed.
+      return !('value' in descriptor) || descriptor.value !== undefined;
+    })
     .sort();
-  // `Object.keys` is already own-properties-only, so this matches what
-  // `requireKey` will accept.
   if (keys.length === 0) return 'it has no readable keys';
   const shown = keys.slice(0, KEYS_IN_MESSAGE);
   const rest = keys.length - shown.length;
@@ -100,17 +111,21 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
     );
   }
   const source = slotObject(slot, call);
-  // Two conditions, and both are load-bearing. The key has to be the
-  // object's own, or `instance("toString")` would answer with a function off
-  // the prototype chain; and its value has to be something other than
+  // Two conditions, and both are load-bearing. The key has to be the object's
+  // own, or `instance("toString")` would answer with a function off the
+  // prototype chain; and its value has to be something other than
   // `undefined`, which a key can be held with and which is not a JSON value —
   // yielding it would put it in front of the planner as one, writing an
   // intent that unsets the field. That is the silent failure these builtins
   // exist to refuse. A JSON `null` is a real value and passes through.
-  if (
-    !Object.prototype.hasOwnProperty.call(source, key) ||
-    source[key] === undefined
-  ) {
+  //
+  // The descriptor supplies both the ownership answer and the value, so a
+  // getter is invoked once and the program receives the value that was
+  // checked rather than whatever a second read returns.
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  const value =
+    descriptor && !('value' in descriptor) ? source[key] : descriptor?.value;
+  if (!descriptor || value === undefined) {
     const hint = OPTIONAL_KEY_HINTS[slot];
     throw new JqEvaluateError(
       `${call} asks for "${key}", which is not in ${
@@ -118,7 +133,7 @@ function requireKey(slot: ContextSlot, call: string, key: unknown): unknown {
       } — ${describeKeys(source)}.${hint ? ` ${hint}` : ''}`,
     );
   }
-  return source[key];
+  return value;
 }
 
 const bareNativeFilters: Record<string, BareNativeFilter> = {

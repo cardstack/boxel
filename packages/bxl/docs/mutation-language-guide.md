@@ -464,6 +464,7 @@ being repeated in every AI-written statement:
   "language": "bxl-mutation/1",
   "programId": "review-invoice-42",
   "target": { "kind": "card", "id": "card:invoice-42" },
+  "actor": "user:ada",
   "baseRevision": "rev-7",
   "delivery": "streaming",
   "transaction": "atomic",
@@ -477,10 +478,11 @@ being repeated in every AI-written statement:
 ```
 
 The revision supplies optimistic concurrency. The program identity supports
-durable deduplication. The actor travels with the plan into authorization and
-audit. The trusted host supplies the context and the authoritative
-target/revision; they are not claims the model gets to make about itself. None
-of those concerns makes the actual edit harder to read.
+durable deduplication. The envelope's `actor` is the principal the host
+carries into authorization and audit; `context.actor` is separately what a
+program may read. The trusted host supplies both, along with the authoritative
+target and revision; they are not claims the model gets to make about itself.
+None of those concerns makes the actual edit harder to read.
 
 ## Read the caller and the payload
 

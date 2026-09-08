@@ -9,6 +9,7 @@ import {
   type BxlBoxelSourceDefinition,
   type BxlCardSourceDocument,
   type BxlCardSourceRelationship,
+  type BxlMutationSchema,
 } from '../../src/mutation/index.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
@@ -1317,28 +1318,149 @@ throws(
   'an undeclared payload key fails and the error lists the declared ones',
 );
 
-// The plan holds the values the program read, not a live view of the host's
-// object: a host that reuses its context object cannot change a plan already
-// made, and the produced document shares no structure with it.
-const mutablePayload = { tag: 'first' };
-const mutableContext = { params: mutablePayload, actor: { id: 'user:ada' } };
-const snapshotResult = mutateBxlCardSource(
-  sourceFixture(),
-  'append(.tags; params("tag"));',
+// A plan never shares structure with the host's context object, and a host
+// that reuses that object cannot change a plan already made. The isolation
+// comes from the planner copying every value on its way into the result — the
+// per-statement `clone(working)` and the intent recording — not from the
+// context being copied on the way in, which is why this asserts the property
+// rather than the mechanism.
+//
+// It has to read an *object* to assert anything at all: a string is copied by
+// value wherever it lands, so a case reading one holds no matter what the
+// planner does with references.
+const contextSchema: BxlMutationSchema = {
+  fields: [
+    {
+      key: 'blob',
+      label: 'Blob',
+      path: ['blob'],
+      fieldType: 'contains',
+      writable: true,
+      fields: [
+        {
+          key: 'n',
+          label: 'N',
+          path: ['blob', 'n'],
+          fieldType: 'contains',
+          writable: true,
+        },
+      ],
+    },
+    {
+      key: 'copy',
+      label: 'Copy',
+      path: ['copy'],
+      fieldType: 'contains',
+      writable: true,
+    },
+  ],
+};
+const isolationProbe = prepareBxlMutation(
+  '.blob = params("payload");\n.copy = params("payload");\n.blob.n = 42;',
+  { targetKind: 'card', syntax: 'solidified', schema: contextSchema },
+);
+const livePayload = { n: 1, nested: { deep: 'first' } };
+const isolationPlan = isolationProbe.plan(
+  { blob: null, copy: null },
   {
-    schema,
-    syntax: 'solidified',
-    programId: 'request-context-copied',
-    context: mutableContext,
-    ...projectionOptions,
+    programId: 'request-context-isolated',
+    context: { params: { payload: livePayload } },
   },
 );
-mutablePayload.tag = 'mutated-after-the-fact';
-deepStrictEqual(snapshotResult.document.data.attributes?.tags, [
-  'language',
-  'web',
-  'first',
-]);
+const isolated = isolationPlan.output as {
+  blob: { n: number; nested: unknown };
+  copy: { nested: unknown };
+};
+ok(isolated.blob !== livePayload, 'the written value is not the host object');
+ok(
+  isolated.blob.nested !== livePayload.nested,
+  'isolation reaches nested objects, not just the top level',
+);
+ok(
+  isolated.blob.nested !== isolated.copy.nested,
+  'two reads of one key do not alias each other in the result',
+);
+strictEqual(
+  livePayload.n,
+  1,
+  'a later statement writing through the value it read does not reach the host object',
+);
+
+// The plan is settled: a host reusing its object afterwards cannot move it.
+livePayload.n = 99;
+livePayload.nested.deep = 'mutated-after-the-fact';
+deepStrictEqual(isolationPlan.output, {
+  blob: { n: 42, nested: { deep: 'first' } },
+  copy: { n: 1, nested: { deep: 'first' } },
+});
+// `BxlMutationIntent` is a union and only the writing variants carry `after`.
+const firstIntent = isolationPlan.intents[0];
+ok(firstIntent && 'after' in firstIntent, 'the first intent writes a value');
+deepStrictEqual(
+  firstIntent && 'after' in firstIntent ? firstIntent.after : undefined,
+  {
+    n: 1,
+    nested: { deep: 'first' },
+  },
+);
+
+// A context carrying something that is not JSON fails the plan, naming the
+// path, rather than putting a live Map or a bigint in front of the planner —
+// `params("v") | tostring` on a bigint yields `undefined`, which is the
+// silent unset these builtins exist to refuse.
+for (const [typeName, value] of [
+  ['Map', new Map([['k', 1]])],
+  ['bigint', 10n],
+  ['Date', new Date(0)],
+  ['URL', new URL('https://example.test/')],
+] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-non-json',
+          context: { params: { payload: value } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.code === 'context-not-json' &&
+      error.message.includes('context.params.payload') &&
+      error.message.includes(`its type is ${typeName}`),
+    `a context holding a ${typeName} is refused`,
+  );
+}
+
+// The walk reaches nested values and does not loop on a cycle.
+throws(
+  () =>
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-non-json-nested',
+        context: { params: { payload: [{ when: new Date(0) }] } } as never,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    error.message.includes('context.params.payload[0].when'),
+);
+const cyclicPayload: Record<string, unknown> = { v: 1 };
+cyclicPayload.self = cyclicPayload;
+throws(
+  () =>
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-cyclic',
+        context: { params: cyclicPayload } as never,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /cyclic at context\.params\.self/.test(error.message),
+);
 
 // A program that names none of the builtins behaves the same whether or not a
 // context is supplied.
@@ -1366,8 +1488,9 @@ const withContext = mutateBxlCardSource(
 deepStrictEqual(withContext.document, withoutContext.document);
 deepStrictEqual(withContext.plan, withoutContext.plan);
 
-// Readable syntax reaches the same builtins: the compiler passes an unknown
-// call name straight through, so `params("tag")` needs no compiler change.
+// Readable syntax reaches the same builtins. The call name passes through as
+// written; the quoted key is held literal by the compiler, which is what the
+// colliding-label case below relies on.
 const readableResult = mutateBxlCardSource(
   sourceFixture(),
   'append(Tags, params("tag"));\nImage = actor("id");',

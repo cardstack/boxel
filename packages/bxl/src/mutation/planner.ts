@@ -76,10 +76,16 @@ interface PlannerContext {
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
   /**
-   * The planner's own copy of the request context, taken once per plan. A
-   * value a program reads out of it can end up written into the document, so
-   * copying here keeps the host's object from being aliased by the result —
-   * and keeps a later edit to that object from changing a plan already made.
+   * The request context as the host supplied it, held by reference.
+   *
+   * Not copied: the planner already isolates the caller's object without
+   * help. Every value a program reads is copied on its way into the result by
+   * the per-statement `clone(working)` and by the intent recording, so
+   * neither `plan.output` nor `intents[].after` ever shares structure with
+   * the host's object — verified for a nested object read, for the same key
+   * read twice, and for a later statement writing through the value that was
+   * read. A copy here would deep-clone the whole stored document once per
+   * plan and change nothing.
    */
   requestContext?: BxlMutationContext;
 }
@@ -191,6 +197,110 @@ function objectId(value: BxlMutationJson | undefined): string | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     return undefined;
   return typeof value.id === 'string' ? value.id : undefined;
+}
+
+/**
+ * Describe a value that is not JSON, or `undefined` when it is.
+ *
+ * `BxlMutationContext` declares the context as JSON, but a type is not a
+ * runtime guarantee: `structuredClone` faithfully preserves a `Date`, `Map`,
+ * `Set`, `RegExp`, `TypedArray` or class instance, and a `bigint` survives as
+ * itself, so any of them reaches a program and can be written into the
+ * document. A `bigint` is the sharpest edge — `params("v") | tostring` on one
+ * yields `undefined`, which is the silent unset these builtins exist to
+ * refuse — but a live `Map` in a plan is no better.
+ */
+function nonJsonTypeName(value: unknown): string | undefined {
+  if (value === null) return undefined;
+  switch (typeof value) {
+    case 'boolean':
+    case 'number':
+    case 'string':
+      return undefined;
+    case 'bigint':
+    case 'symbol':
+    case 'function':
+      return typeof value;
+    case 'undefined':
+      // Tolerated rather than rejected: a host spreading an object with
+      // optional fields produces these readily, and the builtins already
+      // treat a key held with `undefined` as absent when a program reads it.
+      return undefined;
+    default:
+      break;
+  }
+  if (Array.isArray(value)) return undefined;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype === Object.prototype || prototype === null) return undefined;
+  // Named by constructor rather than described in prose, so the message needs
+  // no article and reads the same for `Map`, `URL` and a host's own class.
+  return (value as object).constructor?.name ?? 'a non-plain object';
+}
+
+/**
+ * Reject a request context carrying anything the planner cannot put in a JSON
+ * document, naming the path so the host can find it.
+ *
+ * The check is the only thing standing between a host's mistake and a live
+ * `Map` or a `bigint` in a plan, so it runs before the context is reachable
+ * rather than leaving the type declaration as the sole guard.
+ */
+function assertJsonContext(context: BxlMutationContext) {
+  const seen = new Set<unknown>();
+  const walk = (value: unknown, path: string) => {
+    const typeName = nonJsonTypeName(value);
+    if (typeName) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at ${path} is not JSON — its type is ` +
+          `${typeName}. The host supplies context values already resolved ` +
+          'to JSON.',
+      );
+    }
+    if (value === null || typeof value !== 'object') return;
+    if (seen.has(value)) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context is cyclic at ${path}; a JSON document cannot ` +
+          'hold a cycle.',
+      );
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+    } else {
+      // Own properties, enumerable or not, matching what the builtins read.
+      for (const key of Object.getOwnPropertyNames(value)) {
+        walk((value as Record<string, unknown>)[key], `${path}.${key}`);
+      }
+    }
+    seen.delete(value);
+  };
+
+  for (const slot of ['params', 'actor', 'instance'] as const) {
+    const value = context[slot];
+    if (value === undefined) continue;
+    try {
+      walk(value, `context.${slot}`);
+    } catch (error) {
+      if (error instanceof BxlMutationError) throw error;
+      // A property accessor on the host's object threw. That is still an
+      // unusable context, reported as one instead of escaping raw.
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at context.${slot} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
 }
 
 function evaluateItems(
@@ -1306,7 +1416,7 @@ export function prepareBxlMutation(
         },
         registry,
         requestContext: planOptions.context
-          ? clone(planOptions.context)
+          ? (assertJsonContext(planOptions.context), planOptions.context)
           : undefined,
       };
       const before = clone(snapshot);

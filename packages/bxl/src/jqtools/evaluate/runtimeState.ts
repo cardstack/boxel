@@ -170,21 +170,70 @@ export function withRequestContext<T>(
   } finally {
     requestContextStack.pop();
   }
-  // The scope is a synchronous stack, so it is already unwound by the time an
-  // async callback resumes: the evaluation would read whatever context is
-  // current then, which for concurrent requests is another request's. BXL
-  // evaluation is synchronous throughout, so this cannot happen today — it is
-  // refused loudly rather than left as a silent cross-request read for
-  // whoever first wraps an async callback.
-  if (typeof (result as { then?: unknown } | undefined)?.then === 'function') {
+  // The scope is a synchronous stack, so it is already unwound by the time a
+  // deferred callback resumes or a lazy result is pulled: the evaluation would
+  // read whatever context is current then, which for concurrent requests is
+  // another request's. BXL evaluation is synchronous throughout and the
+  // planner materializes each statement's outputs before returning, so
+  // neither shape can arrive today — each is refused loudly rather than left
+  // as a silent cross-request read for whoever first writes one.
+  const deferred = deferredResultKind(result);
+  if (deferred) {
+    if (deferred === 'promise') {
+      // The promise is abandoned, so nothing else will ever settle it. Left
+      // alone, a rejection becomes an unhandled rejection that terminates the
+      // process — after this throw has already been caught, which makes the
+      // crash look unrelated to its cause. Claim it before throwing.
+      void Promise.resolve(result as PromiseLike<unknown>).then(
+        () => {},
+        () => {},
+      );
+    }
     throw new JqEvaluateError(
       'withRequestContext scopes a request context synchronously and was ' +
-        'given a callback that returned a promise. The context is unwound ' +
-        'before that promise settles, so the evaluation inside it would read ' +
-        "another request's context.",
+        `given a callback that returned ${
+          deferred === 'promise' ? 'a promise' : 'a lazy iterator'
+        }. The context is unwound before that ` +
+        `${deferred === 'promise' ? 'settles' : 'is drained'}, so the ` +
+        "evaluation inside it would read another request's context.",
     );
   }
   return result;
+}
+
+/**
+ * Whether a value defers its work past the call that produced it, and how.
+ *
+ * An iterator is checked for alongside a promise because this evaluator is
+ * built on generators, which makes handing one back the likelier mistake of
+ * the two. Arrays and strings are iterable without deferring anything, so the
+ * test is for the iterator protocol itself — a `next` method — rather than
+ * for iterability.
+ */
+function deferredResultKind(
+  value: unknown,
+): 'promise' | 'iterator' | undefined {
+  if (
+    value === null ||
+    (typeof value !== 'object' && typeof value !== 'function')
+  ) {
+    return undefined;
+  }
+  const candidate = value as {
+    then?: unknown;
+    next?: unknown;
+    [Symbol.iterator]?: unknown;
+    [Symbol.asyncIterator]?: unknown;
+  };
+  if (typeof candidate.then === 'function') return 'promise';
+  if (
+    typeof candidate.next === 'function' &&
+    (typeof candidate[Symbol.iterator] === 'function' ||
+      typeof candidate[Symbol.asyncIterator] === 'function')
+  ) {
+    return 'iterator';
+  }
+  return undefined;
 }
 
 /** The innermost scoped request context, or `undefined` outside them all. */

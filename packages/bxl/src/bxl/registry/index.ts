@@ -96,9 +96,14 @@ export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
 export function mutationBuiltinLibraries(
   libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
 ): BuiltinLibraryName[] {
-  return libraries.includes('request-context')
-    ? [...libraries]
-    : [...libraries, 'request-context'];
+  // Always last, even when the caller already listed it. Resolution is
+  // last-wins, so trailing position is what makes these builtins
+  // unshadowable by a library that later takes one of their names — a
+  // guarantee that would otherwise depend on how the caller ordered its set.
+  return [
+    ...libraries.filter((name) => name !== 'request-context'),
+    'request-context',
+  ];
 }
 
 const resolvedRegistryCache = new Map<string, ResolvedBuiltinRegistry>();

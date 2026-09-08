@@ -126,8 +126,12 @@ const cases: CoverageCase[] = [
     covers: 'actor/1',
     source: 'actor("displayName")',
     // A JSON `null`, by contrast, is a real value and passes through.
+    //
+    // `outputs` rather than `expected`, because `expected: null` normalizes
+    // from an empty stream as well as from a single `null` — and emitting
+    // one value rather than none is exactly what this case is for.
     context: { actor: { id: 'user:ada', displayName: null } },
-    expected: null,
+    outputs: [null],
   },
   {
     covers: 'instance/1',
@@ -142,6 +146,55 @@ const cases: CoverageCase[] = [
     source: 'params("constructor")',
     context,
     throws: /asks for "constructor"/,
+  },
+  {
+    covers: 'params/1',
+    // A key name has to be a string. The message names what arrived, so a
+    // program passing a field value by mistake can see what it did.
+    source: 'params(1)',
+    context,
+    throws: /takes a key name as a string, not number/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params(null)',
+    context,
+    throws: /takes a key name as a string, not null/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params(["body"])',
+    context,
+    throws: /takes a key name as a string, not an array/,
+  },
+  {
+    covers: 'params/1',
+    // The array arm of the slot-type message. A slot the host supplied as an
+    // array is a host defect and says so, rather than being indexed into.
+    source: 'params("body")',
+    context: { params: ['body'] },
+    throws: /to be an object, but the host supplied an array/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("body")',
+    context: { params: {} },
+    throws: /it has no readable keys/,
+  },
+  {
+    covers: 'params/1',
+    // Long key lists are truncated so one wide payload cannot bury the
+    // message it is attached to.
+    source: 'params("absent")',
+    context: {
+      params: Object.fromEntries(
+        Array.from({ length: 15 }, (_entry, index) => [
+          `k${String(index).padStart(2, '0')}`,
+          index,
+        ]),
+      ),
+    },
+    throws: /"k00", "k01".*"k11" and 3 more/,
   },
   {
     covers: 'instance/1',

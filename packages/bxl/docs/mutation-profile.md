@@ -331,6 +331,8 @@ interface BxlMutationExecution {
   transaction?: 'atomic' | 'statement';
   /** Textual programs default to readable BXL; solidified is planner-facing mutation BXL. */
   syntax?: 'readable' | 'solidified';
+  /** Stable principal supplied by the trusted host, for authorization and audit. */
+  actor?: string;
   /** Request-scoped values the program reads; see "Request context" below. */
   context?: BxlMutationContext;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
@@ -352,6 +354,11 @@ host resolved before the program ran:
 | `actor()` / `actor("key")`       | the authenticated caller, or one of its fields |
 | `instance()` / `instance("key")` | the stored document, or one of its fields      |
 
+`actor()` is what a _program_ reads. It is distinct from the envelope's
+`actor`, which the host carries alongside the plan into authorization and
+audit and which no program can see. A host that wants a program to record its
+caller supplies both.
+
 ```ts
 type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
 
@@ -362,14 +369,18 @@ interface BxlMutationContext {
 }
 ```
 
-The host passes it as `context` on the plan options, and the planner takes its
-own copy: a value a program reads can be written into the document, so a plan
-is never a live view of the caller's object.
+The host passes it as `context` on the plan options. A plan never shares
+structure with that object and is settled once made: every value a program
+reads is copied on its way into the result, so a host may keep and reuse its
+context object freely.
 
 These are functions rather than `$`-prefixed bindings, matching the form an
 operation is authored in. The name `params` rather than the more obvious
-`input` is forced: jq owns `input/0`, a second definition at that key would
-hide it, and the mutation profile bans it by name.
+`input` is forced by the profile: `input` is denied in `mutation`, and
+classification is by base name without arity, so an `input("key")` accessor
+would be refused before it ran. Registry resolution is per `NAME/arity`, so
+that accessor would land at the free `input/1` and hide jq's `input/0` from
+nothing — the collision is in the safety table, not the registry.
 
 Every failure is loud. Naming one of these where the host supplied no context,
 or asking for a key that is not there, fails the program — a `null` would land
@@ -383,6 +394,13 @@ A key is readable only if it is the object's own and its value is not
 and `undefined` is not a JSON value — it would reach the planner as one and
 write an intent that unsets the field. A JSON `null` is a real value and reads
 as `null`.
+
+The context is checked against that same standard before a program can reach
+it: a slot carrying anything a JSON document cannot hold — a `Date`, `Map`,
+`Set`, `RegExp`, `TypedArray`, `bigint`, function or class instance, at any
+depth — fails the plan with `context-not-json` naming the path. The type
+declares JSON, but a type is not a runtime guarantee, and a `bigint` read
+through `tostring` produces exactly the silent unset these builtins refuse.
 
 Only the `mutation` profile admits them. `derive` denies them because a stored
 derivation reused on later reads must not depend on whichever request last

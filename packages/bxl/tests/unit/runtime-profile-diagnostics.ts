@@ -1,4 +1,4 @@
-import { ok, strictEqual, throws } from 'node:assert';
+import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
 import { bxl, evaluateBxl, prepareBxlSafe } from '../../src/index.ts';
 import { evaluateBxlBare } from '../../src/runtime-bare.ts';
 import {
@@ -31,14 +31,56 @@ strictEqual(
 );
 
 // A request context is scoped on a synchronous stack, so it is unwound before
-// an async callback resumes — an evaluation inside one would read whatever
-// context is current by then, which under concurrent requests is another
-// request's. Evaluation is synchronous throughout, so this is refused rather
-// than left as a silent cross-request read.
+// a deferred callback resumes or a lazy result is drained — an evaluation
+// inside one would read whatever context is current by then, which under
+// concurrent requests is another request's. Evaluation is synchronous
+// throughout, so both shapes are refused rather than left as a silent
+// cross-request read.
 throws(
   () => withRequestContext({ params: { a: 1 } }, async () => 'later'),
   /scopes a request context synchronously.*returned a promise/s,
   'withRequestContext refuses a promise-returning callback',
+);
+
+throws(
+  () =>
+    withRequestContext({ params: { a: 1 } }, function* () {
+      yield currentRequestContext();
+    }),
+  /scopes a request context synchronously.*returned a lazy iterator/s,
+  'withRequestContext refuses a callback that returns a lazy iterator',
+);
+
+// A refused promise is abandoned, so nothing else will ever settle it. Its
+// rejection has to be claimed here or it surfaces as an unhandled rejection
+// that terminates the process — after the throw above has been caught, which
+// makes the crash look unrelated to its cause.
+let unhandled: unknown;
+const recordUnhandled = (reason: unknown) => {
+  unhandled = reason;
+};
+process.on('unhandledRejection', recordUnhandled);
+throws(
+  () =>
+    withRequestContext({ params: { a: 1 } }, async () => {
+      throw new Error('inner async failure');
+    }),
+  /returned a promise/,
+);
+await new Promise((resolve) => setTimeout(resolve, 10));
+process.off('unhandledRejection', recordUnhandled);
+strictEqual(
+  unhandled,
+  undefined,
+  'the abandoned promise is claimed, so its rejection cannot kill the process',
+);
+
+// Iterability alone is not deferral: an array and a string are returned
+// as-is, or every ordinary result would be refused.
+deepStrictEqual(
+  withRequestContext({ params: { a: 1 } }, () => [1, 2, 3]),
+  [1, 2, 3],
+  'an array result is not mistaken for a lazy iterator',
 );
 
 strictEqual(
