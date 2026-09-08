@@ -225,9 +225,19 @@ function hasMissingExportError(response: RenderVisitResponse): boolean {
 // bundle without matching timestamps against deploy logs.
 export function stampHostShellTokens(
   response: RenderVisitResponse,
-  tokens: { atStart: string | undefined; atCompletion: string | undefined },
+  tokens: {
+    atStart: string | undefined;
+    atCompletion: string | undefined;
+    warmedAtStart?: string | undefined;
+    warmedAtCompletion?: string | undefined;
+  },
 ): void {
-  if (tokens.atStart === undefined && tokens.atCompletion === undefined) {
+  if (
+    tokens.atStart === undefined &&
+    tokens.atCompletion === undefined &&
+    tokens.warmedAtStart === undefined &&
+    tokens.warmedAtCompletion === undefined
+  ) {
     return;
   }
   // Under `diagnostics` rather than beside it: `flattenPrerenderMeta` carries
@@ -243,6 +253,16 @@ export function stampHostShellTokens(
         : {}),
       ...(tokens.atCompletion !== undefined
         ? { hostShellHashAtCompletion: tokens.atCompletion }
+        : {}),
+      // The pool's own token, so `shouldRerenderForStaleShell`'s inputs are
+      // all on the row. Without these the verdict is unreconstructible: a
+      // reader sees one steady reported token and cannot tell a render that
+      // was current from one whose pool never caught up.
+      ...(tokens.warmedAtStart !== undefined
+        ? { warmedHostShellHash: tokens.warmedAtStart }
+        : {}),
+      ...(tokens.warmedAtCompletion !== undefined
+        ? { warmedHostShellHashAtCompletion: tokens.warmedAtCompletion }
         : {}),
     },
   };
@@ -1308,6 +1328,8 @@ export function buildPrerenderApp(options: {
       stampHostShellTokens(response, {
         atStart: shellAtStart,
         atCompletion: shellAtCompletion,
+        warmedAtStart,
+        warmedAtCompletion,
       });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that

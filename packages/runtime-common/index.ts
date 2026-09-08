@@ -759,6 +759,19 @@ export interface Diagnostics
   // row and drops every other meta key.
   hostShellHash?: string;
   hostShellHashAtCompletion?: string;
+  // The token the prerender pool had actually been re-warmed against, sampled
+  // at the same two moments. It trails the reported token for as long as a
+  // recycle takes, and indefinitely if that recycle fails — so the gap between
+  // the two is what says a page may still have been running the outgoing
+  // bundle. The reported token alone cannot: it can sit unchanged across a
+  // whole render while the pool never catches up to it, which is precisely the
+  // shape that poisons rows.
+  //
+  // Recorded so a decision made from these values is checkable afterwards
+  // rather than only asserted. `hostShellHash*` says what the server was told;
+  // these say what its pages were actually running.
+  warmedHostShellHash?: string;
+  warmedHostShellHashAtCompletion?: string;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table

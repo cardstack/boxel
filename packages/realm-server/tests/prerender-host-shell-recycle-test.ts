@@ -282,6 +282,54 @@ module(basename(import.meta.filename), function () {
       } as unknown as typeof response.meta);
     });
 
+    // The pool's tokens are the predicate's actual inputs, so a row without
+    // them records the conclusion's context but not the conclusion's basis.
+    test("records the pool's tokens too, so the verdict is checkable", function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'babf3612',
+        warmedAtCompletion: 'babf3612',
+      });
+      assert.deepEqual(response.meta, {
+        diagnostics: {
+          renderMs: 12,
+          hostShellHash: 'b778fe76',
+          hostShellHashAtCompletion: 'b778fe76',
+          warmedHostShellHash: 'babf3612',
+          warmedHostShellHashAtCompletion: 'babf3612',
+        },
+      } as unknown as typeof response.meta);
+    });
+
+    // The shape a reported-token-only row cannot express, and the reason these
+    // fields exist: one steady reported token across the whole render, and a
+    // pool that never reached it. Reading `hostShellHash*` alone, this is
+    // indistinguishable from a render that was perfectly current.
+    test('a steady reported token with a lagging pool is legible on the row', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'babf3612',
+        warmedAtCompletion: 'babf3612',
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.strictEqual(
+        d.hostShellHash,
+        d.hostShellHashAtCompletion,
+        'nothing moved under the render',
+      );
+      assert.notStrictEqual(
+        d.warmedHostShellHash,
+        d.hostShellHash,
+        'yet the pool was never on the shell being served',
+      );
+    });
+
     test('a server that knows no token stamps nothing', function (assert) {
       let response = {
         meta: { requestId: 'abc' },
@@ -289,6 +337,8 @@ module(basename(import.meta.filename), function () {
       stampHostShellTokens(response, {
         atStart: undefined,
         atCompletion: undefined,
+        warmedAtStart: undefined,
+        warmedAtCompletion: undefined,
       });
       assert.deepEqual(
         response.meta,
