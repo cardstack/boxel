@@ -1211,10 +1211,17 @@ export function buildPrerenderApp(options: {
           warmedAtCompletion ?? 'none',
           shellAtCompletion,
         );
-        // The token moved because `reconcileHostShell` saw it move, so the
-        // browser is being recycled around now and this visit lands on a page
-        // warmed against the current shell. One attempt only: if it fails
-        // again the failure is the card's, and the caller is owed an answer.
+        // One attempt only. If it fails again the caller is owed an answer,
+        // and this server has nothing better to offer: a 5xx here would be
+        // worse than the failure it replaces, because the manager prunes a
+        // server that returns one — and its proxy loop removes the pruned
+        // target from both the registry and its attempt set, so it walks on to
+        // the next server, prunes that one too, and can empty the registry
+        // over a single visit. Nor would it prevent the row: `remote-
+        // prerenderer` retries a 5xx for about six and a half minutes and then
+        // rethrows, and the indexer buffers a `file-error` row carrying
+        // whatever message arrived. Declining to persist a skew-shaped failure
+        // has to happen where the row is written, not here.
         //
         // Waits for the recycle the token change triggered before rendering
         // again. The reported token moves the moment the change is learned,
@@ -1238,15 +1245,8 @@ export function buildPrerenderApp(options: {
         // server distrusts. A recycle is exactly when a visit is most likely
         // to reject, so this is the expected path rather than a corner.
         let discardedMs = Date.now() - start;
-        // Sampled inside the retry, after the recycle and immediately before
-        // the render it describes. Carrying the pre-recycle sample forward as
-        // the retry's start would report a pool that had just been replaced as
-        // still stale, and the re-check below would then refuse a failure the
-        // retry earned honestly on a current pool.
-        let retryWarmedAtStart: string | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
-          retryWarmedAtStart = options.getWarmedHostShellHash?.();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1270,8 +1270,6 @@ export function buildPrerenderApp(options: {
         start = Date.now();
         shellAtStart = shellAtCompletion;
         shellAtCompletion = options.getHostShellHash?.();
-        warmedAtStart = retryWarmedAtStart;
-        warmedAtCompletion = options.getWarmedHostShellHash?.();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
           url,
@@ -1279,45 +1277,6 @@ export function buildPrerenderApp(options: {
           discardedMs,
           shellAtStart,
         );
-        // One re-render, and the pool is *still* not demonstrably on the
-        // current shell — the recycle failed, or another deploy landed on top
-        // of this one. Returning the failure now would persist it as the
-        // card's content, which is the outcome this whole path exists to
-        // avoid, and the render has produced no evidence about the card. So
-        // answer retryably instead: `remote-prerenderer` treats a 500 as a
-        // retryable error and the visit is tried again elsewhere, later, or
-        // on a pool that has caught up.
-        //
-        // The 500 is not free — the manager prunes a server that returns one
-        // from its registry — so this must fire only for a pool that really
-        // cannot reach the current shell, never for a render that was on the
-        // current pool and simply found a broken card. That is why both warmed
-        // samples describe the render being judged, and why the retry's start
-        // is sampled after its recycle rather than carried forward.
-        //
-        // Loudly, because a pool that cannot reach the current shell no longer
-        // fails quietly by poisoning rows — it fails visibly by refusing to
-        // index, and the reason has to be in the log that accompanies it.
-        if (
-          shouldRerenderForStaleShell({
-            response,
-            warmedAtStart,
-            warmedAtCompletion,
-            reportedAtCompletion: shellAtCompletion,
-          })
-        ) {
-          log.error(
-            'visit of %s still failed to resolve a module after re-rendering, on a pool warmed against %s -> %s while the current host shell is %s; refusing to return a failure this server cannot attribute to the card',
-            url,
-            warmedAtStart ?? 'none',
-            warmedAtCompletion ?? 'none',
-            shellAtCompletion,
-          );
-          throw new Error(
-            `prerender pool has not reached host shell ${shellAtCompletion}; ` +
-              `refusing to persist a module-resolution failure for ${url}`,
-          );
-        }
       }
       let totalMs = Date.now() - start;
       let poolFlags = Object.entries({

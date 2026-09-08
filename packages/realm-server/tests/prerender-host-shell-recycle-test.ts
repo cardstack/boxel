@@ -93,15 +93,6 @@ module(basename(import.meta.filename), function () {
           }) as unknown as RenderVisitResponse;
     }
 
-    test('a module error under a changed shell is re-rendered', function (assert) {
-      assert.true(
-        shouldRerenderForStaleShell({
-          response: visitResponse(MISSING_EXPORT),
-          ...poolBehind,
-        }),
-      );
-    });
-
     test("the same error on a pool that is current is the card's own", function (assert) {
       assert.false(
         shouldRerenderForStaleShell({

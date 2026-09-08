@@ -1043,6 +1043,12 @@ module(basename(import.meta.filename), function () {
         return () => (++samples > 1 ? 'b778fe76' : 'babf3612');
       }
 
+      // The pool's own token, which these tests must also state: the predicate
+      // reads the warmed samples, so leaving them undefined makes the gate fire
+      // whatever the reported token does — and a test named for a moving token
+      // would pass identically with a steady one.
+      const POOL_ON_OUTGOING = () => 'babf3612';
+
       function visitRequest(
         request: SuperTest<Test>,
         url: string,
@@ -1079,6 +1085,7 @@ module(basename(import.meta.filename), function () {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () =>
             recycleDeferred.promise.then(() => {
               recycleSettled = true;
@@ -1164,14 +1171,13 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
-      // The retry is judged on its own pool, not on the one the discarded
-      // attempt ran against. A recycle that succeeds between the two renders
-      // leaves the pool current, so a missing export the retry finds there is
-      // the card's — and answering 500 for it would be worse than the bug
-      // this path prevents: the manager prunes a server that returns 500, so
-      // a healthy server would be dropped from the registry over a broken
-      // card, and the visit would be retried until it ran out of servers.
-      test('a genuine failure after a successful recycle is returned, not refused', async function (assert) {
+      // A failure that survives the re-render is returned, whatever the pool
+      // did in between. Recovery here is exactly one extra render: the pool
+      // being behind is grounds for trying again, never grounds for this
+      // server to answer 5xx — the manager prunes a server that returns one,
+      // and its proxy loop walks on to prune the next, so a single visit can
+      // empty the registry.
+      test('a failure surviving the re-render is returned to the caller', async function (assert) {
         // The pool is behind when the first render runs and current once the
         // recycle resolves, which is what a working recycle looks like.
         let warmed = 'babf3612';
@@ -1208,7 +1214,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           res.status,
           201,
-          'the failure is returned rather than refused, so no healthy server is pruned',
+          'answered with the failure rather than a 5xx that would prune the fleet',
         );
         assert.strictEqual(
           res.body.data.attributes.card.error.error.message,
@@ -1218,49 +1224,11 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
-      // The shape that poisoned rows, and the one a token-move test cannot
-      // reach: the token moved before this render began, so nothing moves
-      // under it, and the recycle it triggered has failed — `warmedHostShellHash`
-      // stays where it was, and every render lands on the outgoing bundle. The
-      // failure is real, repeatable, and says nothing about the card, so it
-      // must not be handed back to be stored as the card's content.
-      test('a pool that never reaches the current shell answers 500 rather than a failure', async function (assert) {
-        let built = buildPrerenderApp({
-          serverURL: 'http://127.0.0.1:4222',
-          getHostShellHash: () => 'b778fe76',
-          getWarmedHostShellHash: () => 'babf3612',
-          awaitHostShellRecycle: () => Promise.resolve(),
-        });
-        let request: SuperTest<Test> = supertest(built.app.callback());
-
-        let calls = 0;
-        (built.prerenderer as any).prerenderVisit = async () => {
-          calls++;
-          return moduleFailure();
-        };
-
-        let res = await visitRequest(
-          request,
-          `${realmURL.href}pool-never-current`,
-          authFor(),
-        );
-        assert.strictEqual(
-          res.status,
-          500,
-          'answered retryably instead of returning a failure to persist',
-        );
-        assert.strictEqual(calls, 2, 'one re-render, and no more');
-        assert.notOk(
-          res.body?.data?.attributes?.card?.error,
-          'the distrusted failure is not in the response at all',
-        );
-        await built.prerenderer.stop();
-      });
-
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1299,6 +1267,7 @@ module(basename(import.meta.filename), function () {
           isDraining: () => localDraining,
           drainingPromise: drainingDeferred.promise,
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () => {
             recycleWaitEntered.fulfill();
             // Never settles, so the drain is guaranteed to win the race.
