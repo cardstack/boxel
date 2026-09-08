@@ -1024,7 +1024,6 @@ export function buildPrerenderApp(options: {
         !Array.isArray(attrs.screenshots)
           ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
           : undefined;
-
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
 
