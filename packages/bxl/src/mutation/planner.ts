@@ -36,6 +36,7 @@ import {
 import {
   classifyOverlayRead,
   EMPTY_OVERLAY_INDEX,
+  layerBxlMutationOverlays,
   mergeBxlMutationOverlays,
   overlayWriteOwner,
   settleOverlayUpdate,
@@ -47,7 +48,6 @@ import {
   type BxlMutationFieldType,
   type BxlMutationIntent,
   type BxlMutationJson,
-  type BxlMutationOverlays,
   type BxlMutationPath,
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
@@ -93,7 +93,6 @@ interface PlannerContext {
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
   /** The host's overlay values, if any, as supplied to `plan`. */
-  source?: BxlMutationOverlays;
   /** What the overlays answer for, against the document as it now stands. */
   overlays: OverlayIndex;
   /** Paths earlier statements have made their own. */
@@ -124,11 +123,7 @@ function readView(
   if (cached && cached.of === root && cached.revision === context.revision) {
     return cached.value;
   }
-  const value = mergeBxlMutationOverlays(
-    root,
-    context.source,
-    context.claimed,
-  ).root;
+  const value = layerBxlMutationOverlays(root, context.overlays);
   context.view = { of: root, revision: context.revision, value };
   return value;
 }
@@ -1479,7 +1474,6 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
-        ...(planOptions.overlays ? { source: planOptions.overlays } : {}),
         overlays: EMPTY_OVERLAY_INDEX,
         claimed,
         revision: 0,

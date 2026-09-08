@@ -283,16 +283,33 @@ An author addresses stored, computed, and linked values through the same
   *reshape* the Card: a value whose path runs past a stored scalar is dropped
   rather than retyping the scalar. Index drift is routine and must not change
   the document a program plans over.
-- **Overlays stop at a collection boundary.** An overlay value whose path runs
-  through an array is dropped, whichever side the array sits on. An overlay
-  arrives keyed by position, and a position is an identity only while nothing
-  moves: inserting, deleting, reordering or moving an item renumbers everything
-  after it, and a copy written before the program ran cannot say which item it
-  meant. Contained items carry no id to re-key against. So inside a collection
-  the Card's own items are the whole answer: reads there are source reads, an
-  `unavailable` marker there is dropped for the same reason, and every
-  collection operation plans exactly as it would with no overlays at all. A
-  computed Field inside a collection is the schema's to answer for, through
+- **An overlay speaks only where it has something to say.** `pristine_doc` and
+  `search_doc` are whole documents: they carry the Card's own Fields alongside
+  the ones only they can answer. A Field the Card leaves unset therefore
+  arrives as a `null` in both, and a `null` supplies nothing — claiming it
+  would make an ordinary writable Field read-only for no reason. A host can
+  pass either column wholesale without narrowing it first.
+- **An overlay is data, not a path a program spelled out.** It is read out of
+  a column, so a key naming something on a JavaScript prototype
+  (`__proto__`, `prototype`, `constructor`) is dropped, the same refusal the
+  planner gives a program that spells one out.
+- **A list is one value.** An overlay may hand over a whole list the Card does
+  not store — a computed `containsMany` — and that list reads as itself and is
+  read-only whole, its own positions consistent with each other. It is never
+  descended into, so no overlay position is ever laid beside one of the Card's
+  own items.
+- **Overlays stop at a collection boundary.** No overlay value ever names a
+  position *inside* a list: a path with a segment that reads as an index is
+  dropped, however it is spelled, and so is one that runs through a list the
+  Card stores. An overlay arrives keyed by position, and a position is an
+  identity only while nothing moves: inserting, deleting, reordering or moving
+  an item renumbers everything after it, and a copy written before the program
+  ran cannot say which item it meant. Contained items carry no id to re-key
+  against. So inside a collection the Card stores, its own items are the whole
+  answer: reads there are source reads, an `unavailable` marker there is
+  dropped for the same reason, and every collection operation plans, outputs
+  and records intents exactly as it would with no overlays at all. A computed
+  Field inside a collection is the schema's to answer for, through
   `writeBehavior: 'skip'`.
 - **Overlay values are read-only, and the schema answers first.** Where the
   schema already speaks for a Field, it decides: a Definition-derived schema
@@ -311,7 +328,10 @@ An author addresses stored, computed, and linked values through the same
   overlay supplied the path, the read sits inside a value it supplied, or the
   value returned carries overlay-supplied descendants. Reading a stored
   container whose Fields an overlay filled in is therefore an overlay read, not
-  a source read, so it cannot reach index data without saying so.
+  a source read, so it cannot reach index data without saying so. That holds at
+  the root as well: reading the whole Card carries whatever an overlay put
+  under it, so an expression that indexes by a computed key, or pipes the Card
+  into a builtin, is an overlay read like any other.
 - **An unavailable read fails loudly.** `unavailable` entries name what the
   host could not supply and why (`not-indexed`, `not-searchable`,
   `key-absent`). A marker at the read path, or nested under it, makes the read
@@ -335,9 +355,11 @@ An author addresses stored, computed, and linked values through the same
   the expression returns is settled back against the Card before it is written:
   an overlay value carried straight through is put back to what the Card holds,
   an expression that simply omits the path is not writing to it, and one that
-  writes something else there is refused. Only paths an overlay supplied are
-  settled, and none of them lie inside a collection, so an update that reorders
-  or resizes one has nothing to carry.
+  writes something else there is refused. Reaching a supplied value may have
+  taken containers the Card does not hold either; those are put back the same
+  way, so a graft is never stored. Only paths an overlay supplied are settled,
+  and none of them lie inside a collection, so an update that reorders or
+  resizes one has nothing to carry.
 - **Choosing a write set is a read.** A `[* predicate]` selector consults the
   document to decide what it matches, so an unavailable value stops it rather
   than quietly settling which items a statement deletes. A location that
@@ -358,10 +380,12 @@ An author addresses stored, computed, and linked values through the same
   assert opt-in, and the read event — do not speak for it. Treat them as
   catching the ordinary `.path` spelling, not as a boundary that cannot be
   stepped around.
-- **Every read is reported.** `onRead` fires once per path a program's
-  expressions resolve, in program order, with the tier that answered
-  (`source`, `computed`, `linked`) and the outcome (`value`, `null`,
-  `unavailable`).
+- **Every read an expression resolves is reported.** `onRead` fires once per
+  such path, in program order, with the tier that answered (`source`,
+  `computed`, `linked`) and the outcome (`value`, `null`, `unavailable`). A
+  selector reports only the paths an overlay answered: what it reads of the
+  Card's own document it reads to choose a write target, which the statement's
+  own paths already record.
 
 Overlays are additive: a plan built without them behaves exactly as one built
 before they existed. A plan's `output`, and the `before` recorded on every

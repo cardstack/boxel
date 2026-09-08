@@ -1748,6 +1748,18 @@ strictEqual(
 deepStrictEqual(collectionOutput('.meta |= {"note": .note};', metaStamp).meta, {
   note: 'kept',
 });
+// A copy intent carries paths, not values, and the adapter applies it by
+// reading the source out of the stored document at commit time. An overlay
+// source would commit the Card's own value under the overlay's name, so it is
+// refused; reading it is the spelling that works.
+strictEqual(
+  collectionError('copy_value_to(.meta.stamp; .image);', metaStamp).code,
+  'computed-read-only',
+);
+strictEqual(
+  collectionOutput('.image = .meta.stamp;', metaStamp).image,
+  'derived',
+);
 
 // Reads report the layer that answered them. A collection is never one of
 // those layers, so reading one is a source read even where the host supplied a
@@ -1873,21 +1885,57 @@ strictEqual(
   'assert-snapshot-required',
 );
 
-// The walk reports a lower bound: a path reached through a shape it cannot
-// decompose — a computed key, `getpath`, a variable binding — is not proven,
-// so the guards say nothing about it and the assert is allowed to stand. This
-// is the documented limit of a syntactic walk, not an oversight; the read
-// still sees the layered value.
+// Where the walk cannot name the place it is reading, it names the widest one
+// it can — the document itself. An overlay supplies values under that, so a
+// read of the whole Card is an overlay read: an expression that indexes by a
+// computed key, or pipes the Card into a builtin, is held to the same opt-in
+// as a spelled-out path rather than deciding a precondition on index data
+// unremarked. With the opt-in it sees the layered value.
 for (const expression of [
-  'getpath(["summary","text"])',
-  '.[("sum" + "mary")].text',
+  '.[("sum" + "mary")].text == "derived"',
+  '(. | tostring | contains("derived"))',
 ]) {
-  const unproven = collectionPlan(
-    `assert(${expression} == "derived"; "m");\n.image = "not refused";`,
-    derivedOnly,
+  strictEqual(
+    collectionError(`assert(${expression}; "m");`, derivedOnly).code,
+    'assert-snapshot-required',
+    expression,
   );
-  strictEqual(unproven.affected, 1, expression);
+  strictEqual(
+    collectionPlan(
+      `assert(${expression}; "m"; { snapshot: true });\n` +
+        '.image = "asserted";',
+      derivedOnly,
+    ).affected,
+    1,
+    expression,
+  );
 }
+// A read of the whole Card carries whatever an overlay put under it, so the
+// event says which layer answered rather than calling it a source read.
+const rootEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (. | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-root-read',
+  overlays: derivedOnly,
+  onRead: (event) => rootEvents.push(event),
+});
+deepStrictEqual(rootEvents, [{ path: '', tier: 'computed', outcome: 'value' }]);
+
+// The walk still reports a lower bound: `getpath` names no path at all, so the
+// guards say nothing about it and the assert is allowed to stand. This is the
+// documented limit of a syntactic walk, not an oversight; the read itself
+// still sees the layered value.
+strictEqual(
+  collectionPlan(
+    'assert(getpath(["summary","text"]) == "derived"; "m");\n' +
+      '.image = "not refused";',
+    derivedOnly,
+  ).affected,
+  1,
+);
 
 // `{ "snapshot": true }` is the same record as `{ snapshot: true }`.
 strictEqual(
@@ -1999,6 +2047,105 @@ for (const source of [
     source,
   );
 }
+
+// An overlay speaks only where it has something to say. `pristine_doc` and
+// `search_doc` carry the Card's own Fields alongside the ones only they can
+// answer, so a Field the Card leaves unset arrives as a `null` in both — and
+// claiming it would make an ordinary writable Field read-only for no reason.
+const wholeDocument: BxlMutationOverlays = {
+  computeds: { image: null, summary: { text: 'derived' } },
+  linked: { tags: null, meta: { note: null } },
+};
+deepStrictEqual(
+  collectionOutput('.image = "written";', wholeDocument).image,
+  'written',
+);
+deepStrictEqual(
+  collectionOutput('del(.image);', wholeDocument).image,
+  undefined,
+);
+deepStrictEqual(
+  collectionOutput('.meta |= (. + {"note": "n"});', wholeDocument).meta,
+  {
+    note: 'n',
+    stamp: null,
+  },
+);
+deepStrictEqual(collectionPlan('append(.tags; "z");', wholeDocument).output, {
+  ...collectionSnapshot,
+  tags: ['language', 'web', 'z'],
+});
+// The Field only the index can answer is still covered by the same overlay.
+strictEqual(
+  collectionError('.summary = {"text": "x"};', wholeDocument).code,
+  'computed-read-only',
+);
+
+// An overlay is host data read out of a column, so a key naming something on
+// a JavaScript prototype is dropped rather than grafted — the same refusal the
+// planner already gives a program that spells one out.
+const hostileKey = JSON.parse('{"__proto__":{"pwned":"yes"},"image":"x"}');
+deepStrictEqual(
+  collectionPlan('.tags = ["z"];', { computeds: hostileKey }).output,
+  { ...collectionSnapshot, tags: ['z'] },
+);
+strictEqual(({} as Record<string, unknown>).pwned, undefined);
+strictEqual(
+  collectionPlan('.tags = ["z"];', {
+    unavailable: [
+      { path: 'constructor.prototype', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).affected,
+  1,
+);
+
+// A list is one value, not a place to descend into. An overlay may hand over a
+// whole list the Card does not store — a computed `containsMany` — and that
+// list reads as itself and is read-only whole. A list the Card *does* store
+// wins, so no overlay position ever sits beside one of the Card's own items.
+const derivedList: BxlMutationOverlays = {
+  computeds: { extras: ['from-the-index', 'and-another'] },
+};
+strictEqual(
+  collectionOutput('.image = (.extras | tostring);', derivedList).image,
+  '["from-the-index","and-another"]',
+);
+strictEqual(
+  collectionError('append(.extras; "mine");', derivedList).code,
+  'computed-read-only',
+);
+deepStrictEqual(
+  collectionPlan('append(.tags; "z");', {
+    computeds: { tags: ['from-the-index'] },
+  }).output,
+  { ...collectionSnapshot, tags: ['language', 'web', 'z'] },
+);
+// A position spelled as an object key is a position all the same, so a
+// collection the Card does not store stays empty rather than taking the
+// overlay's rows.
+const objectKeyedRows: BxlMutationOverlays = {
+  computeds: { extras: { 0: 'first', 1: 'second' } },
+};
+strictEqual(
+  collectionOutput('.image = ((.extras | length) | tostring);', objectKeyedRows)
+    .image,
+  '0',
+);
+
+// Reaching a supplied value may take containers the Card does not hold either.
+// An update that carries one along must not store it: what the Card held comes
+// back, whether that was a `null` or nothing at all.
+const graftedInto: BxlMutationOverlays = {
+  computeds: { meta: { origin: { name: 'from-the-index' } } },
+};
+deepStrictEqual(
+  collectionPlan('.meta |= (. + {"note": "x"});', graftedInto).output,
+  collectionPlan('.meta |= (. + {"note": "x"});').output,
+);
+strictEqual(
+  collectionOutput('.image = .meta.origin.name;', graftedInto).image,
+  'from-the-index',
+);
 
 // The overlay layer is inert without overlays: no index, no grafts, and the
 // planner's own view of the document is the snapshot it was handed.

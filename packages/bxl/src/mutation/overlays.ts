@@ -29,12 +29,28 @@ export function overlayPathKey(path: BxlMutationPath): string {
 function normalizeOverlayPath(path: string): string {
   return path
     .trim()
-    .replace(/\[\s*(\d+)\s*\]/g, '.$1')
+    .replace(/\[\s*(-?\d+)\s*\]/g, '.$1')
     .replace(/^\.+/, '')
     .replace(/\.+$/, '');
 }
 
+/** A segment that names a place in a collection rather than a Field. */
+const INDEX_LIKE = /^-?\d+$/;
+
+/**
+ * Segments that name something on a JavaScript object's prototype rather than
+ * a Field of the Card. The planner refuses them in a program's own paths; an
+ * overlay is host data read out of a column, so it is refused the same way.
+ */
+const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+
+function isForbidden(path: BxlMutationPath): boolean {
+  return path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment)));
+}
+
+/** Whether a path lies below another. The root lies above everything. */
 function isWithin(candidate: string, ancestor: string): boolean {
+  if (ancestor === '') return candidate.length > 0;
   return candidate.startsWith(`${ancestor}.`);
 }
 
@@ -46,13 +62,19 @@ function storedAnswers(
   return hasAt(stored, path) && valueAt(stored, path) !== null;
 }
 
+/** One value an overlay supplies, at the path it sits at. */
+export interface OverlaySupply {
+  readonly path: BxlMutationPath;
+  readonly value: BxlMutationJson;
+}
+
 export interface OverlayIndex {
   /** The stored document, which answers a path ahead of any overlay. */
   readonly stored: BxlMutationJson;
   /** Dotted path to the tier that supplied the value there. */
   readonly coverage: ReadonlyMap<string, BxlMutationOverlayTier>;
-  /** The same paths as arrays, for walking into a value the overlays reach. */
-  readonly supplied: readonly BxlMutationPath[];
+  /** What each tier put where, for layering a view and for settling an update. */
+  readonly supplied: readonly OverlaySupply[];
   /** Dotted path to what the host could not supply there, and why. */
   readonly unavailable: ReadonlyMap<string, BxlMutationUnavailableOverlay>;
   /** Proper ancestors of an unavailable path, to the marker nested under them. */
@@ -76,16 +98,21 @@ export const EMPTY_OVERLAY_INDEX: OverlayIndex = {
   empty: true,
 };
 
+/**
+ * The values an overlay actually supplies, each with the path it sits at.
+ *
+ * A list is one value, not a place to descend into. An overlay may hand over
+ * a whole list the Card does not store — a computed `containsMany`, say — and
+ * that list is then read-only whole, its own positions consistent with each
+ * other. What it may never do is name a position inside a list the Card *does*
+ * store: see `reachableInStored`.
+ */
 function* overlayLeaves(
   value: BxlMutationJson,
   path: BxlMutationPath,
 ): Generator<{ path: BxlMutationPath; value: BxlMutationJson }> {
-  if (value !== null && typeof value === 'object') {
-    const entries: Array<[string | number, BxlMutationJson]> = Array.isArray(
-      value,
-    )
-      ? value.map((item, index) => [index, item])
-      : Object.entries(value);
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value);
     if (entries.length > 0) {
       for (const [key, child] of entries) {
         yield* overlayLeaves(child, [...path, key]);
@@ -105,19 +132,20 @@ function* overlayLeaves(
  * already is. Grafting past a stored scalar would replace it with a container,
  * so a leaf whose path runs through one is dropped.
  *
- * A path into a collection is dropped as well, whichever side the collection
- * sits on. An overlay arrives keyed by position, and a position is an identity
+ * A path *into* a collection is dropped as well, whichever side the collection
+ * sits on: a segment that names a position, or a stored list anywhere along
+ * the way. An overlay arrives keyed by position, and a position is an identity
  * only while nothing moves: inserting, deleting, reordering or moving an item
  * renumbers everything after it, and the indexed copy — written before the
  * program ran — cannot say which row it meant. Contained items carry no id to
- * re-key against. Reads inside a collection therefore see the Card's own
- * values and nothing else.
+ * re-key against. Reads inside a collection the Card stores therefore see the
+ * Card's own values and nothing else.
  */
 function reachableInStored(
   stored: BxlMutationJson,
   path: BxlMutationPath,
 ): boolean {
-  if (path.some((segment) => typeof segment === 'number')) return false;
+  if (path.some((segment) => INDEX_LIKE.test(String(segment)))) return false;
   for (let length = 0; length < path.length; length++) {
     const prefix = path.slice(0, length);
     if (!storedAnswers(stored, prefix)) return true;
@@ -150,7 +178,6 @@ export function mergeBxlMutationOverlays(
    */
   claimed: ReadonlySet<string> = new Set(),
 ): { root: BxlMutationJson; index: OverlayIndex } {
-  const root = clone(stored);
   const declared = overlays?.unavailable ?? [];
   if (
     overlays === undefined ||
@@ -158,11 +185,11 @@ export function mergeBxlMutationOverlays(
       overlays.linked === undefined &&
       declared.length === 0)
   ) {
-    return { root, index: EMPTY_OVERLAY_INDEX };
+    return { root: clone(stored), index: EMPTY_OVERLAY_INDEX };
   }
 
   const coverage = new Map<string, BxlMutationOverlayTier>();
-  const supplied: BxlMutationPath[] = [];
+  const supplied: OverlaySupply[] = [];
   const covers = new Set<string>();
   const coversComputed = new Set<string>();
   for (const tier of OVERLAY_TIERS) {
@@ -170,6 +197,13 @@ export function mergeBxlMutationOverlays(
     if (overlay === undefined) continue;
     for (const leaf of overlayLeaves(overlay, [])) {
       if (leaf.path.length === 0) continue;
+      // An overlay speaks only where it has something to say. `pristine_doc`
+      // and `search_doc` carry the Card's own Fields alongside the ones only
+      // they can answer, so a Field the Card leaves unset reaches us as a
+      // `null` in both — and claiming it would make an ordinary writable
+      // Field read-only for no reason.
+      if (leaf.value === null) continue;
+      if (isForbidden(leaf.path)) continue;
       const key = overlayPathKey(leaf.path);
       // The stored document wins over both tiers, and computeds over linked —
       // for a whole subtree, so a later tier cannot replace a value an earlier
@@ -179,9 +213,8 @@ export function mergeBxlMutationOverlays(
       if (selfOrAncestor(coverage, leaf.path) !== undefined) continue;
       if (isClaimed(claimed, leaf.path)) continue;
       if (!reachableInStored(stored, leaf.path)) continue;
-      setAt(root, leaf.path, leaf.value);
       coverage.set(key, tier);
-      supplied.push(leaf.path);
+      supplied.push({ path: leaf.path, value: clone(leaf.value) });
       // A read of the whole document reaches every supplied value under it.
       covers.add('');
       for (let length = 1; length < leaf.path.length; length++) {
@@ -202,12 +235,13 @@ export function mergeBxlMutationOverlays(
   for (const entry of declared) {
     const path = normalizeOverlayPath(entry.path);
     if (path.length === 0) continue;
+    const parts = path.split('.');
     // Overlays do not participate inside a collection, so neither does an
     // absence of one: the Card's own items are the whole answer there.
-    if (path.split('.').some((segment) => /^\d+$/.test(segment))) continue;
+    if (parts.some((segment) => INDEX_LIKE.test(segment))) continue;
+    if (isForbidden(parts)) continue;
     const marker = { ...entry, path };
     unavailable.set(path, marker);
-    const parts = path.split('.');
     for (let length = 0; length < parts.length; length++) {
       const ancestor = parts.slice(0, length).join('.');
       if (!unavailableUnder.has(ancestor)) {
@@ -216,19 +250,72 @@ export function mergeBxlMutationOverlays(
     }
   }
 
-  return {
-    root,
-    index: {
-      stored,
-      coverage,
-      supplied,
-      unavailable,
-      unavailableUnder,
-      covers,
-      coversComputed,
-      empty: coverage.size === 0 && unavailable.size === 0,
-    },
+  const index: OverlayIndex = {
+    stored,
+    coverage,
+    supplied,
+    unavailable,
+    unavailableUnder,
+    covers,
+    coversComputed,
+    empty: coverage.size === 0 && unavailable.size === 0,
   };
+  return { root: layerBxlMutationOverlays(clone(stored), index), index };
+}
+
+/**
+ * The stored document with the overlay values laid over it, for one read.
+ *
+ * Only the way down to each supplied value is copied; everything else is the
+ * document's own nodes, shared. That keeps a read cheap enough to take per
+ * evaluation, which is what lets a bulk statement rebuild the view between
+ * locations instead of reasoning about when a cached one went stale. The
+ * result is read-only: the planner writes to its working document, never here.
+ *
+ * Each value is re-checked against the document as it now stands, so a place
+ * the statement has since filled is the Card's from then on and the overlay
+ * stops answering for it.
+ */
+export function layerBxlMutationOverlays(
+  root: BxlMutationJson,
+  index: OverlayIndex,
+): BxlMutationJson {
+  let layered = root;
+  for (const { path, value } of index.supplied) {
+    if (storedAnswers(layered, path)) continue;
+    if (!reachableInStored(layered, path)) continue;
+    layered = graft(layered, path, value);
+  }
+  return layered;
+}
+
+/** A copy of a container, one level deep. */
+function shallowCopy(value: BxlMutationJson | undefined): BxlMutationJson {
+  if (Array.isArray(value)) return [...value];
+  if (value !== null && typeof value === 'object') return { ...value };
+  return {};
+}
+
+/**
+ * Lay a value at a path, copying the containers along the way rather than the
+ * whole document. Supplied paths never name a position, so every container on
+ * the way down is addressed by key.
+ */
+function graft(
+  root: BxlMutationJson,
+  path: BxlMutationPath,
+  value: BxlMutationJson,
+): BxlMutationJson {
+  const copy = shallowCopy(root) as Record<string, BxlMutationJson>;
+  let container = copy;
+  for (let length = 0; length < path.length - 1; length++) {
+    const key = path[length] as string;
+    const next = shallowCopy(container[key]) as Record<string, BxlMutationJson>;
+    container[key] = next;
+    container = next;
+  }
+  container[path[path.length - 1] as string] = value;
+  return copy;
 }
 
 /**
@@ -385,7 +472,7 @@ export function settleOverlayUpdate(
   | { refused: string; tier: BxlMutationOverlayTier } {
   if (index.empty) return { value: produced };
   let value = produced;
-  for (const path of index.supplied) {
+  for (const { path } of index.supplied) {
     if (!startsWith(path, location)) continue;
     const key = overlayPathKey(path);
     const relative = path.slice(location.length);
@@ -403,7 +490,58 @@ export function settleOverlayUpdate(
     if (sameValue(carried, valueAt(stored ?? null, relative))) continue;
     return { refused: key, tier: index.coverage.get(key) ?? 'computed' };
   }
+  // Reaching a supplied value may have taken containers the Card does not
+  // hold either. Once their contents are back to the Card's, what is left is
+  // the graft itself, and it is no more the Card's than the value was.
+  for (const prefix of graftedContainers(index, location)) {
+    if (!isEmptyObject(valueAt(value, prefix))) continue;
+    const held = stored ?? null;
+    if (hasAt(held, prefix)) {
+      value = setAt(value, prefix, valueAt(held, prefix) ?? null);
+    } else if (hasAt(value, prefix)) {
+      value = deleteAt(value, prefix);
+    }
+  }
   return { value };
+}
+
+/**
+ * The containers the merge created on the way to a value it supplied under
+ * this location, innermost first so a nested graft collapses before the one
+ * holding it.
+ */
+function graftedContainers(
+  index: OverlayIndex,
+  location: BxlMutationPath,
+): BxlMutationPath[] {
+  const seen = new Set<string>();
+  const prefixes: BxlMutationPath[] = [];
+  for (const { path } of index.supplied) {
+    if (!startsWith(path, location)) continue;
+    for (let length = location.length + 1; length < path.length; length++) {
+      if (storedAnswers(index.stored, path.slice(0, length))) continue;
+      const relative = path.slice(location.length, length);
+      const key = overlayPathKey(relative);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      prefixes.push(relative);
+    }
+  }
+  return prefixes.sort((left, right) => right.length - left.length);
+}
+
+/**
+ * Whether a value is a container with nothing in it. Anything the expression
+ * put there of its own would leave a key behind, so an empty one is the graft
+ * and nothing else.
+ */
+function isEmptyObject(value: BxlMutationJson | undefined): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 0
+  );
 }
 
 /** Whether a path lies at or below another. */
