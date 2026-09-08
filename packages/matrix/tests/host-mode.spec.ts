@@ -513,23 +513,29 @@ test.describe('Host mode', () => {
 // rewrite-and-republish, which is what made these the suite's heaviest,
 // flakiest tests.
 test.describe('Host mode routing rules', () => {
-  // Both tests here publish a realm and then wait for its server-rendered HTML,
-  // and the two costs have to fit inside one budget. Publishing is the whole of
-  // `createAndPublishHostModeRealm` — register a user, create a realm, index it,
-  // post two card sources, create a card, publish — which on a loaded runner is
-  // tens of seconds; the marker waits that follow are 45s each, and the second
-  // test performs two of them.
+  // Each test here publishes a realm and then waits for its server-rendered
+  // HTML, and every one of those steps carries its own deadline. They only do
+  // what they are for if the innermost one expires first: each reports which
+  // specific thing did not happen, where the enclosing test timeout can only
+  // report that time ran out. So this budget has to exceed their sum, worst
+  // case, for the test in this group that spends the most:
   //
-  // The suite default of 60s cannot hold that, and the way it fails is the
-  // problem: `waitForPublishedMarker` reports which of "realm not served" and
-  // "served without the marker" happened, and it can only do so if its own
-  // deadline arrives first. Under a budget smaller than the waits it guards, the
-  // test dies of the outer timeout instead and the reason is lost.
+  //   120s  publish readiness — `_readiness-check?awaitPrerenderHtml=true`
+  //          polled until the realm is both indexed and rendered
+  //    45s  marker wait, canonical URL
+  //    45s  marker wait, no-slash variant (the trailing-slash test only)
+  //    15s  the closing `expect(...).toBeVisible()`, at the configured
+  //          expect timeout
+  //   ----
+  //   225s  plus realm creation, which has no explicit deadline of its own
   //
-  // So the invariant is that this budget exceeds the setup plus every marker
-  // wait a test performs. It matches the budget the shared `beforeAll` above
-  // gives the same publish work.
-  test.describe.configure({ timeout: 180_000 });
+  // Hence 300s. That is a ceiling for a pathological run, not a target — these
+  // pass in well under a minute when the stack is healthy — and it is reached
+  // only when something is genuinely wedged, which is the case that most needs
+  // a legible failure rather than a bare timeout.
+  //
+  // Adding a wait here means re-checking this sum.
+  test.describe.configure({ timeout: 300_000 });
 
   // CS-10054 + CS-10055: routing rules in the realm config card resolve a
   // bare path (no .json extension) to a target card and render it in host
