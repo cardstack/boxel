@@ -1292,6 +1292,10 @@ const UNINDEXED_READ_EXEMPT_ACCEPT = 'application/vnd.card+source';
 
 // Wraps a realm's request handler so a read of an instance the boot index
 // would have provided fails loudly rather than returning nothing.
+//
+// This sits in front of every request a test makes, module imports included,
+// so the miss path has to stay cheap: string slicing and one set lookup, no
+// URL construction and no header read until something already matched.
 export function guardIndexReads(
   handler: (request: Request) => Promise<ResponseWithNodeStream | null>,
   realmURL: string,
@@ -1300,22 +1304,30 @@ export function guardIndexReads(
   let seeded = new Set(
     Object.keys(contents ?? {})
       .filter((path) => path.endsWith('.json'))
-      .map((path) => new URL(path, realmURL).href.replace(/\.json$/, '')),
+      .map((path) => new URL(path, realmURL).href.slice(0, -'.json'.length)),
   );
 
   return async (request: Request) => {
-    let accept = request.headers.get('accept') ?? '';
-    if (!accept.includes(UNINDEXED_READ_EXEMPT_ACCEPT)) {
-      let url = new URL(request.url);
-      if (url.pathname.endsWith('/_search')) {
+    let path = request.url;
+    let cut = path.indexOf('?');
+    if (cut === -1) {
+      cut = path.indexOf('#');
+    }
+    if (cut !== -1) {
+      path = path.slice(0, cut);
+    }
+    if (path.endsWith('.json')) {
+      path = path.slice(0, -'.json'.length);
+    }
+
+    let isSearch = path.endsWith('/_search');
+    if (isSearch || seeded.has(path)) {
+      let accept = request.headers.get('accept') ?? '';
+      if (!accept.includes(UNINDEXED_READ_EXEMPT_ACCEPT)) {
         throw new Error(
-          `this realm was created with skipBootIndex, so its index is empty and this search cannot match its seeded instances. Drop skipBootIndex from this test's setup.`,
-        );
-      }
-      let href = `${url.origin}${url.pathname}`.replace(/\.json$/, '');
-      if (seeded.has(href)) {
-        throw new Error(
-          `this realm was created with skipBootIndex, so ${href} was never indexed and reading it would return nothing. Drop skipBootIndex from this test's setup.`,
+          isSearch
+            ? `this realm was created with skipBootIndex, so its index is empty and this search cannot match its seeded instances. Drop skipBootIndex from this test's setup.`
+            : `this realm was created with skipBootIndex, so ${path} was never indexed and reading it would return nothing. Drop skipBootIndex from this test's setup.`,
         );
       }
     }
