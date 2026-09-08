@@ -50,6 +50,7 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   InvalidQueryError,
+  collectPositiveMatchTerms,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -871,7 +872,10 @@ export class IndexQueryEngine {
       );
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
-        let matches = this.collectPositiveMatches(filter);
+        // `assertQuery` already rejects this on the wire surfaces (as an
+        // HTTP 400); this re-check is the backstop for callers that reach the
+        // engine directly.
+        let matches = collectPositiveMatchTerms(filter);
         if (matches.length === 0) {
           throw new InvalidQueryError(
             `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
@@ -1469,57 +1473,6 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // Full-text matches predicate. Postgres uses tsvector/tsquery on the
-  // indexed markdown column; SQLite falls back to a case-insensitive
-  // substring LIKE with `%`/`_`/`\` escaped in JS before binding. An
-  // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
-  // match every non-null row (PG's websearch_to_tsquery already yields an
-  // empty tsquery that matches nothing — we match that behavior here).
-  //
-  // Markdown is a render output and lives on `prerendered_html.markdown`, so
-  // full-text membership is eventually consistent: a row whose prerender-html
-  // job hasn't landed yet has no markdown and is not full-text findable until
-  // it does. The predicate is an expression match against the GIN-indexed
-  // `to_tsvector('english', markdown_search_text(markdown))` —
-  // `markdown_search_text` strips oversized base64 runs and caps length so
-  // the tsvector stays under Postgres's byte limit, and the predicate must
-  // call the same function as the migration's index expression or the
-  // planner won't use the index.
-  // Every positive-polarity `matches` string in the filter tree — the terms the
-  // relevance score is built from. Terms under an odd number of `not`s (negated
-  // polarity) are skipped: they still filter rows out through their `@@`
-  // predicate, but a negated term must not contribute to "how relevant." Reuses
-  // the `FilterPolarity`/`flipPolarity` machinery the predicate compiler uses.
-  // Whitespace-only terms are dropped, mirroring `matchesCondition`'s empty-query
-  // short-circuit (an empty tsquery matches — and ranks — nothing).
-  private collectPositiveMatches(
-    filter: Filter | undefined,
-    polarity: FilterPolarity = 'positive',
-  ): string[] {
-    if (!filter) {
-      return [];
-    }
-    if ('matches' in filter) {
-      return polarity === 'positive' && filter.matches.trim() !== ''
-        ? [filter.matches]
-        : [];
-    }
-    if ('not' in filter) {
-      return this.collectPositiveMatches(filter.not, flipPolarity(polarity));
-    }
-    if ('every' in filter) {
-      return filter.every.flatMap((f) =>
-        this.collectPositiveMatches(f, polarity),
-      );
-    }
-    if ('any' in filter) {
-      return filter.any.flatMap((f) =>
-        this.collectPositiveMatches(f, polarity),
-      );
-    }
-    return [];
-  }
-
   // The relevance value for a `matches` query, aggregated per (url, type) group.
   //
   // Postgres scores the row's markdown tsvector against the OR-union of the
@@ -1569,6 +1522,22 @@ export class IndexQueryEngine {
     ];
   }
 
+  // Full-text matches predicate. Postgres uses tsvector/tsquery on the
+  // indexed markdown column; SQLite falls back to a case-insensitive
+  // substring LIKE with `%`/`_`/`\` escaped in JS before binding. An
+  // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
+  // match every non-null row (PG's websearch_to_tsquery already yields an
+  // empty tsquery that matches nothing — we match that behavior here).
+  //
+  // Markdown is a render output and lives on `prerendered_html.markdown`, so
+  // full-text membership is eventually consistent: a row whose prerender-html
+  // job hasn't landed yet has no markdown and is not full-text findable until
+  // it does. The predicate is an expression match against the GIN-indexed
+  // `to_tsvector('english', markdown_search_text(markdown))` —
+  // `markdown_search_text` strips oversized base64 runs and caps length so
+  // the tsvector stays under Postgres's byte limit, and the predicate must
+  // call the same function as the migration's index expression or the
+  // planner won't use the index.
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,

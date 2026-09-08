@@ -1110,7 +1110,7 @@ export function buildEntryResource(args: {
       ...(matchRelevance !== undefined
         ? { _matchRelevance: matchRelevance }
         : {}),
-    } as EntryResource['meta'];
+    };
   }
   return resource;
 }

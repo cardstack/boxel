@@ -84,7 +84,11 @@ export interface TypedFilter {
   on?: CodeRef;
 }
 
-type GeneralSortField = keyof typeof generalSortFields;
+// The anchorless sort keys: the column-backed general fields plus the
+// synthetic `_matchRelevance` (computed per query, no stored column).
+type GeneralSortField =
+  | keyof typeof generalSortFields
+  | typeof MATCH_RELEVANCE_SORT_KEY;
 
 type SortExpressionWithoutCodeRef = {
   by: GeneralSortField;
@@ -198,6 +202,40 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
 }
 
+// Every positive-polarity `matches` string in a filter tree — the terms a
+// `_matchRelevance` sort scores. Terms under an odd number of `not`s still
+// filter rows out through their predicate but must not contribute to "how
+// relevant", and whitespace-only terms rank nothing (mirroring the predicate's
+// empty-query short-circuit), so both are excluded. Shared by `assertQuery`'s
+// parse-time validation and the engine's rank expression so the two agree on
+// what counts as a rankable term.
+export function collectPositiveMatchTerms(
+  filter: Filter | undefined,
+  polarity: 'positive' | 'negated' = 'positive',
+): string[] {
+  if (!filter) {
+    return [];
+  }
+  if ('matches' in filter) {
+    return polarity === 'positive' && filter.matches.trim() !== ''
+      ? [filter.matches]
+      : [];
+  }
+  if ('not' in filter) {
+    return collectPositiveMatchTerms(
+      filter.not,
+      polarity === 'positive' ? 'negated' : 'positive',
+    );
+  }
+  if ('every' in filter) {
+    return filter.every.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+  }
+  if ('any' in filter) {
+    return filter.any.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+  }
+  return [];
+}
+
 // True when a filter path's leaf is a card/file reference (`id` / `url`). Such
 // leaves get canonical-RRI tolerance in `in` filters — a registered-prefix
 // value also matches its equivalent real-URL / virtual-alias spellings — while
@@ -281,6 +319,24 @@ export function assertQuery(
   if ('fields' in query && query.asData !== true) {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: fields requires asData to be true`,
+    );
+  }
+
+  // A `_matchRelevance` sort scores the filter's positive `matches` terms, so
+  // a query with none has nothing to rank by. Validated here — where every
+  // wire surface parses — so a bad request fails as an `InvalidQueryError`
+  // (HTTP 400) rather than surfacing from the engine as a 500; the engine
+  // re-checks as a backstop for callers that bypass `assertQuery`.
+  if (
+    Array.isArray(query.sort) &&
+    query.sort.some(
+      (s: Record<string, unknown>) =>
+        !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
+    ) &&
+    collectPositiveMatchTerms(query.filter).length === 0
+  ) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
     );
   }
 }

@@ -3455,14 +3455,16 @@ module('Unit | query', function (hooks) {
       },
     };
 
+    // No explicit direction: `_matchRelevance` defaults to `desc` (best match
+    // first), unlike every other sort key.
     let desc = await indexQueryEngine.searchCards(new URL(testRealmURL), {
       ...query,
-      sort: [{ by: '_matchRelevance', direction: 'desc' }],
+      sort: [{ by: '_matchRelevance' }],
     });
     assert.deepEqual(
       getIds(desc.cards),
       [ringo.id, mango.id],
-      'best match (the matches-branch hit) sorts first on desc',
+      'best match (the matches-branch hit) sorts first by default (desc)',
     );
 
     let asc = await indexQueryEngine.searchCards(new URL(testRealmURL), {

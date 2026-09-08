@@ -382,13 +382,15 @@ module(basename(import.meta.filename), function () {
         markdown: 'a single zebra grazing quietly.',
       });
 
+      // No explicit direction: `_matchRelevance` defaults to `desc` (best
+      // match first), unlike every other sort key.
       assert.deepEqual(
         await relevanceUrls({
           filter: { matches: 'zebra' },
-          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+          sort: [{ by: '_matchRelevance' }],
         }),
         [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
-        'the denser row ranks first',
+        'the denser row ranks first by default (desc)',
       );
 
       assert.deepEqual(
