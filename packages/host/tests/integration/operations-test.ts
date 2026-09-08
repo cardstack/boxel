@@ -214,6 +214,25 @@ module('Integration | operations', function (hooks) {
       ['create', 'delete', 'query', 'read', 'transform', 'update'],
       'and adds no name, because it is that base operation',
     );
+
+    class Archivable extends CardDef {
+      // A base operation's name is the verb a caller invokes, so a
+      // declaration by that name may carry it out with another behavior.
+      @operation static delete = {
+        base: 'transform',
+        set: { archived: true },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(getOperations(Archivable).delete)),
+      { base: 'transform', set: { archived: true } },
+      'a delete declared on transform is a soft delete',
+    );
+    assert.deepEqual(
+      Object.keys(getOperations(Archivable)).sort(),
+      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      'which stands in for the removal rather than beside it',
+    );
   });
 
   test('typed references are JSON-serializable markers', function (assert) {

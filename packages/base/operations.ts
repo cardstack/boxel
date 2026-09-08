@@ -63,9 +63,13 @@ import {
 // The behaviors every declaration builds on. Which of them a def carries is
 // implied by the def type rather than written in author code — a `CardDef`
 // has all six, a `FileDef` only `read`, a `FieldDef` none — so
-// `getOperations` synthesizes them. A declaration *named* after a base op is
-// an author's override of it and takes its place, which is how a card
-// specializes its own `read` projection or `update` validation.
+// `getOperations` synthesizes them. A declaration *named* after a base op
+// takes its place: it specializes that behavior when it names the same
+// `base`, and rebinds the verb when it names another — a `delete` declared
+// on `transform` is a soft delete, so asking such a card to delete itself
+// archives it rather than removing it. The name is what a caller invokes and
+// `base` is the behavior that carries it out, so the two are read separately
+// and neither is inferred from the other.
 export const BASE_OPERATIONS = [
   'read',
   'create',
@@ -903,7 +907,7 @@ function assertValidClauses(
     let query = declaration.query;
     if (!isPlainObject(query) || Object.keys(query).length === 0) {
       throw new Error(
-        `${label}: \`query\` must be an object with at least one of \`filter\`, \`sort\`, \`page\` and \`realms\``,
+        `${label}: \`query\` must be an object with at least one of \`filter\`, \`sort\`, \`queryString\`, \`page\` and \`realms\``,
       );
     }
     assertOnlyKeys(label, 'query', query, [
