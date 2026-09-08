@@ -988,8 +988,33 @@ module('Integration | operations', function (hooks) {
         }
         return Report;
       },
-      /must be a card class/,
-      'and a type slot names a card',
+      /must be a card or file class/,
+      'and a type slot names something that has a type of its own',
+    );
+  });
+
+  test('a declaration pins the page the realm implements', function (assert) {
+    class Activity extends CardDef {}
+    class Report extends CardDef {
+      @operation static listRecent = {
+        base: 'query',
+        query: {
+          filter: { type: Activity },
+          page: { size: 20, number: 1 },
+        },
+      };
+    }
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(
+          (
+            getDeclaredOperations(Report)
+              .listRecent as OperationsModule.QueryOperationDeclaration
+          ).query?.page,
+        ),
+      ),
+      { size: 20, number: 1 },
+      'a page is a length and a 0-based offset, which is how the realm pages',
     );
   });
 
@@ -1165,12 +1190,28 @@ module('Integration | operations', function (hooks) {
         /`query.page` must be an object/,
       ],
       [
-        'query.page.cursor',
+        'query.page with no size',
         {
           base: 'query',
-          query: { filter: { type: CardDef }, page: { cursor: '' } },
+          query: { filter: { type: CardDef }, page: { number: 1 } },
         },
-        /`query.page.cursor` must be a string/,
+        /`query.page.size` must be a positive integer/,
+      ],
+      [
+        'query.page.number below zero',
+        {
+          base: 'query',
+          query: { filter: { type: CardDef }, page: { size: 10, number: -1 } },
+        },
+        /`query.page.number` must be a whole number/,
+      ],
+      [
+        'cursor is not a page key',
+        {
+          base: 'query',
+          query: { filter: { type: CardDef }, page: { size: 10, cursor: 'x' } },
+        },
+        /"cursor" is not a valid key for `query.page`/,
       ],
       [
         'a params reference with a non-string key',
