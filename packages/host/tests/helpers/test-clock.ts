@@ -21,8 +21,40 @@
 // this instant instead of from today, which shifts some of them by a unit the
 // first time this lands. That is a one-time baseline change, and it buys the
 // property that they never shift again on their own.
-export const TEST_CLOCK_INSTANT = Date.UTC(2026, 8, 1, 0, 0, 0);
+// Mid-month and mid-day on purpose. A calendar test asserts that days earlier
+// in the current month are disabled by a `today` sentinel, and guards itself
+// with `getDate() > 1` — pinned to the first, that assertion would skip rather
+// than fail, which is a quieter way to lose it than leaving it broken.
+export const TEST_CLOCK_INSTANT = Date.UTC(2026, 8, 15, 12, 0, 0);
 
 export function pinTestClock() {
   (globalThis as { __boxelNow?: number }).__boxelNow = TEST_CLOCK_INSTANT;
+}
+
+// A fixture file's recorded mtime.
+//
+// These cannot all be the pinned instant. The indexer decides what a
+// from-scratch pass has to revisit by comparing a file's mtime against the one
+// on its index row and skipping where they match, so a write that leaves the
+// mtime alone is a change the indexer cannot see — which is what
+// `scripts/normalize-realm-mtimes.mjs` exists to keep working, and what a
+// single frozen stamp would defeat.
+//
+// So they advance, one second per stamp, from far enough below the pinned
+// instant that a suite would have to write tens of thousands of files in one
+// page load to reach it. Staying below matters: a mtime after the pinned
+// instant is in the future, and a file with a future mtime renders as an
+// absolute date rather than an age. Staying within the same day matters too —
+// that is what keeps these files reading as `today`, which is what they read
+// as when both the clock and the stamp were the real one.
+const FIXTURE_MTIME_FLOOR =
+  Math.floor(TEST_CLOCK_INSTANT / 1000) - 12 * 60 * 60;
+const FIXTURE_MTIME_CEILING = Math.floor(TEST_CLOCK_INSTANT / 1000) - 1;
+let fixtureMtimeCounter = 0;
+
+export function nextFixtureMtime(): number {
+  return Math.min(
+    FIXTURE_MTIME_FLOOR + fixtureMtimeCounter++,
+    FIXTURE_MTIME_CEILING,
+  );
 }

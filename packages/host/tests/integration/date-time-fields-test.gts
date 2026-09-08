@@ -26,6 +26,7 @@ import {
   buildField,
 } from '../helpers/field-test-helpers';
 import { setupRenderingTest } from '../helpers/setup';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 module('Integration | date-time fields', function (hooks) {
   setupRenderingTest(hooks);
@@ -485,7 +486,10 @@ module('Integration | date-time fields', function (hooks) {
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     // Anchor on mid-month days so all asserted cells are guaranteed to be
     // rendered in the calendar pane that centers on the current month.
-    let now = new Date();
+    // The same instant the calendar measures from: the field reads the clock
+    // through the seam, so a test that asked the real clock what "today" is
+    // would be asserting against a different day than the component rendered.
+    let now = new Date(TEST_CLOCK_INSTANT);
     let day14 = new Date(now.getFullYear(), now.getMonth(), 14);
     let day15 = new Date(now.getFullYear(), now.getMonth(), 15);
     let day16 = new Date(now.getFullYear(), now.getMonth(), 16);
