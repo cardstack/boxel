@@ -118,7 +118,14 @@ export function dockerExec(args: {
 }
 
 /**
- * Create a docker network; does not fail if network already exists
+ * Create a docker network; does not fail if network already exists.
+ *
+ * The address range is left to Docker. Containers on a user-defined network
+ * reach each other by container name through Docker's embedded DNS, so no
+ * caller needs to know the range — and naming one is a liability: Docker
+ * refuses to create a network whose requested subnet another network already
+ * holds ("Pool overlaps with other one on this address space"), which would
+ * make network creation itself depend on the rest of the daemon's state.
  */
 export function dockerCreateNetwork(args: {
   networkName: string;
@@ -126,7 +133,7 @@ export function dockerCreateNetwork(args: {
   return new Promise<void>((resolve, reject) => {
     childProcess.execFile(
       'docker',
-      ['network', 'create', '--subnet=172.20.0.0/16', args.networkName],
+      ['network', 'create', args.networkName],
       { encoding: 'utf8' },
       (err, _stdout, stderr) => {
         if (err) {
@@ -135,8 +142,10 @@ export function dockerCreateNetwork(args: {
               `network with name ${args.networkName} already exists`,
             )
           ) {
-            // Don't consider this as error
+            // Creation is idempotent: a concurrent harness or an earlier run
+            // may already have created it.
             resolve();
+            return;
           }
           reject(err);
           return;

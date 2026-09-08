@@ -3,7 +3,7 @@ import type * as JSONTypes from 'json-typescript';
 import {
   ensureFullMatrixUserId,
   ensureTrailingSlash,
-  fetchRealmPermissions,
+  fetchEffectiveRealmPermissions,
   fetchUserPermissions,
   type DBAdapter,
   type RealmPermissions,
@@ -66,13 +66,19 @@ export async function prepareRunCommand({
 }): Promise<PrepareRunCommandResult> {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
   let context = { command, realmURL: normalizedRealmURL };
-  let realmPermissions = await fetchRealmPermissions(
+  let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
+  // The effective set the realm itself enforces: its `users` and `*` grants
+  // unioned with the runner's own row. A session token is rejected when its
+  // permissions claim differs from that union in either direction, so on a
+  // realm that carries a shared grant the runner's row alone is not a mintable
+  // set.
+  let userPermissions = await fetchEffectiveRealmPermissions(
     dbAdapter,
     new URL(normalizedRealmURL),
+    runAsUserId,
+    matrixURL,
   );
-  let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
-  let userPermissions = realmPermissions[runAsUserId];
-  if (!userPermissions || userPermissions.length === 0) {
+  if (userPermissions.length === 0) {
     return {
       ok: false,
       error: `${runAs} does not have permissions in ${normalizedRealmURL}`,
@@ -83,6 +89,13 @@ export async function prepareRunCommand({
   let allUserPermissions = await fetchUserPermissions(dbAdapter, {
     userId: runAsUserId,
   });
+  // Only the realm the command names carries the effective set. The sibling
+  // entries come from the per-user enumeration, which reads each realm's own
+  // row and its `*` row but never unions the two, and does not consult `users`
+  // rows at all — so a realm reachable only through a `users` grant is missing
+  // from the bundle, a realm reachable only through `*` is present with `read`
+  // alone, and one where a shared grant widens the user's row is present with a
+  // claim the realm will reject.
   allUserPermissions[normalizedRealmURL] = userPermissions;
   let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
   let accessibleRealms = Object.keys(allUserPermissions);
