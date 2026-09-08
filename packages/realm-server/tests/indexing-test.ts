@@ -1688,6 +1688,53 @@ module(basename(import.meta.filename), function () {
         return { blocker, release };
       }
 
+      // Carrying a good row forward is the only way to survive a render
+      // failure that the environment caused rather than the card: by the time
+      // any error path runs, `invalidate()` has already tombstoned every type
+      // this URL had in the working table, so "leave the row alone" would let
+      // `done()` promote the tombstone and drop the card from search.
+      //
+      // These two cases establish that the content is still reachable at that
+      // moment, and that an error row is not mistaken for content.
+      test('the previous published content is readable after its tombstone', async function (assert) {
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        let url = new URL(`${testRealm}mango.json`);
+
+        let before = await batch.priorPublishedContent(url, 'instance');
+        assert.ok(
+          before?.pristine_doc,
+          'the published row has content to begin with',
+        );
+
+        await batch.invalidate([url]);
+
+        let after = await batch.priorPublishedContent(url, 'instance');
+        assert.deepEqual(
+          after?.pristine_doc,
+          before?.pristine_doc,
+          'still readable from production once the working table has tombstoned it — ' +
+            'the resolution order is working-non-deleted > production > working-deleted',
+        );
+      });
+
+      test('a URL with no published row of that type has nothing to carry', async function (assert) {
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        assert.strictEqual(
+          await batch.priorPublishedContent(
+            new URL(`${testRealm}does-not-exist.json`),
+            'instance',
+          ),
+          undefined,
+          'the brand-new-card case, where an error row is the right output',
+        );
+      });
+
       test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
