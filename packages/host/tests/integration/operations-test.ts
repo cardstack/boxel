@@ -6,6 +6,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
 import {
   setupBaseRealm,
+  cardAPI,
   CardDef,
   FieldDef,
   FileDef,
@@ -895,7 +896,201 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('every declaration guard reports what it wanted', function (assert) {
+    let rejected: [string, unknown, RegExp][] = [
+      [
+        'optimistic',
+        { base: 'read', optimistic: 'yes' },
+        /`optimistic` must be a boolean/,
+      ],
+      [
+        'input',
+        { base: 'read', input: '.a = 1;' },
+        /`input` must be a program written with the bxl tag/,
+      ],
+      [
+        'output',
+        { base: 'read', output: 'title' },
+        /`output` must be a projection object or a bxl program/,
+      ],
+      [
+        'append not an object',
+        { base: 'transform', append: 'comments' },
+        /`append` must be an object naming the field/,
+      ],
+      [
+        'append.to empty',
+        { base: 'transform', append: { to: '', value: 1 } },
+        /`append.to` must name the collection field/,
+      ],
+      [
+        'append with no value',
+        { base: 'transform', append: { to: 'comments' } },
+        /`append` must carry a `value` to append/,
+      ],
+      [
+        'assert not an object',
+        { base: 'transform', assert: 'unique' },
+        /`assert` must be an object naming the collection/,
+      ],
+      [
+        'assert.unique empty',
+        { base: 'transform', assert: { unique: '', by: 1 } },
+        /`assert.unique` must name the collection field/,
+      ],
+      [
+        'assert with no by',
+        { base: 'transform', assert: { unique: 'owners' } },
+        /`assert` must carry a `by` value/,
+      ],
+      [
+        'assert.message',
+        { base: 'transform', assert: { unique: 'o', by: 1, message: 2 } },
+        /`assert.message` must be a string/,
+      ],
+      [
+        'set empty',
+        { base: 'transform', set: {} },
+        /`set` must be an object mapping field names to values/,
+      ],
+      [
+        'fill empty',
+        { base: 'create', of: CardDef, fill: {} },
+        /`fill` must be an object mapping field names to values/,
+      ],
+      [
+        'of not a function',
+        { base: 'create', of: 'Activity' },
+        /`of` must be the card class to create/,
+      ],
+      [
+        'query not an object',
+        { base: 'query', query: 'everything' },
+        /`query` must be an object with at least one of/,
+      ],
+      [
+        'query with an unknown key',
+        { base: 'query', query: { filter: { on: CardDef }, junk: 1 } },
+        /"junk" is not a valid key for `query`/,
+      ],
+      [
+        'query.page not an object',
+        { base: 'query', query: { filter: { on: CardDef }, page: 10 } },
+        /`query.page` must be an object/,
+      ],
+      [
+        'query.page.cursor',
+        {
+          base: 'query',
+          query: { filter: { on: CardDef }, page: { cursor: '' } },
+        },
+        /`query.page.cursor` must be a string/,
+      ],
+      [
+        'a params reference with a non-string key',
+        {
+          base: 'transform',
+          params: { body: StringField },
+          set: { x: { $ref: 'params', key: 1 } },
+        },
+        /must name a param/,
+      ],
+      [
+        'an actor reference with an empty key',
+        { base: 'transform', set: { x: { $ref: 'actor', key: '' } } },
+        /must name a member, or none at all/,
+      ],
+      [
+        'a card reference with a non-reference value',
+        { base: 'transform', set: { x: { $ref: 'card', value: 1 } } },
+        /must carry a card URL or a reference to one/,
+      ],
+    ];
+    for (let [name, declaration, pattern] of rejected) {
+      assert.throws(
+        () => {
+          class Report extends CardDef {
+            @operation static candidate = declaration as never;
+          }
+          return Report;
+        },
+        pattern,
+        `a declaration is refused for ${name}`,
+      );
+    }
+  });
+
+  test('every reference constructor reports what it wanted', function (assert) {
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'params with no name',
+        () => params(''),
+        /takes the name of a param declared/,
+      ],
+      [
+        'params with a non-string',
+        () => params(1 as never),
+        /takes the name of a param declared/,
+      ],
+      [
+        'card with no URL',
+        () => card(''),
+        /takes a card URL or a typed reference to one/,
+      ],
+      [
+        'card with a non-reference',
+        () => card(1 as never),
+        /takes a card URL or a typed reference to one/,
+      ],
+      [
+        'linkTo with a non-class',
+        () => linkTo('Activity' as never),
+        /takes a card class/,
+      ],
+      [
+        'actor with an empty key',
+        () => actor(''),
+        /takes the name of a member to read, or no argument at all/,
+      ],
+      [
+        'instance with a non-string key',
+        () => instance(1 as never),
+        /takes the name of a member to read, or no argument at all/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
+  test('a def with no mutation surface carries only read', function (assert) {
+    class Bare extends cardAPI.BaseDef {}
+    assert.deepEqual(
+      getOperations(Bare),
+      { read: { base: 'read' } },
+      'read is the one operation every addressable def shares',
+    );
+    assert.throws(
+      () => {
+        class Mutable extends cardAPI.BaseDef {
+          @operation static escalate = {
+            base: 'transform',
+            set: { status: 'escalated' },
+          };
+        }
+        return Mutable;
+      },
+      /carries only "read"/,
+      'and a def that carries no mutation base cannot declare one',
+    );
+  });
+
   test('getOperations rejects a target that is not a card definition', function (assert) {
+    assert.throws(
+      () => getDeclaredOperations({} as never),
+      /getDeclaredOperations\(\) takes a class that extends BaseDef/,
+      'each reader names itself in its own error',
+    );
     assert.throws(
       () => getOperations({} as never),
       /getOperations\(\) takes a class that extends BaseDef/,
@@ -968,6 +1163,23 @@ module('Integration | operations', function (hooks) {
       'addComment',
       keyof OperationsModule.OperationsOf<typeof Report>
     >();
+
+    // A static that merely carries a string `base` is not an operation.
+    class Themed extends CardDef {
+      static theme = { base: 'dark', accent: '#fff' };
+      @operation static ping = {
+        base: 'read',
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    expectTypeEquals<
+      'ping',
+      keyof OperationsModule.OperationsOf<typeof Themed>
+    >();
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Themed)),
+      ['ping'],
+      'and the reader agrees with the type at run time',
+    );
 
     class Classroom extends CardDef {
       @operation static addActivity = addActivity;

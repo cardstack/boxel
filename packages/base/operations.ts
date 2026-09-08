@@ -51,7 +51,11 @@ import {
 // TypeScript requires a subclass's static to stay assignable to the one it
 // shadows, so an operation meant to be overridden with a differently-shaped
 // declaration is annotated `: OperationDeclaration` where it is first
-// declared; the override then keeps its own literal types.
+// declared; the override then keeps its own literal types. That annotation
+// costs the annotated name its payload type — `ParamsOf` reads the literal
+// schema — so it is worth writing only where a subclass really will reshape
+// the operation, and the override's own declaration is where the payload type
+// then comes from.
 // ============================================================================
 
 // The behaviors every declaration builds on. Which of them a def carries is
@@ -327,8 +331,15 @@ export type OperationDeclaration =
 
 // The operations declared on a def, read off the class type. Keyed by
 // operation name, so an invocation surface can be typed from the class alone.
+//
+// A declaration qualifies by its `base` still naming a base operation, which
+// is what `satisfies OperationDeclaration` (or an explicit annotation)
+// preserves. Written without either, `base` widens to `string` and the
+// declaration is indistinguishable from any other static that happens to
+// carry a `base` — so it is left out rather than sweeping unrelated statics
+// in alongside it.
 export type OperationsOf<Def> = {
-  [Name in keyof Def as Def[Name] extends { base: string }
+  [Name in keyof Def as Def[Name] extends { base: BaseOperationName }
     ? Name
     : never]: Def[Name];
 };
@@ -336,6 +347,13 @@ export type OperationsOf<Def> = {
 // The payload an operation accepts, derived from its declared `params`
 // schema: each entry becomes the value type of the field class that declares
 // it, and a `linkTo(…)` param becomes a card identity.
+//
+// This reads the literal schema, so it needs a declaration whose `params`
+// survived inference — `satisfies OperationDeclaration`, or nothing at all.
+// Annotating a declaration `: OperationDeclaration` widens `params` to the
+// schema type and erases the keys, leaving `Record<string, never>` here:
+// annotate only the operation a subclass has to reshape (see the header), and
+// read the payload type off the subclass's own declaration.
 export type ParamsOf<Declaration> = Declaration extends {
   params: infer Schema;
 }
