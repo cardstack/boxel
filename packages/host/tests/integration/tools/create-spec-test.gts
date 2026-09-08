@@ -112,6 +112,11 @@ export default class TestComponent extends Component {
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
+          'test-file-def.gts': `import { TextFileDef } from '@cardstack/base/text-file-def';
+
+export class NotesFileDef extends TextFileDef {
+  static displayName = 'Notes File';
+}`,
           'test-spec.gts': `import { Spec } from '@cardstack/base/spec';
 
 export class TestSpec extends Spec {
@@ -232,6 +237,24 @@ export class TestSpec extends Spec {
       'TestCommand',
       'Spec title falls back to export name for commands',
     );
+  });
+
+  test('creates spec with correct type for file definition', async function (assert) {
+    const result = await createSpecCommand.execute({
+      codeRef: {
+        module: testRRI('test-file-def.gts'),
+        name: 'NotesFileDef',
+      },
+      targetRealm: testRealmURL,
+    });
+
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
+    const store = getService('store');
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
+
+    assert.strictEqual(savedSpec.specType, 'file', 'Spec type is file');
+    assert.true(savedSpec.isFile, 'isFile is derived from specType');
+    assert.strictEqual(savedSpec.cardTitle, 'Notes File');
   });
 
   test('throws error when export is not found in module', async function (assert) {
