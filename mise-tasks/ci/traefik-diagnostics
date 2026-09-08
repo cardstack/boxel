@@ -52,14 +52,36 @@ fi
 
 # Whether the ports the route files point at still have a listener behind
 # them separates "Traefik has no route" from "Traefik has a route to a dead
-# backend": both surface to a client as a Traefik-originated error.
-section "listening TCP ports (node / traefik / docker-proxy)"
+# backend": both surface to a client as a Traefik-originated error. The check
+# is by port, taken from each route file's upstream `url:`, because nothing
+# reliable identifies the services by process: Node names its main thread, so
+# `ss -p` reports those processes as `MainThread`, and root-owned docker-proxy
+# sockets carry no process name at all for an unprivileged caller.
+section "route upstreams and their listeners"
 if command -v ss >/dev/null 2>&1; then
-  ss -ltnp 2>/dev/null | grep -Ei 'node|traefik|docker-proxy|http-server|LISTEN.*:(80|443) ' | head -60 \
-    || echo "(none matched)"
+  listeners="$(ss -ltn 2>/dev/null || true)"
 else
-  lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -Ei 'node|traefik|docker' | head -60 || echo "(lsof unavailable)"
+  listeners="$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null || true)"
 fi
+listening() {
+  printf '%s\n' "$listeners" | grep -qE ":$1([[:space:]]|$)"
+}
+for port in 80 443; do
+  if listening "$port"; then state=listening; else state="NOT LISTENING"; fi
+  printf '%-6s %-14s %s\n' "$port" "$state" "(traefik entrypoint)"
+done
+named=0
+for f in "$dynamic_dir"/*.yml "$dynamic_dir"/*.yaml; do
+  [ -e "$f" ] || continue
+  while IFS= read -r port; do
+    named=1
+    if listening "$port"; then state=listening; else state="NOT LISTENING"; fi
+    printf '%-6s %-14s %s\n' "$port" "$state" "$(basename "$f")"
+  done < <(grep -oE 'host\.docker\.internal:[0-9]+' "$f" | sed 's/.*://' | sort -un)
+done
+[ "$named" = 1 ] || echo "(no route file names an upstream port)"
+echo "--- all listening TCP sockets"
+printf '%s\n' "$listeners" | head -60
 
 # Traefik writes its own log and the access log to the same standard output,
 # so `docker logs` returns them interleaved. They are split here rather than
