@@ -9,6 +9,8 @@ import {
   type BxlBoxelSourceDefinition,
   type BxlCardSourceDocument,
   type BxlCardSourceRelationship,
+  type BxlMutationOverlays,
+  type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
@@ -1187,6 +1189,226 @@ strictEqual(
   computedSkip.document.data.attributes?.image,
   'computed-write-was-skipped',
 );
+// --- Read-only overlays ------------------------------------------------------
+//
+// The realm hands BXL the computed values and the searchable Fields of linked
+// Cards as read-only layers under the stored document. `computedLabel` is a
+// computed Field and `cardInfo.theme.name` a Field of a linked Card; neither
+// is ever written to the card's own JSON, so both read `null`/absent from the
+// stored projection and only an overlay can answer them.
+
+const overlays: BxlMutationOverlays = {
+  computeds: {
+    computedLabel: 'TypeScript · language',
+    // A stale copy of a stored value: the stored document still wins.
+    image: 'https://cdn.example.test/stale.svg',
+  },
+  linked: { cardInfo: { theme: { name: 'Original' } } },
+};
+
+function overlayMutation(
+  source: string,
+  options: {
+    overlays?: BxlMutationOverlays;
+    onRead?: (event: BxlMutationReadEvent) => void;
+    resolveCard?: (id: string) => { id: string } | undefined;
+  } = {},
+) {
+  return mutateBxlCardSource(sourceFixture(), source, {
+    schema,
+    syntax: 'solidified',
+    programId: 'overlay-reads',
+    ...projectionOptions,
+    ...options,
+  });
+}
+
+function overlayError(
+  source: string,
+  options: Parameters<typeof overlayMutation>[1] = {},
+): BxlMutationError {
+  try {
+    overlayMutation(source, options);
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`expected ${JSON.stringify(source)} to fail`);
+}
+
+const computedRead = overlayMutation('.image = .computedLabel;', { overlays });
+strictEqual(
+  computedRead.document.data.attributes?.image,
+  'TypeScript · language',
+);
+
+const linkedRead = overlayMutation('.image = .cardInfo.theme.name;', {
+  overlays,
+});
+strictEqual(linkedRead.document.data.attributes?.image, 'Original');
+
+// An overlay never reaches the committed document or the plan's output: it
+// answers reads, and the plan hands back the stored document the program made.
+strictEqual(linkedRead.document.data.attributes?.computedLabel, undefined);
+const storedSnapshot = snapshotBxlCardSource(
+  sourceFixture(),
+  schema,
+  projectionOptions,
+) as Record<string, unknown>;
+deepStrictEqual(linkedRead.plan.output, {
+  ...storedSnapshot,
+  image: 'Original',
+});
+
+// A stale overlay copy of a stored value loses to the stored value.
+deepStrictEqual(
+  overlayMutation('.tags = [.image];', { overlays }).document.data.attributes
+    ?.tags,
+  ['https://example.test/typescript.svg'],
+);
+
+const computedWrite = overlayError('.computedLabel = "written";', {
+  overlays,
+});
+strictEqual(computedWrite.code, 'computed-read-only');
+deepStrictEqual(computedWrite.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+});
+
+const linkedWrite = overlayError('.cardInfo.theme.name = "written";', {
+  overlays,
+});
+strictEqual(linkedWrite.code, 'write-through-link');
+deepStrictEqual(linkedWrite.details, {
+  path: 'cardInfo.theme.name',
+  tier: 'linked',
+});
+
+// Replacing the relationship edge is a write to the Card's own document, not a
+// write through the link, so an overlay on the linked Card's Fields allows it.
+const relinked = overlayMutation(
+  `.cardInfo.theme = card(${JSON.stringify(darkTheme)});`,
+  { overlays, resolveCard: (id) => (id === darkTheme ? { id } : undefined) },
+);
+strictEqual(
+  relationship(relinked.document, 'cardInfo.theme').links?.self,
+  darkTheme,
+);
+
+const unavailable = overlayError('.image = .computedLabel;', {
+  overlays: {
+    unavailable: [
+      { path: 'computedLabel', tier: 'computed', reason: 'not-indexed' },
+    ],
+  },
+});
+strictEqual(unavailable.code, 'snapshot-unavailable');
+deepStrictEqual(unavailable.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+  reason: 'not-indexed',
+});
+
+const notSearchable = overlayError('.image = .cardInfo.theme.name;', {
+  overlays: {
+    unavailable: [
+      { path: 'cardInfo.theme', tier: 'linked', reason: 'not-searchable' },
+    ],
+  },
+});
+strictEqual(notSearchable.code, 'snapshot-unavailable');
+// A path the host could not supply covers the paths nested inside it.
+strictEqual(notSearchable.details?.path, 'cardInfo.theme');
+strictEqual(notSearchable.details?.reason, 'not-searchable');
+
+// An assert over an overlay value must say it accepts a stale answer.
+const bareAssert = overlayError(
+  'assert(.computedLabel == "TypeScript · language"; "wrong label");',
+  { overlays },
+);
+strictEqual(bareAssert.code, 'assert-snapshot-required');
+deepStrictEqual(bareAssert.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+});
+
+strictEqual(
+  overlayMutation(
+    'assert(.computedLabel == "TypeScript · language"; "wrong label"; { snapshot: true });\n' +
+      '.image = "asserted";',
+    { overlays },
+  ).document.data.attributes?.image,
+  'asserted',
+);
+
+const bestEffortUnavailable = overlayError(
+  'assert(.computedLabel == "anything"; "label is not indexed yet"; { snapshot: true });',
+  {
+    overlays: {
+      unavailable: [
+        { path: 'computedLabel', tier: 'computed', reason: 'key-absent' },
+      ],
+    },
+  },
+);
+strictEqual(bestEffortUnavailable.code, 'assertion-failed');
+strictEqual(bestEffortUnavailable.message, 'label is not indexed yet');
+deepStrictEqual(bestEffortUnavailable.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+  reason: 'key-absent',
+});
+
+throws(
+  () => overlayMutation('assert(.image; "m"; { best: "effort" });'),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'assert-option-invalid',
+);
+throws(
+  () => overlayMutation('assert(.image; "m"; { snapshot: true }; 1);'),
+  (error) => error instanceof BxlMutationError && error.code === 'call-arity',
+);
+
+const readEvents: BxlMutationReadEvent[] = [];
+overlayMutation(
+  'assert(.cardInfo.theme.name == "Original"; "wrong theme"; { snapshot: true });\n' +
+    '.image = .computedLabel;\n' +
+    '.tags |= . + [.[0]];\n' +
+    '.cardInfo.name = .unknownToTheIndex;',
+  { overlays, onRead: (event) => readEvents.push(event) },
+);
+deepStrictEqual(readEvents, [
+  { path: 'cardInfo.theme.name', tier: 'linked', outcome: 'value' },
+  { path: 'computedLabel', tier: 'computed', outcome: 'value' },
+  // `|=` evaluates its value expression against the assigned location, so both
+  // reads report the paths they address in the document.
+  { path: 'tags', tier: 'source', outcome: 'value' },
+  { path: 'tags.0', tier: 'source', outcome: 'value' },
+  { path: 'unknownToTheIndex', tier: 'source', outcome: 'null' },
+]);
+
+// Additive: a program the overlays do not answer plans and commits identically
+// whether or not the host supplied them.
+const additiveProgram =
+  '.cardInfo.name = "C#";\n' +
+  '.tags = ["language"];\n' +
+  '.computedLabel = "skipped";';
+const withoutOverlays = overlayMutation(additiveProgram);
+const withOverlays = overlayMutation(additiveProgram, {
+  overlays: { linked: overlays.linked },
+});
+strictEqual(
+  JSON.stringify(withOverlays.document),
+  JSON.stringify(withoutOverlays.document),
+);
+strictEqual(
+  JSON.stringify(withOverlays.plan),
+  JSON.stringify(withoutOverlays.plan),
+);
+// Without a computed overlay the write to a computed Field stays a no-op.
+strictEqual(withoutOverlays.plan.statements[2].affected, 0);
+
 console.log(
-  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, and stale-plan safety passed',
+  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, stale-plan safety, and read-only computed/linked overlays passed',
 );

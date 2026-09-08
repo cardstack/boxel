@@ -19,10 +19,27 @@ import type {
 import {
   parseBxlMutationProgram,
   printMutationAst,
+  readAssertSnapshotOption,
   type MutationAssignmentOperator,
   type ParsedMutationArgument,
   type ParsedMutationStatement,
 } from './syntax.ts';
+import {
+  clone,
+  deleteAt,
+  equalJson,
+  hasAt,
+  pathKey,
+  setAt,
+  valueAt,
+} from './json-path.ts';
+import {
+  classifyOverlayRead,
+  mergeBxlMutationOverlays,
+  overlayWriteOwner,
+  restoreOverlayAnchors,
+  type OverlayIndex,
+} from './overlays.ts';
 import {
   BxlMutationError,
   type BxlMutationField,
@@ -33,9 +50,11 @@ import {
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
   type BxlMutationPrepareOptions,
+  type BxlMutationReadEvent,
   type BxlMutationReturning,
   type BxlMutationSchema,
   type BxlMutationStatementPlan,
+  type BxlMutationUnavailableOverlay,
   type PreparedBxlMutation,
 } from './types.ts';
 
@@ -71,99 +90,86 @@ interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
+  overlays: OverlayIndex;
+  onRead?: (event: BxlMutationReadEvent) => void;
 }
 
-function clone<T>(value: T): T {
-  if (typeof structuredClone === 'function') return structuredClone(value);
-  return JSON.parse(JSON.stringify(value)) as T;
+/**
+ * What a statement's reads resolved to. `strict` reads raise
+ * `snapshot-unavailable` on a path the host could not supply; a best-effort
+ * assert takes the unavailability back instead and fails with its own message.
+ */
+interface RecordedReads {
+  events: BxlMutationReadEvent[];
+  overlay: boolean;
+  unavailable?: BxlMutationUnavailableOverlay;
 }
 
-function pathKey(path: BxlMutationPath): string {
-  return JSON.stringify(path);
+/**
+ * Where an expression's reads are anchored, and whether an unavailable one
+ * stops the statement. A value expression reads from the Card root; the value
+ * side of `|=` reads from the location it updates.
+ */
+interface ReadContext {
+  prefix?: BxlMutationPath;
+  policy?: 'strict' | 'best-effort';
 }
 
-function equalJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function hasAt(root: BxlMutationJson, path: BxlMutationPath): boolean {
-  if (path.length === 0) return true;
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return false;
-    if (Array.isArray(current)) {
-      if (typeof part !== 'number' || part < 0 || part >= current.length)
-        return false;
-      current = current[part];
-    } else {
-      if (
-        typeof part !== 'string' ||
-        !Object.prototype.hasOwnProperty.call(current, part)
-      )
-        return false;
-      current = (current as Record<string, unknown>)[part];
+function recordReads(
+  argument: ParsedMutationArgument,
+  input: BxlMutationJson,
+  context: PlannerContext,
+  statement: number,
+  reads: ReadContext = {},
+): RecordedReads {
+  const result: RecordedReads = { events: [], overlay: false };
+  if (context.onRead === undefined && context.overlays.empty) return result;
+  const prefix = reads.prefix ?? [];
+  for (const relative of argument.readPaths) {
+    const path = [...prefix, ...relative];
+    if (path.length === 0) continue;
+    const resolved = classifyOverlayRead(
+      context.overlays,
+      path,
+      valueAt(input, relative),
+    );
+    result.events.push(resolved.event);
+    if (resolved.event.tier !== 'source') result.overlay = true;
+    if (resolved.unavailable && !result.unavailable) {
+      result.unavailable = resolved.unavailable;
     }
+    context.onRead?.(resolved.event);
   }
-  return true;
+  if ((reads.policy ?? 'strict') === 'strict' && result.unavailable) {
+    const { path, tier, reason } = result.unavailable;
+    throw new BxlMutationError(
+      'plan',
+      'snapshot-unavailable',
+      statement,
+      `The ${tier} value at ${path} is unavailable (${reason}).`,
+      { details: { path, tier, reason } },
+    );
+  }
+  return result;
 }
 
-function valueAt(
-  root: BxlMutationJson,
+/** Overlay values are read-only: a write that lands on one is refused. */
+function assertWritableOverlayPath(
   path: BxlMutationPath,
-): BxlMutationJson | undefined {
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return undefined;
-    current = Array.isArray(current)
-      ? current[part as number]
-      : (current as Record<string, unknown>)[part as string];
-  }
-  return current as BxlMutationJson | undefined;
-}
-
-function setAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-  value: BxlMutationJson,
-): BxlMutationJson {
-  if (path.length === 0) return clone(value);
-  let current = root as BxlMutationJson[] | Record<string, BxlMutationJson>;
-  for (let index = 0; index < path.length - 1; index++) {
-    const part = path[index]!;
-    const nextPart = path[index + 1]!;
-    const next = Array.isArray(current)
-      ? current[part as number]
-      : current[part as string];
-    if (next === null || typeof next !== 'object') {
-      const replacement: BxlMutationJson =
-        typeof nextPart === 'number' ? [] : {};
-      if (Array.isArray(current)) current[part as number] = replacement;
-      else current[part as string] = replacement;
-      current = replacement as
-        | BxlMutationJson[]
-        | Record<string, BxlMutationJson>;
-    } else {
-      current = next as BxlMutationJson[] | Record<string, BxlMutationJson>;
-    }
-  }
-  const last = path[path.length - 1]!;
-  if (Array.isArray(current)) current[last as number] = clone(value);
-  else current[last as string] = clone(value);
-  return root;
-}
-
-function deleteAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-): BxlMutationJson {
-  if (path.length === 0) {
-    throw new Error('The planner cannot delete its root value.');
-  }
-  const parent = valueAt(root, path.slice(0, -1));
-  const key = path[path.length - 1]!;
-  if (Array.isArray(parent)) parent.splice(key as number, 1);
-  else if (parent && typeof parent === 'object') delete parent[key as string];
-  return root;
+  context: PlannerContext,
+  statement: number,
+): void {
+  const owner = overlayWriteOwner(context.overlays, path);
+  if (!owner) return;
+  throw new BxlMutationError(
+    'validate',
+    owner.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    owner.tier === 'computed'
+      ? `${owner.path} is a computed value and cannot be written.`
+      : `${owner.path} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: owner.path, tier: owner.tier } },
+  );
 }
 
 function collectionAt(
@@ -200,7 +206,9 @@ function evaluateSingleJson(
   input: BxlMutationJson,
   context: PlannerContext,
   statement: number,
+  reads: ReadContext = {},
 ): BxlMutationJson | CardReference {
+  recordReads(argument, input, context, statement, reads);
   if (
     argument.ast.type === 'filter' &&
     argument.ast.name === 'card/1' &&
@@ -507,9 +515,10 @@ function validateWritableLocations(
       'Numeric collection positions require a pinned base revision during streaming execution.',
     );
   }
-  return locations.map((location) =>
-    resolveField(location.path, context, statement),
-  );
+  return locations.map((location) => {
+    assertWritableOverlayPath(location.path, context, statement);
+    return resolveField(location.path, context, statement);
+  });
 }
 
 function loadedCard(
@@ -630,6 +639,7 @@ function planAssignment(
         (location.value ?? null) as BxlMutationJson,
         context,
         statement.statement,
+        { prefix: location.path },
       );
     } else {
       const right = evaluateSingleJson(
@@ -723,8 +733,9 @@ function jsonValue(
   root: BxlMutationJson,
   context: PlannerContext,
   statement: number,
+  reads: ReadContext = {},
 ): BxlMutationJson | CardReference {
-  return evaluateSingleJson(argument, root, context, statement);
+  return evaluateSingleJson(argument, root, context, statement, reads);
 }
 
 function planCall(
@@ -738,18 +749,52 @@ function planCall(
 
   switch (statement.name) {
     case 'assert': {
-      const condition = evaluateItems(
-        statement.args[0]!.ast,
-        [createItem(root)],
-        context,
-      );
-      if (condition.length !== 1 || !isTrue(condition[0]!.value)) {
-        const message = jsonValue(statement.args[1]!, root, context, number);
+      const bestEffort =
+        statement.args.length === 3 &&
+        readAssertSnapshotOption(statement.args[2]!, number);
+      const reads = recordReads(statement.args[0]!, root, context, number, {
+        policy: 'best-effort',
+      });
+      if (reads.overlay && !bestEffort) {
+        const overlay = reads.events.find((event) => event.tier !== 'source')!;
+        throw new BxlMutationError(
+          'validate',
+          'assert-snapshot-required',
+          number,
+          `assert reads the ${overlay.tier} value at ${overlay.path}, which can lag the stored document. Mark the assert best-effort with { snapshot: true }.`,
+          { details: { path: overlay.path, tier: overlay.tier } },
+        );
+      }
+      // A best-effort assert fails with its own message rather than raising
+      // `snapshot-unavailable`, so the author's wording reaches the caller.
+      const condition = reads.unavailable
+        ? []
+        : evaluateItems(statement.args[0]!.ast, [createItem(root)], context);
+      if (
+        reads.unavailable ||
+        condition.length !== 1 ||
+        !isTrue(condition[0]!.value)
+      ) {
+        // The whole statement is best-effort, message included: an author who
+        // marked the assert tolerant of stale values gets their wording back
+        // even when the message itself reads an unavailable path.
+        const message = jsonValue(statement.args[1]!, root, context, number, {
+          policy: bestEffort ? 'best-effort' : 'strict',
+        });
         throw new BxlMutationError(
           'plan',
           'assertion-failed',
           number,
           typeof message === 'string' ? message : 'Mutation assertion failed.',
+          reads.unavailable
+            ? {
+                details: {
+                  path: reads.unavailable.path,
+                  tier: reads.unavailable.tier,
+                  reason: reads.unavailable.reason,
+                },
+              }
+            : {},
         );
       }
       break;
@@ -1279,6 +1324,7 @@ export function prepareBxlMutation(
           'The loaded Card revision does not match baseRevision.',
         );
       }
+      const overlays = mergeBxlMutationOverlays(snapshot, planOptions.overlays);
       const context: PlannerContext = {
         prepare: preparedOptions,
         plan: {
@@ -1287,9 +1333,11 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
+        overlays: overlays.index,
+        ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
       };
       const before = clone(snapshot);
-      let working = clone(snapshot);
+      let working = overlays.root;
       const statementPlans: BxlMutationStatementPlan[] = [];
 
       for (const statement of parsed.statements) {
@@ -1340,6 +1388,7 @@ export function prepareBxlMutation(
           .map((path) => [pathKey(path), path]),
       );
       const paths = [...pathMap.values()];
+      const output = restoreOverlayAnchors(working, overlays.index, paths);
       return {
         language: 'bxl-mutation/1',
         programId: planOptions.programId,
@@ -1354,7 +1403,7 @@ export function prepareBxlMutation(
         canonicalSource: parsed.canonicalSource,
         warnings: [...parsed.warnings],
         before,
-        output: working,
+        output,
         statements: statementPlans,
         intents,
         affected,
@@ -1362,7 +1411,7 @@ export function prepareBxlMutation(
         returning: returningProjection(
           planOptions.returning,
           before,
-          working,
+          output,
           intents,
           affected,
           paths,

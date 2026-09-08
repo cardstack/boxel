@@ -13,6 +13,7 @@ export {
 
 export {
   BxlMutationStatementStream,
+  collectMutationReadPaths,
   createBxlMutationStatementStream,
   frameBxlMutationStatements,
 } from './syntax.ts';
@@ -61,19 +62,27 @@ export type {
 export { BxlMutationError } from './types.ts';
 
 export type {
+  BxlMutationErrorDetails,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,
   BxlMutationIntent,
   BxlMutationJson,
+  BxlMutationOverlayReason,
+  BxlMutationOverlays,
+  BxlMutationOverlayTier,
   BxlMutationPath,
   BxlMutationPlan,
   BxlMutationPlanOptions,
   BxlMutationPrepareOptions,
+  BxlMutationReadEvent,
+  BxlMutationReadOutcome,
+  BxlMutationReadTier,
   BxlMutationReturning,
   BxlMutationRootField,
   BxlMutationSchema,
   BxlMutationStatementPlan,
+  BxlMutationUnavailableOverlay,
   BxlStructuredMutationOperation,
   PreparedBxlMutation,
 } from './types.ts';

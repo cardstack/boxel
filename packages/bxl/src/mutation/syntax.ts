@@ -11,6 +11,7 @@ import type {
 } from '../jqtools/parser/AST.ts';
 import type {
   BxlMutationField,
+  BxlMutationPath,
   BxlMutationPrepareOptions,
   BxlMutationSchema,
 } from './types.ts';
@@ -32,6 +33,12 @@ export interface ParsedMutationArgument {
   canonical: string;
   bulk: boolean;
   explicitIndex: boolean;
+  /**
+   * The Card paths this argument reads, relative to the value it is evaluated
+   * against. Empty for location arguments, whose paths the planner resolves
+   * against the document instead.
+   */
+  readPaths: BxlMutationPath[];
 }
 
 export type ParsedMutationStatement =
@@ -69,21 +76,26 @@ export type MutationCallName =
   | 'move_item_to_end'
   | 'reorder_by';
 
-const CALL_ARITIES: Record<MutationCallName, number> = {
-  assert: 2,
-  replace: 2,
-  copy_value_to: 2,
-  del: 1,
-  prepend: 2,
-  append: 2,
-  insert_at: 3,
-  insert_item_before: 2,
-  insert_item_after: 2,
-  move_item_before: 2,
-  move_item_after: 2,
-  move_item_to_start: 2,
-  move_item_to_end: 2,
-  reorder_by: 3,
+/**
+ * The argument counts each structural call accepts. `assert` accepts a third
+ * argument, an option record; every other call has one fixed arity. Keep this
+ * in step with `MutationCallName` and `LOCATION_ARGUMENTS`.
+ */
+const CALL_ARITIES: Record<MutationCallName, readonly number[]> = {
+  assert: [2, 3],
+  replace: [2],
+  copy_value_to: [2],
+  del: [1],
+  prepend: [2],
+  append: [2],
+  insert_at: [3],
+  insert_item_before: [2],
+  insert_item_after: [2],
+  move_item_before: [2],
+  move_item_after: [2],
+  move_item_to_start: [2],
+  move_item_to_end: [2],
+  reorder_by: [3],
 };
 
 const LOCATION_ARGUMENTS: Record<MutationCallName, ReadonlySet<number>> = {
@@ -775,9 +787,180 @@ function argument(
       canonical: parsed.canonical,
       bulk: location && source.includes('[*'),
       explicitIndex: location && /\[\s*-?\d+\s*\]/.test(source),
+      readPaths: location ? [] : collectMutationReadPaths(parsed.ast),
     },
     warnings: parsed.warnings,
   };
+}
+
+/**
+ * Builtins whose arguments are evaluated against the same input as the call
+ * itself, so a path written inside one addresses the same document. Every
+ * other builtin may re-root its arguments — `map(.name)` reads a collection
+ * item, not a Card Field — so the walk stops at the call instead of claiming
+ * a path it cannot prove.
+ */
+const INPUT_PRESERVING_FILTERS: ReadonlySet<string> = new Set([
+  'card/1',
+  'first/1',
+  'has/1',
+  'IF/2',
+  'IF/3',
+  'last/1',
+  'not/0',
+  'select/1',
+]);
+
+function isInputPreservingFilter(name: string): boolean {
+  return INPUT_PRESERVING_FILTERS.has(name) || name.startsWith('IFS/');
+}
+
+/** The path an index chain addresses, when every segment of it is static. */
+function staticPathOf(node: ExpressionAst): BxlMutationPath | undefined {
+  if (node.type === 'identity') return [];
+  if (node.type !== 'index') return undefined;
+  const base = staticPathOf(node.expr);
+  if (!base) return undefined;
+  if (typeof node.index === 'string') return [...base, node.index];
+  if (node.index.type === 'num' && Number.isInteger(node.index.value)) {
+    return [...base, node.index.value];
+  }
+  return undefined;
+}
+
+/**
+ * The Card paths an expression reads, in source order and deduplicated.
+ *
+ * Only chains the walk can prove are reported: it follows operators and
+ * structural literals, and follows a pipe into its right side only when the
+ * left side is a static path it can prefix with. An iterator, a dynamic index,
+ * or a re-rooting builtin argument ends the chain, and the longest provable
+ * prefix stands in for what lies below — `.tags[].name` reports `tags`. Under-
+ * reporting costs a telemetry event; over-reporting would refuse a program
+ * over a path it never read.
+ *
+ * The empty path is a read of the expression's own input, which is the Card
+ * root for most expressions and the assigned location for the value side of
+ * `|=`.
+ */
+export function collectMutationReadPaths(
+  ast: ExpressionAst,
+): BxlMutationPath[] {
+  const paths: BxlMutationPath[] = [];
+  const seen = new Set<string>();
+
+  function record(path: BxlMutationPath): void {
+    const key = JSON.stringify(path);
+    if (seen.has(key)) return;
+    seen.add(key);
+    paths.push(path);
+  }
+
+  function walk(node: ExpressionAst, prefix: BxlMutationPath): void {
+    const direct = staticPathOf(node);
+    if (direct) {
+      record([...prefix, ...direct]);
+      return;
+    }
+    switch (node.type) {
+      case 'index':
+        walk(node.expr, prefix);
+        if (typeof node.index !== 'string') walk(node.index, prefix);
+        return;
+      case 'iterator':
+        walk(node.expr, prefix);
+        return;
+      case 'array':
+        if (node.expr) walk(node.expr, prefix);
+        return;
+      case 'slice':
+        walk(node.expr, prefix);
+        if (node.from) walk(node.from, prefix);
+        if (node.to) walk(node.to, prefix);
+        return;
+      case 'unary':
+        walk(node.expr, prefix);
+        return;
+      case 'binary': {
+        walk(node.left, prefix);
+        if (node.operator !== '|') {
+          walk(node.right, prefix);
+          return;
+        }
+        const left = staticPathOf(node.left);
+        if (left) walk(node.right, [...prefix, ...left]);
+        return;
+      }
+      case 'object':
+        for (const entry of node.entries) {
+          if (typeof entry.key !== 'string') walk(entry.key, prefix);
+          if (entry.value) walk(entry.value, prefix);
+        }
+        return;
+      case 'if':
+        walk(node.cond, prefix);
+        walk(node.then, prefix);
+        for (const elif of node.elifs ?? []) {
+          walk(elif.cond, prefix);
+          walk(elif.then, prefix);
+        }
+        if (node.else) walk(node.else, prefix);
+        return;
+      case 'try':
+        walk(node.body, prefix);
+        if (node.catch) walk(node.catch, prefix);
+        return;
+      case 'filter':
+        if (isInputPreservingFilter(node.name)) {
+          for (const arg of node.args) walk(arg, prefix);
+        }
+        return;
+      case 'str':
+        if (node.interpolated) {
+          for (const part of node.parts) {
+            if (typeof part !== 'string') walk(part, prefix);
+          }
+        }
+        return;
+      default:
+        return;
+    }
+  }
+
+  walk(ast, []);
+  return paths;
+}
+
+/**
+ * `assert(condition; message; { snapshot: true })` marks an assert best-effort
+ * against overlay values, which may lag the stored document. The option record
+ * is read at planning time rather than evaluated, so it must be written as a
+ * literal.
+ */
+export function readAssertSnapshotOption(
+  argument: ParsedMutationArgument,
+  statement: number,
+): boolean {
+  const { ast } = argument;
+  const entry =
+    ast.type === 'object' && ast.entries.length === 1
+      ? ast.entries[0]
+      : undefined;
+  const value = entry?.value;
+  if (
+    !entry ||
+    entry.key !== 'snapshot' ||
+    value === undefined ||
+    value.type !== 'bool'
+  ) {
+    throw new BxlMutationError(
+      'parse',
+      'assert-option-invalid',
+      statement,
+      'assert accepts one option record, written as the literal { snapshot: true }.',
+    );
+  }
+  return value.value;
 }
 
 export function parseBxlMutationProgram(
@@ -842,15 +1025,16 @@ export function parseBxlMutationProgram(
     const semicolonArgs = splitTopLevel(call.body, ';');
     const commaArgs = splitTopLevel(call.body, ',');
     const rawArgs = semicolonArgs.length > 1 ? semicolonArgs : commaArgs;
+    const arities = CALL_ARITIES[name];
     if (
-      rawArgs.length !== CALL_ARITIES[name] ||
+      !arities.includes(rawArgs.length) ||
       rawArgs.some((value) => value.length === 0)
     ) {
       throw new BxlMutationError(
         'parse',
         'call-arity',
         statementNumber,
-        `${name} expects ${CALL_ARITIES[name]} arguments; received ${rawArgs.length}.`,
+        `${name} expects ${arities.join(' or ')} arguments; received ${rawArgs.length}.`,
       );
     }
     const args = rawArgs.map((raw, index) => {
@@ -885,6 +1069,9 @@ export function parseBxlMutationProgram(
       );
     });
     warnings.push(...args.flatMap((entry) => entry.warnings));
+    if (name === 'assert' && args.length === 3) {
+      readAssertSnapshotOption(args[2]!.argument, statementNumber);
+    }
     statements.push({
       kind: 'call',
       statement: statementNumber,

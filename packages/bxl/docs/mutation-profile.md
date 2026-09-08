@@ -244,6 +244,64 @@ such as `@catalog/...`. `formatReference(cardId, path)` performs the inverse for
 writes and may choose RRI, relative, or absolute form per edge. Reindexing never
 rewrites an untouched relationship's reference, metadata, or extension members.
 
+## Read-only overlays
+
+A Card's stored document holds its own Field values and its links to other
+Cards as references. Two other kinds of value exist only in the search index:
+**computed** values, which the indexer evaluates and writes to `pristine_doc`,
+and **linked-Card** values, the searchable Fields of the Cards this one links
+to, denormalized into `search_doc`. A host that does not instantiate Cards
+reads those columns itself and passes them to the planner as read-only
+overlays:
+
+```ts
+const plan = prepared.plan(storedSnapshot, {
+  programId: 'assistant:call_123',
+  overlays: {
+    computeds: pristineDoc,
+    linked: searchDoc,
+    unavailable: [
+      { path: 'patient.name', tier: 'linked', reason: 'not-searchable' },
+    ],
+  },
+  onRead(event) {
+    log(event.path, event.tier, event.outcome);
+  },
+});
+```
+
+An author addresses stored, computed, and linked values through the same
+`.path` syntax. The rules the planner enforces:
+
+- **The stored document wins.** An overlay answers a path only where the
+  stored document holds nothing — an absent key or a `null`, which is what a
+  Card holds at a path it never persists. An overlay's stale copy of a stored
+  value never displaces the stored one.
+- **Overlay values are read-only.** A write that lands on a computed path
+  fails with `computed-read-only`, and one that lands on a linked Card's Field
+  fails with `write-through-link`, each naming the path. Replacing the
+  relationship edge itself stays an ordinary write to the Card's own document.
+- **An unavailable read fails loudly.** `unavailable` entries name what the
+  host could not supply and why (`not-indexed`, `not-searchable`,
+  `key-absent`), covering the paths nested inside them. Reading one raises
+  `snapshot-unavailable` carrying `{ path, tier, reason }` rather than leaking
+  a `null` into a write or a precondition.
+- **An assert over an overlay says so.** Overlay values can lag the stored
+  document by an indexing round, so an `assert` that reads one requires the
+  three-argument form `assert(condition, message, { snapshot: true })`; without
+  it the statement fails with `assert-snapshot-required`. With it, an
+  unavailable read fails the assert with the author's own message.
+- **Every read is reported.** `onRead` fires once per path a program's
+  expressions resolve, in program order, with the tier that answered
+  (`source`, `computed`, `linked`) and the outcome (`value`, `null`,
+  `unavailable`).
+
+Overlays are additive: a plan built without them behaves exactly as one built
+before they existed, and a plan's `output` carries stored values only — the
+overlay answers reads and never reaches the committed document. The planner
+receives overlay values already fetched by the host; it never queries the index
+itself.
+
 ## Why a profile is needed
 
 Ordinary BXL computes a value. Mutation BXL additionally describes locations
@@ -391,6 +449,7 @@ Statement-terminating semicolons are framed outside the expression parser.
 | `move_item_to_end(item, collection)` | Move an item to array end. | exactly one item, one collection |
 | `reorder_by(collection, key, order)` | Apply an exact key permutation. | one collection |
 | `assert(expression, message)` | Add a no-write precondition. | exactly one Boolean |
+| `assert(expression, message, { snapshot: true })` | The same precondition, accepting a stale or missing overlay answer. | exactly one Boolean |
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
@@ -925,7 +984,9 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `relationship-invalid`, `authorization-denied`;
 - `revision-conflict`, `schema-version-conflict`;
 - `execution-identity-conflict`, `limit-exceeded`;
-- `stream-incomplete`, `commit-failed`, `rollback-conflict`.
+- `stream-incomplete`, `commit-failed`, `rollback-conflict`;
+- `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
+  `assert-snapshot-required`.
 
 ## Additional use cases covered by this contract
 
