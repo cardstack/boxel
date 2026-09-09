@@ -429,15 +429,24 @@ module('Unit | file-formats', function (hooks) {
         assert.strictEqual(relativeDate(PINNED - 800 * DAY), '2y ago');
       });
 
-      // The property the Percy comparison depends on: same input, same output,
-      // however much real time passes between two renders.
-      test('is stable across the thresholds it would otherwise drift through', function (assert) {
-        for (let ageDays of [0, 1, 29, 30, 364, 365, 900]) {
-          let stamp = PINNED - ageDays * DAY;
+      // Expected values rather than a self-comparison: `relativeDate(x)` twice
+      // within a tick agrees whether or not the clock is pinned, so that form
+      // demonstrates nothing it appears to. These also pin the boundaries where
+      // the format changes, which nothing else covers.
+      test('renders each threshold as a function of the pinned instant', function (assert) {
+        for (let [ageDays, expected] of [
+          [0, 'today'],
+          [1, '1d ago'],
+          [29, '29d ago'],
+          [30, '1mo ago'],
+          [364, '12mo ago'],
+          [365, '1y ago'],
+          [900, '2y ago'],
+        ] as [number, string][]) {
           assert.strictEqual(
-            relativeDate(stamp),
-            relativeDate(stamp),
-            `${ageDays}d old renders identically on repeat`,
+            relativeDate(PINNED - ageDays * DAY),
+            expected,
+            `${ageDays}d old`,
           );
         }
       });
@@ -459,22 +468,24 @@ module('Unit | file-formats', function (hooks) {
           PINNED * 1000,
           'nowDate() reports the same instant',
         );
-        // The property the whole seam exists for: two reads separated by real
-        // work agree, so anything rendered from them can be compared.
-        let first = now();
-        for (let i = 0; i < 1e5; i++) {
-          /* burn enough wall-clock that an unpinned clock would move */
-        }
-        assert.strictEqual(now(), first, 'repeated reads do not advance');
       });
 
-      test('falls back to the real clock when the pin is not a number', function (assert) {
-        (globalThis as { __boxelNow?: unknown }).__boxelNow = 'nonsense';
-        assert.strictEqual(
-          relativeDate(Date.now()),
-          'today',
-          'a non-numeric pin is ignored rather than breaking the format',
-        );
+      // Asserted through `now()` rather than a rendered label, so it cannot rot
+      // as the pinned instant recedes from the real calendar. The numeric
+      // string is the realistic mistake — `String(Date.now())` out of a query
+      // param or an env var — and is exactly what `typeof` rejects and what a
+      // looser `Number.isFinite(Number(pinned))` would wrongly honour. `NaN`
+      // and `Infinity` are the half nothing else reaches.
+      test('ignores a pin that is not a finite number', function (assert) {
+        for (let bad of ['nonsense', String(PINNED * 1000), NaN, Infinity]) {
+          (globalThis as { __boxelNow?: unknown }).__boxelNow = bad;
+          let before = Date.now();
+          let reading = now();
+          assert.ok(
+            reading >= before && reading <= Date.now(),
+            `${String(bad)} is ignored in favour of the real clock`,
+          );
+        }
       });
     });
   });
