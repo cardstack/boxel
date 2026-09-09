@@ -75,7 +75,7 @@ module('Unit | VirtualNetwork reset', function () {
 
   // A reset leaves the handler chain alone, so both the constructor's package
   // shim handler and anything a caller mounted go on serving. Clearing it
-  // stranded every shimmed package, and then every in-process realm.
+  // would strand every shimmed package, and with them every in-process realm.
   test('keeps serving modules shimmed before a reset', async function (assert) {
     let vn = networkWithRealm();
     vn.shimModule('a-package', { thing: 1 });
@@ -120,19 +120,53 @@ module('Unit | VirtualNetwork reset', function () {
     );
   });
 
-  test('a Loader holding the network sees mappings registered after a reset', function (assert) {
+  // Runs through the holder this change is about rather than through the
+  // network directly. The first assertion is the one a reset has to deliver: a
+  // key folded under a mapping the network has forgotten must not survive it.
+  test('a Loader holding the network stops folding through a forgotten mapping', function (assert) {
     let vn = networkWithRealm();
     let loader = new Loader(vn.fetch, vn.resolveImport, {
       virtualNetwork: vn,
     });
+    let resolved = `${realmURL}thing`;
+    assert.strictEqual(
+      loader.moduleKey(resolved),
+      '@scope/realm/thing',
+      'folds through the mapping while it is registered',
+    );
 
     vn.reset();
-    vn.addRealmMapping('@scope/fresh/', 'https://example.com/fresh/');
 
+    assert.strictEqual(
+      loader.moduleKey(resolved),
+      resolved,
+      'the key derived before the reset did not outlive it',
+    );
+
+    vn.addRealmMapping('@scope/fresh/', 'https://example.com/fresh/');
     assert.strictEqual(
       loader.moduleKey('https://example.com/fresh/mod'),
       '@scope/fresh/mod',
-      'the loader folds through the post-reset mapping without being rebuilt',
+      'and a mapping registered afterwards folds without rebuilding the loader',
+    );
+  });
+
+  // The shims a package namespace addresses survive on the shim handler, so
+  // the namespace has to survive with them — otherwise the network serves a
+  // shimmed module while refusing to recognise the specifier naming it.
+  test('keeps package namespaces while forgetting realms', function (assert) {
+    let vn = networkWithRealm();
+    vn.addPackageMapping('@cardstack/boxel-ui/', 'https://packages/boxel-ui/');
+
+    vn.reset();
+
+    assert.true(
+      vn.isRegisteredPrefix('@cardstack/boxel-ui/components'),
+      'the package namespace is still registered',
+    );
+    assert.false(
+      vn.isRegisteredPrefix('@scope/realm/thing'),
+      'the realm mapping is not',
     );
   });
 });
