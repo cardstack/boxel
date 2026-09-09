@@ -114,6 +114,60 @@ export class VirtualNetwork {
     return () => this.mappingChangeListeners.delete(listener);
   }
 
+  /**
+   * Forgets the realms this network knows, and nothing else.
+   *
+   * Resetting in place rather than constructing a replacement is deliberate.
+   * Consumers hold this object — the Loader keeps it for cache-key folding,
+   * `fetcher` closes over it, `Loader.cloneLoader` copies it onto the clone —
+   * and a replacement leaves every one of them naming through a network
+   * nothing else consults, with no signal that it happened. Identity is what
+   * makes those holders correct, so it is preserved and the listeners are told.
+   *
+   * What survives is what belongs to the host build rather than to a session:
+   * mounted handlers, the shim registry, and the package namespaces that
+   * address it. What goes is realm knowledge — realm mappings, realm URL
+   * aliases, and the memos derived from them.
+   *
+   * Listeners survive too: a subscriber registered against this instance is
+   * still a live subscriber afterwards. They are notified last, once the state
+   * is already gone, because dropping every realm at once is the largest
+   * mapping change there is — a memo keyed under the old mappings cannot be
+   * allowed to outlive them.
+   */
+  reset(): void {
+    // Mounted handlers are the owner's lifecycle, not the session's — an
+    // in-process realm does not stop existing because someone logged in — and
+    // nothing re-mounts them, so clearing them here would strand every fetch
+    // to one. A fresh instance has no caller mounts because it belongs to a
+    // fresh owner; that isolation comes from constructing the network, not
+    // from resetting it.
+    //
+    // Package namespaces are kept for the same reason, one level up: the shims
+    // they address survive on `packageShimHandler`, so dropping the prefix
+    // would leave the network serving a shimmed module while refusing to
+    // recognise the specifier that names it.
+    for (let prefix of [...this.realmMappings.keys()]) {
+      if (this.packageNamespacePrefixes.has(prefix)) {
+        continue;
+      }
+      this.realmMappings.delete(prefix);
+      this.importMap.delete(prefix);
+    }
+    this.urlMappings = [];
+    this.clearURLCaches();
+    this.notifyMappingChange();
+  }
+
+  // The three URL memos are keyed by the mapping set, so every mutation has to
+  // drop all three together. Collected here so a fourth memo cannot be added
+  // to some of the call sites and not the rest.
+  private clearURLCaches() {
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
+  }
+
   private notifyMappingChange() {
     for (let listener of this.mappingChangeListeners) {
       listener();
@@ -148,9 +202,7 @@ export class VirtualNetwork {
     // its virtual→real mapURL step), so a new URL mapping invalidates their
     // memos. toURLHref resolves only through realmMappings, so clearing its
     // cache here is purely defensive.
-    this.toURLHrefCache.clear();
-    this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
+    this.clearURLCaches();
     // Consumers keying caches by a mapping-derived identifier need to hear about
     // this too, not just about realm mappings: a URL mapping changes which alias
     // an identifier folds onto, so a key derived before this call can name a
@@ -244,9 +296,7 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(prefix);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
-    this.toURLHrefCache.clear();
-    this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
+    this.clearURLCaches();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -270,9 +320,7 @@ export class VirtualNetwork {
     // growing for the life of the process.
     this.packageNamespacePrefixes.delete(normalizedId);
     this.importMap.delete(normalizedId);
-    this.toURLHrefCache.clear();
-    this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
+    this.clearURLCaches();
     this.notifyMappingChange();
   }
 

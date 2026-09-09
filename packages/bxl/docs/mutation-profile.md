@@ -233,7 +233,10 @@ They remain readable and addressable, but any assignment, replacement,
 deletion, or collection operation targeting one produces no intent and reports
 zero affected values. The right-hand expression is not evaluated. This makes
 model-generated updates tolerant of derived Card Info fields without weakening
-the fail-closed behavior of query-backed or otherwise read-only Fields.
+the fail-closed behavior of query-backed or otherwise read-only Fields. Read-
+only overlays do not change this: a Field the schema speaks for is answered by
+the schema, so the same program plans the same way whether or not the Card is
+indexed.
 
 Relationship references are logical Card IDs in plans and source references at
 the persistence boundary. `resolveReference(reference, path)` expands authored
@@ -241,6 +244,187 @@ relative links when projecting a snapshot and may preserve portable RRI values
 such as `@catalog/...`. `formatReference(cardId, path)` performs the inverse for
 writes and may choose RRI, relative, or absolute form per edge. Reindexing never
 rewrites an untouched relationship's reference, metadata, or extension members.
+
+## Read-only overlays
+
+A Card's stored document holds its own Field values and its links to other
+Cards as references. Two other kinds of value exist only in the search index:
+**computed** values, which the indexer evaluates and writes to `pristine_doc`,
+and **linked-Card** values, the searchable Fields of the Cards this one links
+to, denormalized into `search_doc`. A host that does not instantiate Cards
+reads those columns itself and passes them to the planner as read-only
+overlays:
+
+Both overlays are keyed the way the snapshot is: by Field, from the Card's
+root. `search_doc` already has that shape. `pristine_doc` does not — it is the
+Card's JSON:API resource, so its Field values sit under `attributes`, and it
+has to be projected through the same adapter the snapshot came from before the
+planner will recognize a path in it:
+
+```ts
+const computeds = snapshotBxlCardSource({ data: pristineDoc }, schema, options);
+
+const plan = prepared.plan(storedSnapshot, {
+  programId: 'assistant:call_123',
+  overlays: {
+    computeds,
+    linked: searchDoc,
+    unavailable: [
+      { path: 'patient.name', tier: 'linked', reason: 'not-searchable' },
+    ],
+  },
+  onRead(event) {
+    log(event.path, event.tier, event.outcome);
+  },
+});
+```
+
+Passing the raw resource instead is not an error the planner can raise: every
+Field path simply goes unanswered, while `attributes`, `meta`, `type` and
+`links` become computed values in their own right.
+
+An author addresses stored, computed, and linked values through the same
+`.path` syntax. The rules the planner enforces:
+
+- **The stored document wins, and keeps its shape.** An overlay answers a path
+  only where the stored document holds nothing — an absent key or a `null`,
+  which is what a Card holds at a path it never persists. An overlay's stale
+  copy of a stored value never displaces the stored one. An empty list counts
+  as holding nothing, since a projection manufactures one for a list Field the
+  Card never persists and it carries none of the Card's own values either way.
+  Nor may an overlay _reshape_ the Card: a value whose path runs past a stored
+  scalar is dropped rather than retyping the scalar, and no path is ever
+  followed _into_ a list, empty or not. Index drift is routine and must not
+  change the document a program plans over.
+- **An overlay speaks only where it has something to say.** `pristine_doc` and
+  `search_doc` are whole documents: they carry the Card's own Fields alongside
+  the ones only they can answer. A Field the Card leaves unset therefore
+  arrives as a `null` in both, and a `null` supplies nothing — claiming it
+  would make an ordinary writable Field read-only for no reason. A host can
+  pass either column wholesale without narrowing it first — `search_doc`'s own
+  bookkeeping keys, which start with an underscore where a Field key never
+  does, are index columns rather than Field values and are dropped. An
+  `unavailable`
+  entry, by contrast, is refused rather than guessed at: a missing or
+  misspelled `path`, `tier`, or `reason` raises `overlay-invalid`, because a
+  marker the planner cannot read is a read it would wrongly allow.
+- **An overlay is data, not a path a program spelled out.** It is read out of
+  a column, so a key naming something on a JavaScript prototype
+  (`__proto__`, `prototype`, `constructor`) is dropped, the same refusal the
+  planner gives a program that spells one out.
+- **A list is one value.** An overlay may hand over a whole list the Card does
+  not store — a computed `containsMany` — and that list reads as itself and is
+  read-only whole, its own positions consistent with each other. It is never
+  descended into, so no overlay position is ever laid beside one of the Card's
+  own items.
+- **Overlays stop at a collection boundary.** No overlay value ever names a
+  position _inside_ a list: a path with a segment that reads as an index is
+  dropped, however it is spelled, and so is one that runs through a list the
+  Card stores. An overlay arrives keyed by position, and a position is an
+  identity only while nothing moves: inserting, deleting, reordering or moving
+  an item renumbers everything after it, and a copy written before the program
+  ran cannot say which item it meant. Contained items carry no id to re-key
+  against. So inside a collection the Card stores, its own items are the whole
+  answer: reads there are source reads, an `unavailable` marker there is
+  dropped for the same reason, and every collection operation plans, outputs
+  and records intents exactly as it would with no overlays at all. A computed
+  Field inside a collection is the schema's to answer for, through
+  `writeBehavior: 'skip'`.
+- **Overlay values are read-only, and the schema answers first.** Where the
+  schema already speaks for a Field, it decides: a Definition-derived schema
+  marks every computed Field `writeBehavior: 'skip'`, so a write to one stays
+  the intentional no-op described above whether or not the indexer has
+  answered. The overlay is the backstop for paths the schema has no opinion
+  about — there, a write that lands on a computed value fails with
+  `computed-read-only`, and one that lands on a linked Card's Field fails with
+  `write-through-link`, each naming the path. A container the overlay supplies
+  where the Card holds nothing is a computed value in its own right and is
+  read-only whole; a container the Card stores, into which an overlay merely
+  filled a Field, stays the Card's to write. Writing an _ancestor_ of a linked
+  value likewise stays an ordinary write: replacing a relationship edge changes
+  the Card's own document, not the Card on the far side of the link.
+- **A read reports an overlay whenever one participates in its value** — the
+  overlay supplied the path, the read sits inside a value it supplied, or the
+  value returned carries overlay-supplied descendants. Reading a stored
+  container whose Fields an overlay filled in is therefore an overlay read, not
+  a source read, so it cannot reach index data without saying so. That holds at
+  the root as well: reading the whole Card carries whatever an overlay put
+  under it, so an expression that indexes by a computed key, or pipes the Card
+  into a builtin, is an overlay read like any other.
+- **An unavailable read fails loudly.** `unavailable` entries name what the
+  host could not supply and why (`not-indexed`, `not-searchable`,
+  `key-absent`). A marker at the read path, or nested under it, makes the read
+  `unavailable` — the subtree returned would be missing what the host could not
+  supply. A marker _above_ the path applies only where the stored document has
+  nothing of its own there. Reading one raises `snapshot-unavailable` carrying
+  `{ path, tier, reason }` rather than leaking a `null` into a write or a
+  precondition. A marker carries no value, so it refuses no writes on its own.
+
+  A relationship Field is the case worth knowing about. `not-searchable`
+  markers sit under links, and a marker under one covers the link itself:
+  reading `.patient` where `patient.name` is unavailable is an unavailable
+  read, even though the Card's own edge is right there. Address the edge to
+  ask whether it is set — `.patient.id != null`, which reads from source —
+  rather than the Field that holds it.
+
+- **An assert over an overlay says so.** Overlay values can lag the stored
+  document by an indexing round, so an `assert` that reads one requires the
+  three-argument form `assert(condition, message, { snapshot: true })`; without
+  it the statement fails with `assert-snapshot-required`. With it, an
+  unavailable read fails the assert with the author's own message. The literal
+  `{ snapshot: true }` is the only accepted option record — `assert/2` is how
+  an assert says it requires stored values.
+- **An update sees the layered value, and stores the Card's.** `|=` is handed
+  the location's value with the overlays under it, so a Field an overlay filled
+  into a stored container is in scope the same way it is anywhere else — which
+  matters because `=` evaluates its value expression against the Card root, so
+  only `|=` can write a value derived from the location it is updating. What
+  the expression returns is settled back against the Card before it is written:
+  an overlay value carried straight through is put back to what the Card holds,
+  an expression that simply omits the path is not writing to it, and one that
+  writes something else there is refused. Reaching a supplied value may have
+  taken containers the Card does not hold either; those are put back the same
+  way, so a graft is never stored. Only paths an overlay supplied are settled,
+  and none of them lie inside a collection, so an update that reorders or
+  resizes one has nothing to carry.
+- **Choosing a write set is a read.** A `[* predicate]` selector consults the
+  document to decide what it matches, so an unavailable value stops it rather
+  than quietly settling which items a statement deletes. A location that
+  addresses one place selects nothing and adds no event of its own.
+- **A path a statement clears belongs to the program.** An overlay answers
+  where the Card holds nothing, and a place the program emptied is not one of
+  those — otherwise a stale index copy would fill it straight back in and
+  refuse the write that follows.
+- **The guards see the paths a program can be _proven_ to read.** Reads are
+  collected by walking an expression, and the walk reports a lower bound. It
+  skips anything conditional — `if`/`else`, the right side of `//`, `and` or
+  `or`, everything after the first argument of `IF`/`IFS`, a comma branch
+  inside `first` — because a path read only on the branch not taken must not
+  refuse the program. It also cannot see through a variable binding,
+  `reduce`/`foreach`, a computed key, `getpath`, `..`, or a builtin that may
+  re-root its argument — and that last one covers the formula functions, so a
+  path reached as an argument to `UPPER`, `LEN`, `ISBLANK` or any of their
+  neighbours is not seen either. `assert(UPPER(.status) == "OPEN"; …)` plans
+  without the option that `assert((.status | ascii_upcase) == "OPEN"; …)`
+  requires. A read reached any of those ways sees the same layered value as
+  any other, but the three guarantees above — the loud unavailable failure, the
+  assert opt-in, and the read event — do not speak for it. Treat them as
+  catching the ordinary `.path` spelling, not as a boundary that cannot be
+  stepped around.
+- **Every read an expression resolves is reported.** `onRead` fires once per
+  such path, in program order, with the tier that answered (`source`,
+  `computed`, `linked`) and the outcome (`value`, `null`, `unavailable`). A
+  selector reports only the paths an overlay answered: what it reads of the
+  Card's own document it reads to choose a write target, which the statement's
+  own paths already record.
+
+Overlays are additive: a plan built without them behaves exactly as one built
+before they existed. A plan's `output`, and the `before` recorded on every
+intent, carry stored values only — the planner's working state is the Card's
+own document, and the layered view exists only for the duration of an
+expression's evaluation, so an overlay answers reads without ever standing in
+for what the Card held. The planner receives overlay values already fetched by
+the host; it never queries the index itself.
 
 ## Why a profile is needed
 
@@ -454,24 +638,25 @@ arguments. The mutation AST may retain profile information such as a
 filter-all location that ordinary value-mode jq would collapse into an array.
 Statement-terminating semicolons are framed outside the expression parser.
 
-| Statement                                  | Meaning                                                                         | Cardinality                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `location = expression`                    | Set/upsert a schema-permitted location.                                         | exactly one, or every match selected with `[* predicate]` |
-| `location \|= expression`                  | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
-| `replace(location, expression)`            | Replace an existing value.                                                      | exactly one target                                        |
-| `copy_value_to(source, destination)`       | Deep-copy one loaded value to another writable field.                           | one source, one destination                               |
-| `del(location)`                            | Delete an existing member or item.                                              | exactly one, or every match selected with `[* predicate]` |
-| `prepend(collection, expression)`          | Insert at array start.                                                          | one collection, one value                                 |
-| `append(collection, expression)`           | Insert at array end.                                                            | one collection, one value                                 |
-| `insert_at(collection, index, expression)` | Insert at a zero-based index.                                                   | one collection, one value                                 |
-| `insert_item_before(value, anchor)`        | Insert a value before a stable array item.                                      | exactly one anchor                                        |
-| `insert_item_after(value, anchor)`         | Insert a value after a stable array item.                                       | exactly one anchor                                        |
-| `move_item_before(item, anchor)`           | Move an item immediately before an anchor.                                      | exactly one item, exactly one anchor                      |
-| `move_item_after(item, anchor)`            | Move an item immediately after an anchor.                                       | exactly one item, exactly one anchor                      |
-| `move_item_to_start(item, collection)`     | Move an item to array start.                                                    | exactly one item, one collection                          |
-| `move_item_to_end(item, collection)`       | Move an item to array end.                                                      | exactly one item, one collection                          |
-| `reorder_by(collection, key, order)`       | Apply an exact key permutation.                                                 | one collection                                            |
-| `assert(expression, message)`              | Add a no-write precondition.                                                    | exactly one Boolean                                       |
+| Statement                                         | Meaning                                                                         | Cardinality                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `location = expression`                           | Set/upsert a schema-permitted location.                                         | exactly one, or every match selected with `[* predicate]` |
+| `location \|= expression`                         | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
+| `replace(location, expression)`                   | Replace an existing value.                                                      | exactly one target                                        |
+| `copy_value_to(source, destination)`              | Deep-copy one loaded value to another writable field.                           | one source, one destination                               |
+| `del(location)`                                   | Delete an existing member or item.                                              | exactly one, or every match selected with `[* predicate]` |
+| `prepend(collection, expression)`                 | Insert at array start.                                                          | one collection, one value                                 |
+| `append(collection, expression)`                  | Insert at array end.                                                            | one collection, one value                                 |
+| `insert_at(collection, index, expression)`        | Insert at a zero-based index.                                                   | one collection, one value                                 |
+| `insert_item_before(value, anchor)`               | Insert a value before a stable array item.                                      | exactly one anchor                                        |
+| `insert_item_after(value, anchor)`                | Insert a value after a stable array item.                                       | exactly one anchor                                        |
+| `move_item_before(item, anchor)`                  | Move an item immediately before an anchor.                                      | exactly one item, exactly one anchor                      |
+| `move_item_after(item, anchor)`                   | Move an item immediately after an anchor.                                       | exactly one item, exactly one anchor                      |
+| `move_item_to_start(item, collection)`            | Move an item to array start.                                                    | exactly one item, one collection                          |
+| `move_item_to_end(item, collection)`              | Move an item to array end.                                                      | exactly one item, one collection                          |
+| `reorder_by(collection, key, order)`              | Apply an exact key permutation.                                                 | one collection                                            |
+| `assert(expression, message)`                     | Add a no-write precondition.                                                    | exactly one Boolean                                       |
+| `assert(expression, message, { snapshot: true })` | The same precondition, accepting a stale or missing overlay answer.             | exactly one Boolean                                       |
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
@@ -1045,7 +1230,9 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `relationship-invalid`, `authorization-denied`;
 - `revision-conflict`, `schema-version-conflict`;
 - `execution-identity-conflict`, `limit-exceeded`;
-- `stream-incomplete`, `commit-failed`, `rollback-conflict`.
+- `stream-incomplete`, `commit-failed`, `rollback-conflict`;
+- `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
+  `assert-snapshot-required`, `assert-option-invalid`, `overlay-invalid`.
 
 ## Additional use cases covered by this contract
 

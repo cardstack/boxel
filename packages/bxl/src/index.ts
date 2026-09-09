@@ -153,7 +153,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.ts';
 
-export const VERSION = '0.7.0-unstable.0';
+export const VERSION = '0.7.0-unstable.1';
 
 /**
  * Runtime identity: the version plus the set of behaviors this build of the
@@ -323,21 +323,29 @@ export type {
   BxlCardSourceResource,
   BxlCardSourceSchemaOptions,
   BxlMutationContext,
+  BxlMutationErrorDetails,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,
   BxlMutationIntent,
   BxlMutationJson,
   BxlMutationJsonObject,
+  BxlMutationOverlayReason,
+  BxlMutationOverlays,
+  BxlMutationOverlayTier,
   BxlMutationPath,
   BxlMutationPlan,
   BxlMutationPlanOptions,
   BxlMutationPrepareOptions,
+  BxlMutationReadEvent,
+  BxlMutationReadOutcome,
+  BxlMutationReadTier,
   BxlMutationReturning,
   BxlMutationRootField,
   BxlMutationSchema,
   BxlMutationStatementPlan,
   BxlMutationStatementStreamOptions,
+  BxlMutationUnavailableOverlay,
   BxlStructuredMutationOperation,
   BxlMutateCardSourceOptions,
   BxlUpdateViaExecutionOptions,
