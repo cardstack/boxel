@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -11,7 +11,10 @@ import {
   type Item,
   isTrue,
 } from '../jqtools/evaluate/utils/utils.ts';
-import { withRuntimeDiagnostics } from '../jqtools/evaluate/runtimeState.ts';
+import {
+  withRequestContext,
+  withRuntimeDiagnostics,
+} from '../jqtools/evaluate/runtimeState.ts';
 import type {
   ExpressionAst,
   NormalBinaryOperator,
@@ -44,6 +47,7 @@ import {
 } from './overlays.ts';
 import {
   BxlMutationError,
+  type BxlMutationContext,
   type BxlMutationField,
   type BxlMutationFieldType,
   type BxlMutationIntent,
@@ -92,7 +96,6 @@ interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
-  /** The host's overlay values, if any, as supplied to `plan`. */
   /** What the overlays answer for, against the document as it now stands. */
   overlays: OverlayIndex;
   /** Paths earlier statements have made their own. */
@@ -102,6 +105,21 @@ interface PlannerContext {
   /** Bumped by every write, so a cached view is never handed back stale. */
   revision: number;
   onRead?: (event: BxlMutationReadEvent) => void;
+  /**
+   * The request context as the host supplied it, held by reference.
+   *
+   * Not copied here: the builtins copy each value as they hand it to a
+   * program, which is what keeps the host's object out of the plan and out of
+   * reach of a builtin that writes into its argument. A copy at this boundary
+   * would clone the whole context once per plan whether a program reads any
+   * of it or not.
+   *
+   * On the way out, a written value is isolated by `setAt`'s own copy and by
+   * the structural inserts' — not by the per-statement `clone(working)`,
+   * which runs on entry to the *next* statement and so does not cover the
+   * last one.
+   */
+  requestContext?: BxlMutationContext;
 }
 
 /**
@@ -270,15 +288,162 @@ function objectId(value: BxlMutationJson | undefined): string | undefined {
   return typeof value.id === 'string' ? value.id : undefined;
 }
 
+/**
+ * Describe a value that is not JSON, or `undefined` when it is.
+ *
+ * `BxlMutationContext` declares the context as JSON, but a type is not a
+ * runtime guarantee: a `Date`, `Map`, `Set`, `RegExp` or `TypedArray` reaches
+ * a program as itself and can be written into the document, and so does a
+ * `bigint`. The `bigint` is the sharpest edge — `params("v") | tostring` on
+ * one yields `undefined`, the silent unset these builtins exist to refuse —
+ * but a live `Map` in a plan is no better, and `NaN` reaching a document as
+ * `null` is a value the host never sent.
+ */
+function nonJsonTypeName(value: unknown): string | undefined {
+  if (value === null) return undefined;
+  switch (typeof value) {
+    case 'boolean':
+      return undefined;
+    case 'number':
+      // `NaN` and the infinities have no JSON form and serialize to `null`,
+      // which is a value the host did not send appearing in the document.
+      return Number.isFinite(value) ? undefined : String(value);
+    case 'string':
+      return undefined;
+    case 'bigint':
+    case 'symbol':
+    case 'function':
+      return typeof value;
+    case 'undefined':
+      // Tolerated rather than rejected: a host spreading an object with
+      // optional fields produces these readily, and the builtins already
+      // treat a key held with `undefined` as absent when a program reads it.
+      return undefined;
+    default:
+      break;
+  }
+  if (Array.isArray(value)) return undefined;
+  // The built-in tag decides. It reports `Date`, `Map` and `URL` reliably,
+  // and says `Object` for every plain object — one from another realm and one
+  // carrying only a class's own data fields included, since both hold nothing
+  // but JSON.
+  //
+  // A `Symbol.toStringTag` can rename the tag or blank it, so an empty tag is
+  // reported rather than read as "no problem found". The reverse, an exotic
+  // object branded `Object`, is not distinguishable from a plain one in JS and
+  // is not defended against: this guard is for a host's mistake, and a
+  // symbol-keyed brand cannot come from a JSON payload.
+  const tag = Object.prototype.toString.call(value).slice(8, -1);
+  if (tag === 'Object') return undefined;
+  return tag || 'an object with no type name';
+}
+
+/**
+ * Reject a request context carrying anything the planner cannot put in a JSON
+ * document, naming the path so the host can find it.
+ *
+ * The check is the only thing standing between a host's mistake and a live
+ * `Map` or a `bigint` in a plan, so it runs before the context is reachable
+ * rather than leaving the type declaration as the sole guard.
+ */
+function assertJsonContext(context: BxlMutationContext) {
+  // Two sets, because they answer different questions. `ancestors` is the
+  // current path and finds a cycle; `cleared` is every object already walked
+  // and keeps shared structure from being walked once per route to it —
+  // without it a graph that merely shares subtrees costs exponential time.
+  const ancestors = new Set<unknown>();
+  const cleared = new Set<unknown>();
+  const walk = (value: unknown, path: string) => {
+    const typeName = nonJsonTypeName(value);
+    if (typeName) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at ${path} is not JSON — its type is ` +
+          `${typeName}. The host supplies context values already resolved ` +
+          'to JSON.',
+      );
+    }
+    if (value === null || typeof value !== 'object') return;
+    if (ancestors.has(value)) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context is cyclic at ${path}; a JSON document cannot ` +
+          'hold a cycle.',
+      );
+    }
+    if (cleared.has(value)) return;
+    ancestors.add(value);
+    if (Array.isArray(value)) {
+      // An index loop, not `forEach`, which skips holes — and a hole reads as
+      // `undefined`, which an array cannot carry: an absent object member
+      // serializes as absent, but an absent array entry serializes as `null`,
+      // a value the host never sent.
+      for (let index = 0; index < value.length; index += 1) {
+        const entry: unknown = value[index];
+        if (entry === undefined) {
+          throw new BxlMutationError(
+            'plan',
+            'context-not-json',
+            1,
+            `The request context at ${path}[${index}] has no value. An ` +
+              'array entry cannot be absent the way an object member can — ' +
+              'it would reach the document as `null`.',
+          );
+        }
+        walk(entry, `${path}[${index}]`);
+      }
+    } else {
+      // Own properties, enumerable or not, matching what the builtins read.
+      for (const key of Object.getOwnPropertyNames(value)) {
+        walk((value as Record<string, unknown>)[key], `${path}.${key}`);
+      }
+    }
+    ancestors.delete(value);
+    cleared.add(value);
+  };
+
+  for (const slot of ['params', 'actor', 'instance'] as const) {
+    const value = context[slot];
+    if (value === undefined) continue;
+    try {
+      walk(value, `context.${slot}`);
+    } catch (error) {
+      if (error instanceof BxlMutationError) throw error;
+      // A property accessor on the host's object threw. That is still an
+      // unusable context, reported as one instead of escaping raw.
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at context.${slot} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
+}
+
 function evaluateItems(
   ast: ExpressionAst,
   input: Item[],
   context: PlannerContext,
 ): Item[] {
-  const runtime = withRuntimeDiagnostics(
-    () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
-    context.prepare.runtimeLimits,
-  );
+  const evaluate = () =>
+    withRuntimeDiagnostics(
+      () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
+      context.prepare.runtimeLimits,
+    );
+  // Scoped outside the diagnostics frame, and around every statement's
+  // evaluation, so `params`/`actor`/`instance` read this plan's context
+  // wherever in the program they appear.
+  const runtime = context.requestContext
+    ? withRequestContext(context.requestContext, evaluate)
+    : evaluate();
   if (runtime.error) throw runtime.error;
   return runtime.result ?? [];
 }
@@ -1434,7 +1599,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    mutationBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({
@@ -1483,6 +1648,9 @@ export function prepareBxlMutation(
         claimed,
         revision: 0,
         ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
+        requestContext: planOptions.context
+          ? (assertJsonContext(planOptions.context), planOptions.context)
+          : undefined,
       };
       const before = clone(snapshot);
       let working = clone(snapshot);

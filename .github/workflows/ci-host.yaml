@@ -857,8 +857,10 @@ jobs:
           taken=$(grep -c '] Snapshot taken: ' /tmp/test-output.log || true)
           attempted=${attempted:-0}
           taken=${taken:-0}
-          printf 'shard=%s\nattempted=%s\ntaken=%s\n' \
-            "${{ matrix.shardIndex }}" "$attempted" "$taken" > /tmp/percy-tally.txt
+          # shardTotal rides along so finalize can say how many tallies it
+          # expected without holding a fourth copy of the shard count.
+          printf 'shard=%s\nshardTotal=%s\nattempted=%s\ntaken=%s\n' \
+            "${{ matrix.shardIndex }}" "${{ matrix.shardTotal }}" "$attempted" "$taken" > /tmp/percy-tally.txt
           cat /tmp/percy-tally.txt
           if [ "$taken" -lt "$attempted" ]; then
             echo "::warning::Shard ${{ matrix.shardIndex }} attempted $attempted Percy snapshot(s) but the CLI received $taken, so this build's snapshot set is incomplete. On main the finalize job rejects such a build so it cannot become a baseline."
@@ -867,9 +869,19 @@ jobs:
             echo "::endgroup::"
           fi
 
+      # The tally is diagnostic: it exists so finalize can tell a build that
+      # lost snapshots from one that did not. A shard whose tests all passed
+      # but whose tally never reached the artifact service is not a broken
+      # shard, so the upload failing must not fail the job. GitHub's artifact
+      # service has rejected uploads with a 403 in bursts (CS-12826: nine
+      # jobs across three consecutive runs, every trigger type, the work
+      # itself complete), and each one read as a red shard until someone
+      # opened the log. Finalize treats a missing tally as unknown rather
+      # than as zero, and warns with how many of the shards it saw.
       - name: Upload Percy snapshot tally
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+        continue-on-error: true
         with:
           # Scope the name to the run attempt, for the reason spelled out on
           # the junit report below: artifacts are retained per attempt under
@@ -922,9 +934,17 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Losing
+      # one loses that view of this shard and nothing else, so, as with the
+      # tally, a failed upload does not fail the shard. The junit and memory
+      # reports stay fatal on purpose: the merge job and the memory-baseline
+      # check consume them and would report a smaller build as a complete
+      # one, so a report that did not upload has to show as a failed shard
+      # rather than as a result that quietly went missing.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
@@ -932,6 +952,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
@@ -939,6 +960,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
@@ -946,6 +968,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
@@ -953,6 +976,7 @@ jobs:
       - name: Upload start:development log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: start-development-log-${{ matrix.shardIndex }}
           path: /tmp/start-development.log
@@ -960,6 +984,7 @@ jobs:
       - name: Upload test-realms log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: test-realms-log-${{ matrix.shardIndex }}
           path: /tmp/test-realms.log
@@ -967,6 +992,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
@@ -974,6 +1000,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: host-dist-log-${{ matrix.shardIndex }}
           path: /tmp/host-dist.log
@@ -981,6 +1008,7 @@ jobs:
       - name: Upload testem log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: testem-log-${{ matrix.shardIndex }}
           path: junit/host-testem.log
@@ -993,6 +1021,7 @@ jobs:
       - name: Upload testem debug log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: testem-debug-log-${{ matrix.shardIndex }}
           path: junit/host-testem-debug-${{ matrix.shardIndex }}.log
@@ -1035,13 +1064,16 @@ jobs:
           attempted=0
           taken=0
           shards=0
+          expected=0
           for f in /tmp/percy-tallies/*/percy-tally.txt; do
             [ -f "$f" ] || continue
             shards=$((shards + 1))
             a=$(sed -n 's/^attempted=//p' "$f")
             t=$(sed -n 's/^taken=//p' "$f")
+            e=$(sed -n 's/^shardTotal=//p' "$f")
             attempted=$((attempted + ${a:-0}))
             taken=$((taken + ${t:-0}))
+            expected=${e:-$expected}
           done
           lost=$((attempted - taken))
           # The CLI can report more than the suite attempted only if the
@@ -1062,16 +1094,24 @@ jobs:
             lost=0
           fi
 
-          echo "shards=$shards attempted=$attempted taken=$taken lost=$lost marker_broken=$marker_broken"
+          echo "shards=$shards expected=$expected attempted=$attempted taken=$taken lost=$lost marker_broken=$marker_broken"
           echo "lost=$lost" >> "$GITHUB_OUTPUT"
           echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
           echo "taken=$taken" >> "$GITHUB_OUTPUT"
           echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
-          # No tallies at all means the shards never got far enough to write
-          # them; that is the host-test failure the reject step already
-          # covers, so say so rather than reading it as a clean run.
+          # The tally upload does not fail its shard (see host-test), so a
+          # shard can pass and still leave no tally behind. The totals over
+          # the tallies that did arrive stay valid — a missing shard adds
+          # nothing to either count — but a snapshot it lost is invisible
+          # here. A missing tally is unknown, not zero: say how much of the
+          # build the gate saw rather than reading a partial set as a clean
+          # run. On main this is the one case where a lost snapshot can reach
+          # the baseline unrejected; rejecting on a missing tally would fail
+          # builds on the same infrastructure noise this exists to absorb.
           if [ "$shards" -eq 0 ]; then
-            echo "::notice::No Percy snapshot tallies were uploaded, so snapshot loss could not be assessed for this build."
+            echo "::notice::No Percy snapshot tallies were uploaded, so snapshot loss could not be assessed for this build. Either no shard got far enough to write one — the host-test failure the reject step covers — or every tally upload failed."
+          elif [ "$shards" -lt "$expected" ]; then
+            echo "::warning::Only $shards of $expected Percy snapshot tallies were uploaded, so snapshot loss on the other $((expected - shards)) shard(s) could not be assessed for this build. A failed tally upload does not fail its shard; look for a failed 'Upload Percy snapshot tally' step on the shards with no tally."
           fi
 
       - name: Finalise Percy
@@ -1473,7 +1513,7 @@ jobs:
             git fetch origin main
 
             if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
-               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qvE "Update host test (memory )?baselines?"; then
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
               echo "main has advanced past $WORKFLOW_SHA with non-baseline commits — skipping (a newer CI run will publish the baselines)."
               exit 0
             fi

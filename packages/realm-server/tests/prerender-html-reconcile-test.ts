@@ -55,8 +55,9 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  function runReconcile() {
+  function runReconcile(skipPrerenderHtmlRealms?: string[]) {
     return prerenderHtmlReconcile({
+      skipPrerenderHtmlRealms,
       reportStatus: () => {},
       log: logger('prerender-html-reconcile-test'),
       dbAdapter,
@@ -485,6 +486,61 @@ module(basename(import.meta.filename), function (hooks) {
       (await prerenderHtmlJobs(realmURL)).length,
       0,
       'no repair job is enqueued for a bot-owned realm',
+    );
+  });
+
+  // A realm configured to render no HTML has every row permanently unrendered,
+  // which reads here exactly like residue worth repairing. Without the
+  // exclusion this sweep re-enqueues, at whole-realm size, the very render the
+  // configuration exists to prevent — and it runs hourly, so a long-lived
+  // process gets there eventually.
+  test('skips a realm configured not to render HTML', async function (assert) {
+    const realmURL = 'http://example.com/no-render/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    for (let name of ['mango', 'vanGogh']) {
+      await seedIndexRow({
+        url: `${realmURL}${name}.json`,
+        realmURL,
+        generation: 5,
+      });
+    }
+
+    assert.deepEqual(
+      await runReconcile([realmURL]),
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the configured realm is left unrendered',
+    );
+    assert.strictEqual(
+      (await prerenderHtmlJobs(realmURL)).length,
+      0,
+      'no repair job is enqueued for a realm configured not to render',
+    );
+
+    // The same rows, with the realm no longer configured off, are exactly what
+    // the sweep is for — so the assertion above is about the configuration and
+    // not about the rows being unrepairable.
+    assert.deepEqual(
+      await runReconcile(),
+      { realmsRepaired: 1, urlsEnqueued: 2, realmsInBackoff: 0 },
+      'the same rows are repaired once the realm is not configured off',
+    );
+  });
+
+  test('a configured realm is matched regardless of a trailing slash', async function (assert) {
+    const realmURL = 'http://example.com/slash/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+
+    assert.deepEqual(
+      await runReconcile([realmURL.replace(/\/$/, '')]),
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a value written without the trailing slash still matches',
     );
   });
 

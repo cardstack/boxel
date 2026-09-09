@@ -161,6 +161,7 @@ export class Worker {
   #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #indexJobsOnly: boolean;
+  #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: (
     userId: string,
@@ -182,6 +183,7 @@ export class Worker {
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    skipPrerenderHtmlRealms,
     mediaCacheAdapter,
   }: {
     indexWriter: IndexWriter;
@@ -199,6 +201,7 @@ export class Worker {
     // When true, register handlers only for INDEX_JOB_TYPES so this worker
     // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
     indexJobsOnly?: boolean;
+    skipPrerenderHtmlRealms?: string[];
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
@@ -221,6 +224,7 @@ export class Worker {
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#indexJobsOnly = indexJobsOnly ?? false;
+    this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
   }
 
@@ -247,6 +251,7 @@ export class Worker {
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
       mediaCacheAdapter: this.#mediaCacheAdapter,
+      skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {

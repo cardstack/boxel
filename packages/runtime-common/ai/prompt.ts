@@ -1276,9 +1276,13 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using one or more SEARCH/REPLACE blocks (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
-2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
-3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+// Sent after a correctness check fails. The fix must be a SEARCH/REPLACE block
+// against the file: a card that just failed its check is usually not indexed,
+// so any card-editing tool (patch-fields, patchCardInstance) applies to
+// nothing and costs a turn. Name no tool, ban them all.
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Fix the errors above by editing the failing file(s) with SEARCH/REPLACE blocks. Do not call any tool to make the fix — a card that just failed its check is not indexed yet, so a tool applies to nothing.
+2. First re-fetch the files that have errors so the SEARCH block matches their current content, then write the fixing blocks in the same reply.
+3. One short sentence of prose before the blocks saying there is an issue you are fixing; do not mention SEARCH/REPLACE blocks in the prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';

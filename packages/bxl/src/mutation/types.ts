@@ -14,6 +14,9 @@ export type BxlMutationJson =
   | BxlMutationJson[]
   | { [key: string]: BxlMutationJson };
 
+/** A JSON object, as distinct from the other JSON shapes. */
+export type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
+
 export type BxlMutationPath = Array<string | number>;
 
 export type BxlMutationFieldType =
@@ -199,6 +202,29 @@ export interface BxlMutationPrepareOptions {
   runtimeLimits?: NativeRuntimeLimits;
 }
 
+/**
+ * The request-scoped values a mutation program reads through the `params`,
+ * `actor` and `instance` builtins.
+ *
+ * Every value arrives already resolved. This package never loads a card or
+ * reaches a network, so `instance` is the stored document as the host read it
+ * and `actor` is the caller as the host authenticated it.
+ *
+ * Each slot is optional and a program that asks for one the host left out
+ * fails rather than reading `null`, so a host supplies exactly the slots its
+ * operation declares. Every slot is a keyed object, because that is what the
+ * builtins can read a key out of — a bare string or array would type-check
+ * against a looser declaration and then fail every lookup at runtime.
+ */
+export interface BxlMutationContext {
+  /** What the caller sent, keyed by the operation's declared parameters. */
+  params?: BxlMutationJsonObject;
+  /** The authenticated caller. `id` is the stable principal. */
+  actor?: { id: string; [key: string]: BxlMutationJson };
+  /** The stored document the program is editing. */
+  instance?: BxlMutationJsonObject;
+}
+
 export interface BxlMutationPlanOptions {
   programId: string;
   targetId?: string;
@@ -208,6 +234,12 @@ export interface BxlMutationPlanOptions {
   baseRevision?: string;
   currentRevision?: string;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
+  /**
+   * Request-scoped values for the `params`, `actor` and `instance` builtins.
+   * Omit it and a program naming one of them fails; a program that names none
+   * of them behaves the same either way.
+   */
+  context?: BxlMutationContext;
   /** Loaded Card projections addressable by the `card(id)` constructor. */
   cards?: Readonly<Record<string, BxlMutationJson>>;
   resolveCard?: (id: string) => BxlMutationJson | undefined;

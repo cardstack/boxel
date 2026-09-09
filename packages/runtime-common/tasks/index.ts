@@ -38,6 +38,10 @@ export interface TaskArgs {
   // The MediaCache's object store. Optional: a worker process without one
   // configured still registers media-cache jobs, whose tasks then no-op.
   mediaCacheAdapter?: MediaCacheAdapter;
+  // Realms whose from-scratch index must not spawn the follow-on
+  // `prerender_html` job. A test harness affordance, empty everywhere else —
+  // see `--skipPrerenderHtmlRealm` in realm-server/worker.ts for what it costs.
+  skipPrerenderHtmlRealms?: string[];
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
