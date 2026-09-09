@@ -73,6 +73,37 @@ module('Unit | VirtualNetwork reset', function () {
     );
   });
 
+  // The constructor mounts the package shim handler. Emptying the handler chain
+  // on reset left `shimModule` filing shims onto a handler nothing consulted,
+  // so every shimmed package 404'd with nothing to point at the cause.
+  test('keeps serving modules shimmed before a reset', async function (assert) {
+    let vn = networkWithRealm();
+    vn.shimModule('a-package', { thing: 1 });
+
+    vn.reset();
+
+    let response = await vn.fetch(new Request('https://packages/a-package'));
+    assert.strictEqual(
+      (response as any)[Symbol.for('shimmed-module')]?.thing,
+      1,
+      'the shim handler is still mounted',
+    );
+  });
+
+  test('serves modules shimmed after a reset', async function (assert) {
+    let vn = networkWithRealm();
+
+    vn.reset();
+    vn.shimModule('b-package', { thing: 2 });
+
+    let response = await vn.fetch(new Request('https://packages/b-package'));
+    assert.strictEqual(
+      (response as any)[Symbol.for('shimmed-module')]?.thing,
+      2,
+      'shims registered after a reset are served',
+    );
+  });
+
   test('a Loader holding the network sees mappings registered after a reset', function (assert) {
     let vn = networkWithRealm();
     let loader = new Loader(vn.fetch, vn.resolveImport, {
