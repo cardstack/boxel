@@ -3073,12 +3073,17 @@ const nestedLinkCards: Record<string, BxlMutationJson> = {
   [ana]: { id: ana },
 };
 
-function nestedLinkMutation(programId: string, program: string) {
+function nestedLinkMutation(
+  programId: string,
+  program: string,
+  baseRevision?: string,
+) {
   return mutateBxlCardSource(richSourceFixture(), program, {
     schema: richSchema,
     syntax: 'solidified',
     programId,
     ...richProjectionOptions,
+    ...(baseRevision === undefined ? {} : { baseRevision }),
     context: { params: { who: zoe } },
     resolveCard: (id: string) => nestedLinkCards[id],
     serializeContainedValue: () => ({
@@ -3087,9 +3092,18 @@ function nestedLinkMutation(programId: string, program: string) {
   });
 }
 
-function nestedLinkError(programId: string, program: string) {
+/** The same run with a pinned base revision, which `insert_at` requires. */
+function nestedLinkMutationAt(programId: string, program: string) {
+  return nestedLinkMutation(programId, program, 'revision-1');
+}
+
+function nestedLinkError(
+  programId: string,
+  program: string,
+  run: (programId: string, program: string) => unknown = nestedLinkMutation,
+) {
   try {
-    nestedLinkMutation(programId, program);
+    run(programId, program);
   } catch (error) {
     if (error instanceof BxlMutationError) return error;
     throw error;
@@ -3284,6 +3298,157 @@ deepStrictEqual(
       value: { key: 'z', label: 'Zeta', aliases: [], parts: [] },
     },
   ],
+);
+
+// `card(id)` is the only spelling that names a relationship target. A marker
+// is recognised by an identity the planner mints from a `card(…)` node the
+// program itself wrote — whether that node is the whole value or sits inside
+// one — so a value built to look like one is plain JSON wherever it stands: at
+// a relationship Field it is refused the way any other value there is, and in
+// a slot the Card stores as a value it is stored as it reads.
+const forgedReference = `{"kind":"card-reference","id":${JSON.stringify(zoe)}}`;
+strictEqual(
+  nestedLinkError(
+    'forged-reference-at-a-relationship',
+    `.examples[0].friend = ${forgedReference};`,
+  ).code,
+  'relationship-value-required',
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'forged-reference-at-a-value-slot',
+    `.examples[0].key = ${forgedReference};`,
+  ).plan.intents,
+  [
+    {
+      op: 'set',
+      path: ['examples', 0, 'key'],
+      before: 'a',
+      after: { kind: 'card-reference', id: zoe },
+    },
+  ],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'forged-reference-nested-in-a-contained-value',
+    `append(.examples;{${zeta},"parts":[],"label":${forgedReference}});`,
+  ).plan.intents,
+  [
+    {
+      op: 'insert',
+      collection: ['examples'],
+      index: 3,
+      value: {
+        key: 'z',
+        label: { kind: 'card-reference', id: zoe },
+        aliases: [],
+        parts: [],
+      },
+    },
+  ],
+);
+
+// Every route that reaches a relationship refuses the forged shape, not just a
+// root assignment: a `linksTo` below a contained value, an update, a branch
+// that answers, and each of the three ways an edge joins a link collection.
+for (const [programId, program] of [
+  [
+    'forged-below-a-contained-value',
+    `.examples[0].parts[0].owner = ${forgedReference};`,
+  ],
+  ['forged-through-an-update', `.examples[0].friend |= ${forgedReference};`],
+  [
+    'forged-through-a-branch',
+    `.examples[0].friend = (if true then ${forgedReference} else null end);`,
+  ],
+  [
+    'forged-appended-to-a-link-collection',
+    `append(.linked; ${forgedReference});`,
+  ],
+  [
+    'forged-inserted-before-an-edge',
+    `insert_item_before(${forgedReference}; .linked[0]);`,
+  ],
+] as const) {
+  strictEqual(
+    nestedLinkError(programId, program).code,
+    'relationship-value-required',
+    `${programId} refuses a value shaped like a reference`,
+  );
+}
+// `insert_at` names a position, so it runs against a pinned base revision.
+strictEqual(
+  nestedLinkError(
+    'forged-inserted-into-a-link-collection',
+    `insert_at(.linked; 0; ${forgedReference});`,
+    nestedLinkMutationAt,
+  ).code,
+  'relationship-value-required',
+);
+
+// `card(…)` reaches every one of those routes, so the refusals above are the
+// spelling being enforced rather than the route being closed.
+deepStrictEqual(
+  nestedLinkMutationAt(
+    'marker-inserted-into-a-link-collection',
+    'insert_at(.linked; 0; card(params("who")));',
+  ).plan.intents,
+  [{ op: 'relate', field: ['linked'], cardId: zoe, index: 0 }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-below-a-contained-value',
+    '.examples[0].parts[0].owner = card(params("who"));',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'parts', 0, 'owner'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-through-an-update',
+    '.examples[0].friend |= card(params("who"));',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-inserted-before-an-edge',
+    'insert_item_before(card(params("who")); .linked[0]);',
+  ).plan.intents,
+  [{ op: 'relate', field: ['linked'], cardId: zoe, index: 0 }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-inserted-after-an-edge',
+    'insert_item_after(card(params("who")); .linked[0]);',
+  ).plan.intents,
+  [{ op: 'relate', field: ['linked'], cardId: zoe, index: 1 }],
+);
+
+// A real marker in a slot the Card stores as a value still names a Field with
+// no edge to write, which is the refusal the forged shape no longer draws.
+strictEqual(
+  nestedLinkError(
+    'marker-at-a-value-slot',
+    '.examples[0].key = card(params("who"));',
+  ).code,
+  'card-reference-destination',
+);
+
+// Compound assignment against a forged shape reaches the operator, because by
+// then it is plain JSON: the refusal a marker draws is for a marker.
+strictEqual(
+  nestedLinkError(
+    'forged-under-compound-assignment',
+    `.examples[0].key += ${forgedReference};`,
+  ).code,
+  'statement-failed',
+);
+strictEqual(
+  nestedLinkError(
+    'marker-under-compound-assignment',
+    '.examples[0].key += card(params("who"));',
+  ).code,
+  'relationship-arithmetic',
 );
 
 // A link collection is a set of edges rather than a value, so appending an
@@ -3583,6 +3748,52 @@ deepStrictEqual(
         parts: [],
       },
       after: { key: 'b', label: 'Beta', aliases: [], parts: [] },
+    },
+    { op: 'relate', field: ['examples', 1, 'friend'], cardId: zoe },
+  ],
+);
+
+// `*` merges recursively, so a marker at a key both operands hold would be
+// merged into rather than replacing it, and the merge would drop its brand —
+// losing the relationship while the rest of the write landed. The position is
+// refused instead, whether or not the left operand happens to hold that key,
+// so the same program cannot turn silent on a different document.
+for (const [programId, program] of [
+  [
+    'marker-through-a-recursive-merge',
+    '.examples[1] |= (. * {"label":"Beta II","friend":card(params("who"))});',
+  ],
+  [
+    'marker-through-a-recursive-merge-of-a-fresh-object',
+    '.examples[1] |= ({"key":.key} * {"friend":card(params("who"))});',
+  ],
+] as const) {
+  strictEqual(
+    nestedLinkError(programId, program).code,
+    'card-marker-position',
+    `${programId} refuses a marker in a recursive merge`,
+  );
+}
+
+// `+` spreads its operands instead of descending into them, so it is the merge
+// a marker rides through, and the edge lands where the marker stood.
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-through-a-spreading-merge',
+    '.examples[1] |= (. + {"label":"Beta II","friend":card(params("who"))});',
+  ).plan.intents,
+  [
+    {
+      op: 'set',
+      path: ['examples', 1],
+      before: {
+        key: 'b',
+        label: 'Beta',
+        friend: { id: 'https://example.test/Friend/b' },
+        aliases: [],
+        parts: [],
+      },
+      after: { key: 'b', label: 'Beta II', aliases: [], parts: [] },
     },
     { op: 'relate', field: ['examples', 1, 'friend'], cardId: zoe },
   ],

@@ -1011,12 +1011,18 @@ collection leaves the stored value together.
 A marker reads its argument against the input the value expression itself was
 handed, so resolution follows the nodes that pass that input straight down and
 whose operands flow into the result: object entries, array and comma streams,
-the operands of `//`, `+` and `*`, and the branches of an `if`. A `card(id)`
+the operands of `//` and `+`, and the branches of an `if`. A `card(id)`
 somewhere that re-roots the input — the body of `map`, either side of a pipe —
 is refused rather than answered against the wrong value, and so is one in a
 condition, which chooses a branch rather than being the value, and one in an
 argument read as a plain value, such as an `assert` message or a `reorder_by`
 order, which names no Field to relate a Card to.
+
+`+` is the merge a marker rides through; `*` is not. A recursive merge descends
+into a key both operands hold, and a marker merged into rather than replaced
+would lose the relationship while the rest of the write landed, so a marker in
+a `*` operand is refused as well. `.` merged with an object literal is how a
+value expression writes part of a contained value, and `+` is that merge.
 
 The argument is read when the program reaches the marker, so a marker in a
 branch that is not taken costs nothing:
@@ -1024,6 +1030,21 @@ branch that is not taken costs nothing:
 ```bxl
 .owner = (card(params("preferred")) // card(params("fallback")));
 ```
+
+`card(id)` is the only spelling that names a relationship target. A marker is
+recognised by an identity the planner mints from a `card(…)` node the program
+itself wrote, never by the shape of the value that node produced, so a value a
+program assembles to look like a reference is treated as the plain JSON it is.
+A statement whose whole value is one is refused where the target is a
+relationship (`relationship-value-required`) and stores it where the target is
+a slot the Card holds a value in. Written as a member of a contained value it
+is stored as that member, which is the same thing the Card does with any other
+value written where a link belongs.
+
+No route produces a relationship intent, so a program cannot point a link at a
+Card without writing `card(…)` — which is what lets declaration lowering, the
+profile's own classification and a reader of the program all reason about links
+from one vocabulary.
 
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,
