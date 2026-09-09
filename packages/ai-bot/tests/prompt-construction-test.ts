@@ -5050,7 +5050,7 @@ new content
     let userMessages =
       messages?.filter((message) => message.role === 'user') ?? [];
     let retryMessages = userMessages.filter((message) =>
-      messageText(message).includes('Propose fixes for the above errors'),
+      messageText(message).includes('Fix the errors above'),
     );
     assert.strictEqual(
       retryMessages.length,
@@ -5070,9 +5070,7 @@ new content
     );
     let failureLimitMessage = failureLimitMessages[0];
     assert.notOk(
-      messageText(failureLimitMessage).includes(
-        'Propose fixes for the above errors',
-      ),
+      messageText(failureLimitMessage).includes('Fix the errors above'),
       'The failure limit prompt should not ask for another round of fixes',
     );
   });
