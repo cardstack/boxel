@@ -1009,9 +1009,12 @@ one marker per edge, and every member of it must be one, because the whole
 collection leaves the stored value together.
 
 The marker's argument reads the input the value expression was handed, so
-resolution follows the object, array and comma nodes that assemble a value.
-A `card(id)` somewhere that re-roots that input — the body of `map`, the right
-of a pipe — is refused rather than answered against the wrong value.
+resolution follows the nodes that pass that input straight down and can
+themselves be the value: object entries, array and comma streams, `//`
+operands, and the branches of an `if`. A `card(id)` somewhere that re-roots the
+input — the body of `map`, the right of a pipe — is refused rather than
+answered against the wrong value, and so is one in a condition, which chooses a
+branch rather than being the value.
 
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,

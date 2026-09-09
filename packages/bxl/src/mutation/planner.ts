@@ -16,6 +16,7 @@ import {
   withRuntimeDiagnostics,
 } from '../jqtools/evaluate/runtimeState.ts';
 import type {
+  DestructuringAst,
   ExpressionAst,
   NormalBinaryOperator,
   RuntimeAnnotatedExpressionAst,
@@ -509,6 +510,25 @@ function evaluateItems(
   return withEvaluationBudget(context, (evaluate) => evaluate(ast, input));
 }
 
+/** Every expression a destructuring pattern holds, keys included. */
+function destructuringExpressions(
+  destructuring: DestructuringAst,
+): ExpressionAst[] {
+  switch (destructuring.type) {
+    case 'arrayDestructuring':
+      return destructuring.destructuring.flatMap(destructuringExpressions);
+    case 'objectDestructuring':
+      return destructuring.entries.flatMap((entry) => [
+        ...(typeof entry.key === 'string' ? [] : [entry.key]),
+        ...(entry.destructuring
+          ? destructuringExpressions(entry.destructuring)
+          : []),
+      ]);
+    default:
+      return [];
+  }
+}
+
 /** Every child expression of a node, so a whole tree can be searched. */
 function childExpressions(ast: ExpressionAst): ExpressionAst[] {
   switch (ast.type) {
@@ -563,7 +583,11 @@ function childExpressions(ast: ExpressionAst): ExpressionAst[] {
         ...(entry.value === undefined ? [] : [entry.value]),
       ]);
     case 'varDeclaration':
-      return [ast.expr, ast.next];
+      return [
+        ast.expr,
+        ...ast.destructuring.flatMap(destructuringExpressions),
+        ast.next,
+      ];
     default:
       return [];
   }
@@ -612,12 +636,15 @@ function cardMarkerNode(id: string): ExpressionAst {
  * Resolve the `card(…)` markers a value expression builds into its result, so
  * the rest of the expression can evaluate as jq wrote it.
  *
- * The walk follows only the object, array and comma nodes that assemble a
- * value, because a marker's argument is evaluated here, against the input the
- * whole expression was handed. Those nodes pass that input through unchanged;
- * a node that re-roots it — the body of `map`, the right of a pipe — does not,
- * and a marker under one is left alone rather than answered from the wrong
- * place. `evaluateSingleJson` reports what is left as unresolvable.
+ * The walk follows the nodes that both pass the expression's own input through
+ * unchanged and can be the value that results: object entries, array and comma
+ * streams, `//` operands, and the branches of an `if`. A marker's argument is
+ * evaluated here, against the input the whole expression was handed, so a node
+ * that re-roots it — the body of `map`, the right of a pipe — is left alone
+ * rather than answered from the wrong place, and so is a condition, which
+ * chooses a branch rather than being the value. `evaluateSingleJson` reports
+ * whatever is left as unresolvable. `try` needs no thought here: the mutation
+ * profile refuses it.
  *
  * A subtree carrying no marker comes back as it went in, so a program without
  * one is never rebuilt and never evaluates anything ahead of time.
@@ -651,12 +678,32 @@ function resolveValueTreeCards(
       return expr === ast.expr ? ast : { ...ast, expr };
     }
     case 'binary': {
-      if (ast.operator !== ',') return ast;
+      if (ast.operator !== ',' && ast.operator !== '//') return ast;
       const left = resolve(ast.left);
       const right = resolve(ast.right);
       return left === ast.left && right === ast.right
         ? ast
         : { ...ast, left, right };
+    }
+    case 'if': {
+      const branches = ast.elifs?.map((elif) => {
+        const then = resolve(elif.then);
+        return then === elif.then ? elif : { ...elif, then };
+      });
+      const then = resolve(ast.then);
+      const otherwise = ast.else === undefined ? undefined : resolve(ast.else);
+      const changed =
+        then !== ast.then ||
+        otherwise !== ast.else ||
+        Boolean(branches?.some((elif, index) => elif !== ast.elifs![index]));
+      return changed
+        ? {
+            ...ast,
+            then,
+            ...(branches === undefined ? {} : { elifs: branches }),
+            ...(otherwise === undefined ? {} : { else: otherwise }),
+          }
+        : ast;
     }
     default:
       return ast;

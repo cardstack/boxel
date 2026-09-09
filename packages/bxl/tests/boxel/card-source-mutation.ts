@@ -3473,6 +3473,68 @@ strictEqual(
   'markers share the budget of the value they sit in',
 );
 
+// A marker resolves through any node that hands the value expression's own
+// input straight down and can itself be the value: an `if` branch and a `//`
+// operand, whole-value or nested. `try` needs no case of its own — the
+// mutation profile refuses it outright.
+deepStrictEqual(
+  nestedLinkMutation(
+    'whole-value-marker-through-a-conditional',
+    '.examples[0].friend = (if true then card(params("who")) else null end);',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'whole-value-marker-through-an-alternative',
+    '.examples[0].friend = (null // card(params("who")));',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'nested-marker-through-a-conditional',
+    `append(.examples;{${zeta},"parts":[],` +
+      '"friend":(if true then card(params("who")) else null end)});',
+  ).plan.intents,
+  [
+    {
+      op: 'insert',
+      collection: ['examples'],
+      index: 3,
+      value: { key: 'z', label: 'Zeta', aliases: [], parts: [] },
+    },
+    { op: 'relate', field: ['examples', 3, 'friend'], cardId: zoe },
+  ],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'nested-marker-through-an-alternative',
+    `append(.examples;{${zeta},"parts":[],` +
+      '"friend":(null // card(params("who")))});',
+  ).plan.intents,
+  [
+    {
+      op: 'insert',
+      collection: ['examples'],
+      index: 3,
+      value: { key: 'z', label: 'Zeta', aliases: [], parts: [] },
+    },
+    { op: 'relate', field: ['examples', 3, 'friend'], cardId: zoe },
+  ],
+);
+
+// A condition chooses a branch rather than being the value, so a marker there
+// is refused the same way one in a re-rooting position is.
+strictEqual(
+  nestedLinkError(
+    'nested-marker-in-a-condition',
+    `append(.examples;{${zeta},"parts":[],` +
+      '"friend":(if card(params("who")) then null else null end)});',
+  ).code,
+  'card-marker-position',
+);
+
 console.log(
   'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, request-context builtins, stale-plan safety, and read-only computed/linked overlays passed',
 );
