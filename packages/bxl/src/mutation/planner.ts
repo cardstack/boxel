@@ -1343,6 +1343,31 @@ interface WrittenLinks {
   shed: BxlMutationPath[];
   /** Relationship Fields whose edges this write leaves as the Card holds them. */
   keep: BxlMutationPath[];
+  /** Slots the value never named, which the planner's own view reads back. */
+  restore: BxlMutationPath[];
+}
+
+/**
+ * Put back the links a value left unmentioned, so the planner reads what the
+ * Card still holds.
+ *
+ * The stored value sheds them again — an edge is never a member — but the
+ * planner's view is what a later statement reads and what `plan.output`
+ * reports, and there the edge is still there. Leaving the slot standing empty
+ * would read as a link the write removed, which is the opposite of what
+ * keeping it means.
+ */
+function restoreKeptLinks(
+  model: BxlMutationJson,
+  restore: BxlMutationPath[],
+  prior: BxlMutationJson | undefined,
+): BxlMutationJson {
+  if (restore.length === 0 || prior === undefined) return model;
+  let restored = model;
+  for (const path of restore) {
+    restored = setAt(restored, path, valueAt(prior, path) ?? null);
+  }
+  return restored;
 }
 
 /**
@@ -1381,7 +1406,7 @@ function assertLinksAreEdges(
     resolution.schema,
     resolution.fieldType === 'containsMany',
   );
-  if (slots.length === 0) return { shed: [], keep: [] };
+  if (slots.length === 0) return { shed: [], keep: [], restore: [] };
   const markers = new Set(nested.map((entry) => pathKey(entry.path)));
   const refuse = (detail: string) => {
     throw new BxlMutationError(
@@ -1393,6 +1418,7 @@ function assertLinksAreEdges(
   };
   const shed: BxlMutationPath[] = [];
   const keep: BxlMutationPath[] = [];
+  const restore: BxlMutationPath[] = [];
   for (const slot of slots) {
     const held = valueAt(value, slot.path);
     const marked =
@@ -1419,8 +1445,11 @@ function assertLinksAreEdges(
     // one has nothing to keep, and saying so would put a line in every plan
     // over a value that merely has a relationship Field somewhere in it.
     if (held === undefined) {
-      if (unmentioned === 'keep' && holdsLink(prior, slot))
+      if (unmentioned === 'keep' && holdsLink(prior, slot)) {
         keep.push(slot.path);
+        shed.push(slot.path);
+        restore.push(slot.path);
+      }
       continue;
     }
     if (prior !== undefined && equalJson(held, valueAt(prior, slot.path))) {
@@ -1436,7 +1465,7 @@ function assertLinksAreEdges(
       `${pathKey([...base, ...slot.path])} is a ${slot.type} Field, so the value written there cannot be stored as data:`,
     );
   }
-  return { shed, keep };
+  return { shed, keep, restore };
 }
 
 /**
@@ -1583,7 +1612,7 @@ function planAssignment(
       unmentioned: 'keep' | 'clear',
     ) => {
       if (field.relationship || isCardReference(evaluated.value)) {
-        return { nested: [], links: { shed: [], keep: [] } };
+        return { nested: [], links: { shed: [], keep: [], restore: [] } };
       }
       const nested = nestedRelationships(
         evaluated.references,
@@ -1604,7 +1633,7 @@ function planAssignment(
     };
     let next: BxlMutationJson | CardReference;
     let nested: NestedRelationship[] = [];
-    let links: WrittenLinks = { shed: [], keep: [] };
+    let links: WrittenLinks = { shed: [], keep: [], restore: [] };
     if (statement.operator === '=') {
       const evaluated = evaluateSingleJson(
         statement.value,
@@ -1635,7 +1664,7 @@ function planAssignment(
         // Settled as the planner reads it, links included: a marker's slot
         // still standing empty would read as a member the Card dropped.
         next = settleUpdate(
-          modelValue(next, nested),
+          restoreKeptLinks(modelValue(next, nested), links.restore, layered),
           layered,
           location,
           context,

@@ -3755,6 +3755,35 @@ deepStrictEqual(
   relationship(richSourceFixture(), 'examples.1.friend'),
 );
 
+// A kept edge is still an edge, so the planner reads it back the way it reads
+// one the document already held: `plan.output` agrees with the committed Card,
+// and a later statement in the same program can follow the link. Leaving the
+// slot standing empty would read as a link the write removed.
+const keptLinkStaysReadable = nestedLinkMutation(
+  'a-kept-link-is-readable-by-a-later-statement',
+  '.examples[0] |= {"key":.key,"parts":.parts};\n.codes = [.examples[0].friend.id];',
+);
+deepStrictEqual(
+  (
+    (keptLinkStaysReadable.plan.output as Record<string, unknown>)
+      .examples as Array<Record<string, unknown>>
+  )[0]!.friend,
+  { id: 'https://example.test/Friend/a' },
+);
+deepStrictEqual(keptLinkStaysReadable.document.data.attributes?.codes, [
+  'https://example.test/Friend/a',
+]);
+// It is read as a link, not stored as one: the value the Card keeps still
+// holds no `friend` member.
+strictEqual(
+  (
+    keptLinkStaysReadable.document.data.attributes?.examples as Array<
+      Record<string, unknown>
+    >
+  )[0]!.friend,
+  undefined,
+);
+
 // Carrying a link back *changed* is a different thing entirely, and the one
 // case shedding must not swallow: the author asked for an edge to move, and
 // silently doing nothing would be its own quiet surprise.
