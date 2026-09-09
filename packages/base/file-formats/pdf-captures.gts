@@ -43,7 +43,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   // attribute before shooting: an async decode's paint isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
   //
-  // The signal is cleared by removing the attribute directly, not by a
+  // Both signals are written by mutating the attribute directly, not by a
   // tracked re-render: the capture page is settled when the engine starts
   // waiting, and a tracked update from this modifier's async continuation
   // demonstrably never flushed there (the paint completed in under a
@@ -57,6 +57,23 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         container.removeAttribute('data-screenshot-pending');
       }
     };
+    // A document that cannot decode (corrupt, encrypted, password-protected
+    // — an ordinary case, not a corner) will never become ready: swap in the
+    // definitive-failure signal so the engine fails this slot immediately
+    // instead of holding the prerender lane for the full pending budget on
+    // every retry. Failing the slot is the point — no manifest entry lands
+    // (the injected durable URL stays an uncaptured 404 the fitted cell's
+    // image fallback absorbs). Resolving readiness instead would persist a
+    // blank white poster (the slot's default background) that the thumbnail
+    // seam would serve as if it were the real page. The attribute value
+    // carries the cause into the slot's failure diagnostics, so an
+    // unreadable document is distinguishable from a hung component.
+    let fail = (cause: unknown) => {
+      if (!cancelled) {
+        container.removeAttribute('data-screenshot-pending');
+        container.setAttribute('data-screenshot-failed', String(cause));
+      }
+    };
     (async () => {
       // Hoisted so the finally can release it: capture renders are route
       // transitions on a pooled warm tab — one long-lived JS heap across
@@ -66,11 +83,13 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
       try {
         let url = fileResourceURL(this.args.model);
         if (!url) {
+          fail('no file resource url on the model');
           return;
         }
         let pdfjs: any = await loadPdfjs();
         let response = await fetch(url);
         if (!response.ok) {
+          fail(`fetching the document returned ${response.status}`);
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
@@ -97,32 +116,12 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
           canvasContext: canvas.getContext('2d'),
           viewport,
         }).promise;
-        // Readiness resolves only on a painted page. A corrupt or
-        // unreadable document leaves `data-screenshot-pending` standing, so
-        // the engine's bounded wait fails this slot: no manifest entry
-        // lands (the injected durable URL stays an uncaptured 404 the
-        // fitted cell's image fallback absorbs), and the retry lane's
-        // failure cap bounds what a permanently unreadable file can cost.
-        // Resolving on failure would instead persist a blank white poster
-        // (the slot's default background) that the thumbnail seam would
-        // serve as if it were the real page.
+        // Readiness resolves only on a painted page; every failure path
+        // resolves the definitive-failure signal instead — see the comment
+        // above `fail()`.
         finish();
       } catch (error) {
-        // Intentionally not resolving readiness — see the comment above
-        // `finish()`. But name the cause: the prerender pipes page console
-        // output into its logs, and without this line an unreadable
-        // document is indistinguishable from a hung component (both
-        // surface as the generic pending-timeout). `warn`, not `error` —
-        // the prerender records console errors into the bucket it attaches
-        // to a failed render's error report, and a per-slot capture
-        // failure on an otherwise-clean row shouldn't dress itself as a
-        // page fault. Stringified because the prerender serializes console
-        // args by value, and an Error's message and stack are
-        // non-enumerable — the object form would log as `{}`.
-        console.warn(
-          `pdf poster capture: first-page paint failed, leaving the slot pending`,
-          String(error),
-        );
+        fail(error);
       } finally {
         try {
           await doc?.destroy?.();

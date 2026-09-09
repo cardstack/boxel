@@ -381,10 +381,11 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a corrupt PDF captures no poster and the fitted cell keeps the placeholder', async function (assert) {
-    // Not a PDF at all: the capture component's decode fails, readiness
-    // never resolves, and the slot's capture fails after the bounded wait —
-    // no manifest entry may land, or the blank white capture box would
-    // masquerade as a first page in every grid.
+    // Not a PDF at all: the capture component's decode fails and it swaps
+    // its readiness signal for `data-screenshot-failed`, so the slot's
+    // capture fails immediately (never stalling the engine's pending
+    // budget) — no manifest entry may land, or the blank white capture box
+    // would masquerade as a first page in every grid.
     await writeAndSettle(
       'broken.pdf',
       new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0xde, 0xad, 0xbe, 0xef]),

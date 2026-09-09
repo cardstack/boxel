@@ -28,6 +28,7 @@ function makeFileSystem() {
     'product.gts': `
       import { contains, field, linksTo, CardDef, Component, type ScreenshotSpec } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
+      import { modifier } from "ember-modifier";
 
       export class Maker extends CardDef {
         @field name = contains(StringField);
@@ -108,6 +109,30 @@ function makeFileSystem() {
         }
         static screenshots: Record<string, ScreenshotSpec> = {
           card: { format: 'fitted', width: 400, height: 300 },
+        };
+      }
+
+      // A capture-only component that discovers its content can never be
+      // ready and swaps the pending signal for the definitive-failure
+      // signal — by direct DOM mutation, per the signalling contract. The
+      // engine must fail this slot immediately (no manifest entry, no
+      // ledger row) rather than waiting out the pending budget, and the
+      // attribute's value must reach the slot's failure diagnostics.
+      class DoomedShot extends Component<typeof Doomed> {
+        markFailed = modifier((el) => {
+          el.removeAttribute('data-screenshot-pending');
+          el.setAttribute('data-screenshot-failed', 'fixture: content cannot decode');
+        });
+        <template>
+          <div data-screenshot-pending='true' {{this.markFailed}}>never ready</div>
+        </template>
+      }
+
+      export class Doomed extends CardDef {
+        @field name = contains(StringField);
+        static screenshots: Record<string, ScreenshotSpec> = {
+          ok: { format: 'fitted', width: 170, height: 250 },
+          doomed: { render: DoomedShot, width: 320, height: 180 },
         };
       }
 
@@ -446,6 +471,71 @@ module(basename(import.meta.filename), function (hooks) {
       await declaredLedgerRows(`${testRealm}nothing`),
       [],
       'no ledger rows',
+    );
+  });
+
+  test('a data-screenshot-failed signal fails its slot immediately; sibling slots still capture', async function (assert) {
+    // The fixture component swaps pending → failed as soon as it renders,
+    // modeling content that is discovered undecodable (a corrupt or
+    // password-protected document). Were the definitive-failure signal not
+    // honored, every render of this instance — the initial pass plus the
+    // full retry lane — would stall the engine's whole pending budget, and
+    // this test would take minutes rather than seconds.
+    await writeAndSettle(
+      'doomed.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Doomed' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Doomed' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}doomed.json`,
+    );
+    assert.ok(row, 'the instance row still indexes');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(
+      manifest?.ok,
+      'the sibling slot captures — a per-slot failure never fails the visit',
+    );
+    assert.notOk(
+      manifest?.doomed,
+      'no manifest entry lands for the failed slot',
+    );
+
+    let ledger = await declaredLedgerRows(`${testRealm}doomed`);
+    assert.deepEqual(
+      [...new Set(ledger.map((r) => r.capture_spec_hash))],
+      [
+        await declaredCaptureSpecHash('ok', {
+          format: 'fitted',
+          width: 170,
+          height: 250,
+        }),
+      ],
+      'only the sibling slot persisted a capture',
+    );
+
+    // The component's stated cause (the attribute's value) rides the slot's
+    // failure diagnostics — an unreadable file must be distinguishable from
+    // a hung component that timed out the pending wait. Every pass fails
+    // this slot identically, so whichever pass's diagnostics survive on the
+    // row carry this message.
+    let errors = (row!.diagnostics as any)?.screenshotErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    let doomedError = errors?.find((e) => e.name === 'doomed');
+    assert.ok(doomedError, 'the failed slot records a screenshot error');
+    assert.ok(
+      doomedError!.message.includes(
+        'signaled data-screenshot-failed: fixture: content cannot decode',
+      ),
+      `the error carries the component's stated cause (got: ${doomedError?.message})`,
     );
   });
 

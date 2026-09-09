@@ -1953,9 +1953,13 @@ function renderErrorMessage(e: RenderError): string {
 // Wait for the capture-only component's explicit readiness signal: while its
 // async content (media decode, canvas paint) is unready it renders a
 // `data-screenshot-pending` attribute and removes it when painted. No such
-// element means ready. A component that never resolves it fails the slot —
-// persisting a byte-hashed unready frame would cache the wrong pixels until
-// the next generation.
+// element means ready. A component that learns its content can never be
+// ready (a corrupt or encrypted document, an undecodable video) swaps in a
+// `data-screenshot-failed` attribute instead, which fails the slot
+// immediately — a definitive failure shouldn't hold the affinity lane for
+// the full pending budget on every retry. A component that resolves neither
+// signal fails the slot at the timeout — persisting a byte-hashed unready
+// frame would cache the wrong pixels until the next generation.
 async function waitForScreenshotPendingClear(
   page: Page,
   name: string,
@@ -1967,16 +1971,18 @@ async function waitForScreenshotPendingClear(
     // less than once per wait budget, timing this wait out after the
     // attribute was already removed (observed: removal ~100ms into the
     // wait, next poll never came within 15s). Mutation polling evaluates
-    // once at injection (covering an already-clear document) and then on
-    // DOM changes, which is exactly when the readiness attribute is
-    // removed. This pairs with the component-side contract that readiness
-    // is cleared by direct DOM mutation — a tracked re-render's flush rides
-    // the same throttled timers and would not produce the mutation in time.
+    // once at injection (covering an already-clear or already-failed
+    // document) and then on DOM changes, which is exactly when either
+    // signal attribute flips. This pairs with the component-side contract
+    // that both signals are written by direct DOM mutation — a tracked
+    // re-render's flush rides the same throttled timers and would not
+    // produce the mutation in time.
     await page.waitForFunction(
-      () => document.querySelector('[data-screenshot-pending]') == null,
+      () =>
+        document.querySelector('[data-screenshot-failed]') != null ||
+        document.querySelector('[data-screenshot-pending]') == null,
       { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 'mutation' },
     );
-    return undefined;
   } catch {
     return buildInvalidRenderResponseError(
       page,
@@ -1984,6 +1990,25 @@ async function waitForScreenshotPendingClear(
       { title: 'Screenshot render never painted' },
     );
   }
+  // The failure attribute's value carries the component's stated cause into
+  // the slot's error, so an unreadable document is distinguishable from a
+  // hung component in the failure diagnostics.
+  let failure = await page.evaluate(
+    () =>
+      document
+        .querySelector('[data-screenshot-failed]')
+        ?.getAttribute('data-screenshot-failed') ?? null,
+  );
+  if (failure != null) {
+    return buildInvalidRenderResponseError(
+      page,
+      `capture-only component for screenshot "${name}" signaled data-screenshot-failed${
+        failure && failure !== 'true' ? `: ${failure}` : ''
+      }`,
+      { title: 'Screenshot render reported failure' },
+    );
+  }
+  return undefined;
 }
 
 // Capture one render-based declared entry through the dedicated
