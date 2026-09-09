@@ -6,19 +6,28 @@
 // prerender pass — never part of the format API, so the live viewer stays a
 // native `<object>` with no pdf.js in the app's dependency graph.
 //
-// pdf.js is the host's vendored copy, reached through the virtual network's
-// lazy `pdfjs-dist` shim (registered in the host's externals) rather than a
-// CDN fetch inside the render: this capture runs on prerender
-// infrastructure, where public-network reachability would otherwise be a
-// standing availability dependency of every realm that holds a PDF. The
-// import stays dynamic and capture-time so the engine's chunk never loads
-// for consumers of the family that don't capture — the live viewer remains
-// a native `<object>` with no pdf.js in its path.
+// pdf.js is the host's vendored copy (not a CDN fetch inside the render:
+// this capture runs on prerender infrastructure, where public-network
+// reachability would otherwise be a standing availability dependency of
+// every realm that holds a PDF), reached through `loadPdfjs` below. The
+// engine's chunk loads only when that function is called at capture time,
+// so consumers of the family that never capture — the live viewer's native
+// `<object>` path included — never pay for it.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { fileResourceURL } from './file-image';
+// The host's vendored pdf.js, behind a statically-imported sync shim whose
+// function performs the host-side lazy chunk load — a runtime `import()` of
+// a shimmed bare specifier is not a load path card code can rely on (the
+// loader resolves shims for static imports; the dynamic form stalls), while
+// a static import of this zero-cost function keeps the engine's chunk load
+// at the call. The wrapper behind it wires a same-origin worker asset, so
+// rasterization runs on a real worker rather than pdf.js's main-thread
+// fallback.
+// @ts-expect-error host-shimmed module; the virtual network resolves it
+import { loadPdfjs } from '@cardstack/host/lib/pdfjs-loader';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -27,16 +36,6 @@ interface CaptureSignature {
     model: any;
   };
   Element: HTMLElement;
-}
-
-// The host's vendored pdf.js, resolved through the virtual network's lazy
-// shim. The wrapper behind the shim wires a same-origin worker asset, so
-// rasterization runs on a real worker rather than pdf.js's main-thread
-// fallback. The loader caches the shimmed module, so concurrent captures on
-// one warm tab share a single load.
-async function loadPdfjs(): Promise<any> {
-  // @ts-expect-error host-shimmed module; the virtual network resolves it
-  return await import('pdfjs-dist');
 }
 
 export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
@@ -63,14 +62,19 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         if (!url) {
           return;
         }
+        // TEMP DEBUG (will be reverted)
+        console.warn('PDFCAP stage=loading-engine');
         let pdfjs: any = await loadPdfjs();
+        console.warn('PDFCAP stage=engine-loaded');
         let response = await fetch(url);
+        console.warn('PDFCAP stage=fetched ok=' + response.ok);
         if (!response.ok) {
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
         doc = await pdfjs.getDocument({ data, isEvalSupported: false })
           .promise;
+        console.warn('PDFCAP stage=document-open pages=' + doc.numPages);
         let page = await doc.getPage(1);
         if (cancelled) {
           return;
@@ -101,8 +105,11 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         // file can cost. Resolving on failure would persist a blank white
         // poster (the slot's default background) that the thumbnail seam
         // would prefer over the placeholder.
+        console.warn('PDFCAP stage=rendered');
         finish();
-      } catch {
+      } catch (e) {
+        // TEMP DEBUG (will be reverted)
+        console.warn('PDFCAP stage=error ' + String(e).slice(0, 200));
         // Intentionally not resolving readiness — see the comment above
         // `finish()`.
       } finally {
