@@ -401,17 +401,14 @@ module(basename(import.meta.filename), function (hooks) {
       manifest?.poster,
       'no poster entry lands for an undecodable document',
     );
-    // The failure is bookkept either as this pass's screenshotErrors or —
-    // once the retry lane's cap excludes the slot from later passes — as the
-    // row's accumulated capture-failure count.
-    let diagnostics = fileRow!.diagnostics as any;
-    let errors = diagnostics?.screenshotErrors as
-      | { name: string; message: string }[]
-      | undefined;
-    assert.ok(
-      errors?.some((e) => e.name === 'poster') ||
-        (diagnostics?.screenshotCaptureFailureRenders ?? 0) >= 1,
-      `the slot failure is bookkept in diagnostics (got: ${JSON.stringify(diagnostics?.screenshotErrors)} / failureRenders=${diagnostics?.screenshotCaptureFailureRenders})`,
+    // No capture was ever persisted: the ledger is the durable signal here.
+    // (Per-pass failure diagnostics and the retry lane's failure-cap
+    // bookkeeping have their own coverage; which pass's diagnostics survive
+    // on the row depends on how many retries ran before settle.)
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.pdf`)).length,
+      0,
+      'no ledger row lands for an undecodable document',
     );
     // The declaration-derived injection still embeds the durable URL — it is
     // class-level and cannot know this document is unreadable. With no
