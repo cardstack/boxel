@@ -109,6 +109,35 @@ export class VirtualNetwork {
   private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
 
   // Subscribe to realm-mapping changes; returns an unsubscribe function.
+  /**
+   * Drops every registered mapping, handler and derived cache, returning this
+   * instance to the state a fresh one would have.
+   *
+   * Resetting in place rather than constructing a replacement is deliberate.
+   * Consumers hold this object — the Loader keeps it for cache-key folding,
+   * `fetcher` closes over it, `Loader.cloneLoader` copies it onto the clone —
+   * and a replacement leaves every one of them naming through a network
+   * nothing else consults, with no signal that it happened. Identity is what
+   * makes those holders correct, so it is preserved and the listeners are told.
+   *
+   * Listeners survive the reset for the same reason: a subscriber registered
+   * against this instance is still a live subscriber afterwards. They are
+   * notified last, once the state is already empty, because clearing every
+   * mapping at once is the largest mapping change there is — a cache keyed
+   * under the old mappings cannot be allowed to outlive them.
+   */
+  reset(): void {
+    this.handlers = [];
+    this.urlMappings = [];
+    this.importMap.clear();
+    this.realmMappings.clear();
+    this.packageNamespacePrefixes.clear();
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
+    this.notifyMappingChange();
+  }
+
   onMappingChange(listener: () => void): () => void {
     this.mappingChangeListeners.add(listener);
     return () => this.mappingChangeListeners.delete(listener);
