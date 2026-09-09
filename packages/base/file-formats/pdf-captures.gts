@@ -24,10 +24,10 @@ import { fileResourceURL } from './file-image';
 // a static import of this zero-cost function keeps the engine's chunk load
 // at the call. The wrapper behind it wires a same-origin worker asset, so
 // rasterization runs on a real worker rather than pdf.js's main-thread
-// fallback.
-// @ts-ignore resolvable only where host sources are in the program (the
-// host build); elsewhere the virtual network's shim serves it at runtime
-import { loadPdfjs } from '@cardstack/host/lib/pdfjs-loader';
+// fallback. `@cardstack/boxel-host/lib/*` is the card-facing doorway for
+// host library modules, the same spelling family as the
+// `@cardstack/boxel-host/tools/*` shims.
+import { loadPdfjs } from '@cardstack/boxel-host/lib/pdfjs-loader';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -74,8 +74,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
-        doc = await pdfjs.getDocument({ data, isEvalSupported: false })
-          .promise;
+        doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
         let page = await doc.getPage(1);
         if (cancelled) {
           return;
@@ -108,9 +107,20 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         // (the slot's default background) that the thumbnail seam would
         // serve as if it were the real page.
         finish();
-      } catch {
+      } catch (error) {
         // Intentionally not resolving readiness — see the comment above
-        // `finish()`.
+        // `finish()`. But name the cause: the prerender pipes page console
+        // output into its logs, and without this line an unreadable
+        // document is indistinguishable from a hung component (both
+        // surface as the generic pending-timeout). `warn`, not `error` —
+        // the prerender records console errors into the bucket it attaches
+        // to a failed render's error report, and a per-slot capture
+        // failure on an otherwise-clean row shouldn't dress itself as a
+        // page fault.
+        console.warn(
+          `pdf poster capture: first-page paint failed, leaving the slot pending`,
+          error,
+        );
       } finally {
         try {
           await doc?.destroy?.();

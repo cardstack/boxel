@@ -13,6 +13,7 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { FileObject } from './file-resources';
@@ -33,6 +34,12 @@ interface LoadedDocument {
   forUrl: string;
   blobUrl: string | undefined;
 }
+
+// Upper bound on the live document fetch. Generous, because a large
+// document on a slow link is the ordinary case a reader still wants to win;
+// bounded, because a stalled fetch must eventually yield to the plain-URL
+// fallback rather than holding the loading state forever.
+const DOCUMENT_FETCH_TIMEOUT_MS = 30_000;
 
 export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   // The served document URL. `<object>`/`<embed>` loads bypass service
@@ -57,7 +64,9 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   // Loading = a live fetch for the current URL has not settled yet. The
   // `<object>` is withheld until then so a private realm never flashes the
   // plugin's error page for the unauthenticated plain-URL load it would
-  // otherwise start immediately.
+  // otherwise start immediately; a spinner holds the space so a slow fetch
+  // reads as loading rather than broken, and the fetch's own timeout bounds
+  // how long this state can last.
   private get isLoading(): boolean {
     return (
       isLiveRender() &&
@@ -81,6 +90,13 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
     }
     let cancelled = false;
     let controller = new AbortController();
+    // A stalled fetch aborts here with `cancelled` still false, so the
+    // settle below runs with no blob and the plain URL takes over — the
+    // same fallback a failed fetch gets.
+    let timeout = setTimeout(
+      () => controller.abort(),
+      DOCUMENT_FETCH_TIMEOUT_MS,
+    );
     let createdBlobUrl: string | undefined;
     void (async () => {
       let blobUrl: string | undefined;
@@ -102,7 +118,10 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         }
       } catch {
         // Fall through: `blobUrl` stays undefined and the plain URL serves
-        // as the fallback (the public-realm anonymous case).
+        // as the fallback (the public-realm anonymous case, or a timed-out
+        // fetch).
+      } finally {
+        clearTimeout(timeout);
       }
       if (!cancelled) {
         this.loaded = { forUrl: url, blobUrl };
@@ -110,6 +129,7 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       controller.abort();
       if (createdBlobUrl) {
         // The object element for this URL is going away with us (teardown or
@@ -145,7 +165,11 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
       </div>
     {{else}}
       <div class='pdf-frame' {{this.loadDocument this.resourceUrl}}>
-        {{#unless this.isLoading}}
+        {{#if this.isLoading}}
+          <div class='pdf-loading' data-test-pdf-loading>
+            <LoadingIndicator />
+          </div>
+        {{else}}
           <FileObject
             class='pdf-object'
             @url={{this.objectUrl}}
@@ -153,7 +177,7 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
             @label={{this.title}}
             data-test-pdf-viewer
           />
-        {{/unless}}
+        {{/if}}
       </div>
     {{/if}}
 
@@ -174,6 +198,12 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         min-height: 0;
         border: 0;
         background: var(--fd-stage, var(--muted, #eceef1));
+      }
+      .pdf-loading {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
       }
 
       /* Fitted: a page-shaped placeholder, not a PDF engine. It reads as "a

@@ -438,15 +438,19 @@ module('Integration | content-only file preview components', function (hooks) {
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
   });
 
-  test('PdfViewer serves the document through an authed blob URL in live renders', async function (assert) {
+  test('PdfViewer hands its fetched document to the object as a blob URL in live renders', async function (assert) {
     let loader: Loader = getService('loader-service').loader;
     let { PdfViewer } = await loader.import<any>(
       `${baseRealm.url}file-formats/pdf-viewer`,
     );
     // A native <object>'s own fetch bypasses service workers, so the viewer
-    // fetches the bytes itself (auth-injectable) and hands the object a blob
-    // URL. A data: URL stands in for the realm document — the fetch path is
-    // identical, no auth needed.
+    // fetches the bytes itself and hands the object a blob URL. A data: URL
+    // stands in for the realm document — the fetch path is identical, no
+    // auth needed. What this pins is the fetch→blob handoff only: the
+    // Authorization injection that motivates it lives in the host auth
+    // service worker, and `isServiceWorkerSupported()` short-circuits under
+    // `isTesting()`, so the authed private-realm leg has no test coverage —
+    // a green run here says nothing about it.
     let pdfB64 =
       'JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMjAwXT4+CmVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA0L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKMTY0CiUlRU9G';
     let model = {

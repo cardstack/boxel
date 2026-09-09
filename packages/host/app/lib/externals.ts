@@ -231,7 +231,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: 'pdfjs-dist',
     resolve: () => import('../lib/pdfjs.js'),
   });
-  virtualNetwork.shimModule('@cardstack/host/lib/pdfjs-loader', pdfjsLoader);
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/lib/pdfjs-loader',
+    pdfjsLoader,
+  );
   virtualNetwork.shimAsyncModule({
     id: 'uuid',
     resolve: () => import('uuid'),
