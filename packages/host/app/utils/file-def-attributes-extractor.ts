@@ -66,6 +66,41 @@ export type FileDefExtractResult = {
   frontmatterDiagnostics?: Partial<Diagnostics>;
 };
 
+// A failure to obtain the file's bytes: the fetch rejected, returned non-ok,
+// or the body stream errored mid-read. The extractor's class-chain fallback
+// exists for parse failures — a subclass that cannot make sense of the
+// content hands off to its parent. A byte-acquisition failure is different in
+// kind: every class faces the same missing bytes, and the base FileDef
+// "succeeds" without reading them, which would index the file as a bare
+// FileDef — permanently dropping its subtype fields (a markdown skill loses
+// `kind`, an image loses its dimensions) with nothing to retry the row. The
+// stream plumbing tags these errors so `extract()` can abort the chain and
+// return `status: 'error'`, which the indexer persists as a retryable error
+// row instead.
+export class FileBytesUnavailableError extends Error {
+  isFileBytesUnavailable = true;
+  cause: unknown;
+  constructor(fileURL: string, cause: unknown) {
+    super(
+      `could not obtain file bytes for ${fileURL}: ${
+        (cause as Error)?.message ?? String(cause)
+      }`,
+    );
+    this.name = 'FileBytesUnavailableError';
+    this.cause = cause;
+  }
+}
+
+export function isFileBytesUnavailableError(
+  error: unknown,
+): error is FileBytesUnavailableError {
+  return (
+    typeof error === 'object' &&
+    error != null &&
+    (error as FileBytesUnavailableError).isFileBytesUnavailable === true
+  );
+}
+
 export class FileDefAttributesExtractor {
   #loaderService: LoaderService;
   #network: NetworkService;
@@ -180,6 +215,7 @@ export class FileDefAttributesExtractor {
     let deps = [this.#fileDefCodeRef.module];
     let error: RenderError | undefined;
     let mismatch = false;
+    let bytesUnavailable: FileBytesUnavailableError | undefined;
 
     let recordError = (err: unknown) => {
       if (!error) {
@@ -214,7 +250,14 @@ export class FileDefAttributesExtractor {
           `[file-extract] ${(klass as any).displayName ?? (klass as any).name ?? 'unknown'}.extractAttributes failed for ${this.#fileURL}:`,
           err,
         );
-        recordError(err);
+        // A byte-acquisition failure aborts the whole chain (see
+        // FileBytesUnavailableError) — falling back to a parent class would
+        // misclassify the file rather than repair anything.
+        if (isFileBytesUnavailableError(err)) {
+          bytesUnavailable = err;
+        } else {
+          recordError(err);
+        }
         return undefined;
       }
     };
@@ -253,6 +296,9 @@ export class FileDefAttributesExtractor {
           ? 'Base FileDef module did not export extractAttributes'
           : 'FileDef module did not export extractAttributes';
       let searchDoc = await tryExtract(klass, missingMessage);
+      if (bytesUnavailable) {
+        break;
+      }
       if (searchDoc) {
         let typeCodeRefs = getTypes(klass);
         let types = typeCodeRefs.map((type) =>
@@ -331,6 +377,19 @@ export class FileDefAttributesExtractor {
       }
     }
 
+    if (bytesUnavailable) {
+      return {
+        status: 'error',
+        searchDoc: null,
+        deps,
+        error: this.#buildError(
+          this.#fileURL,
+          bytesUnavailable.cause ?? bytesUnavailable,
+        ),
+        ...(mismatch ? { mismatch: true } : {}),
+      };
+    }
+
     return {
       status: 'error',
       searchDoc: null,
@@ -358,12 +417,24 @@ export class FileDefAttributesExtractor {
   // runtime-common/stream.ts does this (it cancels in a `finally`), and is what
   // the header-only extractors (the image defs) already use; partial readers
   // should go through it rather than draining the stream by hand.
+  //
+  // Failures anywhere in this plumbing — the fetch itself, buffering, or a
+  // mid-read error on the live body — are surfaced as
+  // FileBytesUnavailableError so the extract aborts instead of falling back
+  // down the class chain.
   #getStreamForAttempt = async () => {
-    if (!this.#primaryUsed) {
-      this.#primaryUsed = true;
-      return this.#getPrimaryStream();
+    try {
+      if (!this.#primaryUsed) {
+        this.#primaryUsed = true;
+        return await this.#getPrimaryStream();
+      }
+      return await this.#getRetryStream();
+    } catch (err) {
+      if (isFileBytesUnavailableError(err)) {
+        throw err;
+      }
+      throw new FileBytesUnavailableError(this.#fileURL, err);
     }
-    return this.#getRetryStream();
   };
 
   async #getPrimaryStream(): Promise<ReadableStream<Uint8Array> | Uint8Array> {
@@ -375,9 +446,38 @@ export class FileDefAttributesExtractor {
     // back to a buffered read only when the body isn't a stream (real fetches
     // always expose one; this keeps non-streaming environments working).
     if (response.body) {
-      return response.body;
+      return this.#tagStreamErrors(response.body);
     }
     return new Uint8Array(await response.arrayBuffer());
+  }
+
+  // A pass-through over the live body whose read failures reject with
+  // FileBytesUnavailableError, so a connection reset mid-stream is
+  // classified the same way as a failed fetch.
+  #tagStreamErrors(
+    stream: ReadableStream<Uint8Array>,
+  ): ReadableStream<Uint8Array> {
+    let reader = stream.getReader();
+    let fileURL = this.#fileURL;
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        let result: ReadableStreamReadResult<Uint8Array>;
+        try {
+          result = await reader.read();
+        } catch (err) {
+          controller.error(new FileBytesUnavailableError(fileURL, err));
+          return;
+        }
+        if (result.done) {
+          controller.close();
+        } else {
+          controller.enqueue(result.value);
+        }
+      },
+      cancel(reason) {
+        return reader.cancel(reason);
+      },
+    });
   }
 
   async #getRetryStream(): Promise<Uint8Array> {
