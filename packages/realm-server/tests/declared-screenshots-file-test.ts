@@ -359,6 +359,19 @@ module(basename(import.meta.filename), function (hooks) {
       'file',
     );
     assert.ok(fileRow, 'the file row exists');
+    // TEMP DEBUG
+    console.log(
+      'DBG doc.pdf fileRow',
+      JSON.stringify(
+        {
+          screenshots: fileRow!.screenshots,
+          diagnostics: fileRow!.diagnostics,
+          error: (fileRow as any).error_doc,
+        },
+        null,
+        2,
+      ).slice(0, 5000),
+    );
     let manifest = fileRow!.screenshots as ScreenshotManifest | null;
     assert.ok(manifest?.poster, 'the first-page poster landed on the file row');
     assert.true(
