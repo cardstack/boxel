@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 "${SCRIPT_DIR}/prepare-test-pg.sh"
 trap '"${SCRIPT_DIR}/stop-test-pg.sh" >/dev/null 2>&1 || true' EXIT INT TERM
 
-BASE_LOG_LEVELS="*=error,prerenderer-chrome=none,pg-adapter=warn,realm:requests=warn"
+# TEMP DEBUG (will be reverted): surface capture-page console for PDFCAP markers
+BASE_LOG_LEVELS="*=error,prerenderer-chrome=warn,pg-adapter=warn,realm:requests=warn"
 EXTRA_LOG_LEVELS="${LOG_LEVELS-}"
 if [ -n "$EXTRA_LOG_LEVELS" ]; then
   EFFECTIVE_LOG_LEVELS="${BASE_LOG_LEVELS},${EXTRA_LOG_LEVELS}"

@@ -26,7 +26,8 @@ import { fileResourceURL } from './file-image';
 // at the call. The wrapper behind it wires a same-origin worker asset, so
 // rasterization runs on a real worker rather than pdf.js's main-thread
 // fallback.
-// @ts-expect-error host-shimmed module; the virtual network resolves it
+// @ts-ignore resolvable only where host sources are in the program (the
+// host build); elsewhere the virtual network's shim serves it at runtime
 import { loadPdfjs } from '@cardstack/host/lib/pdfjs-loader';
 
 import type { ScreenshotSpec } from '../card-api';

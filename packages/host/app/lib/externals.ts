@@ -63,6 +63,7 @@ import {
   fallbackShim,
 } from '@cardstack/runtime-common/package-shim-handler';
 
+import * as pdfjsLoader from '../lib/pdfjs-loader';
 import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
@@ -230,9 +231,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: 'pdfjs-dist',
     resolve: () => import('../lib/pdfjs.js'),
   });
-  virtualNetwork.shimModule('@cardstack/host/lib/pdfjs-loader', {
-    loadPdfjs: async () => (await import('../lib/pdfjs.js')).default,
-  });
+  virtualNetwork.shimModule('@cardstack/host/lib/pdfjs-loader', pdfjsLoader);
   virtualNetwork.shimAsyncModule({
     id: 'uuid',
     resolve: () => import('uuid'),
