@@ -11,7 +11,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { keepLatestTask, task, didCancel } from 'ember-concurrency';
+import { keepLatestTask, task, didCancel, timeout } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
@@ -227,6 +227,25 @@ type DependencyTrackingOptions = {
 };
 type TrackedCreateOptions = CreateOptions & DependencyTrackingOptions;
 type TrackedAddOptions = AddOptions & DependencyTrackingOptions;
+
+// How many times a search the realm-server shed (a 429 from its search
+// admission gate) is retried before the shed surfaces as an error. Three
+// retries at the server's one-second Retry-After span a burst that clears
+// within a few seconds, and give up on a server that stays saturated.
+const MAX_SHED_SEARCH_RETRIES = 3;
+const MAX_SHED_RETRY_AFTER_SECONDS = 5;
+
+// The wait a shed response asks for, in ms, with jitter so the clients a burst
+// shed together don't all come back together. A missing or unparseable header
+// (the HTTP-date form, say) counts as one second.
+function shedRetryDelayMs(retryAfter: string | null): number {
+  let seconds = Number(retryAfter);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    seconds = 1;
+  }
+  seconds = Math.min(seconds, MAX_SHED_RETRY_AFTER_SECONDS);
+  return seconds * 1000 + Math.random() * 250;
+}
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -1656,23 +1675,36 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetchForRealms(
-      searchURL.href,
-      realms,
-      {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-          ...duringPrerenderHeaders(),
-          ...consumingRealmHeader(),
-          ...jobIdHeader(),
-          ...jobPriorityHeader(),
-          ...loggingCorrelationIdHeader(),
+    let response: Response;
+    for (let attempt = 0; ; attempt++) {
+      response = await this.realmServer.maybeAuthedFetchForRealms(
+        searchURL.href,
+        realms,
+        {
+          method: 'QUERY',
+          headers: {
+            Accept: SupportedMimeType.CardJson,
+            'Content-Type': 'application/json',
+            ...duringPrerenderHeaders(),
+            ...consumingRealmHeader(),
+            ...jobIdHeader(),
+            ...jobPriorityHeader(),
+            ...loggingCorrelationIdHeader(),
+          },
+          body: JSON.stringify({ ...query, realms }),
         },
-        body: JSON.stringify({ ...query, realms }),
-      },
-    );
+      );
+      // A 429 is the realm-server shedding load: it is running its maximum
+      // number of concurrent searches and turned this one away before doing
+      // any work on it. The condition is transient by construction (slots free
+      // as searches finish), so wait the interval it names and try again,
+      // rather than surfacing a burst as a broken query field. Bounded so a
+      // server that stays saturated still fails, just later.
+      if (response.status !== 429 || attempt >= MAX_SHED_SEARCH_RETRIES) {
+        break;
+      }
+      await timeout(shedRetryDelayMs(response.headers.get('Retry-After')));
+    }
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
