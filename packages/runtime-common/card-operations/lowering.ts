@@ -110,7 +110,7 @@ interface ResolvedPath {
   unresolved?: {
     at: string;
     segment: string;
-    reason: 'missing' | 'unreachable';
+    reason: 'missing' | 'unreachable' | 'crosses-collection';
   };
 }
 
@@ -370,6 +370,16 @@ async function lowerSet(
   if (!field) {
     return undefined;
   }
+  if (field.type === 'linksToMany') {
+    // A relationship collection is changed one edge at a time; an assignment
+    // would replace the whole set, which the executor refuses outright.
+    sink.add(
+      'link-collection-replace',
+      `set.${path}`,
+      `"${path}" is a link collection, which changes one edge at a time — append to it rather than assigning the whole set`,
+    );
+    return undefined;
+  }
   let slot = await slotForField(field, 'whole', context);
   let source = await lowerValue(
     value,
@@ -435,7 +445,7 @@ async function lowerAssert(
   let resolved = await resolvePath(path, context);
   if (resolved.unresolved) {
     sink.add(
-      'unknown-field',
+      unresolvedCode(resolved),
       'assert.unique',
       unresolvedMessage(resolved, path),
     );
@@ -531,19 +541,62 @@ async function resolvePath(
         },
       };
     }
+    // A collection has to say *which* item before a path can continue into
+    // one, and a declaration has no way to. Following the item type here
+    // would emit a location that reads the collection itself as an object.
+    if (PLURAL_KINDS.includes(fieldDef.type)) {
+      return {
+        segments,
+        unresolved: {
+          at: names.slice(0, index + 1).join('.'),
+          segment: names[index + 1],
+          reason: 'crosses-collection',
+        },
+      };
+    }
     current = await context.lookupDefinition(fieldDef.fieldOrCard);
   }
   return { segments };
 }
 
+// Why a field accepts no write, or undefined when it does. Mirrors the
+// writability the executor derives from the same `FieldDefinition`, so a
+// declaration is refused here rather than at every invocation: a computed
+// field is recomputed over any write, a query-backed field's value comes
+// from its query, and `id` is the card's identity rather than its data.
+function unwritableReason(
+  name: string,
+  fieldDef: FieldDefinition,
+): { code: 'computed-write' | 'read-only-write'; why: string } | undefined {
+  if (fieldDef.isComputed) {
+    return {
+      code: 'computed-write',
+      why: `"${name}" is a computed field, so a write to it would be replaced by the next read of its \`computeVia\``,
+    };
+  }
+  if (fieldDef.query !== undefined) {
+    return {
+      code: 'read-only-write',
+      why: `"${name}" is resolved by a \`query\`, so it holds no stored value to write`,
+    };
+  }
+  if (name === 'id') {
+    return {
+      code: 'read-only-write',
+      why: `"id" is the card's identity rather than its data, and no operation assigns it`,
+    };
+  }
+  return undefined;
+}
+
 // The field a write lands on, or undefined when the path cannot carry one.
 //
-// A write binds to the target card's own stored values. That rules out a
-// computed field, whose value comes from its `computeVia` and would be
-// recomputed over any write, and it rules out reaching *through* a link: the
-// linked card is a separate document with its own operations, so writing into
-// it from here would edit a card the invocation never named. A link as the
-// last segment is fine — that writes the link itself.
+// A write binds to the target card's own stored values. That rules out any
+// field nothing may write (see `unwritableReason`), and it rules out reaching
+// *through* a link: the linked card is a separate document with its own
+// operations, so writing into it from here would edit a card the invocation
+// never named. A link as the last segment is fine — that writes the link
+// itself.
 function checkWritablePath(
   resolved: ResolvedPath,
   path: string,
@@ -551,16 +604,24 @@ function checkWritablePath(
   sink: IssueSink,
 ): FieldDefinition | undefined {
   if (resolved.unresolved) {
-    sink.add('unknown-field', clausePath, unresolvedMessage(resolved, path));
+    sink.add(
+      unresolvedCode(resolved),
+      clausePath,
+      unresolvedMessage(resolved, path),
+    );
     return undefined;
   }
   let ok = true;
   for (let [index, { name, fieldDef }] of resolved.segments.entries()) {
-    if (fieldDef.isComputed) {
+    let unwritable = unwritableReason(name, fieldDef);
+    if (unwritable) {
       sink.add(
-        'computed-write',
+        unwritable.code,
         clausePath,
-        `"${name}" is a computed field, so a write to "${path}" would be replaced by the next read of its \`computeVia\``,
+        // Name the whole path only when it says more than the segment does.
+        name === path
+          ? unwritable.why
+          : `${unwritable.why}, so the write to "${path}" lands on nothing`,
       );
       ok = false;
     }
@@ -581,8 +642,21 @@ function checkWritablePath(
     : undefined;
 }
 
+// A path that names a field the type does not have is an unknown field; one
+// that stops at a collection names a real field it simply cannot address.
+function unresolvedCode(
+  resolved: ResolvedPath,
+): 'unknown-field' | 'path-crosses-collection' {
+  return resolved.unresolved?.reason === 'crosses-collection'
+    ? 'path-crosses-collection'
+    : 'unknown-field';
+}
+
 function unresolvedMessage(resolved: ResolvedPath, path: string): string {
   let { at, segment, reason } = resolved.unresolved!;
+  if (reason === 'crosses-collection') {
+    return `"${path}" continues past the collection "${at}" into "${segment}", and a declaration cannot say which item it means`;
+  }
   if (reason === 'unreachable') {
     return `"${path}" cannot be followed past "${at}", whose type does not resolve`;
   }
@@ -737,19 +811,20 @@ async function lowerObject(
     let memberSlot: ValueSlot = { kind: 'opaque' };
     if (definition) {
       let fieldDef = getImmediateFieldDef(definition, key);
+      let unwritable = fieldDef && unwritableReason(key, fieldDef);
       if (!fieldDef) {
         sink.add(
           'unknown-field',
           memberPath,
           `"${key}" is not a field of ${describeDefinition(definition)}`,
         );
-      } else if (fieldDef.isComputed) {
+      } else if (unwritable) {
         sink.add(
-          'computed-write',
+          unwritable.code,
           memberPath,
-          `"${key}" is a computed field of ${describeDefinition(
+          `${unwritable.why}, and ${describeDefinition(
             definition,
-          )}, so a value written to it would be replaced by the next read of its \`computeVia\``,
+          )} is what this value is written into`,
         );
       } else {
         memberSlot = await slotForField(fieldDef, 'whole', context);
@@ -963,19 +1038,20 @@ async function lowerCreate(
   for (let [key, value] of Object.entries(declaration.fill)) {
     if (target) {
       let fieldDef = getImmediateFieldDef(target, key);
+      let unwritable = fieldDef && unwritableReason(key, fieldDef);
       if (!fieldDef) {
         sink.add(
           'unknown-field',
           `fill.${key}`,
           `"${key}" is not a field of ${describeDefinition(target)}`,
         );
-      } else if (fieldDef.isComputed) {
+      } else if (unwritable) {
         sink.add(
-          'computed-write',
+          unwritable.code,
           `fill.${key}`,
-          `"${key}" is a computed field of ${describeDefinition(
+          `${unwritable.why}, and ${describeDefinition(
             target,
-          )}, so a staged value for it would be replaced by the next read of its \`computeVia\``,
+          )} is the type this creates`,
         );
       }
     }

@@ -707,6 +707,90 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('replacing a whole link collection is recorded — a relationship changes one edge at a time', async function (assert) {
+    let { field, contains, linksToMany, CardDef } = api;
+    let { operation, params } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field reviewers = linksToMany(() => fixtures.Author);
+      @operation static reassign = {
+        base: 'transform',
+        params: { who: StringField },
+        set: { reviewers: [params('who')] },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['link-collection-replace']);
+    assert.true(
+      result.issues[0].message.includes('append'),
+      'the message names the clause that does express the change',
+    );
+    assert.strictEqual(
+      result.operations.reassign.program,
+      undefined,
+      'and no program is emitted, since an assignment here is not executable',
+    );
+  });
+
+  test('a write into a query-backed field or into `id` is recorded', async function (assert) {
+    let { field, contains, linksTo, CardDef } = api;
+    let { operation } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field featured = linksTo(() => fixtures.Author, {
+        query: {
+          filter: { type: { module: `${testRealmURL}author`, name: 'Author' } },
+        },
+      } as never);
+      @operation static feature = {
+        base: 'transform',
+        set: { featured: 'http://example.com/a' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static rename = {
+        base: 'transform',
+        set: { id: 'http://example.com/r' },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['read-only-write', 'read-only-write']);
+    assert.true(
+      result.issues[0].message.includes('query'),
+      'a query-backed field holds no stored value to write',
+    );
+    assert.true(
+      result.issues[1].message.includes('identity'),
+      "and `id` is the card's identity rather than its data",
+    );
+  });
+
+  test('a path that continues past a collection is recorded — no item is named', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field comments = containsMany(fixtures.Comment);
+      @operation static editComment = {
+        base: 'transform',
+        set: { 'comments.body': 'z' },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['path-crosses-collection']);
+    assert.true(
+      result.issues[0].message.includes('which item'),
+      'the message says what the declaration cannot express',
+    );
+  });
+
   test('appending to a field that holds one value is recorded', async function (assert) {
     let { field, contains, CardDef } = api;
     let { operation } = operations;

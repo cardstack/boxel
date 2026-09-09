@@ -121,6 +121,15 @@ export type OperationLoweringIssueCode =
   // A write into a computed field. Its value comes from its `computeVia`, so
   // a write would be overwritten by the next read.
   | 'computed-write'
+  // A write into a field nothing may write: one whose value is resolved by a
+  // `query`, or the card's own `id`.
+  | 'read-only-write'
+  // A `set` that would replace a whole link collection. A relationship
+  // collection is changed one edge at a time, so this is `append`'s job.
+  | 'link-collection-replace'
+  // A dotted path that crosses a collection. Which item it means is not
+  // something a declaration can say, so the path addresses nothing.
+  | 'path-crosses-collection'
   // A write whose path crosses a `linksTo` / `linksToMany`. An operation
   // binds only to the target card's own stored values; the linked card is a
   // separate document with its own operations.
