@@ -44,8 +44,10 @@ import {
 
 // Response header naming how the live-search cache satisfied a request:
 // `miss` (fresh compute), `join` (awaited an identical in-flight compute), or
-// `hit` (served from the TTL window). Diagnostic + test surface only — the
-// body is byte-identical across the three.
+// `hit` (served from the TTL window). Diagnostic only — the body is
+// byte-identical across the three. Added to the CORS `exposeHeaders` list
+// (server.ts) so a cross-origin browser caller can read it, not just
+// server-side supertest/curl.
 export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 
 // The federated search: the entry wire model over every requested
@@ -59,15 +61,16 @@ export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
-  // Enables the live-search coalescing layer: without a dbAdapter the realm
-  // generation fingerprints that keep it fresh can't be read, so live
-  // requests fall back to uncached compute.
-  dbAdapter?: DBAdapter;
+  // Reads each searched realm's generation fingerprints (the freshness signal
+  // the live-search cache keys on). Required — every route wiring passes it.
+  dbAdapter: DBAdapter;
+  // Injectable per test; when unset the handler builds one with production
+  // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
+  // off) to make two sequential callers each compute.
   liveSearchCache?: LiveSearchCache;
 }): (ctxt: Koa.Context) => Promise<void> {
   let { reconciler, searchCache, dbAdapter } = opts;
-  let liveSearchCache =
-    opts.liveSearchCache ?? (dbAdapter ? new LiveSearchCache() : undefined);
+  let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
     let loggingCorrelationId = sanitizeLoggingCorrelationId(
@@ -242,10 +245,7 @@ export default function handleSearch(opts: {
         opts: cacheKeyOpts,
         runSearch,
         emitTimeline,
-        liveSearch:
-          liveSearchCache && dbAdapter
-            ? { cache: liveSearchCache, dbAdapter }
-            : undefined,
+        liveSearch: { cache: liveSearchCache, dbAdapter },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A bounded search

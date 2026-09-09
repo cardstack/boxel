@@ -32,6 +32,7 @@ import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import type { LiveSearchCache } from './live-search-cache.ts';
 import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
@@ -679,6 +680,7 @@ export class RealmServer {
   private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
+  private liveSearchCache: LiveSearchCache | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -706,6 +708,7 @@ export class RealmServer {
     prerenderer,
     reportHostShell,
     searchCache,
+    liveSearchCache,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -743,6 +746,10 @@ export class RealmServer {
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
     searchCache?: JobScopedSearchCache;
+    // Optional live-search cache. When unset the handler builds one with
+    // production defaults; a test injects one configured with `ttlMs: 0`
+    // (coalescing on, retention off) to force each caller to compute.
+    liveSearchCache?: LiveSearchCache;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -793,6 +800,7 @@ export class RealmServer {
     this.prerenderer = prerenderer;
     this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
+    this.liveSearchCache = liveSearchCache;
   }
 
   get app() {
@@ -852,8 +860,12 @@ export class RealmServer {
           // Content-Range/Accept-Ranges are what a cross-origin caller needs
           // to reason about a 206 byte-range response (Content-Length is
           // safelisted, but is listed for symmetry with the range pair).
+          // X-Boxel-Live-Search-Cache names how the live-search cache served a
+          // `_federated-search` response (miss/join/hit); expose it so the
+          // outcome is legible to a browser caller (host DevTools, client
+          // telemetry), not just to server-side supertest/curl.
           exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length',
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, X-Boxel-Live-Search-Cache',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
@@ -914,6 +926,7 @@ export class RealmServer {
           reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
+          liveSearchCache: this.liveSearchCache,
         }),
       )
       .use(

@@ -23,6 +23,7 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
+import { LiveSearchCache } from '../../live-search-cache.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -41,6 +42,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
     let testRealmHttpServer: Server;
 
     let ownerUserId = '@mango:localhost';
@@ -98,10 +101,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       dbAdapter,
       publisher,
       runner,
+      liveSearchCache,
     }: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
+      liveSearchCache?: LiveSearchCache;
     }) {
       let virtualNetwork = createVirtualNetwork();
       let dir = dirSync();
@@ -132,6 +137,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         publisher,
         runner,
         matrixURL,
+        liveSearchCache,
       });
 
       testRealmHttpServer = result.testRealmHttpServer;
@@ -152,8 +158,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     }
 
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
+        publisher = _publisher;
+        runner = _runner;
         await startSearchRealmServer({
           dbAdapter,
           publisher,
@@ -588,9 +596,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         'hit',
         'an identical follow-up is served from the live cache',
       );
-      assert.deepEqual(
-        second.body,
-        first.body,
+      // `.text` is the raw response string, so this is the byte comparison the
+      // message claims (`.body` is supertest's re-parsed JSON). A `hit` returns
+      // the first request's cached string, so equality here is expected.
+      assert.strictEqual(
+        second.text,
+        first.text,
         'the cached body is byte-identical',
       );
 
@@ -607,12 +618,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     });
 
     test('a body computed for one caller is served to a different authorized caller', async function (assert) {
-      // Cross-user sharing is the whole point of the live cache: the body is a
-      // pure function of the realm list (both callers are authorized for it),
-      // not of the requesting user, so a body one user's request populated is
-      // served byte-identically to the next authorized user. Distinct sessions
-      // (different `Authorization` bearers) exercise the sharing that a
-      // single-user test cannot.
+      // Pins that cross-user *sharing happens*: a body one user populated is
+      // served to the next authorized user off the TTL window. This alone does
+      // not prove the body is user-independent — the reader's `hit` returns the
+      // owner's cached string, so the two are equal by construction whether or
+      // not the compute is pure. The purity guard is the separate `ttlMs: 0`
+      // test below, where both callers compute.
       let searchBody = {
         filter: personFilter(),
         realms: [testRealm.url, secondaryRealm.url],
@@ -633,10 +644,60 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         'hit',
         'a different authorized caller is served the cached body',
       );
-      assert.deepEqual(
-        reader.body,
-        owner.body,
-        'the cross-user body is byte-identical',
+      assert.strictEqual(
+        reader.text,
+        owner.text,
+        'the reader is served the exact string the owner populated',
+      );
+    });
+
+    test('two authorized callers each compute a byte-identical body (cross-user purity)', async function (assert) {
+      // The purity guard the sharing test above can't provide. With retention
+      // off (`ttlMs: 0`) — coalescing stays on, but two sequential requests
+      // never coalesce — each caller runs its own compute and the second is a
+      // `miss`, not a `hit`. Comparing those two INDEPENDENTLY computed bodies
+      // is what pins the invariant the whole safety argument rests on: the body
+      // is a pure function of the realm list, not the requesting user. A change
+      // that folded a caller-derived value into the body would diverge here and
+      // trip this assertion — where the sharing test, comparing the one cached
+      // string to itself, would still pass.
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        liveSearchCache: new LiveSearchCache({
+          ttlMs: 0,
+          telemetryIntervalMs: 0,
+        }),
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let owner = await postSearchAs(ownerToken(), searchBody);
+      assert.strictEqual(owner.status, 200, 'the owner request succeeds');
+      assert.strictEqual(
+        owner.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the owner computes (retention is off)',
+      );
+
+      let reader = await postSearchAs(tokenFor(readerUserId), searchBody);
+      assert.strictEqual(reader.status, 200, 'the reader request succeeds');
+      assert.strictEqual(
+        reader.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the reader independently computes rather than being served a cached body',
+      );
+      assert.strictEqual(
+        reader.text,
+        owner.text,
+        'two independent computes produce a byte-identical body',
       );
     });
 

@@ -768,7 +768,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Retained body bytes against the configured cap, worst replica (`max` across tasks). Riding near the cap alongside lifecycle `evicted` activity means the cap is throttling the hit rate.",
+        "description": "Retained body bytes against the configured cap. Both realm-server replicas emit on one Loki stream (no per-process label), so this tracks the most recently emitted summary rather than a per-replica peak — treat it as indicative, not the fleet maximum. Riding near the cap alongside lifecycle `evicted` activity means the cap is throttling the hit rate.",
         "fieldConfig": {
           "defaults": {
             "color": {
