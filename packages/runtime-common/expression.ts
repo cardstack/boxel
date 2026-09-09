@@ -103,18 +103,20 @@ export interface TypesContains {
   key: string;
 }
 
-// An `ORDER BY` sort direction. A direction is a SQL keyword rather than a
-// value — `ORDER BY x $1` orders by a parameter's value, not by a direction —
-// so it cannot be bound, and `expressionToSql` enumerates the two accepted
-// spellings instead. Carrying it as a node rather than as a bare string
-// element is what routes it through that check: a string element renders
-// verbatim, so every direction reaching SQL travels as one of these, whatever
-// the caller assembled it from.
+// An `ORDER BY` sort direction. A direction has no bind form: `ORDER BY x $1`
+// is a syntax error, and `ORDER BY $1` binds in the sort-key position, sorting
+// every row by one constant. So `expressionToSql` enumerates the two accepted
+// keywords when it renders one. Carrying the direction as a node rather than
+// as a bare string element is what routes it through that check — a string
+// element renders verbatim, so every direction reaching SQL travels as one of
+// these, whatever the caller assembled it from.
 export interface SortDirection {
   kind: 'sort-direction';
-  // Deliberately unnarrowed. The renderer is the check, so a caller holding a
-  // loosely typed direction cannot satisfy this by casting.
-  direction: string | undefined;
+  // Wider than `'asc' | 'desc'` on purpose, and wider than the `Sort` type: a
+  // query-backed field interpolates its direction out of card data, so what
+  // arrives here is whatever the caller holds — including `null` from a field
+  // the author left unset. The renderer is what narrows it.
+  direction: string | null | undefined;
 }
 
 export interface FieldArity {
@@ -258,9 +260,13 @@ export function typesContains(key: string, column = 'i.types'): TypesContains {
   };
 }
 
-// An absent direction renders `asc`, the default the query grammar assigns a
-// sort entry that omits one.
-export function sortDirection(direction: string | undefined): SortDirection {
+// An unset direction renders `asc`. Both spellings of unset count: a sort
+// entry that omits the key, and one carrying `null` from an interpolated card
+// field. `makeInstanceComparator` sorts both ascending client-side, so the two
+// legs of a query agree on what an unset direction means.
+export function sortDirection(
+  direction: string | null | undefined,
+): SortDirection {
   return {
     kind: 'sort-direction',
     direction,
@@ -608,16 +614,15 @@ export function expressionToSql(
         .map(renderElement)
         .join(' ');
     } else if (element.kind === 'sort-direction') {
-      // What keeps a direction from becoming SQL text of its own choosing.
-      // Both adapters parse it as a keyword, so there is no bind to render it
-      // through and the two accepted spellings are enumerated instead. The
-      // query grammar constrains the same value on the way in; neither check
-      // relies on the other.
-      // Only an absent direction defaults; `null` is a spelling like any
-      // other, and the grammar refuses it too, so the two agree on every
-      // input rather than only on the ones the grammar sees.
+      // What keeps a direction from becoming SQL text of its own choosing. A
+      // direction has no bind form, so the accepted keywords are enumerated
+      // here instead: unset renders the `asc` default, and anything else must
+      // be one of the two keywords exactly. `assertQuery` constrains this
+      // value as well on the paths that run it, and neither check relies on
+      // the other — a query reaching the engine without passing the grammar
+      // still cannot put arbitrary text in an `ORDER BY`.
       let { direction } = element;
-      if (direction === undefined) {
+      if (direction == null) {
         return 'asc';
       }
       if (direction !== 'asc' && direction !== 'desc') {

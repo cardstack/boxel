@@ -7,6 +7,7 @@ import {
   IndexQueryEngine,
   VirtualNetwork,
   expressionToSql,
+  normalizeQueryDefinition,
   param,
   query,
   sortDirection,
@@ -19,14 +20,17 @@ import {
 
 import { setupDB } from './helpers/index.ts';
 
-// An `ORDER BY` sort direction is the one part of a compiled query that
-// reaches SQL as a keyword rather than as a value: `ORDER BY x $1` orders by a
-// parameter's value, so there is nothing to bind a direction to. Two
-// independent barriers hold it to `asc`/`desc` — the query grammar
-// (`assertQuery`) rejects every other spelling on the way in, and
-// `expressionToSql` renders only those two keywords. These tests pin the
-// second barrier, the one a caller that reaches the query engine without
-// passing through the grammar still meets.
+// An `ORDER BY` sort direction reaches SQL as a keyword, and a keyword has no
+// bind form — `ORDER BY x $1` is a syntax error. So the renderer enumerates
+// `asc`/`desc` rather than parameterizing, and that check is what a caller
+// reaching the query engine without passing `assertQuery` meets.
+//
+// Such a caller exists: a query-backed field's declared `query` may spell its
+// direction as an interpolation token, and `normalizeQueryDefinition`
+// substitutes the value out of the card's own data before
+// `RealmIndexQueryEngine` hands the result to `searchCards`. Nothing on that
+// leg runs the grammar, so the renderer is the only thing standing between an
+// instance attribute and the `ORDER BY` clause.
 
 const ADAPTER_KINDS: DBAdapter['kind'][] = ['pg', 'sqlite'];
 
@@ -43,20 +47,60 @@ const urls = [
   `${testRealmURL}Entry/newest`,
 ];
 
-// `last_modified` values chosen so the seeding order, the ascending order, and
-// the descending order are three different orders — an ORDER BY that silently
-// dropped its direction would still satisfy one of them.
+// Seeded in an order that is neither ascending nor descending by
+// `last_modified`, so neither row-order expectation below can be satisfied by
+// an ORDER BY that dropped its direction and returned rows as stored.
+const SEED_ORDER = [urls[1], urls[0], urls[2]];
+
 const lastModified = new Map([
   [urls[0], 100],
   [urls[1], 200],
   [urls[2], 300],
 ]);
 
-// Nothing below filters on a type, so no definition is ever looked up; the
-// stub exists to satisfy the engine's constructor.
+// Titles ordered so that sorting by `title` gives yet another order — one
+// that matches neither the seeding order nor either `last_modified` order.
+const titles = new Map([
+  [urls[0], 'b'],
+  [urls[1], 'c'],
+  [urls[2], 'a'],
+]);
+
+const byTitleAscending = [urls[2], urls[0], urls[1]];
+
+function ref(module: string, name: string): ResolvedCodeRef {
+  return { module: module as ResolvedCodeRef['module'], name };
+}
+
+const entryRef = ref(`${testRealmURL}entry`, 'Entry');
+const stringRef = ref('@cardstack/base/string', 'default');
+
+// The card a query-backed field targets. Only a sort through `title` resolves
+// against it; the general-sort-field cases never reach a definition at all.
+const entryDef: Definition = {
+  type: 'card-def',
+  codeRef: entryRef,
+  displayName: 'Entry',
+  fields: { title: 'f0' },
+  fieldDefs: {
+    f0: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: stringRef,
+    },
+  },
+};
+
 function makeDefinitionLookup(): DefinitionLookup {
   const lookup: DefinitionLookup = {
     async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
+      if (
+        codeRef.module === entryRef.module &&
+        codeRef.name === entryRef.name
+      ) {
+        return entryDef;
+      }
       throw new Error(
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
       );
@@ -101,7 +145,8 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
     `,`,
     param(JSON.stringify({ id: url, type: 'card' })),
     `::jsonb,`,
-    `'{}'::jsonb,`,
+    param(JSON.stringify({ title: titles.get(url) })),
+    `::jsonb,`,
     `'[]'::jsonb,`,
     `'[]'::jsonb,`,
     param(false),
@@ -167,33 +212,41 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('an absent direction renders as asc, the grammar default', function (assert) {
+    test('an unset direction renders as asc, in either spelling', function (assert) {
+      // `null` is unset, not a bad direction: an interpolated direction whose
+      // card field is empty arrives that way, and the client-side comparator
+      // sorts it ascending too. Refusing it here would fail a query that the
+      // client answers.
       for (let kind of ADAPTER_KINDS) {
-        assert.strictEqual(
-          expressionToSql(kind, [
-            'ORDER BY i.last_modified',
-            sortDirection(undefined),
-          ]).text,
-          'ORDER BY i.last_modified asc',
-          `${kind}: an omitted direction sorts ascending`,
-        );
+        for (let direction of [undefined, null]) {
+          assert.strictEqual(
+            expressionToSql(kind, [
+              'ORDER BY i.last_modified',
+              sortDirection(direction),
+            ]).text,
+            'ORDER BY i.last_modified asc',
+            `${kind}: ${JSON.stringify(direction)} sorts ascending`,
+          );
+        }
       }
     });
 
     test('any other direction is refused rather than rendered', function (assert) {
-      // `ASC` is refused alongside the injection shapes: the grammar admits
-      // the two lowercase spellings, so an uppercase one can only arrive from
-      // a caller that skipped it.
+      // The case variants and the whitespace-padded spellings are refused
+      // alongside the injection shapes: `asc`/`desc` are the only two the
+      // grammar admits, so anything adjacent to them can only arrive from a
+      // caller that skipped it, and rendering it would be a guess.
       for (let kind of ADAPTER_KINDS) {
         for (let direction of [
           SUBQUERY_DIRECTION,
           'asc; DROP TABLE boxel_index',
           'sideways',
           'ASC',
+          'DESC',
+          ' asc',
+          'asc ',
+          'asc nulls first',
           '',
-          // `null` is refused rather than read as absent: the grammar refuses
-          // it too, so only an omitted direction defaults to `asc`.
-          null as unknown as string,
         ]) {
           assert.throws(
             () =>
@@ -231,7 +284,7 @@ module(basename(import.meta.filename), function () {
           makeDefinitionLookup(),
           new VirtualNetwork(),
         );
-        for (let url of urls) {
+        for (let url of SEED_ORDER) {
           await seedEntry(dbAdapter, url);
         }
       },
@@ -253,9 +306,10 @@ module(basename(import.meta.filename), function () {
           expected,
           `${direction} orders the rows by last_modified`,
         );
+        let sql = orderBySql();
         assert.ok(
-          new RegExp(`\\)\\s+${direction}\\s+NULLS LAST`).test(orderBySql()),
-          `${direction} reaches the ORDER BY as the keyword`,
+          new RegExp(`\\)\\s+${direction}\\s+NULLS LAST`).test(sql),
+          `${direction} reaches the ORDER BY as the keyword:\n${sql}`,
         );
       }
     });
@@ -271,7 +325,7 @@ module(basename(import.meta.filename), function () {
           ] as unknown as Sort,
         }),
         /sort direction must be either 'asc' or 'desc'/,
-        'the search is refused while the query is still being compiled',
+        'the search is refused as the ORDER BY is rendered',
       );
       assert.notOk(
         executedSql.some((sql) => sql.includes('realm_user_permissions')),
@@ -292,11 +346,98 @@ module(basename(import.meta.filename), function () {
           expected,
           `${direction} orders the rows by the inner sort alias`,
         );
+        let sql = orderBySql();
+        // The call reaches the wrapped builder through a positional argument
+        // list, so pin that it actually took that branch: the outer select
+        // over `sub` and the inner sort alias only exist on this path.
         assert.ok(
-          new RegExp(`_sort_0\\s+${direction}\\s+NULLS LAST`).test(
-            orderBySql(),
-          ),
-          `${direction} reaches the outer ORDER BY as the keyword`,
+          /\) AS sub/.test(sql),
+          `${direction}: the outer select over \`sub\` was executed:\n${sql}`,
+        );
+        assert.ok(
+          /_sort_0/.test(sql),
+          `${direction}: the inner sort alias was projected:\n${sql}`,
+        );
+        assert.ok(
+          new RegExp(`_sort_0\\s+${direction}\\s+NULLS LAST`).test(sql),
+          `${direction} reaches the outer ORDER BY as the keyword:\n${sql}`,
+        );
+      }
+    });
+
+    // A query-backed field's declared direction, resolved out of the card's own
+    // data exactly as `RealmIndexQueryEngine` resolves it before calling
+    // `searchCards`. `normalizeQueryDefinition` anchors each sort entry on the
+    // field's target type, so this lands on the card-field branch.
+    function interpolatedSort(sortDir: unknown): Sort {
+      let normalized = normalizeQueryDefinition({
+        fieldDefinition: {
+          type: 'linksToMany',
+          isPrimitive: false,
+          isComputed: false,
+          fieldOrCard: entryRef,
+        } as any,
+        queryDefinition: {
+          realms: [testRealmURL],
+          sort: [{ by: 'title', direction: '$this.sortDir' }],
+        },
+        realmURL: new URL(testRealmURL),
+        fieldName: 'items',
+        resolvePathValue: () => sortDir,
+        resource: { attributes: { sortDir } } as any,
+      });
+      return normalized!.query.sort!;
+    }
+
+    test('an interpolated direction carries the card field value to the engine unvalidated', function (assert) {
+      // The premise the tests below rest on: nothing between the card field
+      // and the engine constrains this value, so whatever the field holds
+      // arrives verbatim.
+      assert.deepEqual(
+        interpolatedSort(SUBQUERY_DIRECTION)[0].direction,
+        SUBQUERY_DIRECTION as 'asc',
+        'the payload reaches the sort entry as written',
+      );
+      assert.strictEqual(
+        (interpolatedSort(null)[0] as { direction?: unknown }).direction,
+        null,
+        'an unset field reaches it as null rather than as an absent key',
+      );
+    });
+
+    test('an interpolated direction that is not a keyword never reaches the database', async function (assert) {
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          sort: interpolatedSort(SUBQUERY_DIRECTION),
+        }),
+        /sort direction must be either 'asc' or 'desc'/,
+        'the search is refused as the ORDER BY is rendered',
+      );
+      assert.notOk(
+        executedSql.some((sql) => sql.includes('realm_user_permissions')),
+        'no SQL carrying the direction was executed',
+      );
+      assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
+    });
+
+    test('an interpolated direction still sorts when the card field is set or empty', async function (assert) {
+      // An empty field must keep answering the query rather than failing it —
+      // the client-side comparator sorts an unset direction ascending, so a
+      // refusal here would make the two legs disagree.
+      for (let [sortDir, expected] of [
+        [null, byTitleAscending],
+        [undefined, byTitleAscending],
+        ['asc', byTitleAscending],
+        ['desc', [...byTitleAscending].reverse()],
+      ] as [unknown, string[]][]) {
+        executedSql = [];
+        let { cards } = await engine.searchCards(new URL(testRealmURL), {
+          sort: interpolatedSort(sortDir),
+        });
+        assert.deepEqual(
+          cards.map((card) => String(card.id)),
+          expected,
+          `${JSON.stringify(sortDir)} sorts by title as expected`,
         );
       }
     });
@@ -307,7 +448,7 @@ module(basename(import.meta.filename), function () {
           { by: 'lastModified', direction: SUBQUERY_DIRECTION },
         ]),
         /sort direction must be either 'asc' or 'desc'/,
-        'the search is refused while the query is still being compiled',
+        'the search is refused as the ORDER BY is rendered',
       );
       assert.notOk(
         executedSql.some((sql) => sql.includes('realm_user_permissions')),
