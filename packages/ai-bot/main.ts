@@ -58,6 +58,7 @@ import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireRoomLock, releaseRoomLock } from './lib/queries.ts';
+import { RoomEventSerializer } from './lib/room-event-serializer.ts';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger.js';
 import { setupSignalHandlers } from './lib/signal-handlers.ts';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown.ts';
@@ -85,6 +86,7 @@ let activeGenerations = new Map<
 >();
 
 let aiBotInstanceId = uuidv4();
+let roomEventSerializer = new RoomEventSerializer();
 
 class Assistant {
   private openai: OpenAI;
@@ -226,11 +228,11 @@ Common issues are:
     }
   });
 
-  // TODO: Set this up to use a queue that gets drained (CS-8516)
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
+      let releaseRoomTurn: (() => void) | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -325,6 +327,17 @@ Common issues are:
           return;
         }
 
+        // One sync response can deliver several events for this room at once,
+        // and each gets its own run of this handler. Wait for any earlier
+        // handler for the room to finish before taking the room lock, so the
+        // handlers do not race for it and lose events. Only the newest event
+        // waits: an older event is covered by the newer event's history, so
+        // it stands down (see RoomEventSerializer).
+        releaseRoomTurn = await roomEventSerializer.claim(room.roomId, eventId);
+        if (!releaseRoomTurn) {
+          return;
+        }
+
         // Acquire a lock so that only one instance processes events for this room at a time.
         let roomLock = await profTime(eventId, 'lock:acquire', async () =>
           acquireRoomLock(
@@ -337,6 +350,7 @@ Common issues are:
 
         if (!roomLock) {
           // Some other instance is already processing a recent event in this room. Ignore it.
+          releaseRoomTurn();
           return;
         }
 
@@ -807,6 +821,7 @@ Common issues are:
           // lock as released before attempting to acquire it.
           await releaseRoomLock(assistant.pgAdapter, room.roomId);
           resolveGenerationCompletion();
+          releaseRoomTurn();
 
           // Now that the lock is free, fulfill any reads. Each fulfillment
           // posts a command-result event that re-triggers the bot for the
@@ -837,6 +852,8 @@ Common issues are:
           },
         });
         return;
+      } finally {
+        releaseRoomTurn?.();
       }
     },
   );
