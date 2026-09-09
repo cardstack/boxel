@@ -78,9 +78,10 @@ import {
  * target that the program never wrote `card(…)` for, and the vocabulary the
  * platform reasons about — declaration lowering emits `card(…)`, the profile
  * classifies it, a reviewer reads it — would have a second, silent spelling. A
- * symbol key has no JSON spelling, and the planner stamps one only where it
- * rewrote a `card(…)` node itself, so a marker can be neither forged nor
- * confused with the data around it. The evaluated tree is searched for markers
+ * symbol key has no JSON spelling, and the planner mints one only from a
+ * `card(…)` node the program itself wrote — directly where such a node is the
+ * whole value, and by rewriting the node where it sits inside one — so a
+ * marker can be neither forged nor confused with the data around it. The evaluated tree is searched for markers
  * before anything copies it, so it cannot be lost either: `clone` drops symbol
  * keys.
  */

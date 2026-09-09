@@ -1026,9 +1026,9 @@ branch that is not taken costs nothing:
 ```
 
 `card(id)` is the only spelling that names a relationship target. A marker is
-recognised by an identity the planner stamps on the node it rewrote, never by
-the shape of the value that node produced, so a value a program assembles to
-look like a reference is plain JSON: at a relationship Field it is refused as
+recognised by an identity the planner mints from a `card(…)` node the program
+itself wrote, never by the shape of the value that node produced, so a value a
+program assembles to look like a reference is plain JSON: at a relationship Field it is refused as
 `relationship-value-required`, and in a slot the Card stores as a value it is
 stored as it reads. A program therefore cannot point a link at a Card without
 writing `card(…)`, which is what lets declaration lowering, the profile's own

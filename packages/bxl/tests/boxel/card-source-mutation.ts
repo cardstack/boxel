@@ -3287,8 +3287,9 @@ deepStrictEqual(
 );
 
 // `card(id)` is the only spelling that names a relationship target. A marker
-// is recognised by an identity the planner stamps on the node it rewrote, so a
-// value a program builds to look like one is plain JSON wherever it stands: at
+// is recognised by an identity the planner mints from a `card(…)` node the
+// program itself wrote — whether that node is the whole value or sits inside
+// one — so a value built to look like one is plain JSON wherever it stands: at
 // a relationship Field it is refused the way any other value there is, and in
 // a slot the Card stores as a value it is stored as it reads.
 const forgedReference = `{"kind":"card-reference","id":${JSON.stringify(zoe)}}`;
