@@ -11,6 +11,7 @@ export type Expression = (
   | TableValuedTree
   | JsonContains
   | TypesContains
+  | SortDirection
   | DBSpecificExpression
 )[];
 
@@ -102,6 +103,20 @@ export interface TypesContains {
   key: string;
 }
 
+// An `ORDER BY` sort direction. A direction is a SQL keyword rather than a
+// value — `ORDER BY x $1` orders by a parameter's value, not by a direction —
+// so it cannot be bound, and `expressionToSql` enumerates the two accepted
+// spellings instead. Carrying it as a node rather than as a bare string
+// element is what routes it through that check: a string element renders
+// verbatim, so every direction reaching SQL travels as one of these, whatever
+// the caller assembled it from.
+export interface SortDirection {
+  kind: 'sort-direction';
+  // Deliberately unnarrowed. The renderer is the check, so a caller holding a
+  // loosely typed direction cannot satisfy this by casting.
+  direction: string | undefined;
+}
+
 export interface FieldArity {
   type: CodeRef;
   path: string;
@@ -130,6 +145,7 @@ export type CardExpression = (
   | TableValuedTree
   | JsonContains
   | TypesContains
+  | SortDirection
   | JsonContainsQuery
   | FieldQuery
   | FieldValue
@@ -239,6 +255,15 @@ export function typesContains(key: string, column = 'i.types'): TypesContains {
     kind: 'types-contains',
     column,
     key,
+  };
+}
+
+// An absent direction renders `asc`, the default the query grammar assigns a
+// sort entry that omits one.
+export function sortDirection(direction: string | undefined): SortDirection {
+  return {
+    kind: 'sort-direction',
+    direction,
   };
 }
 
@@ -582,6 +607,21 @@ export function expressionToSql(
       return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
         .map(renderElement)
         .join(' ');
+    } else if (element.kind === 'sort-direction') {
+      // What keeps a direction from becoming SQL text of its own choosing.
+      // Both adapters parse it as a keyword, so there is no bind to render it
+      // through and the two accepted spellings are enumerated instead. The
+      // query grammar constrains the same value on the way in; neither check
+      // relies on the other.
+      let { direction } = element;
+      if (direction != null && direction !== 'asc' && direction !== 'desc') {
+        throw new Error(
+          `sort direction must be either 'asc' or 'desc', not ${JSON.stringify(
+            direction,
+          )}`,
+        );
+      }
+      return direction ?? 'asc';
     } else {
       throw assertNever(element);
     }
