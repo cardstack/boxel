@@ -81,9 +81,17 @@ import {
  * symbol key has no JSON spelling, and the planner mints one only from a
  * `card(…)` node the program itself wrote — directly where such a node is the
  * whole value, and by rewriting the node where it sits inside one — so a
- * marker can be neither forged nor confused with the data around it. The evaluated tree is searched for markers
- * before anything copies it, so it cannot be lost either: `clone` drops symbol
- * keys.
+ * marker can be neither forged nor confused with the data around it.
+ *
+ * Keeping it also means not losing it, which is a property of the routes a
+ * value travels rather than of the symbol: a rebuilt object keeps its string
+ * keys and drops its symbol ones. So every route the walk resolves through is
+ * one that carries the brand — object and array literals build around it and
+ * `+` spreads it — and `VALUE_COMBINING_OPERATORS` says which those are.
+ * `clone` is not one, since `structuredClone` drops symbol-keyed properties,
+ * which is why the evaluated tree is searched for markers before anything
+ * copies it and a reference becomes a `cardId` at the write path rather than
+ * being stored in the working document.
  */
 const CARD_MARKER = Symbol('bxl.mutation.card-marker');
 
@@ -598,12 +606,20 @@ function childExpressions(ast: ExpressionAst): ExpressionAst[] {
 /**
  * Binary operators whose operands are values the result is built from, rather
  * than a stream re-rooted or a decision made from them.
+ *
+ * `*` is not one of them, though it combines values too. It merges objects
+ * recursively, and the merge rebuilds each object from its string keys, so a
+ * marker at a key the left operand already holds an object at is merged into
+ * and its brand dropped — which would take the relationship with it and leave
+ * the write looking like it succeeded. Refusing the position reports what a
+ * program cannot express here instead of losing an edge to it; `+` is the
+ * merge a value expression writes part of a contained value with, and it
+ * spreads its operands rather than descending into them.
  */
 const VALUE_COMBINING_OPERATORS: ReadonlySet<string> = new Set([
   ',',
   '//',
   '+',
-  '*',
 ]);
 
 function containsCardCall(ast: ExpressionAst): boolean {
@@ -674,7 +690,7 @@ function cardMarkerNode(
  * A marker reads its argument against the input the value expression itself was
  * handed, so the walk follows the nodes that pass that input down unchanged and
  * whose operands flow into the result: object entries, array and comma streams,
- * the operands of `//`, `+` and `*`, and the branches of an `if`. Everywhere
+ * the operands of `//` and `+`, and the branches of an `if`. Everywhere
  * else the marker is left as written and `evaluateSingleJson` reports it as
  * unresolvable — a node that re-roots the input (the body of `map`, either side
  * of a pipe) would answer it from the wrong place, and a condition chooses a
