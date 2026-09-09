@@ -36,6 +36,7 @@ import {
   equalJson,
   hasAt,
   pathKey,
+  sameJson,
   setAt,
   valueAt,
 } from './json-path.ts';
@@ -144,6 +145,12 @@ interface FieldResolution {
   fieldPath: BxlMutationPath;
   relationship?: { type: 'linksTo' | 'linksToMany'; path: BxlMutationPath };
   writeBehavior?: 'write' | 'skip';
+  /**
+   * The Fields of the value the path addresses, which is the Fields of a
+   * collection's item where the path selects one. Empty where the value has
+   * none of its own.
+   */
+  schema: BxlMutationSchema;
 }
 
 interface PlannerContext {
@@ -1001,6 +1008,7 @@ function resolveField(
       fieldPath: [],
       relationship,
       writeBehavior: root?.writeBehavior,
+      schema: root?.item ?? context.prepare.schema,
     };
   }
 
@@ -1113,6 +1121,7 @@ function resolveField(
     fieldPath,
     relationship,
     writeBehavior,
+    schema,
   };
 }
 
@@ -1266,49 +1275,295 @@ function nestedRelationships(
   });
 }
 
+/** A relationship Field the schema reaches inside a value being written. */
+interface LinkSlot {
+  /** Where the relationship sits inside the value. */
+  path: BxlMutationPath;
+  type: 'linksTo' | 'linksToMany';
+}
+
 /**
- * Refuse a link collection whose members are not all markers.
+ * Every relationship Field the schema reaches inside a value, whether or not
+ * the value carries anything there.
  *
- * The whole collection leaves the stored value, so a member written beside the
- * edges would be dropped without a word rather than stored as it reads. This
- * sees the collections a marker writes to; one written wholly as data carries
- * no marker to resolve and reaches the Card the way any other value does.
+ * The schema is what makes a Field a link, so this walks the value's shape
+ * rather than the `card(…)` markers in it — a `linksTo` written as
+ * `{"id": …}` and a `linksToMany` written as a list of strings each land on a
+ * slot here and neither carries a marker to be found. Descent follows the
+ * containers the value actually holds, so a Field it never reaches has no
+ * slot, and stops at a relationship, whose subtree belongs to the Card it
+ * points at rather than to this value.
  */
-function assertLinkCollectionsAreEdges(
+function linkSlots(
+  value: BxlMutationJson,
+  schema: BxlMutationSchema,
+  collection: boolean,
+): LinkSlot[] {
+  const slots: LinkSlot[] = [];
+  const walk = (
+    held: BxlMutationJson,
+    at: BxlMutationSchema,
+    path: BxlMutationPath,
+  ) => {
+    if (held === null || typeof held !== 'object' || Array.isArray(held))
+      return;
+    for (const field of at.fields) {
+      // A promoted alias names a Field stored somewhere else in the value, and
+      // the walk reaches it there; reading it here as well would answer for a
+      // slot the value never carries.
+      if (field.path) continue;
+      const here = [...path, field.key];
+      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        slots.push({ path: here, type: field.fieldType });
+        continue;
+      }
+      const nested = nestedSchema(field);
+      if (!nested) continue;
+      const child = held[field.key];
+      if (child === undefined) continue;
+      if (field.fieldType === 'containsMany') {
+        if (Array.isArray(child)) {
+          child.forEach((item, index) => walk(item, nested, [...here, index]));
+        }
+        continue;
+      }
+      walk(child, nested, here);
+    }
+  };
+  if (!collection) walk(value, schema, []);
+  else if (Array.isArray(value)) {
+    value.forEach((item, index) => walk(item, schema, [index]));
+  }
+  return slots;
+}
+
+/**
+ * Whether a slot holds no link at all.
+ *
+ * `null` says so at either kind of Field — a value that names no Card names
+ * none whether the Field holds one or many, and that is how a value written
+ * from nothing spells an empty link. A collection also reads empty as `[]`,
+ * the shape the projection gives it.
+ */
+function linkIsEmpty(
+  held: BxlMutationJson | undefined,
+  slot: LinkSlot,
+): boolean {
+  if (held === null) return true;
+  return (
+    slot.type === 'linksToMany' && Array.isArray(held) && held.length === 0
+  );
+}
+
+/** Whether there is an edge at a slot for a write to leave alone. */
+function holdsLink(
+  prior: BxlMutationJson | undefined,
+  slot: LinkSlot,
+): boolean {
+  if (prior === undefined) return false;
+  const held = valueAt(prior, slot.path);
+  return held !== undefined && !linkIsEmpty(held, slot);
+}
+
+/** What the links inside a written value mean for the Card's edges. */
+interface WrittenLinks {
+  /** Relationship subtrees the stored value must not carry. */
+  shed: BxlMutationPath[];
+  /** Relationship Fields whose edges this write leaves as the Card holds them. */
+  keep: BxlMutationPath[];
+  /** Slots the value never named, which the planner's own view reads back. */
+  restore: BxlMutationPath[];
+}
+
+/**
+ * Put back the links a value left unmentioned, so the planner reads what the
+ * Card still holds.
+ *
+ * The stored value sheds them again — an edge is never a member — but the
+ * planner's view is what a later statement reads and what `plan.output`
+ * reports, and there the edge is still there. Leaving the slot standing empty
+ * would read as a link the write removed, which is the opposite of what
+ * keeping it means.
+ */
+function restoreKeptLinks(
+  model: BxlMutationJson,
+  restore: BxlMutationPath[],
+  prior: BxlMutationJson | undefined,
+): BxlMutationJson {
+  if (restore.length === 0 || prior === undefined) return model;
+  let restored = clone(model);
+  for (const path of restore) {
+    restored = setAt(restored, path, valueAt(prior, path) ?? null);
+  }
+  return restored;
+}
+
+/**
+ * Hold every relationship inside a written value to being an edge.
+ *
+ * A link is an edge in the Card's relationship map with no member of the value
+ * to live in, so `card(…)` is the only way a value writes one. What the
+ * schema calls a relationship is refused anything else — which is what stops a
+ * link-shaped object from being stored as an attribute at a `linksTo` slot,
+ * and a list of anything from sitting at a `linksToMany` one.
+ *
+ * Two spellings carry no intent to change an edge and so are not refusals.
+ * A slot holding exactly what `prior` presented there was read back and
+ * written unchanged, which is how a partial update spells "this link stays" —
+ * the projection shows a link as `{"id": …}`, so any expression rebuilding a
+ * value from what it read carries them along. And a slot the value empties
+ * (`null`, or `[]`) names no Card, so it clears rather than stores. Both leave
+ * the stored value, and the first keeps its edge.
+ *
+ * `unmentioned` is what silence means. An update leaves a slot it never named
+ * alone; a replacement's silence drops the edge, the way it drops everything
+ * else the new value no longer holds.
+ *
+ * Keeping an edge also needs the slot to still be the slot the Card's edge
+ * belongs to. The write's own path pins that only as far as the first
+ * collection index inside the value: past one, a contained value has no
+ * identity to match on, and the projection shows every link as `{"id": …}`,
+ * so two edges to the same Card read alike and a shifted item would inherit
+ * its neighbour's. An index-anchored slot therefore keeps its edge only where
+ * the value holding it is unchanged, and a write that rebuilds a collection
+ * holding edges any other way is refused.
+ */
+function assertLinksAreEdges(
   value: BxlMutationJson,
   nested: NestedRelationship[],
+  base: BxlMutationPath,
+  prior: BxlMutationJson | undefined,
+  unmentioned: 'keep' | 'clear',
+  context: PlannerContext,
   statement: number,
-): void {
-  const edges = new Map<string, { path: BxlMutationPath; at: Set<number> }>();
-  for (const entry of nested) {
-    const index = entry.path.at(-1);
-    // A `linksTo` marker fills the relationship's own slot, so its path and
-    // the subtree the value sheds are the same; only a collection's edge sits
-    // one position deeper.
-    if (entry.strip.length === entry.path.length || typeof index !== 'number') {
-      continue;
-    }
-    const key = pathKey(entry.strip);
-    const collection = edges.get(key) ?? { path: entry.strip, at: new Set() };
-    collection.at.add(index);
-    edges.set(key, collection);
-  }
-  for (const { path, at } of edges.values()) {
-    const collection = valueAt(value, path);
-    if (
-      Array.isArray(collection) &&
-      collection.length === at.size &&
-      collection.every((_, index) => at.has(index))
-    ) {
-      continue;
-    }
+): WrittenLinks {
+  const resolution = resolveField(base, context, statement);
+  const slots = linkSlots(
+    value,
+    resolution.schema,
+    resolution.fieldType === 'containsMany',
+  );
+  if (slots.length === 0) return { shed: [], keep: [], restore: [] };
+  const markers = new Set(nested.map((entry) => pathKey(entry.path)));
+  const refuse = (detail: string) => {
     throw new BxlMutationError(
       'validate',
       'relationship-value-required',
       statement,
-      'Every member of a linksToMany written inside a value must be card("id").',
+      `${detail} card("id") is how a value names the Card a relationship points at.`,
+    );
+  };
+  const refuseMoved = (slot: LinkSlot) => {
+    throw new BxlMutationError(
+      'validate',
+      'relationship-collection-rebuilt',
+      statement,
+      `${pathKey([...base, ...slot.path])} is a relationship inside a collection this write rebuilds, and an edge cannot be told from another to the same Card. Update the items themselves ([* …]) so each edge stays with its value, or move them with the collection operations.`,
+    );
+  };
+  /**
+   * A collection item as the Card stores it: every link inside it taken out.
+   *
+   * A link is never a member of the value, so comparing two items on their
+   * links would answer on where the edges are — the very thing in question —
+   * and would read a value that carried a link back and one that never
+   * mentioned it as different items.
+   */
+  const itemContent = (
+    root: BxlMutationJson | undefined,
+    at: BxlMutationPath,
+  ): BxlMutationJson | undefined => {
+    const held = root === undefined ? undefined : valueAt(root, at);
+    if (held === undefined) return undefined;
+    let content = clone(held);
+    for (const other of slots) {
+      if (
+        other.path.length <= at.length ||
+        !at.every((part, index) => other.path[index] === part)
+      ) {
+        continue;
+      }
+      const relative = other.path.slice(at.length);
+      if (hasAt(content, relative)) content = deleteAt(content, relative);
+    }
+    return content;
+  };
+
+  /**
+   * Whether every collection item a slot sits inside is the item the Card's
+   * edge belongs to.
+   *
+   * Only an index can put a slot somewhere the write's own path does not pin,
+   * so those are the positions to account for — and each of them, not just the
+   * innermost: a link two levels down inside an item that moved sits in a
+   * subtree that may well be identical to the one that used to be there.
+   */
+  const stationary = (slot: LinkSlot) =>
+    slot.path.every((part, index) => {
+      if (typeof part !== 'number') return true;
+      const item = slot.path.slice(0, index + 1);
+      return (
+        prior !== undefined &&
+        sameJson(itemContent(value, item), itemContent(prior, item))
+      );
+    });
+  const shed: BxlMutationPath[] = [];
+  const keep: BxlMutationPath[] = [];
+  const restore: BxlMutationPath[] = [];
+  for (const slot of slots) {
+    const held = valueAt(value, slot.path);
+    const marked =
+      slot.type === 'linksTo'
+        ? markers.has(pathKey(slot.path))
+        : Array.isArray(held) &&
+          held.some((_, index) => markers.has(pathKey([...slot.path, index])));
+    if (marked) {
+      // The whole collection leaves the stored value with the edges, so a
+      // member written beside them would be dropped without a word.
+      if (
+        slot.type === 'linksToMany' &&
+        !(held as BxlMutationJson[]).every((_, index) =>
+          markers.has(pathKey([...slot.path, index])),
+        )
+      ) {
+        refuse(
+          `Every member of the linksToMany at ${pathKey([...base, ...slot.path])} must be a Card reference:`,
+        );
+      }
+      continue;
+    }
+    // Only a slot the Card actually holds an edge at is worth naming: an empty
+    // one has nothing to keep, and saying so would put a line in every plan
+    // over a value that merely has a relationship Field somewhere in it.
+    if (held === undefined) {
+      if (unmentioned === 'keep' && holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
+        keep.push(slot.path);
+        shed.push(slot.path);
+        restore.push(slot.path);
+      }
+      continue;
+    }
+    if (prior !== undefined && sameJson(held, valueAt(prior, slot.path))) {
+      shed.push(slot.path);
+      if (holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
+        keep.push(slot.path);
+      }
+      continue;
+    }
+    if (linkIsEmpty(held, slot)) {
+      shed.push(slot.path);
+      continue;
+    }
+    // An edge the Card holds here, under a value that moved, is a rebuild
+    // rather than a link written as data — say which mistake it was.
+    if (holdsLink(prior, slot) && !stationary(slot)) refuseMoved(slot);
+    refuse(
+      `${pathKey([...base, ...slot.path])} is a ${slot.type} Field, so the value written there cannot be stored as data:`,
     );
   }
+  return { shed, keep, restore };
 }
 
 /**
@@ -1332,21 +1587,20 @@ function modelValue(
 }
 
 /**
- * The value as the Card stores it, with the relationships a marker named shed.
- *
- * A link written as plain data rather than through a marker is not a
- * relationship as far as this is concerned and stays in the value, which is
- * what `assertLinkCollectionsAreEdges` refuses for a collection a marker also
- * writes to.
+ * The value as the Card stores it, with every relationship inside it shed —
+ * the ones a marker named, and the ones `assertLinksAreEdges` let stand as an
+ * unchanged or emptied link.
  */
 function storedValue(
   model: BxlMutationJson,
   nested: NestedRelationship[],
+  shed: BxlMutationPath[],
 ): BxlMutationJson {
-  if (nested.length === 0) return model;
+  const paths = [...nested.map((entry) => entry.strip), ...shed];
+  if (paths.length === 0) return model;
   let stored = clone(model);
-  for (const entry of nested) {
-    if (hasAt(stored, entry.strip)) stored = deleteAt(stored, entry.strip);
+  for (const path of paths) {
+    if (hasAt(stored, path)) stored = deleteAt(stored, path);
   }
   return stored;
 }
@@ -1445,31 +1699,56 @@ function planAssignment(
     // A marker in the relationship's own slot is the whole-value form, which
     // the branch below answers; resolving one against the Field it fills is
     // for a value the Card stores.
-    const resolveNested = (evaluated: EvaluatedValue) => {
-      if (field.relationship || isCardReference(evaluated.value)) return [];
+    //
+    // `=` replaces the value at the location and `|=` updates it, which is the
+    // whole difference between them for the relationships inside: a slot a
+    // replacement never names is gone with the rest of the old value, while an
+    // update that never names one leaves its edge alone.
+    const resolveLinks = (
+      evaluated: EvaluatedValue,
+      prior: BxlMutationJson | undefined,
+      unmentioned: 'keep' | 'clear',
+    ) => {
+      if (field.relationship || isCardReference(evaluated.value)) {
+        return { nested: [], links: { shed: [], keep: [], restore: [] } };
+      }
       const nested = nestedRelationships(
         evaluated.references,
         location.path,
         context,
         statement.statement,
       );
-      assertLinkCollectionsAreEdges(
+      const links = assertLinksAreEdges(
         evaluated.value,
         nested,
-        statement.statement,
-      );
-      return nested;
-    };
-    let next: BxlMutationJson | CardReference;
-    let nested: NestedRelationship[] = [];
-    if (statement.operator === '=') {
-      const evaluated = evaluateSingleJson(
-        statement.value,
-        readView(output, context),
+        location.path,
+        prior,
+        unmentioned,
         context,
         statement.statement,
       );
-      nested = resolveNested(evaluated);
+      return { nested, links };
+    };
+    let next: BxlMutationJson | CardReference;
+    let nested: NestedRelationship[] = [];
+    let links: WrittenLinks = { shed: [], keep: [], restore: [] };
+    if (statement.operator === '=') {
+      // A value's links can only be compared against the view its expression
+      // read them from: `location.value` is the Card's stored value, which an
+      // overlay-answered read is not, and the two differ exactly where an
+      // overlay filled something in.
+      const view = readView(output, context);
+      const evaluated = evaluateSingleJson(
+        statement.value,
+        view,
+        context,
+        statement.statement,
+      );
+      ({ nested, links } = resolveLinks(
+        evaluated,
+        valueAt(view, location.path),
+        'clear',
+      ));
       next = isCardReference(evaluated.value)
         ? evaluated.value
         : modelValue(evaluated.value, nested);
@@ -1486,13 +1765,13 @@ function planAssignment(
         statement.statement,
         { prefix: location.path },
       );
-      nested = resolveNested(evaluated);
+      ({ nested, links } = resolveLinks(evaluated, layered, 'keep'));
       next = evaluated.value;
       if (!isCardReference(next)) {
         // Settled as the planner reads it, links included: a marker's slot
         // still standing empty would read as a member the Card dropped.
         next = settleUpdate(
-          modelValue(next, nested),
+          restoreKeptLinks(modelValue(next, nested), links.restore, layered),
           layered,
           location,
           context,
@@ -1519,6 +1798,21 @@ function planAssignment(
         location.value,
         right.value as BxlMutationJson,
       );
+      // A merge carries the links the current value holds into its result, so
+      // the same rule applies to what it produced: unchanged links are shed
+      // and their edges kept, and anything the right-hand side put at a
+      // relationship slot is refused as data.
+      if (!field.relationship) {
+        links = assertLinksAreEdges(
+          next,
+          nested,
+          location.path,
+          location.value,
+          'clear',
+          context,
+          statement.statement,
+        );
+      }
     }
 
     if (field.relationship) {
@@ -1564,7 +1858,8 @@ function planAssignment(
       op: 'set',
       path: [...location.path],
       ...(location.exists ? { before: clone(location.value!) } : {}),
-      after: clone(storedValue(next, nested)),
+      after: clone(storedValue(next, nested, links.shed)),
+      ...(links.keep.length === 0 ? {} : { keepRelationships: links.keep }),
     };
     intents.push(intent, ...relateIntents(nested));
     output = setAt(output, location.path, next);
@@ -1630,18 +1925,25 @@ function plainValue(
 }
 
 /**
- * Resolve the markers in a value the Card stores at `base`, giving back what
- * the planner reads, what the document stores, and the edges in between.
+ * Resolve the relationships in a value the Card stores at `base`, giving back
+ * what the planner reads, what the document stores, and the edges in between.
+ *
+ * `prior` is the value this one replaces in place, and is absent for an
+ * insertion, whose value lands where the Card held nothing of its own — the
+ * item currently at that index is the one being pushed aside, so its links are
+ * not this value's to read back.
  */
 function containedValue(
   evaluated: EvaluatedValue,
   base: BxlMutationPath,
+  prior: BxlMutationJson | undefined,
   context: PlannerContext,
   statement: number,
 ): {
   model: BxlMutationJson;
   stored: BxlMutationJson;
   intents: BxlMutationIntent[];
+  keep: BxlMutationPath[];
 } {
   const value = evaluated.value as BxlMutationJson;
   const nested = nestedRelationships(
@@ -1650,12 +1952,21 @@ function containedValue(
     context,
     statement,
   );
-  assertLinkCollectionsAreEdges(value, nested, statement);
+  const links = assertLinksAreEdges(
+    value,
+    nested,
+    base,
+    prior,
+    'clear',
+    context,
+    statement,
+  );
   const model = modelValue(value, nested);
   return {
     model,
-    stored: storedValue(model, nested),
+    stored: storedValue(model, nested, links.shed),
     intents: relateIntents(nested),
+    keep: links.keep,
   };
 }
 
@@ -1764,13 +2075,22 @@ function planCall(
           'card(id) may only target relationships.',
         );
       }
-      const contained = containedValue(value, location.path, context, number);
+      const contained = containedValue(
+        value,
+        location.path,
+        valueAt(readView(root, context), location.path),
+        context,
+        number,
+      );
       intents.push(
         {
           op: 'set',
           path: location.path,
           before: clone(location.value!),
           after: clone(contained.stored),
+          ...(contained.keep.length === 0
+            ? {}
+            : { keepRelationships: contained.keep }),
         },
         ...contained.intents,
       );
@@ -1942,6 +2262,7 @@ function planCall(
         const contained = containedValue(
           value,
           [...target.location.path, index],
+          undefined,
           context,
           number,
         );
@@ -2006,6 +2327,7 @@ function planCall(
         const contained = containedValue(
           value,
           [...collectionPath, index],
+          undefined,
           context,
           number,
         );

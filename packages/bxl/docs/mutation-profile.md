@@ -946,7 +946,15 @@ interface BxlMutationStatementResult {
 }
 
 type BxlMutationIntent =
-  | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
+  | {
+      op: 'set';
+      path: JqPath;
+      before?: JsonValue;
+      after: JsonValue;
+      // Relationship Fields inside the replaced value, each named relative to
+      // `path`, whose edges this write leaves as the Card already holds them.
+      keepRelationships?: JqPath[];
+    }
   | { op: 'delete'; path: JqPath; before: JsonValue }
   | { op: 'copy'; from: JqPath; path: JqPath }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
@@ -1007,6 +1015,56 @@ contained value holds `body` alone and the plan carries a separate relationship
 intent at `["comments", 0, "author"]`. A `linksToMany` written this way takes
 one marker per edge, and every member of it must be one, because the whole
 collection leaves the stored value together.
+
+The schema is what decides a Field is a link, so this holds however the value
+was written. A relationship Field the schema reaches inside a written value can
+never hold data: `{body: "…", author: {id: "…"}}` is refused rather than stored,
+because an attribute that looks like a link is not one — nothing follows it,
+reindexes it, or notices when it goes stale.
+
+Two spellings carry no intent to change an edge, and neither is a refusal. A
+snapshot presents a link as `{"id": …}`, so an expression that rebuilds a value
+out of what it read carries its links along; a slot holding exactly what the
+Card already has there was written back unchanged, and its edge stands. And a
+slot the value empties — `null`, or `[]` for a collection — names no Card, so
+it clears the edge rather than storing anything.
+
+An update leaves what it does not mention alone, which is the whole difference
+between `|=` and `=` here:
+
+```bxl
+// keeps the author edge it never mentioned
+.comments[0] |= {body: "revised"};
+
+// replaces the value, so the author edge goes with everything else it dropped
+.comments[0] = {body: "revised"};
+```
+
+An edge lives as long as the value holding it, so an update that drops a
+contained value drops the edges inside it too.
+
+An edge does not follow its value to a new position either. A write addressed
+at one location pins it, so a link beside the value it belongs to stays put;
+but a write that rebuilds a _collection_ reassigns every index in it, and an
+edge has nothing but its index to hold onto — a contained value carries no
+identity, and every link projects as `{"id": …}`, so two edges to the same Card
+read alike. Such a write is refused wherever an edge would have to be matched
+back to a value:
+
+```bxl
+// refused: rebuilding the collection reassigns the indexes its edges sit on
+.comments |= map(. + {flagged: true});
+
+// the items themselves, each write pinned to one index
+.comments[* .flagged == null] |= (. + {flagged: true});
+```
+
+A rebuild that copies its items through untouched moves nothing, so those
+edges stand. It is still a collection replacement in every other respect: each
+item's `meta.fields` entry is discarded and written again from the value, the
+way any wholesale write to a collection rebuilds what it stores. To carry a
+value, its edges and its metadata together, use the collection operations —
+`move_item_before`, `reorder_by` and the rest.
 
 A marker reads its argument against the input the value expression itself was
 handed, so resolution follows the nodes that pass that input straight down and
