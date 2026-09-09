@@ -3172,6 +3172,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/bxl':
+        specifier: workspace:*
+        version: link:../bxl
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -8553,6 +8556,7 @@ packages:
 
   charm@1.0.2:
     resolution: {integrity: sha512-wqW3VdPnlSWT4eRiYX+hcs+C6ViBPUWk1qTCd+37qw9kEm/a5n2qcyQDMBWvSYKN/ctqZzeXNQaeBjOetJJUkw==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   check-error@2.1.3:
     resolution: {integrity: sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==}
