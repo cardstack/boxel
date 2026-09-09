@@ -21,18 +21,34 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
 import {
+  DURING_PRERENDER_HEADER,
   PRERENDER_JOB_ID_HEADER,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
 import {
-  incrementSearchInFlight,
-  decrementSearchInFlight,
+  admitSearch,
+  admitSearchUnconditionally,
+  getSearchAdmissionLimit,
+  getSearchInFlight,
+  getSearchShedCount,
 } from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
-// `/_federated-search`) so the request middleware can track how
-// many searches are in flight for the health sampler.
+// `/_federated-search`) so the request middleware can put searches through
+// the admission gate and report how many are in flight to the health sampler.
 const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search$/;
+
+// Only the methods the search endpoints answer with a search are gated. A
+// CORS preflight or a HEAD to the same path does no search work and must
+// neither count against the ceiling nor be shed by it — a shed preflight would
+// fail the QUERY behind it. The method-override middleware runs later, so a
+// QUERY tunnelled as POST is still a POST here.
+const SEARCH_METHODS = new Set(['POST', 'QUERY']);
+
+// What a shed search tells the client to do. One second is the granularity
+// `Retry-After` allows and is long enough for the burst that filled the gate
+// to drain a slot or two.
+const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -185,48 +201,116 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   }
   let startedAt = Date.now();
 
-  // Track in-flight search load for the health sampler across the request's
-  // full lifecycle (queue → parse → SQL → serialize → send), which is the
-  // window during which a saturated event loop would leave it unserviced.
-  let isSearch = SEARCH_PATH_PATTERN.test(ctxt.path);
-  let releasedInFlight = false;
-  let releaseInFlight = () => {
-    if (releasedInFlight) {
-      return;
-    }
-    releasedInFlight = true;
-    decrementSearchInFlight();
-  };
-  if (isSearch) {
-    incrementSearchInFlight();
-  }
-
   logger.info(
     `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
       fullRequestURL(ctxt).href
     }${jobTag}${corrTag}`,
   );
 
-  let onSettled = () => {
-    if (isSearch) {
-      releaseInFlight();
-    }
+  ctxt.res.on('finish', () => {
     logger.info(
       `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
       }: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
-  };
-  // `finish` fires on a fully-sent response; `close` covers a connection
-  // torn down before that (so the in-flight count can't leak on aborts).
-  ctxt.res.on('finish', onSettled);
-  ctxt.res.on('close', () => {
-    if (isSearch) {
-      releaseInFlight();
-    }
   });
   return next();
+}
+
+// Puts a search through the admission gate (`search-inflight.ts`) and holds
+// its slot for the request's full lifecycle (parse → SQL → serialize → send),
+// which is the window in which it holds heap and in which a saturated event
+// loop would leave it unserviced. Mounted after CORS so that a shed response
+// carries the headers a cross-origin client needs to read its status and
+// Retry-After; before the body is parsed so that a shed costs nothing.
+export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
+  if (
+    !SEARCH_PATH_PATTERN.test(ctxt.path) ||
+    !SEARCH_METHODS.has(ctxt.method)
+  ) {
+    return next();
+  }
+  // Indexing traffic is admitted regardless of the ceiling — see the gate
+  // for why. Both headers are only stamped by the worker-driven prerender
+  // path; a caller that forges one bypasses the wait, the same trust the
+  // cache-only definition lookup already places in them.
+  let isIndexing =
+    sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER)) !== null ||
+    ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+  let arrivedAt = Date.now();
+  let closed = false;
+  let release: (() => void) | undefined;
+  let releaseSlot = () => {
+    release?.();
+    release = undefined;
+  };
+  // `finish` fires on a fully-sent response; `close` covers a connection
+  // torn down before that, so a slot can't leak on an abort.
+  ctxt.res.on('finish', releaseSlot);
+  ctxt.res.on('close', () => {
+    closed = true;
+    releaseSlot();
+  });
+
+  if (isIndexing) {
+    release = admitSearchUnconditionally();
+  } else {
+    let admitted = await admitSearch();
+    if (!admitted) {
+      await shedSearch(ctxt, Date.now() - arrivedAt);
+      return;
+    }
+    if (closed) {
+      // The client went away while this request waited for a slot. The
+      // `close` listener ran before there was anything to release, so hand
+      // the slot back here rather than spend it on a response no one reads.
+      admitted();
+      return;
+    }
+    release = admitted;
+  }
+  return next();
+}
+
+// Answer a search the admission gate turned away. Nothing about the request
+// has been read beyond its path, method and headers, so the response is the
+// whole cost of the shed. The body follows the search handlers' own error
+// shape so a client already parsing search errors can read this one.
+async function shedSearch(ctxt: Koa.Context, waitedMs: number) {
+  let limit = getSearchAdmissionLimit();
+  let loggingCorrelationId = sanitizeLoggingCorrelationId(
+    ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+  );
+  let corrTag = loggingCorrelationId ? ` corr=${loggingCorrelationId}` : '';
+  getLogger('realm:search-admission').warn(
+    `shed ${ctxt.method} ${fullRequestURL(ctxt).href} after ${waitedMs}ms: ` +
+      `inFlight=${getSearchInFlight()} limit=${limit} shedTotal=${getSearchShedCount()}${corrTag}`,
+  );
+  await setContextResponse(
+    ctxt,
+    new Response(
+      JSON.stringify({
+        errors: [
+          {
+            status: '429',
+            title: 'Too Many Requests',
+            message:
+              `The realm server is already running its maximum of ${limit} ` +
+              `concurrent searches; retry after ${SEARCH_SHED_RETRY_AFTER_SECONDS}s.`,
+          },
+        ],
+      }),
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'retry-after': String(SEARCH_SHED_RETRY_AFTER_SECONDS),
+        },
+      },
+    ),
+  );
 }
 
 export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
