@@ -1004,6 +1004,25 @@ export class CustomCssVariable extends FieldDef {
   };
 }
 
+// Names are dasherized so `motionFast` and `motion-fast` land on the same
+// variable, matching how the declared fields derive their names.
+export function customCssRuleMapFor(
+  entries?: CustomCssVariable[] | null,
+): CssRuleMap | undefined {
+  if (!entriesToCssRuleMap || !entries?.length) {
+    return;
+  }
+  let rules: CssRuleMap = new Map();
+  for (let [name, value] of entriesToCssRuleMap(entries).entries()) {
+    let variableName = buildCssVariableName(name);
+    if (!variableName) {
+      continue;
+    }
+    rules.set(variableName, value);
+  }
+  return rules.size ? rules : undefined;
+}
+
 export default class ThemeVarField extends FieldDef {
   static displayName = 'Structured Theme Variables';
 
@@ -1517,23 +1536,8 @@ export default class ThemeVarField extends FieldDef {
     ];
   }
 
-  // Names are dasherized so `motionFast` and `motion-fast` land on the same
-  // variable, matching how the declared fields derive their names.
   get customCssRuleMap(): CssRuleMap | undefined {
-    if (!entriesToCssRuleMap || !this.customCssVariables?.length) {
-      return;
-    }
-    let rules: CssRuleMap = new Map();
-    for (let [name, value] of entriesToCssRuleMap(
-      this.customCssVariables,
-    ).entries()) {
-      let variableName = buildCssVariableName(name);
-      if (!variableName) {
-        continue;
-      }
-      rules.set(variableName, value);
-    }
-    return rules.size ? rules : undefined;
+    return customCssRuleMapFor(this.customCssVariables);
   }
 
   get cssRuleMap(): CssRuleMap | undefined {

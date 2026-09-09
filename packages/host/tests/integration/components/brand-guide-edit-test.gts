@@ -166,6 +166,19 @@ module('Integration | brand-guide | edit view', function (hooks) {
     );
   });
 
+  test('reset clears a card-level custom variable list too', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+      customCssVariables: [
+        new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+      ],
+    });
+    await renderCard(loader, card, 'edit');
+
+    await click('[data-test-reset]');
+    assert.strictEqual(card.customCssVariables.length, 0);
+  });
+
   test('isolated view has no importer or reset button', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
       rootVariables: new ThemeVarField({

@@ -273,6 +273,54 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     );
   });
 
+  test('a card-level custom variable list written before the per-scheme lists keeps emitting', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#ffffff' }),
+      darkModeVariables: new ThemeVarField({ background: '#000000' }),
+      customCssVariables: [
+        new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+      ],
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let css = card.cssVariables ?? '';
+    let root = css.slice(css.indexOf(':root'), css.indexOf('.dark'));
+    let dark = css.slice(css.indexOf('.dark'));
+    assert.true(
+      root.includes('--motion-fast: 100ms'),
+      `expected the legacy token in :root: ${root}`,
+    );
+    assert.false(
+      dark.includes('--motion-fast'),
+      'it is not repeated in .dark, where it cascades in from :root',
+    );
+    assert
+      .dom('[data-test-brand-guide-css-var-name]')
+      .hasText('--motion-fast', 'and it is still listed on the card');
+  });
+
+  test('a variable block entry wins over a card-level entry of the same name', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({
+        background: '#ffffff',
+        customCssVariables: [
+          new CustomCssVariable({ name: 'motionFast', value: '250ms' }),
+        ],
+      }),
+      customCssVariables: [
+        new CustomCssVariable({ name: 'motionFast', value: '100ms' }),
+      ],
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let css = card.cssVariables ?? '';
+    assert.true(
+      css.includes('--motion-fast: 250ms'),
+      `expected the variable block value to win: ${css}`,
+    );
+    assert.false(css.includes('100ms'), 'the card-level value is not emitted');
+  });
+
   test('palette entries render var names and swatches, filtering entries missing name or value', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
       brandColorPalette: [

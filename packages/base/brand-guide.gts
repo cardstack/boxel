@@ -41,7 +41,11 @@ import BrandFunctionalPalette, {
 } from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import { mergeRuleMaps, orderEditSections } from './structured-theme';
-import { ThemeTypographyField } from './structured-theme-variables';
+import {
+  CustomCssVariable,
+  ThemeTypographyField,
+  customCssRuleMapFor,
+} from './structured-theme-variables';
 import DetailedStyleRef from './detailed-style-reference';
 import {
   ThemeDashboard,
@@ -58,7 +62,7 @@ import {
 
 // `customCssVariables` lives on ThemeVarField, one list per color scheme;
 // re-exported for cards that import it from the brand guide.
-export { CustomCssVariable } from './structured-theme-variables';
+export { CustomCssVariable };
 
 const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -1112,9 +1116,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   }
 
   private customCssRulesFor(isDarkMode: boolean): CssRuleMap {
-    let rules: CssRuleMap = new Map(
-      this.args.model?.rootVariables?.customCssRuleMap,
-    );
+    let rules: CssRuleMap = new Map(this.args.model?.legacyCustomCssRuleMap);
+    for (let [name, value] of this.args.model?.rootVariables
+      ?.customCssRuleMap ?? []) {
+      rules.set(name, value);
+    }
     if (!isDarkMode) {
       return rules;
     }
@@ -1427,6 +1433,29 @@ export default class BrandGuide extends DetailedStyleRef {
   @field typography = contains(ThemeTypographyField);
   @field markUsage = contains(BrandLogo);
   @field brandImageAttachments = containsMany(CompoundImageField);
+  // Superseded by the per-scheme lists on `rootVariables` and
+  // `darkModeVariables`. Declared so a document written against the card-level
+  // list keeps its tokens: card-api drops an attribute with no matching field
+  // when deserializing, which would erase them from the document on its next
+  // save. Remove once no realm holds a brand guide carrying this attribute.
+  @field customCssVariables = containsMany(CustomCssVariable, {
+    description:
+      'Superseded by `customCssVariables` on `rootVariables` and `darkModeVariables`, where a token can differ per color scheme. Read for existing documents only; enter new tokens on the variable block.',
+  });
+
+  // Read as light-mode tokens, from where they cascade into dark mode. They
+  // are never merged into the dark block, so a legacy token cannot overwrite
+  // a value the dark block computes for itself.
+  get legacyCustomCssRuleMap(): CssRuleMap | undefined {
+    return customCssRuleMapFor(this.customCssVariables);
+  }
+
+  protected resetCssFields() {
+    super.resetCssFields();
+    if (this.customCssVariables?.length) {
+      this.customCssVariables = [];
+    }
+  }
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
@@ -1498,6 +1527,7 @@ export default class BrandGuide extends DetailedStyleRef {
         ].filter(([, v]) => v) as [string, string][],
       );
       let rootRules = mergeRuleMaps(
+        this.legacyCustomCssRuleMap,
         this.calculatedRules(),
         brandRules,
         rootMarkAliases,
