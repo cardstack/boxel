@@ -2,7 +2,10 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Query } from '@cardstack/runtime-common';
-import { LiveSearchCache } from '../live-search-cache.ts';
+import {
+  LiveSearchCache,
+  type LiveSearchCacheSummary,
+} from '../live-search-cache.ts';
 
 function personQuery(name = 'Person'): Query {
   return {
@@ -263,5 +266,122 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result.body, 'a-body-larger-than-the-cap');
     assert.strictEqual(cache.stats.entryCount, 0);
     assert.strictEqual(cache.stats.sizeBytes, 0);
+    assert.strictEqual(cache.stats.oversized, 1, 'the skip is counted');
+  });
+
+  test('lifecycle counters attribute expiry, eviction, and errors separately', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 50, maxBytes: 25 });
+    let realms = ['http://a/'];
+    let load = (name: string) =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(name),
+        opts: undefined,
+        populate: async () => '0123456789',
+      });
+
+    // Three 10-char bodies against a 25-char cap: C's arrival evicts A (LRU).
+    await load('A');
+    await load('B');
+    await load('C');
+    assert.strictEqual(cache.stats.evicted, 1, 'cap displacement is evicted');
+    assert.strictEqual(cache.stats.expired, 0);
+
+    // Aging out and re-requesting counts as expired, not evicted.
+    await sleep(80);
+    await load('B');
+    assert.ok(
+      cache.stats.expired >= 1,
+      `aged-out entries count as expired (saw ${cache.stats.expired})`,
+    );
+    assert.strictEqual(cache.stats.evicted, 1, 'evicted is unchanged');
+
+    // A failed compute is one error, regardless of joiner count.
+    let deferred = deferredPopulate('unused');
+    let attempts = [
+      cache.getOrPopulate({
+        realms,
+        query: personQuery('D'),
+        opts: undefined,
+        populate: deferred.populate,
+      }),
+      cache.getOrPopulate({
+        realms,
+        query: personQuery('D'),
+        opts: undefined,
+        populate: deferred.populate,
+      }),
+    ];
+    deferred.reject(new Error('boom'));
+    for (let attempt of attempts) {
+      await attempt.catch(() => {});
+    }
+    assert.strictEqual(cache.stats.errors, 1, 'one error per failed compute');
+  });
+
+  test('telemetry summarizes window deltas once per interval', async function (assert) {
+    let summaries: LiveSearchCacheSummary[] = [];
+    let cache = new LiveSearchCache({
+      ttlMs: 60_000,
+      telemetryIntervalMs: 200,
+      emitTelemetry: (summary) => summaries.push(summary),
+    });
+    let realms = ['http://a/'];
+    let body = '{"data":[]}';
+    let load = () =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(),
+        opts: undefined,
+        populate: async () => body,
+      });
+
+    await load(); // miss
+    await load(); // hit — within the interval, so nothing emits yet
+    assert.strictEqual(summaries.length, 0, 'the floor interval holds');
+
+    await sleep(250);
+    await load(); // hit — crosses the interval, emitting the whole window
+    assert.strictEqual(summaries.length, 1, 'one summary per interval');
+    let [summary] = summaries;
+    assert.strictEqual(summary.event_type, 'summary');
+    assert.strictEqual(summary.misses, 1);
+    assert.strictEqual(summary.hits, 2);
+    assert.strictEqual(summary.missBytes, body.length);
+    assert.strictEqual(summary.hitBytes, body.length * 2);
+    assert.ok(summary.windowMs >= 200, 'the window spans the interval');
+    assert.strictEqual(summary.entryCount, 1);
+    assert.strictEqual(summary.sizeBytes, body.length);
+    assert.strictEqual(summary.ttlMs, 60_000, 'config echoes on the line');
+
+    // The next window's deltas start from zero.
+    await sleep(250);
+    await load(); // hit
+    assert.strictEqual(summaries.length, 2);
+    assert.strictEqual(summaries[1].hits, 1, 'deltas reset per window');
+    assert.strictEqual(summaries[1].misses, 0);
+  });
+
+  test('telemetry interval 0 disables emission', async function (assert) {
+    let summaries: LiveSearchCacheSummary[] = [];
+    let cache = new LiveSearchCache({
+      ttlMs: 60_000,
+      telemetryIntervalMs: 0,
+      emitTelemetry: (summary) => summaries.push(summary),
+    });
+    await cache.getOrPopulate({
+      realms: ['http://a/'],
+      query: personQuery(),
+      opts: undefined,
+      populate: async () => '{"data":[]}',
+    });
+    await sleep(10);
+    await cache.getOrPopulate({
+      realms: ['http://a/'],
+      query: personQuery(),
+      opts: undefined,
+      populate: async () => '{"data":[]}',
+    });
+    assert.strictEqual(summaries.length, 0, 'nothing emits');
   });
 });
