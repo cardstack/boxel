@@ -904,12 +904,15 @@ async function lowerObject(
         );
       } else {
         memberSlot = await slotForField(fieldDef, 'whole', context);
-        if (member === null && memberSlot.kind === 'link') {
-          // A contained value written whole simply has no link at this key.
-          // That is not the "clear this link" a `set` on a link path would
-          // be — there is no existing edge to remove — and the executor
-          // writes it without complaint, so refusing it would refuse work
-          // that does happen.
+        if (
+          member === null &&
+          (memberSlot.kind === 'link' || memberSlot.kind === 'links')
+        ) {
+          // A contained value written whole simply has no link, or no links,
+          // at this key. That is not the "clear this link" a `set` on a link
+          // path would be — there is no existing edge to remove — and the
+          // executor writes it without complaint, so refusing it would refuse
+          // work that does happen.
           memberSlot = { kind: 'opaque' };
         }
       }

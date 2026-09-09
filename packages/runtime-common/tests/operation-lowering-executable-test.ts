@@ -256,8 +256,10 @@ const EXECUTABLE_DECLARATIONS: {
     },
   },
   {
-    // A contained value written whole, with no link at its link-typed key.
-    // Nothing is being cleared — the item is new — and the executor writes it.
+    // A contained value written whole, with nothing at either of its
+    // link-typed keys. Nothing is being cleared — the item is new — and the
+    // executor writes it, so neither an absent link nor an absent link
+    // collection may be refused.
     name: 'appendContainedWithNoLink',
     writes: true,
     declaration: {
@@ -265,7 +267,7 @@ const EXECUTABLE_DECLARATIONS: {
       params: { value: StringFieldClass },
       append: {
         to: 'comments',
-        value: { body: params('value'), author: null },
+        value: { body: params('value'), author: null, helpers: null },
       },
     },
   },
