@@ -3673,6 +3673,297 @@ deepStrictEqual(
   [{ op: 'relate', field: ['examples', 3, 'friend'], cardId: ana }],
 );
 
+// A relationship is an edge whatever the value says. The schema decides which
+// Fields are links, so a link-shaped object written as ordinary data lands on
+// the same rule `card(…)` does rather than being stored as an attribute: the
+// planner reaches every relationship Field inside a written value through the
+// schema, not through the markers the value happens to carry.
+
+// A `linksTo` written as plain data names a Card the way `card(…)` does and
+// means the same thing, but a stored attribute is not an edge: nothing
+// downstream follows it, reindexes it, or notices when it goes stale.
+strictEqual(
+  nestedLinkError(
+    'nested-link-written-as-data',
+    `append(.examples;{${zeta},"parts":[],"friend":{"id":${JSON.stringify(zoe)}}});`,
+  ).code,
+  'relationship-value-required',
+);
+
+// The same for a `linksToMany`, whose members need not even look like Cards to
+// end up sitting at a link collection's slot.
+strictEqual(
+  voyageError(
+    'nested-link-collection-written-as-data',
+    'append(.crews;{"name":"alpha","members":["ana"]});',
+  ).code,
+  'relationship-value-required',
+);
+
+// The snapshot projection presents a link as `{"id": …}`, so the most natural
+// partial update there is — read a subtree, write back the parts that stay —
+// carries every link it read along with it. Those are the links the Card
+// already holds, so the update keeps its edges: the ones it wrote back
+// unchanged, and the ones it never mentioned.
+const roundTripped = nestedLinkMutation(
+  'update-round-trips-its-links',
+  '.examples[0] |= {"key":.key,"parts":.parts};',
+);
+deepStrictEqual(roundTripped.plan.intents, [
+  {
+    op: 'set',
+    path: ['examples', 0],
+    before: {
+      key: 'a',
+      label: 'Alpha',
+      friend: { id: 'https://example.test/Friend/a' },
+      aliases: ['A-one', 'A-two'],
+      parts: [
+        { key: 'p1', owner: { id: 'https://example.test/Friend/part-1' } },
+        { key: 'p2', owner: { id: 'https://example.test/Friend/part-2' } },
+      ],
+    },
+    after: { key: 'a', parts: [{ key: 'p1' }, { key: 'p2' }] },
+    keepRelationships: [
+      ['friend'],
+      ['parts', 0, 'owner'],
+      ['parts', 1, 'owner'],
+    ],
+  },
+]);
+// The link the value carried back is shed rather than stored, so nothing is
+// left behind holding a frozen copy of what the link pointed at.
+deepStrictEqual(
+  (roundTripped.document.data.attributes?.examples as unknown[])[0],
+  { key: 'a', parts: [{ key: 'p1' }, { key: 'p2' }] },
+);
+// An edge left alone keeps everything the Card was holding on it, which is
+// more than a `relate` intent could put back: it carries only a Card id.
+deepStrictEqual(relationship(roundTripped.document, 'examples.0.friend'), {
+  links: { self: '../Friend/a', related: 'keep-a' },
+  meta: { slot: 'a' },
+});
+deepStrictEqual(
+  relationship(roundTripped.document, 'examples.0.parts.0.owner'),
+  {
+    links: { self: '../Friend/part-1' },
+    meta: { part: 'p1' },
+  },
+);
+deepStrictEqual(
+  relationship(roundTripped.document, 'examples.1.friend'),
+  relationship(richSourceFixture(), 'examples.1.friend'),
+);
+
+// Carrying a link back *changed* is a different thing entirely, and the one
+// case shedding must not swallow: the author asked for an edge to move, and
+// silently doing nothing would be its own quiet surprise.
+strictEqual(
+  nestedLinkError(
+    'update-rewrites-a-link-as-data',
+    `.examples[0] |= (. + {"friend":{"id":${JSON.stringify(zoe)}}});`,
+  ).code,
+  'relationship-value-required',
+);
+
+// An update reaches an edge the way everything else reaches one: through a
+// marker, which plans the `relate` and sheds the link from the stored value.
+const updatedThroughMarker = nestedLinkMutation(
+  'update-moves-a-link-through-a-marker',
+  '.examples[0] |= (. + {"friend":card(params("who"))});',
+);
+deepStrictEqual(
+  updatedThroughMarker.plan.intents.filter((intent) => intent.op === 'relate'),
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  relationship(updatedThroughMarker.document, 'examples.0.friend'),
+  { links: { self: '../Friend/zoe' } },
+);
+deepStrictEqual(
+  relationship(updatedThroughMarker.document, 'examples.0.parts.0.owner'),
+  { links: { self: '../Friend/part-1' }, meta: { part: 'p1' } },
+);
+
+// A slot the value empties names no Card, so it clears the edge rather than
+// being refused for holding something that is not a marker.
+const clearedLink = nestedLinkMutation(
+  'update-empties-a-link',
+  '.examples[0] |= (. + {"friend":null});',
+);
+deepStrictEqual(
+  (clearedLink.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [
+    ['parts', 0, 'owner'],
+    ['parts', 1, 'owner'],
+  ],
+);
+strictEqual(
+  clearedLink.document.data.relationships?.['examples.0.friend'],
+  undefined,
+);
+strictEqual(
+  (
+    clearedLink.document.data.attributes?.examples as Array<
+      Record<string, unknown>
+    >
+  )[0]!.friend,
+  undefined,
+);
+
+// An edge survives only as long as the value that holds it. Dropping `parts`
+// takes the owners with it, because there is no longer a part for them to be
+// the owner of.
+const droppedContainer = nestedLinkMutation(
+  'update-drops-the-value-holding-a-link',
+  '.examples[0] |= {"key":.key};',
+);
+deepStrictEqual(
+  (droppedContainer.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [['friend']],
+);
+strictEqual(
+  relationship(droppedContainer.document, 'examples.0.friend').links?.self,
+  '../Friend/a',
+);
+strictEqual(
+  droppedContainer.document.data.relationships?.['examples.0.parts.0.owner'],
+  undefined,
+);
+
+// `=` replaces where `|=` updates, and that is the whole difference for the
+// links inside: a replacement's silence drops an edge the way it drops
+// everything else the new value no longer holds.
+const replacedWholesale = nestedLinkMutation(
+  'assignment-drops-an-unmentioned-link',
+  '.examples[0] = {"key":"a","parts":[]};',
+);
+deepStrictEqual(
+  (replacedWholesale.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  undefined,
+);
+strictEqual(
+  replacedWholesale.document.data.relationships?.['examples.0.friend'],
+  undefined,
+);
+
+// A replacement that carries the link back is still saying it does not change,
+// so the edge stands.
+const replacedInPlace = nestedLinkMutation(
+  'replace-round-trips-its-link',
+  'replace(.examples[0];{"key":"a","friend":.examples[0].friend,"parts":[]});',
+);
+deepStrictEqual(
+  (replacedInPlace.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [['friend']],
+);
+deepStrictEqual(relationship(replacedInPlace.document, 'examples.0.friend'), {
+  links: { self: '../Friend/a', related: 'keep-a' },
+  meta: { slot: 'a' },
+});
+
+// An insertion has no link to carry back. Its value lands where the Card held
+// nothing of its own — the item at that index is the one being pushed aside —
+// so reading that item's link into the new value writes data at a link slot
+// and nothing more.
+strictEqual(
+  nestedLinkError(
+    'insertion-cannot-round-trip-the-item-it-displaces',
+    `insert_item_before({${zeta},"friend":.examples[0].friend,"parts":[]};.examples[0]);`,
+  ).code,
+  'relationship-value-required',
+);
+
+// The rule reads the same over a whole collection: each item's links are
+// compared where that item lands, so an update that keeps every item keeps
+// every edge.
+const bulkUpdated = nestedLinkMutation(
+  'collection-update-keeps-every-edge',
+  '.examples |= map(. + {"label":"renamed"});',
+);
+deepStrictEqual(
+  (bulkUpdated.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [
+    [0, 'friend'],
+    [0, 'parts', 0, 'owner'],
+    [0, 'parts', 1, 'owner'],
+    [1, 'friend'],
+    [2, 'friend'],
+  ],
+);
+deepStrictEqual(relationship(bulkUpdated.document, 'examples.2.friend'), {
+  links: { self: '../Friend/c', related: 'keep-c' },
+  meta: { slot: 'c' },
+});
+deepStrictEqual(
+  relationship(bulkUpdated.document, 'examples.0.parts.1.owner'),
+  {
+    links: { self: '../Friend/part-2' },
+    meta: { part: 'p2' },
+  },
+);
+
+// Dropping the last item leaves the others where they were, so their edges are
+// still the edges of the values holding them and the dropped one's is not.
+const bulkFiltered = nestedLinkMutation(
+  'collection-update-drops-the-last-item',
+  '.examples |= map(select(.key != "c"));',
+);
+strictEqual(
+  relationship(bulkFiltered.document, 'examples.1.friend').links?.self,
+  '../Friend/b',
+);
+strictEqual(
+  bulkFiltered.document.data.relationships?.['examples.2.friend'],
+  undefined,
+);
+
+// Dropping an item ahead of the others moves each link to an index it did not
+// come from, which is exactly the comparison failing: edges cannot follow
+// their values through a `|=`, and the collection operations that do move them
+// are how a program says this.
+strictEqual(
+  nestedLinkError(
+    'collection-update-cannot-shift-its-links',
+    '.examples |= map(select(.key != "a"));',
+  ).code,
+  'relationship-value-required',
+);
+
+// A compound assignment merges the current value into its result, links and
+// all, so the same reading applies to what the merge produced.
+const merged = nestedLinkMutation(
+  'compound-merge-keeps-its-links',
+  '.examples[0] += {"label":"merged"};',
+);
+deepStrictEqual(
+  (merged.plan.intents[0] as { keepRelationships?: unknown }).keepRelationships,
+  [['friend'], ['parts', 0, 'owner'], ['parts', 1, 'owner']],
+);
+deepStrictEqual(relationship(merged.document, 'examples.0.friend'), {
+  links: { self: '../Friend/a', related: 'keep-a' },
+  meta: { slot: 'a' },
+});
+strictEqual(
+  (
+    merged.document.data.attributes?.examples as Array<Record<string, unknown>>
+  )[0]!.friend,
+  undefined,
+);
+
+// A value with no link-typed Field anywhere in it is untouched by any of this:
+// the walk finds no slot, and the plan says exactly what it said before.
+deepStrictEqual(
+  nestedLinkMutation('value-with-no-link-field', 'append(.codes;"four");').plan
+    .intents,
+  [{ op: 'insert', collection: ['codes'], index: 3, value: 'four' }],
+);
+
 console.log(
   'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, request-context builtins, stale-plan safety, and read-only computed/linked overlays passed',
 );
