@@ -5,9 +5,11 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   claimHostShellGeneration,
   currentHostShellGeneration,
+  dbAdapterQuerier,
   NO_HOST_SHELL_OBSERVED,
   param,
   type HostShellGeneration,
+  type Querier,
 } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
@@ -176,6 +178,58 @@ module(basename(import.meta.filename), function (hooks) {
       'no backend ever blocked on the row lock, so this test never created the overlap it asserts about',
     );
   }
+
+  // The contract a caller depends on: the answer describes the shell that was
+  // asked about. Anything else lets a render be stamped with another shell's
+  // number, which is the ordering failing in the one situation it exists for.
+  test('the answer always describes the shell that was claimed', async function (assert) {
+    for (let hash of ['aaaaaaaa', 'bbbbbbbb', 'aaaaaaaa', 'cccccccc']) {
+      let claimed = await claimHostShellGeneration(dbAdapter, hash, 1000);
+      assert.strictEqual(
+        claimed.shellHash,
+        hash,
+        `claiming ${hash} reported ${claimed.shellHash}`,
+      );
+    }
+  });
+
+  // Drives the gap directly rather than hoping to hit it. A querier that lets
+  // another shell be claimed *after* the claim's own statement runs is exactly
+  // the interleaving a second read-back query would have been exposed to: the
+  // lock is released by then, so the row has moved on. One statement has
+  // nothing to interpose on, so the claim still answers about its own shell.
+  test('a competing claim landing after the statement cannot change the answer', async function (assert) {
+    await claimHostShellGeneration(dbAdapter, 'aaaaaaaa', 1000);
+
+    let interposed = false;
+    let interposing: Querier = async (expression) => {
+      let rows = await dbAdapterQuerier(dbAdapter)(expression);
+      if (!interposed) {
+        interposed = true;
+        // A different shell wins the row the instant this claim lets go of it.
+        await claimHostShellGeneration(dbAdapter, 'bbbbbbbb', 2000);
+      }
+      return rows;
+    };
+
+    let claimed = await claimHostShellGeneration(
+      dbAdapter,
+      'aaaaaaaa',
+      3000,
+      interposing,
+    );
+    assert.true(interposed, 'the competing claim really did run');
+    assert.strictEqual(
+      claimed.shellHash,
+      'aaaaaaaa',
+      'answers about the shell it was asked about, not the one that overtook it',
+    );
+    assert.deepEqual(
+      await currentHostShellGeneration(dbAdapter),
+      { generation: 2, shellHash: 'bbbbbbbb' },
+      'and the competing claim is what the row now holds',
+    );
+  });
 
   test('the singleton constraint keeps a second row out', async function (assert) {
     await assert.rejects(

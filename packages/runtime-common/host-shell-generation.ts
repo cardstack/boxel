@@ -28,22 +28,29 @@ export interface HostShellGeneration {
 // it belongs to. Idempotent: a server re-reporting the shell already recorded
 // gets that shell's generation back without advancing anything.
 //
-// Concurrency is the whole reason this is one statement rather than a read
-// followed by a write. A rolling deploy has several realm-server tasks
-// reporting at once, and a task booting against the outgoing bundle overlaps
-// with its neighbour on the new one, so two *different* shells get claimed
-// concurrently. Read-then-write collapses them: both readers see the same
-// starting generation, both compute the same successor, and two distinct
-// shells end up sharing one number — which destroys the ordering, because a
-// row rendered on either shell then carries the same generation and no repair
-// can tell them apart.
+// Concurrency is the whole reason this is one statement. A rolling deploy
+// overlaps a task booting against the outgoing bundle with its neighbour on the
+// new one, so two *different* shells are claimed at once. Two readers see the
+// same starting generation, compute the same successor, and two distinct shells
+// end up sharing one number — which destroys the ordering, because rows from
+// either then carry the same generation and nothing can tell them apart.
 //
-// A single `UPDATE` cannot collapse that way. The row is locked by the first
-// writer; the second blocks, and once the first commits, READ COMMITTED
-// re-evaluates `shell_hash <> $1` against the committed row — so a claim for a
-// different shell sees the transition it missed and counts its own on top,
-// while a claim for the shell just recorded matches nothing and reads that
-// same generation back.
+// The `WHERE id = 1` is unconditional so the statement always takes the row
+// lock and always returns the row it observed. A second claimant blocks; once
+// the first commits, READ COMMITTED re-evaluates against the committed row, and
+// the `CASE` decides from that value whether this claim is a transition to
+// count or the shell already recorded. Advancing on a *transition* rather than
+// per distinct hash is what makes a rollback correct: redeploying a bundle that
+// ran before takes a new, higher generation than the one it replaces, because a
+// row's generation records when it was rendered, not which artifact is
+// semantically newer.
+//
+// Reading the idempotent answer back in a second query would reopen the gap
+// this closes. That statement commits and releases the lock before the read
+// runs, so a different-shell claim landing in between would make this return
+// *that* shell's hash and generation — and a caller stamping its own render
+// with the number would defeat the ordering during exactly the concurrency
+// this exists to survive.
 export async function claimHostShellGeneration(
   dbAdapter: DBAdapter,
   shellHash: string,
@@ -51,26 +58,27 @@ export async function claimHostShellGeneration(
   querier?: Querier,
 ): Promise<HostShellGeneration> {
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  // Advancing on a *transition* rather than per distinct hash is what makes a
-  // rollback correct: redeploying a bundle that ran before is a new, higher
-  // generation than the one it replaces, because a row's generation records
-  // when it was rendered, not which artifact is semantically newer.
-  let advanced = await q([
-    `UPDATE host_shell_generation
-     SET shell_hash = `,
+  let claimed = await q([
+    `UPDATE host_shell_generation SET shell_hash = `,
     param(shellHash),
-    `, generation = generation + 1, observed_at = `,
+    `, generation = CASE WHEN shell_hash <> `,
+    param(shellHash),
+    ` THEN generation + 1 ELSE generation END`,
+    `, observed_at = CASE WHEN shell_hash <> `,
+    param(shellHash),
+    ` THEN `,
     param(observedAt),
-    ` WHERE id = 1 AND shell_hash <> `,
-    param(shellHash),
-    ` RETURNING generation, shell_hash`,
+    ` ELSE observed_at END`,
+    ` WHERE id = 1 RETURNING generation, shell_hash`,
   ]);
-  if (advanced.length > 0) {
-    return rowToGeneration(advanced[0]);
+  if (claimed.length === 0) {
+    // The migration seeds the row, so its absence means this database predates
+    // that migration or something removed it. Reporting "nothing observed"
+    // keeps callers on their no-ordering-available path instead of throwing
+    // into a boot sequence that must not fail for a diagnostic.
+    return { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' };
   }
-  // Nothing to advance, so this shell is already the recorded one — either
-  // this server is re-reporting it, or another task claimed it first.
-  return await currentHostShellGeneration(dbAdapter, querier);
+  return rowToGeneration(claimed[0]);
 }
 
 // The generation of the shell currently being served, for comparing against
