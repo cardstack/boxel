@@ -2,6 +2,7 @@ import { screenshotsMetaFromManifest } from '../capture-spec.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { isSingleCardDocument } from '../document-types.ts';
 import {
+  canonicalizeTarget,
   instanceTargetURL,
   localPathFor,
   newOperationScope,
@@ -37,20 +38,27 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 //                answering a HEAD or a conditional GET and would throw the
 //                body away.
 //
-// The document mode's output is held to byte-for-byte agreement with what the
-// card+json GET handler serves, so the handler can delegate to it: the same
-// canonical URL, the same `links.self`, the same prefix-form ids, the same
-// freshly-joined `meta.generation` and `meta.screenshots`, the same disk-read
-// file-meta document for a path that holds bytes, and the same mapping from an
-// errored index row to an HTTP status.
+// The document mode's *body* is held to byte-for-byte agreement with what the
+// card+json GET handler serves: the same canonical URL, the same `links.self`,
+// the same prefix-form ids, the same freshly-joined `meta.generation` and
+// `meta.screenshots`, the same disk-read file-meta document for a path that
+// holds bytes, and the same mapping from an errored index row to an HTTP
+// status.
 //
-// Two things the handler does stay the handler's, and a caller that is not it
-// has to account for them. It drains in-flight incremental indexing before
-// reading, so a read here serves whatever the index currently holds rather
-// than waiting for a write that has landed on disk to be indexed. And it
-// answers the redirects — a `.json` spelling and a path that normalizes to a
-// different one both get a 302 rather than a body, where a read simply serves
-// the card the path resolves to.
+// The body, and not the response around it. Three things stay the handler's,
+// and a caller that is not it has to account for them:
+//
+//   * It drains in-flight incremental indexing before reading, so a read here
+//     serves whatever the index currently holds rather than waiting for a
+//     write that has landed on disk to be indexed.
+//   * It answers the redirects. A `.json` spelling and a path that normalizes
+//     to a different one both get a 302; a read has no redirect to give, so it
+//     serves the card the path resolves to.
+//   * It computes the 200's validator from the assembled document's own
+//     `deps` / `indexedAt` / `screenshots`, which this result does not carry —
+//     only the headers mode reports those. A caller wanting both a body and an
+//     ETag needs them threaded through, or it re-peeks and takes on the
+//     snapshot skew the handler avoids by reading them off the assembly.
 // ============================================================================
 
 export async function readOperation(
@@ -60,8 +68,13 @@ export async function readOperation(
   opts: RunOperationOptions = {},
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDocumentResult | OperationHeadResult> {
+  // `runOperation` canonicalized the target already; doing it again is a no-op
+  // and keeps a direct caller of this executor addressing the same card
+  // dispatch would have.
+  let target = canonicalizeTarget(core, request.target);
+  let url = instanceTargetURL({ ...request, target });
   refuseUnservedStages(request, definition);
-  let { url, localPath } = canonicalTarget(core, request);
+  let localPath = localPathFor(core, url);
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, scope);
   }
@@ -92,30 +105,6 @@ function refuseUnservedStages(
       `operation "${request.name}" specializes \`read\` with ` +
       `${stages.join(', ')}, which the read executor does not carry out`,
   });
-}
-
-// The path a target actually addresses, and the URL that path resolves back
-// to. Both matter: a target may be spelled with a query string, a fragment, a
-// trailing slash, or as the realm root — none of which name a different card,
-// and all of which would otherwise be carried into the index lookup and onto
-// `links.self`. Deriving the URL from the local path is what the card+json GET
-// does, and it is what makes `<realm>/` resolve to the realm's index card.
-function canonicalTarget(
-  core: OperationCore,
-  request: OperationRequest,
-): { url: URL; localPath: LocalPath } {
-  let localPath = localPathFor(core, instanceTargetURL(request));
-  if (localPath === '') {
-    localPath = 'index' as LocalPath;
-  }
-  // A card addressed by its source file is the same card. The GET handler
-  // redirects that spelling to the canonical one; a read has no redirect to
-  // answer with, so it resolves to the same card instead of looking for a file
-  // called `<name>.json`.
-  if (localPath.endsWith('.json')) {
-    localPath = (localPath.slice(0, -'.json'.length) || 'index') as LocalPath;
-  }
-  return { url: pathsFor(core).fileURL(localPath), localPath };
 }
 
 async function readDocument(
@@ -204,10 +193,12 @@ async function readHeaders(
     throw await missingTarget(core, url, localPath);
   }
   if (row.type !== 'instance') {
-    // The peek carries the error itself but none of the salvage the assembled
-    // document's error result carries alongside it — there is no last-known
-    // -good rendering on a row nobody assembled. The status mapping is what
-    // this mode needs, and that comes from the error alone.
+    // Only the status is wanted here, and that comes from the error alone. The
+    // salvage the assembled document's error result carries — the last known
+    // good rendering, its scoped CSS, the card's title — is reachable from
+    // this same row, so a caller that needs it (a conditional GET falling
+    // through to a body) must assemble the document rather than read it off
+    // this refusal.
     throw errorRowFailure(url, {
       type: 'error',
       error: {

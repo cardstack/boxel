@@ -212,6 +212,12 @@ export type BaseOperation = BaseOperationName;
 // state. A `type` target names a class instead, for the operations that have
 // no instance to bind to yet: a plain `create` mints a card of that type in
 // that realm, and a `query` is rooted in the type it searches for.
+//
+// `url` is an absolute, unmapped URL. A result's ids are canonicalized to
+// registered-prefix form on the way out (`@cardstack/skills/foo`), so an id
+// read off one response is not usable as the next request's target without
+// resolving it back — which the caller does, since resolving a prefix is the
+// realm's own fetch-layer concern and no operation reaches that.
 export type OperationTarget =
   | { kind: 'instance'; url: string }
   | { kind: 'type'; codeRef: CodeRef; realm: string };

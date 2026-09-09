@@ -78,6 +78,14 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('a declared operation resolves the same however the target is spelled', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a card named by its source spelling is a card, not a file', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });

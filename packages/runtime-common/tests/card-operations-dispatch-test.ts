@@ -55,6 +55,20 @@ interface Stub {
   calls: string[];
 }
 
+// `getInstance` matches `i.url` / `i.file_alias`, so a row answers to the
+// card's canonical URL and to nothing else — not to a query string, a
+// fragment, a trailing slash, or the `.json` source spelling. The stub holds
+// itself to the same rule so a target that reaches the index uncanonicalized
+// misses, the way it would against Postgres.
+function isCanonicalKey(url: URL): boolean {
+  return (
+    url.search === '' &&
+    url.hash === '' &&
+    !url.pathname.endsWith('.json') &&
+    !url.pathname.endsWith('/')
+  );
+}
+
 function stub(opts: StubOptions = {}): Stub {
   let calls: string[] = [];
   let {
@@ -88,7 +102,7 @@ function stub(opts: StubOptions = {}): Stub {
     indexQueryEngine: {
       async cardDocument(url) {
         calls.push('cardDocument');
-        if (document === 'missing') {
+        if (document === 'missing' || !isCanonicalKey(url)) {
           return undefined;
         }
         if (typeof document === 'object') {
@@ -124,7 +138,7 @@ function stub(opts: StubOptions = {}): Stub {
       },
       async instance(url) {
         calls.push('instance');
-        if (row === 'missing') {
+        if (row === 'missing' || !isCanonicalKey(url)) {
           return undefined;
         }
         return {
@@ -629,6 +643,68 @@ const tests = Object.freeze({
       ),
     );
     assert.strictEqual(notAURL.code, 'invalid-params');
+  },
+
+  'a declared operation resolves the same however the target is spelled':
+    async (assert) => {
+      // Dispatch resolves the type from the target and the executor reads from
+      // it, so both have to be looking at the same card. Canonicalizing in only
+      // one of them is worse than canonicalizing in neither: the type is
+      // resolved for one card and the document assembled for another, and a
+      // declared operation silently degrades to the built-in.
+      let declared = {
+        read: {
+          base: 'read' as const,
+          deterministic: true,
+          output: { source: 'PROJECT(.title)', syntax: 'solidified' as const },
+        },
+      };
+      for (let spelling of [
+        `${REALM}person-1`,
+        `${REALM}person-1.json`,
+        `${REALM}person-1?vary=1`,
+        `${REALM}person-1#section`,
+        `${REALM}person-1/`,
+      ]) {
+        let { core, calls } = stub({ operations: declared });
+        let error = await refusalFrom(() =>
+          runOperation(
+            core,
+            invoke({ kind: 'instance', url: spelling }, 'read'),
+          ),
+        );
+        assert.strictEqual(
+          error.status,
+          501,
+          `${spelling} resolves the declared read, not the built-in`,
+        );
+        assert.strictEqual(
+          calls.filter((call) => call === 'instance').length,
+          1,
+          `${spelling} costs one row read, shared by dispatch and the executor`,
+        );
+      }
+    },
+
+  'a card named by its source spelling is a card, not a file': async (
+    assert,
+  ) => {
+    // `.json` is a registered file extension, so an uncanonicalized target
+    // classifies a card's own source spelling as a file — and then refuses
+    // every operation a card carries beyond `read`.
+    let { core } = stub();
+    let error = await refusalFrom(() =>
+      runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}person-1.json` }, 'update'),
+      ),
+    );
+    assert.strictEqual(
+      error.status,
+      501,
+      'update is a card operation with no executor yet, not one a file lacks',
+    );
+    assert.strictEqual(error.code, 'internal-error');
   },
 
   'the row peek is memoized for one invocation and no longer': async (

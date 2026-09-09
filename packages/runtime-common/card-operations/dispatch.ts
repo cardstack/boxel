@@ -143,9 +143,11 @@ export function newOperationScope(core: OperationCore): OperationScope {
 // Reading the extension is a commitment made before the index is consulted,
 // which the card+json GET does not make — it asks for a card document first
 // and falls back to file metadata only when there is none. The two agree
-// because a card id never carries a registered extension, which is the same
-// assumption the index query engine's own file/instance split rests on. A
-// target that broke it would read as a file here and as a card there.
+// because a card's *id* never carries a registered extension, the same
+// assumption the index query engine's own file/instance split rests on. The
+// one path that does is a card's `.json` source spelling, which is why a
+// target is canonicalized — stripped of that extension — before it reaches
+// here.
 //
 // A `type` target has only its ref, so its kind comes from the entry, and a
 // file def named that way therefore carries nothing. That is correct rather
@@ -267,17 +269,15 @@ export async function runOperation(
   request: OperationRequest,
   opts: RunOperationOptions = {},
 ): Promise<OperationResult> {
+  let target = canonicalizeTarget(core, request.target);
+  let canonical: OperationRequest =
+    target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core);
-  let definition = await resolveOperation(
-    core,
-    request.target,
-    request.name,
-    scope,
-  );
-  validateParams(request, definition);
+  let definition = await resolveOperation(core, target, canonical.name, scope);
+  validateParams(canonical, definition);
   switch (definition.base) {
     case 'read':
-      return await readOperation(core, request, definition, opts, scope);
+      return await readOperation(core, canonical, definition, opts, scope);
     case 'query':
       // A declared query is a saved search, not work the realm carries out
       // here: an invocation resolves its markers with `lowerQueryOperation`
@@ -286,7 +286,7 @@ export async function runOperation(
       // declaration means the caller used the wrong entry point, so it is
       // theirs to correct rather than a fault to page someone about.
       throw new OperationFailure({
-        id: targetId(request.target),
+        id: targetId(canonical.target),
         status: 400,
         code: 'wrong-entry-point',
         title: 'Operation not executable here',
@@ -299,7 +299,7 @@ export async function runOperation(
     case 'delete':
     case 'transform':
       throw new OperationFailure({
-        id: targetId(request.target),
+        id: targetId(canonical.target),
         status: 501,
         code: 'internal-error',
         title: 'Operation not implemented',
@@ -312,7 +312,7 @@ export async function runOperation(
       // `OperationResult` and which every result guard quietly reports false
       // for — a wrong answer is worse than a refusal.
       throw new OperationFailure({
-        id: targetId(request.target),
+        id: targetId(canonical.target),
         status: 500,
         code: 'internal-error',
         title: 'Unknown base operation',
@@ -353,6 +353,58 @@ export function pathsFor(core: OperationCore): RealmPaths {
     pathsByCore.set(core, paths);
   }
   return paths;
+}
+
+// The target as this realm addresses it. A card can be named with a trailing
+// slash, a query string, a fragment, or by its `.json` source, and the realm
+// root names the realm's index card — none of those are a different card, and
+// every one of them has to resolve to the same thing before anything reads it.
+//
+// This runs once, in `runOperation`, and everything downstream sees the result:
+// dispatch resolves the type from it, the row memo is keyed on it, and the
+// executor reads it. Canonicalizing in only one of those places is worse than
+// canonicalizing in none, because the two then disagree about which card the
+// request names — the type is resolved for one card and the document assembled
+// for another.
+//
+// Idempotent, and deliberately tolerant: a URL that does not parse, or that
+// belongs to another realm, is returned untouched so the refusal for it comes
+// from the code that has something to say about it.
+export function canonicalizeTarget(
+  core: OperationCore,
+  target: OperationTarget,
+): OperationTarget {
+  if (target.kind !== 'instance') {
+    return target;
+  }
+  let url = parseTargetURL(target.url);
+  if (!url) {
+    return target;
+  }
+  let paths = pathsFor(core);
+  let localPath: LocalPath;
+  try {
+    localPath = paths.local(url);
+  } catch {
+    return target;
+  }
+  if (localPath === '') {
+    localPath = 'index' as LocalPath;
+  }
+  // A card addressed by its source file is the same card. The GET handler
+  // redirects that spelling; a read has no redirect to answer with, so it
+  // resolves to the card instead of looking for a file called `<name>.json`.
+  // The cost is that a genuine `.json` file cannot be named as a read target —
+  // the same blind spot `getCard` has, since its redirect lands on a path that
+  // `nonJsonFileExists` then declines. A file-meta surface delegating here
+  // would have to settle that first.
+  if (localPath.endsWith('.json')) {
+    localPath = (localPath.slice(0, -'.json'.length) || 'index') as LocalPath;
+  }
+  let canonical = paths.fileURL(localPath).href;
+  return canonical === target.url
+    ? target
+    : { kind: 'instance', url: canonical };
 }
 
 // The local path a target addresses within this core's realm. A target outside
@@ -411,8 +463,12 @@ async function definitionFor(
   } else {
     let url = parseTargetURL(target.url);
     if (!url || urlNamesFile(url)) {
-      // A file's type is derived from its extension and declares no
-      // operations, so there is nothing to look up.
+      // A file's type comes from its extension rather than from stored JSON,
+      // so there is no `adoptsFrom` to read without a second index read. A
+      // file therefore reaches only the built-in `read`: a `read` a file def
+      // subclass declares is not consulted. Nothing declares one today, and
+      // resolving one would mean reading the file row for its type before
+      // every file read.
       return undefined;
     }
     relativeTo = url;
@@ -478,6 +534,14 @@ function notAllowed(
   kind: DefKind,
   base: BaseOperation,
 ): OperationFailure {
+  // A type target's kind is inferred from an entry that cannot say `file-def`,
+  // so naming the kind there would report a file def as a field def. The
+  // target's own terms are accurate either way.
+  let because =
+    target.kind === 'instance'
+      ? `a ${kind} allows ${describeAllowed(kind)}`
+      : `a type carries only what its definition declares, and a "${base}" ` +
+        `runs against an instance`;
   return new OperationFailure({
     id: targetId(target),
     status: 405,
@@ -485,12 +549,12 @@ function notAllowed(
     title: 'Operation not allowed',
     detail:
       `operation "${name}" is a "${base}", which ${describeTarget(target)} ` +
-      `does not carry: a ${kind} allows ${describeAllowed(kind)}`,
+      `does not carry: ${because}`,
   });
 }
 
 function describeAllowed(kind: DefKind): string {
-  let allowed = Object.keys(ALLOWED_BASE_OPERATIONS[kind]);
+  let allowed = Object.keys(ALLOWED_BASE_OPERATIONS[kind] ?? {});
   return allowed.length > 0 ? allowed.join(', ') : 'no operations';
 }
 
