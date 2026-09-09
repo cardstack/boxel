@@ -73,9 +73,9 @@ module('Unit | VirtualNetwork reset', function () {
     );
   });
 
-  // The constructor mounts the package shim handler. Emptying the handler chain
-  // on reset left `shimModule` filing shims onto a handler nothing consulted,
-  // so every shimmed package 404'd with nothing to point at the cause.
+  // A reset leaves the handler chain alone, so both the constructor's package
+  // shim handler and anything a caller mounted go on serving. Clearing it
+  // stranded every shimmed package, and then every in-process realm.
   test('keeps serving modules shimmed before a reset', async function (assert) {
     let vn = networkWithRealm();
     vn.shimModule('a-package', { thing: 1 });
@@ -101,6 +101,22 @@ module('Unit | VirtualNetwork reset', function () {
       (response as any)[Symbol.for('shimmed-module')]?.thing,
       2,
       'shims registered after a reset are served',
+    );
+  });
+
+  test('leaves a caller-mounted handler serving across a reset', async function (assert) {
+    let vn = networkWithRealm();
+    vn.mount(async (request: Request) =>
+      request.url === 'http://mounted/thing' ? new Response('served') : null,
+    );
+
+    vn.reset();
+
+    let response = await vn.fetch(new Request('http://mounted/thing'));
+    assert.strictEqual(
+      await response.text(),
+      'served',
+      "a mount is the owner's lifecycle, not the session's",
     );
   });
 

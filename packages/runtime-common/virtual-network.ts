@@ -110,8 +110,7 @@ export class VirtualNetwork {
 
   // Subscribe to realm-mapping changes; returns an unsubscribe function.
   /**
-   * Drops every registered mapping, caller-mounted handler and derived cache,
-   * returning this instance to the state a fresh one would have.
+   * Drops the registered mappings and the caches derived from them.
    *
    * Resetting in place rather than constructing a replacement is deliberate.
    * Consumers hold this object — the Loader keeps it for cache-key folding,
@@ -127,13 +126,12 @@ export class VirtualNetwork {
    * under the old mappings cannot be allowed to outlive them.
    */
   reset(): void {
-    // The constructor mounts the package shim handler, and a fresh instance
-    // therefore has it. Emptying the chain outright would leave `shimModule`
-    // still filing shims onto a handler nothing consults, so every shimmed
-    // package — `@glimmer/component` and the rest of `shimExternals` — would
-    // 404 with no indication why. Re-mount it, keeping its registry: shims are
-    // module code keyed by package name, not session state.
-    this.handlers = [this.packageShimHandler.handle];
+    // Mounted handlers are deliberately left alone. They are the owner's
+    // lifecycle, not the session's — an in-process realm does not stop
+    // existing because someone logged in — and nothing re-mounts them, so
+    // clearing them here would strand every fetch to one. A fresh instance has
+    // no caller mounts because it belongs to a fresh owner; that isolation
+    // comes from constructing the network, not from resetting it.
     this.urlMappings = [];
     this.importMap.clear();
     this.realmMappings.clear();
