@@ -994,6 +994,37 @@ move_item_before(
 );
 ```
 
+A relationship reached through a contained value is written the same way.
+A `card(id)` standing inside the object or array a statement writes is resolved
+where it stands, at any depth:
+
+```bxl
+append(.comments; {body: "Looks right to me", author: card(params("who"))});
+```
+
+A link is an edge of the Card rather than a member of the value, so the stored
+contained value holds `body` alone and the plan carries a separate relationship
+intent at `["comments", 0, "author"]`. A `linksToMany` written this way takes
+one marker per edge, and every member of it must be one, because the whole
+collection leaves the stored value together.
+
+A marker reads its argument against the input the value expression itself was
+handed, so resolution follows the nodes that pass that input straight down and
+whose operands flow into the result: object entries, array and comma streams,
+the operands of `//`, `+` and `*`, and the branches of an `if`. A `card(id)`
+somewhere that re-roots the input — the body of `map`, either side of a pipe —
+is refused rather than answered against the wrong value, and so is one in a
+condition, which chooses a branch rather than being the value, and one in an
+argument read as a plain value, such as an `assert` message or a `reorder_by`
+order, which names no Field to relate a Card to.
+
+The argument is read when the program reaches the marker, so a marker in a
+branch that is not taken costs nothing:
+
+```bxl
+.owner = (card(params("preferred")) // card(params("fallback")));
+```
+
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,
 insert, and move to relationship intents when the target field is a
