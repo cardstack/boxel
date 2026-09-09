@@ -125,6 +125,18 @@ module('Responding', (hooks) => {
     delete process.env.AI_BOT_STREAMING_MODE;
   });
 
+  test('does not treat a reaction as a response trigger', (assert) => {
+    let reaction = {
+      getType: () => 'm.reaction',
+      getContent: () => ({}),
+    } as any;
+
+    assert.false(
+      Responder.eventMayTriggerResponse(reaction),
+      'reactions must not enter the response-event serializer',
+    );
+  });
+
   test('Sends thinking message', async () => {
     await responder.ensureThinkingMessageSent();
 

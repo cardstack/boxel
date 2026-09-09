@@ -327,6 +327,14 @@ Common issues are:
           return;
         }
 
+        // Only events that can produce a response participate in the
+        // newest-event-wins queue. Otherwise a later reaction or other
+        // timeline event could make a user message stand down, then exit
+        // without responding.
+        if (!Responder.eventMayTriggerResponse(event)) {
+          return;
+        }
+
         // One sync response can deliver several events for this room at once,
         // and each gets its own run of this handler. Wait for any earlier
         // handler for the room to finish before taking the room lock, so the
@@ -371,10 +379,6 @@ Common issues are:
         let pendingFulfillAgentId: string | undefined;
 
         try {
-          if (!Responder.eventMayTriggerResponse(event)) {
-            return; // early exit for events that will not trigger a response
-          }
-
           log.info(
             '(%s) (Room: "%s" %s) (Message: %s %s)',
             event.getType(),
