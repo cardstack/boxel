@@ -42,7 +42,6 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
-  GRAFANACTL_VERSION: "0.1.10"
 
 jobs:
   sweep:
@@ -55,8 +54,6 @@ jobs:
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
-        with:
-          version: ${{ env.GRAFANACTL_VERSION }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0

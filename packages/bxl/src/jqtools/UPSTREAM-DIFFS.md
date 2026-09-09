@@ -82,9 +82,24 @@ maxOutputBytes, maxWallClockMs, signal }`.
 - `checkRuntimeBudget()` — called from `evaluate.ts` at iterator boundaries
   to enforce budgets without corrupting generator state.
 - `HaltSignal` — thrown when budgets exceed; callers unwrap the diagnostic.
+- `NativeRequestContext` — public shape of the request-scoped values the
+  `params`, `actor` and `instance` builtins read.
+- `withRequestContext(context, fn)` — scopes one request context to `fn` on a
+  stack separate from the diagnostics frames, since a host scopes a context
+  around a whole call while entry points inside it open frames of their own.
+  Refuses a callback that returns a promise or a lazy iterator: the scope is
+  synchronous and would be unwound before either completed.
+- `currentRequestContext()` — the innermost scoped context, read by the
+  request-context builtins in `bxl/bridge/`.
 
-Good candidate for upstream contribution if `alexxander/jq-tools` adopts a
-pluggable runtime-hook API.
+The request-context trio is BXL's own concept rather than anything jq has, and
+it lives here because a native filter is invoked as `(input, ...args)` with no
+access to the `Environment` — so a builtin has no other route to a
+host-supplied value. It is the one piece of request-scoped state inside this
+vendored subsystem; keep that in mind when auditing against upstream.
+
+The budget half is a good candidate for upstream contribution if
+`alexxander/jq-tools` adopts a pluggable runtime-hook API.
 
 ### `evaluate/dateTime.ts`
 

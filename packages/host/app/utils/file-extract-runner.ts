@@ -67,6 +67,8 @@ export async function runFileExtract({
   let fileDefCodeRef = renderOptions.fileDefCodeRef ?? baseFileRef;
   let contentHash: string | undefined = renderOptions.fileContentHash;
   let contentSize: number | undefined = renderOptions.fileContentSize;
+  let lastModified: number | undefined = renderOptions.fileLastModified;
+  let createdAt: number | undefined = renderOptions.fileCreatedAt;
   // This runs on the indexing path, so skill tool schemas are generated
   // during the extract and persisted with the row. Tool classes never read
   // the context during schema generation, but host-package tools resolve
@@ -84,6 +86,8 @@ export async function runFileExtract({
     baseFileDefCodeRef: baseFileRef,
     contentHash,
     contentSize,
+    lastModified,
+    createdAt,
     fileSizeLimitBytes,
     buildError: buildFileExtractError,
     toolContext,

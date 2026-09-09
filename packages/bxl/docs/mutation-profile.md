@@ -147,9 +147,7 @@ current-revision loading, durable idempotency, transaction limits, network
 persistence, JSON:API Atomic lowering, and result publication.
 
 ```ts
-const update = updateViaBxl(
-  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
-);
+const update = updateViaBxl('"Line Item"[SKU = "COPY-03"].Quantity += 1;');
 
 const plan = update.call(invoice, {
   programId: 'assistant:call_123',
@@ -329,19 +327,102 @@ interface BxlMutationExecution {
   };
   baseRevision?: string;
   schemaVersion?: string;
-  /** Stable principal supplied by the trusted host. */
-  actor?: string;
   delivery?: 'complete' | 'streaming';
   transaction?: 'atomic' | 'statement';
   /** Textual programs default to readable BXL; solidified is planner-facing mutation BXL. */
   syntax?: 'readable' | 'solidified';
-  parameters?: Readonly<Record<string, JsonValue>>;
+  /** Stable principal supplied by the trusted host, for authorization and audit. */
+  actor?: string;
+  /** Request-scoped values the program reads; see "Request context" below. */
+  context?: BxlMutationContext;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
 }
 ```
 
 Defaults are `delivery: 'complete'`, `transaction: 'atomic'`, and
 `syntax: 'readable'`. Structured operation programs ignore `syntax`.
+
+## Request context
+
+A program sees the document it is editing through `.`. Three builtins supply
+the rest of what a write operation needs, each reading a value the trusted
+host resolved before the program ran:
+
+| Call                             | Reads                                          |
+| -------------------------------- | ---------------------------------------------- |
+| `params("key")`                  | that entry of the payload the caller sent      |
+| `actor()` / `actor("key")`       | the authenticated caller, or one of its fields |
+| `instance()` / `instance("key")` | the stored document, or one of its fields      |
+
+`actor()` is what a _program_ reads. It is distinct from the envelope's
+`actor`, which the host carries alongside the plan into authorization and
+audit and which no program can see. A host that wants a program to record its
+caller supplies both.
+
+```ts
+type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
+
+interface BxlMutationContext {
+  params?: BxlMutationJsonObject;
+  actor?: { id: string; [key: string]: BxlMutationJson };
+  instance?: BxlMutationJsonObject;
+}
+```
+
+The host passes it as `context` on the plan options, and may keep and reuse
+that object freely. A value is copied on its way to a program — a builtin is
+free to write into the argument it is handed, and the copy is what keeps those
+writes off the host's own object — and a written value is copied again on its
+way into the plan, so a plan never shares structure with the context and is
+settled once made.
+
+These are functions rather than `$`-prefixed bindings, matching the form an
+operation is authored in. The name `params` rather than the more obvious
+`input` is forced by the profile: `input` is denied in `mutation`, and
+classification is by base name without arity, so an `input("key")` accessor
+would be refused before it ran. Registry resolution is per `NAME/arity`, so
+that accessor would land at the free `input/1` and hide jq's `input/0` from
+nothing — the collision is in the safety table, not the registry.
+
+Every failure is loud. Naming one of these where the host supplied no context,
+or asking for a key that is not there, fails the program — a `null` would land
+in the document as a missing comment author or a silently unset field. The
+operation layer validates declared keys before a program runs; the key check
+here is the backstop. `actor()` and `instance()` return the whole object, which
+is the reading to reach for when a key may legitimately be absent.
+
+A key is readable only if it is the object's own and its value is not
+`undefined`. A prototype-chain name would otherwise answer with a function,
+and `undefined` is not a JSON value — it would reach the planner as one and
+write an intent that unsets the field. A JSON `null` is a real value and reads
+as `null`.
+
+The context is checked against that same standard before a program can reach
+it: a slot carrying anything a JSON document cannot hold — a `Date`, `Map`,
+`Set`, `RegExp`, `TypedArray`, `URL` or any other value whose built-in type is
+neither a plain object nor an array, a `bigint`, a function, or a non-finite
+number, at any depth — fails the plan with `context-not-json` naming the path.
+An object carrying only its own data fields is a plain object whatever its
+prototype says, and is accepted. The type declares JSON, but a type is not a
+runtime guarantee, and a `bigint` read through `tostring` produces exactly the
+silent unset these builtins refuse.
+
+An absent array entry is refused too, whether it is a hole or an explicit
+`undefined`. An absent object member serializes as absent, but an absent array
+entry serializes as `null` — a value the host never sent.
+
+Only the `mutation` profile admits them. `derive` denies them because a stored
+derivation reused on later reads must not depend on whichever request last
+wrote it, and `policy`, `authorization` and `predicate` deny them because a
+mutation payload is not an input to an authorization decision or a query
+predicate.
+
+In readable syntax the quoted argument to these three is a literal key name.
+Everywhere else a quoted string is resolved against the schema's field labels
+— that is how a multi-word label like `"Packing Notes"` is written — which
+would otherwise turn `params("Image")` on a card with an `Image` field into a
+read of that field. A bare label still compiles as an expression, so a
+computed key stays available.
 
 The target defines what `.` means. For a Card target, `.` is the Card's
 editable projection. For a Field target, `.` is that Field's own value. The
@@ -353,12 +434,12 @@ solidified form uses `.` for the same root.
 
 This produces four meaningful combinations:
 
-| Delivery | Transaction | Meaning |
-| --- | --- | --- |
-| complete | atomic | Parse, validate, and commit the complete program once. |
-| streaming | atomic | Evaluate complete statements into a private preview, then commit once when the stream finishes. |
-| streaming | statement | Commit each complete statement independently inside one named undo session. This is the Scrabble-stream behavior. |
-| complete | statement | Execute a supplied batch statement by statement; useful for imports and resumable jobs. |
+| Delivery  | Transaction | Meaning                                                                                                           |
+| --------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| complete  | atomic      | Parse, validate, and commit the complete program once.                                                            |
+| streaming | atomic      | Evaluate complete statements into a private preview, then commit once when the stream finishes.                   |
+| streaming | statement   | Commit each complete statement independently inside one named undo session. This is the Scrabble-stream behavior. |
+| complete  | statement   | Execute a supplied batch statement by statement; useful for imports and resumable jobs.                           |
 
 “Streaming” never implies partial-statement execution. “Atomic” never describes
 a sequence whose earlier statements have already become durable.
@@ -373,24 +454,24 @@ arguments. The mutation AST may retain profile information such as a
 filter-all location that ordinary value-mode jq would collapse into an array.
 Statement-terminating semicolons are framed outside the expression parser.
 
-| Statement | Meaning | Cardinality |
-| --- | --- | --- |
-| `location = expression` | Set/upsert a schema-permitted location. | exactly one, or every match selected with `[* predicate]` |
-| `location \|= expression` | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
-| `replace(location, expression)` | Replace an existing value. | exactly one target |
-| `copy_value_to(source, destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
-| `del(location)` | Delete an existing member or item. | exactly one, or every match selected with `[* predicate]` |
-| `prepend(collection, expression)` | Insert at array start. | one collection, one value |
-| `append(collection, expression)` | Insert at array end. | one collection, one value |
-| `insert_at(collection, index, expression)` | Insert at a zero-based index. | one collection, one value |
-| `insert_item_before(value, anchor)` | Insert a value before a stable array item. | exactly one anchor |
-| `insert_item_after(value, anchor)` | Insert a value after a stable array item. | exactly one anchor |
-| `move_item_before(item, anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
-| `move_item_after(item, anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
-| `move_item_to_start(item, collection)` | Move an item to array start. | exactly one item, one collection |
-| `move_item_to_end(item, collection)` | Move an item to array end. | exactly one item, one collection |
-| `reorder_by(collection, key, order)` | Apply an exact key permutation. | one collection |
-| `assert(expression, message)` | Add a no-write precondition. | exactly one Boolean |
+| Statement                                  | Meaning                                                                         | Cardinality                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `location = expression`                    | Set/upsert a schema-permitted location.                                         | exactly one, or every match selected with `[* predicate]` |
+| `location \|= expression`                  | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
+| `replace(location, expression)`            | Replace an existing value.                                                      | exactly one target                                        |
+| `copy_value_to(source, destination)`       | Deep-copy one loaded value to another writable field.                           | one source, one destination                               |
+| `del(location)`                            | Delete an existing member or item.                                              | exactly one, or every match selected with `[* predicate]` |
+| `prepend(collection, expression)`          | Insert at array start.                                                          | one collection, one value                                 |
+| `append(collection, expression)`           | Insert at array end.                                                            | one collection, one value                                 |
+| `insert_at(collection, index, expression)` | Insert at a zero-based index.                                                   | one collection, one value                                 |
+| `insert_item_before(value, anchor)`        | Insert a value before a stable array item.                                      | exactly one anchor                                        |
+| `insert_item_after(value, anchor)`         | Insert a value after a stable array item.                                       | exactly one anchor                                        |
+| `move_item_before(item, anchor)`           | Move an item immediately before an anchor.                                      | exactly one item, exactly one anchor                      |
+| `move_item_after(item, anchor)`            | Move an item immediately after an anchor.                                       | exactly one item, exactly one anchor                      |
+| `move_item_to_start(item, collection)`     | Move an item to array start.                                                    | exactly one item, one collection                          |
+| `move_item_to_end(item, collection)`       | Move an item to array end.                                                      | exactly one item, one collection                          |
+| `reorder_by(collection, key, order)`       | Apply an exact key permutation.                                                 | one collection                                            |
+| `assert(expression, message)`              | Add a no-write precondition.                                                    | exactly one Boolean                                       |
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
@@ -442,14 +523,36 @@ type BxlMutationOperation =
   | ({ id: string; op: 'set'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'update'; target: StructuredTarget; expression: string }
   | ({ id: string; op: 'set-all'; target: StructuredTarget } & OperationValue)
-  | { id: string; op: 'update-all'; target: StructuredTarget; expression: string }
+  | {
+      id: string;
+      op: 'update-all';
+      target: StructuredTarget;
+      expression: string;
+    }
   | ({ id: string; op: 'replace'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'copy'; from: StructuredTarget; target: StructuredTarget }
   | { id: string; op: 'delete'; target: StructuredTarget }
   | { id: string; op: 'delete-all'; target: StructuredTarget }
-  | ({ id: string; op: 'insert'; into: StructuredTarget; position: StructuredPosition } & OperationValue)
-  | { id: string; op: 'move'; target: StructuredTarget; into: StructuredTarget; position: StructuredPosition }
-  | { id: string; op: 'reorder'; target: StructuredTarget; key: JqPath; order: JsonScalar[] }
+  | ({
+      id: string;
+      op: 'insert';
+      into: StructuredTarget;
+      position: StructuredPosition;
+    } & OperationValue)
+  | {
+      id: string;
+      op: 'move';
+      target: StructuredTarget;
+      into: StructuredTarget;
+      position: StructuredPosition;
+    }
+  | {
+      id: string;
+      op: 'reorder';
+      target: StructuredTarget;
+      key: JqPath;
+      order: JsonScalar[];
+    }
   | { id: string; op: 'assert'; expression: string; message?: string }
   | StructuredRelationshipOperation;
 ```
@@ -477,7 +580,12 @@ Literal structured operations and equivalent textual statements must lower to
 the same intent. For example, these are semantically identical:
 
 ```json
-{ "id": "rename", "op": "set", "target": { "path": ["title"] }, "value": "Final" }
+{
+  "id": "rename",
+  "op": "set",
+  "target": { "path": ["title"] },
+  "value": "Final"
+}
 ```
 
 ```bxl
@@ -501,8 +609,8 @@ create sparse arrays. `|=` and `replace` require the target to exist.
 
 The right side of `=` and `replace` observes the current root snapshot. The
 right side of `|=` observes the selected value, matching jq update-assignment
-semantics. Host parameters are read through a dedicated `$params` binding;
-statements cannot bind variables for later statements.
+semantics. Host parameters are read through `params("key")`; statements cannot
+bind variables for later statements.
 
 Root replacement (`. = ...`) is forbidden for a Card target. It is permitted
 for an explicitly selected Field target because replacing a scalar or complete
@@ -733,9 +841,21 @@ type BxlRelationshipIntent =
   | { op: 'move-relation'; field: JqPath; cardId: string; toIndex: number };
 
 type StructuredRelationshipOperation =
-  | { id: string; op: 'relate'; target: StructuredTarget; cardId: string; position?: StructuredPosition }
+  | {
+      id: string;
+      op: 'relate';
+      target: StructuredTarget;
+      cardId: string;
+      position?: StructuredPosition;
+    }
   | { id: string; op: 'unrelate'; target: StructuredTarget; cardId: string }
-  | { id: string; op: 'move-relation'; target: StructuredTarget; cardId: string; position: StructuredPosition };
+  | {
+      id: string;
+      op: 'move-relation';
+      target: StructuredTarget;
+      cardId: string;
+      position: StructuredPosition;
+    };
 ```
 
 This is the key mechanism for avoiding reprinted relationship subtrees.
@@ -956,20 +1076,20 @@ transaction coordinator, authorization fan-out, and failure model.
 Tests should cross execution mode with mutation shape, not test each feature in
 only one happy path:
 
-| Area | Required cases |
-| --- | --- |
-| Streaming | every byte boundary; strings/comments with semicolons; truncated final statement; retry; backpressure; stop-on-error |
-| Encodings | structured/text equivalence, streamed JSON objects, streamed statements, canonical plan equality |
-| Atomic | all-or-nothing validation; final invariant failure; revision drift before commit; no observable intermediate state |
-| Statement commits | revision chaining; durable dedupe; partial success report; undo grouping; rollback conflict |
-| Scalar/object | set, update, replace, delete/null distinction, computed RHS, forbidden Card-root write, allowed Field-root replace |
-| Bulk | explicit multi-target success, zero matches, deterministic path order, per-target authorization failure |
-| Insert | start/end/index/before/after, empty array, invalid index, single-value cardinality |
-| Move | forward/backward, start/end, source-is-anchor, cross-array type validation, concurrent anchor drift |
-| Reorder | exact permutation, missing/extra/duplicate keys, primitive arrays, unchanged order no-op |
-| Relationships | loaded linksTo/linksToMany projection, Card Store resolution, singular/plural, duplicate edge, unlink missing edge, ordered edge move, query-backed read-only membership, no related-Card traversal, no raw JSON:API paths |
-| Safety | forbidden constructs, prototype paths, limits, output cardinality, unknown functions |
-| Audit | stable canonical hash, concrete intents, redaction, inverse plan, resulting revision |
+| Area              | Required cases                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Streaming         | every byte boundary; strings/comments with semicolons; truncated final statement; retry; backpressure; stop-on-error                                                                                                       |
+| Encodings         | structured/text equivalence, streamed JSON objects, streamed statements, canonical plan equality                                                                                                                           |
+| Atomic            | all-or-nothing validation; final invariant failure; revision drift before commit; no observable intermediate state                                                                                                         |
+| Statement commits | revision chaining; durable dedupe; partial success report; undo grouping; rollback conflict                                                                                                                                |
+| Scalar/object     | set, update, replace, delete/null distinction, computed RHS, forbidden Card-root write, allowed Field-root replace                                                                                                         |
+| Bulk              | explicit multi-target success, zero matches, deterministic path order, per-target authorization failure                                                                                                                    |
+| Insert            | start/end/index/before/after, empty array, invalid index, single-value cardinality                                                                                                                                         |
+| Move              | forward/backward, start/end, source-is-anchor, cross-array type validation, concurrent anchor drift                                                                                                                        |
+| Reorder           | exact permutation, missing/extra/duplicate keys, primitive arrays, unchanged order no-op                                                                                                                                   |
+| Relationships     | loaded linksTo/linksToMany projection, Card Store resolution, singular/plural, duplicate edge, unlink missing edge, ordered edge move, query-backed read-only membership, no related-Card traversal, no raw JSON:API paths |
+| Safety            | forbidden constructs, prototype paths, limits, output cardinality, unknown functions                                                                                                                                       |
+| Audit             | stable canonical hash, concrete intents, redaction, inverse plan, resulting revision                                                                                                                                       |
 
 Property tests should verify that plan application produces the returned output
 snapshot, inverse application restores the base snapshot in isolation, reorder

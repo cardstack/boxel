@@ -1,34 +1,54 @@
 name: Install grafanactl
 description: |
-  Download and install the pinned grafanactl release on the Ubuntu runner,
-  verifying the SHA-256 checksum from the release's grafanactl_checksums.txt
-  before placing the binary on PATH. Used by the observability-apply-staging,
-  observability-apply-production, and observability-diff workflows.
+  Install the pinned grafanactl release on the Ubuntu runner, verifying its
+  SHA-256 before placing the binary on PATH. Used by the observability diff,
+  preview, preview-sweep and apply workflows.
 
-inputs:
+outputs:
   version:
-    description: grafanactl release version (without the leading 'v', e.g. "0.1.10")
-    required: true
+    description: The grafanactl version installed.
+    value: ${{ steps.pin.outputs.version }}
 
 runs:
   using: composite
   steps:
-    - shell: bash
-      env:
-        GRAFANACTL_VERSION: ${{ inputs.version }}
+    # grafanactl is still pre-1.0 — bump as needed. The version and the
+    # checksum are a single pin and have to move together, so they live here
+    # rather than in the five workflows that install it: a version supplied
+    # apart from its checksum would fail verification rather than install what
+    # was asked for. The checksum is this asset's line in the release's
+    # grafanactl_checksums.txt.
+    - name: Pin grafanactl
+      id: pin
+      shell: bash
       run: |
         set -euo pipefail
-        TARBALL="grafanactl_Linux_x86_64.tar.gz"
-        CHECKSUMS="grafanactl_checksums.txt"
-        RELEASE_URL="https://github.com/grafana/grafanactl/releases/download/v${GRAFANACTL_VERSION}"
-        TMPDIR="$(mktemp -d)"
-        trap 'rm -rf "$TMPDIR"' EXIT
+        version=0.1.10
+        {
+          echo "version=${version}"
+          echo "sha256=7f785c8be5ab6210579ae2bc0fddb9cdf180a2d59d928935adba8e581b69cfa9"
+          echo "url=https://github.com/grafana/grafanactl/releases/download/v${version}/grafanactl_Linux_x86_64.tar.gz"
+        } >> "$GITHUB_OUTPUT"
 
-        curl -fsSL "${RELEASE_URL}/${TARBALL}"   -o "${TMPDIR}/${TARBALL}"
-        curl -fsSL "${RELEASE_URL}/${CHECKSUMS}" -o "${TMPDIR}/${CHECKSUMS}"
+    - name: Fetch grafanactl
+      id: asset
+      uses: ./.github/actions/fetch-cached-release-asset
+      with:
+        name: grafanactl
+        url: ${{ steps.pin.outputs.url }}
+        sha256: ${{ steps.pin.outputs.sha256 }}
 
-        ( cd "$TMPDIR" && grep " ${TARBALL}\$" "${CHECKSUMS}" | sha256sum -c - )
-
-        tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" grafanactl
-        sudo install -m 0755 "${TMPDIR}/grafanactl" /usr/local/bin/grafanactl
+    # The tarball is what gets cached and checksummed, so it is unpacked afresh
+    # each run: that keeps the pinned value the one the release publishes,
+    # verifiable against upstream without unpacking anything.
+    - name: Install grafanactl
+      shell: bash
+      env:
+        GRAFANACTL_TARBALL: ${{ steps.asset.outputs.path }}
+      run: |
+        set -euo pipefail
+        unpacked="$(mktemp -d)"
+        trap 'rm -rf "$unpacked"' EXIT
+        tar -xzf "$GRAFANACTL_TARBALL" -C "$unpacked" grafanactl
+        sudo install -m 0755 "${unpacked}/grafanactl" /usr/local/bin/grafanactl
         grafanactl --version

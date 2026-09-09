@@ -55,9 +55,9 @@ export class StatAtom extends GlimmerComponent<StatSignature> {
         align-items: center;
         gap: 0.375rem;
         padding: 0.25rem 0.625rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
-        border: 1px solid var(--border, #e2e8f0);
+        border: 1px solid var(--border);
       }
       .stat-icon-pill {
         display: inline-flex;
@@ -66,14 +66,14 @@ export class StatAtom extends GlimmerComponent<StatSignature> {
         width: 1.25rem;
         height: 1.25rem;
         border-radius: 0.375rem;
-        background: var(--primary, #3b82f6);
-        color: var(--primary-foreground, #ffffff);
+        background: var(--primary);
+        color: var(--primary-foreground);
         flex-shrink: 0;
       }
       .stat-value {
         font-size: 0.875rem;
         font-weight: 700;
-        color: var(--foreground, var(--boxel-dark));
+        color: var(--foreground);
         line-height: 1;
       }
     </style>
@@ -147,12 +147,8 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         gap: 0.75rem;
         padding: 1.25rem;
         border-radius: 0.75rem;
-        background: linear-gradient(
-          135deg,
-          var(--card, #ffffff) 0%,
-          var(--muted, #f8fafc) 100%
-        );
-        border: 1px solid var(--border, #e2e8f0);
+        background: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
+        border: 1px solid var(--border);
         box-shadow:
           0 4px 6px -1px rgb(0 0 0 / 0.05),
           0 2px 4px -1px rgb(0 0 0 / 0.03);
@@ -162,7 +158,7 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         box-shadow:
           0 10px 15px -3px rgb(0 0 0 / 0.1),
           0 4px 6px -2px rgb(0 0 0 / 0.05);
-        border-color: var(--ring, #cbd5e1);
+        border-color: var(--ring);
       }
       .stat-header {
         display: flex;
@@ -175,7 +171,7 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         font-weight: 600;
         letter-spacing: 0.025em;
         text-transform: uppercase;
-        color: var(--muted-foreground, #64748b);
+        color: var(--muted-foreground);
       }
       .stat-icon-container {
         display: inline-flex;
@@ -184,8 +180,8 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         width: 2.25rem;
         height: 2.25rem;
         border-radius: 0.5rem;
-        background: var(--primary, #3b82f6);
-        color: var(--primary-foreground, #ffffff);
+        background: var(--primary);
+        color: var(--primary-foreground);
         box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
       }
       .stat-main {
@@ -197,13 +193,13 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         font-size: 2.5rem;
         font-weight: 800;
         line-height: 1;
-        color: var(--foreground, #0f172a);
+        color: var(--foreground);
         letter-spacing: -0.025em;
       }
       .stat-subtitle {
         font-size: 0.875rem;
         font-weight: 600;
-        color: var(--success, #22c55e);
+        color: var(--success);
         display: flex;
         align-items: center;
         gap: 0.25rem;
@@ -213,17 +209,17 @@ export class StatEmbedded extends GlimmerComponent<StatSignature> {
         align-items: center;
         gap: 0.5rem;
         padding-top: 0.5rem;
-        border-top: 1px solid var(--border, #e2e8f0);
+        border-top: 1px solid var(--border);
       }
       .stat-range-label {
         font-size: 0.75rem;
         font-weight: 600;
-        color: var(--muted-foreground, #94a3b8);
+        color: var(--muted-foreground);
       }
       .stat-range-value {
         font-size: 0.75rem;
         font-weight: 500;
-        color: var(--foreground, #0f172a);
+        color: var(--foreground);
       }
     </style>
   </template>

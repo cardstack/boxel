@@ -469,15 +469,42 @@ being repeated in every AI-written statement:
   "delivery": "streaming",
   "transaction": "atomic",
   "syntax": "readable",
+  "context": {
+    "params": { "note": "looks right to me" },
+    "actor": { "id": "user:ada" }
+  },
   "returning": ["changes", "affected", "paths"]
 }
 ```
 
 The revision supplies optimistic concurrency. The program identity supports
-durable deduplication. The actor travels with the plan into authorization and
-audit. The trusted host supplies the actor and authoritative target/revision
-context; they are not claims the model gets to make about itself. None of
-those concerns makes the actual edit harder to read.
+durable deduplication. The envelope's `actor` is the principal the host
+carries into authorization and audit; `context.actor` is separately what a
+program may read. The trusted host supplies both, along with the authoritative
+target and revision; they are not claims the model gets to make about itself.
+None of those concerns makes the actual edit harder to read.
+
+## Read the caller and the payload
+
+A program sees the Card through `.`. Three calls supply the rest of what a
+write needs, each reading a value the host resolved before the program ran:
+`params("note")` is that entry of the payload the caller sent, `actor("id")`
+is the authenticated caller, and `instance("revision")` is the stored
+document. `actor()` and `instance()` with no argument hand back the whole
+object.
+
+```bxl
+assert(Status = "review", "must still be in review");
+append(Comment, params("note"));
+Reviewer = actor("id");
+```
+
+Each of these fails the program rather than reading `null` when the host
+supplied no context, or when the key is not there — an operation records the
+caller as the author of a comment, and a blank author is worse than a refused
+edit. The key is exact and case-sensitive, and stays a literal even when the
+Card has a Field of the same name: `params("Note")` reads the payload, never
+`Note`.
 
 ## Let an AI make a schema-constrained tool call
 
@@ -667,24 +694,28 @@ Note = null;
 del(Note);
 
 # Select exactly one nested field
-Item[ID = $params.id].Score += 10;
+Item[ID = params("id")].Score += 10;
 
 # Explicitly update every match
 Item[* Done].Status = "archived";
 
 # Structural collection edits
-append(Item, $params.item);
-insert_item_after($params.item, Item[ID = $params.anchorId]);
+append(Item, params("item"));
+insert_item_after(params("item"), Item[ID = params("anchorId")]);
 move_item_before(
-  Item[ID = $params.movingId],
-  Item[ID = $params.anchorId]
+  Item[ID = params("movingId")],
+  Item[ID = params("anchorId")]
 );
 # Select and move an enclosing item by a nested field
 move_item_before(
-  Product[Variants[SKU = $params.sku]],
-  Product[ID = $params.anchorId]
+  Product[Variants[SKU = params("sku")]],
+  Product[ID = params("anchorId")]
 );
-reorder_by(Item, ID, $params.order);
+reorder_by(Item, ID, params("order"));
+
+# Read the caller and the stored document
+Reviewer = actor("id");
+Note = "revision " + (instance("revision") | tostring);
 
 # Structural calls stand alone; never write Item = append(...)
 
@@ -700,9 +731,9 @@ assert(Status = "draft", "must still be a draft");
 copy_value_to(Summary, "Packing Notes");
 
 # Loaded Card relationships
-Owner = card($params.ownerId);
-append(Reviewer, card($params.reviewerId));
-del(Reviewer[ID = $params.reviewerId]);
+Owner = card(params("ownerId"));
+append(Reviewer, card(params("reviewerId")));
+del(Reviewer[ID = params("reviewerId")]);
 ```
 
 The recurring pattern is simple: select the smallest meaningful location,

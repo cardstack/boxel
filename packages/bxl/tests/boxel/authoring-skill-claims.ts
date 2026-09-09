@@ -330,6 +330,14 @@ const REFUSALS_NOT_WORTH_NAMING = new Map<string, string>([
   // Not a name a card author can even reach: the parser rejects it as an
   // unexpected keyword before the profile gets a say.
   ['MODULEMETA', 'metadata'],
+  // The request-context builtins belong to the mutation dialect, and the
+  // library that carries them is not in the set a card resolves against — a
+  // computed field naming one gets `'params/1' is not defined` before the
+  // profile has a say. The `derive` ban is the second line of that defense,
+  // not something a card author needs to be taught around.
+  ['ACTOR', 'requestContext'],
+  ['INSTANCE', 'requestContext'],
+  ['PARAMS', 'requestContext'],
 ]);
 
 check('the skill accounts for every call the derive profile bans', () => {

@@ -12,6 +12,7 @@
  */
 import { ok, strictEqual, deepStrictEqual } from 'node:assert';
 import { evaluateBxl } from '../../../../src/index.ts';
+import { withRequestContext } from '../../../../src/jqtools/evaluate/runtimeState.ts';
 import {
   BXL_REGISTRY,
   registerBuiltinLibrary,
@@ -27,6 +28,7 @@ import {
 } from '../../../../src/jqtools/evaluate/filters/lib/nativeFilter.ts';
 import {
   CARD_LIBRARIES,
+  mutationLibraries,
   type CoverageCase,
   type Expectation,
   type ZoneContext,
@@ -209,17 +211,25 @@ function runInZone(
   libraries: BuiltinLibraryName[],
   context: ZoneContext,
 ): string | undefined {
-  const effective = testCase.libraries ?? libraries;
+  const effective = testCase.mutationLibraries
+    ? mutationLibraries()
+    : (testCase.libraries ?? libraries);
   recordResolvedBuiltinsFilter(effective);
   invoked.clear();
   let outputs: unknown[] | undefined;
   let thrown: unknown;
-  try {
-    outputs = evaluateBxl(testCase.source, testCase.input ?? null, {
+  const evaluate = () =>
+    evaluateBxl(testCase.source, testCase.input ?? null, {
       libraries: effective,
       schema: testCase.schema,
       readableSyntax: testCase.readableSyntax ?? true,
     }).outputs;
+  try {
+    // Scoped outside `evaluateBxl`, which opens a diagnostics frame of its
+    // own — the same shape a host uses around a whole mutation plan.
+    outputs = testCase.context
+      ? withRequestContext(testCase.context, evaluate)
+      : evaluate();
   } catch (error) {
     thrown = error;
   }

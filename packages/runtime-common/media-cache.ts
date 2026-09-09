@@ -73,11 +73,12 @@ export type MediaCacheLane = 'declared' | 'on-demand';
 // one canonical spec at one generation.
 export interface MediaCacheEntryKey {
   realmURL: string;
-  // The source instance's canonical URL in its extensionless card-id form
-  // (matching `boxel_index.file_alias`); the `.json`-suffixed file-URL form
-  // (matching `boxel_index.url`) also joins correctly, but writers should
-  // store the id form — it is the shape every other screenshot surface
-  // (durable URLs, `meta.screenshots`) speaks.
+  // The source row's ledger spelling, per `screenshotLedgerSourceURL`: an
+  // instance's captures key on its extensionless card-id form (matching
+  // `boxel_index.file_alias`), a file's on the file's own URL with its
+  // extension intact (matching `boxel_index.url`). The GC sweep joins this
+  // against both index columns, so either spelling resolves — but writers
+  // must key through the helper, or serving misses what persist wrote.
   sourceURL: string;
   captureSpecHash: string;
   sourceGeneration: number;
@@ -417,8 +418,12 @@ export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
 }
 
 // Ledger rows the sweep may reclaim, oldest reasons first:
-//   - 'tombstoned': the source instance is deleted (its `boxel_index` row is
-//     a tombstone) — the capture inherits the deletion.
+//   - 'tombstoned': the source row is deleted (every `boxel_index` row —
+//     instance or file — matching the ledger spelling is a tombstone) — the
+//     capture inherits the deletion. The live-row guard is what keeps an
+//     alias collision honest: a deleted `foo.json`'s tombstone matches a
+//     live extensionless `foo` file's captures on `file_alias`, and without
+//     the guard the sweep would reclaim the live file's bytes.
 //   - 'superseded': a newer-generation row exists for the same capture
 //     identity, and has for at least the min-age (so a serve that resolved
 //     the old row just before the swap can still finish streaming).
@@ -427,6 +432,27 @@ export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
 // The jsonb-free SQL here is still Postgres-shaped (row-value EXISTS,
 // bigint arithmetic); like the reconcile scans, the GC task runs solely
 // behind the Postgres queue.
+
+// The tombstone arm, verbatim in both the reason CASE and the WHERE below —
+// one string so the two can't drift. `IN ('instance', 'file')` covers both
+// ledger spellings (`screenshotLedgerSourceURL`): a non-`.json` file's
+// captures have no instance row at all, so an instance-only predicate would
+// leak them forever.
+const GC_TOMBSTONED_PREDICATE = `
+  EXISTS (
+    SELECT 1 FROM boxel_index i
+    WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
+      AND i.realm_url = r.realm_url
+      AND i.type IN ('instance', 'file') AND i.is_deleted IS TRUE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM boxel_index i
+    WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
+      AND i.realm_url = r.realm_url
+      AND i.type IN ('instance', 'file')
+      AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+  )`;
+
 export async function findMediaCacheGcCandidates(
   dbAdapter: DBAdapter,
   {
@@ -440,12 +466,7 @@ export async function findMediaCacheGcCandidates(
   let rows = (await query(dbAdapter, [
     `SELECT realm_url, source_url, capture_spec_hash, source_generation, object_key,
        CASE
-         WHEN EXISTS (
-           SELECT 1 FROM boxel_index i
-           WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
-             AND i.realm_url = r.realm_url
-             AND i.type = 'instance' AND i.is_deleted IS TRUE
-         ) THEN 'tombstoned'
+         WHEN (${GC_TOMBSTONED_PREDICATE}) THEN 'tombstoned'
          WHEN EXISTS (
            SELECT 1 FROM media_cache_ledger n
            WHERE n.realm_url = r.realm_url AND n.source_url = r.source_url
@@ -460,12 +481,7 @@ export async function findMediaCacheGcCandidates(
      WHERE r.created_at <`,
     param(minAgeCutoff),
     `AND (
-       EXISTS (
-         SELECT 1 FROM boxel_index i
-         WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
-           AND i.realm_url = r.realm_url
-           AND i.type = 'instance' AND i.is_deleted IS TRUE
-       )
+       (${GC_TOMBSTONED_PREDICATE})
        OR EXISTS (
          SELECT 1 FROM media_cache_ledger n
          WHERE n.realm_url = r.realm_url AND n.source_url = r.source_url

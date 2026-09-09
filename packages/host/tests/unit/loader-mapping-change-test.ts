@@ -222,3 +222,276 @@ module('Unit | loader mapping change during traversal', function () {
     );
   });
 });
+
+// A mapping change can also land while a module's bytes are still in flight,
+// or between the moment an import's walk resolves and the moment the import
+// reads the module back out of the map. For the first, the fetching record is
+// the generation token: a response or failure that arrives for a record the
+// map no longer holds must not write over whatever replaced it. For the
+// second, the import re-enters its walk rather than reporting the empty slot
+// as a bug. Both interleavings are driven with a source server whose responses
+// the test releases in a chosen order.
+module('Unit | loader mapping change during a fetch', function (hooks) {
+  const origin = 'https://mapping-fetch.test/';
+
+  // Stands in for a realm serving module source: the test owns what each URL
+  // answers with and, where an interleaving is the thing under test, when the
+  // answer arrives.
+  class SourceServer {
+    sources: Map<string, string>;
+    #parkedURLs = new Set<string>();
+    #parked: Array<{ url: string; release: (fail: boolean) => void }> = [];
+
+    constructor(sources: Record<string, string>) {
+      this.sources = new Map(
+        Object.entries(sources).map(([path, source]) => [
+          `${origin}${path}`,
+          source,
+        ]),
+      );
+    }
+
+    url(path: string): string {
+      return `${origin}${path}`;
+    }
+
+    fetch: typeof globalThis.fetch = async (urlOrRequest, init) => {
+      let url = new Request(urlOrRequest as RequestInfo, init).url;
+      // A realm resolves an extensionless import to the file that backs it;
+      // the loader emits dependency URLs without an extension, so answer both.
+      // Read before parking, so a held fetch answers with the source that was
+      // current when it was issued — a response in flight carries the bytes
+      // the server already sent.
+      let source = this.sources.get(url) ?? this.sources.get(`${url}.js`);
+      if (this.#parkedURLs.has(url)) {
+        let failed = await new Promise<boolean>((resolve) => {
+          this.#parked.push({ url, release: resolve });
+        });
+        if (failed) {
+          return new Response('server error', { status: 500 });
+        }
+      }
+      if (source == null) {
+        return new Response(`no such module ${url}`, { status: 404 });
+      }
+      return new Response(source, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+    };
+
+    // Hold every subsequent fetch of `path` until the test releases it, so a
+    // second generation of the same module can be started while the first is
+    // still in flight.
+    park(path: string) {
+      this.#parkedURLs.add(this.url(path));
+    }
+
+    parkedCount(path: string): number {
+      let url = this.url(path);
+      return this.#parked.filter((entry) => entry.url === url).length;
+    }
+
+    unpark(path: string) {
+      this.#parkedURLs.delete(this.url(path));
+    }
+
+    // Releases one parked fetch by its arrival position, so a test can choose
+    // the order two generations of a module complete in.
+    release(path: string, arrival: number, outcome: 'source' | 'failure') {
+      let url = this.url(path);
+      let parked = this.#parked.filter((entry) => entry.url === url);
+      if (!parked[arrival]) {
+        throw new Error(
+          `no fetch of ${url} has arrived at position ${arrival} (${parked.length} parked)`,
+        );
+      }
+      parked[arrival].release(outcome === 'failure');
+    }
+  }
+
+  const fixtures = {
+    'leaf.js': `export function leaf() { return 'leaf'; }`,
+    'middle.js': `
+      import { leaf } from './leaf';
+      export function middle() { return 'middle-' + leaf(); }
+    `,
+    'top.js': `
+      import { middle } from './middle';
+      export function top() { return 'top-' + middle(); }
+    `,
+    'gen.js': `export function value() { return 'v1'; }`,
+  };
+
+  async function waitFor(condition: () => boolean, description: string) {
+    let deadline = Date.now() + 3000;
+    while (!condition()) {
+      if (Date.now() > deadline) {
+        throw new Error(`timed out waiting for ${description}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  let server: SourceServer;
+  let virtualNetwork: VirtualNetwork;
+  let loader: Loader;
+  let mappingChanges = 0;
+  let loaderPrototype: Record<string, unknown>;
+  let originalAdvanceToState: unknown;
+
+  hooks.beforeEach(function () {
+    server = new SourceServer(fixtures);
+    virtualNetwork = new VirtualNetwork(server.fetch);
+    loader = new Loader(virtualNetwork.fetch, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    });
+    loaderPrototype = Object.getPrototypeOf(loader) as Record<string, unknown>;
+    originalAdvanceToState = loaderPrototype.advanceToState;
+  });
+
+  // One test below steps into `advanceToState` by patching the prototype. A
+  // `finally` in that test cannot be relied on to undo it: the interleaving it
+  // drives is an import that may never settle, which is what the guard under
+  // test prevents, and an abandoned async function runs no `finally`. Restoring
+  // here keeps a failure of that kind from leaving every later test running a
+  // wrapper closed over this test's server.
+  hooks.afterEach(function () {
+    loaderPrototype.advanceToState = originalAdvanceToState;
+  });
+
+  // Registering a mapping is what discards the loader's caches; the alias is
+  // unrelated to anything the tests import, so only the discard is observable.
+  function discardCaches() {
+    mappingChanges++;
+    virtualNetwork.addURLMapping(
+      new URL(`http://alias-${mappingChanges}.example/`),
+      new URL(`http://real-${mappingChanges}.example/`),
+    );
+  }
+
+  test('a dependency walk taken while a module is still fetching is not memoized', async function (assert) {
+    await loader.import(server.url('top.js'));
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')).sort(),
+      [server.url('leaf'), server.url('middle')],
+      'the dependency set is cached off the first walk',
+    );
+
+    // The re-import holds `top` in the map as a fetching record for the whole
+    // round trip — present, but with no dependencies named yet.
+    server.park('top.js');
+    discardCaches();
+    let reimport = loader.import(server.url('top.js'));
+    await waitFor(
+      () => server.parkedCount('top.js') === 1,
+      'the re-import to be in flight',
+    );
+
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')),
+      [],
+      'a module that has not named its dependencies yet reports none',
+    );
+
+    server.unpark('top.js');
+    server.release('top.js', 0, 'source');
+    await reimport;
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')).sort(),
+      [server.url('leaf'), server.url('middle')],
+      'that walk did not outlive the fetch it was taken during',
+    );
+  });
+
+  test('a mapping change landing after the graph is walked re-enters instead of failing the import', async function (assert) {
+    // The read this covers happens after the walk has resolved, so no fetch
+    // can reach it — driving the interleaving means stepping in where the
+    // import awaits. Counting microtasks instead would pin nothing stable.
+    let walk = originalAdvanceToState as (...args: unknown[]) => Promise<void>;
+    assert.strictEqual(
+      typeof walk,
+      'function',
+      'the walk this test steps into still exists',
+    );
+
+    let discards = 0;
+    loaderPrototype.advanceToState = async function (
+      this: Loader,
+      ...args: unknown[]
+    ) {
+      let result = await walk.apply(this, args);
+      if (discards === 0) {
+        discards++;
+        discardCaches();
+      }
+      return result;
+    };
+
+    let module = await loader.import<{ leaf(): string }>(server.url('leaf.js'));
+    assert.strictEqual(
+      module.leaf(),
+      'leaf',
+      'the import resolves against the module that replaced the discarded one',
+    );
+    assert.strictEqual(
+      discards,
+      1,
+      'the mapping change fired in the window under test',
+    );
+  });
+
+  test('a response that arrives after its fetch was discarded does not replace the newer module', async function (assert) {
+    server.park('gen.js');
+    let stale = loader.import<{ value(): string }>(server.url('gen.js'));
+    await waitFor(() => server.parkedCount('gen.js') === 1, 'the first fetch');
+
+    discardCaches();
+    server.sources.set(
+      server.url('gen.js'),
+      `export function value() { return 'v2'; }`,
+    );
+    let current = loader.import<{ value(): string }>(server.url('gen.js'));
+    await waitFor(() => server.parkedCount('gen.js') === 2, 'the second fetch');
+
+    server.release('gen.js', 1, 'source');
+    assert.strictEqual((await current).value(), 'v2');
+
+    server.release('gen.js', 0, 'source');
+    assert.strictEqual(
+      (await stale).value(),
+      'v2',
+      'the discarded import resolves against the replacement',
+    );
+
+    let later = await loader.import<{ value(): string }>(server.url('gen.js'));
+    assert.strictEqual(
+      later.value(),
+      'v2',
+      'the stale response did not overwrite the cached module',
+    );
+  });
+
+  test('a failure that arrives after its fetch was discarded does not evict the newer module', async function (assert) {
+    server.park('gen.js');
+    let stale = loader.import<{ value(): string }>(server.url('gen.js'));
+    await waitFor(() => server.parkedCount('gen.js') === 1, 'the first fetch');
+
+    discardCaches();
+    let current = loader.import<{ value(): string }>(server.url('gen.js'));
+    await waitFor(() => server.parkedCount('gen.js') === 2, 'the second fetch');
+
+    server.release('gen.js', 1, 'source');
+    assert.strictEqual((await current).value(), 'v1');
+
+    server.release('gen.js', 0, 'failure');
+    assert.strictEqual(
+      (await stale).value(),
+      'v1',
+      'the discarded import resolves against the replacement',
+    );
+    assert.true(
+      loader.isModuleLoaded(server.url('gen.js')),
+      'the stale failure did not evict the module that replaced it',
+    );
+  });
+});
