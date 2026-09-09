@@ -14,6 +14,7 @@ export type BxlFunctionSafetyCategory =
   | 'errorMasking'
   | 'metadata'
   | 'predicateLowerable'
+  | 'requestContext'
   | 'volatile';
 
 export interface BxlProfileFunctionPolicy {
@@ -301,6 +302,13 @@ export const BXL_METADATA_CALLS = names([
   'modulemeta',
 ]);
 
+/**
+ * The request-context builtins. They read state that belongs to one request —
+ * the payload, the caller, the stored document — so they are only meaningful
+ * where a program runs once per request, which is the `mutation` profile.
+ */
+export const BXL_REQUEST_CONTEXT_CALLS = names(['actor', 'instance', 'params']);
+
 export const BXL_PREDICATE_LOWERABLE_CALLS = names([
   'IN',
   'age',
@@ -313,10 +321,26 @@ export const BXL_PREDICATE_LOWERABLE_CALLS = names([
   'present',
 ]);
 
-export const BXL_DERIVE_DENIED_CALLS = names([
+/**
+ * The determinism bans the two write-time profiles share: nothing volatile,
+ * nothing with a side effect, nothing reading runtime metadata.
+ */
+export const BXL_MUTATION_DENIED_CALLS = names([
   ...BXL_VOLATILE_CALLS,
   ...BXL_DERIVE_CONTROL_DENIED_CALLS,
   ...BXL_METADATA_CALLS,
+]);
+
+/**
+ * `derive` bans everything `mutation` does and the request-context builtins
+ * besides, which is what separates the two: a mutation program is planned for
+ * a single request, and reading that request's payload and caller is its job.
+ * A derivation is stored, indexed and reused on later reads, so the same call
+ * there would make a field's value depend on whichever request last wrote it.
+ */
+export const BXL_DERIVE_DENIED_CALLS = names([
+  ...BXL_MUTATION_DENIED_CALLS,
+  ...BXL_REQUEST_CONTEXT_CALLS,
 ]);
 
 export const BXL_FUNCTION_SAFETY_CATEGORIES: ReadonlyMap<
@@ -341,6 +365,9 @@ export const BXL_FUNCTION_SAFETY_CATEGORIES: ReadonlyMap<
     (name) => [name, 'controlOrSideEffect'] as const,
   ),
   ...[...BXL_METADATA_CALLS].map((name) => [name, 'metadata'] as const),
+  ...[...BXL_REQUEST_CONTEXT_CALLS].map(
+    (name) => [name, 'requestContext'] as const,
+  ),
   ...[...BXL_PREDICATE_LOWERABLE_CALLS].map(
     (name) => [name, 'predicateLowerable'] as const,
   ),
@@ -354,6 +381,7 @@ const POLICY_DENIED_CALLS = new Set([
   ...BXL_VOLATILE_CALLS,
   ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   ...BXL_METADATA_CALLS,
+  ...BXL_REQUEST_CONTEXT_CALLS,
 ]);
 
 const AUTHORIZATION_DENIED_CALLS = new Set([
@@ -365,6 +393,7 @@ const AUTHORIZATION_DENIED_CALLS = new Set([
   ...BXL_VOLATILE_CALLS,
   ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   ...BXL_METADATA_CALLS,
+  ...BXL_REQUEST_CONTEXT_CALLS,
 ]);
 
 export const BXL_PROFILE_FUNCTION_POLICIES: Record<
@@ -382,6 +411,9 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       errorMasking:
         'error-masking calls can hide fail-closed authorization errors',
       metadata: 'runtime metadata calls are not authorization predicates',
+      requestContext:
+        'request-context calls read a mutation payload, which is not an ' +
+        'authorization predicate input',
       volatile:
         'volatile calls are not stable request-time authorization predicates',
     },
@@ -397,6 +429,9 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       errorMasking:
         'error-masking calls can hide fail-closed authorization errors',
       metadata: 'runtime metadata calls are not relationship-graph predicates',
+      requestContext:
+        'request-context calls read a mutation payload, which is not part of ' +
+        'the relationship graph',
       volatile: 'volatile calls are not stable relationship-graph predicates',
     },
   },
@@ -409,11 +444,14 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       controlOrSideEffect:
         'control/side-effect calls are not stable write-time derivations',
       metadata: 'runtime metadata calls are not stable write-time derivations',
+      requestContext:
+        'request-context calls would make a stored derivation depend on ' +
+        'whichever request last wrote it',
       volatile: 'volatile calls are not stable write-time derivations',
     },
   },
   mutation: {
-    deniedCalls: BXL_DERIVE_DENIED_CALLS,
+    deniedCalls: BXL_MUTATION_DENIED_CALLS,
     denyMessageByCategory: {
       controlOrSideEffect:
         'control/side-effect calls are not pure mutation-plan expressions',
