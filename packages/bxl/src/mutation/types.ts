@@ -104,6 +104,50 @@ export type BxlMutationIntent =
       toIndex: number;
     };
 
+export type BxlMutationOverlayTier = 'computed' | 'linked';
+
+export type BxlMutationOverlayReason =
+  | 'not-indexed'
+  | 'not-searchable'
+  | 'key-absent';
+
+/** One path the host could not supply an overlay value for, and why. */
+export interface BxlMutationUnavailableOverlay {
+  path: string;
+  tier: BxlMutationOverlayTier;
+  reason: BxlMutationOverlayReason;
+}
+
+/**
+ * Read-only values a host layers over a Card's stored document. `computeds`
+ * carries the Card with its computed Fields filled in; `linked` carries the
+ * searchable Fields of the Cards this one links to. Both sit *under* the
+ * stored document: a stored value always answers a read, and an overlay
+ * answers only where the stored document holds nothing — an absent key or a
+ * `null`, which is what a Card that never persists computed or linked values
+ * holds at those paths.
+ *
+ * Overlay paths are dotted strings addressing the loaded Card model, with
+ * collection indices as their own segment: `status`, `patient.name`,
+ * `recommendations.0.title`.
+ */
+export interface BxlMutationOverlays {
+  computeds?: BxlMutationJson;
+  linked?: BxlMutationJson;
+  unavailable?: readonly BxlMutationUnavailableOverlay[];
+}
+
+export type BxlMutationReadTier = 'source' | BxlMutationOverlayTier;
+
+export type BxlMutationReadOutcome = 'value' | 'null' | 'unavailable';
+
+/** One resolved read, reported so a host can see which layer answered it. */
+export interface BxlMutationReadEvent {
+  path: string;
+  tier: BxlMutationReadTier;
+  outcome: BxlMutationReadOutcome;
+}
+
 export interface BxlMutationStatementPlan {
   statement: number;
   source: string;
@@ -201,6 +245,15 @@ export interface BxlMutationPlanOptions {
   resolveCard?: (id: string) => BxlMutationJson | undefined;
   /** Optional concrete-write-set authorization hook supplied by the host. */
   authorize?: (statement: BxlMutationStatementPlan) => boolean | void;
+  /** Read-only computed and linked-Card values fetched by the host. */
+  overlays?: BxlMutationOverlays;
+  /**
+   * Read telemetry sink, called once per path a program's expressions resolve,
+   * in program order. Write locations report through the plan's intents
+   * instead, so a compound assignment's implicit read of its own target is not
+   * a read event.
+   */
+  onRead?: (event: BxlMutationReadEvent) => void;
 }
 
 export interface PreparedBxlMutation {
@@ -244,18 +297,27 @@ export type BxlMutationErrorPhase =
   | 'authorize'
   | 'commit';
 
+/**
+ * Machine-readable facts about the location an error is about. `snapshot-
+ * unavailable` carries the full `{ path, tier, reason }` the host declared;
+ * `computed-read-only` and `write-through-link` carry the offending path and
+ * the overlay tier that owns it.
+ */
+export type BxlMutationErrorDetails = Readonly<Record<string, BxlMutationJson>>;
+
 export class BxlMutationError extends Error {
   readonly name = 'BxlMutationError';
   readonly phase: BxlMutationErrorPhase;
   readonly code: string;
   readonly statement: number;
+  readonly details?: BxlMutationErrorDetails;
 
   constructor(
     phase: BxlMutationErrorPhase,
     code: string,
     statement: number,
     message: string,
-    options: { cause?: unknown } = {},
+    options: { cause?: unknown; details?: BxlMutationErrorDetails } = {},
   ) {
     super(
       message,
@@ -264,5 +326,6 @@ export class BxlMutationError extends Error {
     this.phase = phase;
     this.code = code;
     this.statement = statement;
+    if (options.details !== undefined) this.details = options.details;
   }
 }
