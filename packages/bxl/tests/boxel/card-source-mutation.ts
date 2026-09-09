@@ -3263,7 +3263,7 @@ strictEqual(
 );
 
 // A whole-value marker plans as it always has, and so does a value with no
-// marker in it: the resolution runs only over a value tree that has one.
+// marker in it.
 deepStrictEqual(
   nestedLinkMutation(
     'whole-value-marker',
@@ -3359,14 +3359,6 @@ function voyageMutation(
   );
 }
 
-function voyageMutationWithLimits(
-  programId: string,
-  program: string,
-  runtimeLimits: { maxSteps?: number },
-) {
-  return voyageMutation(programId, program, runtimeLimits);
-}
-
 const crewed = voyageMutation(
   'append-nested-link-collection',
   `append(.crews;{"name":"alpha","members":[card(params("who")),card(${JSON.stringify(ana)})]});`,
@@ -3442,19 +3434,26 @@ function markerBudgetOutcome(
   markers: number,
   maxSteps: number,
 ): 'completed' | 'refused' {
+  // Only a refusal that names the step limit counts: any other
+  // BxlMutationError would let this keep passing while the budget stopped
+  // being shared.
+  const spentTheBudget = (error: BxlMutationError) =>
+    error.message.includes(`${maxSteps} step`);
   const costly =
     'card(([range(0;40)]|map(tostring)|join("-")|length|tostring) | ' +
     `${JSON.stringify(zoe)})`;
   const members = Array.from({ length: markers }, () => costly).join(',');
   try {
-    voyageMutationWithLimits(
+    voyageMutation(
       `marker-budget-${markers}-${maxSteps}`,
       `append(.crews;{"name":"alpha","members":[${members}]});`,
       { maxSteps },
     );
     return 'completed';
   } catch (error) {
-    if (error instanceof BxlMutationError) return 'refused';
+    if (error instanceof BxlMutationError && spentTheBudget(error)) {
+      return 'refused';
+    }
     throw error;
   }
 }
@@ -3533,6 +3532,145 @@ strictEqual(
       '"friend":(if card(params("who")) then null else null end)});',
   ).code,
   'card-marker-position',
+);
+
+// A marker reads its argument when the program reaches it, so a branch that is
+// not taken costs nothing — no argument evaluated for it, and no error from one
+// that only makes sense on the branch that runs. Falling back is the whole
+// reason `if` and `//` carry markers, and an argument read ahead of time would
+// refuse the fallback on the strength of the branch it exists to avoid.
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-in-an-untaken-branch',
+    '.examples[0].friend = ' +
+      '(if false then card(params("missing")) else card(params("who")) end);',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-in-a-short-circuited-operand',
+    '.examples[0].friend = (card(params("who")) // card(params("missing")));',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+
+// An argument the program does reach still answers for itself.
+strictEqual(
+  nestedLinkError(
+    'nested-marker-argument-not-a-string',
+    `append(.examples;{${zeta},"parts":[],"friend":card(123)});`,
+  ).code,
+  'card-id-invalid',
+);
+
+// `.` merged with an object literal is how a program writes part of a
+// contained value, so a marker rides through the merge.
+deepStrictEqual(
+  nestedLinkMutation(
+    'nested-marker-through-a-merge',
+    '.examples[1] |= (. + {"friend":card(params("who"))});',
+  ).plan.intents,
+  [
+    {
+      op: 'set',
+      path: ['examples', 1],
+      before: {
+        key: 'b',
+        label: 'Beta',
+        friend: { id: 'https://example.test/Friend/b' },
+        aliases: [],
+        parts: [],
+      },
+      after: { key: 'b', label: 'Beta', aliases: [], parts: [] },
+    },
+    { op: 'relate', field: ['examples', 1, 'friend'], cardId: zoe },
+  ],
+);
+
+// An `elif` branch is a branch like any other, and either operand of `//` can
+// be the one that answers.
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-in-an-elif-branch',
+    '.examples[0].friend = (if false then null elif true then ' +
+      'card(params("who")) else null end);',
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+
+// An argument read as a plain value has no Field to relate a Card to, so a
+// marker in one is reported rather than quietly leaving its slot empty. The
+// message of an assertion that holds is never built at all, so there is
+// nothing there to report.
+for (const [programId, program] of [
+  ['marker-in-an-assert-message', 'assert(false;{"a":card(params("who"))});'],
+  [
+    'marker-in-a-reorder-order',
+    'reorder_by(.examples; .key; {"a":card(params("who"))});',
+  ],
+] as const) {
+  strictEqual(
+    nestedLinkError(programId, program).code,
+    'card-marker-position',
+    programId,
+  );
+}
+doesNotThrow(() =>
+  nestedLinkMutation(
+    'marker-in-the-message-of-an-assertion-that-holds',
+    'assert(true;{"a":card(params("who"))});',
+  ),
+);
+
+// The other statements that write a contained value resolve markers the same
+// way `append` does, each against the place its own value lands.
+deepStrictEqual(
+  nestedLinkMutation(
+    'replace-a-contained-value-carrying-a-link',
+    `replace(.examples[1];{"key":"b2","label":"B2","aliases":[],"parts":[],` +
+      '"friend":card(params("who"))});',
+  ).plan.intents.filter((intent) => intent.op === 'relate'),
+  [{ op: 'relate', field: ['examples', 1, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'prepend-a-contained-value-carrying-a-link',
+    `prepend(.examples;{${zeta},"parts":[],"friend":card(params("who"))});`,
+  ).plan.intents.filter((intent) => intent.op === 'relate'),
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'insert-a-contained-value-carrying-a-link-before-another',
+    `insert_item_before({${zeta},"parts":[],"friend":card(params("who"))};` +
+      '.examples[2]);',
+  ).plan.intents.filter((intent) => intent.op === 'relate'),
+  [{ op: 'relate', field: ['examples', 2, 'friend'], cardId: zoe }],
+);
+
+// A prepared program is planned many times, so resolution must not consume the
+// parsed tree or hold a Card from an earlier run.
+const preparedWithMarker = prepareBxlMutation(
+  `append(.examples;{${zeta},"parts":[],"friend":card(params("who"))});`,
+  { schema: richSchema, syntax: 'solidified', targetKind: 'card' },
+);
+const preparedSnapshot = snapshotBxlCardSource(
+  richSourceFixture(),
+  richSchema,
+  richProjectionOptions,
+);
+const planWith = (who: string) =>
+  preparedWithMarker.plan(preparedSnapshot, {
+    programId: 'prepared-twice',
+    ...richProjectionOptions,
+    context: { params: { who } },
+    resolveCard: (id: string) => nestedLinkCards[id],
+  }).intents;
+deepStrictEqual(planWith(zoe), planWith(zoe));
+deepStrictEqual(
+  planWith(ana).filter((intent) => intent.op === 'relate'),
+  [{ op: 'relate', field: ['examples', 3, 'friend'], cardId: ana }],
 );
 
 console.log(

@@ -1008,13 +1008,22 @@ intent at `["comments", 0, "author"]`. A `linksToMany` written this way takes
 one marker per edge, and every member of it must be one, because the whole
 collection leaves the stored value together.
 
-The marker's argument reads the input the value expression was handed, so
-resolution follows the nodes that pass that input straight down and can
-themselves be the value: object entries, array and comma streams, `//`
-operands, and the branches of an `if`. A `card(id)` somewhere that re-roots the
-input — the body of `map`, the right of a pipe — is refused rather than
-answered against the wrong value, and so is one in a condition, which chooses a
-branch rather than being the value.
+A marker reads its argument against the input the value expression itself was
+handed, so resolution follows the nodes that pass that input straight down and
+whose operands flow into the result: object entries, array and comma streams,
+the operands of `//`, `+` and `*`, and the branches of an `if`. A `card(id)`
+somewhere that re-roots the input — the body of `map`, either side of a pipe —
+is refused rather than answered against the wrong value, and so is one in a
+condition, which chooses a branch rather than being the value, and one in an
+argument read as a plain value, such as an `assert` message or a `reorder_by`
+order, which names no Field to relate a Card to.
+
+The argument is read when the program reaches the marker, so a marker in a
+branch that is not taken costs nothing:
+
+```bxl
+.owner = (card(params("preferred")) // card(params("fallback")));
+```
 
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,

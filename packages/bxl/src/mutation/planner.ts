@@ -85,11 +85,13 @@ function isCardReference(value: unknown): value is CardReference {
  * The value a `card(…)` marker leaves behind while an expression it sits
  * inside is evaluated.
  *
- * Identity is what makes a marker a marker. A program builds arbitrary JSON,
- * so one recognised by its shape could be forged into a relationship write; a
- * symbol key has no JSON spelling, and the evaluated tree is searched for
- * markers before anything copies it, so this test can be neither fooled nor
- * lost.
+ * Identity is what makes a marker a marker. A program builds arbitrary JSON, so
+ * one recognised by its shape could be forged; a symbol key has no JSON
+ * spelling, and the evaluated tree is searched for markers before anything
+ * copies it, so this test can be neither fooled nor lost. `isCardReference`
+ * above is the older shape-recognised form, and a whole value matching it is
+ * still taken for a reference — bounded by `loadedCard`, which refuses an id
+ * the caller did not supply.
  */
 const CARD_MARKER = Symbol('bxl.mutation.card-marker');
 
@@ -593,18 +595,29 @@ function childExpressions(ast: ExpressionAst): ExpressionAst[] {
   }
 }
 
+/**
+ * Binary operators whose operands are values the result is built from, rather
+ * than a stream re-rooted or a decision made from them.
+ */
+const VALUE_COMBINING_OPERATORS: ReadonlySet<string> = new Set([
+  ',',
+  '//',
+  '+',
+  '*',
+]);
+
 function containsCardCall(ast: ExpressionAst): boolean {
   return isCardCall(ast) || childExpressions(ast).some(containsCardCall);
 }
 
 /** The Card a `card(…)` marker names, read from its one argument. */
 function readCardId(
-  ast: Extract<ExpressionAst, { type: 'filter' }>,
+  argument: ExpressionAst,
   input: BxlMutationJson,
   evaluate: EvaluateItems,
   statement: number,
 ): string {
-  const items = evaluate(ast.args[0]!, [createItem(input)]);
+  const items = evaluate(argument, [createItem(input)]);
   if (items.length !== 1 || typeof items[0]!.value !== 'string') {
     throw new BxlMutationError(
       'plan',
@@ -616,16 +629,38 @@ function readCardId(
   return items[0]!.value;
 }
 
-/** A node standing in for one resolved marker, yielding it and nothing else. */
-function cardMarkerNode(id: string): ExpressionAst {
-  const marker = { [CARD_MARKER]: id };
+/**
+ * A node standing in for one marker, yielding it and nothing else.
+ *
+ * The Card it names is read when the node is reached, not while the tree is
+ * being rewritten, so a marker in a branch the program does not take costs
+ * nothing: no argument evaluated for a branch that never runs, no error from
+ * one that only makes sense there, and no share of the statement's steps. The
+ * budget frame is already open around the whole evaluation, so reading it here
+ * is still metered with everything else.
+ *
+ * `singleOutput` stays false, as it is for every filter node the annotator
+ * marks: the single-output evaluator has no case for a filter and throws on
+ * one. Nothing in the walk puts a marker where that evaluator runs, and saying
+ * `true` here would arm that throw for whoever widens the walk next.
+ */
+function cardMarkerNode(
+  argument: ExpressionAst,
+  input: BxlMutationJson,
+  evaluate: EvaluateItems,
+  statement: number,
+): ExpressionAst {
+  let marker: { [CARD_MARKER]: string } | undefined;
   const node: RuntimeAnnotatedExpressionAst = {
     type: 'filter',
     name: '_card_marker/0',
     arity: 0,
     args: [],
-    singleOutput: true,
+    singleOutput: false,
     resolvedNative: function* () {
+      marker ??= {
+        [CARD_MARKER]: readCardId(argument, input, evaluate, statement),
+      };
       yield createItem(marker);
     },
   };
@@ -636,18 +671,18 @@ function cardMarkerNode(id: string): ExpressionAst {
  * Resolve the `card(…)` markers a value expression builds into its result, so
  * the rest of the expression can evaluate as jq wrote it.
  *
- * The walk follows the nodes that both pass the expression's own input through
- * unchanged and can be the value that results: object entries, array and comma
- * streams, `//` operands, and the branches of an `if`. A marker's argument is
- * evaluated here, against the input the whole expression was handed, so a node
- * that re-roots it — the body of `map`, the right of a pipe — is left alone
- * rather than answered from the wrong place, and so is a condition, which
- * chooses a branch rather than being the value. `evaluateSingleJson` reports
- * whatever is left as unresolvable. `try` needs no thought here: the mutation
+ * A marker reads its argument against the input the value expression itself was
+ * handed, so the walk follows the nodes that pass that input down unchanged and
+ * whose operands flow into the result: object entries, array and comma streams,
+ * the operands of `//`, `+` and `*`, and the branches of an `if`. Everywhere
+ * else the marker is left as written and `evaluateSingleJson` reports it as
+ * unresolvable — a node that re-roots the input (the body of `map`, either side
+ * of a pipe) would answer it from the wrong place, and a condition chooses a
+ * branch rather than being the value. `try` needs no thought here: the mutation
  * profile refuses it.
  *
  * A subtree carrying no marker comes back as it went in, so a program without
- * one is never rebuilt and never evaluates anything ahead of time.
+ * one is never rebuilt.
  */
 function resolveValueTreeCards(
   ast: ExpressionAst,
@@ -656,7 +691,7 @@ function resolveValueTreeCards(
   statement: number,
 ): ExpressionAst {
   if (isCardCall(ast)) {
-    return cardMarkerNode(readCardId(ast, input, evaluate, statement));
+    return cardMarkerNode(ast.args[0]!, input, evaluate, statement);
   }
   const resolve = (child: ExpressionAst) =>
     resolveValueTreeCards(child, input, evaluate, statement);
@@ -678,7 +713,10 @@ function resolveValueTreeCards(
       return expr === ast.expr ? ast : { ...ast, expr };
     }
     case 'binary': {
-      if (ast.operator !== ',' && ast.operator !== '//') return ast;
+      // `.` merged with an object literal is how a program writes part of a
+      // contained value, so the operators that combine two values into the one
+      // that results carry markers as much as the structural nodes do.
+      if (!VALUE_COMBINING_OPERATORS.has(ast.operator)) return ast;
       const left = resolve(ast.left);
       const right = resolve(ast.right);
       return left === ast.left && right === ast.right
@@ -757,7 +795,7 @@ function evaluateSingleJson(
       return {
         value: {
           kind: 'card-reference',
-          id: readCardId(argument.ast, input, evaluate, statement),
+          id: readCardId(argument.ast.args[0]!, input, evaluate, statement),
         },
         references: [],
       };
@@ -1214,10 +1252,12 @@ function nestedRelationships(
 }
 
 /**
- * Refuse a link collection carrying anything but markers.
+ * Refuse a link collection whose members are not all markers.
  *
  * The whole collection leaves the stored value, so a member written beside the
- * edges would be dropped without a word rather than stored as it reads.
+ * edges would be dropped without a word rather than stored as it reads. This
+ * sees the collections a marker writes to; one written wholly as data carries
+ * no marker to resolve and reaches the Card the way any other value does.
  */
 function assertLinkCollectionsAreEdges(
   value: BxlMutationJson,
@@ -1276,7 +1316,14 @@ function modelValue(
   return model;
 }
 
-/** The value as the Card stores it, with every relationship shed. */
+/**
+ * The value as the Card stores it, with the relationships a marker named shed.
+ *
+ * A link written as plain data rather than through a marker is not a
+ * relationship as far as this is concerned and stays in the value, which is
+ * what `assertLinkCollectionsAreEdges` refuses for a collection a marker also
+ * writes to.
+ */
 function storedValue(
   model: BxlMutationJson,
   nested: NestedRelationship[],
@@ -1543,6 +1590,30 @@ function jsonValue(
 }
 
 /**
+ * The value of an argument that names no Field to relate a Card to.
+ *
+ * An `assert` message, an insertion index and a reorder key are read as plain
+ * values, so a marker in one has nothing to resolve against. Reporting it is
+ * what keeps it from being quietly dropped — the lifted marker leaves `null`
+ * behind, which an index or a key would go on to refuse for the wrong reason
+ * and a message would print.
+ */
+function plainValue(
+  evaluated: EvaluatedValue,
+  statement: number,
+): BxlMutationJson | CardReference {
+  if (evaluated.references.length > 0) {
+    throw new BxlMutationError(
+      'validate',
+      'card-marker-position',
+      statement,
+      'card(id) names the Card a relationship points at, so it stands where a value is written, not in an argument read as a plain value.',
+    );
+  }
+  return evaluated.value;
+}
+
+/**
  * Resolve the markers in a value the Card stores at `base`, giving back what
  * the planner reads, what the document stores, and the edges in between.
  */
@@ -1620,9 +1691,12 @@ function planCall(
         // The whole statement is best-effort, message included: an author who
         // marked the assert tolerant of stale values gets their wording back
         // even when the message itself reads an unavailable path.
-        const message = jsonValue(statement.args[1]!, root, context, number, {
-          policy: bestEffort ? 'best-effort' : 'strict',
-        }).value;
+        const message = plainValue(
+          jsonValue(statement.args[1]!, root, context, number, {
+            policy: bestEffort ? 'best-effort' : 'strict',
+          }),
+          number,
+        );
         throw new BxlMutationError(
           'plan',
           'assertion-failed',
@@ -1801,12 +1875,10 @@ function planCall(
             'insert_at requires a pinned base revision.',
           );
         }
-        const requested = jsonValue(
-          statement.args[1]!,
-          root,
-          context,
+        const requested = plainValue(
+          jsonValue(statement.args[1]!, root, context, number),
           number,
-        ).value;
+        );
         if (
           typeof requested !== 'number' ||
           !Number.isInteger(requested) ||
@@ -2081,7 +2153,10 @@ function planCall(
         );
       }
       const keyPath = keyPathItems[0]!.path as BxlMutationPath;
-      const order = jsonValue(statement.args[2]!, root, context, number).value;
+      const order = plainValue(
+        jsonValue(statement.args[2]!, root, context, number),
+        number,
+      );
       if (
         !Array.isArray(order) ||
         order.some(
