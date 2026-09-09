@@ -207,11 +207,6 @@ export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
-// Every `assert*` in this grammar reports a failure by throwing
-// `InvalidQueryError` and returns nothing on success. That makes `forEach` the
-// only correct way to walk a collection of them: `every` reads each callback's
-// `undefined` as false and stops, so it would check a collection's first entry
-// and silently accept the rest.
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -407,6 +402,10 @@ function assertPage(
   }
 }
 
+// The operator validators below report a failure by throwing and return
+// nothing on success, so a collection of them is walked with `forEach`.
+// `every` reads each callback's `undefined` as false and stops, which would
+// check a collection's first entry and silently accept the rest.
 function assertFilter(
   filter: any,
   pointer: string[],
@@ -468,20 +467,20 @@ function assertAnyFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('any');
+  let anyPointer = pointer.concat('any');
   if (!('any' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: AnyFilter must have any property`,
+      `${anyPointer.join('/') || '/'}: AnyFilter must have any property`,
     );
   }
 
   if (!Array.isArray(filter.any)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: any must be an array of Filters`,
+      `${anyPointer.join('/') || '/'}: any must be an array of Filters`,
     );
   } else {
     filter.any.forEach((value: any, index: number) => {
-      assertFilter(value, pointer.concat(`[${index}]`));
+      assertFilter(value, anyPointer.concat(`[${index}]`));
     });
   }
 }
@@ -495,20 +494,20 @@ function assertEveryFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('every');
+  let everyPointer = pointer.concat('every');
   if (!('every' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: EveryFilter must have every property`,
+      `${everyPointer.join('/') || '/'}: EveryFilter must have every property`,
     );
   }
 
   if (!Array.isArray(filter.every)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: every must be an array of Filters`,
+      `${everyPointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
     filter.every.forEach((value: any, index: number) => {
-      assertFilter(value, pointer.concat(`[${index}]`));
+      assertFilter(value, everyPointer.concat(`[${index}]`));
     });
   }
 }
@@ -522,14 +521,14 @@ function assertNotFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('not');
+  let notPointer = pointer.concat('not');
   if (!('not' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: NotFilter must have not property`,
+      `${notPointer.join('/') || '/'}: NotFilter must have not property`,
     );
   }
 
-  assertFilter(filter.not, pointer);
+  assertFilter(filter.not, notPointer);
 }
 
 function assertEqFilter(
@@ -541,22 +540,20 @@ function assertEqFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('eq');
+  let eqPointer = pointer.concat('eq');
   if (!('eq' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('eq').join('/') || '/'
-      }: EqFilter must have eq property`,
+      `${eqPointer.join('/') || '/'}: EqFilter must have eq property`,
     );
   }
   if (typeof filter.eq !== 'object' || filter.eq == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: eq must be an object`,
+      `${eqPointer.join('/') || '/'}: eq must be an object`,
     );
   }
   Object.entries(filter.eq).forEach(([key, value]) => {
-    assertKey(key, pointer);
-    assertJSONValue(value, pointer.concat(key));
+    assertKey(key, eqPointer);
+    assertJSONValue(value, eqPointer.concat(key));
   });
 }
 
@@ -602,22 +599,20 @@ function assertContainsFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('contains');
+  let containsPointer = pointer.concat('contains');
   if (!('contains' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('contains').join('/') || '/'
-      }: ContainsFilter must have contains property`,
+      `${containsPointer.join('/') || '/'}: ContainsFilter must have contains property`,
     );
   }
   if (typeof filter.contains !== 'object' || filter.contains == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: contains must be an object`,
+      `${containsPointer.join('/') || '/'}: contains must be an object`,
     );
   }
   Object.entries(filter.contains).forEach(([key, value]) => {
-    assertKey(key, pointer);
-    assertJSONValue(value, pointer.concat(key));
+    assertKey(key, containsPointer);
+    assertJSONValue(value, containsPointer.concat(key));
   });
 }
 
@@ -630,21 +625,19 @@ function assertRangeFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('range');
+  let rangePointer = pointer.concat('range');
   if (!('range' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('range').join('/') || '/'
-      }: RangeFilter must have range property`,
+      `${rangePointer.join('/') || '/'}: RangeFilter must have range property`,
     );
   }
   if (typeof filter.range !== 'object' || filter.range == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: range must be an object`,
+      `${rangePointer.join('/') || '/'}: range must be an object`,
     );
   }
   Object.entries(filter.range).forEach(([fieldPath, constraints]) => {
-    let innerPointer = [...pointer, fieldPath];
+    let innerPointer = [...rangePointer, fieldPath];
     if (typeof constraints !== 'object' || constraints == null) {
       throw new InvalidQueryError(
         `${innerPointer.join('/') || '/'}: range constraint must be an object`,

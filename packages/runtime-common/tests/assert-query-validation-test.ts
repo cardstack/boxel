@@ -2,14 +2,16 @@
 // outside itself — the `/_search` and `/_federated-search` endpoints, the AI
 // search tool's model-authored query, and the second opinion on a card
 // author's declared `query` operation. A shape it accepts reaches the query
-// engine, which compiles whatever it can make of it, so a filter that clears
-// validation malformed does not fail loudly: it runs and matches the wrong
-// rows.
+// engine, which compiles whatever it can make of it — for these shapes either
+// crashing there on a request that was malformed all along, or, where the
+// engine can make something of them, running and matching the wrong rows.
 //
 // Every collection in the grammar is therefore validated entry by entry, not
 // just at its head. Each case below puts the offending entry in a
 // **non-first** position, which is the only position that distinguishes a loop
-// that walks the whole collection from one that stops at the first entry.
+// that walks the whole collection from one that stops at the first entry, and
+// asserts the pointer that names it — operator segment included, so the
+// pointer identifies the entry rather than merely the node it sits under.
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { SharedTests } from '../helpers/index.ts';
 import { InvalidQueryError, assertQuery } from '../query.ts';
@@ -27,7 +29,8 @@ const tests = Object.freeze({
           filter: { any: [{ eq: { status: 'open' } }, 'not a filter'] },
         }),
       (err: Error) =>
-        err instanceof InvalidQueryError && /filter\/\[1\]/.test(err.message),
+        err instanceof InvalidQueryError &&
+        /filter\/any\/\[1\]: missing filter object/.test(err.message),
       'the second any element is rejected, and the pointer names it',
     );
   },
@@ -41,7 +44,10 @@ const tests = Object.freeze({
           filter: { range: { a: { gt: 1 }, b: { bogus: 2 } } },
         }),
       (err: Error) =>
-        err instanceof InvalidQueryError && /filter\/b/.test(err.message),
+        err instanceof InvalidQueryError &&
+        /filter\/range\/b\/bogus: range item must be gt, gte, lt, or lte/.test(
+          err.message,
+        ),
       'the second field path is rejected, and the pointer names it',
     );
   },
@@ -51,7 +57,7 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { range: { a: { gt: 1, bogus: 2 } } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/a\/bogus: range item must be gt, gte, lt, or lte/.test(
+        /filter\/range\/a\/bogus: range item must be gt, gte, lt, or lte/.test(
           err.message,
         ),
       'an unknown constraint key after a valid one is rejected, and the pointer names it',
@@ -60,7 +66,7 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { range: { a: { gt: 1, lt: {} } } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/a\/lt: JSON primitive/.test(err.message),
+        /filter\/range\/a\/lt: JSON primitive/.test(err.message),
       'and so is a non-primitive bound after a valid one',
     );
   },
@@ -75,7 +81,7 @@ const tests = Object.freeze({
         }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/title\/b: value not allowed in json/.test(err.message),
+        /filter\/eq\/title\/b: value not allowed in json/.test(err.message),
       'the second key of a nested object is rejected',
     );
     assert.throws(
@@ -89,7 +95,7 @@ const tests = Object.freeze({
         }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/meta\/second\/deep: value not allowed in json/.test(
+        /filter\/contains\/meta\/second\/deep: value not allowed in json/.test(
           err.message,
         ),
       'and so is a non-JSON leaf below the second key, at any depth',
@@ -103,7 +109,7 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { eq: { tags: [1, () => {}] } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/tags\/\[1\]: value not allowed in json/.test(err.message),
+        /filter\/eq\/tags\/\[1\]: value not allowed in json/.test(err.message),
       'the second element of a nested array is rejected',
     );
   },
@@ -155,9 +161,10 @@ const tests = Object.freeze({
     assert,
   ) => {
     // Walking a whole collection rejects more shapes than walking its head, so
-    // these pin the shapes that must keep clearing validation: the search
-    // query-builder's OR of a full-text match with two title matches, and a
-    // range naming several field paths with several bounds each.
+    // these pin shapes that must keep clearing validation: the search
+    // query-builder's OR of a full-text match with two title matches, a range
+    // naming several field paths with several bounds each, and an `every`
+    // carrying a multi-key nested JSON value alongside an `in`.
     let accepted = [
       {
         filter: {
