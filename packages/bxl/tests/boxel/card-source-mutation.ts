@@ -3329,7 +3329,11 @@ const voyageSchema = await mutationSchemaForCardSource(voyageDefinition, {
   },
 });
 
-function voyageMutation(programId: string, program: string) {
+function voyageMutation(
+  programId: string,
+  program: string,
+  runtimeLimits?: { maxSteps?: number },
+) {
   return mutateBxlCardSource(
     {
       data: {
@@ -3350,8 +3354,17 @@ function voyageMutation(programId: string, program: string) {
         id.replace('https://example.test/', '../'),
       context: { params: { who: zoe } },
       resolveCard: (id: string) => nestedLinkCards[id],
+      ...(runtimeLimits === undefined ? {} : { runtimeLimits }),
     },
   );
+}
+
+function voyageMutationWithLimits(
+  programId: string,
+  program: string,
+  runtimeLimits: { maxSteps?: number },
+) {
+  return voyageMutation(programId, program, runtimeLimits);
 }
 
 const crewed = voyageMutation(
@@ -3403,6 +3416,61 @@ strictEqual(
     'append(.crews;{"name":"alpha","members":card(params("who"))});',
   ).code,
   'collection-replacement-forbidden',
+);
+
+// A path only descends through a Field that has Fields of its own. A marker
+// under a scalar addresses something the schema does not describe, and reading
+// its key against the parent schema instead would answer with the sibling
+// beside it — resolving `label.friend` to the `friend` relationship and naming
+// a Field the path never reaches.
+strictEqual(
+  nestedLinkError(
+    'nested-marker-below-a-scalar',
+    `append(.examples;{${zeta},"parts":[],"label":{"friend":card(params("who"))}});`,
+  ).code,
+  'field-unknown',
+);
+
+// Every runtime limit lives on the frame an evaluation opens — steps,
+// milliseconds and output bytes all start again with each one — so what shares
+// a frame shares a ceiling. A value expression and the `card(…)` arguments
+// standing inside it are one evaluation: raising the marker count must not
+// raise what the statement is allowed to spend. Calibrated against a single
+// marker rather than a fixed count, so the claim survives a change in how
+// steps are counted.
+function markerBudgetOutcome(
+  markers: number,
+  maxSteps: number,
+): 'completed' | 'refused' {
+  const costly =
+    'card(([range(0;40)]|map(tostring)|join("-")|length|tostring) | ' +
+    `${JSON.stringify(zoe)})`;
+  const members = Array.from({ length: markers }, () => costly).join(',');
+  try {
+    voyageMutationWithLimits(
+      `marker-budget-${markers}-${maxSteps}`,
+      `append(.crews;{"name":"alpha","members":[${members}]});`,
+      { maxSteps },
+    );
+    return 'completed';
+  } catch (error) {
+    if (error instanceof BxlMutationError) return 'refused';
+    throw error;
+  }
+}
+
+let oneMarkerBudget = 0;
+for (const candidate of [500, 1000, 2000, 4000, 8000, 16000]) {
+  if (markerBudgetOutcome(1, candidate) === 'completed') {
+    oneMarkerBudget = candidate;
+    break;
+  }
+}
+ok(oneMarkerBudget > 0, 'one marker fits inside some step budget');
+strictEqual(
+  markerBudgetOutcome(8, oneMarkerBudget),
+  'refused',
+  'markers share the budget of the value they sit in',
 );
 
 console.log(

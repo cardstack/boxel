@@ -471,24 +471,42 @@ function assertJsonContext(context: BxlMutationContext) {
   }
 }
 
+/** Evaluate one expression against the budget the caller already opened. */
+type EvaluateItems = (ast: ExpressionAst, input: Item[]) => Item[];
+
+/**
+ * Run `body` under one runtime budget, handing it the evaluator to use.
+ *
+ * Every limit lives on the frame `withRuntimeDiagnostics` opens — steps,
+ * milliseconds and output bytes all start again with each one — so what shares
+ * a frame shares a ceiling. A value expression and the `card(…)` arguments
+ * standing inside it are one evaluation, and spend the host's allowance
+ * between them rather than each taking the whole of it.
+ */
+function withEvaluationBudget<T>(
+  context: PlannerContext,
+  body: (evaluate: EvaluateItems) => T,
+): T {
+  const evaluate: EvaluateItems = (ast, input) =>
+    Array.from(evaluateItemsWithRegistry(ast, input, context.registry));
+  const run = () =>
+    withRuntimeDiagnostics(() => body(evaluate), context.prepare.runtimeLimits);
+  // Scoped outside the diagnostics frame, and around every statement's
+  // evaluation, so `params`/`actor`/`instance` read this plan's context
+  // wherever in the program they appear.
+  const runtime = context.requestContext
+    ? withRequestContext(context.requestContext, run)
+    : run();
+  if (runtime.error) throw runtime.error;
+  return runtime.result as T;
+}
+
 function evaluateItems(
   ast: ExpressionAst,
   input: Item[],
   context: PlannerContext,
 ): Item[] {
-  const evaluate = () =>
-    withRuntimeDiagnostics(
-      () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
-      context.prepare.runtimeLimits,
-    );
-  // Scoped outside the diagnostics frame, and around every statement's
-  // evaluation, so `params`/`actor`/`instance` read this plan's context
-  // wherever in the program they appear.
-  const runtime = context.requestContext
-    ? withRequestContext(context.requestContext, evaluate)
-    : evaluate();
-  if (runtime.error) throw runtime.error;
-  return runtime.result ?? [];
+  return withEvaluationBudget(context, (evaluate) => evaluate(ast, input));
 }
 
 /** Every child expression of a node, so a whole tree can be searched. */
@@ -559,10 +577,10 @@ function containsCardCall(ast: ExpressionAst): boolean {
 function readCardId(
   ast: Extract<ExpressionAst, { type: 'filter' }>,
   input: BxlMutationJson,
-  context: PlannerContext,
+  evaluate: EvaluateItems,
   statement: number,
 ): string {
-  const items = evaluateItems(ast.args[0]!, [createItem(input)], context);
+  const items = evaluate(ast.args[0]!, [createItem(input)]);
   if (items.length !== 1 || typeof items[0]!.value !== 'string') {
     throw new BxlMutationError(
       'plan',
@@ -607,14 +625,14 @@ function cardMarkerNode(id: string): ExpressionAst {
 function resolveValueTreeCards(
   ast: ExpressionAst,
   input: BxlMutationJson,
-  context: PlannerContext,
+  evaluate: EvaluateItems,
   statement: number,
 ): ExpressionAst {
   if (isCardCall(ast)) {
-    return cardMarkerNode(readCardId(ast, input, context, statement));
+    return cardMarkerNode(readCardId(ast, input, evaluate, statement));
   }
   const resolve = (child: ExpressionAst) =>
-    resolveValueTreeCards(child, input, context, statement);
+    resolveValueTreeCards(child, input, evaluate, statement);
   switch (ast.type) {
     case 'object': {
       let changed = false;
@@ -687,53 +705,55 @@ function evaluateSingleJson(
   reads: ReadContext = {},
 ): EvaluatedValue {
   recordReads(argument, input, context, statement, reads);
-  if (isCardCall(argument.ast)) {
-    return {
-      value: {
-        kind: 'card-reference',
-        id: readCardId(argument.ast, input, context, statement),
-      },
-      references: [],
-    };
-  }
-  const resolved = resolveValueTreeCards(
-    argument.ast,
-    input,
-    context,
-    statement,
-  );
-  if (containsCardCall(resolved)) {
-    throw new BxlMutationError(
-      'validate',
-      'card-marker-position',
+  return withEvaluationBudget(context, (evaluate): EvaluatedValue => {
+    if (isCardCall(argument.ast)) {
+      return {
+        value: {
+          kind: 'card-reference',
+          id: readCardId(argument.ast, input, evaluate, statement),
+        },
+        references: [],
+      };
+    }
+    const resolved = resolveValueTreeCards(
+      argument.ast,
+      input,
+      evaluate,
       statement,
-      'card(id) names the Card a relationship points at, so it stands where a value is written: on its own, or inside an object or array the value expression builds.',
     );
-  }
-  const values = evaluateItems(resolved, [createItem(input)], context);
-  if (values.length !== 1) {
-    throw new BxlMutationError(
-      'plan',
-      'value-cardinality',
-      statement,
-      `Mutation value expressions must produce exactly one value; received ${values.length}.`,
+    if (containsCardCall(resolved)) {
+      throw new BxlMutationError(
+        'validate',
+        'card-marker-position',
+        statement,
+        'card(id) names the Card a relationship points at, so it stands where a value is written: on its own, or inside an object or array the value expression builds.',
+      );
+    }
+    const values = evaluate(resolved, [createItem(input)]);
+    if (values.length !== 1) {
+      throw new BxlMutationError(
+        'plan',
+        'value-cardinality',
+        statement,
+        `Mutation value expressions must produce exactly one value; received ${values.length}.`,
+      );
+    }
+    if (resolved === argument.ast) {
+      return {
+        value: clone(values[0]!.value) as BxlMutationJson,
+        references: [],
+      };
+    }
+    const lifted = liftCardMarkers(values[0]!.value);
+    // A marker the whole value resolved to is the whole-value form arrived at
+    // by another route — a conditional, say — and answers the same way.
+    const whole = lifted.references.find(
+      (reference) => reference.path.length === 0,
     );
-  }
-  if (resolved === argument.ast) {
-    return {
-      value: clone(values[0]!.value) as BxlMutationJson,
-      references: [],
-    };
-  }
-  const lifted = liftCardMarkers(values[0]!.value);
-  // A marker the whole value resolved to is the whole-value form arrived at by
-  // another route — a conditional, say — and answers the same way.
-  const whole = lifted.references.find(
-    (reference) => reference.path.length === 0,
-  );
-  return whole
-    ? { value: { kind: 'card-reference', id: whole.id }, references: [] }
-    : { value: lifted.value, references: lifted.references };
+    return whole
+      ? { value: { kind: 'card-reference', id: whole.id }, references: [] }
+      : { value: lifted.value, references: lifted.references };
+  });
 }
 
 function resolveLocations(
@@ -830,6 +850,16 @@ function nestedSchema(field: BxlMutationField): BxlMutationSchema | undefined {
   if (field.fields) return { fields: field.fields };
   return undefined;
 }
+
+/**
+ * What a Field with no Fields of its own descends into: nothing.
+ *
+ * A path that keeps going past such a Field addresses something the schema
+ * does not describe, and reading the next key against the *parent* schema
+ * would answer it with a sibling — `.label.friend` on a scalar `label`
+ * resolving the `friend` beside it, and naming a Field the path never reaches.
+ */
+const NO_FIELDS: BxlMutationSchema = { fields: [] };
 
 function resolveField(
   path: BxlMutationPath,
@@ -937,8 +967,7 @@ function resolveField(
           `Unexpected collection index at ${pathKey(path.slice(0, index + 1))}.`,
         );
       }
-      const item = nestedSchema(field);
-      if (item) schema = item;
+      schema = nestedSchema(field) ?? NO_FIELDS;
       field = undefined;
       continue;
     }
@@ -976,8 +1005,7 @@ function resolveField(
         );
       }
     }
-    const next = nestedSchema(field);
-    if (next) schema = next;
+    schema = nestedSchema(field) ?? NO_FIELDS;
   }
   return {
     field,
