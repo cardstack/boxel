@@ -238,7 +238,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch({ reconciler: args.reconciler, searchCache }),
+    handleSearch({
+      reconciler: args.reconciler,
+      searchCache,
+      dbAdapter: args.dbAdapter,
+    }),
   );
   router.all(
     '/_federated-info',

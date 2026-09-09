@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -549,6 +550,89 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       } finally {
         resetSearchBoundsForTests();
       }
+    });
+
+    test('identical live searches within the TTL share one cached body', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let first = await postSearch(searchBody);
+      assert.strictEqual(first.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        first.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the first request computes',
+      );
+
+      let second = await postSearch(searchBody);
+      assert.strictEqual(second.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        second.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'an identical follow-up is served from the live cache',
+      );
+      assert.deepEqual(
+        second.body,
+        first.body,
+        'the cached body is byte-identical',
+      );
+
+      // A request differing in any body member addresses a different entry.
+      let differentRealms = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+      });
+      assert.strictEqual(
+        differentRealms.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'a different realm list is a different cache identity',
+      );
+    });
+
+    test('a write to a searched realm invalidates the live search cache', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let first = await postSearch(searchBody);
+      assert.strictEqual(first.status, 200, 'HTTP 200 status');
+      assert.strictEqual(first.body.meta.page.total, 4, 'four people');
+      let primed = await postSearch(searchBody);
+      assert.strictEqual(
+        primed.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'the entry is cached before the write',
+      );
+
+      // The default write waits for the incremental index, which advances the
+      // realm's generation — the device the cache key folds in for freshness.
+      await testRealm.write(
+        'mark.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Mark' },
+            meta: {
+              adoptsFrom: { module: rri('./person'), name: 'Person' },
+            },
+          },
+        }),
+      );
+
+      let afterWrite = await postSearch(searchBody);
+      assert.strictEqual(
+        afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the generation bump addresses a fresh entry',
+      );
+      assert.strictEqual(
+        afterWrite.body.meta.page.total,
+        5,
+        'the new instance is in the fresh result',
+      );
     });
   });
 });
