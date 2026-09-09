@@ -556,57 +556,6 @@ export class Batch {
     return this.#tombstonedLiveTypes.get(url);
   }
 
-  /**
-   * The content the previous pass published for `url`, read from production
-   * `boxel_index`, for carrying a good row forward instead of replacing it
-   * with an error.
-   *
-   * Readable at all mid-pass because `invalidate()` writes its tombstones to
-   * the working table: the resolution order is working-non-deleted >
-   * production > working-deleted, so production still holds the last published
-   * row until `done()` promotes. That is the only reason carry-forward is
-   * possible from here — by the time an error path runs, the working table has
-   * already tombstoned every type this URL had, so there is nothing left to
-   * "keep" and the prior content has to be re-written to survive.
-   *
-   * Returns undefined when the URL has no live production row of that type,
-   * which is the brand-new-card case: there is no good content to protect, and
-   * an error row is the right output.
-   */
-  async priorPublishedContent(
-    url: URL,
-    type: 'instance' | 'file',
-  ): Promise<
-    | Pick<
-        BoxelIndexTable,
-        'pristine_doc' | 'search_doc' | 'deps' | 'types' | 'display_names'
-      >
-    | undefined
-  > {
-    await this.ready;
-    let rows = (await this.#query([
-      `SELECT pristine_doc, search_doc, deps, types, display_names
-         FROM boxel_index WHERE`,
-      ...every([
-        [`realm_url =`, param(this.realmURL.href)],
-        any([
-          [`url =`, param(url.href)],
-          [`file_alias =`, param(url.href)],
-        ]),
-        [`type =`, param(type)],
-        any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        // An error row is not content worth carrying forward: preserving it
-        // would re-publish the very failure this path exists to avoid.
-        any([['has_error = false'], ['has_error IS NULL']]),
-      ]),
-      `LIMIT 1`,
-    ] as Expression)) as unknown as Pick<
-      BoxelIndexTable,
-      'pristine_doc' | 'search_doc' | 'deps' | 'types' | 'display_names'
-    >[];
-    return rows[0];
-  }
-
   // Populate `#tombstonedLiveTypes` for `urls` straight from the production
   // index, WITHOUT tombstoning or computing a fan-out — the same live-type
   // memory `invalidate()` records, but for a batch that never invalidated.

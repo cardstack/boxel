@@ -770,8 +770,18 @@ export interface Diagnostics
   // Recorded so a decision made from these values is checkable afterwards
   // rather than only asserted. `hostShellHash*` says what the server was told;
   // these say what its pages were actually running.
-  warmedHostShellHash?: string;
-  warmedHostShellHashAtCompletion?: string;
+  //
+  // `null` and absent mean different things, and the difference decides
+  // whether a reader may act. `null` is a sampled answer — the pool has never
+  // been re-warmed against a token this server has heard, which is a genuinely
+  // stale pool. Absent means nothing sampled it, so there is no verdict to
+  // read: a server that predates these fields stamps nothing, and because the
+  // prerender server and the worker reading these deploy separately, a worker
+  // sees such responses throughout a rolling deploy. Treating absence as
+  // `null` would read "no information" as "stale" and suppress a row for a
+  // card that is genuinely broken, so a reader must require presence.
+  warmedHostShellHash?: string | null;
+  warmedHostShellHashAtCompletion?: string | null;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table

@@ -330,6 +330,48 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The distinction a reader has to be able to make. Both of these describe
+    // a pool that is not on the current shell, but only one of them is an
+    // answer: `null` was sampled, absence was not. A reader that conflates
+    // them suppresses a row for a genuinely broken card whenever it meets a
+    // response from something that does not sample — a server predating these
+    // fields, which a worker sees throughout a rolling deploy.
+    test('a sampled-but-unwarmed pool stamps null, not absence', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: null,
+        warmedAtCompletion: null,
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.true(
+        'warmedHostShellHash' in d,
+        'the key is present, so a reader knows a verdict was reached',
+      );
+      assert.strictEqual(d.warmedHostShellHash, null);
+      assert.strictEqual(d.warmedHostShellHashAtCompletion, null);
+    });
+
+    test('an unsampled pool stamps no warmed keys at all', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.false(
+        'warmedHostShellHash' in d,
+        'absent rather than null — there is no verdict to read',
+      );
+      assert.false('warmedHostShellHashAtCompletion' in d);
+      assert.strictEqual(
+        d.hostShellHash,
+        'b778fe76',
+        'the reported tokens are unaffected',
+      );
+    });
+
     test('a server that knows no token stamps nothing', function (assert) {
       let response = {
         meta: { requestId: 'abc' },
