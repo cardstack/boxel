@@ -21,6 +21,7 @@ import {
   isScopedReference,
   maybeRelativeReference as makeRelativeReference,
 } from './url.ts';
+import { rri } from './realm-identifiers.ts';
 
 export default async function serialize({
   doc,
@@ -348,19 +349,19 @@ async function processRelationships({
       // Handle both truthy and null values for links.self
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
-        // A scoped reference is already canonical and portable, so it is
-        // stored verbatim — the same rule the read path applies when serving a
-        // document. Resolving one here would store whatever URL the linked
-        // realm happens to answer to in the writing environment, baking a
-        // dev or staging host into a realm that is version controlled.
-        if (
-          realmURL &&
-          selfLink &&
-          !isScopedReference(selfLink, virtualNetwork)
-        ) {
+        if (realmURL && selfLink) {
           try {
             selfLink = makeRelativeReference(
-              virtualNetwork.resolveURL(selfLink, relativeTo),
+              // A scoped reference is passed through unresolved.
+              // `maybeRelativeReference` relativizes it when it points into
+              // the writing realm and otherwise preserves the form it was
+              // given, which is what keeps a cross-realm link canonical.
+              // Resolving first discards that form, so the fallback could only
+              // return a URL — whatever the linked realm answers to in this
+              // environment, baked into a version-controlled realm.
+              isScopedReference(selfLink, virtualNetwork)
+                ? rri(selfLink)
+                : virtualNetwork.resolveURL(selfLink, relativeTo),
               relativeTo,
               realmURL,
             );
