@@ -1322,14 +1322,22 @@ function linkSlots(
   return slots;
 }
 
-/** Whether a slot holds no link at all, in the shape its Field reads as. */
+/**
+ * Whether a slot holds no link at all.
+ *
+ * `null` says so at either kind of Field — a value that names no Card names
+ * none whether the Field holds one or many, and that is how a value written
+ * from nothing spells an empty link. A collection also reads empty as `[]`,
+ * the shape the projection gives it.
+ */
 function linkIsEmpty(
   held: BxlMutationJson | undefined,
   slot: LinkSlot,
 ): boolean {
-  return slot.type === 'linksTo'
-    ? held === null
-    : Array.isArray(held) && held.length === 0;
+  if (held === null) return true;
+  return (
+    slot.type === 'linksToMany' && Array.isArray(held) && held.length === 0
+  );
 }
 
 /** Whether there is an edge at a slot for a write to leave alone. */

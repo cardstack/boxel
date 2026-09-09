@@ -4252,6 +4252,31 @@ deepStrictEqual(relationship(crewCleared.document, 'parts.0.owner'), {
   links: { self: '../Friend/zoe', related: 'own-1' },
 });
 
+// A value written from nothing spells an empty link `null`, whichever kind of
+// Field it sits at — it names no Card either way — so a collection reads that
+// the same as the `[]` its projection shows.
+const crewNulled = holdingMutation(
+  'a-null-empties-a-link-collection-too',
+  '.parts[0] |= (. + {"crew":null});',
+);
+deepStrictEqual(
+  (crewNulled.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [['owner']],
+);
+strictEqual(
+  Object.keys(crewNulled.document.data.relationships ?? {}).filter((key) =>
+    key.startsWith('parts.0.crew'),
+  ).length,
+  0,
+);
+strictEqual(
+  (
+    crewNulled.document.data.attributes?.parts as Array<Record<string, unknown>>
+  )[0]!.crew,
+  undefined,
+);
+
 // A compound assignment merges the current value into its result, links and
 // all, so the same reading applies to what the merge produced.
 const merged = nestedLinkMutation(
