@@ -53,9 +53,25 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
     let cancelled = false;
     let container = canvas.parentElement!;
     let finish = () => {
+      // TEMP DEBUG (will be reverted)
+      let count = () =>
+        document.querySelectorAll('[data-screenshot-pending]').length;
+      console.warn(
+        'PDFCAP finish cancelled=' +
+          cancelled +
+          ' connected=' +
+          container.isConnected +
+          ' tag=' +
+          container.tagName +
+          '.' +
+          container.className +
+          ' pendingBefore=' +
+          count(),
+      );
       if (!cancelled) {
         container.removeAttribute('data-screenshot-pending');
       }
+      console.warn('PDFCAP finish pendingAfter=' + count());
     };
     (async () => {
       // Hoisted so the finally can release it: capture renders are route
