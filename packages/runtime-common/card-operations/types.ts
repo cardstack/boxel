@@ -1,4 +1,9 @@
 import type { CodeRef } from '../code-ref.ts';
+import type { ScreenshotManifest } from '../capture-spec.ts';
+import type {
+  SingleCardDocument,
+  SingleFileMetaDocument,
+} from '../document-types.ts';
 import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
@@ -184,4 +189,178 @@ export interface LowerOperationDeclarationsResult {
   // same issues are on the operations that carry them; this is the flat view
   // a module's diagnostics are built from.
   issues: OperationLoweringIssue[];
+}
+
+// ============================================================================
+// Invoking an operation.
+//
+// Everything above describes an operation as it is *stored*. What follows
+// describes one being *run*: what a caller names, what comes back, and how a
+// refusal is spelled. The two are separate on purpose — a stored definition is
+// built once when a module is indexed, while a request carries the actor and
+// the payload, which are known only at invocation.
+// ============================================================================
+
+// The six built-in behaviors, under the operation runtime's own name. The
+// authoring API owns the list because that is where a declaration names one;
+// re-stating it here lets a consumer of the runtime types stay clear of the
+// card authoring surface, which only loads inside a card module.
+export type BaseOperation = BaseOperationName;
+
+// What an operation runs against. An `instance` target is an existing card or
+// file, addressed by URL — the identity of a thing that already has stored
+// state. A `type` target names a class instead, for the operations that have
+// no instance to bind to yet: a plain `create` mints a card of that type in
+// that realm, and a `query` is rooted in the type it searches for.
+export type OperationTarget =
+  | { kind: 'instance'; url: string }
+  | { kind: 'type'; codeRef: CodeRef; realm: string };
+
+export interface OperationRequest {
+  target: OperationTarget;
+  // The name the operation is invoked under — a declared name, or one of the
+  // six base names for the built-in behavior. Never `base`: a `delete` built
+  // on `transform` is invoked as `delete`.
+  name: string;
+  // The payload, keyed the way the definition's `params` schema declares it.
+  params?: Record<string, unknown>;
+  // The invoking user, as the identity `actor()` resolves to.
+  actor: string;
+  // The caller's own id for this request. Echoed on the realm's index event so
+  // a client can tell its own write's event from anyone else's, which is what
+  // lets it retire the matching optimistic entry rather than reloading.
+  clientRequestId: string;
+  // The version the caller believes it is writing on top of. Absent means an
+  // unconditional write; present makes the write conditional, and the result's
+  // `baseMatched` reports whether the target was still at that version.
+  baseVersion?: string;
+}
+
+// A read's answer: the assembled JSON:API document, exactly as the card+json
+// GET serves it.
+export interface OperationDocumentResult {
+  document: SingleCardDocument | SingleFileMetaDocument;
+}
+
+// A headers-only read's answer. These are the values the card+json response
+// headers are computed from — the validator, the modification time, and the
+// index-data generation and screenshot manifest that go into it. No body is
+// assembled to produce them.
+export interface OperationHeadResult {
+  indexedAt: number | null;
+  lastModified: number | null;
+  generation: number | null;
+  screenshots: ScreenshotManifest | null;
+}
+
+// A write's answer: the identity of what was written and the version it now
+// holds, without reprinting the document. A caller that wants the new state
+// reads it; a caller that wrote it already has it, and the common case is a
+// client reconciling its own optimistic entry, which needs the version and
+// nothing else.
+export interface OperationIdentityResult {
+  id: string;
+  meta: {
+    // The token a later request passes as `baseVersion`.
+    version: string;
+    generation: number | null;
+    lastModified: number | null;
+    // Present only on a conditional write: whether the target was still at
+    // the `baseVersion` the request named. A false here is not an error — the
+    // write happened, and the caller decides what a moved base means.
+    baseMatched?: boolean;
+  };
+}
+
+// A `delete` answers with `null`: there is no state left to describe.
+export type OperationResult =
+  | OperationDocumentResult
+  | OperationHeadResult
+  | OperationIdentityResult
+  | null;
+
+export function isDocumentResult(
+  result: OperationResult,
+): result is OperationDocumentResult {
+  return result != null && 'document' in result;
+}
+
+export function isHeadResult(
+  result: OperationResult,
+): result is OperationHeadResult {
+  return result != null && 'indexedAt' in result;
+}
+
+export function isIdentityResult(
+  result: OperationResult,
+): result is OperationIdentityResult {
+  return result != null && 'id' in result;
+}
+
+export type OperationErrorCode =
+  // No operation of that name, and the name is not a base operation the
+  // target's def type carries.
+  | 'unknown-operation'
+  // The name resolves to a behavior the target's def type does not carry — a
+  // `transform` on a file, anything at all on a field.
+  | 'operation-not-allowed'
+  // The stored definition is flagged `invalid`: lowering recorded findings
+  // against the declaration, so there is an operation by that name but no
+  // runnable form of it. Distinct from `unknown-operation` so an author sees
+  // what is wrong with the declaration rather than being told it does not
+  // exist.
+  | 'invalid-operation'
+  // The payload does not satisfy the definition's `params` schema, or a
+  // marker in the operation references something this invocation cannot
+  // supply.
+  | 'invalid-params'
+  // Nothing at the target's URL.
+  | 'target-not-found'
+  // The target's source file is on disk but the realm has not indexed it yet.
+  // Separate from `target-not-found` because waiting resolves it: the write
+  // landed and the index row is coming.
+  | 'target-not-indexed'
+  // The target exists but its index row is an error row, so there is no clean
+  // state to work from. The row's own HTTP status carries through, which is
+  // why this is distinct from `internal-error`: a recorded 403 is the caller's
+  // to act on, not the realm's.
+  | 'target-errored'
+  // A precondition the operation's program asserts did not hold.
+  | 'assertion-failed'
+  // The request named a `baseVersion` the target is no longer at, on an
+  // operation that requires the base to match.
+  | 'version-conflict'
+  // The operation could not be carried out for a reason that is not the
+  // caller's — an unreadable definition, an errored index row, a failure
+  // inside the executor.
+  | 'internal-error';
+
+// A refusal, shaped like a JSON:API error object so an HTTP surface can put it
+// straight into an `errors` array. `status` is the number the realm's own
+// error bodies carry rather than JSON:API's string, so the two agree.
+export interface OperationError {
+  // The target the operation ran against, where there was one.
+  id?: string;
+  status: number;
+  code: OperationErrorCode;
+  title: string;
+  detail: string;
+  meta?: Record<string, unknown>;
+}
+
+// How a refusal travels. Thrown rather than returned: a batch of operations is
+// all-or-nothing, so the first refusal has to abandon the rest, and an
+// exception is what unwinds the work already staged.
+export class OperationFailure extends Error {
+  readonly error: OperationError;
+
+  constructor(error: OperationError) {
+    super(`${error.code}: ${error.detail}`);
+    this.name = 'OperationFailure';
+    this.error = error;
+  }
+}
+
+export function isOperationFailure(err: unknown): err is OperationFailure {
+  return err instanceof OperationFailure;
 }
