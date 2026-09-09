@@ -775,11 +775,13 @@ async function lowerValue(
 ): Promise<string> {
   // A link collection holds a *list* of identities, so anything that is not a
   // list cannot be one — a bare marker included, since that names a single
-  // card. Checked before the marker dispatch so one value cannot slip through
-  // as a lone `card(…)` where a collection belongs.
+  // card. Recorded and then lowered against the slot anyway: dropping to
+  // `opaque` here would strip a marker of its `card(…)` wrapper, and the
+  // unwrapped spelling is the one the executor accepts and writes, so the
+  // stored program for a refused operation would go from one the planner
+  // rejects to one that quietly writes the wrong thing.
   if (slot.kind === 'links' && !Array.isArray(value)) {
     sink.add('link-requires-identity', path, notAList(path));
-    slot = { kind: 'opaque' };
   }
   if (isMarker(value)) {
     return await lowerReference(value, slot, path, paramNames, sink, context);
