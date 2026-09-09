@@ -6,8 +6,17 @@
 // Rasterization goes through the screenshot engine by design: the browser
 // has no decode path for OOXML, so the extracted-structure rendering IS the
 // office viewer, and screenshotting it is the pattern rather than an
-// exception. Everything here is synchronous DOM over already-extracted
-// fields, so no readiness signal is needed — the engine's settle covers it.
+// exception. The render is synchronous DOM over already-extracted fields, so
+// a poster that has a renderable first unit captures on the engine's settle
+// with no readiness signal. A file whose extraction yielded no such unit — an
+// oversize document the extractor skipped, or a format with no preview
+// payload — instead holds `data-screenshot-pending`, so the engine's bounded
+// wait declines the slot: the typed fitted placeholder (format badge + count)
+// stays the tile rather than a filename-on-white capture displacing it
+// through `useAsThumbnail`. The attribute is set once at the initial (and
+// only) render off a synchronous getter — not flipped from an async
+// continuation — so the tracked-update caveat on `data-screenshot-pending`
+// does not apply.
 import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -91,8 +100,26 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
     );
   }
 
+  // A poster earns a capture only when the extracted structure carries a
+  // renderable first unit; otherwise the slot declines (see the file header)
+  // so the heading-only white page never displaces the typed placeholder.
+  get hasPosterContent(): boolean {
+    if (this.kind === 'presentation') {
+      let slide = this.titleSlide;
+      return !!slide && (!!slide.title || (slide.bullets?.length ?? 0) > 0);
+    }
+    if (this.kind === 'spreadsheet') {
+      return this.sheetRows.length > 0;
+    }
+    return this.blocks.length > 0;
+  }
+
   <template>
-    <div class='office-poster' data-kind={{this.kind}}>
+    <div
+      class='office-poster'
+      data-kind={{this.kind}}
+      data-screenshot-pending={{unless this.hasPosterContent 'true'}}
+    >
       {{#if (eq this.kind 'presentation')}}
         <div class='slide'>
           <div class='slide-title'>{{if
