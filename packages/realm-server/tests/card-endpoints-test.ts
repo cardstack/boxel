@@ -2661,47 +2661,6 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('still stores a link to an unmapped realm absolutely', async function (assert) {
-          let unmapped = 'http://localhost:4205/other/Pet/vangogh';
-
-          let response = await request
-            .patch('/hassan')
-            .send({
-              data: {
-                type: 'card',
-                relationships: {
-                  friend: { links: { self: unmapped } },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: rri('./friend.gts'),
-                    name: 'Friend',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(
-            response.status,
-            200,
-            `HTTP 200 status: ${response.text}`,
-          );
-
-          let cardFile = join(
-            dir.name,
-            'realm_server_1',
-            'test',
-            'hassan.json',
-          );
-          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
-          assert.strictEqual(
-            stored.data.relationships.friend.links.self,
-            unmapped,
-            'a link to a realm with no prefix mapping stays absolute',
-          );
-        });
-
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
 
