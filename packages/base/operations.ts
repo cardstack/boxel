@@ -248,6 +248,12 @@ export interface AssertClause {
   readonly unique: string;
   readonly by: OperationValue;
   readonly message?: string;
+  // Asks for the values the check reads to be gathered before it runs. A
+  // program reads the target's stored document, which holds neither a
+  // computed value nor a linked card's fields, so a `unique` path that names
+  // one is only checkable against a snapshot — and gathering one costs reads
+  // the author is opting into here rather than paying invisibly.
+  readonly snapshot?: boolean;
 }
 
 export type SetClause = { readonly [fieldName: string]: OperationValue };
@@ -857,7 +863,12 @@ function assertValidClauses(
         `${label}: \`assert\` must be an object naming the collection that must stay \`unique\` and the value to key it \`by\``,
       );
     }
-    assertOnlyKeys(label, 'assert', assertion, ['unique', 'by', 'message']);
+    assertOnlyKeys(label, 'assert', assertion, [
+      'unique',
+      'by',
+      'message',
+      'snapshot',
+    ]);
     if (typeof assertion.unique !== 'string' || assertion.unique.length === 0) {
       throw new Error(
         `${label}: \`assert.unique\` must name the collection field that must not already hold the value`,
@@ -873,6 +884,12 @@ function assertValidClauses(
       typeof assertion.message !== 'string'
     ) {
       throw new Error(`${label}: \`assert.message\` must be a string`);
+    }
+    if (
+      assertion.snapshot !== undefined &&
+      typeof assertion.snapshot !== 'boolean'
+    ) {
+      throw new Error(`${label}: \`assert.snapshot\` must be a boolean`);
     }
   }
   for (let clause of ['set', 'fill'] as const) {

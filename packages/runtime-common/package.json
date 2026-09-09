@@ -39,6 +39,7 @@
     "@babel/traverse": "catalog:",
     "@babel/types": "^7.20.0",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/bxl": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@eslint/js": "catalog:",

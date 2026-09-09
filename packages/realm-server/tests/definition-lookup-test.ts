@@ -12,6 +12,7 @@ import {
   type ModuleDefinitionResult,
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
+  type OperationLoweringDiagnostic,
   type Prerenderer,
   type Reader,
   rri,
@@ -2446,6 +2447,11 @@ module(basename(import.meta.filename), function () {
     let nextPersonDefinitionParts:
       | { fields: Record<string, string>; fieldDefs: Record<string, any> }
       | undefined;
+    // The lowered `@operation` declarations the mock hangs on the Person
+    // definition, for driving them through the same persistence path. Left
+    // undefined, the definition carries no `operations` key at all — which is
+    // what every module that declares no operations produces.
+    let nextPersonOperations: Record<string, any> | undefined;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -2473,6 +2479,9 @@ module(basename(import.meta.filename), function () {
                   displayName: 'Person',
                   fields: nextPersonDefinitionParts?.fields ?? {},
                   fieldDefs: nextPersonDefinitionParts?.fieldDefs ?? {},
+                  ...(nextPersonOperations
+                    ? { operations: nextPersonOperations }
+                    : {}),
                 },
                 types: [],
               },
@@ -2516,6 +2525,7 @@ module(basename(import.meta.filename), function () {
       await adapter.close();
       nextPrerenderMeta = undefined;
       nextPersonDefinitionParts = undefined;
+      nextPersonOperations = undefined;
     });
 
     test('persists diagnostics from prerender meta on module rows', async function (assert) {
@@ -2645,6 +2655,120 @@ module(basename(import.meta.filename), function () {
         definition.fieldDefs[reviewerDefId].searchable,
         'address',
         'searchable survives into the persisted modules.definitions JSON',
+      );
+    });
+
+    test("round-trips a type's lowered operations through modules.definitions", async function (assert) {
+      // The definition-cache entry is the whole channel an operation reaches
+      // the realm through — a card's JSON names its type, and the type's
+      // entry carries the operation — so what matters is that the lowered
+      // JSON survives the persistence path byte for byte, program text
+      // included.
+      nextPersonOperations = {
+        addComment: {
+          base: 'transform',
+          params: {
+            body: {
+              kind: 'field',
+              codeRef: { module: `${realmURL}string`, name: 'default' },
+            },
+          },
+          program: {
+            source:
+              'append(.comments;{body:params("body"),author:card(actor("id"))});',
+            syntax: 'solidified',
+          },
+          deterministic: true,
+        },
+      };
+      let definition = await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+      assert.deepEqual(
+        definition?.operations,
+        nextPersonOperations,
+        'the lookup answers with the operations the entry carries',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT definitions FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { definitions: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].definitions;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      let personEntry = persisted[Object.keys(persisted)[0]];
+      assert.deepEqual(
+        personEntry.definition.operations,
+        nextPersonOperations,
+        'operations survive into the persisted modules.definitions JSON',
+      );
+    });
+
+    test('a type that declares no operations has no operations key at all', async function (assert) {
+      let definition = await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+      assert.ok(definition, 'the lookup answered');
+      assert.notOk(
+        definition ? 'operations' in definition : undefined,
+        'the entry for every existing card is unchanged',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT definitions FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { definitions: unknown }[];
+      let raw = rows[0].definitions;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      let personEntry = persisted[Object.keys(persisted)[0]];
+      assert.notOk(
+        'operations' in personEntry.definition,
+        'and nothing is persisted for it either',
+      );
+    });
+
+    test('persists operationIssues from prerender meta on module rows', async function (assert) {
+      // Lowering records a bad declaration rather than throwing, and this is
+      // the channel that puts the finding where an author sees it — the same
+      // one `searchablePathIssues` travels.
+      let operationIssues: OperationLoweringDiagnostic[] = [
+        {
+          codeRef: `${realmURL}person/Person`,
+          code: 'unknown-field',
+          operation: 'addComment',
+          path: 'append.to',
+          message: '"commnets" is not a field of this type',
+        },
+      ];
+      nextPrerenderMeta = { diagnostics: { operationIssues } };
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      let rows = (await adapter.execute(
+        `SELECT diagnostics FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { diagnostics: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].diagnostics;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      assert.deepEqual(
+        persisted?.operationIssues,
+        operationIssues,
+        'operationIssues persisted to modules.diagnostics',
       );
     });
   });
