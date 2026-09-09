@@ -514,27 +514,30 @@ test.describe('Host mode', () => {
 // flakiest tests.
 test.describe('Host mode routing rules', () => {
   // Each test here publishes a realm and then waits for its server-rendered
-  // HTML, and every one of those steps carries its own deadline. They only do
-  // what they are for if the innermost one expires first: each reports which
-  // specific thing did not happen, where the enclosing test timeout can only
-  // report that time ran out. So this budget has to exceed their sum, worst
-  // case, for the test in this group that spends the most:
+  // HTML, and every step of that carries a deadline of its own. Those deadlines
+  // are the useful ones: each says which specific thing did not happen, where
+  // the enclosing test timeout can only say that time ran out. They report only
+  // if they expire first, so this budget is sized to sit above them — the suite
+  // default of 60s sits below, which is why a failure here has been a bare
+  // timeout carrying nothing.
   //
-  //   120s  publish readiness — `_readiness-check?awaitPrerenderHtml=true`
-  //          polled until the realm is both indexed and rendered
-  //    45s  marker wait, canonical URL
-  //    45s  marker wait, no-slash variant (the trailing-slash test only)
-  //    15s  the closing `expect(...).toBeVisible()`, at the configured
-  //          expect timeout
-  //   ----
-  //   225s  plus realm creation, which has no explicit deadline of its own
+  // The costs it has to clear, largest first: publish readiness polls
+  // `_readiness-check?awaitPrerenderHtml=true` for 120s; each marker wait is
+  // 45s and the trailing-slash test performs two; the closing `toBeVisible`
+  // runs at the 15s expect timeout.
   //
-  // Hence 300s. That is a ceiling for a pathological run, not a target — these
-  // pass in well under a minute when the stack is healthy — and it is reached
-  // only when something is genuinely wedged, which is the case that most needs
-  // a legible failure rather than a bare timeout.
+  // Deliberately a ceiling with headroom rather than a sum, because no exact
+  // worst case exists to add up. `waitUntil` checks its deadline only between
+  // attempts, so any poll can overshoot by one whole in-flight request — a
+  // readiness request alone can hold ~70s (`READINESS_REQUEST_BUDGET_MS` plus
+  // `awaitPublishedHtmlReady`'s wait) before answering. And realm creation's
+  // navigations and `locator.waitFor()` calls have no deadline at all: the
+  // config sets neither `actionTimeout` nor `navigationTimeout`, so this budget
+  // is the only thing bounding them.
   //
-  // Adding a wait here means re-checking this sum.
+  // These pass in well under a minute against a healthy stack. If this starts
+  // firing, the answer is to give those waits real per-attempt deadlines so a
+  // worst case can be computed — not to raise this number again.
   test.describe.configure({ timeout: 300_000 });
 
   // CS-10054 + CS-10055: routing rules in the realm config card resolve a
