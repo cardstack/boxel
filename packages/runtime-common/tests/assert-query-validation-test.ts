@@ -51,13 +51,16 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { range: { a: { gt: 1, bogus: 2 } } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /range item must be gt, gte, lt, or lte/.test(err.message),
-      'an unknown constraint key after a valid one is rejected',
+        /filter\/a\/bogus: range item must be gt, gte, lt, or lte/.test(
+          err.message,
+        ),
+      'an unknown constraint key after a valid one is rejected, and the pointer names it',
     );
     assert.throws(
       () => assertQuery({ filter: { range: { a: { gt: 1, lt: {} } } } }),
       (err: Error) =>
-        err instanceof InvalidQueryError && /JSON primitive/.test(err.message),
+        err instanceof InvalidQueryError &&
+        /filter\/a\/lt: JSON primitive/.test(err.message),
       'and so is a non-primitive bound after a valid one',
     );
   },

@@ -10,11 +10,8 @@ export function assertJSONValue(v: any, pointer: string[]) {
     case 'boolean':
       return;
     case 'object':
-      // Every element and every entry is checked, at every level of
-      // recursion — a container is JSON only if all of it is. `forEach` is
-      // what makes that so: these callbacks report a failure by throwing and
-      // return nothing, so `every` would read the first `undefined` as false
-      // and stop, leaving the rest of the subtree unchecked.
+      // A container is JSON only if all of it is, so every element and every
+      // entry is checked at every level of recursion.
       if (Array.isArray(v)) {
         v.forEach((value, index) => {
           assertJSONValue(value, pointer.concat(`[${index}]`));

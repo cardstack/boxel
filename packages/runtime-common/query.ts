@@ -207,6 +207,11 @@ export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
+// Every `assert*` in this grammar reports a failure by throwing
+// `InvalidQueryError` and returns nothing on success. That makes `forEach` the
+// only correct way to walk a collection of them: `every` reads each callback's
+// `undefined` as false and stops, so it would check a collection's first entry
+// and silently accept the rest.
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -398,11 +403,6 @@ function assertPage(
   }
 }
 
-// Every `assert*` below reports a failure by throwing `InvalidQueryError` and
-// returns nothing on success. That makes `forEach` the only correct way to walk
-// a collection of them: `every` reads each callback's `undefined` as false and
-// stops, so it would check a collection's first entry and silently accept the
-// rest.
 function assertFilter(
   filter: any,
   pointer: string[],
@@ -657,7 +657,7 @@ function assertRangeFilter(
         default:
           throw new InvalidQueryError(
             `${
-              innerPointer.join('/') || '/'
+              innerPointer.concat(key).join('/') || '/'
             }: range item must be gt, gte, lt, or lte`,
           );
       }
