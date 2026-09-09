@@ -18,11 +18,6 @@ source you own, in your own storage, and can fork.
 
 </div>
 
-<!-- DEMO: replace this comment with a ≤10s screen capture — browse the catalog, fork a
-     listing, see it running in your own realm. GIF or mp4, ≤5MB, committed under
-     ./docs/assets/demo.gif. This slot is above the fold and is the single highest-value
-     thing on the page; ship the README with it, not after it. -->
-
 ---
 
 ## Setup
