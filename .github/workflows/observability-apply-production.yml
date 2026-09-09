@@ -79,6 +79,15 @@ jobs:
       # CS-11107 bug — every evaluation failed with ResourceNotFoundException).
       WORKER_LOG_GROUP_NAME: ecs-boxel-worker-production
       WORKER_LOG_GROUP_ACCOUNT_ID: "120317779495"
+      # Realm-server availability alerts (realm-server-availability-group.json):
+      # the log group follows the deterministic `ecs-boxel-realm-server-<env>`
+      # convention; the ALB dimension value carries the ALB's generated hash
+      # suffix, so it can't be derived from a naming convention — read it from
+      # `aws elbv2 describe-load-balancers --names boxel-realm-server-production`
+      # (the LoadBalancerArn's trailing `app/<name>/<hash>` segment).
+      REALM_SERVER_LOG_GROUP_NAME: ecs-boxel-realm-server-production
+      REALM_SERVER_LOG_GROUP_ACCOUNT_ID: "120317779495"
+      REALM_SERVER_ALB_FULL_NAME: app/boxel-realm-server-production/e1d83dcf1a10d92f
 
     steps:
       - name: Refuse to apply from non-main branches

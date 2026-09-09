@@ -1,0 +1,496 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "realm-server-availability-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "rs-alb-5xx-surge",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server ALB 5xx Surge",
+          "condition": "B",
+          "annotations": {
+            "summary": "The realm-server ALB is returning 5xx at more than 50/minute. ELB-generated 5xx (as opposed to target 5xx) means the ALB could not get a valid response from any target — targets crashed, hung, or deregistered. Check ECS task health and the heap/OOM alerts in this group."
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {
+                  "LoadBalancer": "${REALM_SERVER_ALB_FULL_NAME}"
+                },
+                "expression": "",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "HTTPCode_ELB_5XX_Count",
+                "metricQueryType": 0,
+                "namespace": "AWS/ApplicationELB",
+                "period": "60",
+                "queryMode": "Metrics",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Sum"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        50,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "1m",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "rs-oom-crash",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server OOM Crash",
+          "condition": "B",
+          "annotations": {
+            "summary": "A realm-server process hit the V8 heap limit and died (FATAL ERROR: Reached heap limit / JavaScript heap out of memory). ECS will replace the task; if the surviving replica absorbs the failed-over load it can OOM too, taking the service down. Identify what drove heap growth (usually a _federated-search storm — check inFlightSearch in the health line)."
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /Reached heap limit/ or @message like /JavaScript heap out of memory/\n| stats count() as oomCount by bin(5m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "rs-heap-near-limit",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server Heap Near Limit",
+          "condition": "B",
+          "annotations": {
+            "summary": "A realm-server process's JS heap exceeded 1600MB (the V8 limit is ~2048MB — at that point the process dies and drops every in-flight request). Sourced from the periodic health line (heapMB=N). Usually driven by concurrent _federated-search load; see the search-saturation alert."
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /heapMB=/\n| parse @message /heapMB=(?<heap>\\d+)/\n| stats max(heap) as maxHeapMB by bin(1m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1600,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "rs-search-saturation",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server Search Saturation",
+          "condition": "B",
+          "annotations": {
+            "summary": "A realm-server process has been handling 15+ concurrent _federated-search requests for several minutes (baseline is single digits). Sourced from the periodic health line (inFlightSearch=N). Sustained saturation drives heap growth toward OOM — this is the early-warning signal; find which client/realm is issuing the searches."
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /inFlightSearch=/\n| parse @message /inFlightSearch=(?<n>\\d+)/\n| stats max(n) as maxInFlight by bin(1m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        15,
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "3m",
+          "isPaused": false,
+          "notification_settings": null
+        }
+      ]
+    }
+  ]
+}
