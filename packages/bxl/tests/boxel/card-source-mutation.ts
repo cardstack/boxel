@@ -4026,17 +4026,231 @@ strictEqual(
   'relationship-collection-rebuilt',
 );
 
-// Dropping an item ahead of the others moves each link to an index it did not
-// come from, which is exactly the comparison failing: edges cannot follow
-// their values through a `|=`, and the collection operations that do move them
-// are how a program says this.
+// The author who drops an item ahead of the others moved values, and wrote no
+// data at all, so both fixtures answer the same way: whether the shifted links
+// happen to read alike decides nothing.
 strictEqual(
   nestedLinkError(
     'collection-update-cannot-shift-its-links',
     '.examples |= map(select(.key != "a"));',
   ).code,
-  'relationship-value-required',
+  'relationship-collection-rebuilt',
 );
+
+// An edge two levels down inside an item that moved sits in a subtree that may
+// well be identical to the one that used to be there, so the item itself has
+// to be the thing compared. Here every `lead` is alike and only the item's own
+// `key` tells them apart.
+const deepPart: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('DeepPart'),
+  displayName: 'Deep Part',
+  fields: { key: 'f0', owner: 'f1' },
+  fieldDefs: {
+    f0: field('contains', 'String', { primitive: true }),
+    f1: field('linksTo', 'Friend'),
+  },
+};
+const deepExample: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('DeepExample'),
+  displayName: 'Deep Example',
+  fields: { key: 'f0', lead: 'f1' },
+  fieldDefs: {
+    f0: field('contains', 'String', { primitive: true }),
+    f1: field('contains', 'DeepPart'),
+  },
+};
+const deepSpec: BxlBoxelSourceDefinition = {
+  type: 'card-def',
+  codeRef: ref('DeepSpec'),
+  displayName: 'Deep Spec',
+  fields: { examples: 'f0' },
+  fieldDefs: { f0: field('containsMany', 'DeepExample') },
+};
+const deepDefinitions = new Map(
+  [deepPart, deepExample, deepSpec].map((definition) => [
+    JSON.stringify(definition.codeRef),
+    definition,
+  ]),
+);
+const deepSchema = await mutationSchemaForCardSource(deepSpec, {
+  async lookupDefinition(codeRef) {
+    return deepDefinitions.get(JSON.stringify(codeRef));
+  },
+});
+function deepError(programId: string, program: string) {
+  try {
+    mutateBxlCardSource(
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            examples: [
+              { key: 'FIRST', lead: { key: 'L' } },
+              { key: 'SECOND', lead: { key: 'L' } },
+            ],
+          },
+          relationships: {
+            'examples.0.lead.owner': {
+              links: { self: '../Friend/zoe', related: 'sidecar-of-first' },
+            },
+            'examples.1.lead.owner': {
+              links: { self: '../Friend/zoe', related: 'sidecar-of-second' },
+            },
+          },
+          meta: { adoptsFrom: ref('DeepSpec') },
+        },
+      },
+      program,
+      {
+        schema: deepSchema,
+        syntax: 'solidified',
+        programId,
+        targetId: 'https://example.test/DeepSpec/one',
+        resolveReference: (reference: string) =>
+          new URL(reference, 'https://example.test/DeepSpec/one').href,
+        formatReference: (id: string) =>
+          id.replace('https://example.test/', '../'),
+        serializeContainedValue: () => ({
+          meta: { adoptsFrom: { module: '../fields', name: 'ZetaExample' } },
+        }),
+      },
+    );
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`${programId} was expected to fail`);
+}
+strictEqual(
+  deepError('edge-below-a-moved-item', '.examples |= .[1:];').code,
+  'relationship-collection-rebuilt',
+);
+
+// A relationship inside a collection item, where an index stands between the
+// write's own path and the slot. The item is what has to be compared, and its
+// links are not part of that comparison — they are not members of the value,
+// so a value that carried one back and one that never mentioned it are the
+// same item.
+const holderDefinition: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('Holder'),
+  displayName: 'Holder',
+  fields: { key: 'f0', owner: 'f1', crew: 'f2' },
+  fieldDefs: {
+    f0: field('contains', 'String', { primitive: true }),
+    f1: field('linksTo', 'Friend'),
+    f2: field('linksToMany', 'Friend'),
+  },
+};
+const holdingDefinition: BxlBoxelSourceDefinition = {
+  type: 'card-def',
+  codeRef: ref('Holding'),
+  displayName: 'Holding',
+  fields: { parts: 'f0' },
+  fieldDefs: { f0: field('containsMany', 'Holder') },
+};
+const holdingDefinitions = new Map(
+  [holderDefinition, holdingDefinition].map((definition) => [
+    JSON.stringify(definition.codeRef),
+    definition,
+  ]),
+);
+const holdingSchema = await mutationSchemaForCardSource(holdingDefinition, {
+  async lookupDefinition(codeRef) {
+    return holdingDefinitions.get(JSON.stringify(codeRef));
+  },
+});
+function holdingMutation(programId: string, program: string) {
+  return mutateBxlCardSource(
+    {
+      data: {
+        type: 'card',
+        attributes: { parts: [{ key: 'p1' }, { key: 'p2' }] },
+        relationships: {
+          'parts.0.owner': {
+            links: { self: '../Friend/zoe', related: 'own-1' },
+          },
+          'parts.0.crew.0': {
+            links: { self: '../Friend/ana', related: 'crew-a' },
+          },
+          'parts.0.crew.1': {
+            links: { self: '../Friend/bo', related: 'crew-b' },
+          },
+          'parts.1.owner': {
+            links: { self: '../Friend/cy', related: 'own-2' },
+          },
+        },
+        meta: { adoptsFrom: ref('Holding') },
+      },
+    },
+    program,
+    {
+      schema: holdingSchema,
+      syntax: 'solidified',
+      programId,
+      targetId: 'https://example.test/Holding/one',
+      resolveReference: (reference: string) =>
+        new URL(reference, 'https://example.test/Holding/one').href,
+      formatReference: (id: string) =>
+        id.replace('https://example.test/', '../'),
+      serializeContainedValue: () => ({
+        meta: { adoptsFrom: { module: '../fields', name: 'ZetaHolder' } },
+      }),
+    },
+  );
+}
+
+// The item is unchanged once its links are set aside, so both edges stand —
+// the singular one and every member of the collection, each with its sidecar.
+const heldOver = holdingMutation(
+  'links-under-an-index-are-keepable',
+  '.parts[0] |= {"key":.key};',
+);
+deepStrictEqual(
+  (heldOver.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [['owner'], ['crew']],
+);
+deepStrictEqual(relationship(heldOver.document, 'parts.0.owner'), {
+  links: { self: '../Friend/zoe', related: 'own-1' },
+});
+deepStrictEqual(relationship(heldOver.document, 'parts.0.crew.0'), {
+  links: { self: '../Friend/ana', related: 'crew-a' },
+});
+deepStrictEqual(relationship(heldOver.document, 'parts.0.crew.1'), {
+  links: { self: '../Friend/bo', related: 'crew-b' },
+});
+// A kept collection is kept whole: its edges are stored one key per index, so
+// naming the Field has to reach the keys beneath it.
+strictEqual(
+  Object.keys(heldOver.document.data.relationships ?? {}).filter((key) =>
+    key.startsWith('parts.0.crew'),
+  ).length,
+  2,
+);
+
+// Emptying the collection names no Card, so it clears rather than being
+// refused, and leaves the singular edge beside it alone.
+const crewCleared = holdingMutation(
+  'emptying-a-nested-link-collection-clears-it',
+  '.parts[0] |= (. + {"crew":[]});',
+);
+deepStrictEqual(
+  (crewCleared.plan.intents[0] as { keepRelationships?: unknown })
+    .keepRelationships,
+  [['owner']],
+);
+strictEqual(
+  Object.keys(crewCleared.document.data.relationships ?? {}).filter((key) =>
+    key.startsWith('parts.0.crew'),
+  ).length,
+  0,
+);
+deepStrictEqual(relationship(crewCleared.document, 'parts.0.owner'), {
+  links: { self: '../Friend/zoe', related: 'own-1' },
+});
 
 // A compound assignment merges the current value into its result, links and
 // all, so the same reading applies to what the merge produced.

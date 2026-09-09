@@ -36,6 +36,7 @@ import {
   equalJson,
   hasAt,
   pathKey,
+  sameJson,
   setAt,
   valueAt,
 } from './json-path.ts';
@@ -1292,6 +1293,10 @@ function linkSlots(
     if (held === null || typeof held !== 'object' || Array.isArray(held))
       return;
     for (const field of at.fields) {
+      // A promoted alias names a Field stored somewhere else in the value, and
+      // the walk reaches it there; reading it here as well would answer for a
+      // slot the value never carries.
+      if (field.path) continue;
       const here = [...path, field.key];
       if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
         slots.push({ path: here, type: field.fieldType });
@@ -1363,7 +1368,7 @@ function restoreKeptLinks(
   prior: BxlMutationJson | undefined,
 ): BxlMutationJson {
   if (restore.length === 0 || prior === undefined) return model;
-  let restored = model;
+  let restored = clone(model);
   for (const path of restore) {
     restored = setAt(restored, path, valueAt(prior, path) ?? null);
   }
@@ -1433,15 +1438,52 @@ function assertLinksAreEdges(
       `${pathKey([...base, ...slot.path])} is a relationship inside a collection this write rebuilds, and an edge cannot be told from another to the same Card. Update the items themselves ([* …]) so each edge stays with its value, or move them with the collection operations.`,
     );
   };
-  /** Whether the value holding a slot is the one the Card's edge belongs to. */
-  const stationary = (slot: LinkSlot) => {
-    if (!slot.path.some((part) => typeof part === 'number')) return true;
-    const holder = slot.path.slice(0, -1);
-    return (
-      prior !== undefined &&
-      equalJson(valueAt(value, holder), valueAt(prior, holder))
-    );
+  /**
+   * A collection item as the Card stores it: every link inside it taken out.
+   *
+   * A link is never a member of the value, so comparing two items on their
+   * links would answer on where the edges are — the very thing in question —
+   * and would read a value that carried a link back and one that never
+   * mentioned it as different items.
+   */
+  const itemContent = (
+    root: BxlMutationJson | undefined,
+    at: BxlMutationPath,
+  ): BxlMutationJson | undefined => {
+    const held = root === undefined ? undefined : valueAt(root, at);
+    if (held === undefined) return undefined;
+    let content = clone(held);
+    for (const other of slots) {
+      if (
+        other.path.length <= at.length ||
+        !at.every((part, index) => other.path[index] === part)
+      ) {
+        continue;
+      }
+      const relative = other.path.slice(at.length);
+      if (hasAt(content, relative)) content = deleteAt(content, relative);
+    }
+    return content;
   };
+
+  /**
+   * Whether every collection item a slot sits inside is the item the Card's
+   * edge belongs to.
+   *
+   * Only an index can put a slot somewhere the write's own path does not pin,
+   * so those are the positions to account for — and each of them, not just the
+   * innermost: a link two levels down inside an item that moved sits in a
+   * subtree that may well be identical to the one that used to be there.
+   */
+  const stationary = (slot: LinkSlot) =>
+    slot.path.every((part, index) => {
+      if (typeof part !== 'number') return true;
+      const item = slot.path.slice(0, index + 1);
+      return (
+        prior !== undefined &&
+        sameJson(itemContent(value, item), itemContent(prior, item))
+      );
+    });
   const shed: BxlMutationPath[] = [];
   const keep: BxlMutationPath[] = [];
   const restore: BxlMutationPath[] = [];
@@ -1479,7 +1521,7 @@ function assertLinksAreEdges(
       }
       continue;
     }
-    if (prior !== undefined && equalJson(held, valueAt(prior, slot.path))) {
+    if (prior !== undefined && sameJson(held, valueAt(prior, slot.path))) {
       shed.push(slot.path);
       if (holdsLink(prior, slot)) {
         if (!stationary(slot)) refuseMoved(slot);
@@ -1491,6 +1533,9 @@ function assertLinksAreEdges(
       shed.push(slot.path);
       continue;
     }
+    // An edge the Card holds here, under a value that moved, is a rebuild
+    // rather than a link written as data — say which mistake it was.
+    if (holdsLink(prior, slot) && !stationary(slot)) refuseMoved(slot);
     refuse(
       `${pathKey([...base, ...slot.path])} is a ${slot.type} Field, so the value written there cannot be stored as data:`,
     );
@@ -1665,13 +1710,22 @@ function planAssignment(
     let nested: NestedRelationship[] = [];
     let links: WrittenLinks = { shed: [], keep: [], restore: [] };
     if (statement.operator === '=') {
+      // A value's links can only be compared against the view its expression
+      // read them from: `location.value` is the Card's stored value, which an
+      // overlay-answered read is not, and the two differ exactly where an
+      // overlay filled something in.
+      const view = readView(output, context);
       const evaluated = evaluateSingleJson(
         statement.value,
-        readView(output, context),
+        view,
         context,
         statement.statement,
       );
-      ({ nested, links } = resolveLinks(evaluated, location.value, 'clear'));
+      ({ nested, links } = resolveLinks(
+        evaluated,
+        valueAt(view, location.path),
+        'clear',
+      ));
       next = isCardReference(evaluated.value)
         ? evaluated.value
         : modelValue(evaluated.value, nested);
@@ -2000,7 +2054,7 @@ function planCall(
       const contained = containedValue(
         value,
         location.path,
-        location.value,
+        valueAt(readView(root, context), location.path),
         context,
         number,
       );

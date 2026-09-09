@@ -1059,9 +1059,12 @@ back to a value:
 .comments[* .flagged == null] |= (. + {flagged: true});
 ```
 
-A rebuild that copies its items through untouched moves nothing and keeps
-their edges. To move a value and its edges together, use the collection
-operations — `move_item_before`, `reorder_by` and the rest.
+A rebuild that copies its items through untouched moves nothing, so those
+edges stand. It is still a collection replacement in every other respect: each
+item's `meta.fields` entry is discarded and written again from the value, the
+way any wholesale write to a collection rebuilds what it stores. To carry a
+value, its edges and its metadata together, use the collection operations —
+`move_item_before`, `reorder_by` and the rest.
 
 A marker reads its argument against the input the value expression itself was
 handed, so resolution follows the nodes that pass that input straight down and
