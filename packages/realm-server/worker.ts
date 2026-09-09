@@ -85,6 +85,7 @@ let {
   migrateDB,
   prerendererUrl,
   indexJobsOnly = false,
+  skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -123,12 +124,21 @@ let {
         'When set, the worker only registers (and therefore only claims) indexing job types, making it a dedicated index lane that other job types cannot occupy',
       type: 'boolean',
     },
+    skipPrerenderHtmlRealm: {
+      description:
+        'Realm URL whose from-scratch index must not spawn the follow-on prerender_html job. Repeatable. A test-harness affordance: the realm ends up indexed but never rendered, so anything reading its prerendered HTML sees nothing at all rather than something late. No deployment sets this.',
+      type: 'array',
+    },
   })
   .parseSync();
 
 log.info(
   `starting worker with pid ${process.pid} and priority ${priority}${
     indexJobsOnly ? ' (index jobs only)' : ''
+  }${
+    skipPrerenderHtmlRealms.length
+      ? `, not spawning prerender_html for ${skipPrerenderHtmlRealms.join(', ')}`
+      : ''
   }`,
 );
 
@@ -216,6 +226,7 @@ let autoMigrate = migrateDB || undefined;
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
   });
 
