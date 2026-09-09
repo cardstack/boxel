@@ -67,35 +67,34 @@ import {
   type PreparedBxlMutation,
 } from './types.ts';
 
-interface CardReference {
-  readonly kind: 'card-reference';
-  readonly id: string;
-}
-
-function isCardReference(value: unknown): value is CardReference {
-  return Boolean(
-    value &&
-    typeof value === 'object' &&
-    (value as Partial<CardReference>).kind === 'card-reference' &&
-    typeof (value as Partial<CardReference>).id === 'string',
-  );
-}
-
 /**
- * The value a `card(…)` marker leaves behind while an expression it sits
- * inside is evaluated.
+ * The value a `card(…)` marker leaves behind while the value expression it
+ * sits inside is evaluated — whether it stands for the whole value or for one
+ * Field nested inside it.
  *
- * Identity is what makes a marker a marker. A program builds arbitrary JSON, so
- * one recognised by its shape could be forged; a symbol key has no JSON
- * spelling, and the evaluated tree is searched for markers before anything
- * copies it, so this test can be neither fooled nor lost. `isCardReference`
- * above is the older shape-recognised form, and a whole value matching it is
- * still taken for a reference — bounded by `loadedCard`, which refuses an id
- * the caller did not supply.
+ * Identity is what makes a marker a marker, and it is the only thing that
+ * does. A program builds arbitrary JSON, so a marker recognised by its shape
+ * could be forged: a value spelled out as data would name a relationship
+ * target that the program never wrote `card(…)` for, and the vocabulary the
+ * platform reasons about — declaration lowering emits `card(…)`, the profile
+ * classifies it, a reviewer reads it — would have a second, silent spelling. A
+ * symbol key has no JSON spelling, and the planner stamps one only where it
+ * rewrote a `card(…)` node itself, so a marker can be neither forged nor
+ * confused with the data around it. The evaluated tree is searched for markers
+ * before anything copies it, so it cannot be lost either: `clone` drops symbol
+ * keys.
  */
 const CARD_MARKER = Symbol('bxl.mutation.card-marker');
 
-function isCardMarker(value: unknown): value is { [CARD_MARKER]: string } {
+interface CardReference {
+  readonly [CARD_MARKER]: string;
+}
+
+function cardReference(id: string): CardReference {
+  return { [CARD_MARKER]: id };
+}
+
+function isCardReference(value: unknown): value is CardReference {
   return Boolean(
     value &&
     typeof value === 'object' &&
@@ -103,7 +102,7 @@ function isCardMarker(value: unknown): value is { [CARD_MARKER]: string } {
   );
 }
 
-/** `card(id)` as it is written: a marker the planner reads by shape. */
+/** `card(id)` as a program writes it: the node the planner rewrites. */
 function isCardCall(
   ast: ExpressionAst,
 ): ast is Extract<ExpressionAst, { type: 'filter' }> {
@@ -650,7 +649,7 @@ function cardMarkerNode(
   evaluate: EvaluateItems,
   statement: number,
 ): ExpressionAst {
-  let marker: { [CARD_MARKER]: string } | undefined;
+  let marker: CardReference | undefined;
   const node: RuntimeAnnotatedExpressionAst = {
     type: 'filter',
     name: '_card_marker/0',
@@ -658,9 +657,9 @@ function cardMarkerNode(
     args: [],
     singleOutput: false,
     resolvedNative: function* () {
-      marker ??= {
-        [CARD_MARKER]: readCardId(argument, input, evaluate, statement),
-      };
+      marker ??= cardReference(
+        readCardId(argument, input, evaluate, statement),
+      );
       yield createItem(marker);
     },
   };
@@ -762,7 +761,7 @@ function liftCardMarkers(raw: unknown): {
 } {
   const references: NestedCardReference[] = [];
   const copy = (value: unknown, path: BxlMutationPath): BxlMutationJson => {
-    if (isCardMarker(value)) {
+    if (isCardReference(value)) {
       references.push({ path, id: value[CARD_MARKER] });
       return null;
     }
@@ -793,10 +792,9 @@ function evaluateSingleJson(
   return withEvaluationBudget(context, (evaluate): EvaluatedValue => {
     if (isCardCall(argument.ast)) {
       return {
-        value: {
-          kind: 'card-reference',
-          id: readCardId(argument.ast.args[0]!, input, evaluate, statement),
-        },
+        value: cardReference(
+          readCardId(argument.ast.args[0]!, input, evaluate, statement),
+        ),
         references: [],
       };
     }
@@ -836,7 +834,7 @@ function evaluateSingleJson(
       (reference) => reference.path.length === 0,
     );
     return whole
-      ? { value: { kind: 'card-reference', id: whole.id }, references: [] }
+      ? { value: cardReference(whole.id), references: [] }
       : { value: lifted.value, references: lifted.references };
   });
 }
@@ -1523,15 +1521,16 @@ function planAssignment(
           'Use relationship collection operations instead of replacing linksToMany wholesale.',
         );
       }
+      const cardId = next[CARD_MARKER];
       intents.push({
         op: 'relate',
         field: field.relationship.path,
-        cardId: next.id,
+        cardId,
       });
       output = setAt(
         output,
         field.relationship.path,
-        loadedCard(next.id, context, statement.statement),
+        loadedCard(cardId, context, statement.statement),
       );
       documentChanged(context);
       continue;
@@ -1905,17 +1904,14 @@ function planCall(
             'Relationship insertion requires card("id").',
           );
         }
+        const cardId = value.value[CARD_MARKER];
         intents.push({
           op: 'relate',
           field: target.field.relationship.path,
-          cardId: value.value.id,
+          cardId,
           index,
         });
-        collection.splice(
-          index,
-          0,
-          loadedCard(value.value.id, context, number),
-        );
+        collection.splice(index, 0, loadedCard(cardId, context, number));
         documentChanged(context);
       } else {
         if (isCardReference(value.value)) {
@@ -1972,17 +1968,14 @@ function planCall(
             'Relationship insertion requires card("id").',
           );
         }
+        const cardId = value.value[CARD_MARKER];
         intents.push({
           op: 'relate',
           field: anchor.field.relationship.path,
-          cardId: value.value.id,
+          cardId,
           index,
         });
-        collection.splice(
-          index,
-          0,
-          loadedCard(value.value.id, context, number),
-        );
+        collection.splice(index, 0, loadedCard(cardId, context, number));
         documentChanged(context);
       } else {
         if (isCardReference(value.value)) {

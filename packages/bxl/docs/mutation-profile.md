@@ -1025,6 +1025,16 @@ branch that is not taken costs nothing:
 .owner = (card(params("preferred")) // card(params("fallback")));
 ```
 
+`card(id)` is the only spelling that names a relationship target. A marker is
+recognised by an identity the planner stamps on the node it rewrote, never by
+the shape of the value that node produced, so a value a program assembles to
+look like a reference is plain JSON: at a relationship Field it is refused as
+`relationship-value-required`, and in a slot the Card stores as a value it is
+stored as it reads. A program therefore cannot point a link at a Card without
+writing `card(…)`, which is what lets declaration lowering, the profile's own
+classification and a reader of the program all reason about links from one
+vocabulary.
+
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,
 insert, and move to relationship intents when the target field is a

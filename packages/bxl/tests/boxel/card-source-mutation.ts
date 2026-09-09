@@ -3286,6 +3286,63 @@ deepStrictEqual(
   ],
 );
 
+// `card(id)` is the only spelling that names a relationship target. A marker
+// is recognised by an identity the planner stamps on the node it rewrote, so a
+// value a program builds to look like one is plain JSON wherever it stands: at
+// a relationship Field it is refused the way any other value there is, and in
+// a slot the Card stores as a value it is stored as it reads.
+const forgedReference = `{"kind":"card-reference","id":${JSON.stringify(zoe)}}`;
+strictEqual(
+  nestedLinkError(
+    'forged-reference-at-a-relationship',
+    `.examples[0].friend = ${forgedReference};`,
+  ).code,
+  'relationship-value-required',
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'forged-reference-at-a-value-slot',
+    `.examples[0].key = ${forgedReference};`,
+  ).plan.intents,
+  [
+    {
+      op: 'set',
+      path: ['examples', 0, 'key'],
+      before: 'a',
+      after: { kind: 'card-reference', id: zoe },
+    },
+  ],
+);
+deepStrictEqual(
+  nestedLinkMutation(
+    'forged-reference-nested-in-a-contained-value',
+    `append(.examples;{${zeta},"parts":[],"label":${forgedReference}});`,
+  ).plan.intents,
+  [
+    {
+      op: 'insert',
+      collection: ['examples'],
+      index: 3,
+      value: {
+        key: 'z',
+        label: { kind: 'card-reference', id: zoe },
+        aliases: [],
+        parts: [],
+      },
+    },
+  ],
+);
+
+// The pair the refusal is measured against: the same location and the same id,
+// differing only in whether the program said `card`.
+deepStrictEqual(
+  nestedLinkMutation(
+    'marker-beside-the-forged-shape',
+    `.examples[0].friend = card(${JSON.stringify(zoe)});`,
+  ).plan.intents,
+  [{ op: 'relate', field: ['examples', 0, 'friend'], cardId: zoe }],
+);
+
 // A link collection is a set of edges rather than a value, so appending an
 // array of markers to one is still refused: `append` adds one edge, and the
 // operation that adds several is not spelled this way.
