@@ -67,19 +67,45 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
 
   // Responsive candidates for the reading formats, assembled from the image
   // family's captured rendition slots plus the original as the largest
-  // candidate. Skipped where a substitute would lie about the picture: an
-  // SVG scales crisply at any size with no bytes to save, a GIF's renditions
-  // are stills of its first frame, a fitted cell already prefers the `thumb`
-  // capture through the stage, and a source smaller than the smallest
-  // rendition has nothing to gain. Renditions capture at deviceScaleFactor 1
-  // (their declared width is their physical width) but the descriptor
-  // multiplies it anyway so a future dsf change can't silently skew the
-  // browser's density math.
+  // candidate. Skipped where a substitute would lie about the picture or
+  // shrink it:
+  //  - an SVG scales crisply at any size with no bytes to save;
+  //  - a GIF's renditions are stills of its first frame, and WebP/AVIF can
+  //    animate too — no extracted signal says whether a given file does, so
+  //    both formats sit out until the meta extractors record an animated
+  //    flag;
+  //  - a fitted cell already prefers the `thumb` capture through the stage;
+  //  - a source smaller than the smallest rendition has nothing to gain;
+  //  - an image narrower than the renditions' 4:3 canvas would display
+  //    smaller than the original: the browser sizes the *canvas* by its `w`
+  //    descriptor and the picture occupies only its contained sub-rectangle
+  //    (a 3:4 portrait renders at roughly half its linear size). The
+  //    letterbox margins being transparent keeps them invisible, not
+  //    size-free. Residual for shapes that do participate: in a frame wider
+  //    than the image, a wide image's rendition gives up some height to its
+  //    baked bands (a 16:9 image loses ~25% of its height there) — accepted
+  //    as the byte-savings tradeoff.
+  // Renditions capture at deviceScaleFactor 1 (their declared width is their
+  // physical width) but the descriptor multiplies it anyway so a future dsf
+  // change can't silently skew the browser's density math.
   get srcset(): string | undefined {
     if (this.isSvg || this.model.previewKind === 'gif') {
       return undefined;
     }
+    if (
+      this.model.contentType === 'image/webp' ||
+      this.model.contentType === 'image/avif'
+    ) {
+      return undefined;
+    }
     if (this.format === 'fitted') {
+      return undefined;
+    }
+    // The renditions' canvas is 4:3. The view model rounds aspect to three
+    // decimals, so an exactly-4:3 image arrives as 1.333 — the threshold
+    // sits just under that to tolerate the rounding; an unknown aspect is
+    // treated as unsafe.
+    if (!this.model.aspectRatio || this.model.aspectRatio < 1.33) {
       return undefined;
     }
     let meta = (this.model.source as any)?.screenshotsMeta as

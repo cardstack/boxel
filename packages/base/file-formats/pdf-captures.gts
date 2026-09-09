@@ -6,15 +6,28 @@
 // prerender pass — never part of the format API, so the live viewer stays a
 // native `<object>` with no pdf.js in the app's dependency graph.
 //
-// pdf.js loads from a pinned CDN build at capture time, the same delivery
-// the 3D family uses for three.js: the decoder is needed only inside the
-// capture render, and vendoring a PDF engine into the base realm would tax
-// every consumer for a poster only the prerender pass draws.
+// pdf.js is the host's vendored copy (not a CDN fetch inside the render:
+// this capture runs on prerender infrastructure, where public-network
+// reachability would otherwise be a standing availability dependency of
+// every realm that holds a PDF), reached through `loadPdfjs` below. The
+// engine's chunk loads only when that function is called at capture time,
+// so consumers of the family that never capture — the live viewer's native
+// `<object>` path included — never pay for it.
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { fileResourceURL } from './file-image';
+// The host's vendored pdf.js, behind a statically-imported sync shim whose
+// function performs the host-side lazy chunk load — a runtime `import()` of
+// a shimmed bare specifier is not a load path card code can rely on (the
+// loader resolves shims for static imports; the dynamic form stalls), while
+// a static import of this zero-cost function keeps the engine's chunk load
+// at the call. The wrapper behind it wires a same-origin worker asset, so
+// rasterization runs on a real worker rather than pdf.js's main-thread
+// fallback. `@cardstack/boxel-host/lib/*` is the card-facing doorway for
+// host library modules, the same spelling family as the
+// `@cardstack/boxel-host/tools/*` shims.
+import { loadPdfjs } from '@cardstack/boxel-host/lib/pdfjs-loader';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -29,33 +42,39 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   // The capture engine waits (bounded) for no `data-screenshot-pending`
   // attribute before shooting: an async decode's paint isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
-  @tracked pending = true;
-
+  //
+  // The signal is cleared by removing the attribute directly, not by a
+  // tracked re-render: the capture page is settled when the engine starts
+  // waiting, and a tracked update from this modifier's async continuation
+  // demonstrably never flushed there (the paint completed in under a
+  // second; the attribute still read pending at the engine's full timeout).
+  // The engine polls raw DOM, so raw DOM is the reliable channel.
   private paintFirstPage = modifier((canvas: HTMLCanvasElement) => {
     let cancelled = false;
+    let container = canvas.parentElement!;
     let finish = () => {
       if (!cancelled) {
-        this.pending = false;
+        container.removeAttribute('data-screenshot-pending');
       }
     };
     (async () => {
+      // Hoisted so the finally can release it: capture renders are route
+      // transitions on a pooled warm tab — one long-lived JS heap across
+      // many captures — so an undestroyed document accumulates until the
+      // tab recycles.
+      let doc: any;
       try {
         let url = fileResourceURL(this.args.model);
         if (!url) {
           return;
         }
-        let pdfjs: any =
-          // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-          await import('https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs');
-        pdfjs.GlobalWorkerOptions.workerSrc =
-          'https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.worker.mjs';
+        let pdfjs: any = await loadPdfjs();
         let response = await fetch(url);
         if (!response.ok) {
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
-        let doc = await pdfjs.getDocument({ data, isEvalSupported: false })
-          .promise;
+        doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
         let page = await doc.getPage(1);
         if (cancelled) {
           return;
@@ -78,12 +97,37 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
           canvasContext: canvas.getContext('2d'),
           viewport,
         }).promise;
-      } catch {
-        // A corrupt or unreadable document is an absent poster, not a broken
-        // capture render: readiness still resolves, the engine shoots the
-        // empty page, and byte-hash dedupe keeps the blank from churning.
-      } finally {
+        // Readiness resolves only on a painted page. A corrupt or
+        // unreadable document leaves `data-screenshot-pending` standing, so
+        // the engine's bounded wait fails this slot: no manifest entry
+        // lands (the injected durable URL stays an uncaptured 404 the
+        // fitted cell's image fallback absorbs), and the retry lane's
+        // failure cap bounds what a permanently unreadable file can cost.
+        // Resolving on failure would instead persist a blank white poster
+        // (the slot's default background) that the thumbnail seam would
+        // serve as if it were the real page.
         finish();
+      } catch (error) {
+        // Intentionally not resolving readiness — see the comment above
+        // `finish()`. But name the cause: the prerender pipes page console
+        // output into its logs, and without this line an unreadable
+        // document is indistinguishable from a hung component (both
+        // surface as the generic pending-timeout). `warn`, not `error` —
+        // the prerender records console errors into the bucket it attaches
+        // to a failed render's error report, and a per-slot capture
+        // failure on an otherwise-clean row shouldn't dress itself as a
+        // page fault.
+        console.warn(
+          `pdf poster capture: first-page paint failed, leaving the slot pending`,
+          error,
+        );
+      } finally {
+        try {
+          await doc?.destroy?.();
+        } catch {
+          // Releasing a torn-down document must never mask the capture
+          // outcome.
+        }
       }
     })();
     return () => {
@@ -92,10 +136,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   });
 
   <template>
-    <div
-      class='pdf-poster-capture'
-      data-screenshot-pending={{if this.pending 'true'}}
-    >
+    <div class='pdf-poster-capture' data-screenshot-pending='true'>
       <canvas {{this.paintFirstPage}} />
     </div>
     <style scoped>

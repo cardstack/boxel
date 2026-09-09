@@ -64,7 +64,12 @@ class ImageThumbCapture extends GlimmerComponent<CaptureSignature> {
       }
       .thumb-capture[data-image-fit='contain'] {
         object-fit: contain;
-        background: var(--fd-paper, #f7f7f5);
+        /* Fixed hex on purpose, not the --fd-paper token: capture pixels
+           bake whatever the token resolves to, and content-keyed
+           carry-forward would leave old and new mattes side by side across
+           a grid after a theme-default change. The value is what --fd-paper
+           resolves to today. */
+        background: #f7f7f5;
       }
     </style>
   </template>
@@ -105,17 +110,19 @@ export const IMAGE_RENDITION_SLOT_NAMES = [
   'rendition-1280',
 ] as const;
 
-// The image family's declared slots, assigned to `ImageDef.screenshots`.
-// All key on `keyBy: 'file-content'`: an image's captures derive from its
-// bytes, so a metadata-only edit must skip the re-decode. webp throughout —
-// alpha-capable (the renditions' transparent letterbox margins need it) and
-// the strongest encoder `page.screenshot` offers for photographic content.
-//
-// `thumb` uses the recommended thumbnail box (the CardsGrid tile, 170×250 at
-// the default deviceScaleFactor of 2) and feeds the thumbnail fallback
-// chain. The renditions capture at deviceScaleFactor 1 so their declared
-// width IS their physical width — the `w` descriptor srcset needs.
-export const IMAGE_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+// The image family's declared slots, in two tiers matching where they are
+// consumed. Both tiers key on `keyBy: 'file-content'`: an image's captures
+// derive from its bytes, so a metadata-only edit must skip the re-decode.
+// webp throughout — alpha-capable (the renditions' transparent letterbox
+// margins need it) and the strongest encoder `page.screenshot` offers for
+// photographic content.
+
+// Every image family member's thumbnail, assigned to `ImageDef.screenshots`
+// (vectors included — the fitted cell and the thumbnail fallback chain
+// consume `thumb` for SVG and raster alike). The box is the recommended
+// thumbnail box: the CardsGrid tile, 170×250 at the default
+// deviceScaleFactor of 2.
+export const IMAGE_THUMB_SCREENSHOTS: Record<string, ScreenshotSpec> = {
   thumb: {
     render: ImageThumbCapture,
     width: 170,
@@ -124,6 +131,19 @@ export const IMAGE_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
     useAsThumbnail: true,
     type: 'webp',
   },
+};
+
+// The srcset renditions, assigned to `RasterImageDef.screenshots` rather
+// than `ImageDef`'s: srcset excludes vectors and the fitted cell uses
+// `thumb`, so an SVG's renditions would be pure prerender cost with no
+// consumer — and class placement is the only exclusion lever, since
+// `getScreenshots` merges every declaration level and has no
+// removal-by-subclass mechanism. Residual: `GifDef` is a raster, so GIFs
+// still pay for renditions the srcset gate never reads; that resolves if
+// renditions become consumable for stills, and the placement can be
+// revisited then. The renditions capture at deviceScaleFactor 1 so their
+// declared width IS their physical width — the `w` descriptor srcset needs.
+export const IMAGE_RENDITION_SCREENSHOTS: Record<string, ScreenshotSpec> = {
   'rendition-640': {
     render: ImageRenditionCapture,
     width: 640,

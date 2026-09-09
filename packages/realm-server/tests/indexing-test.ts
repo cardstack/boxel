@@ -6,6 +6,8 @@ import {
   SupportedMimeType,
   Deferred,
   IndexWriter,
+  mintRealmLoaderEpoch,
+  readRealmLoaderEpoch,
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
@@ -1707,6 +1709,64 @@ module(basename(import.meta.filename), function () {
         assert.ok(
           jsonSeedBatch.invalidations.includes(`${testRealm}mango.json`),
           '.json seed resolves to concrete indexed URL',
+        );
+      });
+
+      // A batch reads the realm's loader epoch when it starts, and with no
+      // executable in its invalidation set its own epoch getter returns that
+      // same token. Committing it unconditionally would write the read-at-start
+      // value back over anything minted in between — including the epoch a
+      // module write mints for the definition it invalidates, whose whole
+      // point is to be current for the populate that follows the write. Those
+      // two overlap on the deferred-indexing paths: a `waitForIndex: false`
+      // write skips the drain, so an instance batch for the realm can be
+      // in flight when a module lands.
+      test('an instance-only batch commit leaves an epoch minted after it started', async function (assert) {
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await batch.invalidate([new URL(`${testRealm}mango.json`)]);
+        assert.false(
+          batch.invalidations.some((url) => url.endsWith('.gts')),
+          'precondition: nothing executable is in this batch, so it mints no epoch of its own',
+        );
+
+        let mintedMidBatch = await mintRealmLoaderEpoch(
+          testDbAdapter,
+          realm.url,
+        );
+
+        await batch.done();
+
+        assert.strictEqual(
+          await readRealmLoaderEpoch(testDbAdapter, realm.url),
+          mintedMidBatch,
+          'the commit left the newer epoch standing rather than restoring the one it read at start',
+        );
+      });
+
+      test('a batch that invalidates an executable commits an epoch of its own', async function (assert) {
+        let before = await readRealmLoaderEpoch(testDbAdapter, realm.url);
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await batch.invalidate([new URL(`${testRealm}person.gts`)]);
+        assert.true(
+          batch.invalidations.some((url) => url.endsWith('.gts')),
+          'precondition: the batch carries an executable',
+        );
+
+        await batch.done();
+
+        // The other half of the contract the test above pins: skipping the
+        // write when nothing was minted must not skip it when something was,
+        // or an index pass would stop clearing warm tabs entirely.
+        assert.notStrictEqual(
+          await readRealmLoaderEpoch(testDbAdapter, realm.url),
+          before,
+          'the executable invalidation advanced the realm epoch',
         );
       });
 
