@@ -322,6 +322,25 @@ module(basename(import.meta.filename), function () {
       await Promise.all(held);
     });
 
+    test('every spelling of a search path the router accepts is gated', async function (assert) {
+      let app = buildApp();
+      let held = await fillGate(app);
+      for (let path of [
+        '/_federated-search/',
+        '/_FEDERATED-SEARCH',
+        '/some-realm/_search/',
+        '/some-realm/_SEARCH',
+      ]) {
+        let shed = await send(app, path);
+        assert.strictEqual(shed.status, 429, `${path} is shed`);
+      }
+      for (let release of holds) {
+        release();
+      }
+      await Promise.all(held);
+      assert_inFlight(0);
+    });
+
     test('a preflight to a search path is neither counted nor shed', async function (assert) {
       let app = buildApp();
       let held = await fillGate(app);

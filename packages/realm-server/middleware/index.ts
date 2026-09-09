@@ -36,7 +36,11 @@ import {
 // Matches the realm-server's search endpoints (`/_search`,
 // `/_federated-search`) so the request middleware can put searches through
 // the admission gate and report how many are in flight to the health sampler.
-const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search$/;
+// The router matches these routes case-insensitively and with an optional
+// trailing slash, so the pattern accepts every spelling the router does;
+// otherwise a request written one of those ways would run a search without
+// holding a slot.
+const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search\/?$/i;
 
 // Only the methods the search endpoints answer with a search are gated. A
 // CORS preflight or a HEAD to the same path does no search work and must
