@@ -1,9 +1,11 @@
 export { lowerOperationDeclarations } from './lowering.ts';
 export type { LoweringContext } from './lowering.ts';
 export {
+  canonicalizeTarget,
   localPathFor,
   instanceTargetURL,
   newOperationScope,
+  pathsFor,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';

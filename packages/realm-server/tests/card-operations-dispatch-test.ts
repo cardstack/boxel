@@ -90,6 +90,18 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('both read modes answer for a file whose extension is not registered', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a malformed type realm is a refusal, not a raw throw', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a read refuses any clause it does not carry out', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });

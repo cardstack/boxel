@@ -742,6 +742,82 @@ const tests = Object.freeze({
     );
   },
 
+  'both read modes answer for a file whose extension is not registered': async (
+    assert,
+  ) => {
+    // `urlNamesFile` only knows the extensions the platform maps to a file def,
+    // so a `.css`, a `.yaml` or an extensionless name reaches the card branch
+    // and misses the index. Both modes have to make the same fallback, or one
+    // path answers with a body and refuses its own headers.
+    let unregistered: OperationTarget = {
+      kind: 'instance',
+      url: `${REALM}styles.css`,
+    };
+
+    let doc = await runOperation(
+      stub({ document: 'missing', row: 'missing' }).core,
+      invoke(unregistered, 'read'),
+    );
+    assert.true(isDocumentResult(doc), 'the document mode serves the file');
+
+    let headers = await runOperation(
+      stub({ document: 'missing', row: 'missing' }).core,
+      invoke(unregistered, 'read'),
+      { headersOnly: true },
+    );
+    assert.true(isHeadResult(headers), 'and the headers mode answers too');
+    if (isHeadResult(headers)) {
+      assert.strictEqual(
+        headers.lastModified,
+        42,
+        'reporting what the file itself can say',
+      );
+      assert.strictEqual(
+        headers.indexedAt,
+        null,
+        'and nothing an index row would have carried',
+      );
+    }
+  },
+
+  'a malformed type realm is a refusal, not a raw throw': async (assert) => {
+    let { core } = stub();
+    let error = await refusalFrom(() =>
+      resolveOperation(
+        core,
+        { kind: 'type', codeRef: PERSON, realm: 'not-a-url' },
+        'create',
+      ),
+    );
+    assert.strictEqual(error.code, 'invalid-params');
+    assert.strictEqual(error.status, 400);
+  },
+
+  'a read refuses any clause it does not carry out': async (assert) => {
+    // Not only the program stages: a declaration rebound onto `read` may carry
+    // a clause belonging to the base it came from, and ignoring it is the same
+    // failure as ignoring a projection.
+    for (let clause of ['program', 'input', 'output', 'fill', 'of', 'query']) {
+      let { core } = stub({
+        operations: {
+          look: {
+            base: 'read' as const,
+            deterministic: true,
+            [clause]: clause === 'fill' ? {} : ({ x: 1 } as any),
+          } as any,
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'look')),
+      );
+      assert.strictEqual(
+        error.status,
+        501,
+        `a read carrying \`${clause}\` is refused rather than flattened`,
+      );
+    }
+  },
+
   'the row peek is memoized for one invocation and no longer': async (
     assert,
   ) => {

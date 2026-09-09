@@ -71,7 +71,9 @@ export interface OperationCore {
   // rather than in stored JSON, and the mapping resolves module specifiers, so
   // the realm supplies it bound for the same reason `resolveCodeRef` is. It
   // reads nothing — the answer is a table lookup on the extension, the same one
-  // that stamps `adoptsFrom` on the document a file read serves.
+  // that stamps `adoptsFrom` on the document a file read serves. The type it
+  // names is then looked up in the definition cache like any other, so a file
+  // read does cost a definition lookup even though this function costs none.
   fileDefCodeRef(url: URL): CodeRef;
   // Rewrite a document's instance ids into canonical prefix form, in place.
   // The mapping lives in the realm's fetch layer, so this arrives as a bound
@@ -111,9 +113,9 @@ export interface RunOperationOptions {
   skipQueryBackedExpansion?: boolean;
 }
 
-// One request's memo of the index-row peek. Dispatch reads a target's row to
-// learn its type, and a behavior often wants the same row — a headers-only
-// read wants nothing else. Both go through here so one invocation costs one
+// One request's memo of the index-row peek. Dispatch reads a card's row to
+// learn its type — a file's comes from its extension instead — and a behavior
+// often wants the same row, a headers-only read wanting nothing else. Both go through here so one invocation costs one
 // read of a row rather than one per reader, and so every reader sees the same
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
@@ -149,11 +151,11 @@ export function newOperationScope(core: OperationCore): OperationScope {
 // Reading the extension is a commitment made before the index is consulted,
 // which the card+json GET does not make — it asks for a card document first
 // and falls back to file metadata only when there is none. The two agree
-// because a card's *id* never carries a registered extension, the same
-// assumption the index query engine's own file/instance split rests on. The
-// one path that does is a card's `.json` source spelling, which is why a
-// target is canonicalized — stripped of that extension — before it reaches
-// here.
+// because a card's *id* never carries a registered extension — ids are minted
+// from a UUID — which is the same assumption the index query engine's own
+// file/instance split rests on. The one path that does carry one is a card's
+// `.json` source spelling, and that is classified as a file deliberately: it
+// names the card's stored bytes rather than the card.
 //
 // A `type` target has only its ref, so its kind comes from the entry, and a
 // file def named that way therefore carries nothing. That is correct rather
@@ -363,9 +365,10 @@ export function pathsFor(core: OperationCore): RealmPaths {
 }
 
 // The target as this realm addresses it. A card can be named with a trailing
-// slash, a query string, a fragment, or by its `.json` source, and the realm
-// root names the realm's index card — none of those are a different card, and
-// every one of them has to resolve to the same thing before anything reads it.
+// slash, a query string or a fragment, and the realm root names the realm's
+// index card — none of those are a different card, and every one of them has to
+// resolve to the same thing before anything reads it. A `.json` path is the
+// exception and is left as written; see below.
 //
 // This runs once, in `runOperation`, and everything downstream sees the result:
 // dispatch resolves the type from it, the row memo is keyed on it, and the
@@ -456,7 +459,19 @@ export function instanceTargetURL(request: OperationRequest): URL {
 // one would be a read taken on a question already settled. A URL that does not
 // parse is left alone — the executor has the better refusal for that.
 function assertInRealm(core: OperationCore, target: OperationTarget): void {
-  if (target.kind !== 'instance') {
+  if (target.kind === 'type') {
+    // A type target names the realm its operation is scoped to. Nothing reads
+    // it here, but it is resolved against later, so an unparseable one is the
+    // caller's mistake rather than something to throw out of a URL constructor
+    // deeper in.
+    if (!parseTargetURL(target.realm)) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid target',
+        detail: `target realm "${target.realm}" is not a URL`,
+      });
+    }
     return;
   }
   let url = parseTargetURL(target.url);

@@ -21,6 +21,7 @@ import type {
   RunOperationOptions,
 } from './dispatch.ts';
 import type { LocalPath } from '../paths.ts';
+import type { SingleFileMetaDocument } from '../document-types.ts';
 import type { SearchResultError } from '../realm-index-query-engine.ts';
 
 // ============================================================================
@@ -84,17 +85,18 @@ export async function readOperation(
 }
 
 // A declaration may specialize `read` — reshaping the payload with `input`,
-// projecting the result with `output`, running a `program`. None of that is
-// carried out here, and serving the plain document as though the declaration
-// said nothing hands the caller a well-formed answer to a different question.
-// Refusing says so.
+// projecting the result with `output`, running a `program` — and a declaration
+// rebound onto `read` may carry a clause that belongs to the base it came from.
+// None of it is carried out here, and serving the plain document as though the
+// declaration said nothing hands the caller a well-formed answer to a different
+// question. Refusing says so.
 function refuseUnservedStages(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  let stages = (['program', 'input', 'output'] as const).filter(
-    (stage) => definition[stage] !== undefined,
-  );
+  let stages = (
+    ['program', 'input', 'output', 'fill', 'of', 'query'] as const
+  ).filter((stage) => definition[stage] !== undefined);
   if (stages.length === 0) {
     return;
   }
@@ -172,15 +174,7 @@ async function readHeaders(
       // Fall back to the bytes on disk the same way the document mode does —
       // a file the realm serves but has not indexed still has a modification
       // time to report.
-      let fileMeta = await fileMetaOrMissing(core, url, localPath);
-      let attributes = fileMeta.data.attributes;
-      return {
-        indexedAt: null,
-        lastModified: numberOrNull(attributes?.lastModified),
-        generation: null,
-        screenshots: null,
-        deps: null,
-      };
+      return headersFromDisk(await fileMetaOrMissing(core, url, localPath));
     }
     return {
       indexedAt: file.indexedAt,
@@ -192,6 +186,15 @@ async function readHeaders(
   }
   let row = await scope.peekInstance(url);
   if (row === undefined) {
+    // A path with no instance row may still hold bytes, and the extension test
+    // does not catch a file whose extension is not a registered one. The
+    // document mode falls back for exactly that case, so this one has to as
+    // well — otherwise the same path answers with a body and refuses its own
+    // headers.
+    let fileMeta = await core.fileMetaDocument(localPath);
+    if (fileMeta) {
+      return headersFromDisk(fileMeta);
+    }
     throw await missingTarget(core, url, localPath);
   }
   if (row.type !== 'instance') {
@@ -217,6 +220,20 @@ async function readHeaders(
     generation: row.generation,
     screenshots: row.screenshots,
     deps: row.deps,
+  };
+}
+
+// What a file's own metadata can say about its headers. There is no index row
+// behind these, so the values a row would carry are absent rather than guessed.
+function headersFromDisk(
+  document: SingleFileMetaDocument,
+): OperationHeadResult {
+  return {
+    indexedAt: null,
+    lastModified: numberOrNull(document.data.attributes?.lastModified),
+    generation: null,
+    screenshots: null,
+    deps: null,
   };
 }
 

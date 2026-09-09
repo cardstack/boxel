@@ -74,7 +74,11 @@ export function lowerQueryOperation(
       status: 400,
       code: 'invalid-params',
       title: 'Invalid params',
-      detail: `the resolved query is not one the realm accepts — ${err?.message ?? String(err)}`,
+      detail:
+        `the query this invocation resolves to is not one the realm ` +
+        `accepts — ${err?.message ?? String(err)}. The fault is in a supplied ` +
+        `value or in the declared query it was substituted into; after ` +
+        `substitution the two are the same query.`,
     });
   }
   return query;
