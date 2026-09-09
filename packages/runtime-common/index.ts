@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
   ScreenshotFormat,
   ScreenshotImageType,
@@ -78,6 +79,20 @@ export interface SearchablePathDiagnostic {
   fieldName: string;
   // The dotted `searchable` path that failed to resolve.
   path: string;
+}
+
+// A problem found while lowering an `@operation` declaration into the data
+// the realm executes — a clause naming a field the type does not have, a
+// write into a computed field, a raw program that does not parse. Recorded on
+// the module render's `meta.diagnostics` and persisted to
+// `modules.diagnostics`, the same channel `searchablePathIssues` travels, so
+// an author sees a bad declaration where they see a bad `searchable` path.
+// The operation is still stored (flagged `invalid` in the definition entry),
+// so invoking it reports the problem rather than reading as unknown.
+export interface OperationLoweringDiagnostic extends OperationLoweringIssue {
+  // The card/field def carrying the declaration, as the `internalKeyFor`
+  // CodeRef string.
+  codeRef: string;
 }
 
 // A failure to parse a markdown file's leading YAML frontmatter block,
@@ -276,6 +291,11 @@ export interface PrerenderMetaDiagnostics {
   // module-prerender route's definition-build validation, not a card render.
   // Omitted entirely when every annotation in the module resolves.
   searchablePathIssues?: SearchablePathDiagnostic[];
+  // Problems found while lowering the module's `@operation` declarations,
+  // persisted to `modules.diagnostics` alongside `searchablePathIssues`.
+  // Omitted entirely when every declaration in the module lowers cleanly, and
+  // absent for a module that declares no operations.
+  operationIssues?: OperationLoweringDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -1321,6 +1341,13 @@ export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
+// Only the lowered *shapes*, not the pass that produces them: lowering reaches
+// `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
+// pull bxl's sources into the typecheck program of every package that imports
+// anything from runtime-common. A caller that runs the pass imports
+// `@cardstack/runtime-common/card-operations` directly and takes that cost on
+// purpose.
+export type * from './card-operations/types.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
