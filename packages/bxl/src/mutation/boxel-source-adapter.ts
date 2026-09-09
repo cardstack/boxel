@@ -1570,9 +1570,12 @@ export function mutateBxlCardSource(
     baseRevision: options.baseRevision,
     currentRevision: options.currentRevision,
     returning: options.returning,
+    context: options.context,
     cards: options.cards,
     resolveCard: options.resolveCard,
     authorize: options.authorize,
+    overlays: options.overlays,
+    onRead: options.onRead,
   });
   return applyBxlMutationPlanToCardSource(
     document,

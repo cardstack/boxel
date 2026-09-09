@@ -20,7 +20,10 @@ import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   prerenderSpawnedPriority,
 } from '../jobs/indexing.ts';
-import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
+import {
+  enqueuePrerenderHtmlJob,
+  skipsPrerenderHtml,
+} from '../jobs/prerender-html.ts';
 import type { Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
@@ -354,6 +357,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   virtualNetwork,
   queuePublisher,
   createPrerenderAuth,
+  skipPrerenderHtmlRealms,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, realmURL } = args;
@@ -385,6 +389,16 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
       onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+        if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
+          // Configured off for this realm. Says so out loud: a realm whose
+          // HTML never renders reads, from every other vantage point, exactly
+          // like one whose render is merely slow.
+          log.info(
+            `${jobIdentity(jobInfo)} not spawning prerender_html for ${realmURL}: ` +
+              `the realm is listed in --skipPrerenderHtmlRealm`,
+          );
+          return;
+        }
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,

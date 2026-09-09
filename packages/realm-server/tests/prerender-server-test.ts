@@ -1043,6 +1043,12 @@ module(basename(import.meta.filename), function () {
         return () => (++samples > 1 ? 'b778fe76' : 'babf3612');
       }
 
+      // The pool's own token, which these tests must also state: the predicate
+      // reads the warmed samples, so leaving them undefined makes the gate fire
+      // whatever the reported token does — and a test named for a moving token
+      // would pass identically with a steady one.
+      const POOL_ON_OUTGOING = () => 'babf3612';
+
       function visitRequest(
         request: SuperTest<Test>,
         url: string,
@@ -1079,6 +1085,7 @@ module(basename(import.meta.filename), function () {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () =>
             recycleDeferred.promise.then(() => {
               recycleSettled = true;
@@ -1132,10 +1139,14 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
-      test("a module failure under a steady shell is returned as the card's own", async function (assert) {
+      // What makes a module failure the card's own is not that nothing moved
+      // during the render — it is that the pool can be shown to have been on
+      // the current shell throughout. So this states both tokens.
+      test("a module failure on a pool that is current is returned as the card's own", async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1160,10 +1171,64 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
+      // A failure that survives the re-render is returned, whatever the pool
+      // did in between. Recovery here is exactly one extra render: the pool
+      // being behind is grounds for trying again, never grounds for this
+      // server to answer 5xx — the manager prunes a server that returns one,
+      // and its proxy loop walks on to prune the next, so a single visit can
+      // empty the registry.
+      test('a failure surviving the re-render is returned to the caller', async function (assert) {
+        // The pool is behind when the first render runs and current once the
+        // recycle resolves, which is what a working recycle looks like.
+        let warmed = 'babf3612';
+        let recycleDeferred = new Deferred<void>();
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => warmed,
+          awaitHostShellRecycle: () =>
+            recycleDeferred.promise.then(() => {
+              warmed = 'b778fe76';
+            }),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        let firstRenderEntered = new Deferred<void>();
+        (built.prerenderer as any).prerenderVisit = async () => {
+          if (++calls === 1) {
+            firstRenderEntered.fulfill();
+          }
+          // Both attempts fail the same way: the card really is broken.
+          return moduleFailure();
+        };
+
+        let resPromise = inFlight(() =>
+          visitRequest(request, `${realmURL.href}genuinely-broken`, authFor()),
+        );
+        await firstRenderEntered.promise;
+        recycleDeferred.fulfill();
+
+        let res = await resPromise;
+        assert.strictEqual(calls, 2, 'the re-render happened');
+        assert.strictEqual(
+          res.status,
+          201,
+          'answered with the failure rather than a 5xx that would prune the fleet',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          "the caller gets the card's own failure to persist",
+        );
+        await built.prerenderer.stop();
+      });
+
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1202,6 +1267,7 @@ module(basename(import.meta.filename), function () {
           isDraining: () => localDraining,
           drainingPromise: drainingDeferred.promise,
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () => {
             recycleWaitEntered.fulfill();
             // Never settles, so the drain is guaranteed to win the race.

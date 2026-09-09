@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -11,7 +11,10 @@ import {
   type Item,
   isTrue,
 } from '../jqtools/evaluate/utils/utils.ts';
-import { withRuntimeDiagnostics } from '../jqtools/evaluate/runtimeState.ts';
+import {
+  withRequestContext,
+  withRuntimeDiagnostics,
+} from '../jqtools/evaluate/runtimeState.ts';
 import type {
   ExpressionAst,
   NormalBinaryOperator,
@@ -19,12 +22,33 @@ import type {
 import {
   parseBxlMutationProgram,
   printMutationAst,
+  readAssertSnapshotOption,
   type MutationAssignmentOperator,
   type ParsedMutationArgument,
   type ParsedMutationStatement,
 } from './syntax.ts';
 import {
+  addressesPrototype,
+  clone,
+  deleteAt,
+  equalJson,
+  hasAt,
+  pathKey,
+  setAt,
+  valueAt,
+} from './json-path.ts';
+import {
+  classifyOverlayRead,
+  EMPTY_OVERLAY_INDEX,
+  indexBxlMutationOverlays,
+  layerBxlMutationOverlays,
+  overlayWriteOwner,
+  settleOverlayUpdate,
+  type OverlayIndex,
+} from './overlays.ts';
+import {
   BxlMutationError,
+  type BxlMutationContext,
   type BxlMutationField,
   type BxlMutationFieldType,
   type BxlMutationIntent,
@@ -33,9 +57,11 @@ import {
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
   type BxlMutationPrepareOptions,
+  type BxlMutationReadEvent,
   type BxlMutationReturning,
   type BxlMutationSchema,
   type BxlMutationStatementPlan,
+  type BxlMutationUnavailableOverlay,
   type PreparedBxlMutation,
 } from './types.ts';
 
@@ -71,99 +97,180 @@ interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
+  /** What the overlays answer for, against the document as it now stands. */
+  overlays: OverlayIndex;
+  /** Paths earlier statements have made their own. */
+  claimed: ReadonlySet<string>;
+  /** The layered view of the working document, and what it was built from. */
+  view?: { of: BxlMutationJson; revision: number; value: BxlMutationJson };
+  /** Bumped by every write, so a cached view is never handed back stale. */
+  revision: number;
+  onRead?: (event: BxlMutationReadEvent) => void;
+  /**
+   * The request context as the host supplied it, held by reference.
+   *
+   * Not copied here: the builtins copy each value as they hand it to a
+   * program, which is what keeps the host's object out of the plan and out of
+   * reach of a builtin that writes into its argument. A copy at this boundary
+   * would clone the whole context once per plan whether a program reads any
+   * of it or not.
+   *
+   * On the way out, a written value is isolated by `setAt`'s own copy and by
+   * the structural inserts' — not by the per-statement `clone(working)`,
+   * which runs on entry to the *next* statement and so does not cover the
+   * last one.
+   */
+  requestContext?: BxlMutationContext;
 }
 
-function clone<T>(value: T): T {
-  if (typeof structuredClone === 'function') return structuredClone(value);
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function pathKey(path: BxlMutationPath): string {
-  return JSON.stringify(path);
-}
-
-function equalJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function hasAt(root: BxlMutationJson, path: BxlMutationPath): boolean {
-  if (path.length === 0) return true;
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return false;
-    if (Array.isArray(current)) {
-      if (typeof part !== 'number' || part < 0 || part >= current.length)
-        return false;
-      current = current[part];
-    } else {
-      if (
-        typeof part !== 'string' ||
-        !Object.prototype.hasOwnProperty.call(current, part)
-      )
-        return false;
-      current = (current as Record<string, unknown>)[part];
-    }
-  }
-  return true;
-}
-
-function valueAt(
+/**
+ * The document an expression is evaluated against: the Card's own document
+ * with the overlays layered under it.
+ *
+ * The planner's working state is the Card's document alone, so a plan's output
+ * and its intents carry stored values without anything having to be undone.
+ * The view exists only for the duration of an evaluation, and shares the
+ * working document's shape — an overlay never adds or retypes a container —
+ * so a path resolved in one addresses the same element in the other.
+ */
+function readView(
   root: BxlMutationJson,
-  path: BxlMutationPath,
-): BxlMutationJson | undefined {
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return undefined;
-    current = Array.isArray(current)
-      ? current[part as number]
-      : (current as Record<string, unknown>)[part as string];
-  }
-  return current as BxlMutationJson | undefined;
-}
-
-function setAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-  value: BxlMutationJson,
+  context: PlannerContext,
 ): BxlMutationJson {
-  if (path.length === 0) return clone(value);
-  let current = root as BxlMutationJson[] | Record<string, BxlMutationJson>;
-  for (let index = 0; index < path.length - 1; index++) {
-    const part = path[index]!;
-    const nextPart = path[index + 1]!;
-    const next = Array.isArray(current)
-      ? current[part as number]
-      : current[part as string];
-    if (next === null || typeof next !== 'object') {
-      const replacement: BxlMutationJson =
-        typeof nextPart === 'number' ? [] : {};
-      if (Array.isArray(current)) current[part as number] = replacement;
-      else current[part as string] = replacement;
-      current = replacement as
-        | BxlMutationJson[]
-        | Record<string, BxlMutationJson>;
-    } else {
-      current = next as BxlMutationJson[] | Record<string, BxlMutationJson>;
-    }
+  if (context.overlays.empty) return root;
+  const cached = context.view;
+  if (cached && cached.of === root && cached.revision === context.revision) {
+    return cached.value;
   }
-  const last = path[path.length - 1]!;
-  if (Array.isArray(current)) current[last as number] = clone(value);
-  else current[last as string] = clone(value);
-  return root;
+  const value = layerBxlMutationOverlays(root, context.overlays);
+  context.view = { of: root, revision: context.revision, value };
+  return value;
 }
 
-function deleteAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-): BxlMutationJson {
-  if (path.length === 0) {
-    throw new Error('The planner cannot delete its root value.');
+/**
+ * Record that the working document changed, so the next read builds a fresh
+ * view. A bulk statement writes between locations and its value expression may
+ * read what an earlier location left behind.
+ */
+function documentChanged(context: PlannerContext): void {
+  context.revision++;
+}
+
+/**
+ * What a statement's reads resolved to. `strict` reads raise
+ * `snapshot-unavailable` on a path the host could not supply; a best-effort
+ * assert takes the unavailability back instead and fails with its own message.
+ */
+interface RecordedReads {
+  events: BxlMutationReadEvent[];
+  overlay: boolean;
+  unavailable?: BxlMutationUnavailableOverlay;
+}
+
+/**
+ * Where an expression's reads are anchored, and whether an unavailable one
+ * stops the statement. A value expression reads from the Card root; the value
+ * side of `|=` reads from the location it updates.
+ */
+interface ReadContext {
+  prefix?: BxlMutationPath;
+  policy?: 'strict' | 'best-effort';
+  /**
+   * Report only reads an overlay answered. A location is resolved for every
+   * statement, and saying so each time would drown the log in the paths a
+   * program is plainly writing to; what matters is when index data helped
+   * choose the write set.
+   */
+  onlyOverlay?: boolean;
+}
+
+function recordReads(
+  argument: ParsedMutationArgument,
+  input: BxlMutationJson,
+  context: PlannerContext,
+  statement: number,
+  reads: ReadContext = {},
+): RecordedReads {
+  const result: RecordedReads = { events: [], overlay: false };
+  if (context.onRead === undefined && context.overlays.empty) return result;
+  const prefix = reads.prefix ?? [];
+  for (const relative of argument.readPaths) {
+    const path = [...prefix, ...relative];
+    const resolved = classifyOverlayRead(
+      context.overlays,
+      path,
+      valueAt(input, relative),
+    );
+    if (reads.onlyOverlay && resolved.event.tier === 'source') continue;
+    result.events.push(resolved.event);
+    if (resolved.event.tier !== 'source') result.overlay = true;
+    if (resolved.unavailable && !result.unavailable) {
+      result.unavailable = resolved.unavailable;
+    }
+    context.onRead?.(resolved.event);
   }
-  const parent = valueAt(root, path.slice(0, -1));
-  const key = path[path.length - 1]!;
-  if (Array.isArray(parent)) parent.splice(key as number, 1);
-  else if (parent && typeof parent === 'object') delete parent[key as string];
-  return root;
+  if ((reads.policy ?? 'strict') === 'strict' && result.unavailable) {
+    const { path, tier, reason } = result.unavailable;
+    throw new BxlMutationError(
+      'plan',
+      'snapshot-unavailable',
+      statement,
+      `The ${tier} value at ${namePath(path)} is unavailable (${reason}).`,
+      { details: { path, tier, reason } },
+    );
+  }
+  return result;
+}
+
+/** How a path reads in a message. The root has no name of its own. */
+function namePath(path: string): string {
+  return path === '' ? 'the whole Card' : path;
+}
+
+/** Keep an update's result to what the Card can store. */
+function settleUpdate(
+  produced: BxlMutationJson,
+  layered: BxlMutationJson,
+  location: ResolvedLocation,
+  context: PlannerContext,
+  statement: number,
+): BxlMutationJson {
+  const settled = settleOverlayUpdate(
+    context.overlays,
+    location.path,
+    layered,
+    location.value,
+    produced,
+  );
+  if ('value' in settled) return settled.value;
+  throw new BxlMutationError(
+    'validate',
+    settled.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    settled.tier === 'computed'
+      ? `${settled.refused} is a computed value and cannot be written.`
+      : `${settled.refused} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: settled.refused, tier: settled.tier } },
+  );
+}
+
+/** Overlay values are read-only: a write that lands on one is refused. */
+function assertWritableOverlayPath(
+  path: BxlMutationPath,
+  context: PlannerContext,
+  statement: number,
+): void {
+  const owner = overlayWriteOwner(context.overlays, path);
+  if (!owner) return;
+  throw new BxlMutationError(
+    'validate',
+    owner.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    owner.tier === 'computed'
+      ? `${owner.path} is a computed value and cannot be written.`
+      : `${owner.path} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: owner.path, tier: owner.tier } },
+  );
 }
 
 function collectionAt(
@@ -182,15 +289,162 @@ function objectId(value: BxlMutationJson | undefined): string | undefined {
   return typeof value.id === 'string' ? value.id : undefined;
 }
 
+/**
+ * Describe a value that is not JSON, or `undefined` when it is.
+ *
+ * `BxlMutationContext` declares the context as JSON, but a type is not a
+ * runtime guarantee: a `Date`, `Map`, `Set`, `RegExp` or `TypedArray` reaches
+ * a program as itself and can be written into the document, and so does a
+ * `bigint`. The `bigint` is the sharpest edge — `params("v") | tostring` on
+ * one yields `undefined`, the silent unset these builtins exist to refuse —
+ * but a live `Map` in a plan is no better, and `NaN` reaching a document as
+ * `null` is a value the host never sent.
+ */
+function nonJsonTypeName(value: unknown): string | undefined {
+  if (value === null) return undefined;
+  switch (typeof value) {
+    case 'boolean':
+      return undefined;
+    case 'number':
+      // `NaN` and the infinities have no JSON form and serialize to `null`,
+      // which is a value the host did not send appearing in the document.
+      return Number.isFinite(value) ? undefined : String(value);
+    case 'string':
+      return undefined;
+    case 'bigint':
+    case 'symbol':
+    case 'function':
+      return typeof value;
+    case 'undefined':
+      // Tolerated rather than rejected: a host spreading an object with
+      // optional fields produces these readily, and the builtins already
+      // treat a key held with `undefined` as absent when a program reads it.
+      return undefined;
+    default:
+      break;
+  }
+  if (Array.isArray(value)) return undefined;
+  // The built-in tag decides. It reports `Date`, `Map` and `URL` reliably,
+  // and says `Object` for every plain object — one from another realm and one
+  // carrying only a class's own data fields included, since both hold nothing
+  // but JSON.
+  //
+  // A `Symbol.toStringTag` can rename the tag or blank it, so an empty tag is
+  // reported rather than read as "no problem found". The reverse, an exotic
+  // object branded `Object`, is not distinguishable from a plain one in JS and
+  // is not defended against: this guard is for a host's mistake, and a
+  // symbol-keyed brand cannot come from a JSON payload.
+  const tag = Object.prototype.toString.call(value).slice(8, -1);
+  if (tag === 'Object') return undefined;
+  return tag || 'an object with no type name';
+}
+
+/**
+ * Reject a request context carrying anything the planner cannot put in a JSON
+ * document, naming the path so the host can find it.
+ *
+ * The check is the only thing standing between a host's mistake and a live
+ * `Map` or a `bigint` in a plan, so it runs before the context is reachable
+ * rather than leaving the type declaration as the sole guard.
+ */
+function assertJsonContext(context: BxlMutationContext) {
+  // Two sets, because they answer different questions. `ancestors` is the
+  // current path and finds a cycle; `cleared` is every object already walked
+  // and keeps shared structure from being walked once per route to it —
+  // without it a graph that merely shares subtrees costs exponential time.
+  const ancestors = new Set<unknown>();
+  const cleared = new Set<unknown>();
+  const walk = (value: unknown, path: string) => {
+    const typeName = nonJsonTypeName(value);
+    if (typeName) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at ${path} is not JSON — its type is ` +
+          `${typeName}. The host supplies context values already resolved ` +
+          'to JSON.',
+      );
+    }
+    if (value === null || typeof value !== 'object') return;
+    if (ancestors.has(value)) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context is cyclic at ${path}; a JSON document cannot ` +
+          'hold a cycle.',
+      );
+    }
+    if (cleared.has(value)) return;
+    ancestors.add(value);
+    if (Array.isArray(value)) {
+      // An index loop, not `forEach`, which skips holes — and a hole reads as
+      // `undefined`, which an array cannot carry: an absent object member
+      // serializes as absent, but an absent array entry serializes as `null`,
+      // a value the host never sent.
+      for (let index = 0; index < value.length; index += 1) {
+        const entry: unknown = value[index];
+        if (entry === undefined) {
+          throw new BxlMutationError(
+            'plan',
+            'context-not-json',
+            1,
+            `The request context at ${path}[${index}] has no value. An ` +
+              'array entry cannot be absent the way an object member can — ' +
+              'it would reach the document as `null`.',
+          );
+        }
+        walk(entry, `${path}[${index}]`);
+      }
+    } else {
+      // Own properties, enumerable or not, matching what the builtins read.
+      for (const key of Object.getOwnPropertyNames(value)) {
+        walk((value as Record<string, unknown>)[key], `${path}.${key}`);
+      }
+    }
+    ancestors.delete(value);
+    cleared.add(value);
+  };
+
+  for (const slot of ['params', 'actor', 'instance'] as const) {
+    const value = context[slot];
+    if (value === undefined) continue;
+    try {
+      walk(value, `context.${slot}`);
+    } catch (error) {
+      if (error instanceof BxlMutationError) throw error;
+      // A property accessor on the host's object threw. That is still an
+      // unusable context, reported as one instead of escaping raw.
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at context.${slot} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
+}
+
 function evaluateItems(
   ast: ExpressionAst,
   input: Item[],
   context: PlannerContext,
 ): Item[] {
-  const runtime = withRuntimeDiagnostics(
-    () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
-    context.prepare.runtimeLimits,
-  );
+  const evaluate = () =>
+    withRuntimeDiagnostics(
+      () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
+      context.prepare.runtimeLimits,
+    );
+  // Scoped outside the diagnostics frame, and around every statement's
+  // evaluation, so `params`/`actor`/`instance` read this plan's context
+  // wherever in the program they appear.
+  const runtime = context.requestContext
+    ? withRequestContext(context.requestContext, evaluate)
+    : evaluate();
   if (runtime.error) throw runtime.error;
   return runtime.result ?? [];
 }
@@ -200,7 +454,9 @@ function evaluateSingleJson(
   input: BxlMutationJson,
   context: PlannerContext,
   statement: number,
+  reads: ReadContext = {},
 ): BxlMutationJson | CardReference {
+  recordReads(argument, input, context, statement, reads);
   if (
     argument.ast.type === 'filter' &&
     argument.ast.name === 'card/1' &&
@@ -240,9 +496,17 @@ function resolveLocations(
   statement: number,
   cardinality: 'one' | 'bulk' = argument.bulk ? 'bulk' : 'one',
 ): ResolvedLocation[] {
+  const view = readView(root, context);
+  // A selector reads the document to decide what it matches, so an unavailable
+  // value cannot be allowed to quietly settle a write set. A location that
+  // addresses one place directly selects nothing, and whatever it reads its
+  // statement reads too.
+  if (argument.bulk) {
+    recordReads(argument, view, context, statement, { onlyOverlay: true });
+  }
   let items: Item[];
   try {
-    items = evaluateItems(argument.ast, [createItem(root)], context);
+    items = evaluateItems(argument.ast, [createItem(view)], context);
   } catch (error) {
     throw new BxlMutationError(
       'plan',
@@ -325,8 +589,7 @@ function resolveField(
   context: PlannerContext,
   statement: number,
 ): FieldResolution {
-  const unsafeParts = new Set(['__proto__', 'prototype', 'constructor']);
-  if (path.some((part) => typeof part === 'string' && unsafeParts.has(part))) {
+  if (addressesPrototype(path)) {
     throw new BxlMutationError(
       'validate',
       'prototype-path-forbidden',
@@ -507,9 +770,26 @@ function validateWritableLocations(
       'Numeric collection positions require a pinned base revision during streaming execution.',
     );
   }
-  return locations.map((location) =>
-    resolveField(location.path, context, statement),
-  );
+  return locations.map((location) => {
+    let field: FieldResolution;
+    try {
+      field = resolveField(location.path, context, statement);
+    } catch (error) {
+      // The overlay often has the more specific reason to refuse a path the
+      // schema rejects — a write through a link, which the schema can only
+      // report as traversal. Let it speak first.
+      assertWritableOverlayPath(location.path, context, statement);
+      throw error;
+    }
+    // The schema is the authority on the Fields a Card declares. Where it
+    // already answers a write with an intentional no-op, an overlay does not
+    // turn that into an error: the refusal is a backstop for paths the schema
+    // has no opinion about, not a second opinion about the ones it does.
+    if (field.writeBehavior !== 'skip') {
+      assertWritableOverlayPath(location.path, context, statement);
+    }
+    return field;
+  });
 }
 
 function loadedCard(
@@ -620,21 +900,36 @@ function planAssignment(
     if (statement.operator === '=') {
       next = evaluateSingleJson(
         statement.value,
-        output,
+        readView(output, context),
         context,
         statement.statement,
       );
     } else if (statement.operator === '|=') {
+      // An update sees the layered value, so a Field an overlay filled into
+      // a stored container is in scope; what it returns is settled back
+      // against the Card's.
+      const layered = (valueAt(readView(output, context), location.path) ??
+        null) as BxlMutationJson;
       next = evaluateSingleJson(
         statement.value,
-        (location.value ?? null) as BxlMutationJson,
+        layered,
         context,
         statement.statement,
+        { prefix: location.path },
       );
+      if (!isCardReference(next)) {
+        next = settleUpdate(
+          next,
+          layered,
+          location,
+          context,
+          statement.statement,
+        );
+      }
     } else {
       const right = evaluateSingleJson(
         statement.value,
-        output,
+        readView(output, context),
         context,
         statement.statement,
       );
@@ -680,6 +975,7 @@ function planAssignment(
         field.relationship.path,
         loadedCard(next.id, context, statement.statement),
       );
+      documentChanged(context);
       continue;
     }
     if (isCardReference(next)) {
@@ -698,6 +994,7 @@ function planAssignment(
     };
     intents.push(intent);
     output = setAt(output, location.path, next as BxlMutationJson);
+    documentChanged(context);
   }
   return { root: output, plan: statementPlan(statement, intents) };
 }
@@ -723,8 +1020,15 @@ function jsonValue(
   root: BxlMutationJson,
   context: PlannerContext,
   statement: number,
+  reads: ReadContext = {},
 ): BxlMutationJson | CardReference {
-  return evaluateSingleJson(argument, root, context, statement);
+  return evaluateSingleJson(
+    argument,
+    readView(root, context),
+    context,
+    statement,
+    reads,
+  );
 }
 
 function planCall(
@@ -738,18 +1042,60 @@ function planCall(
 
   switch (statement.name) {
     case 'assert': {
-      const condition = evaluateItems(
-        statement.args[0]!.ast,
-        [createItem(root)],
+      const bestEffort =
+        statement.args.length === 3 &&
+        readAssertSnapshotOption(statement.args[2]!, number);
+      const reads = recordReads(
+        statement.args[0]!,
+        readView(root, context),
         context,
+        number,
+        { policy: 'best-effort' },
       );
-      if (condition.length !== 1 || !isTrue(condition[0]!.value)) {
-        const message = jsonValue(statement.args[1]!, root, context, number);
+      if (reads.overlay && !bestEffort) {
+        const overlay = reads.events.find((event) => event.tier !== 'source')!;
+        throw new BxlMutationError(
+          'validate',
+          'assert-snapshot-required',
+          number,
+          `assert reads the ${overlay.tier} value at ${namePath(overlay.path)}, which can lag the stored document. Mark the assert best-effort with { snapshot: true }.`,
+          { details: { path: overlay.path, tier: overlay.tier } },
+        );
+      }
+      // A best-effort assert fails with its own message rather than raising
+      // `snapshot-unavailable`, so the author's wording reaches the caller.
+      const condition = reads.unavailable
+        ? []
+        : evaluateItems(
+            statement.args[0]!.ast,
+            [createItem(readView(root, context))],
+            context,
+          );
+      if (
+        reads.unavailable ||
+        condition.length !== 1 ||
+        !isTrue(condition[0]!.value)
+      ) {
+        // The whole statement is best-effort, message included: an author who
+        // marked the assert tolerant of stale values gets their wording back
+        // even when the message itself reads an unavailable path.
+        const message = jsonValue(statement.args[1]!, root, context, number, {
+          policy: bestEffort ? 'best-effort' : 'strict',
+        });
         throw new BxlMutationError(
           'plan',
           'assertion-failed',
           number,
           typeof message === 'string' ? message : 'Mutation assertion failed.',
+          reads.unavailable
+            ? {
+                details: {
+                  path: reads.unavailable.path,
+                  tier: reads.unavailable.tier,
+                  reason: reads.unavailable.reason,
+                },
+              }
+            : {},
         );
       }
       break;
@@ -794,6 +1140,7 @@ function planCall(
         after: clone(value as BxlMutationJson),
       });
       output = setAt(output, location.path, value as BxlMutationJson);
+      documentChanged(context);
       break;
     }
     case 'copy_value_to': {
@@ -826,6 +1173,7 @@ function planCall(
         path: destination.location.path,
       });
       output = setAt(output, destination.location.path, source.location.value!);
+      documentChanged(context);
       break;
     }
     case 'del': {
@@ -887,6 +1235,7 @@ function planCall(
           });
         }
         output = deleteAt(output, location.path);
+        documentChanged(context);
       }
       break;
     }
@@ -941,6 +1290,7 @@ function planCall(
           index,
         });
         collection.splice(index, 0, loadedCard(value.id, context, number));
+        documentChanged(context);
       } else {
         if (isCardReference(value)) {
           throw new BxlMutationError(
@@ -957,6 +1307,7 @@ function planCall(
           value: clone(value as BxlMutationJson),
         });
         collection.splice(index, 0, clone(value as BxlMutationJson));
+        documentChanged(context);
       }
       break;
     }
@@ -993,6 +1344,7 @@ function planCall(
           index,
         });
         collection.splice(index, 0, loadedCard(value.id, context, number));
+        documentChanged(context);
       } else {
         if (isCardReference(value)) {
           throw new BxlMutationError(
@@ -1009,6 +1361,7 @@ function planCall(
           value: clone(value as BxlMutationJson),
         });
         collection.splice(index, 0, clone(value as BxlMutationJson));
+        documentChanged(context);
       }
       break;
     }
@@ -1086,6 +1439,7 @@ function planCall(
       }
       const sourceCollection = collectionAt(output, sourceCollectionPath);
       const [moved] = sourceCollection.splice(sourceIndex, 1);
+      documentChanged(context);
       if (moved === undefined)
         throw new BxlMutationError(
           'plan',
@@ -1094,6 +1448,7 @@ function planCall(
           'Move source no longer exists.',
         );
       sourceCollection.splice(targetIndex, 0, moved);
+      documentChanged(context);
       if (item.field.relationship) {
         const id = objectId(moved);
         if (!id)
@@ -1192,6 +1547,7 @@ function planCall(
       );
       const reordered = order.map((key) => byKey.get(JSON.stringify(key))!);
       collection.splice(0, collection.length, ...reordered);
+      documentChanged(context);
       intents.push({
         op: 'reorder',
         collection: target.location.path,
@@ -1243,7 +1599,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    mutationBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({
@@ -1279,6 +1635,7 @@ export function prepareBxlMutation(
           'The loaded Card revision does not match baseRevision.',
         );
       }
+      const claimed = new Set<string>();
       const context: PlannerContext = {
         prepare: preparedOptions,
         plan: {
@@ -1287,6 +1644,13 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
+        overlays: EMPTY_OVERLAY_INDEX,
+        claimed,
+        revision: 0,
+        ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
+        requestContext: planOptions.context
+          ? (assertJsonContext(planOptions.context), planOptions.context)
+          : undefined,
       };
       const before = clone(snapshot);
       let working = clone(snapshot);
@@ -1294,6 +1658,13 @@ export function prepareBxlMutation(
 
       for (const statement of parsed.statements) {
         const draft = clone(working);
+        // Rebuild the index against the document as this statement finds it,
+        // so what an overlay answers for is described in the positions the
+        // statement will address rather than the ones it started life in —
+        // minus whatever earlier statements have made their own.
+        context.overlays = planOptions.overlays
+          ? indexBxlMutationOverlays(draft, planOptions.overlays, claimed)
+          : EMPTY_OVERLAY_INDEX;
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
           result =
@@ -1326,6 +1697,7 @@ export function prepareBxlMutation(
           }
         }
         working = result.root;
+        for (const path of result.plan.paths) claimed.add(path.join('.'));
         statementPlans.push(result.plan);
       }
 
@@ -1340,6 +1712,7 @@ export function prepareBxlMutation(
           .map((path) => [pathKey(path), path]),
       );
       const paths = [...pathMap.values()];
+      const output = working;
       return {
         language: 'bxl-mutation/1',
         programId: planOptions.programId,
@@ -1354,7 +1727,7 @@ export function prepareBxlMutation(
         canonicalSource: parsed.canonicalSource,
         warnings: [...parsed.warnings],
         before,
-        output: working,
+        output,
         statements: statementPlans,
         intents,
         affected,
@@ -1362,7 +1735,7 @@ export function prepareBxlMutation(
         returning: returningProjection(
           planOptions.returning,
           before,
-          working,
+          output,
           intents,
           affected,
           paths,

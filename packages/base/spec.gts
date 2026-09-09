@@ -6,6 +6,7 @@ import {
   linksToMany,
   FieldDef,
   containsMany,
+  FileDef,
   getCardMeta,
   resolveInstanceURL,
   type CardOrFieldTypeIcon,
@@ -53,6 +54,7 @@ import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
+import FileIcon from '@cardstack/boxel-icons/file';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecTool from '@cardstack/boxel-host/commands/generate-readme-spec';
@@ -65,7 +67,13 @@ import {
   type Permissions,
 } from '@cardstack/runtime-common';
 
-export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
+export type SpecType =
+  | 'card'
+  | 'field'
+  | 'component'
+  | 'app'
+  | 'command'
+  | 'file';
 
 class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
   constructor(toolContext: ToolContext) {
@@ -360,6 +368,7 @@ interface SpecExamplesSectionSignature {
   Blocks: {
     linkedExamples: [];
     containedExamples: [];
+    fileExamples: [];
   };
 }
 
@@ -404,7 +413,9 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
           <h2 id='examples'>Examples</h2>
         </div>
       </header>
-      {{#if (eq this.specType 'field')}}
+      {{#if (eq this.specType 'file')}}
+        {{yield to='fileExamples'}}
+      {{else if (eq this.specType 'field')}}
         {{#if this.isPrimitiveField}}
           <p
             class='spec-example-incompatible-message'
@@ -689,6 +700,9 @@ class Isolated extends Component<typeof Spec> {
         <:containedExamples>
           <@fields.containedExamples />
         </:containedExamples>
+        <:fileExamples>
+          <@fields.fileExamples />
+        </:fileExamples>
       </SpecExamplesSection>
 
       <SpecModuleSection @model={{@model}} />
@@ -818,6 +832,9 @@ class Edit extends Component<typeof Spec> {
         <:containedExamples>
           <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         </:containedExamples>
+        <:fileExamples>
+          <@fields.fileExamples @typeConstraint={{this.absoluteRef}} />
+        </:fileExamples>
       </SpecExamplesSection>
 
       <SpecModuleSection @model={{@model}} />
@@ -938,6 +955,12 @@ export class Spec extends CardDef {
     },
   });
 
+  @field isFile = contains(BooleanField, {
+    computeVia: function (this: Spec) {
+      return this.specType === 'file';
+    },
+  });
+
   @field moduleHref = contains(StringField, {
     computeVia: function (this: Spec) {
       if (!this.ref || !this.ref.module) {
@@ -952,6 +975,7 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef);
+  @field fileExamples = linksToMany(FileDef);
   @field cardTitle = contains(SpecTitleField);
   @field cardDescription = contains(SpecDescriptionField);
 
@@ -1112,6 +1136,8 @@ function getIcon(specType: string) {
       return LayoutList;
     case 'component':
       return LayoutList;
+    case 'file':
+      return FileIcon;
     default:
       return;
   }

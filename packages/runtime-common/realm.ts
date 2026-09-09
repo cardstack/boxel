@@ -112,6 +112,7 @@ import {
   param,
   dbExpression,
   dbAdapterQuerier,
+  mintRealmLoaderEpoch,
   type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -176,9 +177,11 @@ import {
   captureSpecOverrides,
   isValidScreenshotName,
   parseCaptureSpecParams,
+  screenshotLedgerSourceURL,
   screenshotsMetaFromManifest,
   type CaptureSpec,
   type ScreenshotManifest,
+  type ScreenshotManifestEntry,
 } from './capture-spec.ts';
 import {
   findMediaCacheEntry,
@@ -232,7 +235,7 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { computeContentHash, isSampledContentHash } from './content-hash.ts';
-import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
+import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
@@ -2320,6 +2323,11 @@ export class Realm {
       contentSize?: number;
     }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
+    // Whether this batch has already minted a loader epoch. The token only
+    // has to differ from whatever a prerender tab is holding, so one per
+    // batch covers every module in it; minting per file would cost each warm
+    // tab a loader reset per file for no extra freshness.
+    let mintedLoaderEpoch = false;
     let addedFiles: LocalPath[] = [];
     let updatedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
@@ -2423,6 +2431,94 @@ export class Realm {
       (isNewFile ? addedFiles : updatedFiles).push(path);
       this.invalidateCache(path);
       await this.#notifyFileChange(path);
+      if (currentWriteType === 'module') {
+        // The definition cache is keyed by module URL with no freshness
+        // check on the row — `readFromDatabaseCache` never compares content
+        // hashes or mtimes, and only error rows carry a TTL — so a cached
+        // definition for this module stays authoritative until something
+        // deletes it. Dropping it here, where the bytes change, keeps a
+        // written module's cached definition in step with the file rather
+        // than with the index: the next `lookupDefinition` misses and reads
+        // the rewritten module through `prerenderModule`, off disk.
+        //
+        // Leaving this to the index job's `onInvalidation` instead would
+        // leave a window — the whole of it on the deferred-indexing paths —
+        // in which `fileSerialization` resolves an instance against the
+        // module's previous schema. `serializeCardResource` skips every
+        // attribute whose field that schema doesn't declare, so the
+        // instance lands on disk missing the new field and the write still
+        // reports success; a dropped attribute is indistinguishable from an
+        // unset one, so nothing downstream can tell it happened.
+        //
+        // Ordered after `#notifyFileChange` deliberately. This replica dropped
+        // its own byte caches synchronously in `invalidateCache(path)` above,
+        // but peer replicas only drop theirs when they receive that
+        // notification. Deleting the definition row is what makes the next
+        // `lookupDefinition` — on any replica — prerender the module; a peer
+        // that prerenders while still holding pre-write bytes derives the old
+        // schema and caches THAT, reinstating the staleness this call removes
+        // and making it durable until indexing lands. Publishing the byte
+        // invalidation first narrows that to peers which have not yet
+        // processed the notification; it does not close it, since the notify
+        // is best-effort and applied asynchronously. The index job's own
+        // invalidation stays the backstop.
+        //
+        // Best-effort, like `#notifyFileChange` above. The bytes are already
+        // durable at this point but `urls` has not been appended to yet, so
+        // letting either step throw would abandon the batch before ANY index
+        // job is enqueued — for this file and for every file written ahead of
+        // it — and the caller's natural remedy makes it worse: a retry with
+        // the same bytes takes the unchanged-content short-circuit above, so
+        // it enqueues nothing either and the file stays on disk and out of
+        // the index until an unrelated edit or a full reindex. Swallowing
+        // leaves only the staleness these steps exist to remove, which the
+        // index job's own invalidation still clears. They are caught
+        // separately so a failure in one still leaves the other's benefit:
+        // the delete alone still drops the row a stale definition sits in,
+        // and the epoch alone still stops a later invalidation from
+        // re-deriving that definition off a warm tab.
+        //
+        // Deleting the cached definition only guarantees the next lookup
+        // re-derives one; it says nothing about what that lookup derives it
+        // FROM. `lookupDefinition` repopulates by prerendering the module,
+        // and a prerender tab that already evaluated this module keeps
+        // serving the evaluated copy — the route re-reads the file's metadata
+        // (so the response even carries the post-write mtime) but imports out
+        // of the loader it is holding. The result is the pre-write schema,
+        // cached under the post-write module's URL and durable until
+        // something else invalidates it: the staleness the delete removes,
+        // reinstated one layer down.
+        //
+        // Minting a loader epoch is how this codebase already says "warm tabs
+        // are stale for this realm" — an index pass whose invalidation set
+        // contains an executable mints one, and the render routes reset a
+        // tab's loader once per epoch it has not cleared for. The write path
+        // has to mint too, because every definition resolved between the
+        // write and that index pass — the whole of the window on the
+        // deferred-indexing paths — is resolved before the pass's epoch
+        // exists. Ordered before the delete so the epoch is already current
+        // for any lookup that observes the missing row.
+        if (!mintedLoaderEpoch) {
+          try {
+            await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+            // Only on success: a transient failure here gets another attempt
+            // from the next module in the batch rather than leaving every
+            // module in it renderable off a warm tab.
+            mintedLoaderEpoch = true;
+          } catch (err: unknown) {
+            this.#log.error(
+              `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+            );
+          }
+        }
+        try {
+          await this.#definitionLookup.invalidate(url.href);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
+          );
+        }
+      }
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
@@ -4195,14 +4291,53 @@ export class Realm {
       // an `<img>` embedded ahead of its capture picks it up on
       // revalidation. Names never trigger capture work: declared captures
       // are produced by the prerender pass alone.
+      //
+      // Names address the URL's file row too: a FileDef family's declared
+      // captures persist there, keyed by the file's own URL with its
+      // extension intact (only an instance id sheds `.json`). A path that
+      // names a file by a registered extension reads the file row first;
+      // any other path reads the instance first — with the other row as the
+      // fallback either way, so an extensionless file (`LICENSE`) still
+      // resolves.
+      let rawFileURL = this.paths.fileURL(instanceLocalPath);
       let manifestLookupStart = Date.now();
-      let manifest =
-        await this.#realmIndexQueryEngine.liveInstanceScreenshots(instanceURL);
-      let manifestLookupMs = Date.now() - manifestLookupStart;
-      if (manifest === undefined) {
-        return mediaCacheMissResponse({ requestContext });
+      let readInstance = async () => {
+        let row =
+          await this.#realmIndexQueryEngine.liveInstanceScreenshots(
+            instanceURL,
+          );
+        return row && ({ kind: 'instance', ...row } as const);
+      };
+      let readFileRow = async () => {
+        let row =
+          await this.#realmIndexQueryEngine.liveFileScreenshots(rawFileURL);
+        return row && ({ kind: 'file', ...row } as const);
+      };
+      let reads = urlNamesFile(rawFileURL)
+        ? [readFileRow, readInstance]
+        : [readInstance, readFileRow];
+      // The first live row whose manifest holds the name wins — a URL both
+      // rows answer to (a `.json` file that is also a card) must resolve to
+      // the row that actually captured this slot, not 404 against the other
+      // row's empty manifest. The ledger key comes from the matched row's
+      // own canonical url, never the request's spelling: the lookups also
+      // match `file_alias`, and an alias-addressed hit would otherwise look
+      // up a source URL the ledger never held.
+      let manifestEntry: ScreenshotManifestEntry | undefined;
+      let manifestSourceURL = instanceURL.href;
+      for (let read of reads) {
+        let row = await read();
+        if (!row) {
+          continue;
+        }
+        let entry = row.manifest?.[name];
+        if (entry) {
+          manifestEntry = entry;
+          manifestSourceURL = screenshotLedgerSourceURL(row.url, row.kind);
+          break;
+        }
       }
-      let manifestEntry = manifest?.[name];
+      let manifestLookupMs = Date.now() - manifestLookupStart;
       if (!manifestEntry) {
         return mediaCacheMissResponse({ requestContext });
       }
@@ -4218,7 +4353,7 @@ export class Realm {
       let ledgerLookupStart = Date.now();
       let entry = await findMediaCacheEntry(this.#dbAdapter, {
         realmURL: this.url,
-        sourceURL: instanceURL.href,
+        sourceURL: manifestSourceURL,
         captureSpecHash: manifestEntry.specHash,
         objectKey: manifestEntry.objectKey,
       });
@@ -4244,7 +4379,7 @@ export class Realm {
       this.emitScreenshotServePerf(
         {
           realmURL: this.url,
-          sourceURL: instanceURL.href,
+          sourceURL: manifestSourceURL,
           captureSpecHash: manifestEntry.specHash,
           sourceGeneration: entry.sourceGeneration,
         },
@@ -5556,6 +5691,20 @@ export class Realm {
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
+          // The file row's declared-screenshot manifest, joined at serve time
+          // the way the card+json GET joins an instance row's — never
+          // persisted into the index row's resource itself.
+          ...(fileEntry.screenshots
+            ? {
+                screenshots: screenshotsMetaFromManifest(
+                  fileEntry.screenshots,
+                  {
+                    realmURL: this.url,
+                    instanceLocalPath: localPath,
+                  },
+                ),
+              }
+            : {}),
         },
         links: { self: fileURL },
       },
@@ -5620,11 +5769,10 @@ export class Realm {
     // caller is holding, so waiting deadlocks. Serialization still resolves a
     // definition it has never seen — `lookupDefinition` reads through to
     // `prerenderModule`, which serves the module off disk rather than out of
-    // the index. What the drain did cover and this path does not is a module
-    // the same caller just rewrote: the cached definition stays authoritative
-    // until the deferred index job invalidates it, so a serialization run in
-    // that window is against the previous schema and `fileSerialization`
-    // drops attributes whose fields it doesn't know.
+    // the index. A module the same caller just rewrote reads through for the
+    // same reason: `_batchWriteUnlocked` drops that module's cached
+    // definition as it writes the bytes, so no indexing-dependent step
+    // stands between a module rewrite and the serialization that follows it.
     if (!duringPrerender) {
       let pending = this.incrementalIndexing();
       if (pending) {

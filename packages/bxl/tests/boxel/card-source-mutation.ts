@@ -1,6 +1,13 @@
-import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
+import {
+  deepStrictEqual,
+  doesNotThrow,
+  ok,
+  strictEqual,
+  throws,
+} from 'node:assert';
 import {
   BxlMutationError,
+  EMPTY_OVERLAY_INDEX,
   applyBxlMutationPlanToCardSource,
   mutateBxlCardSource,
   mutationSchemaForCardSource,
@@ -9,7 +16,15 @@ import {
   type BxlBoxelSourceDefinition,
   type BxlCardSourceDocument,
   type BxlCardSourceRelationship,
+  type BxlMutationSchema,
+  mergeBxlMutationOverlays,
+  type BxlMutationOverlays,
+  type BxlMutationUnavailableOverlay,
+  type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
+import { evaluateBxl } from '../../src/index.ts';
+import { mutationBuiltinLibraries } from '../../src/bxl/registry/index.ts';
+import { withRequestContext } from '../../src/jqtools/evaluate/runtimeState.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
 // array of them. Every assertion below is about a single one, addressed by its
@@ -1187,6 +1202,1864 @@ strictEqual(
   computedSkip.document.data.attributes?.image,
   'computed-write-was-skipped',
 );
+// The request-context builtins. A card operation reads the caller's payload
+// through `params`, the caller through `actor`, and the stored document
+// through `instance`; the host supplies all three through `context`.
+const requestContext = {
+  params: { tag: 'typed', expectedStatus: 'language', caption: 'from Ada' },
+  actor: { id: 'user:ada', displayName: 'Ada' },
+  instance: { id: 'https://example.test/TierItem/typescript', revision: 7 },
+};
+
+const contextSource = sourceFixture();
+const contextResult = mutateBxlCardSource(
+  contextSource,
+  'assert(.tags[0] == params("expectedStatus"), "tags must still lead with the language");\n' +
+    'append(.tags; params("tag"));\n' +
+    'append(.tags; actor("id"));\n' +
+    '.image = instance("id");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-builtins',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(
+  contextResult.document.data.attributes?.tags,
+  ['language', 'web', 'typed', 'user:ada'],
+  'append reads the payload through params and the caller through actor',
+);
+strictEqual(
+  contextResult.document.data.attributes?.image,
+  'https://example.test/TierItem/typescript',
+  'instance("id") is usable as a written value',
+);
+deepStrictEqual(
+  contextSource,
+  sourceFixture(),
+  'the input source document is still immutable',
+);
+
+// `actor()` and `instance()` with no argument hand the program the whole
+// object, so a caption can be composed from several of its fields.
+const wholeObjectResult = mutateBxlCardSource(
+  sourceFixture(),
+  '.image = actor().displayName + " · " + (instance().revision | tostring);',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-whole-objects',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(wholeObjectResult.document.data.attributes?.image, 'Ada · 7');
+
+// A false `assert` reading the payload fails the program rather than the
+// builtin: the value arrived, the precondition did not hold.
+throws(
+  () =>
+    mutateBxlCardSource(
+      sourceFixture(),
+      'assert(.tags[0] == params("tag"), "tags must lead with the new tag");',
+      {
+        schema,
+        syntax: 'solidified',
+        programId: 'request-context-assert-fails',
+        context: requestContext,
+        ...projectionOptions,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /tags must lead with the new tag/.test(error.message),
+  'assert reads the payload and still fails on a false precondition',
+);
+
+// A host that supplies no context at all gets an error naming the call, not a
+// program that quietly appended `null`.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; params("tag"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-missing',
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /params\(key\) needs a request context/.test(error.message),
+  'a program naming params without a context fails',
+);
+
+// The same for a slot the host left out of the context it did supply.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-missing-slot',
+      context: { params: requestContext.params },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /actor\(key\) needs the caller identity/.test(error.message),
+  'a program naming actor without an actor in the context fails',
+);
+
+// The operation layer validates declared keys before a program runs; this is
+// the backstop, and it names the keys that are there.
+throws(
+  () =>
+    mutateBxlCardSource(
+      sourceFixture(),
+      'append(.tags; params("undeclared"));',
+      {
+        schema,
+        syntax: 'solidified',
+        programId: 'request-context-undeclared-key',
+        context: requestContext,
+        ...projectionOptions,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /params\(key\) asks for "undeclared"/.test(error.message) &&
+    /"caption", "expectedStatus", "tag"/.test(error.message),
+  'an undeclared payload key fails and the error lists the declared ones',
+);
+
+// A plan never shares structure with the host's context object, and a host
+// that reuses that object cannot change a plan already made. The isolation
+// comes from the planner copying every value on its way into the result — the
+// per-statement `clone(working)` and the intent recording — not from the
+// context being copied on the way in, which is why this asserts the property
+// rather than the mechanism.
+//
+// It has to read an *object* to assert anything at all: a string is copied by
+// value wherever it lands, so a case reading one holds no matter what the
+// planner does with references.
+const contextSchema: BxlMutationSchema = {
+  fields: [
+    {
+      key: 'blob',
+      label: 'Blob',
+      path: ['blob'],
+      fieldType: 'contains',
+      writable: true,
+      fields: [
+        {
+          key: 'n',
+          label: 'N',
+          path: ['blob', 'n'],
+          fieldType: 'contains',
+          writable: true,
+        },
+      ],
+    },
+    {
+      key: 'copy',
+      label: 'Copy',
+      path: ['copy'],
+      fieldType: 'contains',
+      writable: true,
+    },
+  ],
+};
+const isolationProbe = prepareBxlMutation(
+  '.blob = params("payload");\n.copy = params("payload");\n.blob.n = 42;',
+  { targetKind: 'card', syntax: 'solidified', schema: contextSchema },
+);
+const livePayload = { n: 1, nested: { deep: 'first' } };
+const isolationPlan = isolationProbe.plan(
+  { blob: null, copy: null },
+  {
+    programId: 'request-context-isolated',
+    context: { params: { payload: livePayload } },
+  },
+);
+const isolated = isolationPlan.output as {
+  blob: { n: number; nested: unknown };
+  copy: { nested: unknown };
+};
+ok(isolated.blob !== livePayload, 'the written value is not the host object');
+ok(
+  isolated.blob.nested !== livePayload.nested,
+  'isolation reaches nested objects, not just the top level',
+);
+ok(
+  isolated.blob.nested !== isolated.copy.nested,
+  'two reads of one key do not alias each other in the result',
+);
+strictEqual(
+  livePayload.n,
+  1,
+  'a later statement writing through the value it read does not reach the host object',
+);
+
+// The plan is settled: a host reusing its object afterwards cannot move it.
+livePayload.n = 99;
+livePayload.nested.deep = 'mutated-after-the-fact';
+deepStrictEqual(isolationPlan.output, {
+  blob: { n: 42, nested: { deep: 'first' } },
+  copy: { n: 1, nested: { deep: 'first' } },
+});
+// `BxlMutationIntent` is a union and only the writing variants carry `after`.
+const firstIntent = isolationPlan.intents[0];
+ok(firstIntent && 'after' in firstIntent, 'the first intent writes a value');
+deepStrictEqual(
+  firstIntent && 'after' in firstIntent ? firstIntent.after : undefined,
+  {
+    n: 1,
+    nested: { deep: 'first' },
+  },
+);
+
+// A context carrying something that is not JSON fails the plan, naming the
+// path, rather than putting a live Map or a bigint in front of the planner —
+// `params("v") | tostring` on a bigint yields `undefined`, which is the
+// silent unset these builtins exist to refuse.
+for (const [typeName, value] of [
+  ['Map', new Map([['k', 1]])],
+  ['bigint', 10n],
+  ['Date', new Date(0)],
+  ['URL', new URL('https://example.test/')],
+] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-non-json',
+          context: { params: { payload: value } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.code === 'context-not-json' &&
+      error.message.includes('context.params.payload') &&
+      error.message.includes(`its type is ${typeName}`),
+    `a context holding a ${typeName} is refused`,
+  );
+}
+
+// `NaN` and the infinities have no JSON form and would reach the document as
+// `null` — a value the host never sent.
+for (const notFinite of [NaN, Infinity, -Infinity] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-non-finite',
+          context: { params: { payload: notFinite } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError && error.code === 'context-not-json',
+    `a context holding ${String(notFinite)} is refused`,
+  );
+}
+
+// A value handed to a program is a copy. A builtin is free to write into its
+// argument and several do — the two-argument validator.js helpers merge their
+// defaults into the options object they are given — so without this the
+// host's own context object would carry whatever a program's builtins wrote
+// into it.
+{
+  const hostInstance = { nested: { n: 1 } };
+  const handed = withRequestContext({ instance: hostInstance }, () =>
+    evaluateBxl('instance()', null, {
+      libraries: mutationBuiltinLibraries(),
+    }),
+  ).value as { nested: { n: number } };
+  ok(handed !== hostInstance, 'the whole slot is handed over as a copy');
+  ok(
+    handed.nested !== hostInstance.nested,
+    'the copy reaches nested objects, not just the top level',
+  );
+  handed.nested.n = 99;
+  strictEqual(
+    hostInstance.nested.n,
+    1,
+    'writing into what a program was handed does not reach the host object',
+  );
+
+  const hostPayload = { obj: { n: 1 } };
+  const key = withRequestContext({ params: hostPayload }, () =>
+    evaluateBxl('params("obj")', null, {
+      libraries: mutationBuiltinLibraries(),
+    }),
+  ).value as { n: number };
+  ok(key !== hostPayload.obj, 'a keyed read is handed over as a copy too');
+  key.n = 99;
+  strictEqual(
+    hostPayload.obj.n,
+    1,
+    'and writing into it leaves the host alone',
+  );
+}
+
+// An array entry cannot be absent the way an object member can: an absent
+// member serializes as absent, an absent entry serializes as `null` — a value
+// the host never sent. A hole reads as `undefined` and is refused the same
+// way.
+// Built rather than written as a literal: a sparse array literal is a lint
+// error, and the point is a genuine hole.
+const holed = new Array<unknown>(3);
+holed[0] = 1;
+holed[2] = 3;
+for (const [description, payload] of [
+  ['an explicit undefined entry', [1, undefined, 3]],
+  ['a hole', holed],
+  ['a nested undefined entry', [[undefined]]],
+] as const) {
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-array-hole',
+          context: { params: { payload } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.code === 'context-not-json' &&
+      /has no value/.test(error.message),
+    `${description} in a context array is refused`,
+  );
+}
+
+// A `null` entry is a real value and passes. This writes the array whole, so
+// it needs a program that does not also index into what it wrote.
+deepStrictEqual(
+  (
+    prepareBxlMutation('.blob = params("payload");', {
+      targetKind: 'card',
+      syntax: 'solidified',
+      schema: contextSchema,
+    }).plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-array-null',
+        context: { params: { payload: [1, null, 3] } } as never,
+      },
+    ).output as { blob: unknown }
+  ).blob,
+  [1, null, 3],
+);
+
+// A `Symbol.toStringTag` can blank the built-in tag. An empty name has to be
+// reported rather than read as "no problem found", or a branded exotic value
+// reaches the document as itself.
+for (const exotic of [new Map([['k', 1]]), new Date(0)] as const) {
+  Object.defineProperty(exotic, Symbol.toStringTag, {
+    value: '',
+    configurable: true,
+  });
+  throws(
+    () =>
+      isolationProbe.plan(
+        { blob: null, copy: null },
+        {
+          programId: 'request-context-blank-tag',
+          context: { params: { payload: exotic } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError && error.code === 'context-not-json',
+    'an exotic value whose type name was blanked is still refused',
+  );
+}
+
+// A key name in a diagnostic is bounded, and cut by code point so the cut
+// cannot leave a lone surrogate in the message. Keys come from host data, so
+// a count cap alone still lets one key dominate its own error message.
+{
+  const longKey = `${'b'.repeat(59)}😀c`.repeat(20);
+  let message = '';
+  try {
+    mutateBxlCardSource(sourceFixture(), 'Image = params("nope");', {
+      schema,
+      programId: 'request-context-key-length',
+      context: { params: { [longKey]: 1 } } as never,
+      ...projectionOptions,
+    });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  ok(message.includes('…'), 'a long key name is truncated');
+  ok(!message.includes(longKey), 'the whole key does not reach the message');
+  ok(
+    message.length < 400,
+    `the message stays bounded, got ${message.length} characters`,
+  );
+  // `encodeURIComponent` throws `URIError` on a lone surrogate, which is what
+  // a cut landing inside a surrogate pair leaves behind.
+  doesNotThrow(
+    () => encodeURIComponent(message),
+    'truncating by code point leaves no lone surrogate in the message',
+  );
+}
+
+// A plain object is plain whatever its prototype chain says: an object
+// carrying only a class's own data fields holds nothing but JSON, and
+// refusing it for its prototype would reject data a host may legitimately
+// send. The check reads the built-in tag, not the constructor.
+class DataOnlyActor {
+  id = 'user:ada';
+}
+strictEqual(
+  (
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-plain-tag',
+        context: { params: { payload: new DataOnlyActor() } } as never,
+      },
+    ).output as { blob: { id: string } }
+  ).blob.id,
+  'user:ada',
+  'an object holding only its own data fields is accepted',
+);
+
+// Shared structure is walked once per object, not once per path to it. A
+// graph that merely shares subtrees has exponentially many paths, so a walk
+// without that memo does exponentially many reads rather than hanging
+// outright — counted here so the assertion cannot be timing-dependent.
+{
+  let sharedReads = 0;
+  const shared: Record<string, unknown> = {};
+  Object.defineProperty(shared, 'leaf', {
+    enumerable: true,
+    get() {
+      sharedReads += 1;
+      return 1;
+    },
+  });
+  let graph: unknown = shared;
+  for (let level = 0; level < 20; level += 1) {
+    graph = { left: graph, right: graph };
+  }
+  // A program that never names the context, so the only reads are the
+  // plan-time check's own.
+  prepareBxlMutation('.copy = "unrelated";', {
+    targetKind: 'card',
+    syntax: 'solidified',
+    schema: contextSchema,
+  }).plan(
+    { blob: null, copy: null },
+    {
+      programId: 'request-context-shared-structure',
+      context: { params: { payload: graph } } as never,
+    },
+  );
+  strictEqual(
+    sharedReads,
+    1,
+    'a shared subtree is validated once, not once per path reaching it',
+  );
+}
+
+// The walk reaches nested values and does not loop on a cycle.
+throws(
+  () =>
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-non-json-nested',
+        context: { params: { payload: [{ when: new Date(0) }] } } as never,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    error.message.includes('context.params.payload[0].when'),
+);
+const cyclicPayload: Record<string, unknown> = { v: 1 };
+cyclicPayload.self = cyclicPayload;
+throws(
+  () =>
+    isolationProbe.plan(
+      { blob: null, copy: null },
+      {
+        programId: 'request-context-cyclic',
+        context: { params: cyclicPayload } as never,
+      },
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /cyclic at context\.params\.self/.test(error.message),
+);
+
+// A program that names none of the builtins behaves the same whether or not a
+// context is supplied.
+const withoutContext = mutateBxlCardSource(
+  sourceFixture(),
+  'append(.tags; "plain");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-unused-absent',
+    ...projectionOptions,
+  },
+);
+const withContext = mutateBxlCardSource(
+  sourceFixture(),
+  'append(.tags; "plain");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-unused-absent',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(withContext.document, withoutContext.document);
+deepStrictEqual(withContext.plan, withoutContext.plan);
+
+// Readable syntax reaches the same builtins. The call name passes through as
+// written; the quoted key is held literal by the compiler, which is what the
+// colliding-label case below relies on.
+const readableResult = mutateBxlCardSource(
+  sourceFixture(),
+  'append(Tags, params("tag"));\nImage = actor("id");',
+  {
+    schema,
+    programId: 'request-context-readable',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(readableResult.document.data.attributes?.tags, [
+  'language',
+  'web',
+  'typed',
+]);
+strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
+
+// How a key is read, and how the diagnostic lists keys. Both are properties
+// of the accessor protocol rather than of any value, so they need host
+// objects that observe being read.
+{
+  const readProbe = prepareBxlMutation('.title = actor("lazy");', {
+    targetKind: 'card',
+    syntax: 'solidified',
+    schema: {
+      fields: [
+        {
+          key: 'title',
+          label: 'Title',
+          path: ['title'],
+          fieldType: 'contains',
+          writable: true,
+        },
+      ],
+    },
+  });
+
+  // An accessor is read once per lookup, and the program receives the value
+  // that was checked — not whatever a second read would return.
+  let reads = 0;
+  const counting: Record<string, unknown> = { id: 'user:ada' };
+  Object.defineProperty(counting, 'lazy', {
+    enumerable: true,
+    get() {
+      reads += 1;
+      return `read-${reads}`;
+    },
+  });
+  const readPlan = readProbe.plan(
+    { title: null },
+    {
+      programId: 'request-context-single-read',
+      context: { actor: counting } as never,
+    },
+  );
+  strictEqual(
+    (readPlan.output as { title: string }).title,
+    'read-2',
+    'the program gets the value the lookup checked, not a later re-read',
+  );
+  strictEqual(
+    reads,
+    2,
+    'one read for the plan-time context check and one for the lookup, never a third',
+  );
+
+  // The listing names what is actually readable: an own non-enumerable key
+  // works, so it is listed, while a key held with `undefined` does not.
+  const mixed: Record<string, unknown> = { visible: 1, absent: undefined };
+  Object.defineProperty(mixed, 'hidden', {
+    enumerable: false,
+    value: 'readable',
+  });
+  strictEqual(
+    mutateBxlCardSource(sourceFixture(), 'Image = params("hidden");', {
+      schema,
+      programId: 'request-context-non-enumerable',
+      context: { params: mixed } as never,
+      ...projectionOptions,
+    }).document.data.attributes?.image,
+    'readable',
+    'an own non-enumerable key is readable',
+  );
+  throws(
+    () =>
+      mutateBxlCardSource(sourceFixture(), 'Image = params("nope");', {
+        schema,
+        programId: 'request-context-listing',
+        context: { params: mixed } as never,
+        ...projectionOptions,
+      }),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      error.message.includes('"hidden"') &&
+      error.message.includes('"visible"') &&
+      !error.message.includes('"absent"'),
+    'the listing names every readable key and no unreadable one',
+  );
+
+  // Producing that diagnostic must not invoke host accessors, or one throwing
+  // getter anywhere in the object replaces the message with its own error.
+  const trapped: Record<string, unknown> = { ok: 1 };
+  Object.defineProperty(trapped, 'trap', {
+    enumerable: true,
+    get() {
+      throw new Error('accessor must not run for a diagnostic');
+    },
+  });
+  throws(
+    () =>
+      prepareBxlMutation('.title = params("nope");', {
+        targetKind: 'card',
+        syntax: 'solidified',
+        schema: {
+          fields: [
+            {
+              key: 'title',
+              label: 'Title',
+              path: ['title'],
+              fieldType: 'contains',
+              writable: true,
+            },
+          ],
+        },
+      }).plan(
+        { title: null },
+        {
+          programId: 'request-context-diagnostic-accessors',
+          // The plan-time check reads accessors and reports this one; what
+          // matters is that the message below is the one it produces.
+          context: { params: { ok: 1 } } as never,
+        },
+      ),
+    (error: unknown) =>
+      error instanceof BxlMutationError &&
+      /asks for "nope"/.test(error.message),
+    'a missing key reports as a missing key',
+  );
+  ok(
+    (() => {
+      try {
+        // Reached directly, so the plan-time check is not in the way and the
+        // diagnostic itself has to survive the throwing accessor.
+        withRequestContext({ params: trapped }, () =>
+          evaluateBxl('params("nope")', null, {
+            libraries: mutationBuiltinLibraries(),
+          }),
+        );
+        return false;
+      } catch (error) {
+        return (
+          error instanceof Error &&
+          /asks for "nope"/.test(error.message) &&
+          error.message.includes('"trap"') &&
+          !error.message.includes('accessor must not run')
+        );
+      }
+    })(),
+    'the diagnostic lists a throwing accessor without invoking it',
+  );
+}
+
+// A payload key named after a field of the card being edited. Readable syntax
+// resolves a quoted string against the field labels, so this is the case where
+// the key has to win: reading the card's own `image` here would silently write
+// the value the program was replacing.
+const collidingResult = mutateBxlCardSource(
+  sourceFixture(),
+  'Image = params("image");',
+  {
+    schema,
+    programId: 'request-context-key-shadows-field',
+    context: { params: { image: 'https://cdn.example.test/from-payload.svg' } },
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  collidingResult.document.data.attributes?.image,
+  'https://cdn.example.test/from-payload.svg',
+  'a payload key named after a field reads the payload, not the field',
+);
+
+// --- Read-only overlays ------------------------------------------------------
+//
+// The realm hands BXL the computed values and the searchable Fields of linked
+// Cards as read-only layers under the stored document. `computedLabel` is a
+// computed Field and `cardInfo.theme.name` a Field of a linked Card; neither
+// is ever written to the card's own JSON, so both read `null`/absent from the
+// stored projection and only an overlay can answer them.
+
+const overlays: BxlMutationOverlays = {
+  computeds: {
+    computedLabel: 'TypeScript · language',
+    // A stale copy of a stored value: the stored document still wins.
+    image: 'https://cdn.example.test/stale.svg',
+  },
+  linked: { cardInfo: { theme: { name: 'Original' } } },
+};
+
+function overlayMutation(
+  source: string,
+  options: {
+    overlays?: BxlMutationOverlays;
+    onRead?: (event: BxlMutationReadEvent) => void;
+    resolveCard?: (id: string) => { id: string } | undefined;
+  } = {},
+) {
+  return mutateBxlCardSource(sourceFixture(), source, {
+    schema,
+    syntax: 'solidified',
+    programId: 'overlay-reads',
+    ...projectionOptions,
+    ...options,
+  });
+}
+
+function overlayError(
+  source: string,
+  options: Parameters<typeof overlayMutation>[1] = {},
+): BxlMutationError {
+  try {
+    overlayMutation(source, options);
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`expected ${JSON.stringify(source)} to fail`);
+}
+
+const computedRead = overlayMutation('.image = .computedLabel;', { overlays });
+strictEqual(
+  computedRead.document.data.attributes?.image,
+  'TypeScript · language',
+);
+
+const linkedRead = overlayMutation('.image = .cardInfo.theme.name;', {
+  overlays,
+});
+strictEqual(linkedRead.document.data.attributes?.image, 'Original');
+
+// An overlay never reaches the committed document or the plan's output: it
+// answers reads, and the plan hands back the stored document the program made.
+strictEqual(linkedRead.document.data.attributes?.computedLabel, undefined);
+const storedSnapshot = snapshotBxlCardSource(
+  sourceFixture(),
+  schema,
+  projectionOptions,
+) as Record<string, unknown>;
+deepStrictEqual(linkedRead.plan.output, {
+  ...storedSnapshot,
+  image: 'Original',
+});
+
+// A stale overlay copy of a stored value loses to the stored value.
+deepStrictEqual(
+  overlayMutation('.tags = [.image];', { overlays }).document.data.attributes
+    ?.tags,
+  ['https://example.test/typescript.svg'],
+);
+
+// The schema is the authority on the Fields a Card declares. A Definition-
+// derived schema marks every computed Field `writeBehavior: 'skip'`, so a
+// write to one stays the intentional no-op it is without overlays — the same
+// program plans the same way whether or not the indexer has answered.
+for (const overlaid of [undefined, overlays]) {
+  const skipped = overlayMutation('.computedLabel = "written";', {
+    overlays: overlaid,
+  });
+  strictEqual(skipped.plan.statements[0].affected, 0);
+  deepStrictEqual(skipped.plan.statements[0].intents, []);
+  strictEqual(skipped.document.data.attributes?.computedLabel, undefined);
+}
+
+const linkedWrite = overlayError('.cardInfo.theme.name = "written";', {
+  overlays,
+});
+strictEqual(linkedWrite.code, 'write-through-link');
+deepStrictEqual(linkedWrite.details, {
+  path: 'cardInfo.theme.name',
+  tier: 'linked',
+});
+
+// Replacing the relationship edge is a write to the Card's own document, not a
+// write through the link, so an overlay on the linked Card's Fields allows it.
+const relinked = overlayMutation(
+  `.cardInfo.theme = card(${JSON.stringify(darkTheme)});`,
+  { overlays, resolveCard: (id) => (id === darkTheme ? { id } : undefined) },
+);
+strictEqual(
+  relationship(relinked.document, 'cardInfo.theme').links?.self,
+  darkTheme,
+);
+
+const unavailable = overlayError('.image = .computedLabel;', {
+  overlays: {
+    unavailable: [
+      { path: 'computedLabel', tier: 'computed', reason: 'not-indexed' },
+    ],
+  },
+});
+strictEqual(unavailable.code, 'snapshot-unavailable');
+deepStrictEqual(unavailable.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+  reason: 'not-indexed',
+});
+
+const notSearchable = overlayError('.image = .cardInfo.theme.name;', {
+  overlays: {
+    unavailable: [
+      { path: 'cardInfo.theme', tier: 'linked', reason: 'not-searchable' },
+    ],
+  },
+});
+strictEqual(notSearchable.code, 'snapshot-unavailable');
+// A path the host could not supply covers the paths nested inside it.
+strictEqual(notSearchable.details?.path, 'cardInfo.theme');
+strictEqual(notSearchable.details?.reason, 'not-searchable');
+
+// A marker says what the host could not supply from the index; it says nothing
+// about the Card's own document. The stored relationship edge still answers.
+const shadowedEdge: BxlMutationOverlays = {
+  unavailable: [
+    { path: 'cardInfo.theme', tier: 'linked', reason: 'not-searchable' },
+  ],
+};
+strictEqual(
+  overlayMutation('.image = .cardInfo.theme.id;', { overlays: shadowedEdge })
+    .document.data.attributes?.image,
+  'https://example.test/Theme/original',
+);
+strictEqual(
+  relationship(
+    overlayMutation(`.cardInfo.theme = card(${JSON.stringify(darkTheme)});`, {
+      overlays: shadowedEdge,
+      resolveCard: (id) => (id === darkTheme ? { id } : undefined),
+    }).document,
+    'cardInfo.theme',
+  ).links?.self,
+  darkTheme,
+);
+
+// The same holds however the overlay shapes the value: a computed Field the
+// schema declares is the schema's to answer for.
+const computedContainer: BxlMutationOverlays = {
+  computeds: { computedLabel: { text: 'TypeScript · language' } },
+};
+for (const program of ['.computedLabel = "written";', 'del(.computedLabel);']) {
+  strictEqual(
+    overlayMutation(program, { overlays: computedContainer }).plan.affected,
+    0,
+    program,
+  );
+}
+
+// An assert over an overlay value must say it accepts a stale answer.
+const bareAssert = overlayError(
+  'assert(.computedLabel == "TypeScript · language"; "wrong label");',
+  { overlays },
+);
+strictEqual(bareAssert.code, 'assert-snapshot-required');
+deepStrictEqual(bareAssert.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+});
+
+strictEqual(
+  overlayMutation(
+    'assert(.computedLabel == "TypeScript · language"; "wrong label"; { snapshot: true });\n' +
+      '.image = "asserted";',
+    { overlays },
+  ).document.data.attributes?.image,
+  'asserted',
+);
+
+const bestEffortUnavailable = overlayError(
+  'assert(.computedLabel == "anything"; "label is not indexed yet"; { snapshot: true });',
+  {
+    overlays: {
+      unavailable: [
+        { path: 'computedLabel', tier: 'computed', reason: 'key-absent' },
+      ],
+    },
+  },
+);
+strictEqual(bestEffortUnavailable.code, 'assertion-failed');
+strictEqual(bestEffortUnavailable.message, 'label is not indexed yet');
+deepStrictEqual(bestEffortUnavailable.details, {
+  path: 'computedLabel',
+  tier: 'computed',
+  reason: 'key-absent',
+});
+
+throws(
+  () => overlayMutation('assert(.image; "m"; { best: "effort" });'),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'assert-option-invalid',
+);
+// The option exists only to opt in; `assert/2` is how an assert says it wants
+// stored values, so there is one spelling of each behavior.
+throws(
+  () => overlayMutation('assert(.image; "m"; { snapshot: false });'),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'assert-option-invalid',
+);
+throws(
+  () => overlayMutation('assert(.image; "m"; { snapshot: true }; 1);'),
+  (error) => error instanceof BxlMutationError && error.code === 'call-arity',
+);
+
+const readEvents: BxlMutationReadEvent[] = [];
+overlayMutation(
+  'assert(.cardInfo.theme.name == "Original"; "wrong theme"; { snapshot: true });\n' +
+    '.image = .computedLabel;\n' +
+    '.tags |= . + [.[0]];\n' +
+    '.cardInfo.name = .unknownToTheIndex;',
+  { overlays, onRead: (event) => readEvents.push(event) },
+);
+deepStrictEqual(readEvents, [
+  { path: 'cardInfo.theme.name', tier: 'linked', outcome: 'value' },
+  { path: 'computedLabel', tier: 'computed', outcome: 'value' },
+  // `|=` evaluates its value expression against the assigned location, so both
+  // reads report the paths they address in the document.
+  { path: 'tags', tier: 'source', outcome: 'value' },
+  { path: 'tags.0', tier: 'source', outcome: 'value' },
+  { path: 'unknownToTheIndex', tier: 'source', outcome: 'null' },
+]);
+
+// Additive: a program the overlays do not answer plans and commits identically
+// whether or not the host supplied them.
+const additiveProgram =
+  '.cardInfo.name = "C#";\n' +
+  '.tags = ["language"];\n' +
+  '.computedLabel = "skipped";';
+const withoutOverlays = overlayMutation(additiveProgram);
+const withOverlays = overlayMutation(additiveProgram, {
+  overlays: { linked: overlays.linked },
+});
+strictEqual(
+  JSON.stringify(withOverlays.document),
+  JSON.stringify(withoutOverlays.document),
+);
+strictEqual(
+  JSON.stringify(withOverlays.plan),
+  JSON.stringify(withoutOverlays.plan),
+);
+// Without a computed overlay the write to a computed Field stays a no-op.
+strictEqual(withoutOverlays.plan.statements[2].affected, 0);
+
+// The card-source projection fills every schema Field, so these two rules —
+// what an overlay leaves behind under a container the merge created, and which
+// branches of an expression count as read — are exercised against the planner
+// directly, where a Field can be genuinely absent.
+const branchingSchema = {
+  fields: [
+    { key: 'image', label: 'Image', kind: 'scalar' as const, writable: true },
+    { key: 'flag', label: 'Flag', kind: 'scalar' as const, writable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      kind: 'scalar' as const,
+      writable: false,
+      writeBehavior: 'skip' as const,
+    },
+    {
+      key: 'profile',
+      label: 'Profile',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'name', label: 'Name', kind: 'scalar' as const, writable: true },
+      ],
+    },
+  ],
+};
+
+function plannerRun(
+  source: string,
+  overlays: BxlMutationOverlays,
+  onRead?: (event: BxlMutationReadEvent) => void,
+) {
+  return prepareBxlMutation(source, {
+    targetKind: 'card',
+    schema: branchingSchema,
+    syntax: 'solidified',
+  }).plan(
+    { image: 'a', flag: true, profile: null },
+    { programId: 'overlay-planner', overlays, onRead },
+  );
+}
+
+/** The planner's output as a record, for reading one Field out of it. */
+function plannerOutput(
+  source: string,
+  overlays: BxlMutationOverlays,
+  onRead?: (event: BxlMutationReadEvent) => void,
+): Record<string, unknown> {
+  return plannerRun(source, overlays, onRead).output as Record<string, unknown>;
+}
+
+// A write to a stored sibling keeps its own value and still sheds the overlay
+// leaves that shared the container the merge created for them.
+const derivedProfile: BxlMutationOverlays = {
+  computeds: { profile: { derived: 'from the index' } },
+};
+deepStrictEqual(plannerRun('.profile.name = "Ada";', derivedProfile).output, {
+  image: 'a',
+  flag: true,
+  profile: { name: 'Ada' },
+});
+deepStrictEqual(
+  plannerRun('.image = .profile.derived;', derivedProfile).output,
+  { image: 'from the index', flag: true, profile: null },
+);
+
+// A path read only on the branch not taken must not refuse the program.
+const statusMissing: BxlMutationOverlays = {
+  unavailable: [{ path: 'status', tier: 'computed', reason: 'not-indexed' }],
+};
+const branchEvents: BxlMutationReadEvent[] = [];
+strictEqual(
+  plannerOutput(
+    '.image = (if .flag then "taken" else .status end);',
+    statusMissing,
+    (event) => branchEvents.push(event),
+  ).image,
+  'taken',
+);
+strictEqual(
+  plannerOutput('.image = (.flag // .status);', statusMissing).image,
+  true,
+);
+deepStrictEqual(branchEvents, [
+  { path: 'flag', tier: 'source', outcome: 'value' },
+]);
+// The condition itself runs every time, so it is read every time.
+throws(
+  () =>
+    plannerRun('.image = (if .status then "y" else "n" end);', statusMissing),
+  (error) =>
+    error instanceof BxlMutationError && error.code === 'snapshot-unavailable',
+);
+
+// An overlay layers values *under* the stored document, so it may fill a place
+// the Card leaves empty but never change what the Card already is. Index drift
+// is routine — a `pristine_doc` or `search_doc` row can lag a write, carry an
+// extra collection row, or hold a value of a different shape — and none of it
+// may reshape the document a program plans over.
+const collectionSchema = {
+  fields: [
+    { key: 'image', label: 'Image', kind: 'scalar' as const, writable: true },
+    {
+      key: 'summary',
+      label: 'Summary',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'text', label: 'Text', kind: 'scalar' as const, writable: true },
+      ],
+    },
+    {
+      key: 'tags',
+      label: 'Tags',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+    },
+    {
+      key: 'hints',
+      label: 'Hints',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+    },
+    {
+      key: 'extras',
+      label: 'Extras',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: false,
+      writeBehavior: 'skip' as const,
+    },
+    {
+      key: 'meta',
+      label: 'Meta',
+      kind: 'object' as const,
+      fieldType: 'contains' as const,
+      writable: true,
+      fields: [
+        { key: 'note', label: 'Note', kind: 'scalar' as const, writable: true },
+        {
+          key: 'stamp',
+          label: 'Stamp',
+          kind: 'scalar' as const,
+          writable: true,
+        },
+        {
+          key: 'refs',
+          label: 'Refs',
+          kind: 'array' as const,
+          fieldType: 'containsMany' as const,
+          writable: true,
+        },
+      ],
+    },
+    {
+      key: 'rows',
+      label: 'Rows',
+      kind: 'array' as const,
+      fieldType: 'containsMany' as const,
+      writable: true,
+      item: {
+        fields: [
+          { key: 'qty', label: 'Qty', kind: 'scalar' as const, writable: true },
+          {
+            key: 'total',
+            label: 'Total',
+            kind: 'scalar' as const,
+            writable: false,
+            writeBehavior: 'skip' as const,
+          },
+        ],
+      },
+    },
+  ],
+};
+const collectionSnapshot = {
+  image: 'stored',
+  summary: null,
+  tags: ['language', 'web'],
+  // What a projection manufactures for a list Field the Card never persists.
+  hints: [],
+  extras: [],
+  meta: { note: 'kept', stamp: null, refs: [] },
+  rows: [
+    { qty: 2, total: null },
+    { qty: 3, total: null },
+  ],
+};
+
+function collectionPlan(source: string, overlays?: BxlMutationOverlays) {
+  return prepareBxlMutation(source, {
+    targetKind: 'card',
+    schema: collectionSchema,
+    syntax: 'solidified',
+  }).plan(collectionSnapshot, {
+    programId: 'overlay-collection',
+    baseRevision: 'r1',
+    currentRevision: 'r1',
+    overlays,
+  });
+}
+
+/** The planner's output as a record, for reading one Field out of it. */
+function collectionOutput(
+  source: string,
+  overlays?: BxlMutationOverlays,
+): Record<string, unknown> {
+  return collectionPlan(source, overlays).output as Record<string, unknown>;
+}
+
+function collectionError(
+  source: string,
+  overlays?: BxlMutationOverlays,
+): BxlMutationError {
+  try {
+    collectionPlan(source, overlays);
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`expected ${JSON.stringify(source)} to fail`);
+}
+
+// An overlay never participates inside a collection. It arrives keyed by
+// position, and a position is an identity only while nothing moves: inserting,
+// deleting, reordering or moving an item renumbers everything after it, and an
+// indexed copy written before the program ran cannot say which item it meant.
+// Contained items carry no id to re-key against, so the Card's own items are
+// the whole answer there — whichever side of the path the collection sits on.
+const indexedTags: BxlMutationOverlays = {
+  linked: { tags: ['language', 'web', 'from-the-index'] },
+};
+for (const overlays of [undefined, indexedTags]) {
+  strictEqual(
+    collectionError('insert_at(.tags; 3; "new");', overlays).code,
+    'insert-index-invalid',
+  );
+  deepStrictEqual(collectionPlan('del(.tags[0]);', overlays).output, {
+    ...collectionSnapshot,
+    tags: ['web'],
+  });
+  deepStrictEqual(
+    collectionPlan('move_item_to_end(.tags[0]; .tags);', overlays).intents,
+    [{ op: 'move', from: ['tags', 0], toCollection: ['tags'], toIndex: 1 }],
+  );
+  deepStrictEqual(collectionPlan('append(.tags; "z");', overlays).output, {
+    ...collectionSnapshot,
+    tags: ['language', 'web', 'z'],
+  });
+}
+
+// An overlay whose value has a different shape than the stored one is dropped
+// too: the stored value survives untouched.
+deepStrictEqual(
+  collectionPlan('.image = "written";', {
+    computeds: { image: { nested: 'wrong shape' }, tags: { 0: 'wrong shape' } },
+  }).output,
+  { ...collectionSnapshot, image: 'written' },
+);
+
+// A computed Field inside a collection is the schema's to answer for, and the
+// collection holding it stays writable.
+const rowTotals: BxlMutationOverlays = {
+  computeds: { rows: [{ total: 20 }, { total: 30 }] },
+};
+strictEqual(collectionPlan('.rows[0].total = 9;', rowTotals).affected, 0);
+for (const source of [
+  'append(.rows; {"qty": 5});',
+  'del(.rows[0]);',
+  '.rows[0].qty = 9;',
+]) {
+  ok(collectionPlan(source, rowTotals).affected > 0, source);
+}
+// Where the schema has no opinion — a Field it declares writable, under which
+// an overlay supplied a value the Card does not store — the overlay is the
+// backstop that refuses the write.
+strictEqual(
+  collectionError('.summary = {"text": "x"};', {
+    computeds: { summary: { text: 'derived' } },
+  }).code,
+  'computed-read-only',
+);
+// A stale overlay copy of a value the Card does store neither answers reads
+// nor makes the Field read-only.
+deepStrictEqual(
+  collectionPlan('.image = .image;', { computeds: { image: 'stale' } }).output,
+  collectionSnapshot,
+);
+
+// An update is handed the layered value, so a Field an overlay filled into a
+// stored container is in scope. What comes back is settled against the Card's
+// own, so an overlay value the expression carried along is read but never
+// stored, and one it wrote over is refused rather than quietly dropped.
+const metaStamp: BxlMutationOverlays = {
+  computeds: { meta: { stamp: 'derived' } },
+};
+deepStrictEqual(
+  collectionOutput(
+    '.meta |= (. + {"note": (.note + " " + .stamp)});',
+    metaStamp,
+  ).meta,
+  { note: 'kept derived', stamp: null, refs: [] },
+);
+strictEqual(
+  collectionError('.meta |= (. + {"stamp": "mine"});', metaStamp).code,
+  'computed-read-only',
+);
+// An expression that simply omits the Field is not writing to it.
+deepStrictEqual(collectionOutput('.meta |= {"note": .note};', metaStamp).meta, {
+  note: 'kept',
+});
+// A copy intent carries paths, not values, and the adapter applies it by
+// reading the source out of the stored document at commit time. An overlay
+// source would commit the Card's own value under the overlay's name, so it is
+// refused; reading it is the spelling that works.
+strictEqual(
+  collectionError('copy_value_to(.meta.stamp; .image);', metaStamp).code,
+  'computed-read-only',
+);
+strictEqual(
+  collectionOutput('.image = .meta.stamp;', metaStamp).image,
+  'derived',
+);
+
+// Reads report the layer that answered them. A collection is never one of
+// those layers, so reading one is a source read even where the host supplied a
+// value for every row.
+const rowEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (.rows | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-collection-reads',
+  overlays: rowTotals,
+  onRead: (event) => rowEvents.push(event),
+});
+deepStrictEqual(rowEvents, [
+  { path: 'rows', tier: 'source', outcome: 'value' },
+]);
+// So an assert over a collection stands on the Card's own values, with no
+// snapshot option to opt into.
+strictEqual(
+  collectionPlan(
+    'assert((.rows | length) == 2; "wrong count");\n.image = "asserted";',
+    rowTotals,
+  ).affected,
+  1,
+);
+// A read that does reach an overlay value still says which layer supplied it.
+const metaEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = .meta.stamp;', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-collection-covered-reads',
+  overlays: metaStamp,
+  onRead: (event) => metaEvents.push(event),
+});
+deepStrictEqual(metaEvents, [
+  { path: 'meta.stamp', tier: 'computed', outcome: 'value' },
+]);
+
+// An intent records what the Card stored, never what an overlay answered with.
+deepStrictEqual(
+  collectionPlan('.rows = [];', { computeds: { rows: [{ total: 20 }] } })
+    .intents,
+  [
+    {
+      op: 'set',
+      path: ['rows'],
+      before: [
+        { qty: 2, total: null },
+        { qty: 3, total: null },
+      ],
+      after: [],
+    },
+  ],
+);
+
+// A statement that restructures a collection an overlay named values inside
+// plans, outputs and records intents exactly as it does with no overlays at
+// all — including every form that renumbers, resizes or reorders it. That
+// parity is the whole point of stopping the overlay layer at the boundary:
+// there is no recorded position left to go stale.
+const holesFilled: BxlMutationOverlays = {
+  computeds: { tags: ['from-index-0', 'from-index-1'] },
+};
+for (const [source, overlays] of [
+  ['del(.rows[0]);', rowTotals],
+  ['prepend(.rows; {"qty": 1});', rowTotals],
+  ['move_item_to_end(.rows[0]; .rows);', rowTotals],
+  ['insert_item_before({"qty": 9}; .rows[1]);', rowTotals],
+  ['.rows[* .qty > 0] |= (. + {"qty": (.qty + (.total // 10))});', rowTotals],
+  ['.rows |= [.[1], .[0]];', rowTotals],
+  ['.rows |= (. + [{"qty": 9}]);', rowTotals],
+  ['.rows |= [.[0]];', rowTotals],
+  ['del(.tags[0]);', holesFilled],
+  ['prepend(.tags; "new");', holesFilled],
+] as const) {
+  deepStrictEqual(
+    collectionPlan(source, overlays).output,
+    collectionPlan(source).output,
+    source,
+  );
+  deepStrictEqual(
+    collectionPlan(source, overlays).intents,
+    collectionPlan(source).intents,
+    source,
+  );
+}
+
+// The same holds across statements: a program that shifts a collection and
+// then writes into it is not refused over a position anything used to occupy.
+deepStrictEqual(
+  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;', rowTotals).output,
+  collectionPlan('del(.rows[0]);\n.rows[0].qty = 9;').output,
+);
+
+// `first` stops at its first output and `last` has to reach the end, so only
+// `first`'s later comma branches are conditional. Both otherwise read what
+// they are given, and the guards see it.
+const derivedOnly: BxlMutationOverlays = {
+  computeds: { summary: { text: 'derived' } },
+};
+for (const expression of ['.summary.text', 'first(.summary.text)']) {
+  strictEqual(
+    collectionError(`assert(${expression} == "derived"; "m");`, derivedOnly)
+      .code,
+    'assert-snapshot-required',
+    expression,
+  );
+}
+// A comma branch inside `first` may never run, so it is not a read.
+strictEqual(
+  collectionPlan('.image = first(.tags[0], .summary.text);', derivedOnly)
+    .affected,
+  1,
+);
+
+// A pipe whose left side is a static path is proven, and reported under it.
+strictEqual(
+  collectionError('assert((.summary | .text) == "derived"; "m");', derivedOnly)
+    .code,
+  'assert-snapshot-required',
+);
+
+// Where the walk cannot name the place it is reading, it names the widest one
+// it can — the document itself. An overlay supplies values under that, so a
+// read of the whole Card is an overlay read: an expression that indexes by a
+// computed key, or pipes the Card into a builtin, is held to the same opt-in
+// as a spelled-out path rather than deciding a precondition on index data
+// unremarked. With the opt-in it sees the layered value.
+for (const expression of [
+  '.[("sum" + "mary")].text == "derived"',
+  '(. | tostring | contains("derived"))',
+]) {
+  strictEqual(
+    collectionError(`assert(${expression}; "m");`, derivedOnly).code,
+    'assert-snapshot-required',
+    expression,
+  );
+  strictEqual(
+    collectionPlan(
+      `assert(${expression}; "m"; { snapshot: true });\n` +
+        '.image = "asserted";',
+      derivedOnly,
+    ).affected,
+    1,
+    expression,
+  );
+}
+// A read of the whole Card carries whatever an overlay put under it, so the
+// event says which layer answered rather than calling it a source read.
+const rootEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (. | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-root-read',
+  overlays: derivedOnly,
+  onRead: (event) => rootEvents.push(event),
+});
+deepStrictEqual(rootEvents, [{ path: '', tier: 'computed', outcome: 'value' }]);
+
+// The walk still reports a lower bound: `getpath` names no path at all, so the
+// guards say nothing about it and the assert is allowed to stand. This is the
+// documented limit of a syntactic walk, not an oversight; the read itself
+// still sees the layered value.
+strictEqual(
+  collectionPlan(
+    'assert(getpath(["summary","text"]) == "derived"; "m");\n' +
+      '.image = "not refused";',
+    derivedOnly,
+  ).affected,
+  1,
+);
+
+// `{ "snapshot": true }` is the same record as `{ snapshot: true }`.
+strictEqual(
+  collectionPlan(
+    'assert(.summary.text == "derived"; "m"; { "snapshot": true });\n' +
+      '.image = "asserted";',
+    derivedOnly,
+  ).affected,
+  1,
+);
+
+// A path a statement clears belongs to the program from then on. The index
+// carries a copy of every stored Field, so without that rule the overlay would
+// fill the hole straight back in and refuse the write that follows.
+const staleCopy: BxlMutationOverlays = { computeds: { image: 'stored' } };
+for (const overlays of [undefined, staleCopy]) {
+  deepStrictEqual(
+    collectionOutput('del(.image);\n.image = "mine";', overlays).image,
+    'mine',
+  );
+  deepStrictEqual(
+    collectionOutput('.image = null;\n.tags = [(.image // "gone")];', overlays)
+      .tags,
+    ['gone'],
+  );
+}
+
+// A selector reads the document to choose what it matches, so a value the host
+// could not supply must not be allowed to quietly settle a write set.
+strictEqual(
+  collectionError('del(.tags[* . == "web"]);', {
+    unavailable: [{ path: 'tags', tier: 'linked', reason: 'not-searchable' }],
+  }).code,
+  'snapshot-unavailable',
+);
+// A selector over a collection reaches no overlay, so it has nothing to report
+// and decides on the Card's own values — matching exactly what it matches with
+// no overlays at all, here nothing.
+const selectorEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('del(.rows[* .qty > 2]);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-selector',
+  overlays: rowTotals,
+  onRead: (event) => selectorEvents.push(event),
+});
+deepStrictEqual(selectorEvents, []);
+for (const overlays of [undefined, rowTotals]) {
+  strictEqual(
+    collectionError('del(.rows[* .total > 0]);', overlays).code,
+    'bulk-target-empty',
+  );
+}
+// A value the host could not supply stops the read that reaches it.
+strictEqual(
+  collectionError('.image = .meta.stamp;', {
+    unavailable: [
+      { path: 'meta.stamp', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).code,
+  'snapshot-unavailable',
+);
+// A marker inside a collection is dropped for the same reason a value there
+// is: the Card's own items already are the whole answer, so there is nothing
+// missing to report.
+strictEqual(
+  collectionError('del(.rows[* .total > 0]);', {
+    ...rowTotals,
+    unavailable: [
+      { path: 'rows.0.total', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).code,
+  'bulk-target-empty',
+);
+strictEqual(
+  collectionOutput('.image = ((.rows[0].total // "none") | tostring);', {
+    unavailable: [
+      { path: 'rows.0.total', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).image,
+  'none',
+);
+// A location that addresses one place selects nothing, so it adds no event.
+const directEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = "x";', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-direct',
+  overlays: rowTotals,
+  onRead: (event) => directEvents.push(event),
+});
+deepStrictEqual(directEvents, []);
+
+// The layered view is cached per statement and rebuilt after every write, so a
+// value expression reading what an earlier location of the same statement left
+// behind sees it. A missed invalidation would show up here as a stale read.
+for (const source of [
+  '.rows[* .qty > 0].qty = (.rows[0].qty + 100);',
+  '.rows[* .qty > 0].qty = (.rows | map(.qty) | add);',
+  'del(.rows[0]);\n.image = ((.rows | length) | tostring);',
+]) {
+  deepStrictEqual(
+    collectionPlan(source, rowTotals).output,
+    collectionPlan(source).output,
+    source,
+  );
+}
+
+// An overlay speaks only where it has something to say. `pristine_doc` and
+// `search_doc` carry the Card's own Fields alongside the ones only they can
+// answer, so a Field the Card leaves unset arrives as a `null` in both — and
+// claiming it would make an ordinary writable Field read-only for no reason.
+const wholeDocument: BxlMutationOverlays = {
+  // `summary` and `meta.stamp` are `null` in the Card too, so these are the
+  // leaves that would be claimed if a `null` counted as a value.
+  computeds: { image: null, summary: null, meta: { stamp: null } },
+  linked: { tags: null, meta: { note: null } },
+};
+deepStrictEqual(
+  collectionOutput('.summary = {"text": "mine"};', wholeDocument).summary,
+  { text: 'mine' },
+);
+deepStrictEqual(collectionOutput('.meta.stamp = "mine";', wholeDocument).meta, {
+  note: 'kept',
+  stamp: 'mine',
+  refs: [],
+});
+deepStrictEqual(
+  collectionOutput('.image = "written";', wholeDocument).image,
+  'written',
+);
+deepStrictEqual(
+  collectionOutput('del(.image);', wholeDocument).image,
+  undefined,
+);
+deepStrictEqual(
+  collectionOutput('.meta |= (. + {"note": "n"});', wholeDocument).meta,
+  { note: 'n', stamp: null, refs: [] },
+);
+deepStrictEqual(collectionPlan('append(.tags; "z");', wholeDocument).output, {
+  ...collectionSnapshot,
+  tags: ['language', 'web', 'z'],
+});
+// A Field the index does answer, in the same overlay, is still covered.
+strictEqual(
+  collectionError('.summary = {"text": "x"};', {
+    ...wholeDocument,
+    computeds: { image: null, summary: { text: 'derived' } },
+  }).code,
+  'computed-read-only',
+);
+
+// An overlay is host data read out of a column, so a key naming something on
+// a JavaScript prototype is dropped rather than grafted — the same refusal the
+// planner already gives a program that spells one out.
+const hostileKey = JSON.parse('{"__proto__":{"pwned":"yes"},"image":"x"}');
+deepStrictEqual(
+  collectionPlan('.tags = ["z"];', { computeds: hostileKey }).output,
+  { ...collectionSnapshot, tags: ['z'] },
+);
+strictEqual(({} as Record<string, unknown>).pwned, undefined);
+// Grafted onto a prototype, the value would read back at a path no overlay
+// supplied — and be reported as the Card's own.
+const hostileEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = ((.pwned // "clean") | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-prototype',
+  overlays: { computeds: hostileKey },
+  onRead: (event) => hostileEvents.push(event),
+});
+deepStrictEqual(hostileEvents, [
+  { path: 'pwned', tier: 'source', outcome: 'null' },
+]);
+// `prototype` and `constructor` are refused on the same grounds, and neither
+// is spelled with the leading underscore that marks an index column, so this
+// is the rule that has to catch them.
+strictEqual(
+  collectionOutput('.image = ((.prototype.pwned // "clean") | tostring);', {
+    computeds: JSON.parse('{"prototype":{"pwned":"yes"}}'),
+  }).image,
+  'clean',
+);
+strictEqual(
+  collectionPlan('.tags = ["z"];', {
+    unavailable: [
+      { path: 'constructor.prototype', tier: 'computed', reason: 'key-absent' },
+    ],
+  }).affected,
+  1,
+);
+
+// `search_doc` carries the index's own bookkeeping beside the Card's
+// searchable Fields. A Card declares none of it, so passing the column
+// wholesale neither adds Fields to the Card nor makes reading it an overlay
+// read — otherwise every whole-Card read on every Card would need the opt-in.
+const searchDocShape: BxlMutationOverlays = {
+  linked: {
+    _title: 'derived title',
+    _cardType: 'Card',
+    _isCardInstanceFile: true,
+  },
+};
+deepStrictEqual(
+  collectionPlan('.image = (. | tostring);', searchDocShape).output,
+  collectionPlan('.image = (. | tostring);').output,
+);
+strictEqual(
+  collectionPlan(
+    'assert((. | keys | length) > 0; "m");\n.image = "ran";',
+    searchDocShape,
+  ).affected,
+  1,
+);
+
+// An empty list says nothing, the same as a `null`. A projection manufactures
+// one for every list Field the Card leaves unset, so a host passing a column
+// wholesale hands one over for each — and claiming those would make every
+// empty writable list read-only.
+const emptyLists: BxlMutationOverlays = {
+  computeds: { image: null, hints: [] },
+  linked: { extras: [] },
+};
+deepStrictEqual(
+  collectionPlan('append(.hints; "z");', emptyLists).output,
+  collectionPlan('append(.hints; "z");').output,
+);
+deepStrictEqual(
+  collectionPlan('.hints = ["z"];', emptyLists).output,
+  collectionPlan('.hints = ["z"];').output,
+);
+strictEqual(
+  collectionPlan(
+    'assert((.hints | length) == 0; "m");\n.image = "ran";',
+    emptyLists,
+  ).affected,
+  1,
+);
+// An update settles the same way whether the Card holds `[]` or `null` under
+// a supplied value, since an expression that omits the path is not writing to
+// it either way.
+deepStrictEqual(
+  collectionPlan('.meta |= {"note": .note};', {
+    computeds: { meta: { refs: ['from-the-index'] } },
+  }).output,
+  collectionPlan('.meta |= {"note": .note};').output,
+);
+
+// A list is one value, not a place to descend into. A projection manufactures
+// an empty list for a list Field the Card never persists, so an empty list is
+// an absence like a `null`: a computed `containsMany` reads as the overlay
+// supplied it, and is read-only whole.
+const derivedExtras: BxlMutationOverlays = {
+  computeds: { extras: ['from-the-index', 'and-another'] },
+};
+strictEqual(
+  collectionOutput('.image = (.extras | tostring);', derivedExtras).image,
+  '["from-the-index","and-another"]',
+);
+// The schema still answers first for the Field itself: it declares `extras`
+// computed, so a write to it is the intentional no-op it already was.
+strictEqual(
+  collectionPlan('append(.extras; "mine");', derivedExtras).affected,
+  0,
+);
+strictEqual(collectionPlan('.extras = [];', derivedExtras).affected, 0);
+// Where the schema has no opinion, the overlay is the backstop for a supplied
+// list the same as for any other value.
+strictEqual(
+  collectionError('append(.hints; "mine");', {
+    computeds: { hints: ['from-the-index'] },
+  }).code,
+  'computed-read-only',
+);
+deepStrictEqual(
+  collectionPlan('append(.tags; "z");', {
+    computeds: { tags: ['from-the-index'] },
+  }).output,
+  { ...collectionSnapshot, tags: ['language', 'web', 'z'] },
+);
+// A position spelled as an object key is a position all the same, so it is
+// dropped wherever it appears — including under a container the Card holds
+// nothing in, where nothing else would stop it.
+strictEqual(
+  collectionOutput('.image = ((.extras | length) | tostring);', {
+    computeds: { extras: { 0: 'first', 1: 'second' } },
+  }).image,
+  '0',
+);
+strictEqual(
+  collectionOutput('.image = ((.meta.list // "none") | tostring);', {
+    computeds: { meta: { list: { 0: 'first' } } },
+  }).image,
+  'none',
+);
+// Nor is a list the Card stores reached into by a path that reads like a
+// Field name: it is the list being a list that stops the graft, not the
+// spelling of what comes after it. Were it grafted, the list would read as
+// carrying an overlay value.
+const listEvents: BxlMutationReadEvent[] = [];
+prepareBxlMutation('.image = (.tags | tostring);', {
+  targetKind: 'card',
+  schema: collectionSchema,
+  syntax: 'solidified',
+}).plan(collectionSnapshot, {
+  programId: 'overlay-into-list',
+  overlays: { computeds: { tags: { name: 'from-the-index' } } },
+  onRead: (event) => listEvents.push(event),
+});
+deepStrictEqual(listEvents, [
+  { path: 'tags', tier: 'source', outcome: 'value' },
+]);
+
+// An `unavailable` entry the planner cannot read is a read it would wrongly
+// allow, so it is refused rather than guessed at or quietly dropped.
+for (const entry of [
+  { path: 42, tier: 'computed', reason: 'key-absent' },
+  { path: null, tier: 'computed', reason: 'key-absent' },
+  { path: 'summary.text', tier: 'made-up', reason: 'key-absent' },
+  { path: 'summary.text', tier: 'computed', reason: 'made-up' },
+]) {
+  strictEqual(
+    collectionError('.image = "x";', {
+      unavailable: [entry as unknown as BxlMutationUnavailableOverlay],
+    }).code,
+    'overlay-invalid',
+    JSON.stringify(entry),
+  );
+}
+// A path named twice is answered by the last entry, at the path and above it
+// alike.
+deepStrictEqual(
+  collectionError('.image = .summary.text;', {
+    unavailable: [
+      { path: 'summary.text', tier: 'computed', reason: 'not-indexed' },
+      { path: 'summary.text', tier: 'linked', reason: 'key-absent' },
+    ],
+  }).details,
+  { path: 'summary.text', tier: 'linked', reason: 'key-absent' },
+);
+// The root has no name of its own, so a message says what it is.
+ok(
+  collectionError(
+    'assert((. | tostring) != ""; "m");',
+    derivedExtras,
+  ).message.includes('the whole Card'),
+);
+
+// Reaching a supplied value may take containers the Card does not hold either.
+// An update that carries one along must not store it: what the Card held comes
+// back, whether that was a `null` or nothing at all.
+const graftedInto: BxlMutationOverlays = {
+  computeds: { meta: { origin: { name: 'from-the-index' } } },
+};
+deepStrictEqual(
+  collectionPlan('.meta |= (. + {"note": "x"});', graftedInto).output,
+  collectionPlan('.meta |= (. + {"note": "x"});').output,
+);
+strictEqual(
+  collectionOutput('.image = .meta.origin.name;', graftedInto).image,
+  'from-the-index',
+);
+
+// The overlay layer is inert without overlays: no index, no grafts, and the
+// planner's own view of the document is the snapshot it was handed.
+const inert = mergeBxlMutationOverlays(collectionSnapshot, undefined);
+strictEqual(inert.index, EMPTY_OVERLAY_INDEX);
+deepStrictEqual(inert.root, collectionSnapshot);
+ok(inert.root !== collectionSnapshot);
+strictEqual(
+  mergeBxlMutationOverlays(collectionSnapshot, {}).index,
+  EMPTY_OVERLAY_INDEX,
+);
+strictEqual(
+  mergeBxlMutationOverlays(collectionSnapshot, { unavailable: [] }).index,
+  EMPTY_OVERLAY_INDEX,
+);
+
 console.log(
-  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, and stale-plan safety passed',
+  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, request-context builtins, stale-plan safety, and read-only computed/linked overlays passed',
 );

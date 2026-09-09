@@ -10,10 +10,10 @@ const CREDIT_TRACKING_TIMEOUT_MS = 5_000;
 
 /**
  * Waits for any pending fallback credit tracking to complete before starting
- * a new generation. The primary serialization is now the per-user
- * `withUserCostLock` barrier around generate → debit (see main.ts); this
- * remains a secondary net for the rare fallback path below, whose debit lands
- * outside the lock.
+ * a new generation. The primary serialization is the per-user
+ * `withUserCostLock` barrier around the credit gate and the debit (see
+ * main.ts; the generation itself runs outside it); this remains a secondary
+ * net for the rare fallback path below, whose debit lands outside the lock.
  *
  * Uses a timeout to avoid blocking indefinitely when
  * fetchGenerationCostWithBackoff is retrying with exponential backoff
