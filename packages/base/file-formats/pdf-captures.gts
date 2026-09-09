@@ -14,7 +14,6 @@
 // so consumers of the family that never capture — the live viewer's native
 // `<object>` path included — never pay for it.
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { fileResourceURL } from './file-image';
@@ -43,13 +42,19 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   // The capture engine waits (bounded) for no `data-screenshot-pending`
   // attribute before shooting: an async decode's paint isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
-  @tracked pending = true;
-
+  //
+  // The signal is cleared by removing the attribute directly, not by a
+  // tracked re-render: the capture page is settled when the engine starts
+  // waiting, and a tracked update from this modifier's async continuation
+  // demonstrably never flushed there (the paint completed in under a
+  // second; the attribute still read pending at the engine's full timeout).
+  // The engine polls raw DOM, so raw DOM is the reliable channel.
   private paintFirstPage = modifier((canvas: HTMLCanvasElement) => {
     let cancelled = false;
+    let container = canvas.parentElement!;
     let finish = () => {
       if (!cancelled) {
-        this.pending = false;
+        container.removeAttribute('data-screenshot-pending');
       }
     };
     (async () => {
@@ -128,10 +133,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   });
 
   <template>
-    <div
-      class='pdf-poster-capture'
-      data-screenshot-pending={{if this.pending 'true'}}
-    >
+    <div class='pdf-poster-capture' data-screenshot-pending='true'>
       <canvas {{this.paintFirstPage}} />
     </div>
     <style scoped>
