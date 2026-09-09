@@ -1231,8 +1231,17 @@ export default class StoreService extends Service implements StoreInterface {
   async searchEntries(
     query: SearchEntryWireQuery,
     realms?: string[],
+    opts?: {
+      // Set by the card-facing `searchResultsComponent` surface, mirroring
+      // `store.search`: an empty realm list means the card's current realm is
+      // unknown, so search nothing rather than fanning out to every realm.
+      // Host callers leave it unset and keep the all-realms fallback.
+      cardInitiated?: boolean;
+    },
   ): Promise<SearchEntryResults> {
-    let searchRealms = this.normalizeSearchRealms(realms);
+    let searchRealms = opts?.cardInitiated
+      ? this.normalizeRealmPaths(realms)
+      : this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
       return { data: [], meta: { page: { total: 0 } } };
     }

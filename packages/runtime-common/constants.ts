@@ -107,6 +107,14 @@ export const CardURLContextName = 'card-url-context';
 
 export const RealmURLContextName = 'realm-url-context';
 
+// The realm a card-initiated, no-realm search defaults to (the realm the
+// `@context` was provided with). Provided alongside the card-facing
+// `searchResultsComponent` so that surface can scope a realm-less query to the
+// current realm instead of fanning out across every readable realm. Value is a
+// thunk: `() => string | undefined`.
+export const CardSearchDefaultRealmContextName =
+  'card-search-default-realm-context';
+
 export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;

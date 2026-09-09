@@ -18,6 +18,7 @@ import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
+  CardSearchDefaultRealmContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -40,7 +41,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import CardChooserModal from '../card-chooser/modal';
 import FileChooserModal from '../file-chooser/modal';
 import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
-import SearchResults from '../search/search-results';
+import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
@@ -118,6 +119,15 @@ export default class OperatorModeContainer extends Component<Signature> {
       });
   }
 
+  // The realm the card-facing `searchResultsComponent` scopes a no-realm search
+  // to — the same current realm `getCards` defaults to, so both card-search
+  // surfaces target one realm rather than fanning out across the whole server.
+  @provide(CardSearchDefaultRealmContextName)
+  // @ts-ignore "cardSearchDefaultRealm" is declared but not used
+  private get cardSearchDefaultRealm(): () => string | undefined {
+    return () => this.currentRealm;
+  }
+
   @provide(GetCardCollectionContextName)
   // @ts-ignore "getCardCollection" is declared but not used
   private get getCardCollection() {
@@ -141,7 +151,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       // populated alongside toolContext for content still reading the
       // pre-rename spelling
       commandContext: this.toolContext,
-      searchResultsComponent: SearchResults,
+      searchResultsComponent: CardContextSearchResults,
       markdownEmbedChooser: this.markdownEmbedChooser,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,
