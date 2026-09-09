@@ -1221,6 +1221,29 @@ module(basename(import.meta.filename), function () {
           MISSING_EXPORT,
           "the caller gets the card's own failure to persist",
         );
+        // The stamped tokens have to describe the render the response came
+        // from. Both attempts failed identically, so only the pool
+        // distinguishes them: the discarded one ran behind, the retry ran
+        // current. Reporting the discarded attempt's pool here would say this
+        // failure came from an outgoing bundle when it did not — and a later
+        // persistence decision reading that would suppress a row for a card
+        // that really is broken.
+        let stamped = res.body.data.attributes.meta.diagnostics;
+        assert.strictEqual(
+          stamped.warmedHostShellHash,
+          'b778fe76',
+          'the retry started on the recycled pool, not the outgoing one',
+        );
+        assert.strictEqual(
+          stamped.warmedHostShellHashAtCompletion,
+          'b778fe76',
+          'and finished on it',
+        );
+        assert.strictEqual(
+          stamped.hostShellHashAtCompletion,
+          'b778fe76',
+          'so the warmed pair agrees with the reported pair — one render, four consistent values',
+        );
         await built.prerenderer.stop();
       });
 
