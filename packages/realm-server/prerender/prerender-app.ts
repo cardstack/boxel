@@ -1264,8 +1264,14 @@ export function buildPrerenderApp(options: {
         // server distrusts. A recycle is exactly when a visit is most likely
         // to reject, so this is the expected path rather than a corner.
         let discardedMs = Date.now() - start;
+        // Sampled inside the retry, after the recycle and immediately before
+        // the render it describes. Carrying the discarded attempt's sample
+        // forward would stamp the response as having rendered on the outgoing
+        // pool even when the retry ran entirely on the current shell.
+        let retryWarmedAtStart: string | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
+          retryWarmedAtStart = options.getWarmedHostShellHash?.();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1289,6 +1295,11 @@ export function buildPrerenderApp(options: {
         start = Date.now();
         shellAtStart = shellAtCompletion;
         shellAtCompletion = options.getHostShellHash?.();
+        // The warmed pair has to move with the reported pair, or the four
+        // stamped values describe two different renders — the retry's reported
+        // tokens beside the discarded attempt's pool.
+        warmedAtStart = retryWarmedAtStart;
+        warmedAtCompletion = options.getWarmedHostShellHash?.();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
           url,
