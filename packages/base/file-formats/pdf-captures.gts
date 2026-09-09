@@ -53,25 +53,9 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
     let cancelled = false;
     let container = canvas.parentElement!;
     let finish = () => {
-      // TEMP DEBUG (will be reverted)
-      let count = () =>
-        document.querySelectorAll('[data-screenshot-pending]').length;
-      console.warn(
-        'PDFCAP finish cancelled=' +
-          cancelled +
-          ' connected=' +
-          container.isConnected +
-          ' tag=' +
-          container.tagName +
-          '.' +
-          container.className +
-          ' pendingBefore=' +
-          count(),
-      );
       if (!cancelled) {
         container.removeAttribute('data-screenshot-pending');
       }
-      console.warn('PDFCAP finish pendingAfter=' + count());
     };
     (async () => {
       // Hoisted so the finally can release it: capture renders are route
@@ -84,19 +68,14 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         if (!url) {
           return;
         }
-        // TEMP DEBUG (will be reverted)
-        console.warn('PDFCAP stage=loading-engine');
         let pdfjs: any = await loadPdfjs();
-        console.warn('PDFCAP stage=engine-loaded');
         let response = await fetch(url);
-        console.warn('PDFCAP stage=fetched ok=' + response.ok);
         if (!response.ok) {
           return;
         }
         let data = new Uint8Array(await response.arrayBuffer());
         doc = await pdfjs.getDocument({ data, isEvalSupported: false })
           .promise;
-        console.warn('PDFCAP stage=document-open pages=' + doc.numPages);
         let page = await doc.getPage(1);
         if (cancelled) {
           return;
@@ -122,16 +101,14 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         // Readiness resolves only on a painted page. A corrupt or
         // unreadable document leaves `data-screenshot-pending` standing, so
         // the engine's bounded wait fails this slot: no manifest entry
-        // lands, the fitted cell keeps the typed page placeholder, and the
-        // retry lane's failure cap bounds what a permanently unreadable
-        // file can cost. Resolving on failure would persist a blank white
-        // poster (the slot's default background) that the thumbnail seam
-        // would prefer over the placeholder.
-        console.warn('PDFCAP stage=rendered');
+        // lands (the injected durable URL stays an uncaptured 404 the
+        // fitted cell's image fallback absorbs), and the retry lane's
+        // failure cap bounds what a permanently unreadable file can cost.
+        // Resolving on failure would instead persist a blank white poster
+        // (the slot's default background) that the thumbnail seam would
+        // serve as if it were the real page.
         finish();
-      } catch (e) {
-        // TEMP DEBUG (will be reverted)
-        console.warn('PDFCAP stage=error ' + String(e).slice(0, 200));
+      } catch {
         // Intentionally not resolving readiness — see the comment above
         // `finish()`.
       } finally {
