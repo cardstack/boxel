@@ -773,6 +773,14 @@ async function lowerValue(
   sink: IssueSink,
   context: LoweringContext,
 ): Promise<string> {
+  // A link collection holds a *list* of identities, so anything that is not a
+  // list cannot be one — a bare marker included, since that names a single
+  // card. Checked before the marker dispatch so one value cannot slip through
+  // as a lone `card(…)` where a collection belongs.
+  if (slot.kind === 'links' && !Array.isArray(value)) {
+    sink.add('link-requires-identity', path, notAList(path));
+    slot = { kind: 'opaque' };
+  }
   if (isMarker(value)) {
     return await lowerReference(value, slot, path, paramNames, sink, context);
   }
@@ -896,6 +904,14 @@ async function lowerObject(
         );
       } else {
         memberSlot = await slotForField(fieldDef, 'whole', context);
+        if (member === null && memberSlot.kind === 'link') {
+          // A contained value written whole simply has no link at this key.
+          // That is not the "clear this link" a `set` on a link path would
+          // be — there is no existing edge to remove — and the executor
+          // writes it without complaint, so refusing it would refuse work
+          // that does happen.
+          memberSlot = { kind: 'opaque' };
+        }
       }
     }
     entries.push(
@@ -924,6 +940,10 @@ function wantsIdentity(slot: ValueSlot): boolean {
 
 function notAnIdentity(path: string, described: string): string {
   return `${described} cannot stand for a card identity at \`${path}\` — write a card URL, a param declared with \`linkTo(…)\`, or \`actor()\` / \`instance()\` there`;
+}
+
+function notAList(path: string): string {
+  return `\`${path}\` addresses a link collection, which holds a list of card identities — write a list, or append to the collection one edge at a time`;
 }
 
 // `null` in a link position reads as "clear this link", which is a different
@@ -979,33 +999,25 @@ async function lowerReference(
       return asLink ? `card(${read})` : read;
     }
     case 'card': {
-      let inner = marker.value;
-      if (slot.kind === 'identity') {
-        // `card(…)` in a comparison says *which* card, and what a comparison
-        // against `.id` needs is the identity inside the marker rather than
-        // the projection around it.
-        return await lowerValue(
-          inner,
-          slot,
-          `${path}.value`,
-          paramNames,
-          sink,
-          context,
-        );
-      }
-      if (typeof inner === 'string') {
-        return `card(${bxlLiteral(inner)})`;
-      }
-      // `card()` already says identity, so the value inside it is lowered in
-      // its own right rather than wrapped a second time.
-      return `card(${await lowerValue(
-        inner,
-        { kind: 'opaque' },
+      // Whatever `card(…)` wraps is an identity by definition, so the value
+      // inside it lowers in an identity slot however the marker itself is
+      // being used. That is what narrows a keyless `actor()` to the `id` the
+      // constructor needs: `card(…)` takes exactly one identity string, so a
+      // whole actor record is refused at plan time. Lowering the inside
+      // against the outer slot instead would leave the explicit spelling
+      // broken while the bare `actor()` it is more precise than works.
+      let inner = await lowerValue(
+        marker.value,
+        { kind: 'identity' },
         `${path}.value`,
         paramNames,
         sink,
         context,
-      )})`;
+      );
+      // A comparison wants that identity on its own; everywhere else the
+      // marker is saying "this is a link", and the projection around it is
+      // what the executor writes.
+      return slot.kind === 'identity' ? inner : `card(${inner})`;
     }
     default:
       return 'null';

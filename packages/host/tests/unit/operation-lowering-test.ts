@@ -268,7 +268,7 @@ module('Unit | operation lowering', function (hooks) {
     shim({ Report });
 
     let { operations: lowered, issues } = await lower(Report);
-    assert.deepEqual(issues, [], 'both declarations lower cleanly');
+    assert.deepEqual(issues, [], 'every declaration lowers cleanly');
     assert.strictEqual(
       lowered.addTag.program?.source,
       [
@@ -642,6 +642,83 @@ module('Unit | operation lowering', function (hooks) {
       'transformations',
       'the finding points at the program rather than at a clause',
     );
+  });
+
+  test('card() naming a link identity lowers the same as naming it bare', async function (assert) {
+    let { field, contains, linksTo, linksToMany, CardDef } = api;
+    let { operation, actor, card } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field owner = linksTo(() => fixtures.Author);
+      @field reviewers = linksToMany(() => fixtures.Author, {
+        searchable: true,
+      });
+      @operation static assignBare = {
+        base: 'transform',
+        set: { owner: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static assignExplicit = {
+        base: 'transform',
+        set: { owner: card(actor()) },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static enrolExplicit = {
+        base: 'transform',
+        append: { to: 'reviewers', value: card(actor()) },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let { operations: lowered, issues } = await lower(Report);
+    assert.deepEqual(issues, [], 'the declarations lower cleanly');
+    // `card(…)` says "this value is a card", so the marker inside it is
+    // narrowed to the id the constructor takes, exactly as the bare spelling
+    // is. Emitting `card(actor())` instead hands the whole actor record to a
+    // constructor that wants one id string, so the more precise spelling
+    // would be the one that fails.
+    assert.strictEqual(
+      lowered.assignExplicit.program?.source,
+      '.owner=card(actor("id"));',
+    );
+    assert.strictEqual(
+      lowered.assignBare.program?.source,
+      lowered.assignExplicit.program?.source,
+      'the two spellings are the same program',
+    );
+    assert.strictEqual(
+      lowered.enrolExplicit.program?.source,
+      'append(.reviewers;card(actor("id")));',
+    );
+  });
+
+  test('a contained value written whole may leave its link empty', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation, params } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field comments = containsMany(fixtures.Comment);
+      @operation static addComment = {
+        base: 'transform',
+        params: { body: StringField },
+        append: {
+          to: 'comments',
+          value: { body: params('body'), author: null },
+        },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    // Nothing is being cleared here: the item is new, so there is no edge to
+    // remove and the executor writes it. Only a `set` onto an existing link
+    // path means "clear this link", which is the case with no spelling.
+    assert.deepEqual(codes(result), []);
+    assert.strictEqual(
+      result.operations.addComment.program?.source,
+      'append(.comments;{body:params("body"),author:null});',
+    );
+    assert.notOk(result.operations.addComment.invalid);
   });
 
   test('a value in a link position that is not a card identity is recorded', async function (assert) {

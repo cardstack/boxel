@@ -77,6 +77,7 @@ const Author = definition('Author', { name: scalar() });
 const Comment = definition('Comment', {
   body: scalar(),
   author: compound('Author', { type: 'linksTo' }),
+  helpers: compound('Author', { type: 'linksToMany' }),
 });
 
 const Report = definition('Report', {
@@ -110,6 +111,7 @@ const StringFieldClass = function StringField() {} as unknown as never;
 const params = (key: string) => ({ $ref: 'params', key }) as never;
 const actor = (key?: string) =>
   (key === undefined ? { $ref: 'actor' } : { $ref: 'actor', key }) as never;
+const card = (value: unknown) => ({ $ref: 'card', value }) as never;
 
 async function lower(declarations: Record<string, unknown>) {
   return await lowerOperationDeclarations(declarations as never, {
@@ -238,6 +240,36 @@ const EXECUTABLE_DECLARATIONS: {
     },
   },
   {
+    // The explicit spelling of a link identity. `card(…)` says "this is a
+    // card", so the marker inside it has to be narrowed to an id just as it
+    // is when written bare — the constructor takes exactly one id string.
+    name: 'setLinkViaCardMarker',
+    writes: true,
+    declaration: { base: 'transform', set: { owner: card(actor()) } },
+  },
+  {
+    name: 'appendLinkViaCardMarker',
+    writes: true,
+    declaration: {
+      base: 'transform',
+      append: { to: 'reviewers', value: card(actor()) },
+    },
+  },
+  {
+    // A contained value written whole, with no link at its link-typed key.
+    // Nothing is being cleared — the item is new — and the executor writes it.
+    name: 'appendContainedWithNoLink',
+    writes: true,
+    declaration: {
+      base: 'transform',
+      params: { value: StringFieldClass },
+      append: {
+        to: 'comments',
+        value: { body: params('value'), author: null },
+      },
+    },
+  },
+  {
     name: 'assertLinkedByActor',
     writes: false,
     declaration: {
@@ -266,7 +298,7 @@ const REFUSED_DECLARATIONS: {
   code: string;
   declaration: unknown;
   wouldBe: string;
-  executor: 'rejects' | 'no-ops';
+  executor: 'rejects' | 'no-ops' | 'writes-wrong';
   emitsProgram?: true;
 }[] = [
   {
@@ -329,6 +361,20 @@ const REFUSED_DECLARATIONS: {
     emitsProgram: true,
     declaration: { base: 'transform', set: { owner: null } },
     wouldBe: '.owner=null;',
+  },
+  {
+    // The executor neither rejects this nor drops it: it writes the number
+    // into a relationship field and reports success. Nothing downstream will
+    // catch it, which is the whole reason lowering has to.
+    name: 'a non-list written to a nested link collection',
+    executor: 'writes-wrong',
+    code: 'link-requires-identity',
+    emitsProgram: true,
+    declaration: {
+      base: 'transform',
+      append: { to: 'comments', value: { body: 'b', helpers: 7 } },
+    },
+    wouldBe: 'append(.comments;{body:"b",helpers:7});',
   },
   {
     name: 'append of something that is not an identity to a link collection',
@@ -421,15 +467,61 @@ const tests = Object.freeze({
           'rejected' in outcome && outcome.rejected,
           `the executor rejects ${wouldBe}, so refusing it is right`,
         );
-      } else {
+      } else if (executor === 'no-ops') {
         assert.deepEqual(
           outcome,
           { affected: 0 },
           `the executor silently changes nothing for ${wouldBe}, so refusing it is right`,
         );
+      } else {
+        assert.true(
+          'affected' in outcome && outcome.affected > 0,
+          `the executor writes ${wouldBe} without complaint, so lowering is the only thing that can refuse it`,
+        );
       }
     }
   },
+  // `card(…)` is how a declaration says "this value is a card identity"
+  // explicitly, and it is the spelling the docs point at. It has to lower to
+  // the same thing as naming the identity bare: when it did not, the explicit
+  // form emitted `card(actor())` — the whole actor record handed to a
+  // constructor that takes one id string — so being precise was the thing
+  // that broke the operation, and nothing reported it.
+  'naming a link identity explicitly lowers the same as naming it bare': async (
+    assert,
+  ) => {
+    let { operations, issues } = await lower({
+      bare: { base: 'transform', set: { owner: actor() } },
+      explicit: { base: 'transform', set: { owner: card(actor()) } },
+      bareAppend: {
+        base: 'transform',
+        append: { to: 'reviewers', value: actor() },
+      },
+      explicitAppend: {
+        base: 'transform',
+        append: { to: 'reviewers', value: card(actor()) },
+      },
+    });
+    assert.deepEqual(issues, [], 'both spellings lower with no findings');
+    assert.strictEqual(
+      operations.explicit.program?.source,
+      operations.bare.program?.source,
+      `set: ${operations.bare.program?.source}`,
+    );
+    assert.strictEqual(
+      operations.explicitAppend.program?.source,
+      operations.bareAppend.program?.source,
+      `append: ${operations.bareAppend.program?.source}`,
+    );
+    for (let name of ['bare', 'explicit', 'bareAppend', 'explicitAppend']) {
+      assert.deepEqual(
+        await planOutcome(operations[name].program!.source),
+        { affected: 1 },
+        `${name} plans a change`,
+      );
+    }
+  },
+
   // Planning without error proves only that a program is runnable. An
   // assertion that compares a value which can never equal what it is compared
   // against — a whole actor record against the id string `.id` holds — plans

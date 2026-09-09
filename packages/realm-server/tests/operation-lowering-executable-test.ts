@@ -14,6 +14,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(operationLoweringExecutableTests, assert, {});
     });
 
+    test('naming a link identity explicitly lowers the same as naming it bare', async function (assert) {
+      await runSharedTest(operationLoweringExecutableTests, assert, {});
+    });
+
     test('an assert over a link collection fires on a duplicate and not otherwise', async function (assert) {
       await runSharedTest(operationLoweringExecutableTests, assert, {});
     });
