@@ -116,10 +116,12 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
         // the prerender records console errors into the bucket it attaches
         // to a failed render's error report, and a per-slot capture
         // failure on an otherwise-clean row shouldn't dress itself as a
-        // page fault.
+        // page fault. Stringified because the prerender serializes console
+        // args by value, and an Error's message and stack are
+        // non-enumerable — the object form would log as `{}`.
         console.warn(
           `pdf poster capture: first-page paint failed, leaving the slot pending`,
-          error,
+          String(error),
         );
       } finally {
         try {
