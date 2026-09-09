@@ -108,6 +108,49 @@ const tests = Object.freeze({
     );
   },
 
+  'assertQuery constrains the sort direction of every sort entry': async (
+    assert,
+  ) => {
+    // A general sort field takes no `on` — it resolves against a column rather
+    // than a card type — so it exercises a different path through
+    // `assertSortExpression` than a card-field sort does. Both constrain
+    // `direction` to `asc` or `desc`.
+    for (let sort of [
+      [{ by: 'lastModified', direction: 'sideways' }],
+      [{ by: 'createdAt', direction: 'sideways' }],
+      [{ by: 'cardURL', direction: 'sideways' }],
+      [{ by: 'title', on: sampleRef, direction: 'sideways' }],
+    ]) {
+      assert.throws(
+        () => assertQuery({ sort }),
+        (err: Error) =>
+          err instanceof InvalidQueryError &&
+          /sort\[0\]\/direction: direction must be either 'asc' or 'desc'/.test(
+            err.message,
+          ),
+        `${JSON.stringify(sort)} is rejected, and the pointer names it`,
+      );
+    }
+    for (let sort of [
+      [{ by: 'lastModified', direction: 'asc' }],
+      [{ by: 'lastModified', direction: 'desc' }],
+      [{ by: 'lastModified' }],
+      [{ by: 'title', on: sampleRef, direction: 'desc' }],
+    ]) {
+      try {
+        assertQuery({ sort });
+        assert.ok(true, `accepted ${JSON.stringify(sort)}`);
+      } catch (err) {
+        assert.ok(
+          false,
+          `unexpected throw for ${JSON.stringify(sort)}: ${
+            (err as Error).message
+          }`,
+        );
+      }
+    }
+  },
+
   'assertQuery accepts the multi-entry shapes the grammar allows': async (
     assert,
   ) => {

@@ -354,16 +354,10 @@ function assertSortExpression(
       `${pointer.concat('by').join('/') || '/'}: by must be a string`,
     );
   }
-  if (!('on' in sort)) {
-    if (Object.keys(generalSortFields).includes(sort.by)) {
-      return;
-    }
-    throw new InvalidQueryError(
-      `${pointer.concat('on').join('/') || '/'}: missing on object`,
-    );
-  }
-  assertCardType(sort.on, pointer.concat('on'));
-
+  // Every sort entry carries a direction, whether or not it names a type: a
+  // general sort field is anchored by the column it maps to rather than by
+  // `on`, so it takes the same `asc`/`desc` constraint. Checked ahead of the
+  // branching below so neither shape can reach a `return` with it unchecked.
   if ('direction' in sort) {
     if (sort.direction !== 'asc' && sort.direction !== 'desc') {
       throw new InvalidQueryError(
@@ -373,6 +367,16 @@ function assertSortExpression(
       );
     }
   }
+
+  if (!('on' in sort)) {
+    if (Object.keys(generalSortFields).includes(sort.by)) {
+      return;
+    }
+    throw new InvalidQueryError(
+      `${pointer.concat('on').join('/') || '/'}: missing on object`,
+    );
+  }
+  assertCardType(sort.on, pointer.concat('on'));
 }
 
 function assertPage(

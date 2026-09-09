@@ -5,7 +5,7 @@ import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import assertQueryValidationTests from '@cardstack/runtime-common/tests/assert-query-validation-test';
 
 module(basename(import.meta.filename), function () {
-  module('assertQuery collection validation', function () {
+  module('assertQuery validation', function () {
     test('assertQuery validates every element of an any filter', async function (assert) {
       await runSharedTest(assertQueryValidationTests, assert, {});
     });
@@ -23,6 +23,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('assertQuery validates every element of a nested JSON array', async function (assert) {
+      await runSharedTest(assertQueryValidationTests, assert, {});
+    });
+
+    test('assertQuery constrains the sort direction of every sort entry', async function (assert) {
       await runSharedTest(assertQueryValidationTests, assert, {});
     });
 
