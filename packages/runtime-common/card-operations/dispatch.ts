@@ -31,10 +31,15 @@ import type { SearchResult } from '../realm-index-query-engine.ts';
 
 // The realm's collaborators, narrowed to what an operation actually uses. The
 // core is handed these rather than a `Realm` so it stays testable in isolation
-// and, more importantly, so it cannot reach the realm's fetch layer: a
-// `VirtualNetwork` resolves author-controlled identifiers, and none of that
-// belongs behind an operation. Where a behavior does need a resolution the
-// realm owns, the realm supplies it as a plain function below.
+// and, more importantly, so no operation resolves an identifier itself: a
+// `VirtualNetwork` resolves author-controlled ones, and steering a lookup is
+// not something author-written code should be able to do in a trusted context.
+// So the two resolutions a behavior needs arrive already done, as plain
+// functions the realm binds to its own fetch layer.
+//
+// Nothing here is a network capability. A behavior that turns out to need one
+// should add it deliberately, in the narrowest form that behavior needs, and
+// say what it is for — not inherit a general `fetch`.
 export interface OperationCore {
   // The realm every target of this core belongs to. Local paths are derived
   // from it, so a target outside it is not this core's to serve.
@@ -48,11 +53,10 @@ export interface OperationCore {
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
   isIgnored(url: URL): Promise<boolean>;
-  // The file-meta document for a path that holds bytes rather than a card,
-  // preferring the indexed row and falling back to the file on disk — a file's
-  // read is its metadata surface, so it answers with everything the row
-  // carries. Undefined when the path is not a servable file, including when a
-  // sibling `.json` makes it a card's source rather than a file.
+  // The file-meta document for a path that holds bytes rather than a card, as
+  // the card+json read serves it: derived from the bytes on disk. Undefined
+  // when the path is not a servable file, including when a sibling `.json`
+  // makes it a card's source rather than a file.
   fileMetaDocument(
     localPath: LocalPath,
   ): Promise<SingleFileMetaDocument | undefined>;
@@ -70,7 +74,6 @@ export interface OperationCore {
     data: LooseCardResource | FileMetaResource;
     included?: (LooseCardResource | FileMetaResource)[];
   }): void;
-  fetch: typeof globalThis.fetch;
 }
 
 // `CachingDefinitionLookup`, narrowed to the one read an operation makes.
@@ -82,7 +85,7 @@ export interface OperationDefinitionLookup {
 export interface OperationIndexQueryEngine {
   cardDocument(
     url: URL,
-    opts?: { loadLinks?: boolean },
+    opts?: { loadLinks?: boolean; skipQueryBackedExpansion?: boolean },
   ): Promise<SearchResult | undefined>;
   instance(
     url: URL,
@@ -95,6 +98,11 @@ export interface RunOperationOptions {
   // A `read` that needs only the values the card+json response headers are
   // computed from, and no document. Ignored by every other behavior.
   headersOnly?: true;
+  // Leave a query-backed field unexpanded. A render inside a prerender request
+  // must not recurse back into the search that would resolve one, so a read
+  // serving that request says so here — the same control the card+json GET
+  // applies from `isDuringPrerenderRequest`.
+  skipQueryBackedExpansion?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a target's row to
@@ -124,13 +132,25 @@ export function newOperationScope(core: OperationCore): OperationScope {
   };
 }
 
-// The def types, as the operation core distinguishes them. `Definition.type`
-// draws only the card/field line, because that is the line every other
-// consumer of a definition entry cares about — a file def's entry says
-// `field-def`, since `FileDef` descends from `BaseDef` rather than `CardDef`.
-// The distinction that matters here is drawn from the target instead, which is
-// also the more reliable signal: a URL naming a registered file extension is
-// the same test the realm's own read paths use to tell a file from a card.
+// The def types, as the operation core distinguishes them.
+//
+// The file/card line is drawn from the target URL, by the registered-extension
+// test `urlNamesFile` — not from `Definition.type`, which cannot express it: a
+// file def's entry says `field-def`, since `FileDef` descends from `BaseDef`
+// rather than `CardDef`, and dispatching off that would leave a file carrying
+// no operations at all rather than `read`.
+//
+// Reading the extension is a commitment made before the index is consulted,
+// which the card+json GET does not make — it asks for a card document first
+// and falls back to file metadata only when there is none. The two agree
+// because a card id never carries a registered extension, which is the same
+// assumption the index query engine's own file/instance split rests on. A
+// target that broke it would read as a file here and as a card there.
+//
+// A `type` target has only its ref, so its kind comes from the entry, and a
+// file def named that way therefore carries nothing. That is correct rather
+// than a gap: operations belong to cards, and the one operation a file has is
+// `read`, which needs an instance to read.
 type DefKind = 'card-def' | 'file-def' | 'field-def';
 
 // Exhaustive over `BaseOperation` on purpose: a seventh built-in behavior has
@@ -157,7 +177,24 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
 };
 
 function isBaseOperation(name: string): name is BaseOperation {
-  return Object.prototype.hasOwnProperty.call(CARD_DEF_OPERATIONS, name);
+  return own(CARD_DEF_OPERATIONS, name) !== undefined;
+}
+
+// Read a record by a key that arrived over the wire. Every name-keyed lookup
+// on this path goes through here: a plain object answers `toString` and
+// `constructor` with something that is not an operation, and reading one of
+// those as a declaration gets as far as dispatching on a `base` of
+// `"undefined"`. The authoring API builds its own declaration records with a
+// null prototype for this reason, but a lowered one has been through JSON and
+// carries `Object.prototype` again.
+function own<T>(
+  record: Record<string, T> | undefined,
+  key: string,
+): T | undefined {
+  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) {
+    return undefined;
+  }
+  return record[key];
 }
 
 // Which built-in behavior `name` means for `target`, as the definition the
@@ -188,7 +225,7 @@ export async function resolveOperation(
     });
   }
   let kind = defKindFor(target, definition);
-  let declared = definition?.operations?.[name];
+  let declared = own(definition?.operations, name);
   if (declared) {
     if (declared.invalid) {
       throw new OperationFailure({
@@ -202,7 +239,7 @@ export async function resolveOperation(
         meta: { issues: declared.issues ?? [] },
       });
     }
-    if (!ALLOWED_BASE_OPERATIONS[kind][declared.base]) {
+    if (!own(ALLOWED_BASE_OPERATIONS[kind], declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
     return declared;
@@ -216,7 +253,7 @@ export async function resolveOperation(
       detail: `there is no operation named "${name}" on ${describeTarget(target)}`,
     });
   }
-  if (!ALLOWED_BASE_OPERATIONS[kind][name]) {
+  if (!own(ALLOWED_BASE_OPERATIONS[kind], name)) {
     throw notAllowed(target, name, kind, name);
   }
   // The built-in behavior, undeclared. It has no program and no params, and
@@ -237,6 +274,7 @@ export async function runOperation(
     request.name,
     scope,
   );
+  validateParams(request, definition);
   switch (definition.base) {
     case 'read':
       return await readOperation(core, request, definition, opts, scope);
@@ -244,11 +282,13 @@ export async function runOperation(
       // A declared query is a saved search, not work the realm carries out
       // here: an invocation resolves its markers with `lowerQueryOperation`
       // and runs the result on the search engine, which is the one place a
-      // query is planned and executed.
+      // query is planned and executed. Reaching this with a perfectly valid
+      // declaration means the caller used the wrong entry point, so it is
+      // theirs to correct rather than a fault to page someone about.
       throw new OperationFailure({
         id: targetId(request.target),
-        status: 500,
-        code: 'internal-error',
+        status: 400,
+        code: 'wrong-entry-point',
         title: 'Operation not executable here',
         detail:
           `operation "${request.name}" is a query; resolve it with ` +
@@ -260,11 +300,44 @@ export async function runOperation(
     case 'transform':
       throw new OperationFailure({
         id: targetId(request.target),
-        status: 500,
+        status: 501,
         code: 'internal-error',
-        title: 'Operation not executable here',
+        title: 'Operation not implemented',
         detail: `no executor for base operation "${definition.base}"`,
       });
+    default:
+      // Unreachable while `base` holds a base-operation name, which the
+      // allow-table check above already required. Present because falling off
+      // an exhaustive switch returns `undefined`, which is not an
+      // `OperationResult` and which every result guard quietly reports false
+      // for — a wrong answer is worse than a refusal.
+      throw new OperationFailure({
+        id: targetId(request.target),
+        status: 500,
+        code: 'internal-error',
+        title: 'Unknown base operation',
+        detail: `operation "${request.name}" names a base operation the core does not implement`,
+      });
+  }
+}
+
+// The payload has to satisfy the schema the definition declares before any
+// behavior runs on it. A declared param with no value is the caller's mistake,
+// and finding out inside an executor means finding out after work has started.
+function validateParams(
+  request: OperationRequest,
+  definition: OperationDefinition,
+): void {
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(request.params, key) === undefined) {
+      throw new OperationFailure({
+        id: targetId(request.target),
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `operation "${request.name}" requires a value for params("${key}")`,
+      });
+    }
   }
 }
 

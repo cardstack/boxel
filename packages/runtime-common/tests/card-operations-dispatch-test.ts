@@ -46,6 +46,8 @@ interface StubOptions {
   // The source file behind the target, when there is one on disk.
   source?: string;
   fileMeta?: boolean;
+  // Whether the file target has an index row.
+  fileRow?: boolean;
 }
 
 interface Stub {
@@ -62,6 +64,7 @@ function stub(opts: StubOptions = {}): Stub {
     definitionType = 'card-def',
     source,
     fileMeta = true,
+    fileRow = false,
   } = opts;
 
   let core: OperationCore = {
@@ -139,7 +142,16 @@ function stub(opts: StubOptions = {}): Stub {
       },
       async file() {
         calls.push('file');
-        return undefined;
+        return fileRow
+          ? ({
+              type: 'file',
+              lastModified: 1699,
+              generation: 4,
+              screenshots: null,
+              deps: null,
+              indexedAt: 1700,
+            } as any)
+          : undefined;
       },
     },
     async readSource() {
@@ -165,7 +177,6 @@ function stub(opts: StubOptions = {}): Stub {
     unresolveInstanceIds: () => {
       calls.push('unresolveInstanceIds');
     },
-    fetch: globalThis.fetch,
   };
   return { core, calls };
 }
@@ -463,6 +474,161 @@ const tests = Object.freeze({
     let { core } = stub({ definitionType: 'unresolvable' });
     let result = await runOperation(core, invoke(CARD, 'read'));
     assert.true(isDocumentResult(result), 'the card still reads');
+  },
+
+  'a target is canonicalized before anything is read': async (assert) => {
+    // The realm root names the realm's index card, and a query string, a
+    // fragment or a `.json` spelling all name the card they hang off. None of
+    // them may reach the index lookup or `links.self` as written.
+    for (let [spelling, expected] of [
+      [`${REALM}`, `${REALM}index`],
+      [`${REALM}person-1?vary=1`, `${REALM}person-1`],
+      [`${REALM}person-1#section`, `${REALM}person-1`],
+      [`${REALM}person-1.json`, `${REALM}person-1`],
+    ] as [string, string][]) {
+      let { core } = stub();
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: spelling }, 'read'),
+      );
+      assert.true(isDocumentResult(result), `${spelling} reads`);
+      if (isDocumentResult(result)) {
+        assert.strictEqual(
+          result.document.data.links?.self,
+          expected,
+          `${spelling} resolves to ${expected}`,
+        );
+      }
+    }
+  },
+
+  'a declared read the executor cannot carry out is refused': async (
+    assert,
+  ) => {
+    // Serving the plain document would be a well-formed answer to a different
+    // question than the declaration asked.
+    let { core } = stub({
+      operations: {
+        summary: {
+          base: 'read',
+          deterministic: true,
+          output: { source: 'PROJECT(.title)', syntax: 'solidified' },
+        },
+      },
+    });
+    let error = await refusalFrom(() =>
+      runOperation(core, invoke(CARD, 'summary')),
+    );
+    assert.strictEqual(error.status, 501);
+    assert.true(
+      error.detail.includes('output'),
+      `the refusal names the stage: ${error.detail}`,
+    );
+  },
+
+  'a payload missing a declared param is refused before any behavior runs':
+    async (assert) => {
+      let { core, calls } = stub({
+        operations: {
+          summary: {
+            base: 'read',
+            deterministic: true,
+            params: {
+              locale: { kind: 'field', codeRef: PERSON },
+            },
+          },
+        },
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'summary')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.true(
+        error.detail.includes('locale'),
+        `the refusal names the param: ${error.detail}`,
+      );
+      assert.strictEqual(
+        calls.filter((call) => call === 'cardDocument').length,
+        0,
+        'nothing is read for a payload that cannot satisfy the operation',
+      );
+    },
+
+  'a name every object answers to is unknown, not a dispatchable operation':
+    async (assert) => {
+      // A lowered `operations` record has been through JSON, so it carries
+      // `Object.prototype` and answers these names with something that is not
+      // an operation. Reading one as a declaration reaches a `base` of
+      // `undefined`.
+      for (let name of [
+        'toString',
+        'constructor',
+        '__proto__',
+        'valueOf',
+        'hasOwnProperty',
+      ]) {
+        let { core } = stub();
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke(CARD, name)),
+        );
+        assert.strictEqual(
+          error.code,
+          'unknown-operation',
+          `"${name}" is not an operation`,
+        );
+      }
+    },
+
+  'a headers-only read of a file answers from the file row': async (assert) => {
+    let indexed = stub({ fileRow: true });
+    let fromRow = await runOperation(indexed.core, invoke(FILE, 'read'), {
+      headersOnly: true,
+    });
+    assert.deepEqual(fromRow, {
+      indexedAt: 1700,
+      lastModified: 1699,
+      generation: 4,
+      screenshots: null,
+      deps: null,
+    });
+    assert.strictEqual(
+      indexed.calls.filter((call) => call === 'fileMetaDocument').length,
+      0,
+      'an indexed file needs no document assembled',
+    );
+
+    // A file the realm serves but has not indexed still has a modification
+    // time to report.
+    let unindexed = stub({ fileRow: false });
+    let fromDisk = await runOperation(unindexed.core, invoke(FILE, 'read'), {
+      headersOnly: true,
+    });
+    assert.deepEqual(fromDisk, {
+      indexedAt: null,
+      lastModified: 42,
+      generation: null,
+      screenshots: null,
+      deps: null,
+    });
+  },
+
+  'a read needs an instance to read': async (assert) => {
+    let { core } = stub();
+    let onType = await refusalFrom(() =>
+      runOperation(
+        core,
+        invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'read'),
+      ),
+    );
+    assert.strictEqual(onType.code, 'invalid-params');
+
+    let notAURL = await refusalFrom(() =>
+      runOperation(
+        core,
+        invoke({ kind: 'instance', url: 'not a url' }, 'read'),
+      ),
+    );
+    assert.strictEqual(notAURL.code, 'invalid-params');
   },
 
   'the row peek is memoized for one invocation and no longer': async (

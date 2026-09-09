@@ -960,10 +960,6 @@ export class Realm {
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #operationCore: OperationCore | undefined;
-  // The realm's own fetch, kept for the operation core. Held separately from
-  // `__fetchForTesting` so an operational dependency does not read as a test
-  // hook.
-  #operationFetch: typeof globalThis.fetch;
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
@@ -1242,7 +1238,6 @@ export class Realm {
     this.#definitionLookup = definitionLookup.forRealm(this);
 
     this.__fetchForTesting = _fetch;
-    this.#operationFetch = _fetch;
 
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
@@ -3165,11 +3160,12 @@ export class Realm {
   // The operation core, built from the realm's own collaborators. What it is
   // handed is deliberately narrow: the definition cache and the index query
   // engine, plus plain functions for the few resolutions that belong to the
-  // realm's fetch layer. No `VirtualNetwork` crosses this boundary — it
-  // resolves author-controlled identifiers, and an operation runs in a trusted
-  // context where nothing author-written should be able to steer a lookup. So
-  // the realm absolutizes a code ref and canonicalizes a document's ids on the
-  // core's behalf rather than letting it reach for the network itself.
+  // realm's fetch layer. It gets no network capability and no
+  // `VirtualNetwork` — that resolves author-controlled identifiers, and an
+  // operation runs in a trusted context where nothing author-written should be
+  // able to steer a lookup. So the realm absolutizes a code ref and
+  // canonicalizes a document's ids on the core's behalf, and an operation
+  // never resolves either itself.
   get operationCore(): OperationCore {
     if (!this.#operationCore) {
       this.#operationCore = {
@@ -3191,7 +3187,6 @@ export class Realm {
           return isResolvedCodeRef(absolute) ? absolute : undefined;
         },
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
-        fetch: this.#operationFetch,
       };
     }
     return this.#operationCore;
@@ -5661,25 +5656,6 @@ export class Realm {
     localPath: LocalPath,
     fileEntry: IndexedFile,
   ): Promise<Response> {
-    let doc = await this.#fileMetaDocumentFromRow(localPath, fileEntry);
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.FileMeta,
-        },
-      },
-      requestContext,
-    });
-  }
-
-  // A file's metadata document assembled from its index row, which is the
-  // preferred source: it carries the extract-computed attributes and the
-  // per-field subclass overrides that reading the bytes alone cannot recover.
-  async #fileMetaDocumentFromRow(
-    localPath: LocalPath,
-    fileEntry: IndexedFile,
-  ): Promise<SingleFileMetaDocument> {
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
@@ -5786,27 +5762,26 @@ export class Realm {
       },
     };
     this.#serveInstanceIdsAsRRI(doc);
-    return doc;
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.FileMeta,
+        },
+      },
+      requestContext,
+    });
   }
 
   // The file-meta document for a path that holds bytes rather than a card, as
-  // the operation core reads it: the indexed row where there is one, the bytes
-  // on disk otherwise, and no response around either. That is the file-meta
-  // endpoint's own preference rather than the card+json handler's, which reads
-  // the bytes alone — a `read` of a file is the file-meta surface, so it
-  // answers with the row's extract-computed attributes and subclass field
-  // overrides where the row exists. A path whose sibling `.json` makes it a
-  // card's source is not a file and answers undefined, which is what sends a
-  // card+json read back to its own not-found handling.
+  // the operation core reads it — the card+json read's own answer for such a
+  // path, derived from the bytes, with no response around it. The guard is the
+  // one that read applies: a path whose sibling `.json` makes it a card's
+  // source is not a file, and answers undefined so the read falls back to its
+  // own not-found handling.
   async #operationFileMetaDocument(
     localPath: LocalPath,
   ): Promise<SingleFileMetaDocument | undefined> {
-    let fileEntry = await this.#realmIndexQueryEngine.file(
-      this.paths.fileURL(localPath),
-    );
-    if (fileEntry) {
-      return await this.#fileMetaDocumentFromRow(localPath, fileEntry);
-    }
     if (!(await this.nonJsonFileExists(localPath))) {
       return undefined;
     }

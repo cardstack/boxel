@@ -54,6 +54,30 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('a target is canonicalized before anything is read', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a declared read the executor cannot carry out is refused', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a payload missing a declared param is refused before any behavior runs', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a name every object answers to is unknown, not a dispatchable operation', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a headers-only read of a file answers from the file row', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a read needs an instance to read', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });

@@ -251,6 +251,13 @@ export interface OperationHeadResult {
   lastModified: number | null;
   generation: number | null;
   screenshots: ScreenshotManifest | null;
+  // The target's index-row dependencies. Carried because a validator is only
+  // safe when none of them live in another realm: cross-realm invalidation
+  // does not cascade `indexed_at`, so a stable local one does not mean the
+  // assembled `included[]` is current, and a caller that emitted an ETag
+  // anyway would serve a 304 against stale foreign content. Whoever computes
+  // the headers makes that call, so they need what it rests on.
+  deps: string[] | null;
 }
 
 // A write's answer: the identity of what was written and the version it now
@@ -330,6 +337,10 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The operation is sound but is not carried out here. A `query` is the case:
+  // it is planned and run on the search engine, so reaching the operation core
+  // with one means the caller used the wrong entry point.
+  | 'wrong-entry-point'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

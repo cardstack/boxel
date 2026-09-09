@@ -51,7 +51,11 @@ export function lowerQueryOperation(
     'query',
   ) as OperationQueryTemplate;
   let query = resolved as SearchEntryWireQuery;
-  if (!query.realms && invocation.realms?.length) {
+  // An authored `realms` is a deliberate scope and stands, empty included —
+  // `realms: []` says "these and no others", which is not the same as saying
+  // nothing. The invocation's scope fills only the slot a declaration left
+  // alone.
+  if (query.realms === undefined && invocation.realms?.length) {
     query.realms = [...invocation.realms];
   }
   return query;
@@ -94,17 +98,20 @@ function resolveMarker(
 ): unknown {
   switch (marker.$ref) {
     case 'params': {
+      // Own properties only. A key of `__proto__` or `toString` is answered by
+      // every plain object, so an `in` check would pass and substitute
+      // `Object.prototype` — or a native function — into a filter operand.
       let key = String(marker.key);
-      if (!definition.params || !(key in definition.params)) {
+      if (!hasOwn(definition.params, key)) {
         throw invalidParams(
           path,
           `references params("${key}"), which this operation does not declare`,
         );
       }
-      if (!invocation.params || !(key in invocation.params)) {
+      if (!hasOwn(invocation.params, key)) {
         throw invalidParams(path, `requires a value for params("${key}")`);
       }
-      return invocation.params[key];
+      return invocation.params![key];
     }
     case 'actor':
       // A query compares against what the index holds, and what it holds for
@@ -145,6 +152,15 @@ function invalidParams(path: string, detail: string): OperationFailure {
     title: 'Invalid params',
     detail: `${path} ${detail}`,
   });
+}
+
+function hasOwn(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): boolean {
+  return (
+    record !== undefined && Object.prototype.hasOwnProperty.call(record, key)
+  );
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

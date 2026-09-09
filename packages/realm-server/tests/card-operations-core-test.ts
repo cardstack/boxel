@@ -199,9 +199,12 @@ module(basename(import.meta.filename), function () {
         'a file target reads as its metadata document, not as a card',
       );
 
+      // Against the card+json GET rather than the file-meta endpoint: the
+      // card+json handler is the surface that will delegate here, so it is the
+      // one the read has to reproduce.
       let response = await realmRequest
         .get('/sample.md')
-        .set('Accept', SupportedMimeType.FileMeta);
+        .set('Accept', SupportedMimeType.CardJson);
       assert.strictEqual(
         response.status,
         200,
@@ -210,7 +213,28 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         document,
         JSON.parse(response.text),
-        'the read operation assembles the same document the file-meta GET returns',
+        'the read operation assembles the same document the card+json GET returns for a file',
+      );
+    });
+
+    test('a read of the realm root serves the index card', async function (assert) {
+      let response = await realmRequest
+        .get('/')
+        .set('Accept', SupportedMimeType.CardJson);
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let result = await runOperation(
+        testRealm.operationCore,
+        request({ kind: 'instance', url: testRealmHref }, 'read'),
+      );
+      assert.deepEqual(
+        documentOf(result),
+        JSON.parse(response.text),
+        'the realm root resolves to the index card, as it does over HTTP',
       );
     });
 
@@ -342,6 +366,77 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         error.detail.includes('status'),
         `the refusal names the missing param: ${error.detail}`,
+      );
+    });
+
+    test('a card marker resolves to the identity it wraps', function (assert) {
+      let definition = savedSearch();
+      definition.query!.filter = {
+        'item.on': personRef,
+        eq: {
+          'item.owner': { $ref: 'card', value: { $ref: 'actor', key: 'id' } },
+        },
+      };
+      let query = lowerQueryOperation(definition, {
+        actor: '@test-actor:localhost',
+        params: { status: 'open' },
+      });
+      assert.deepEqual(query.filter, {
+        'item.on': personRef,
+        eq: { 'item.owner': '@test-actor:localhost' },
+      });
+    });
+
+    test('a keyed actor reference needs the actor card, so it is refused', async function (assert) {
+      let definition = savedSearch();
+      definition.query!.filter = {
+        'item.on': personRef,
+        eq: { 'item.ownerName': { $ref: 'actor', key: 'name' } },
+      };
+      let error = await refusalFrom(async () =>
+        lowerQueryOperation(definition, {
+          actor: '@test-actor:localhost',
+          params: { status: 'open' },
+        }),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.ok(
+        error.detail.includes('identity'),
+        `the refusal says why: ${error.detail}`,
+      );
+    });
+
+    test('a marker nothing knows how to resolve is refused', async function (assert) {
+      let definition = savedSearch();
+      definition.query!.filter = {
+        'item.on': personRef,
+        eq: { 'item.title': { $ref: 'nonsense' } as never },
+      };
+      let error = await refusalFrom(async () =>
+        lowerQueryOperation(definition, {
+          actor: '@test-actor:localhost',
+          params: { status: 'open' },
+        }),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+    });
+
+    test('a param key every object answers to is not a declared param', async function (assert) {
+      let definition = savedSearch();
+      definition.query!.filter = {
+        'item.on': personRef,
+        eq: { 'item.title': { $ref: 'params', key: '__proto__' } },
+      };
+      let error = await refusalFrom(async () =>
+        lowerQueryOperation(definition, {
+          actor: '@test-actor:localhost',
+          params: { status: 'open' },
+        }),
+      );
+      assert.strictEqual(
+        error.code,
+        'invalid-params',
+        'a prototype member is not a param, so nothing of it reaches the query',
       );
     });
 
