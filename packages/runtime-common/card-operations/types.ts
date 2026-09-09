@@ -81,6 +81,13 @@ export interface OperationDefinition {
   // The transformation stage — the clauses and any raw program, lowered to a
   // single BXL mutation program.
   program?: OperationProgram;
+  // Whether the program needs the target's values gathered before it runs.
+  // A program reads the target's stored document, which holds neither a
+  // computed value nor a linked card's fields, so an assertion over one is
+  // only checkable against a snapshot. Gathering costs reads, so it is never
+  // inferred: this is set only where a declaration asked for it with
+  // `assert: { snapshot: true }` over a path that actually needs it.
+  snapshot?: true;
   // The raw program's payload-shaping stage, and its result projection.
   input?: OperationProgram;
   output?: OperationProgram;
@@ -130,6 +137,13 @@ export type OperationLoweringIssueCode =
   // A dotted path that crosses a collection. Which item it means is not
   // something a declaration can say, so the path addresses nothing.
   | 'path-crosses-collection'
+  // A value in a link position that is not a card identity. A link holds the
+  // identity of a card — a URL, or a marker resolving to one — and the
+  // executor requires that for a relationship write, so anything else would
+  // fail on every invocation. It also covers the comparison side: a value
+  // that is not an identity can never equal one, so an `assert` over a link
+  // collection would hold for every item and guard nothing.
+  | 'link-requires-identity'
   // A write whose path crosses a `linksTo` / `linksToMany`. An operation
   // binds only to the target card's own stored values; the linked card is a
   // separate document with its own operations.

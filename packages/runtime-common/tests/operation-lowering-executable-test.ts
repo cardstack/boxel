@@ -137,20 +137,20 @@ const SNAPSHOT = {
   featured: null,
 };
 
+const ACTOR_ID = 'http://example.com/cards/author/1';
+
 const PLAN_CONTEXT = {
   programId: 'operation-lowering-test',
   targetId: 'http://example.com/cards/report/1',
   context: {
     params: {
       value: 'a value',
-      who: 'http://example.com/cards/author/1',
+      who: ACTOR_ID,
     },
-    actor: { id: 'http://example.com/cards/author/1' },
+    actor: { id: ACTOR_ID },
   },
   cards: {
-    'http://example.com/cards/author/1': {
-      id: 'http://example.com/cards/author/1',
-    },
+    [ACTOR_ID]: { id: ACTOR_ID },
   },
 };
 
@@ -158,6 +158,7 @@ const PLAN_CONTEXT = {
 // changes it plans, or the error text when planning throws.
 async function planOutcome(
   source: string,
+  snapshot: Record<string, unknown> = SNAPSHOT,
 ): Promise<{ rejected: string } | { affected: number }> {
   try {
     let prepared = prepareBxlMutation(source, {
@@ -165,7 +166,7 @@ async function planOutcome(
       targetKind: 'card',
       syntax: 'solidified',
     });
-    let plan = prepared.plan(SNAPSHOT as never, PLAN_CONTEXT as never);
+    let plan = prepared.plan(snapshot as never, PLAN_CONTEXT as never);
     return { affected: plan.affected };
   } catch (err: any) {
     return { rejected: `${err?.code ?? 'error'}: ${err?.message ?? err}` };
@@ -236,6 +237,14 @@ const EXECUTABLE_DECLARATIONS: {
       assert: { unique: 'reviewers', by: params('who'), snapshot: true },
     },
   },
+  {
+    name: 'assertLinkedByActor',
+    writes: false,
+    declaration: {
+      base: 'transform',
+      assert: { unique: 'reviewers', by: actor(), snapshot: true },
+    },
+  },
 ];
 
 // Each declaration lowering refuses, paired with the finding it records and
@@ -244,12 +253,21 @@ const EXECUTABLE_DECLARATIONS: {
 // and changes nothing, which is the worse of the two for an author — the
 // operation reports success while the write they wrote never happened. Either
 // way the finding is tracking a real restriction rather than a guess.
+//
+// `emitsProgram` separates the two places a refusal can happen. A clause the
+// executor could not carry out at all is dropped whole, so no program comes
+// out; a bad *value* inside an otherwise sound clause is recorded and the
+// statement is still assembled, since one unusable value in a multi-key `set`
+// is not a reason to discard the rest. Either way the operation is flagged
+// `invalid` and so is never run — what the table pins down is that the
+// program the executor would have been handed is one it refuses.
 const REFUSED_DECLARATIONS: {
   name: string;
   code: string;
   declaration: unknown;
   wouldBe: string;
   executor: 'rejects' | 'no-ops';
+  emitsProgram?: true;
 }[] = [
   {
     name: 'set replacing a whole link collection',
@@ -292,6 +310,36 @@ const REFUSED_DECLARATIONS: {
     code: 'computed-write',
     declaration: { base: 'transform', set: { slug: 'z' } },
     wouldBe: '.slug="z";',
+  },
+  {
+    name: 'set on a link to something that is not an identity',
+    executor: 'rejects',
+    code: 'link-requires-identity',
+    emitsProgram: true,
+    declaration: { base: 'transform', set: { owner: { name: 'Ada' } } },
+    wouldBe: '.owner={name:"Ada"};',
+  },
+  {
+    // Clearing a link: the executor removes an edge with `del`, which refuses
+    // a link that is already empty, so there is no spelling that clears
+    // idempotently and the declaration is reported rather than approximated.
+    name: 'set clearing a link',
+    executor: 'rejects',
+    code: 'link-requires-identity',
+    emitsProgram: true,
+    declaration: { base: 'transform', set: { owner: null } },
+    wouldBe: '.owner=null;',
+  },
+  {
+    name: 'append of something that is not an identity to a link collection',
+    executor: 'rejects',
+    code: 'link-requires-identity',
+    emitsProgram: true,
+    declaration: {
+      base: 'transform',
+      append: { to: 'reviewers', value: { name: 'Ada' } },
+    },
+    wouldBe: 'append(.reviewers;{name:"Ada"});',
   },
 ];
 
@@ -340,6 +388,7 @@ const tests = Object.freeze({
       declaration,
       wouldBe,
       executor,
+      emitsProgram,
     } of REFUSED_DECLARATIONS) {
       let { operations } = await lower({ candidate: declaration });
       let operation = operations.candidate;
@@ -349,11 +398,19 @@ const tests = Object.freeze({
         [code],
         `${name} records ${code}`,
       );
-      assert.strictEqual(
-        operation.program,
-        undefined,
-        `${name} emits no program`,
-      );
+      if (emitsProgram) {
+        assert.strictEqual(
+          operation.program?.source,
+          wouldBe,
+          `${name} still assembles its statement`,
+        );
+      } else {
+        assert.strictEqual(
+          operation.program,
+          undefined,
+          `${name} emits no program`,
+        );
+      }
       // The other half of the contract: had lowering emitted the obvious
       // program instead, the executor would either have thrown or done
       // nothing. Without this the finding could be guarding a restriction
@@ -373,6 +430,51 @@ const tests = Object.freeze({
       }
     }
   },
+  // Planning without error proves only that a program is runnable. An
+  // assertion that compares a value which can never equal what it is compared
+  // against — a whole actor record against the id string `.id` holds — plans
+  // just as cleanly, holds for every item, and lets the duplicate it exists
+  // to reject go straight in. So the precondition is checked both ways round:
+  // it has to fire on a duplicate and it has to stay out of the way when
+  // there is none.
+  'an assert over a link collection fires on a duplicate and not otherwise':
+    async (assert) => {
+      let { operations, issues } = await lower({
+        addReviewer: {
+          base: 'transform',
+          assert: { unique: 'reviewers', by: actor(), snapshot: true },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      let source = operations.addReviewer.program!.source;
+
+      let onDuplicate = await planOutcome(source, {
+        ...SNAPSHOT,
+        reviewers: [{ id: ACTOR_ID }],
+      });
+      assert.ok(
+        'rejected' in onDuplicate &&
+          onDuplicate.rejected.includes('assertion-failed'),
+        `the assertion fires when the actor is already linked: ${source}`,
+      );
+      assert.deepEqual(
+        await planOutcome(source, {
+          ...SNAPSHOT,
+          reviewers: [{ id: 'http://example.com/cards/author/2' }],
+        }),
+        { affected: 0 },
+        'and holds when someone else is linked',
+      );
+      assert.deepEqual(
+        await planOutcome(source, { ...SNAPSHOT, reviewers: [] }),
+        { affected: 0 },
+        'and holds when nothing is linked',
+      );
+      assert.true(
+        operations.addReviewer.snapshot,
+        'the gathering the assertion depends on travels with the operation, since a program reads the stored document and a link collection is not in it',
+      );
+    },
 }) as SharedTests<Record<string, never>>;
 
 export default tests;

@@ -246,6 +246,12 @@ export interface AppendClause {
 // identity — an assertion is never an authorization check.
 export interface AssertClause {
   readonly unique: string;
+  // What decides whether an item is already there. On a collection of links
+  // this is compared against the linked card's `id`, so it must be an
+  // identity — a card URL, a param declared with `linkTo(…)`, or `actor()` /
+  // `instance()`. On a collection of contained values the item is compared
+  // whole, so a partial object never matches an item that has any other field
+  // set: key such a check on the value the collection actually holds.
   readonly by: OperationValue;
   readonly message?: string;
   // Asks for the values the check reads to be gathered before it runs. A

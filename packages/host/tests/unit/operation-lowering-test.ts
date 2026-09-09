@@ -237,7 +237,7 @@ module('Unit | operation lowering', function (hooks) {
 
   test('assert lowers to a uniqueness precondition keyed by the collection kind', async function (assert) {
     let { field, contains, containsMany, linksToMany, CardDef } = api;
-    let { operation, params } = operations;
+    let { operation, params, actor } = operations;
     class Report extends CardDef {
       static displayName = 'Report';
       @field tags = containsMany(StringField);
@@ -260,6 +260,10 @@ module('Unit | operation lowering', function (hooks) {
         params: { who: StringField },
         assert: { unique: 'reviewers', by: params('who'), snapshot: true },
       } satisfies OperationsModule.OperationDeclaration;
+      @operation static claimReview = {
+        base: 'transform',
+        assert: { unique: 'reviewers', by: actor(), snapshot: true },
+      } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
 
@@ -277,6 +281,20 @@ module('Unit | operation lowering', function (hooks) {
       lowered.addReviewer.program?.source,
       'assert(all(.reviewers[];.id!=params("who"));"reviewers already holds this value");',
       'a link collection compares the linked card id against the identity itself — not against a card() projection — and an omitted message gets a default',
+    );
+    assert.strictEqual(
+      lowered.claimReview.program?.source,
+      'assert(all(.reviewers[];.id!=actor("id"));"reviewers already holds this value");',
+      'a keyless actor() being compared narrows to the id it is compared against, the way it does on its way into a link — the whole record would never equal an id string, so the check would hold for every item',
+    );
+    assert.true(
+      lowered.addReviewer.snapshot,
+      'the gathering the author opted into travels with the program that needs it',
+    );
+    assert.strictEqual(
+      lowered.addTag.snapshot,
+      undefined,
+      'while an assert the stored document can answer asks for none',
     );
   });
 
@@ -574,17 +592,37 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
-  test('params() for a key the schema does not declare is recorded, in a clause and in a program', async function (assert) {
+  test('params() for a key the schema does not declare is refused in a clause and recorded in a program', async function (assert) {
     let { field, contains, CardDef } = api;
     let { operation, params, bxl } = operations;
+
+    // The two layers divide the work by what each can see. A clause value is
+    // structure the declaration API reads, so it resolves the reference and
+    // refuses the declaration where the class is defined — earlier than
+    // lowering, and pointing at the line the author wrote.
+    assert.throws(
+      () => {
+        class Flawed extends CardDef {
+          static displayName = 'Flawed';
+          @field status = contains(StringField);
+          @operation static close = {
+            base: 'transform',
+            params: { note: StringField },
+            set: { status: params('reason' as 'note') },
+          } satisfies OperationsModule.OperationDeclaration;
+        }
+        return Flawed;
+      },
+      /references the param "reason", which the `params` schema does not declare/,
+      'an undeclared param in a clause never reaches lowering',
+    );
+
+    // Raw program text is what lowering has to catch on its own: the
+    // declaration API leaves the references inside a `bxl` program to BXL, so
+    // nothing before lowering has read this key.
     class Report extends CardDef {
       static displayName = 'Report';
       @field status = contains(StringField);
-      @operation static close = {
-        base: 'transform',
-        params: { note: StringField },
-        set: { status: params('reason' as 'note') },
-      } satisfies OperationsModule.OperationDeclaration;
       @operation static raw: OperationsModule.OperationDeclaration = {
         base: 'transform',
         params: { note: StringField },
@@ -594,12 +632,63 @@ module('Unit | operation lowering', function (hooks) {
     shim({ Report });
 
     let result = await lower(Report);
-    assert.deepEqual(codes(result), ['undeclared-param', 'undeclared-param']);
+    assert.deepEqual(codes(result), ['undeclared-param']);
     assert.deepEqual(
       result.issues.map((issue) => issue.operation),
-      ['close', 'raw'],
-      'a typo inside raw program text is caught the way a typo in a clause is',
+      ['raw'],
     );
+    assert.strictEqual(
+      result.issues[0].path,
+      'transformations',
+      'the finding points at the program rather than at a clause',
+    );
+  });
+
+  test('a value in a link position that is not a card identity is recorded', async function (assert) {
+    let { field, contains, linksTo, linksToMany, CardDef } = api;
+    let { operation } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field owner = linksTo(() => fixtures.Author);
+      @field reviewers = linksToMany(() => fixtures.Author, {
+        searchable: true,
+      });
+      @operation static misassign = {
+        base: 'transform',
+        set: { owner: { name: 'Ada' } },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static unassign = {
+        base: 'transform',
+        set: { owner: null },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static misappend = {
+        base: 'transform',
+        append: { to: 'reviewers', value: 7 },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), [
+      'link-requires-identity',
+      'link-requires-identity',
+      'link-requires-identity',
+    ]);
+    assert.deepEqual(
+      result.issues.map((issue) => issue.path),
+      ['set.owner', 'set.owner', 'append.value'],
+    );
+    assert.true(
+      result.issues[1].message.includes('already empty'),
+      'clearing a link is called out as its own missing spelling rather than as a bad value',
+    );
+    for (let name of ['misassign', 'unassign', 'misappend']) {
+      assert.true(
+        result.operations[name].invalid,
+        `${name} is flagged rather than stored as though it would run`,
+      );
+    }
   });
 
   test('a write into a computed field is recorded', async function (assert) {

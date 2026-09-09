@@ -83,6 +83,9 @@ type ValueSlot =
   | { kind: 'link' }
   // A list of card identities.
   | { kind: 'links' }
+  // A card identity being compared rather than written: the identity string
+  // itself, not the `card(…)` projection a link slot writes.
+  | { kind: 'identity' }
   // A single value the field's serializer understands.
   | { kind: 'scalar' }
   // A contained value, whose keys are the fields of `definition`.
@@ -175,7 +178,12 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
-  let statements = await lowerClauses(declaration, paramNames, sink, context);
+  let { statements, snapshot } = await lowerClauses(
+    declaration,
+    paramNames,
+    sink,
+    context,
+  );
   let rawProgram = (declaration as { transformations?: { $bxl: string } })
     .transformations;
   if (rawProgram) {
@@ -204,6 +212,9 @@ async function lowerOperation(
     );
     if (program) {
       operation.program = program;
+      if (snapshot) {
+        operation.snapshot = true;
+      }
     }
   }
 
@@ -326,14 +337,16 @@ async function lowerClauses(
   paramNames: Set<string>,
   sink: IssueSink,
   context: LoweringContext,
-): Promise<string[]> {
+): Promise<{ statements: string[]; snapshot: boolean }> {
   let statements: string[] = [];
+  let snapshot = false;
   let assertion = (declaration as { assert?: Record<string, unknown> }).assert;
   if (assertion) {
-    let statement = await lowerAssert(assertion, paramNames, sink, context);
-    if (statement) {
-      statements.push(statement);
+    let lowered = await lowerAssert(assertion, paramNames, sink, context);
+    if (lowered.statement) {
+      statements.push(lowered.statement);
     }
+    snapshot = lowered.snapshot;
   }
   let set = (declaration as { set?: Record<string, unknown> }).set;
   if (set) {
@@ -351,7 +364,7 @@ async function lowerClauses(
       statements.push(statement);
     }
   }
-  return statements;
+  return { statements, snapshot };
 }
 
 // `set: { status: 'closed' }` → `.status="closed";`
@@ -440,7 +453,7 @@ async function lowerAssert(
   paramNames: Set<string>,
   sink: IssueSink,
   context: LoweringContext,
-): Promise<string | undefined> {
+): Promise<{ statement?: string; snapshot: boolean }> {
   let path = String(assertion.unique);
   let resolved = await resolvePath(path, context);
   if (resolved.unresolved) {
@@ -449,7 +462,7 @@ async function lowerAssert(
       'assert.unique',
       unresolvedMessage(resolved, path),
     );
-    return undefined;
+    return { snapshot: false };
   }
   let field = resolved.segments[resolved.segments.length - 1].fieldDef;
   if (!PLURAL_KINDS.includes(field.type)) {
@@ -458,7 +471,7 @@ async function lowerAssert(
       'assert.unique',
       `"${path}" is a ${field.type} field, which holds one value — a uniqueness check needs a collection`,
     );
-    return undefined;
+    return { snapshot: false };
   }
   checkReadablePath(resolved, path, 'assert.unique', sink);
   let gathered = resolved.segments.some(
@@ -476,12 +489,15 @@ async function lowerAssert(
   //
   // `by` is therefore compared against a member, not against the item: on a
   // link collection it is the identity string that `.id` holds, so it lowers
-  // in a scalar slot rather than being wrapped in `card(…)` the way the same
-  // value would be on its way *into* the link.
+  // in an identity slot rather than being wrapped in `card(…)` the way the
+  // same value would be on its way *into* the link. The slot is also what
+  // narrows a keyless `actor()` to `actor("id")` here — comparing a whole
+  // actor record against an id string is never equal, so the assertion would
+  // hold for every item and the precondition would guard nothing at all.
   let linked = LINK_KINDS.includes(field.type);
   let keyed = linked ? '.id' : '.';
   let slot: ValueSlot = linked
-    ? { kind: 'scalar' }
+    ? { kind: 'identity' }
     : await slotForField(field, 'item', context);
   let by = await lowerValue(
     assertion.by,
@@ -495,7 +511,14 @@ async function lowerAssert(
     typeof assertion.message === 'string'
       ? bxlLiteral(assertion.message)
       : bxlLiteral(`${path} already holds this value`);
-  return `assert(all(${bxlFieldPath(path)}[];${keyed}!=${by});${message});`;
+  return {
+    statement: `assert(all(${bxlFieldPath(path)}[];${keyed}!=${by});${message});`,
+    // The flag travels with the program rather than staying a lowering-time
+    // gate: the check it suppresses is exactly the one saying the stored
+    // document does not hold these values, so the realm has to be told to
+    // gather them or the assertion reads an absent field and holds.
+    snapshot: gathered && assertion.snapshot === true,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -724,6 +747,24 @@ async function slotForField(
 //
 // The walk is async because it resolves the type of every contained value it
 // descends into, so a key is checked at whatever depth an author wrote it.
+//
+// One emitted shape has no executable spelling yet. `card(…)` is a marker the
+// mutation planner recognizes structurally, and only as an entire value
+// expression, so a relationship *nested inside* a contained value —
+// `append(.comments;{body:"b",author:card(actor("id"))});` — parses, plans,
+// and then fails with `'card/1' is not defined`. That is every contained
+// write carrying a link, not one example. It is emitted unchanged all the
+// same: this is the lowered form the design calls for, and bending it here
+// would bake a workaround into stored data that later has to be unbaked;
+// resolving the marker inside a value tree belongs to the executor.
+//
+// No finding is recorded for it, deliberately. A finding sets `invalid`,
+// which would refuse the shape rather than flag it, and there is no
+// warning severity to say "this is right but not yet runnable". The same
+// reasoning leaves `deterministic` alone: it says whether a program yields
+// the same result for the same input, which stays true of a program that
+// cannot yet run, and nothing is optimistically applied from a program the
+// planner rejects.
 async function lowerValue(
   value: unknown,
   slot: ValueSlot,
@@ -753,6 +794,12 @@ async function lowerValue(
     return `(${program.source})`;
   }
   if (Array.isArray(value)) {
+    // Reported once and then carried through as plain data: descending with
+    // the identity slot still in hand would report every item as well.
+    if (wantsIdentity(slot)) {
+      sink.add('link-requires-identity', path, notAnIdentity(path, 'a list'));
+      slot = { kind: 'opaque' };
+    }
     let itemSlot = itemSlotOf(slot);
     let items: string[] = [];
     for (let [index, entry] of value.entries()) {
@@ -770,6 +817,14 @@ async function lowerValue(
     return `[${items.join(',')}]`;
   }
   if (isPlainObject(value)) {
+    if (wantsIdentity(slot)) {
+      sink.add(
+        'link-requires-identity',
+        path,
+        notAnIdentity(path, 'an object'),
+      );
+      slot = { kind: 'opaque' };
+    }
     return await lowerObject(value, slot, path, paramNames, sink, context);
   }
   if (
@@ -778,10 +833,23 @@ async function lowerValue(
     typeof value === 'boolean' ||
     value === null
   ) {
-    // A link slot can only mean an identity, and a bare URL in one is the
-    // identity spelled without the `card(…)` marker.
-    if (typeof value === 'string' && slot.kind === 'link') {
-      return `card(${bxlLiteral(value)})`;
+    if (wantsIdentity(slot)) {
+      if (typeof value !== 'string') {
+        sink.add(
+          'link-requires-identity',
+          path,
+          value === null
+            ? cannotClearLink(path)
+            : notAnIdentity(path, JSON.stringify(value)),
+        );
+        return bxlLiteral(value);
+      }
+      // A bare URL is the identity spelled without the `card(…)` marker: a
+      // write wants the projection around it, a comparison wants the
+      // identity itself.
+      return slot.kind === 'identity'
+        ? bxlLiteral(value)
+        : `card(${bxlLiteral(value)})`;
     }
     return bxlLiteral(value);
   }
@@ -844,6 +912,29 @@ async function lowerObject(
   return `{${entries.join(',')}}`;
 }
 
+// A link holds a card identity — the URL of a saved card, or a marker that
+// resolves to one. Anything else in that position lowers to a program that
+// parses and then fails on every invocation, since the executor requires an
+// identity for a relationship write. The same holds where an identity is
+// compared rather than written: a value that is not an identity can never
+// equal one, so the comparison would quietly hold for every item.
+function wantsIdentity(slot: ValueSlot): boolean {
+  return slot.kind === 'link' || slot.kind === 'identity';
+}
+
+function notAnIdentity(path: string, described: string): string {
+  return `${described} cannot stand for a card identity at \`${path}\` — write a card URL, a param declared with \`linkTo(…)\`, or \`actor()\` / \`instance()\` there`;
+}
+
+// `null` in a link position reads as "clear this link", which is a different
+// operation from writing one: the executor removes an edge with `del`, and
+// that refuses a link which is already empty. So there is no spelling a
+// clause can lower to that clears idempotently, and approximating one would
+// give an operation that works until the second time it runs.
+function cannotClearLink(path: string): string {
+  return `\`${path}\` addresses a link, and \`null\` there reads as clearing it — which a clause cannot express: a relationship write requires an identity, and removing the edge outright fails when the link is already empty`;
+}
+
 function itemSlotOf(slot: ValueSlot): ValueSlot {
   switch (slot.kind) {
     case 'links':
@@ -864,6 +955,11 @@ async function lowerReference(
   context: LoweringContext,
 ): Promise<string> {
   let asLink = slot.kind === 'link' || slot.kind === 'links';
+  // A link slot and an identity slot both ask *which card*, so a whole-value
+  // reference narrows to its `id` in either. They differ only in spelling:
+  // a link is written as the `card(…)` projection, an identity is the bare
+  // string that `.id` holds.
+  let identifies = asLink || slot.kind === 'identity';
   switch (marker.$ref) {
     case 'params': {
       let key = String(marker.key);
@@ -874,9 +970,8 @@ async function lowerReference(
     case 'actor':
     case 'instance': {
       let builtin = String(marker.$ref);
-      // A link slot needs an identity, and the identity of a whole actor or
-      // instance is its `id`.
-      let key = marker.key ?? (asLink ? 'id' : undefined);
+      // The identity of a whole actor or instance is its `id`.
+      let key = marker.key ?? (identifies ? 'id' : undefined);
       let read =
         key === undefined
           ? `${builtin}()`
@@ -885,6 +980,19 @@ async function lowerReference(
     }
     case 'card': {
       let inner = marker.value;
+      if (slot.kind === 'identity') {
+        // `card(…)` in a comparison says *which* card, and what a comparison
+        // against `.id` needs is the identity inside the marker rather than
+        // the projection around it.
+        return await lowerValue(
+          inner,
+          slot,
+          `${path}.value`,
+          paramNames,
+          sink,
+          context,
+        );
+      }
       if (typeof inner === 'string') {
         return `card(${bxlLiteral(inner)})`;
       }
@@ -904,6 +1012,13 @@ async function lowerReference(
   }
 }
 
+// Where a clause value reads a param, the declaration API has already
+// resolved the reference and refused the declaration at class-definition
+// time, so this only fires for a caller that assembled declarations without
+// going through the decorator. It stays because the pass is exported and its
+// input is plain data. Raw program text is the case this genuinely catches:
+// the declaration API leaves the references inside a `bxl` program to BXL,
+// so nothing before lowering has read those keys.
 function checkParamKey(
   key: string,
   paramNames: Set<string>,

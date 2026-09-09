@@ -13,5 +13,9 @@ module(basename(import.meta.filename), function () {
     test('every declaration lowering refuses is one the executor would reject', async function (assert) {
       await runSharedTest(operationLoweringExecutableTests, assert, {});
     });
+
+    test('an assert over a link collection fires on a duplicate and not otherwise', async function (assert) {
+      await runSharedTest(operationLoweringExecutableTests, assert, {});
+    });
   });
 });
