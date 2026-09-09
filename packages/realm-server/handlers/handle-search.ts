@@ -35,18 +35,18 @@ import { fetchRealmGenerations } from '../job-scoped-search-cache.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import { LiveSearchCache } from '../live-search-cache.ts';
 import type { DBAdapter } from '@cardstack/runtime-common';
-
-// Response header naming how the live-search cache satisfied a request:
-// `miss` (fresh compute), `join` (awaited an identical in-flight compute), or
-// `hit` (served from the TTL window). Diagnostic + test surface only — the
-// body is byte-identical across the three.
-export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
+
+// Response header naming how the live-search cache satisfied a request:
+// `miss` (fresh compute), `join` (awaited an identical in-flight compute), or
+// `hit` (served from the TTL window). Diagnostic + test surface only — the
+// body is byte-identical across the three.
+export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,

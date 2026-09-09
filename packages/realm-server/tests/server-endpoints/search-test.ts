@@ -44,6 +44,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let testRealmHttpServer: Server;
 
     let ownerUserId = '@mango:localhost';
+    // A second principal with read access to both realms. Used to prove the
+    // live-search cache serves a body computed for one authorized caller to a
+    // different authorized caller — the sharing is keyed on the realm list, not
+    // the user.
+    let readerUserId = '@reader:localhost';
 
     // Two Person instances per realm: per-realm css dedup is exercised
     // within each realm (two renderings share one stylesheet), and the
@@ -111,6 +116,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             fileSystem: realmFileSystem,
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],
+              [readerUserId]: ['read'],
             },
           },
           {
@@ -118,6 +124,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             fileSystem: realmFileSystem,
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],
+              [readerUserId]: ['read'],
             },
           },
         ],
@@ -163,11 +170,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       },
     });
 
-    function ownerToken() {
+    function tokenFor(userId: string) {
       return createRealmServerJWT(
-        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        { user: userId, sessionRoom: `session-room-${userId}` },
         realmSecretSeed,
       );
+    }
+
+    function ownerToken() {
+      return tokenFor(ownerUserId);
     }
 
     // Anchor on the base CardDef ref: each realm's Person adopts from its
@@ -179,15 +190,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       };
     }
 
-    function postSearch(body: Record<string, unknown>) {
+    function postSearchAs(token: string, body: Record<string, unknown>) {
       let searchURL = new URL('/_federated-search', testRealm.url);
       return request
         .post(`${searchURL.pathname}${searchURL.search}`)
         .set('Accept', 'application/vnd.card+json')
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Authorization', `Bearer ${ownerToken()}`)
+        .set('Authorization', `Bearer ${token}`)
         .send(body);
+    }
+
+    function postSearch(body: Record<string, unknown>) {
+      return postSearchAs(ownerToken(), body);
     }
 
     test('QUERY /_federated-search federates entry results across realms', async function (assert) {
@@ -588,6 +603,40 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         differentRealms.headers[LIVE_SEARCH_CACHE_HEADER],
         'miss',
         'a different realm list is a different cache identity',
+      );
+    });
+
+    test('a body computed for one caller is served to a different authorized caller', async function (assert) {
+      // Cross-user sharing is the whole point of the live cache: the body is a
+      // pure function of the realm list (both callers are authorized for it),
+      // not of the requesting user, so a body one user's request populated is
+      // served byte-identically to the next authorized user. Distinct sessions
+      // (different `Authorization` bearers) exercise the sharing that a
+      // single-user test cannot.
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let owner = await postSearchAs(ownerToken(), searchBody);
+      assert.strictEqual(owner.status, 200, 'the owner request succeeds');
+      assert.strictEqual(
+        owner.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the first caller computes the body',
+      );
+
+      let reader = await postSearchAs(tokenFor(readerUserId), searchBody);
+      assert.strictEqual(reader.status, 200, 'the reader request succeeds');
+      assert.strictEqual(
+        reader.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'a different authorized caller is served the cached body',
+      );
+      assert.deepEqual(
+        reader.body,
+        owner.body,
+        'the cross-user body is byte-identical',
       );
     });
 
