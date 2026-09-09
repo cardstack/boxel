@@ -2576,6 +2576,132 @@ module(basename(import.meta.filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+        // What is stored for a relationship depends on whether the link can be
+        // relativized against the writing realm. A scoped reference cannot be,
+        // and must not be resolved either: resolving one stores whatever URL
+        // the linked realm answers to in this environment, so a realm under
+        // version control ends up carrying a dev or staging host.
+        test('stores a scoped cross-realm link verbatim', async function (assert) {
+          let scopedLink = '@cardstack/catalog/Pet/vangogh';
+
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: scopedLink } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            scopedLink,
+            'the stored link is the scoped reference the client sent',
+          );
+        });
+
+        test('still relativizes a same-realm link', async function (assert) {
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}jade` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            './jade',
+            'an in-realm link is still stored relative',
+          );
+        });
+
+        test('still stores a link to an unmapped realm absolutely', async function (assert) {
+          let unmapped = 'http://localhost:4205/other/Pet/vangogh';
+
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: unmapped } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            unmapped,
+            'a link to a realm with no prefix mapping stays absolute',
+          );
+        });
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
 

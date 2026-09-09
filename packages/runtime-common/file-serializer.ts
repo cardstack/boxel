@@ -17,7 +17,10 @@ import type { VirtualNetwork } from './virtual-network.ts';
 import { isMeta, type CardFields, type Meta } from './resource-types.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
-import { maybeRelativeReference as makeRelativeReference } from './url.ts';
+import {
+  isScopedReference,
+  maybeRelativeReference as makeRelativeReference,
+} from './url.ts';
 
 export default async function serialize({
   doc,
@@ -345,7 +348,16 @@ async function processRelationships({
       // Handle both truthy and null values for links.self
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
-        if (realmURL && selfLink) {
+        // A scoped reference is already canonical and portable, so it is
+        // stored verbatim — the same rule the read path applies when serving a
+        // document. Resolving one here would store whatever URL the linked
+        // realm happens to answer to in the writing environment, baking a
+        // dev or staging host into a realm that is version controlled.
+        if (
+          realmURL &&
+          selfLink &&
+          !isScopedReference(selfLink, virtualNetwork)
+        ) {
           try {
             selfLink = makeRelativeReference(
               virtualNetwork.resolveURL(selfLink, relativeTo),
