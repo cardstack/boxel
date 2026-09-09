@@ -613,15 +613,21 @@ export function expressionToSql(
       // through and the two accepted spellings are enumerated instead. The
       // query grammar constrains the same value on the way in; neither check
       // relies on the other.
+      // Only an absent direction defaults; `null` is a spelling like any
+      // other, and the grammar refuses it too, so the two agree on every
+      // input rather than only on the ones the grammar sees.
       let { direction } = element;
-      if (direction != null && direction !== 'asc' && direction !== 'desc') {
+      if (direction === undefined) {
+        return 'asc';
+      }
+      if (direction !== 'asc' && direction !== 'desc') {
         throw new Error(
           `sort direction must be either 'asc' or 'desc', not ${JSON.stringify(
             direction,
           )}`,
         );
       }
-      return direction ?? 'asc';
+      return direction;
     } else {
       throw assertNever(element);
     }
