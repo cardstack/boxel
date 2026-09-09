@@ -470,6 +470,28 @@ check('commit setter failures roll back earlier writes', () => {
   strictEqual(card.locked, 'safe');
 });
 
+check('a partial update keeps the links it does not mention', () => {
+  const card = invoiceFixture();
+  const original = card.cardInfo.theme;
+  ok(original, 'the fixture starts with a theme');
+  const plan = updateViaBxl('.cardInfo |= {"name":.name};', {
+    getFields,
+    syntax: 'solidified',
+  }).call(card);
+  // A link is an edge, so the value the write stores holds no `theme` member;
+  // the model still points at the very Card it pointed at before.
+  const written = plan.intents.find((intent) => intent.op === 'set');
+  deepStrictEqual(written?.op === 'set' ? written.after : undefined, {
+    name: 'Coastal Maine',
+  });
+  deepStrictEqual(
+    written?.op === 'set' ? written.keepRelationships : undefined,
+    [['theme']],
+  );
+  strictEqual(card.cardInfo.theme, original);
+  strictEqual(card.cardInfo.name, 'Coastal Maine');
+});
+
 check('query-backed relationship fields remain read-only', () => {
   const card = invoiceFixture();
   throws(

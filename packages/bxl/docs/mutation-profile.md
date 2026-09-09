@@ -946,7 +946,15 @@ interface BxlMutationStatementResult {
 }
 
 type BxlMutationIntent =
-  | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
+  | {
+      op: 'set';
+      path: JqPath;
+      before?: JsonValue;
+      after: JsonValue;
+      // Relationship Fields inside the replaced value, each named relative to
+      // `path`, whose edges this write leaves as the Card already holds them.
+      keepRelationships?: JqPath[];
+    }
   | { op: 'delete'; path: JqPath; before: JsonValue }
   | { op: 'copy'; from: JqPath; path: JqPath }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
@@ -1033,10 +1041,27 @@ between `|=` and `=` here:
 ```
 
 An edge lives as long as the value holding it, so an update that drops a
-contained value drops the edges inside it too. An edge does not follow its
-value to a new position either: an update that moves a linked value to another
-index is refused, and the collection operations — `move_item_before`,
-`reorder_by` and the rest — are what carry a value and its edges together.
+contained value drops the edges inside it too.
+
+An edge does not follow its value to a new position either. A write addressed
+at one location pins it, so a link beside the value it belongs to stays put;
+but a write that rebuilds a _collection_ reassigns every index in it, and an
+edge has nothing but its index to hold onto — a contained value carries no
+identity, and every link projects as `{"id": …}`, so two edges to the same Card
+read alike. Such a write is refused wherever an edge would have to be matched
+back to a value:
+
+```bxl
+// refused: rebuilding the collection reassigns the indexes its edges sit on
+.comments |= map(. + {flagged: true});
+
+// the items themselves, each write pinned to one index
+.comments[* .flagged == null] |= (. + {flagged: true});
+```
+
+A rebuild that copies its items through untouched moves nothing and keeps
+their edges. To move a value and its edges together, use the collection
+operations — `move_item_before`, `reorder_by` and the rest.
 
 A marker reads its argument against the input the value expression itself was
 handed, so resolution follows the nodes that pass that input straight down and

@@ -3907,22 +3907,41 @@ strictEqual(
   'relationship-value-required',
 );
 
-// The rule reads the same over a whole collection: each item's links are
-// compared where that item lands, so an update that keeps every item keeps
-// every edge.
+// A write that rebuilds a collection reassigns every index in it, and an edge
+// has nothing but its index to hold onto: a contained value carries no
+// identity, and the projection shows every link as `{"id": …}`, so two edges
+// to the same Card read alike. Such a write is refused wherever an edge would
+// have to be matched back to a value.
+strictEqual(
+  nestedLinkError(
+    'collection-rebuild-cannot-place-its-edges',
+    '.examples |= map(. + {"label":"renamed"});',
+  ).code,
+  'relationship-collection-rebuilt',
+);
+
+// Addressing the items instead pins each write to one index, so nothing can
+// shift underneath it and every edge stays with its value.
 const bulkUpdated = nestedLinkMutation(
-  'collection-update-keeps-every-edge',
-  '.examples |= map(. + {"label":"renamed"});',
+  'per-item-update-keeps-every-edge',
+  '.examples[* .key != ""] |= (. + {"label":"renamed"});',
 );
 deepStrictEqual(
-  (bulkUpdated.plan.intents[0] as { keepRelationships?: unknown })
-    .keepRelationships,
+  bulkUpdated.plan.intents.map((intent) =>
+    intent.op === 'set'
+      ? [
+          intent.path,
+          (intent as { keepRelationships?: unknown }).keepRelationships,
+        ]
+      : intent.op,
+  ),
   [
-    [0, 'friend'],
-    [0, 'parts', 0, 'owner'],
-    [0, 'parts', 1, 'owner'],
-    [1, 'friend'],
-    [2, 'friend'],
+    [
+      ['examples', 0],
+      [['friend'], ['parts', 0, 'owner'], ['parts', 1, 'owner']],
+    ],
+    [['examples', 1], [['friend']]],
+    [['examples', 2], [['friend']]],
   ],
 );
 deepStrictEqual(relationship(bulkUpdated.document, 'examples.2.friend'), {
@@ -3937,10 +3956,11 @@ deepStrictEqual(
   },
 );
 
-// Dropping the last item leaves the others where they were, so their edges are
-// still the edges of the values holding them and the dropped one's is not.
+// A rebuild that copies its items through untouched leaves each one where it
+// was, so those edges are still the edges of the values holding them; the
+// item the rebuild drops takes its edge with it.
 const bulkFiltered = nestedLinkMutation(
-  'collection-update-drops-the-last-item',
+  'collection-rebuild-that-moves-nothing',
   '.examples |= map(select(.key != "c"));',
 );
 strictEqual(
@@ -3950,6 +3970,60 @@ strictEqual(
 strictEqual(
   bulkFiltered.document.data.relationships?.['examples.2.friend'],
   undefined,
+);
+
+// The refusal is not the id comparison in disguise. Where every edge points at
+// the same Card, the projection presents them identically and only their
+// sidecars differ, so a shift reads as every slot round-tripping unchanged —
+// and keeping them by index would hand each value the neighbour's sidecars.
+function collidingSourceFixture(): BxlCardSourceDocument {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        examples: [
+          { key: 'a', aliases: [], parts: [] },
+          { key: 'b', aliases: [], parts: [] },
+        ],
+        codes: [],
+      },
+      relationships: {
+        'examples.0.friend': {
+          links: { self: '../Friend/zoe', related: 'belongs-to-a' },
+          meta: { slot: 'a' },
+        },
+        'examples.1.friend': {
+          links: { self: '../Friend/zoe', related: 'belongs-to-b' },
+          meta: { slot: 'b' },
+        },
+      },
+      meta: { adoptsFrom: ref('SpecLike') },
+    },
+  };
+}
+function collidingError(programId: string, program: string) {
+  try {
+    mutateBxlCardSource(collidingSourceFixture(), program, {
+      schema: richSchema,
+      syntax: 'solidified',
+      programId,
+      ...richProjectionOptions,
+      serializeContainedValue: () => ({
+        meta: { adoptsFrom: { module: '../fields', name: 'ZetaExample' } },
+      }),
+    });
+  } catch (error) {
+    if (error instanceof BxlMutationError) return error;
+    throw error;
+  }
+  throw new Error(`${programId} was expected to fail`);
+}
+strictEqual(
+  collidingError(
+    'colliding-edges-cannot-be-placed-by-index',
+    '.examples |= map(select(.key != "a"));',
+  ).code,
+  'relationship-collection-rebuilt',
 );
 
 // Dropping an item ahead of the others moves each link to an index it did not

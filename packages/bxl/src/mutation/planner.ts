@@ -1390,6 +1390,15 @@ function restoreKeptLinks(
  * `unmentioned` is what silence means. An update leaves a slot it never named
  * alone; a replacement's silence drops the edge, the way it drops everything
  * else the new value no longer holds.
+ *
+ * Keeping an edge also needs the slot to still be the slot the Card's edge
+ * belongs to. The write's own path pins that only as far as the first
+ * collection index inside the value: past one, a contained value has no
+ * identity to match on, and the projection shows every link as `{"id": …}`,
+ * so two edges to the same Card read alike and a shifted item would inherit
+ * its neighbour's. An index-anchored slot therefore keeps its edge only where
+ * the value holding it is unchanged, and a write that rebuilds a collection
+ * holding edges any other way is refused.
  */
 function assertLinksAreEdges(
   value: BxlMutationJson,
@@ -1414,6 +1423,23 @@ function assertLinksAreEdges(
       'relationship-value-required',
       statement,
       `${detail} card("id") is how a value names the Card a relationship points at.`,
+    );
+  };
+  const refuseMoved = (slot: LinkSlot) => {
+    throw new BxlMutationError(
+      'validate',
+      'relationship-collection-rebuilt',
+      statement,
+      `${pathKey([...base, ...slot.path])} is a relationship inside a collection this write rebuilds, and an edge cannot be told from another to the same Card. Update the items themselves ([* …]) so each edge stays with its value, or move them with the collection operations.`,
+    );
+  };
+  /** Whether the value holding a slot is the one the Card's edge belongs to. */
+  const stationary = (slot: LinkSlot) => {
+    if (!slot.path.some((part) => typeof part === 'number')) return true;
+    const holder = slot.path.slice(0, -1);
+    return (
+      prior !== undefined &&
+      equalJson(valueAt(value, holder), valueAt(prior, holder))
     );
   };
   const shed: BxlMutationPath[] = [];
@@ -1446,6 +1472,7 @@ function assertLinksAreEdges(
     // over a value that merely has a relationship Field somewhere in it.
     if (held === undefined) {
       if (unmentioned === 'keep' && holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
         keep.push(slot.path);
         shed.push(slot.path);
         restore.push(slot.path);
@@ -1454,7 +1481,10 @@ function assertLinksAreEdges(
     }
     if (prior !== undefined && equalJson(held, valueAt(prior, slot.path))) {
       shed.push(slot.path);
-      if (holdsLink(prior, slot)) keep.push(slot.path);
+      if (holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
+        keep.push(slot.path);
+      }
       continue;
     }
     if (linkIsEmpty(held, slot)) {
