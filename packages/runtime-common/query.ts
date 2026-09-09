@@ -1,8 +1,14 @@
 import { isEqual } from 'lodash-es';
-import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
+import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 import { type CodeRef, isCodeRef, generalSortFields } from './index.ts';
+
+// `query.ts` is where callers reach for the grammar's error, so it stays
+// exported from here even though the class itself lives one module down.
+export { InvalidQueryError };
+
 type JSONValue =
   | string
   | number
@@ -10,13 +16,6 @@ type JSONValue =
   | null
   | JSONValue[]
   | { [key: string]: JSONValue };
-
-export class InvalidQueryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidQueryError';
-  }
-}
 
 export type SparseFieldsets = Record<string, string[]>;
 
@@ -399,6 +398,11 @@ function assertPage(
   }
 }
 
+// Every `assert*` below reports a failure by throwing `InvalidQueryError` and
+// returns nothing on success. That makes `forEach` the only correct way to walk
+// a collection of them: `every` reads each callback's `undefined` as false and
+// stops, so it would check a collection's first entry and silently accept the
+// rest.
 function assertFilter(
   filter: any,
   pointer: string[],
@@ -472,9 +476,9 @@ function assertAnyFilter(
       `${pointer.join('/') || '/'}: any must be an array of Filters`,
     );
   } else {
-    filter.any.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`)),
-    );
+    filter.any.forEach((value: any, index: number) => {
+      assertFilter(value, pointer.concat(`[${index}]`));
+    });
   }
 }
 
@@ -635,14 +639,14 @@ function assertRangeFilter(
       `${pointer.join('/') || '/'}: range must be an object`,
     );
   }
-  Object.entries(filter.range).every(([fieldPath, constraints]) => {
+  Object.entries(filter.range).forEach(([fieldPath, constraints]) => {
     let innerPointer = [...pointer, fieldPath];
     if (typeof constraints !== 'object' || constraints == null) {
       throw new InvalidQueryError(
         `${innerPointer.join('/') || '/'}: range constraint must be an object`,
       );
     }
-    Object.entries(constraints).every(([key, value]) => {
+    Object.entries(constraints).forEach(([key, value]) => {
       switch (key) {
         case 'gt':
         case 'gte':
