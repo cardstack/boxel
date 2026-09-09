@@ -68,9 +68,9 @@ function makeFileSystem() {
   return {
     'filedef-mismatch.gts': FILEDEF_MISMATCH_SOURCE,
     'sample.mismatch': 'poster me',
-    // Exercises the image family's own declared slots (ImageDef ships a
-    // `thumb` + rendition roster): SVG keeps the fixture textual while still
-    // hitting the SvgDef -> ImageDef chain.
+    // Exercises the image family's own declared slots (ImageDef ships the
+    // `thumb`; the renditions live on RasterImageDef): SVG keeps the fixture
+    // textual while still hitting the SvgDef -> ImageDef chain.
     'picture.svg': `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#3b82f6"/></svg>`,
   };
 }
