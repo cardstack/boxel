@@ -188,12 +188,20 @@ function stub(opts: StubOptions = {}): Stub {
         : undefined;
     },
     resolveCodeRef: (codeRef) => codeRef as any,
+    // The realm derives a file's type from its extension; the stub answers the
+    // one file def the cases need.
+    fileDefCodeRef: () => MARKDOWN,
     unresolveInstanceIds: () => {
       calls.push('unresolveInstanceIds');
     },
   };
   return { core, calls };
 }
+
+const MARKDOWN: CodeRef = {
+  module: 'https://cardstack.com/base/markdown-file-def',
+  name: 'MarkdownDef',
+} as CodeRef;
 
 const CARD: OperationTarget = { kind: 'instance', url: `${REALM}person-1` };
 const FILE: OperationTarget = { kind: 'instance', url: `${REALM}sample.md` };
@@ -447,27 +455,6 @@ const tests = Object.freeze({
     assert.strictEqual(notACard.code, 'target-not-found');
   },
 
-  'a target outside the realm is refused before anything is read': async (
-    assert,
-  ) => {
-    let { core, calls } = stub();
-    let error = await refusalFrom(() =>
-      runOperation(
-        core,
-        invoke(
-          { kind: 'instance', url: 'http://example.com/other/person-1' },
-          'read',
-        ),
-      ),
-    );
-    assert.strictEqual(error.code, 'target-not-found');
-    assert.strictEqual(
-      calls.filter((call) => call === 'cardDocument').length,
-      0,
-      'the document is never assembled for a target this core cannot serve',
-    );
-  },
-
   'a type nobody can resolve is refused as a missing target': async (
     assert,
   ) => {
@@ -491,14 +478,15 @@ const tests = Object.freeze({
   },
 
   'a target is canonicalized before anything is read': async (assert) => {
-    // The realm root names the realm's index card, and a query string, a
-    // fragment or a `.json` spelling all name the card they hang off. None of
-    // them may reach the index lookup or `links.self` as written.
+    // The realm root names the realm's index card; a query string, a fragment
+    // and a trailing slash all name the card they hang off. None of them may
+    // reach the index lookup or `links.self` as written. A `.json` spelling is
+    // not in this set — it names the card's source, which is a different read.
     for (let [spelling, expected] of [
       [`${REALM}`, `${REALM}index`],
       [`${REALM}person-1?vary=1`, `${REALM}person-1`],
       [`${REALM}person-1#section`, `${REALM}person-1`],
-      [`${REALM}person-1.json`, `${REALM}person-1`],
+      [`${REALM}person-1/`, `${REALM}person-1`],
     ] as [string, string][]) {
       let { core } = stub();
       let result = await runOperation(
@@ -661,7 +649,6 @@ const tests = Object.freeze({
       };
       for (let spelling of [
         `${REALM}person-1`,
-        `${REALM}person-1.json`,
         `${REALM}person-1?vary=1`,
         `${REALM}person-1#section`,
         `${REALM}person-1/`,
@@ -686,25 +673,73 @@ const tests = Object.freeze({
       }
     },
 
-  'a card named by its source spelling is a card, not a file': async (
-    assert,
-  ) => {
-    // `.json` is a registered file extension, so an uncanonicalized target
-    // classifies a card's own source spelling as a file — and then refuses
-    // every operation a card carries beyond `read`.
-    let { core } = stub();
+  'a card source spelling names the source, not the card': async (assert) => {
+    // `<card>.json` names the card's stored bytes. That is a different read
+    // from the card, so the target routes as a file rather than resolving to
+    // the instance — and a file carries only `read`.
+    let { core, calls } = stub();
     let error = await refusalFrom(() =>
       runOperation(
         core,
         invoke({ kind: 'instance', url: `${REALM}person-1.json` }, 'update'),
       ),
     );
+    assert.strictEqual(error.code, 'operation-not-allowed');
     assert.strictEqual(
-      error.status,
-      501,
-      'update is a card operation with no executor yet, not one a file lacks',
+      calls.filter((call) => call === 'instance').length,
+      0,
+      'a source target is never resolved through the instance index',
     );
-    assert.strictEqual(error.code, 'internal-error');
+  },
+
+  'a file def declaration is resolved the same as a card def one': async (
+    assert,
+  ) => {
+    // A file names its type by its extension rather than in stored JSON, but
+    // the type's entry carries declarations either way, so a `read` declared
+    // on a file def subclass has to be found.
+    let { core, calls } = stub({
+      operations: {
+        readRedacted: { base: 'read' as const, deterministic: true },
+      },
+    });
+    let result = await runOperation(core, invoke(FILE, 'readRedacted'));
+    assert.true(isDocumentResult(result), 'the declared file read resolves');
+    assert.true(
+      calls.includes('lookupDefinition'),
+      'the file def type entry is consulted',
+    );
+
+    // The allowance still holds: a file carries `read` and nothing else,
+    // whatever it declares.
+    let mutating = stub({
+      operations: {
+        touch: { base: 'transform' as const, deterministic: true },
+      },
+    });
+    let error = await refusalFrom(() =>
+      runOperation(mutating.core, invoke(FILE, 'touch')),
+    );
+    assert.strictEqual(error.code, 'operation-not-allowed');
+  },
+
+  'a foreign target is refused without reading the index': async (assert) => {
+    let { core, calls } = stub();
+    let error = await refusalFrom(() =>
+      runOperation(
+        core,
+        invoke(
+          { kind: 'instance', url: 'http://example.com/other/person-1' },
+          'read',
+        ),
+      ),
+    );
+    assert.strictEqual(error.code, 'target-not-found');
+    assert.deepEqual(
+      calls,
+      [],
+      'a URL this realm does not contain settles before any read',
+    );
   },
 
   'the row peek is memoized for one invocation and no longer': async (

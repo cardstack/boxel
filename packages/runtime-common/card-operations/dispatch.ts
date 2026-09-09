@@ -67,6 +67,12 @@ export interface OperationCore {
     codeRef: CodeRef,
     relativeTo: URL,
   ): ResolvedCodeRef | undefined;
+  // The type of the file at this URL. A file names its type by its extension
+  // rather than in stored JSON, and the mapping resolves module specifiers, so
+  // the realm supplies it bound for the same reason `resolveCodeRef` is. It
+  // reads nothing — the answer is a table lookup on the extension, the same one
+  // that stamps `adoptsFrom` on the document a file read serves.
+  fileDefCodeRef(url: URL): CodeRef;
   // Rewrite a document's instance ids into canonical prefix form, in place.
   // The mapping lives in the realm's fetch layer, so this arrives as a bound
   // function for the same reason `resolveCodeRef` does.
@@ -214,6 +220,7 @@ export async function resolveOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
+  assertInRealm(core, target);
   let definition = await definitionFor(core, target, scope);
   if (target.kind === 'type' && !definition) {
     // Nothing else can be said about a type nobody can resolve: whether it
@@ -391,16 +398,13 @@ export function canonicalizeTarget(
   if (localPath === '') {
     localPath = 'index' as LocalPath;
   }
-  // A card addressed by its source file is the same card. The GET handler
-  // redirects that spelling; a read has no redirect to answer with, so it
-  // resolves to the card instead of looking for a file called `<name>.json`.
-  // The cost is that a genuine `.json` file cannot be named as a read target —
-  // the same blind spot `getCard` has, since its redirect lands on a path that
-  // `nonJsonFileExists` then declines. A file-meta surface delegating here
-  // would have to settle that first.
-  if (localPath.endsWith('.json')) {
-    localPath = (localPath.slice(0, -'.json'.length) || 'index') as LocalPath;
-  }
+  // A `.json` path is deliberately left alone. It names a card's stored source
+  // rather than the card, and the stored bytes of an instance are a different
+  // read from the instance itself — one this core does not serve yet. So the
+  // extension stands and the target routes as a file, which is where that read
+  // will live. Resolving it to the card instead would answer a question nobody
+  // asked, and would be the one spelling where the extension test and the rest
+  // of the core disagreed.
   let canonical = paths.fileURL(localPath).href;
   return canonical === target.url
     ? target
@@ -447,6 +451,20 @@ export function instanceTargetURL(request: OperationRequest): URL {
   }
 }
 
+// A target this realm does not contain is refused here, before anything reads
+// it: a foreign URL is not this core's to answer for, and peeking the index for
+// one would be a read taken on a question already settled. A URL that does not
+// parse is left alone — the executor has the better refusal for that.
+function assertInRealm(core: OperationCore, target: OperationTarget): void {
+  if (target.kind !== 'instance') {
+    return;
+  }
+  let url = parseTargetURL(target.url);
+  if (url) {
+    localPathFor(core, url);
+  }
+}
+
 // The type entry a target's operations are declared on. Undefined where it
 // cannot be read — an unresolvable ref, an index row with no `adoptsFrom`, an
 // unreachable module. Callers decide what that means for them.
@@ -462,17 +480,17 @@ async function definitionFor(
     relativeTo = new URL(target.realm);
   } else {
     let url = parseTargetURL(target.url);
-    if (!url || urlNamesFile(url)) {
-      // A file's type comes from its extension rather than from stored JSON,
-      // so there is no `adoptsFrom` to read without a second index read. A
-      // file therefore reaches only the built-in `read`: a `read` a file def
-      // subclass declares is not consulted. Nothing declares one today, and
-      // resolving one would mean reading the file row for its type before
-      // every file read.
+    if (!url) {
       return undefined;
     }
     relativeTo = url;
-    codeRef = await adoptsFromOf(scope, url);
+    // A file names its type by its extension; a card names its own in the
+    // stored JSON the index holds. Either way the type's entry is what carries
+    // the declarations, so a `read` declared on a file def subclass resolves
+    // the same as one declared on a card.
+    codeRef = urlNamesFile(url)
+      ? core.fileDefCodeRef(url)
+      : await adoptsFromOf(scope, url);
   }
   if (!codeRef) {
     return undefined;

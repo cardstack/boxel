@@ -440,6 +440,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a substituted value the realm would refuse is refused here', async function (assert) {
+      // Lowering checks a declared query against the realm's grammar only
+      // where it can: a template still holding a marker stands in for a value
+      // the realm types concretely, so the check is deferred to the invocation
+      // that supplies it. This is that check.
+      let definition = savedSearch();
+      definition.query!.filter = {
+        'item.on': personRef,
+        matches: { $ref: 'params', key: 'status' },
+      };
+      let error = await refusalFrom(async () =>
+        lowerQueryOperation(definition, {
+          actor: '@test-actor:localhost',
+          params: { status: 42 },
+        }),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.ok(
+        error.detail.includes('matches must be a string'),
+        `the refusal carries the grammar's own reason: ${error.detail}`,
+      );
+
+      // A list operand is the other half of the same rule.
+      let listy = savedSearch();
+      listy.query!.filter = {
+        'item.on': personRef,
+        in: { 'item.status': { $ref: 'params', key: 'status' } },
+      };
+      let listError = await refusalFrom(async () =>
+        lowerQueryOperation(listy, {
+          actor: '@test-actor:localhost',
+          params: { status: 'open' },
+        }),
+      );
+      assert.strictEqual(listError.code, 'invalid-params');
+    });
+
     test('instance() has no target to resolve against in a query', async function (assert) {
       let definition = savedSearch();
       definition.query!.filter = {

@@ -3186,6 +3186,8 @@ export class Realm {
           );
           return isResolvedCodeRef(absolute) ? absolute : undefined;
         },
+        fileDefCodeRef: (url) =>
+          resolveFileDefCodeRef(url, this.#virtualNetwork),
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
       };
     }

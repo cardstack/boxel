@@ -42,10 +42,6 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
-    test('a target outside the realm is refused before anything is read', async function (assert) {
-      await runSharedTest(cardOperationsDispatchTests, assert, {});
-    });
-
     test('a type nobody can resolve is refused as a missing target', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
@@ -82,7 +78,15 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
-    test('a card named by its source spelling is a card, not a file', async function (assert) {
+    test('a card source spelling names the source, not the card', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a file def declaration is resolved the same as a card def one', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a foreign target is refused without reading the index', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 

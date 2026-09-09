@@ -3,7 +3,10 @@ import {
   type OperationDefinition,
   type OperationQueryTemplate,
 } from './types.ts';
-import type { SearchEntryWireQuery } from '../search-entry.ts';
+import {
+  parseSearchEntryQueryFromPayload,
+  type SearchEntryWireQuery,
+} from '../search-entry.ts';
 
 // ============================================================================
 // Resolving a declared query at invocation time.
@@ -57,6 +60,22 @@ export function lowerQueryOperation(
   // alone.
   if (query.realms === undefined && invocation.realms?.length) {
     query.realms = [...invocation.realms];
+  }
+  // Lowering checked the declaration against the realm's grammar only where it
+  // could — a template still holding a marker stands in for a value the realm
+  // types concretely, so that check was deferred to here, where the value is
+  // known. This is where it lands. Without it a param supplying a number to
+  // `matches`, or a scalar where `in` wants a list, produces a query that
+  // fails in the search parser instead of as a refusal naming the payload.
+  try {
+    parseSearchEntryQueryFromPayload(query);
+  } catch (err: any) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid params',
+      detail: `the resolved query is not one the realm accepts — ${err?.message ?? String(err)}`,
+    });
   }
   return query;
 }

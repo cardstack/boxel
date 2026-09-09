@@ -51,9 +51,11 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 //   * It drains in-flight incremental indexing before reading, so a read here
 //     serves whatever the index currently holds rather than waiting for a
 //     write that has landed on disk to be indexed.
-//   * It answers the redirects. A `.json` spelling and a path that normalizes
-//     to a different one both get a 302; a read has no redirect to give, so it
-//     serves the card the path resolves to.
+//   * It answers the redirects, and for the `.json` spelling it redirects to
+//     the card. A read has no redirect to give, and treats that spelling as
+//     what it literally names — the card's stored source, a file-def target —
+//     so the two diverge there by intent rather than by omission. A path that
+//     merely normalizes to a different one is served, not redirected.
 //   * It computes the 200's validator from the assembled document's own
 //     `deps` / `indexedAt` / `screenshots`, which this result does not carry —
 //     only the headers mode reports those. A caller wanting both a body and an
