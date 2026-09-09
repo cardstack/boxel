@@ -61,6 +61,11 @@ module('Integration | tools | check-correctness', function (hooks) {
             });
           }
         `,
+          'settings.json': {
+            type: 'module',
+            meta: { version: 1 },
+            attributes: { enabled: true },
+          },
           'Pet/billy.json': {
             data: {
               type: 'card',
@@ -287,6 +292,22 @@ ${REPLACE_MARKER}`;
 
     assert.true(result.correct, 'empty file reports as correct');
     assert.deepEqual(result.errors, [], 'no errors are reported');
+  });
+
+  test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let command = new CheckCorrectnessTool(toolService.toolContext);
+
+    let result = await command.execute({
+      targetType: 'file',
+      targetRef: `${testRealmURL}settings.json`,
+      roomId: '!room:example.com',
+    });
+
+    assert.true(result.correct, 'ordinary JSON is not treated as a card');
+    assert.deepEqual(result.errors, [], 'no card-document errors are reported');
   });
 
   test('reports size limit errors for file writes', async function (assert) {

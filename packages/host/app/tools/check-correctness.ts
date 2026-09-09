@@ -295,8 +295,9 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   // the model only learns two turns later, from show-card's "Could not find".
   // Models get this wrong in a handful of ways (no "data" wrapper, "type" set
   // to the card's name instead of "card", no meta.adoptsFrom, a made-up
-  // "cardDef" link), so name what a card document needs. A .json with none of
-  // the card-shaped keys is left alone: not every JSON file is a card.
+  // "cardDef" link), so name what a card document needs. Only inspect files
+  // with a card-specific signal: ordinary JSON configuration can legitimately
+  // have its own type, meta, or attributes keys.
   private async describeNonCardJson(
     fileUrl: string,
   ): Promise<string | undefined> {
@@ -317,10 +318,20 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       return `${fileUrl} is not valid JSON: ${e?.message ?? e}`;
     }
     let candidate = doc?.data ?? doc;
+    let candidateIsObject = candidate && typeof candidate === 'object';
+    let candidateMeta =
+      candidateIsObject && candidate.meta && typeof candidate.meta === 'object'
+        ? candidate.meta
+        : undefined;
     let cardShaped =
-      candidate &&
-      typeof candidate === 'object' &&
-      ('attributes' in candidate || 'meta' in candidate || 'type' in candidate);
+      doc &&
+      typeof doc === 'object' &&
+      ('data' in doc ||
+        (candidateIsObject &&
+          (candidate.type === 'card' ||
+            candidateMeta?.adoptsFrom ||
+            'cardDef' in candidate ||
+            'cardDef' in (candidateMeta ?? {}))));
     if (!cardShaped) {
       return undefined;
     }

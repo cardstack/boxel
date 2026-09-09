@@ -16,6 +16,7 @@ import RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
 import UseAiAssistantTool from '@cardstack/host/tools/ai-assistant';
 import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
+import SetActiveLLMTool from '@cardstack/host/tools/set-active-llm';
 
 import {
   setupIntegrationTestRealm,
@@ -331,6 +332,25 @@ module('Integration | tools | ai-assistant', function (hooks) {
       llmState.model,
       'gpt-4',
       'LLM model should be set to gpt-4',
+    );
+  });
+
+  test('does not set a model when the requested LLM mode is invalid', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-with-invalid-llm-mode',
+    });
+    let command = new SetActiveLLMTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({ roomId, model: 'gpt-4', mode: 'code' }),
+      /mode must be "act" or "ask"/,
+      'the invalid mode is rejected',
+    );
+
+    assert.notOk(
+      getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, ''),
+      'the model is not changed when the invocation is invalid',
     );
   });
 
