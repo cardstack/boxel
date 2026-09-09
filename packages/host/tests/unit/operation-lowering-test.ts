@@ -8,12 +8,12 @@ import {
   getFieldDefinitions,
   identifyCard,
   loadCardDef,
-  lowerOperationDeclarations,
   maybeHandleScopedCSSRequest,
   type CodeRef,
   type Definition,
   type LowerOperationDeclarationsResult,
 } from '@cardstack/runtime-common';
+import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';

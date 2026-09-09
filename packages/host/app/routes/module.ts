@@ -21,7 +21,6 @@ import {
   isCardDef,
   isCardError,
   loadCardDef,
-  lowerOperationDeclarations,
   parseRenderRouteOptions,
   rri,
   SupportedMimeType,
@@ -40,6 +39,10 @@ import {
   unixTime,
   validateSearchablePaths,
 } from '@cardstack/runtime-common';
+// Imported from its own entry rather than the barrel: the pass reaches
+// `@cardstack/bxl`, and the barrel deliberately carries only the lowered
+// shapes so no other package type-checks bxl's sources.
+import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 import {
   serializableError,
   isCardErrorJSONAPI,

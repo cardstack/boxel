@@ -21,6 +21,7 @@
     ".": "./index.ts",
     "./package.json": "./package.json",
     "./ai": "./ai/index.ts",
+    "./card-operations": "./card-operations/index.ts",
     "./amd-transpile": "./amd-transpile/index.ts",
     "./helpers": "./helpers/index.ts",
     "./serializers": "./serializers/index.ts",

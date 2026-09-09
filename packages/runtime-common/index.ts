@@ -1318,7 +1318,13 @@ export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
-export * from './card-operations/index.ts';
+// Only the lowered *shapes*, not the pass that produces them: lowering reaches
+// `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
+// pull bxl's sources into the typecheck program of every package that imports
+// anything from runtime-common. A caller that runs the pass imports
+// `@cardstack/runtime-common/card-operations` directly and takes that cost on
+// purpose.
+export type * from './card-operations/types.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
