@@ -2322,6 +2322,13 @@ const collectionSchema = {
           kind: 'scalar' as const,
           writable: true,
         },
+        {
+          key: 'refs',
+          label: 'Refs',
+          kind: 'array' as const,
+          fieldType: 'containsMany' as const,
+          writable: true,
+        },
       ],
     },
     {
@@ -2352,7 +2359,7 @@ const collectionSnapshot = {
   // What a projection manufactures for a list Field the Card never persists.
   hints: [],
   extras: [],
-  meta: { note: 'kept', stamp: null },
+  meta: { note: 'kept', stamp: null, refs: [] },
   rows: [
     { qty: 2, total: null },
     { qty: 3, total: null },
@@ -2471,7 +2478,7 @@ deepStrictEqual(
     '.meta |= (. + {"note": (.note + " " + .stamp)});',
     metaStamp,
   ).meta,
-  { note: 'kept derived', stamp: null },
+  { note: 'kept derived', stamp: null, refs: [] },
 );
 strictEqual(
   collectionError('.meta |= (. + {"stamp": "mine"});', metaStamp).code,
@@ -2798,6 +2805,7 @@ deepStrictEqual(
 deepStrictEqual(collectionOutput('.meta.stamp = "mine";', wholeDocument).meta, {
   note: 'kept',
   stamp: 'mine',
+  refs: [],
 });
 deepStrictEqual(
   collectionOutput('.image = "written";', wholeDocument).image,
@@ -2809,10 +2817,7 @@ deepStrictEqual(
 );
 deepStrictEqual(
   collectionOutput('.meta |= (. + {"note": "n"});', wholeDocument).meta,
-  {
-    note: 'n',
-    stamp: null,
-  },
+  { note: 'n', stamp: null, refs: [] },
 );
 deepStrictEqual(collectionPlan('append(.tags; "z");', wholeDocument).output, {
   ...collectionSnapshot,
@@ -2890,6 +2895,39 @@ strictEqual(
     searchDocShape,
   ).affected,
   1,
+);
+
+// An empty list says nothing, the same as a `null`. A projection manufactures
+// one for every list Field the Card leaves unset, so a host passing a column
+// wholesale hands one over for each — and claiming those would make every
+// empty writable list read-only.
+const emptyLists: BxlMutationOverlays = {
+  computeds: { image: null, hints: [] },
+  linked: { extras: [] },
+};
+deepStrictEqual(
+  collectionPlan('append(.hints; "z");', emptyLists).output,
+  collectionPlan('append(.hints; "z");').output,
+);
+deepStrictEqual(
+  collectionPlan('.hints = ["z"];', emptyLists).output,
+  collectionPlan('.hints = ["z"];').output,
+);
+strictEqual(
+  collectionPlan(
+    'assert((.hints | length) == 0; "m");\n.image = "ran";',
+    emptyLists,
+  ).affected,
+  1,
+);
+// An update settles the same way whether the Card holds `[]` or `null` under
+// a supplied value, since an expression that omits the path is not writing to
+// it either way.
+deepStrictEqual(
+  collectionPlan('.meta |= {"note": .note};', {
+    computeds: { meta: { refs: ['from-the-index'] } },
+  }).output,
+  collectionPlan('.meta |= {"note": .note};').output,
 );
 
 // A list is one value, not a place to descend into. A projection manufactures

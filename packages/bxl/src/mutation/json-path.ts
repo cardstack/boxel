@@ -9,6 +9,17 @@ export function pathKey(path: BxlMutationPath): string {
   return JSON.stringify(path);
 }
 
+/**
+ * Segments that name something on a JavaScript object's prototype rather than
+ * a Field of the Card. No path may address one, whether a program spelled it
+ * out or a host handed it over in an overlay.
+ */
+const PROTOTYPE_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+
+export function addressesPrototype(path: BxlMutationPath): boolean {
+  return path.some((segment) => PROTOTYPE_SEGMENTS.has(String(segment)));
+}
+
 export function equalJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }

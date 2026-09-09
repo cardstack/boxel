@@ -1,4 +1,5 @@
 import {
+  addressesPrototype,
   clone,
   deleteAt,
   equalJson,
@@ -37,17 +38,6 @@ function normalizeOverlayPath(path: string): string {
 
 /** A segment that names a place in a collection rather than a Field. */
 const INDEX_LIKE = /^-?\d+$/;
-
-/**
- * Segments that name something on a JavaScript object's prototype rather than
- * a Field of the Card. The planner refuses them in a program's own paths; an
- * overlay is host data read out of a column, so it is refused the same way.
- */
-const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
-
-function isForbidden(path: BxlMutationPath): boolean {
-  return path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment)));
-}
 
 /**
  * Whether a path names an index column rather than a Field. The index keys its
@@ -125,9 +115,19 @@ function storedAnswers(
   path: BxlMutationPath,
 ): boolean {
   if (!hasAt(stored, path)) return false;
-  const value = valueAt(stored, path);
-  if (value === null) return false;
-  return !(Array.isArray(value) && value.length === 0);
+  return !isNothing(valueAt(stored, path));
+}
+
+/**
+ * Whether a value carries nothing of the Card's own. A `null` is what a Card
+ * holds at a path it never persists, and an empty list is what a projection
+ * manufactures for a list Field in the same state — neither side of an overlay
+ * displaces anything by answering there, and neither supplies anything by
+ * being handed over.
+ */
+function isNothing(value: BxlMutationJson | undefined): boolean {
+  if (value === undefined || value === null) return true;
+  return Array.isArray(value) && value.length === 0;
 }
 
 /** One value an overlay supplies, at the path it sits at. */
@@ -242,13 +242,29 @@ function reachableInStored(
 export function mergeBxlMutationOverlays(
   stored: BxlMutationJson,
   overlays: BxlMutationOverlays | undefined,
+  claimed: ReadonlySet<string> = new Set(),
+): { root: BxlMutationJson; index: OverlayIndex } {
+  const index = indexBxlMutationOverlays(stored, overlays, claimed);
+  return { root: layerBxlMutationOverlays(clone(stored), index), index };
+}
+
+/**
+ * What the overlays answer for, against a document as it now stands.
+ *
+ * The planner takes this on its own and derives a view per evaluation, so the
+ * index is built without laying anything out: a statement that reads nothing
+ * pays for no copy at all.
+ */
+export function indexBxlMutationOverlays(
+  stored: BxlMutationJson,
+  overlays: BxlMutationOverlays | undefined,
   /**
    * Paths a program has already written to or cleared. An overlay speaks for
    * a place the Card leaves empty, and a place the program emptied is not one
    * of those — it is the program's, and the overlay must not fill it back in.
    */
   claimed: ReadonlySet<string> = new Set(),
-): { root: BxlMutationJson; index: OverlayIndex } {
+): OverlayIndex {
   const declared = overlays?.unavailable ?? [];
   if (
     overlays === undefined ||
@@ -256,7 +272,7 @@ export function mergeBxlMutationOverlays(
       overlays.linked === undefined &&
       declared.length === 0)
   ) {
-    return { root: clone(stored), index: EMPTY_OVERLAY_INDEX };
+    return EMPTY_OVERLAY_INDEX;
   }
 
   const coverage = new Map<string, BxlMutationOverlayTier>();
@@ -273,8 +289,11 @@ export function mergeBxlMutationOverlays(
       // they can answer, so a Field the Card leaves unset reaches us as a
       // `null` in both — and claiming it would make an ordinary writable
       // Field read-only for no reason.
-      if (leaf.value === null) continue;
-      if (isForbidden(leaf.path)) continue;
+      // An empty list says nothing either, and for the same reason: it is what
+      // a projection manufactures for a list Field the Card never persists, so
+      // claiming it would make an ordinary writable list read-only.
+      if (isNothing(leaf.value)) continue;
+      if (addressesPrototype(leaf.path)) continue;
       // `search_doc` carries the index's own bookkeeping beside the Card's
       // searchable Fields — a title it derived, the Card's type, whether the
       // row is an instance. None of those is a Field, and a Card declares
@@ -315,7 +334,7 @@ export function mergeBxlMutationOverlays(
     // Overlays do not participate inside a collection, so neither does an
     // absence of one: the Card's own items are the whole answer there.
     if (parts.some((segment) => INDEX_LIKE.test(segment))) continue;
-    if (isForbidden(parts)) continue;
+    if (addressesPrototype(parts)) continue;
     // A path named twice is answered by the last entry, at the path itself and
     // everywhere under it alike.
     unavailable.set(path, { ...entry, path });
@@ -330,7 +349,7 @@ export function mergeBxlMutationOverlays(
     }
   }
 
-  const index: OverlayIndex = {
+  return {
     stored,
     coverage,
     supplied,
@@ -340,7 +359,6 @@ export function mergeBxlMutationOverlays(
     coversComputed,
     empty: coverage.size === 0 && unavailable.size === 0,
   };
-  return { root: layerBxlMutationOverlays(clone(stored), index), index };
 }
 
 /**
@@ -653,5 +671,8 @@ function sameValue(
   left: BxlMutationJson | undefined,
   right: BxlMutationJson | undefined,
 ): boolean {
-  return equalJson(left ?? null, right ?? null);
+  return equalJson(
+    isNothing(left) ? null : left,
+    isNothing(right) ? null : right,
+  );
 }

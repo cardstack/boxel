@@ -359,6 +359,14 @@ An author addresses stored, computed, and linked values through the same
   nothing of its own there. Reading one raises `snapshot-unavailable` carrying
   `{ path, tier, reason }` rather than leaking a `null` into a write or a
   precondition. A marker carries no value, so it refuses no writes on its own.
+
+  A relationship Field is the case worth knowing about. `not-searchable`
+  markers sit under links, and a marker under one covers the link itself:
+  reading `.patient` where `patient.name` is unavailable is an unavailable
+  read, even though the Card's own edge is right there. Address the edge to
+  ask whether it is set — `.patient.id != null`, which reads from source —
+  rather than the Field that holds it.
+
 - **An assert over an overlay says so.** Overlay values can lag the stored
   document by an indexing round, so an `assert` that reads one requires the
   three-argument form `assert(condition, message, { snapshot: true })`; without
@@ -394,7 +402,11 @@ An author addresses stored, computed, and linked values through the same
   inside `first` — because a path read only on the branch not taken must not
   refuse the program. It also cannot see through a variable binding,
   `reduce`/`foreach`, a computed key, `getpath`, `..`, or a builtin that may
-  re-root its argument. A read reached that way sees the same layered value as
+  re-root its argument — and that last one covers the formula functions, so a
+  path reached as an argument to `UPPER`, `LEN`, `ISBLANK` or any of their
+  neighbours is not seen either. `assert(UPPER(.status) == "OPEN"; …)` plans
+  without the option that `assert((.status | ascii_upcase) == "OPEN"; …)`
+  requires. A read reached any of those ways sees the same layered value as
   any other, but the three guarantees above — the loud unavailable failure, the
   assert opt-in, and the read event — do not speak for it. Treat them as
   catching the ordinary `.path` spelling, not as a boundary that cannot be

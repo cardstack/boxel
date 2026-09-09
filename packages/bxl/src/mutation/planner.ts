@@ -28,6 +28,7 @@ import {
   type ParsedMutationStatement,
 } from './syntax.ts';
 import {
+  addressesPrototype,
   clone,
   deleteAt,
   equalJson,
@@ -39,8 +40,8 @@ import {
 import {
   classifyOverlayRead,
   EMPTY_OVERLAY_INDEX,
+  indexBxlMutationOverlays,
   layerBxlMutationOverlays,
-  mergeBxlMutationOverlays,
   overlayWriteOwner,
   settleOverlayUpdate,
   type OverlayIndex,
@@ -588,8 +589,7 @@ function resolveField(
   context: PlannerContext,
   statement: number,
 ): FieldResolution {
-  const unsafeParts = new Set(['__proto__', 'prototype', 'constructor']);
-  if (path.some((part) => typeof part === 'string' && unsafeParts.has(part))) {
+  if (addressesPrototype(path)) {
     throw new BxlMutationError(
       'validate',
       'prototype-path-forbidden',
@@ -1663,7 +1663,7 @@ export function prepareBxlMutation(
         // statement will address rather than the ones it started life in —
         // minus whatever earlier statements have made their own.
         context.overlays = planOptions.overlays
-          ? mergeBxlMutationOverlays(draft, planOptions.overlays, claimed).index
+          ? indexBxlMutationOverlays(draft, planOptions.overlays, claimed)
           : EMPTY_OVERLAY_INDEX;
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
