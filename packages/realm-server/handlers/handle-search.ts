@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
+  releaseSearchAdmission,
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -381,6 +382,15 @@ async function respondWithJobScopedSearchCache(
       query,
       opts: { ...(args.opts as Record<string, unknown>), generations },
       populate: runSearch,
+      // A joiner or a hit holds no result document of its own, so it stops
+      // counting toward the search admission ceiling here rather than when
+      // its response ends; the ceiling is then a bound on concurrent
+      // computations, which is what holds the heap.
+      onOutcome: (decided) => {
+        if (decided !== 'miss') {
+          releaseSearchAdmission(ctxt);
+        }
+      },
     });
     await setContextResponse(
       ctxt,

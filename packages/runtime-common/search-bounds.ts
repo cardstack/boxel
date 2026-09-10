@@ -152,14 +152,18 @@ export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
   MIN_CONCURRENCY,
 );
 
-// Max searches the realm-server process runs at once, across every caller.
-// Enforced server-side at admission (see the realm-server's
-// `search-inflight.ts`). Sized against the per-search heap cost: a few dozen
-// concurrent federated searches exhaust a 2 GB heap, so the default keeps a
-// process on the default heap alive and leaves headroom on a larger one.
-// Indexing traffic is admitted regardless of this ceiling (it is bounded
-// upstream by the prerender pool), so the effective room for interactive
-// searches is whatever indexing isn't using.
+// Max search admission slots the realm-server process hands out at once,
+// across every caller. Enforced server-side at admission (see the realm-server's
+// `search-inflight.ts`), before the request body is read. A request that the
+// live-search cache serves from another request's computation hands its slot
+// back as soon as the cache says so, so the slots are held by searches
+// assembling their own result document — the ones that hold heap — plus the
+// requests briefly between admission and the cache lookup. Sized so that a
+// full gate of distinct computations fits a 2 GB heap: each holds tens of MB
+// while it assembles, and a few dozen exhaust that heap. Raise it per
+// environment where the heap allows. Indexing traffic is admitted regardless
+// of this ceiling (it is bounded upstream by the prerender pool), so the
+// effective room for interactive searches is whatever indexing isn't using.
 export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
   env.SERVER_MAX_IN_FLIGHT_SEARCHES,
   DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES,

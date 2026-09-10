@@ -175,11 +175,18 @@ export class LiveSearchCache {
     this.#emitTelemetry = opts?.emitTelemetry ?? defaultEmitTelemetry;
   }
 
+  // `onOutcome` fires the moment the cache decides how it will satisfy the
+  // request — before a joiner starts waiting on the in-flight compute, before
+  // a hit returns, and as a miss starts its populate — so a caller can act on
+  // the decision while the request is still in progress. The realm-server's
+  // search admission uses it to hand back the slot of a request that holds no
+  // result document of its own.
   async getOrPopulate(args: {
     realms: string[];
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<string>;
+    onOutcome?: (outcome: LiveSearchOutcome) => void;
   }): Promise<{ body: string; outcome: LiveSearchOutcome }> {
     try {
       return await this.#getOrPopulate(args);
@@ -193,9 +200,11 @@ export class LiveSearchCache {
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<string>;
+    onOutcome?: (outcome: LiveSearchOutcome) => void;
   }): Promise<{ body: string; outcome: LiveSearchOutcome }> {
     this.#reapExpiredHead();
     let key = searchRequestKeyHash(args.realms, args.query, args.opts);
+    let onOutcome = args.onOutcome ?? (() => {});
 
     let entry = this.#entries.get(key);
     if (entry) {
@@ -206,6 +215,7 @@ export class LiveSearchCache {
         this.#entries.set(key, entry);
         this.#counters.hits += 1;
         this.#counters.hitBytes += entry.body.length;
+        onOutcome('hit');
         return { body: entry.body, outcome: 'hit' };
       }
       this.#delete(key, entry);
@@ -215,11 +225,13 @@ export class LiveSearchCache {
     let inFlight = this.#inFlight.get(key);
     if (inFlight) {
       this.#counters.joins += 1;
+      onOutcome('join');
       let body = await inFlight;
       this.#counters.joinBytes += body.length;
       return { body, outcome: 'join' };
     }
 
+    onOutcome('miss');
     let promise = args.populate();
     this.#inFlight.set(key, promise);
     try {
