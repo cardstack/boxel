@@ -348,9 +348,10 @@ module('Integration | tools | ai-assistant', function (hooks) {
       'the invalid mode is rejected',
     );
 
-    assert.notOk(
-      getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, ''),
-      'the model is not changed when the invocation is invalid',
+    assert.throws(
+      () => getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, ''),
+      /M_NOT_FOUND/,
+      'no active LLM state is written when the invocation is invalid',
     );
   });
 
