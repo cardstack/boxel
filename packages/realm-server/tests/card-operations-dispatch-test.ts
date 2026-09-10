@@ -122,6 +122,18 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('a version read from the bytes is the version of the bytes served', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a headers-only read asks for no version it would have to read bytes for', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('an adapter that reports no size still reads', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('the realm root is a directory, not a stored file', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });

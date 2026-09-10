@@ -10,6 +10,7 @@ export {
   runOperation,
 } from './dispatch.ts';
 export type {
+  CanonicalizeOptions,
   OperationCore,
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
@@ -23,7 +24,9 @@ export { readSourceOperation } from './read-source.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {
+  DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
+  isDefinitionFreeBaseOperation,
   isDocumentResult,
   isHeadResult,
   isIdentityResult,

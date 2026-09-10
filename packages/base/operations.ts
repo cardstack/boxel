@@ -91,9 +91,10 @@ export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
 // independent. The realm answers one of these by name without reading a
 // definition at all, so a declaration under the name — whatever base it
 // builds on — would be dispatched straight past: the built-in would run and
-// the author's operation would never be reached. Refusing the name is what
-// makes answering it definition-free correct, and refusing the base is what
-// stops the behavior being reached under some other name.
+// the author's operation would never be reached. Refusing the name here is
+// what keeps a new declaration out of that state, and refusing the base is
+// what stops the behavior being reached under some other name. Lowering
+// refuses the name too, so no stored definition can carry one either.
 const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
 
 function isNotDeclarable(name: string): boolean {
@@ -375,6 +376,19 @@ export type OperationDeclaration =
   | ReadOperationDeclaration
   | QueryOperationDeclaration;
 
+// A base operation a def carries with nothing declared on it. It is not a
+// declaration and the union above deliberately cannot express one: an author
+// writes no clauses for a base operation, and the two `NOT_DECLARABLE` names
+// cannot be written at all, so a declaration type that admitted them would
+// invite exactly what the decorator refuses. `getOperations` returns both
+// shapes, so a consumer reading `base` to dispatch gets every operation a def
+// carries — including the ones no `OperationDeclaration` could name.
+export interface ImpliedOperation {
+  readonly base: BaseOperationName;
+}
+
+export type CarriedOperation = OperationDeclaration | ImpliedOperation;
+
 // The operations declared on a def, read off the class type. Keyed by
 // operation name, so an invocation surface can be typed from the class alone.
 //
@@ -525,14 +539,11 @@ export const operation = function (
 // relied on to carry one, so lower from `getDeclaredOperations`.
 export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
-): Record<string, OperationDeclaration> {
+): Record<string, CarriedOperation> {
   let owner = defConstructorFor(classOrInstance, 'getOperations');
-  let operations = emptyOperationRecord();
+  let operations = emptyOperationRecord() as Record<string, CarriedOperation>;
   for (let base of impliedOperations(owner)) {
-    // A base operation with nothing declared on it is the declaration
-    // `{ base }`; the cast is only because a union does not narrow from a
-    // computed discriminant.
-    operations[base] = { base } as OperationDeclaration;
+    operations[base] = { base };
   }
   return Object.assign(operations, declaredOperations(owner));
 }

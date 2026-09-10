@@ -3,6 +3,7 @@ import { urlNamesFile } from '../file-def-code-ref.ts';
 import { readOperation } from './read.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
+  DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   type BaseOperation,
   type OperationDefinition,
@@ -67,21 +68,27 @@ export interface OperationCore {
   openStoredFile(
     localPath: LocalPath,
   ): Promise<OperationStoredFile | undefined>;
-  // The write-time record behind a path's bytes: the content hash a
-  // stored-bytes read reports as `version`, and when the realm first saw the
-  // path. Resolving the hash is the realm's job rather than the executor's,
-  // because the realm is the side that can both read its own file-meta row and
-  // open a second handle on the bytes to hash them — which is what it takes to
-  // answer without consuming the handle a read is about to serve.
+  // The version and creation time of the bytes at `file`, resolved by the
+  // realm because it owns both its file-meta row and the policy for when a
+  // content hash is worth reading bytes to get.
   //
-  // `observedSize` is the byte size of the handle the caller is reading from,
-  // where its adapter knew it from a stat rather than from the bytes. The
-  // realm needs it to tell whether its recorded hash still describes the file:
-  // a `version` that identifies bytes other than the ones it is returned with
-  // is what a conditional GET would build a wrong validator from.
+  // `file` is the handle the caller will serve from, not just its path: the
+  // realm validates its recorded hash against that handle's size, since a
+  // `version` identifying bytes other than the ones it is returned with is
+  // what a conditional GET would build a wrong validator from. Where the
+  // realm has to read the bytes to hash them it reads them from this handle
+  // and returns them as `bytes`, so one open serves both the hash and the
+  // body and the two cannot describe different files.
+  //
+  // `mayReadBytes` is false for a headers-only read, which returns no body and
+  // so must leave the handle's `content` untouched. The realm then answers
+  // from its row alone and reports no version where it has none recorded —
+  // an absence a caller can act on, rather than a value bought with a read it
+  // asked not to pay.
   storedFileMeta(
     localPath: LocalPath,
-    observedSize?: number,
+    file: OperationStoredFile,
+    opts: { mayReadBytes: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -133,11 +140,17 @@ export interface OperationStoredFile {
 }
 
 export interface OperationStoredFileMeta {
-  // The content hash of the stored bytes, absent where the realm can neither
-  // recall nor compute one.
+  // The content hash of the stored bytes, absent where the realm has none
+  // recorded and reading the bytes to compute one is not warranted for this
+  // path.
   version?: string;
   // Epoch seconds, absent where the realm holds no record of this path.
   createdAt?: number;
+  // The bytes, present exactly when the realm read them to hash them. Serving
+  // these rather than the handle's own `content` is what makes `version`
+  // describe the body it is returned with — and the handle has been consumed
+  // producing them, so a caller that has these must serve these.
+  bytes?: Uint8Array;
 }
 
 // `CachingDefinitionLookup`, narrowed to the one read an operation makes.
@@ -252,22 +265,32 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
 //
 // A definition is consulted for two reasons — to find a declaration of the
 // requested name, and to learn a type target's def kind — and a stored-bytes
-// read needs neither. Nothing may declare one (the authoring decorator refuses
-// it, and so does the declared branch below), so no declaration can take the
-// name; and a type has no stored bytes, so there is no type-target form whose
-// kind would have to be resolved.
+// read needs neither. An instance target's kind comes from its URL, and
+// nothing may declare one of these names, so there is nothing in a definition
+// that could change the answer.
 //
-// That is what makes skipping the lookup correct rather than merely cheaper. A
-// module path is the case that needs it: `.gts` is a registered extension, so
-// resolving a definition for one means a cache lookup on the file def its
-// extension names, and a path whose type nothing can resolve would then refuse
-// a read of bytes that are plainly on disk. Definition-free means
-// definition-free.
+// What skipping the lookup buys is the lookup: a byte read is the hottest
+// path the realm has, and resolving a definition for one costs a cache read
+// that cannot affect the outcome — for a `.gts` it is a read of the file def
+// its extension names. It also fixes the addressing before anything reads,
+// which is what lets `runOperation` tell a path read from a card read by name
+// alone.
+//
+// It is not what makes the answer correct. The ordinary path reaches the same
+// built-in for an instance target whether or not a definition resolves, since
+// `defKindFor` never consults one. What makes *skipping* safe is the name
+// reservation: were a declaration able to take one of these names, resolving
+// before the lookup would run the built-in in its place.
+// A null-prototype record over the shared list, so a wire-supplied name is
+// looked up the same prototype-safe way every other name on this path is.
 const DEFINITION_FREE_OPERATIONS: Readonly<
   Partial<Record<BaseOperation, true>>
-> = {
-  readSource: true,
-};
+> = Object.assign(
+  Object.create(null) as Partial<Record<BaseOperation, true>>,
+  Object.fromEntries(
+    DEFINITION_FREE_BASE_OPERATIONS.map((name) => [name, true]),
+  ),
+);
 
 function isBaseOperation(name: string): name is BaseOperation {
   return own(CARD_DEF_OPERATIONS, name) !== undefined;
@@ -734,8 +757,7 @@ function notAllowed(
   let because =
     target.kind === 'instance' && kind
       ? `a ${kind} allows ${describeAllowed(kind)}`
-      : `a type carries only what its definition declares, and a "${base}" ` +
-        `runs against an instance`;
+      : `a "${base}" runs against an instance, and a type is not one`;
   return new OperationFailure({
     id: targetId(target),
     status: 405,

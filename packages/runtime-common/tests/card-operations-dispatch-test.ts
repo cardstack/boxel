@@ -63,6 +63,15 @@ interface StubOptions {
   // value for.
   storedVersions?: Record<string, string>;
   storedCreatedAt?: Record<string, number>;
+  // Paths for which the realm has no recorded hash but will read the bytes to
+  // compute one — its behavior for a path whose validator is built from a
+  // hash. The stub reads the handle and hands the bytes back, as the realm
+  // does, so the executor is held to serving those rather than the handle it
+  // no longer owns.
+  storedHashOnRead?: Record<string, string>;
+  // An adapter that reports no `size`, which the realm cannot validate a
+  // recorded hash against.
+  sizelessAdapter?: boolean;
 }
 
 interface Stub {
@@ -71,7 +80,11 @@ interface Stub {
   // What each `storedFileMeta` call was asked about, for the one part of the
   // version contract that is the core's: handing the realm the size of the
   // handle whose bytes it is returning.
-  metaCalls: { localPath: string; observedSize: number | undefined }[];
+  metaCalls: {
+    localPath: string;
+    size: number | undefined;
+    mayReadBytes: boolean;
+  }[];
 }
 
 // `getInstance` matches `i.url` / `i.file_alias`, so a row answers to the
@@ -102,6 +115,8 @@ function stub(opts: StubOptions = {}): Stub {
     stored = {},
     storedVersions = {},
     storedCreatedAt = {},
+    storedHashOnRead = {},
+    sizelessAdapter = false,
   } = opts;
 
   let core: OperationCore = {
@@ -213,20 +228,50 @@ function stub(opts: StubOptions = {}): Stub {
           return content;
         },
         lastModified: 1699,
-        size: typeof content === 'string' ? content.length : content.byteLength,
+        ...(sizelessAdapter
+          ? {}
+          : {
+              size:
+                typeof content === 'string'
+                  ? content.length
+                  : content.byteLength,
+            }),
       };
     },
-    async storedFileMeta(localPath, observedSize) {
+    async storedFileMeta(localPath, file, { mayReadBytes }) {
       calls.push('storedFileMeta');
-      // Recorded rather than acted on: deciding whether a recorded hash still
-      // describes the file is the realm's, so what the core owes is passing
-      // the size of the handle it is reading from. The realm-server suite
-      // holds the realm to the decision.
-      metaCalls.push({ localPath, observedSize });
-      return {
-        version: storedVersions[localPath],
-        createdAt: storedCreatedAt[localPath],
-      };
+      // What the core owes is the handle it is reading from and whether the
+      // bytes may be read; the policy over those is the realm's, and the
+      // realm-server suite holds the realm to it. The shape is mirrored here
+      // so the executor is exercised against both of the realm's answers.
+      metaCalls.push({ localPath, size: file.size, mayReadBytes });
+      let createdAt = storedCreatedAt[localPath];
+      let recorded = Object.prototype.hasOwnProperty.call(
+        storedVersions,
+        localPath,
+      )
+        ? storedVersions[localPath]
+        : undefined;
+      if (recorded !== undefined) {
+        return { version: recorded, createdAt };
+      }
+      let onRead = Object.prototype.hasOwnProperty.call(
+        storedHashOnRead,
+        localPath,
+      )
+        ? storedHashOnRead[localPath]
+        : undefined;
+      if (onRead === undefined || !mayReadBytes) {
+        return { createdAt };
+      }
+      // Reading the handle, as the realm does — which spends it, so the bytes
+      // come back with the version.
+      let content = file.content;
+      let bytes =
+        typeof content === 'string'
+          ? new TextEncoder().encode(content)
+          : (content as Uint8Array);
+      return { version: onRead, createdAt, bytes };
     },
     async isIgnored() {
       return false;
@@ -269,6 +314,19 @@ function invoke(target: OperationTarget, name: string) {
     actor: '@test-actor:localhost',
     clientRequestId: 'dispatch-test',
   };
+}
+
+// The stub's bodies are a string or a byte array, never a stream, so one pass
+// is enough — but going through a helper keeps a case from reading a body
+// twice by accident, which a real single-use handle would answer with nothing.
+async function textOfBody(body: unknown): Promise<string> {
+  if (typeof body === 'string') {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return new TextDecoder().decode(body);
+  }
+  throw new Error(`expected a materialized body, got ${typeof body}`);
 }
 
 // Rethrows anything that is not an operation failure, so a genuine bug reports
@@ -921,8 +979,9 @@ const tests = Object.freeze({
         [
           {
             localPath: path,
-            observedSize:
+            size:
               typeof content === 'string' ? content.length : content.byteLength,
+            mayReadBytes: true,
           },
         ],
         `${path} asks for its version against the handle being read`,
@@ -1075,6 +1134,103 @@ const tests = Object.freeze({
       ),
     );
     assert.strictEqual(error.code, 'target-not-found');
+  },
+
+  'a version read from the bytes is the version of the bytes served': async (
+    assert,
+  ) => {
+    // Where the realm has no hash recorded it reads the handle to compute one,
+    // which spends that handle. So the bytes come back with the version and
+    // the executor has to serve those — serving the spent handle instead would
+    // hand back an empty body under a hash of the real one.
+    let { core, calls } = stub({
+      stored: { 'person-1.json': '{"data":{"type":"card"}}' },
+      storedHashOnRead: { 'person-1.json': 'hash-of-read-bytes' },
+    });
+    let result = await runOperation(
+      core,
+      invoke({ kind: 'instance', url: `${REALM}person-1.json` }, 'readSource'),
+    );
+    assert.true(isSourceResult(result));
+    if (isSourceResult(result)) {
+      assert.strictEqual(result.version, 'hash-of-read-bytes');
+      assert.deepEqual(
+        result.body,
+        new TextEncoder().encode('{"data":{"type":"card"}}'),
+        'the body is the bytes the version was computed from',
+      );
+    }
+    assert.strictEqual(
+      calls.filter((call) => call === 'storedContent').length,
+      1,
+      'and the handle is touched once in total — the realm reads it, the ' +
+        'executor serves what that read produced rather than reaching for it ' +
+        'again',
+    );
+  },
+
+  'a headers-only read asks for no version it would have to read bytes for':
+    async (assert) => {
+      // The mode returns no body, so it must not buy a version with a read of
+      // one. It reports the absence instead, which no facade can build a wrong
+      // validator from — and the body mode's answer for the same path is a
+      // hash, so the two never contradict each other.
+      let opts = {
+        stored: { 'person-1.json': '{"data":{"type":"card"}}' },
+        storedHashOnRead: { 'person-1.json': 'hash-of-read-bytes' },
+      };
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${REALM}person-1.json`,
+      };
+
+      let headers = await runOperation(
+        stub(opts).core,
+        invoke(target, 'readSource'),
+        { headersOnly: true },
+      );
+      assert.true(isSourceResult(headers));
+      if (isSourceResult(headers)) {
+        assert.strictEqual(
+          headers.version,
+          null,
+          'no version, rather than one bought with the read it declined',
+        );
+        assert.strictEqual(headers.body, undefined);
+      }
+
+      let bytes = await runOperation(
+        stub(opts).core,
+        invoke(target, 'readSource'),
+      );
+      assert.true(isSourceResult(bytes));
+      if (isSourceResult(bytes)) {
+        assert.strictEqual(
+          bytes.version,
+          'hash-of-read-bytes',
+          'while the mode that does read the bytes reports their hash',
+        );
+      }
+    },
+
+  'an adapter that reports no size still reads': async (assert) => {
+    // A recorded hash cannot be checked against a handle whose length the
+    // adapter never stated, so the realm treats it as undescribed. The result
+    // reports the size it does not have rather than omitting the member.
+    let { core } = stub({
+      stored: { 'sample.md': '# hi' },
+      storedVersions: { 'sample.md': 'recorded' },
+      sizelessAdapter: true,
+    });
+    let result = await runOperation(
+      core,
+      invoke({ kind: 'instance', url: `${REALM}sample.md` }, 'readSource'),
+    );
+    assert.true(isSourceResult(result));
+    if (isSourceResult(result)) {
+      assert.strictEqual(result.size, null);
+      assert.strictEqual(await textOfBody(result.body), '# hi');
+    }
   },
 
   'the realm root is a directory, not a stored file': async (assert) => {

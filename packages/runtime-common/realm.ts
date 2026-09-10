@@ -146,6 +146,7 @@ import {
 } from './index.ts';
 import type {
   OperationCore,
+  OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
@@ -745,6 +746,18 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   return value
     .split(',')
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
+}
+
+// Whether the byte routes build this path's validator from a content hash.
+// `getSourceOrRedirect` caches and hashes a `.json` or an executable
+// extension — a card's stored source, or a module — and takes its
+// `bypassCache` path for everything else, where the `ETag` rests on
+// `lastModified` and no hash is computed at all. A stored-bytes read reports
+// `version` on the same terms: the value is there for the routes that build a
+// validator from one, and no read of an image or a video is spent producing a
+// hash the route serving it would not use.
+function storedPathIsHashed(localPath: LocalPath): boolean {
+  return localPath.endsWith('.json') || hasExecutableExtension(localPath);
 }
 
 // Cheap helper for the source endpoint: returns the content fingerprint of the
@@ -3179,8 +3192,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, observedSize) =>
-          this.#operationStoredFileMeta(localPath, observedSize),
+        storedFileMeta: (localPath, file, opts) =>
+          this.#operationStoredFileMeta(localPath, file, opts),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -5535,12 +5548,19 @@ export class Realm {
   // Its `.json` refusal is right for metadata — a `.json` is a card's source,
   // not a file with metadata of its own — and wrong for this, because a card's
   // stored source is exactly what a stored-bytes read reads. Its `_`-prefix
-  // refusal does not describe the byte routes at all: the `card+source`
-  // GET/HEAD and the raw byte serve are both registered on `/.*` and refuse no
-  // name, `upsertCardSource` writes whatever path it is given, and only the
-  // specific registered `_` endpoints are routed away from the file handlers.
-  // So an `_`-prefixed file a caller stored is a file the realm serves, and
-  // refusing it here would make this the one read that could not reach it.
+  // refusal does not describe the byte routes: the `card+source` GET/HEAD is
+  // registered on `/.*` and refuses no name, the raw byte serve is whatever
+  // `fallbackHandle` reaches when the router does not claim the request, and
+  // `upsertCardSource` writes whatever path it is given. So an `_`-prefixed
+  // file a caller stored is a file those routes serve, and refusing it here
+  // would make this the one read that could not reach it.
+  //
+  // The prefixes the router or `handle` do claim are the exception in the
+  // other direction: a path under one is answered by that endpoint rather than
+  // from disk, so bytes stored beneath it — `_screenshot/…`, say, whose GET is
+  // claimed before the router — are reachable through this read and through no
+  // byte route. Worth knowing when a facade routes here; not worth a
+  // name-based refusal, which is what got this wrong in the first place.
   //
   // What is left is the path that names no file at all. `#adapter.openFile`
   // answers undefined for a directory and for a path that is not there, so
@@ -5851,23 +5871,27 @@ export class Realm {
   // holding to, since a byte response routed through here pays it per request.
   async #operationStoredFileMeta(
     localPath: LocalPath,
-    observedSize?: number,
+    file: OperationStoredFile,
+    { mayReadBytes }: { mayReadBytes: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
           localPath,
         )
       : undefined;
-    let describesThisFile =
+    let createdAt = persisted?.createdAt;
+    if (
       persisted?.contentHash !== undefined &&
-      observedSize !== undefined &&
-      persisted.contentSize === observedSize;
-    let version = describesThisFile ? persisted!.contentHash : undefined;
-    if (version === undefined) {
-      let fileRef = await this.#operationStoredFile(localPath);
-      version = fileRef ? await computeContentHashFromRef(fileRef) : undefined;
+      file.size !== undefined &&
+      persisted.contentSize === file.size
+    ) {
+      return { version: persisted.contentHash, createdAt };
     }
-    return { version, createdAt: persisted?.createdAt };
+    if (!mayReadBytes || !storedPathIsHashed(localPath)) {
+      return { createdAt };
+    }
+    let bytes = await fileContentToBytes({ content: file.content });
+    return { version: computeContentHash(bytes), createdAt, bytes };
   }
 
   private async getFileMeta(

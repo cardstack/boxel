@@ -494,42 +494,62 @@ module(basename(import.meta.filename), function () {
       // overwritten out of band therefore has a row describing bytes that are
       // gone, and reporting that hash would let a conditional GET answer 304
       // for content that changed.
-      await testRealm.write('notes.md', '# first');
-      let recorded = sourceOf(
-        await runOperation(
-          testRealm.operationCore,
-          request(
-            { kind: 'instance', url: `${testRealmHref}notes.md` },
-            'readSource',
+      //
+      // A module, so this is also a path whose validator the byte routes build
+      // from a content hash — which is what makes recomputing one warranted
+      // when the row cannot be trusted.
+      let read = async (localPath: string) =>
+        sourceOf(
+          await runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'instance', url: `${testRealmHref}${localPath}` },
+              'readSource',
+            ),
           ),
-        ),
-      );
+        );
+
+      await testRealm.write('notes.gts', 'export const first = 1;');
       assert.strictEqual(
-        recorded.version,
-        computeContentHash('# first'),
+        (await read('notes.gts')).version,
+        computeContentHash('export const first = 1;'),
         'a realm write records the hash of what it wrote',
       );
 
-      // Straight to disk, so nothing refreshes the row.
-      writeFileSync(join(testRealmPath, 'notes.md'), '# second, and longer');
-      let overwritten = sourceOf(
-        await runOperation(
-          testRealm.operationCore,
-          request(
-            { kind: 'instance', url: `${testRealmHref}notes.md` },
-            'readSource',
-          ),
-        ),
+      // Straight to disk, so nothing refreshes the row. The new bytes are a
+      // different length, which is what the recorded hash is checked against.
+      writeFileSync(
+        join(testRealmPath, 'notes.gts'),
+        'export const second = 2; // and longer',
       );
+      let overwritten = await read('notes.gts');
       assert.strictEqual(
         await textOf(overwritten.body),
-        '# second, and longer',
+        'export const second = 2; // and longer',
         'the read serves the bytes that are on disk',
       );
       assert.strictEqual(
         overwritten.version,
-        computeContentHash('# second, and longer'),
+        computeContentHash('export const second = 2; // and longer'),
         'and `version` identifies those bytes rather than the recorded ones',
+      );
+
+      // The same overwrite on a path whose validator rests on `lastModified`
+      // rather than a hash. The recorded hash is equally untrustworthy, and
+      // reading an image or a video to replace it is a cost the route serving
+      // it would not pay — so the answer is the absence, never the stale hash.
+      await testRealm.write('notes.md', '# first');
+      writeFileSync(join(testRealmPath, 'notes.md'), '# second, and longer');
+      let unhashed = await read('notes.md');
+      assert.strictEqual(
+        await textOf(unhashed.body),
+        '# second, and longer',
+        'the bytes on disk are still what is served',
+      );
+      assert.strictEqual(
+        unhashed.version,
+        null,
+        'and no version is reported rather than one that describes other bytes',
       );
     });
 
@@ -547,7 +567,10 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(headers.body, undefined, 'no bytes in this mode');
       assert.strictEqual(headers.contentType, 'text/markdown');
-      assert.strictEqual(typeof headers.version, 'string');
+      // A fixture file, so the realm has no hash recorded for it, and a `.md`
+      // is not a path whose validator is built from one. The mode reports the
+      // absence rather than reading the body it declined to return.
+      assert.strictEqual(headers.version, null);
 
       let withBody = sourceOf(
         await runOperation(

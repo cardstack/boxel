@@ -168,7 +168,11 @@ export type OperationLoweringIssueCode =
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
-  | 'invalid-query';
+  | 'invalid-query'
+  // An operation declared under a name the realm resolves without reading a
+  // definition. Such a name is answered before a stored entry is consulted, so
+  // an operation kept under it would never run.
+  | 'reserved-name';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
@@ -207,6 +211,24 @@ export interface LowerOperationDeclarationsResult {
 // re-stating it here lets a consumer of the runtime types stay clear of the
 // card authoring surface, which only loads inside a card module.
 export type BaseOperation = BaseOperationName;
+
+// The base operations the realm resolves without reading a definition, which
+// is also the set of names nothing may be declared under: the realm answers
+// one of these before it would consult a type's entry, so an operation stored
+// under the name would be dispatched straight past rather than run.
+//
+// Stated here because both ends of that rule need it and this module is the
+// one both can reach — dispatch, which does the resolving, and lowering, which
+// keeps such a name out of a stored entry. The authoring decorator enforces
+// the same list from inside a card module, where it can refuse the
+// declaration outright.
+export const DEFINITION_FREE_BASE_OPERATIONS: readonly BaseOperation[] = [
+  'readSource',
+];
+
+export function isDefinitionFreeBaseOperation(name: string): boolean {
+  return (DEFINITION_FREE_BASE_OPERATIONS as readonly string[]).includes(name);
+}
 
 // What an operation runs against. An `instance` target is an existing card or
 // file, addressed by URL — the identity of a thing that already has stored
@@ -286,20 +308,26 @@ export interface OperationSourceResult {
   // than filling it in.
   created: number | null;
   // The content hash of the stored bytes — the same identity the rest of the
-  // project calls `version`. It identifies these bytes and no others, which is
-  // what a validator needs, but it is not by itself the byte routes' `ETag`:
-  // the source route builds one from a content hash for a `.json` or an
-  // executable extension and from `lastModified` for everything else, so a
-  // facade reproducing those validators chooses between the two. Null only
-  // where the realm can neither recall nor compute a hash.
+  // project calls `version`.
+  //
+  // Two things a facade building a validator from it has to know. It is not by
+  // itself the byte routes' `ETag`: the source route builds one from a hash for
+  // a `.json` or an executable extension and from `lastModified` for
+  // everything else, and `version` is populated on those same terms, so it is
+  // null exactly where that route computes no hash. And `computeContentHash`
+  // samples above its whole-content limit, so a large file's hash covers its
+  // head, tail and length rather than all of it — `isSampledContentHash` tells
+  // one from the other, and the realm's own `ETag` joins a sampled hash with
+  // `lastModified` rather than trusting it alone.
   version: string | null;
   // The byte size, where the adapter knew it from the stat it already
-  // performed, and absent where knowing it would cost reading the bytes. A
-  // facade needs it for `Content-Length` and to decide whether it can offer a
-  // `Range` at all. The bounded-read capability itself does not travel here —
-  // it is a function on the adapter's handle — so a facade serving 206s reads
-  // from the handle rather than from this result.
-  size?: number;
+  // performed, and null where knowing it would cost reading the bytes — the
+  // same way the two values above report what the realm cannot say. A facade
+  // needs it for `Content-Length` and to decide whether it can offer a `Range`
+  // at all. The bounded-read capability itself does not travel here — it is a
+  // function on the adapter's handle — so a facade serving 206s reads from the
+  // handle rather than from this result.
+  size: number | null;
   // The bytes. Absent in the headers-only mode, which is the whole difference
   // between the two: a `HEAD` reports the metadata above and would discard
   // this. Whatever form the realm's file adapter produced — a string, a byte

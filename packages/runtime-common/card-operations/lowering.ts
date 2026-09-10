@@ -10,6 +10,7 @@ import {
   paramKeysRead,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import { isDefinitionFreeBaseOperation } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
   OperationDefinition,
@@ -134,6 +135,30 @@ export async function lowerOperationDeclarations(
   let issues: OperationLoweringIssue[] = [];
   for (let name of Object.keys(raw)) {
     let sink = new IssueSink(name);
+    if (isDefinitionFreeBaseOperation(name)) {
+      // The realm answers these names without reading a definition, so a
+      // stored operation under one would be dispatched straight past rather
+      // than run. The authoring decorator refuses the name; refusing it here
+      // too is what keeps it out of a type's entry, which outlives the code
+      // that built it — a definition-cache row carries no code version and is
+      // not re-derived until something invalidates it.
+      let operation: OperationDefinition = {
+        base: 'read',
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: 'reserved-name',
+            operation: name,
+            path: name,
+            message: `"${name}" is a reserved operation name — the realm serves it from the bytes stored at the target's URL and reads no definition to do so`,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
     let operation = await lowerOperation(raw[name], sink, context);
     if (sink.issues.length > 0) {
       operation.invalid = true;
