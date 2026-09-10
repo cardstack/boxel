@@ -344,6 +344,18 @@ export function storedRelationshipLink(
   realmURL: URL,
   virtualNetwork: VirtualNetwork,
 ): string {
+  // A scoped reference whose prefix this process has not registered cannot be
+  // resolved, and asking anyway is worse than not asking: `resolveURL` treats
+  // it as a relative reference and joins it against the base, so
+  // `@scope/name/x` comes back as a URL *inside* the writing realm and then
+  // relativizes to `./@scope/name/x`. It is absolute and cross-realm by
+  // construction, so store it exactly as sent.
+  if (
+    !virtualNetwork.isRegisteredPrefix(selfLink) &&
+    selfLink.startsWith('@')
+  ) {
+    return selfLink;
+  }
   let resolved: URL;
   try {
     resolved = virtualNetwork.resolveURL(selfLink, relativeTo);

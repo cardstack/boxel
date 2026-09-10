@@ -62,6 +62,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The case the write suite caught and this stub originally hid: the stub
+    // registered every prefix it was asked about, while the realm-server
+    // harness registers only `@cardstack/base/`. Resolving an unregistered
+    // scoped reference joins it against the base as though it were relative.
+    test('stores an unregistered scoped reference exactly as sent', function (assert) {
+      assert.strictEqual(
+        stored('@nobody/knows-this/Pet/vangogh'),
+        '@nobody/knows-this/Pet/vangogh',
+      );
+    });
+
     test('stores a cross-realm URL resolved', function (assert) {
       assert.strictEqual(
         stored('http://elsewhere/other/Pet/vangogh'),
