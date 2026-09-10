@@ -56,6 +56,7 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.t
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
+import type { LiveSearchCache } from '../../live-search-cache.ts';
 import jsonwebtoken from 'jsonwebtoken';
 const { sign: jwtSign } = jsonwebtoken;
 import {
@@ -1583,6 +1584,7 @@ export async function runTestRealmServerWithRealms({
     boxelSite: 'localhost',
   },
   prerenderer: providedPrerenderer,
+  liveSearchCache,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1602,6 +1604,9 @@ export async function runTestRealmServerWithRealms({
     boxelSite?: string;
   };
   prerenderer?: Prerenderer;
+  // Inject a cache configured for the test (e.g. `ttlMs: 0` to keep
+  // coalescing but disable retention). Omit for the production default.
+  liveSearchCache?: LiveSearchCache;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1690,6 +1695,7 @@ export async function runTestRealmServerWithRealms({
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
+    liveSearchCache,
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),

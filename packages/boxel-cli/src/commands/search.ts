@@ -171,6 +171,10 @@ interface SearchEntryDoc {
     relationships?: {
       item?: { data?: { type: string; id: string } };
     };
+    // Entry-level metadata (see runtime-common's `EntryResource`). Full-text
+    // relevance rides here, present only when the query sorted by
+    // `_matchRelevance`.
+    meta?: { generation?: number; _matchRelevance?: number };
   }[];
   included?: { type: string; id: string }[];
 }
@@ -200,9 +204,26 @@ export function itemsFromSearchEntryDoc(
       continue;
     }
     let item = byIdentity.get(resourceIdentity(ref.type, ref.id));
-    if (item) {
-      items.push(item);
+    if (!item) {
+      continue;
     }
+    // Relevance rides the entry, not the item; the CLI collapses entry→item, so
+    // fold the score into the item's `meta` under the same key a relevance-
+    // sorted search still exposes hit strength for cross-realm re-ranking.
+    // Absent (no `_matchRelevance` sort, or a pre-relevance server) → the item
+    // passes through untouched. Clone rather than mutate the shared `included`
+    // resource, which two entries could point at.
+    let relevance = entry.meta?._matchRelevance;
+    if (relevance !== undefined) {
+      item = {
+        ...item,
+        meta: {
+          ...(item.meta as Record<string, unknown> | undefined),
+          _matchRelevance: relevance,
+        },
+      };
+    }
+    items.push(item);
   }
   return items;
 }

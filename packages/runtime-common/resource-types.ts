@@ -275,7 +275,16 @@ export interface EntryResource {
   // consumer tell fresh index data from stale and pair it against the `html`
   // resource's own generation (the two channels advance independently).
   meta?: {
-    generation: number;
+    // The engine always supplies the generation; optional because `meta` can
+    // be assembled from `_matchRelevance` alone by callers with no generation
+    // to surface (unit tests).
+    generation?: number;
+    // Full-text relevance of this entry for the query's `matches` terms
+    // (Postgres `ts_rank_cd`, 0–1). Present only on a query that sorts by
+    // `_matchRelevance`; absent otherwise. Lets a consumer gauge hit strength
+    // and re-rank across realms (the federated path concatenates per-realm
+    // results without re-sorting).
+    _matchRelevance?: number;
   };
 }
 

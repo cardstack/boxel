@@ -69,6 +69,18 @@ export type BxlMutationIntent =
       path: BxlMutationPath;
       before?: BxlMutationJson;
       after: BxlMutationJson;
+      /**
+       * Relationship Fields inside the replaced value whose edges this write
+       * leaves as the Card already holds them, each named relative to `path`.
+       *
+       * Replacing a contained value discards the sidecars the old value owned,
+       * and the plan's `relate` intents say what the new one has instead. A
+       * link the written value carried back unchanged — and, under an update,
+       * one it never mentioned — changed nothing, so its edge is neither
+       * rewritten nor discarded, and its `links.related` and `meta` survive
+       * with it.
+       */
+      keepRelationships?: BxlMutationPath[];
     }
   | { op: 'delete'; path: BxlMutationPath; before: BxlMutationJson }
   | { op: 'copy'; from: BxlMutationPath; path: BxlMutationPath }

@@ -24,6 +24,29 @@ export function equalJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value === null || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.keys(record)
+      .sort()
+      .map((key) => [key, canonical(record[key])]),
+  );
+}
+
+/**
+ * Deep equality that reads two objects alike whatever order their keys were
+ * written in, and keeps an array's order, which carries meaning.
+ *
+ * `equalJson` compares serializations, so it answers on spelling as much as on
+ * content. Use this wherever the question is whether two values *are* the
+ * same rather than whether they were written the same way.
+ */
+export function sameJson(left: unknown, right: unknown): boolean {
+  return equalJson(canonical(left), canonical(right));
+}
+
 export function hasAt(root: BxlMutationJson, path: BxlMutationPath): boolean {
   if (path.length === 0) return true;
   let current: unknown = root;
