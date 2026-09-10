@@ -166,7 +166,9 @@ function isRootTypeRef(ref: CodeRef): boolean {
   );
 }
 
-function hasNarrowingPositiveTypeRef(filter: Filter | undefined): boolean {
+export function hasNarrowingPositiveTypeRef(
+  filter: Filter | undefined,
+): boolean {
   if (!filter) {
     return false;
   }

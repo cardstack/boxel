@@ -25,6 +25,11 @@ import {
   SearchCardsResult,
   SearchCardSummaryField,
 } from './commands/search-card-result';
+import {
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
+} from './commands/search-entry-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 export type ToolCallStatus = 'applied' | 'ready' | 'applying';
@@ -276,7 +281,9 @@ export class ScreenshotCardOutput extends CardDef {
           <figure class='capture'>
             {{#if capture.url}}
               <img src={{capture.url}} alt={{capture.name}} />
-              <figcaption><a href={{capture.url}}>{{capture.url}}</a></figcaption>
+              <figcaption><a
+                  href={{capture.url}}
+                >{{capture.url}}</a></figcaption>
             {{/if}}
           </figure>
         {{/each}}
@@ -659,6 +666,9 @@ export {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
   SearchCardSummaryField,
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
 };
 
 export class RealmInfoField extends FieldDef {
