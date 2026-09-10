@@ -1284,6 +1284,25 @@ export class Batch {
         let production: Record<string, any> =
           (await this.getProductionVersion(url, baseTypeFromError(entry))) ??
           {};
+        // A failure the prerender server marked unattributable to the card is
+        // not published as the card's content, provided there is content to
+        // keep: the carried-forward `pristine_doc` and friends stay as the last
+        // good pass left them and `has_error` stays false, so readers keep
+        // seeing the card until a render that *can* be attributed replaces it.
+        //
+        // Presence of the mark is the whole test. The conclusion belongs to the
+        // prerender server, which is the only place holding the tokens it rests
+        // on, so this site does not re-derive it — one implementation of the
+        // rule rather than two that can drift. Absence means no verdict, never
+        // "attributable", so nothing is withheld by default.
+        //
+        // Gated on a prior published row. A brand-new card has no good content
+        // to protect, and withholding its error would leave nothing at all —
+        // the failure has to surface somewhere, and an error row is the right
+        // output there even when the environment caused it.
+        let withholdFailure = Boolean(
+          diagnostics?.staleShellFailure && production.pristine_doc,
+        );
         entryPayload = {
           types: entry.types,
           // favor the last known good types over the types derived from the error state
@@ -1294,9 +1313,16 @@ export class Batch {
           // the current searchData onto that doc keeps an instance's rich fields
           // when it degrades to a sparse error searchData, while a file /
           // dependency-error row (full searchData) wins outright.
-          search_doc: entry.searchData
-            ? { ...(production.search_doc ?? {}), ...entry.searchData }
-            : (production.search_doc ?? null),
+          //
+          // A withheld failure keeps the published doc untouched instead: the
+          // error's sparse searchData describes a render whose result is not
+          // being published, so overlaying it would degrade a row that is
+          // otherwise staying exactly as the last good pass left it.
+          search_doc: withholdFailure
+            ? (production.search_doc ?? null)
+            : entry.searchData
+              ? { ...(production.search_doc ?? {}), ...entry.searchData }
+              : (production.search_doc ?? null),
           // preserve last_known_good_deps through error cycles (may have been cleared
           // by getProductionVersion if it returned undefined, so we explicitly preserve it)
           last_known_good_deps: await this.getLastKnownGoodDeps(
@@ -1304,8 +1330,26 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
-          has_error: true,
+          // A failure the prerender server marked unattributable to the card
+          // is not published as the card's content, provided there is content
+          // to keep. The row's carried-forward `pristine_doc` and friends stay
+          // exactly as the last good pass left them, and `has_error` is left
+          // false, so readers keep seeing the card until a render that can be
+          // attributed replaces it.
+          //
+          // Presence of the mark is the whole test — the conclusion is the
+          // prerender server's, which is the only place holding the tokens it
+          // rests on. Absence means no verdict, never "attributable", so
+          // nothing is withheld by default.
+          //
+          // Gated on there being a prior published row. A brand-new card has no
+          // good content to protect, and withholding its error would leave
+          // nothing at all: the failure has to surface somewhere, and an error
+          // row is the right output there even if the environment caused it.
+          error_doc: withholdFailure
+            ? null
+            : (errorEntry?.error ?? entry.error),
+          has_error: !withholdFailure,
           diagnostics: diagnostics,
         };
         break;

@@ -802,6 +802,19 @@ export interface Diagnostics
   // card that is genuinely broken, so a reader must require presence.
   warmedHostShellHash?: string | null;
   warmedHostShellHashAtCompletion?: string | null;
+  // Set only when the prerender server has concluded that a module-resolution
+  // failure cannot be attributed to the card: the render failed on a missing
+  // export, a re-render on a recycled pool failed the same way, and the pool
+  // still could not be shown to have been on the shell being served. The
+  // server holding both tokens is the one that can decide this, so it states
+  // the conclusion rather than leaving every reader to re-derive it from the
+  // four tokens above — a predicate duplicated at the write site would be a
+  // second place for the presence rule to be got wrong.
+  //
+  // Absent means no verdict, never "attributable". A reader must require
+  // presence before suppressing anything, for the same reason the warmed
+  // tokens distinguish `null` from absence.
+  staleShellFailure?: true;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table

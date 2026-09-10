@@ -187,6 +187,29 @@ export function shouldRerenderForStaleShell({
   );
 }
 
+// Whether the missing export *is* the failure, rather than merely present
+// among the console errors `RenderRunner` merged onto it.
+//
+// The broader test drives the re-render, where being wrong costs one extra
+// render. This one gates suppressing a row, where being wrong hides a genuine
+// break — so a render whose own failure was a timeout or a wedge, and whose
+// console happened to carry a missing-export line, is not grounds to withhold
+// the error it actually produced.
+function missingExportIsTheFailure(response: RenderVisitResponse): boolean {
+  for (let candidate of [
+    response.card?.error,
+    response.fileExtract?.error,
+    response.fileRender?.error,
+    response.pageUnusableError,
+  ]) {
+    let message = candidate?.error?.message;
+    if (typeof message === 'string' && isMissingExportMessage(message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasMissingExportError(response: RenderVisitResponse): boolean {
   // Every sub-response that can carry a render failure, because every one of
   // them is persisted the same way: `prerender-html-visit` writes
@@ -272,6 +295,23 @@ export function stampHostShellTokens(
       ...(tokens.warmedAtCompletion !== undefined
         ? { warmedHostShellHashAtCompletion: tokens.warmedAtCompletion }
         : {}),
+    },
+  };
+}
+
+// Record that this failure is the environment's rather than the card's, so the
+// write site can decline to publish it as the card's content.
+//
+// Stated by this server because it is the only place holding both the reported
+// and warmed tokens at the moment of the render. The write site checks for the
+// field's presence and nothing else — it does not re-derive the conclusion, so
+// there is one implementation of the rule rather than two that can drift.
+export function stampStaleShellFailure(response: RenderVisitResponse): void {
+  response.meta = {
+    ...(response.meta ?? {}),
+    diagnostics: {
+      ...(response.meta?.diagnostics ?? {}),
+      staleShellFailure: true,
     },
   };
 }
@@ -1321,6 +1361,36 @@ export function buildPrerenderApp(options: {
           discardedMs,
           shellAtStart,
         );
+        // The re-render failed the same way and the pool still cannot be shown
+        // to have been on the shell being served, so this failure describes the
+        // environment and not the card. Say so on the response and return it
+        // unchanged: the write site declines to publish it as the card's
+        // content, which is the only place that decision can be made — a
+        // prerender server can delay a write but never prevent one.
+        //
+        // Narrower than the re-render's own test on purpose. That one accepts a
+        // missing export anywhere in the error, including the console errors
+        // merged onto an unrelated timeout, because being wrong there costs one
+        // render. Withholding a row wants the missing export to be the failure
+        // itself.
+        if (
+          missingExportIsTheFailure(response) &&
+          shouldRerenderForStaleShell({
+            response,
+            warmedAtStart,
+            warmedAtCompletion,
+            reportedAtCompletion: shellAtCompletion,
+          })
+        ) {
+          log.warn(
+            'visit of %s failed to resolve a module on a pool warmed against %s -> %s while the current host shell is %s, after a re-render; marking the failure unattributable to the card',
+            url,
+            warmedAtStart ?? 'none',
+            warmedAtCompletion ?? 'none',
+            shellAtCompletion,
+          );
+          stampStaleShellFailure(response);
+        }
       }
       let totalMs = Date.now() - start;
       let poolFlags = Object.entries({
