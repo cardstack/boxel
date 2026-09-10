@@ -103,6 +103,30 @@ const COALESCE_MAX_ITERATIONS = 4;
 // converges as soon as no invalidation lands mid-populate; the cap keeps an
 // invalidation storm from spinning on prerenders instead of surfacing.
 const POPULATE_RACE_MAX_ATTEMPTS = 3;
+// A module in a realm this server does not host can only be placed by asking
+// the realm that holds it, so `buildLookupContext` reaches the network — and
+// the cost of that request is set by the far end, not by anything local. An
+// origin that accepts no connections spends the platform's connect timeout
+// (10s under Node's fetch) before rejecting, and none of that is per-module:
+// a search whose filter names types from an unreachable realm pays it once
+// per type, and the next search pays the whole bill again.
+//
+// Three bounds keep it flat. Each probe carries its own deadline, so an
+// unreachable origin costs the deadline rather than the platform's timeout —
+// generous enough that a realm answering slowly under load is still seen.
+// Concurrent probes for the same module and requesting user share one
+// request. And a transport failure is remembered against the origin that
+// produced it, short-circuiting later probes there until the window lapses:
+// keyed by origin because a connection that never opens says nothing about
+// the path. An HTTP answer — 404 included — is never remembered, since a
+// server that answers at all is already fast.
+//
+// The record's window matches ERROR_CACHE_TTL_MS above, and for the same
+// reason: it is long enough that a failure is not re-paid on every request
+// that follows it, and short enough that a realm coming back is seen without
+// anything having to be restarted or cleared.
+const REALM_PROBE_TIMEOUT_MS = 5_000;
+const REALM_PROBE_UNREACHABLE_TTL_MS = ERROR_CACHE_TTL_MS;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -377,6 +401,61 @@ interface LookupContext {
   priority?: number;
 }
 
+interface RemoteRealmProbe {
+  isPublic: boolean;
+  resolvedRealmURL?: string;
+}
+
+// The origin a probe's transport failure is recorded against. A module URL
+// that cannot be parsed has no origin to blame, so such a probe is bounded by
+// its deadline alone and nothing is remembered.
+function originOf(moduleURL: string): string | undefined {
+  try {
+    return new URL(moduleURL).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+// Settles with `work` if it finishes inside `ms`, and rejects otherwise. The
+// abandoned promise's rejection is absorbed so it cannot surface as an
+// unhandled rejection after the deadline has already been reported.
+async function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  description: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${description} exceeded ${ms}ms`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    work.catch(() => {});
+  }
+}
+
+// Identifies the caller a probe is answered for, so probes are shared only
+// among callers whose visibility answer must agree.
+function probeAuthKey(headers?: HeadersInit): string {
+  if (!headers) {
+    return '';
+  }
+  return [...new Headers(headers).entries()]
+    .map(([name, value]) => `${name}:${value}`)
+    .sort()
+    .join(',');
+}
+
 export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
@@ -410,6 +489,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
+  // Remote-realm visibility probes. `#probeInFlight` shares one request among
+  // concurrent probes of the same module and requesting user;
+  // `#unreachableOrigins` maps an origin whose transport failed to the
+  // timestamp its record stops applying. See REALM_PROBE_TIMEOUT_MS.
+  #probeInFlight = new Map<string, Promise<RemoteRealmProbe | null>>();
+  #unreachableOrigins = new Map<string, number>();
   // CS-10953 cross-process prerender coalescer. Optional — when undefined,
   // loadDefinitionCacheEntryUncached runs the original uncoordinated path.
   // Constructed only by the realm-server main when
@@ -1340,16 +1425,67 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   private async probeRemoteRealm(
     moduleURL: string,
     headers?: HeadersInit,
-  ): Promise<{
-    isPublic: boolean;
-    resolvedRealmURL?: string;
-  } | null> {
+  ): Promise<RemoteRealmProbe | null> {
+    let origin = originOf(moduleURL);
+    if (origin) {
+      let unreachableUntil = this.#unreachableOrigins.get(origin);
+      if (unreachableUntil !== undefined) {
+        if (unreachableUntil > Date.now()) {
+          log.debug(
+            `Skipping remote realm visibility probe for ${moduleURL}: ${origin} is recorded unreachable for another ${unreachableUntil - Date.now()}ms`,
+          );
+          return null;
+        }
+        this.#unreachableOrigins.delete(origin);
+      }
+    }
+
+    // The requesting user is part of the key: visibility is answered per
+    // caller, so two users probing one module must not share a result.
+    let key = `${moduleURL}|${probeAuthKey(headers)}`;
+    let inFlight = this.#probeInFlight.get(key);
+    if (inFlight) {
+      return await inFlight;
+    }
+    let probe = this.probeRemoteRealmUncoalesced(moduleURL, origin, headers);
+    this.#probeInFlight.set(key, probe);
     try {
-      let response = await this.#fetch(moduleURL, {
-        method: 'HEAD',
-        headers,
-      });
+      return await probe;
+    } finally {
+      if (this.#probeInFlight.get(key) === probe) {
+        this.#probeInFlight.delete(key);
+      }
+    }
+  }
+
+  private async probeRemoteRealmUncoalesced(
+    moduleURL: string,
+    origin: string | undefined,
+    headers?: HeadersInit,
+  ): Promise<RemoteRealmProbe | null> {
+    let startedAt = Date.now();
+    try {
+      // The deadline is enforced on the caller, not only on the request. The
+      // signal is passed as well so the socket is torn down wherever the
+      // fetch stack honors it, but a probe must be bounded even where it does
+      // not: the request travels through the virtual network's remapping,
+      // retry and dispatcher layers, each of which rebuilds it, and a
+      // platform connect timeout an order of magnitude longer than this
+      // deadline sits underneath them all. Racing here makes the bound hold
+      // regardless of which layer the signal survives.
+      let response = await withDeadline(
+        this.#fetch(moduleURL, {
+          method: 'HEAD',
+          headers,
+          signal: AbortSignal.timeout(REALM_PROBE_TIMEOUT_MS),
+        }),
+        REALM_PROBE_TIMEOUT_MS,
+        `remote realm visibility probe for ${moduleURL}`,
+      );
       if (!response.ok) {
+        log.debug(
+          `Remote realm visibility probe for ${moduleURL} answered ${response.status} in ${Date.now() - startedAt}ms`,
+        );
         return null;
       }
       let publicReadable = response.headers.get(
@@ -1365,7 +1501,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       };
     } catch (err) {
-      log.warn(`Failed to probe remote realm visibility for ${moduleURL}`, err);
+      if (origin) {
+        this.#unreachableOrigins.set(
+          origin,
+          Date.now() + REALM_PROBE_UNREACHABLE_TTL_MS,
+        );
+      }
+      log.warn(
+        `Failed to probe remote realm visibility for ${moduleURL} after ${Date.now() - startedAt}ms${
+          origin
+            ? `; treating ${origin} as unreachable for the next ${REALM_PROBE_UNREACHABLE_TTL_MS}ms`
+            : ''
+        }`,
+        err,
+      );
       return null;
     }
   }
