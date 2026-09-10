@@ -21,11 +21,7 @@ import { CardError } from './error.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { LooseCardResource, FileMetaResource } from './index.ts';
-import {
-  isUrlLike,
-  trimExecutableExtension,
-  resolveRRIReference,
-} from './index.ts';
+import { trimExecutableExtension, resolveRRIReference } from './index.ts';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker.ts';
 
 export type ResolvedCodeRef = {
@@ -167,32 +163,29 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-// Loader-only bare specifiers (e.g. `@cardstack/boxel-host/commands/foo`)
-// have no registered realm-prefix mapping — `VirtualNetwork.resolveURL`
-// would URL-join them to `relativeTo` and produce a nonexistent realm
-// path. Throw on that exact case so callers' surrounding try/catch
-// leaves the original ref alone for the loader's importMap shim to
-// resolve. (URL-like refs and registered prefixes resolve normally.)
 // A code ref's module is canonical RRI, so resolving it is path math rather
-// than a naming question: `@scope/name/...` and anything carrying a URL scheme
-// are already absolute, and a relative reference joins against `relativeTo`.
+// than a naming question: `@scope/name/...` and anything a URL parser accepts
+// are already absolute, and everything else is a relative reference that joins
+// against `relativeTo`. That is the line `isRelativePath` draws, and
+// `resolveRRIReference` draws it the same way.
 //
-// The rejection below no longer consults a prefix registry, because a bare
-// specifier is recognisable by shape: it is neither URL-like (relative, rooted,
-// or schemed) nor scoped. What it stops rejecting is a scoped reference whose
-// prefix this process has not registered — deliberately, since such a reference
-// is absolute and cross-realm by construction, which is the same rule the read
-// path applies. An unresolvable one fails at fetch, naming the module the
-// caller actually wrote.
+// A scoped specifier the loader shims rather than serves — say
+// `@cardstack/boxel-host/commands/foo`, which matches no realm prefix — passes
+// through unchanged, which is what the loader's import map needs in order to
+// resolve it.
+//
+// A bare specifier cannot be given that treatment, and no rule here can fix
+// that: `garden-design` naming a module in this realm and `date-fns` naming a
+// shimmed package are the same shape, and only a prefix registry told them
+// apart. Relative wins, because a code ref names a card definition — the
+// checked-in refs that look like this are same-realm modules, and the shimmed
+// packages are imported by module source rather than referenced as code refs.
+// The cost is that a bare shimmed specifier used *as* a code ref would resolve
+// into the realm and fail at fetch instead of reaching the import map.
 export function resolveModuleHref(
   module: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
-  if (!isUrlLike(module) && !module.startsWith('@')) {
-    throw new Error(
-      `Cannot resolve bare package specifier "${module}" — a module reference must be scoped, URL-like, or relative`,
-    );
-  }
   return resolveRRIReference(module, relativeTo);
 }
 

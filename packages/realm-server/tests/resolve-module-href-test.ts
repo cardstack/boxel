@@ -42,14 +42,28 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('rejects a bare package specifier', function (assert) {
-      // Recognised by shape rather than by a registry lookup: neither
-      // URL-like nor scoped. Without this a bare name would silently join
-      // against the consumer and fetch a URL nobody wrote.
-      assert.throws(
-        () => resolveModuleHref('lodash', relativeTo),
-        /bare package specifier "lodash"/,
+    // There is no bare-specifier category to reject: `isRelativePath` treats
+    // any non-scoped, non-URL identifier as relative, so a bare name is
+    // indistinguishable in shape from a module in this realm. One that names
+    // nothing resolves here and fails at fetch.
+    test('joins a bare name against the consumer, like any relative reference', function (assert) {
+      assert.strictEqual(
+        resolveModuleHref('garden-design', relativeTo),
+        'http://test/realm/garden-design',
       );
+      assert.strictEqual(
+        resolveModuleHref('lodash', relativeTo),
+        'http://test/realm/lodash',
+      );
+    });
+
+    test('passes a non-http absolute scheme through unchanged', function (assert) {
+      for (let ref of [
+        'data:text/javascript,export default 1',
+        'blob:http://test/8f2c',
+      ]) {
+        assert.strictEqual(resolveModuleHref(ref, relativeTo), ref);
+      }
     });
 
     test('needs no relativeTo for an already-absolute reference', function (assert) {
