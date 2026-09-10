@@ -470,10 +470,11 @@ const reportHostShellToManager = async () => {
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
-  // Periodic event-loop-lag + in-flight-search sampler. Emits a
-  // `realm:health` line only during saturation windows, so a stalled
-  // `_search` can be checked against whether the process's event loop was
-  // starved at the time.
+  // Periodic event-loop-lag + in-flight-search + heap sampler. Emits a
+  // `realm:health` line every interval, so a stalled `_search` can be checked
+  // against whether the process's event loop was starved at the time, and heap
+  // growth toward the OOM limit is visible (and alertable) on a calm process
+  // before a search storm — not only inside saturation windows.
   let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
