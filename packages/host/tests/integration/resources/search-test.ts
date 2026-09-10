@@ -594,6 +594,70 @@ module(`Integration | search resource`, function (hooks) {
     }
   });
 
+  test(`a query change inside the window folds the pending re-run into it`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let fetchCalls = 0;
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+      fetchCalls++;
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+    try {
+      let args = {
+        query: {
+          filter: {
+            on: { module: testRRI('book'), name: 'Book' },
+            eq: { 'author.lastName': 'Abdel-Rahman' },
+          },
+        },
+        realms: [testRealmURL],
+        isLive: true,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+      await search.loaded;
+      let baseline = fetchCalls;
+      let messageService = getService('message-service');
+
+      // Arm the scheduler with an event, then change the query before the
+      // window flushes. The query change must cancel the armed flush and fold
+      // its pending floors into its own run — otherwise a redundant second
+      // search over the new query fires a window later (the cost this change
+      // exists to remove), invisible because it still returns the right rows.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 1,
+        realmURL: testRealmURL,
+      });
+      search.modify([], {
+        ...args,
+        query: {
+          filter: {
+            on: { module: testRRI('book'), name: 'Book' },
+            eq: { 'author.lastName': 'Jones' },
+          },
+        },
+      });
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 1,
+        'the query change folds the armed flush into its own run; no redundant second search fires',
+      );
+    } finally {
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
   test(`cards in search results live update`, async function (assert) {
     let query: Query = {
       filter: {

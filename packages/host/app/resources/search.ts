@@ -265,8 +265,12 @@ export class SearchResource<
   // the scheduler's window — the coalesced form of what each event used to
   // pass to its own `search.perform`. Consumed by the flush, which hands the
   // batch to the search task to raise the floors above once the run
-  // succeeds. Untracked, like `#resultGenerations`: only the subscription
-  // callback writes it and only the flush reads it.
+  // succeeds. Untracked, like `#resultGenerations`: the subscription callback
+  // writes it, and it is drained by the flush and by `modify()` (which folds
+  // any pending batch into the run its query/realm change performs). A plain
+  // Map is safe for that `modify()` read because it is untracked — unlike the
+  // tracked-state hazard the sibling comment on `realmsNeedingRefresh` warns
+  // about.
   #pendingRefreshFloors = new Map<string, number>();
   // Defers the event-triggered re-run so a burst of realm events costs one
   // search, not one per event. The subscription callback accumulates the
@@ -657,9 +661,16 @@ export class SearchResource<
     this.#previousQueryString = queryString;
     // This run reads the index at least as fresh as any event still waiting
     // on the scheduler's window, so fold the pending flush into it rather
-    // than letting a second search fire after it.
+    // than letting a second search fire after it. Scope the fold to the
+    // realms this run actually searches: a realm-set change drops the
+    // realms it removed, and a floor for one of those would otherwise be
+    // stamped on success though this run never read that realm's index.
     this.#refreshScheduler.cancel();
-    let floors = this.#pendingRefreshFloors;
+    let floors = new Map(
+      [...this.#pendingRefreshFloors].filter(([realm]) =>
+        this.realmsToSearch.includes(realm),
+      ),
+    );
     this.#pendingRefreshFloors = new Map();
     this.trackStoreLoad(this.search.perform(query, floors), 'search');
   }
@@ -1121,9 +1132,11 @@ export class SearchResource<
   // the burst the scheduler's window accumulated, consuming the pending
   // generation floors so the run carries them as its own. An event arriving
   // after this consumes them lands in a fresh map and arms a fresh flush, so
-  // nothing is lost to the handoff; a run that fails (or is restarted by a
-  // query change) drops its batch, which only forgoes a floor raise — floors
-  // are a monotonic safety net, never load-bearing state.
+  // nothing is lost to the handoff. The floor itself is load-bearing — it is
+  // the ordering `reseed` uses to decline a stale document — but dropping a
+  // batch on a run that fails (or is restarted by a query change) is still
+  // correct: such a run applied no result set, so there is no coverage for a
+  // floor raise to claim. Only a run that applied a set may raise floors.
   #flushLiveRefresh(): void {
     if (
       isDestroyed(this) ||
