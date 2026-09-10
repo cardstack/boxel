@@ -271,7 +271,7 @@ export class SearchResource<
   // Map is safe for that `modify()` read because it is untracked — unlike the
   // tracked-state hazard the sibling comment on `realmsNeedingRefresh` warns
   // about.
-  #pendingRefreshFloors = new Map<string, number>();
+  #pendingRefreshFloors = new Map<RealmIdentifier, number>();
   // Defers the event-triggered re-run so a burst of realm events costs one
   // search, not one per event. The subscription callback accumulates the
   // generation floors above and arms this; the flush performs the search.
@@ -1154,7 +1154,7 @@ export class SearchResource<
   }
 
   private search = restartableTask(
-    async (query: Query, refreshFloors?: Map<string, number>) => {
+    async (query: Query, refreshFloors?: Map<RealmIdentifier, number>) => {
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
