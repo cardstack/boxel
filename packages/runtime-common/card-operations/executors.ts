@@ -197,46 +197,55 @@ export async function stageCreate(
         `${ctx.realmURL}; a batch commits to one realm`,
     });
   }
-  let included = entry.document?.included ?? [];
-  let writes: StagedWrite[] = [];
-  let primaryIdentity: StagedIdentity | undefined;
-  // The primary first, then each side-loaded resource. A side-loaded resource
-  // with no `lid` is not staged: it has no id to be created under and nothing
-  // in the batch can link to it, so the client sent a resource the realm has
-  // no way to name.
-  for (let [index, resource] of [primary, ...included].entries()) {
-    if (index > 0 && typeof resource.lid !== 'string') {
-      continue;
-    }
-    if (namesForeignRealm(resource, ctx.realmURL)) {
-      continue;
-    }
-    let identity =
-      index === 0
-        ? createIdentity(entry, primary, ctx.paths, ctx.lids)
-        : stagedLid(resource.lid!, ctx);
-    if (index === 0) {
-      primaryIdentity = identity;
-    } else {
-      // A side-loaded resource's module refs are written relative to the card
-      // it was sent with, so they are resolved against that card before the
-      // resource is serialized under its own URL.
-      visitModuleDeps(resource, (moduleId, setModuleId) => {
-        setModuleId(ctx.resolveModuleId(moduleId, primaryIdentity!.id));
-      });
-    }
-    promoteStagedLinks(resource, ctx);
-    writes.push({
+  let identity = createIdentity(entry, primary, ctx.paths, ctx.lids);
+  promoteStagedLinks(primary, ctx);
+  let writes: StagedWrite[] = [
+    {
       path: identity.path,
-      content: await serializeForStorage(resource, identity, ctx),
-    });
+      content: await serializeForStorage(primary, identity, ctx),
+    },
+  ];
+  for (let resource of entry.document?.included ?? []) {
+    // A side-loaded resource with no `lid` is not staged: it has no id to be
+    // created under and nothing in the batch can link to it, so the client
+    // sent a resource the realm has no way to name. One naming another realm
+    // is not this batch's to write.
+    if (
+      typeof resource.lid !== 'string' ||
+      namesForeignRealm(resource, ctx.realmURL)
+    ) {
+      continue;
+    }
+    writes.push(
+      await stageSideLoaded(resource, resource.lid, identity.id, ctx),
+    );
   }
   return {
     writes,
     deletes: [],
-    id: primaryIdentity!.id,
+    id: identity.id,
     ...(entry.lid ? { lid: entry.lid } : {}),
-    primaryPath: primaryIdentity!.path,
+    primaryPath: identity.path,
+  };
+}
+
+// A card side-loaded alongside the one an entry names. Its module refs are
+// written relative to the card it was sent with, so they are resolved against
+// that card before it is serialized under its own URL.
+async function stageSideLoaded(
+  resource: CardResource,
+  lid: string,
+  relativeTo: string,
+  ctx: StagingContext,
+): Promise<StagedWrite> {
+  let identity = stagedLid(lid, ctx);
+  promoteStagedLinks(resource, ctx);
+  visitModuleDeps(resource, (moduleId, setModuleId) => {
+    setModuleId(ctx.resolveModuleId(moduleId, relativeTo));
+  });
+  return {
+    path: identity.path,
+    content: await serializeForStorage(resource, identity, ctx),
   };
 }
 
@@ -384,15 +393,7 @@ export async function stageUpdate(
       ) {
         continue;
       }
-      let identity = stagedLid(resource.lid, ctx);
-      promoteStagedLinks(resource, ctx);
-      visitModuleDeps(resource, (moduleId, setModuleId) => {
-        setModuleId(ctx.resolveModuleId(moduleId, url.href));
-      });
-      writes.push({
-        path: identity.path,
-        content: await serializeForStorage(resource, identity, ctx),
-      });
+      writes.push(await stageSideLoaded(resource, resource.lid, url.href, ctx));
     }
   }
   return { writes, deletes: [], id: url.href, primaryPath: sourcePath };
