@@ -49,6 +49,8 @@ import {
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
+  InvalidQueryError,
+  collectPositiveMatchTerms,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -306,6 +308,16 @@ export const generalSortFields: Record<string, string> = {
   createdAt: 'i.resource_created_at',
   cardURL: 'i.url COLLATE "POSIX"',
 };
+
+// A synthetic sort key (not a column in `generalSortFields`): the full-text
+// relevance score of a `matches` query, computed per query from the filter's
+// match terms. The leading underscore follows the synthetic-key convention
+// (`_isCardInstance`, `_isCardInstanceFile`) — it is derived, not a stored
+// field. Recognized by the sort validators (`assertSortExpression`,
+// `translateSort`) and handled specially by the order builders below; it never
+// flows through `generalFieldSortColumn` (it has no static column). Sorting by
+// it defaults to `desc` (best match first).
+export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
 
 export { isValidPrerenderedHtmlFormat };
 
@@ -885,6 +897,28 @@ export class IndexQueryEngine {
       let limitClause = page
         ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
         : [];
+
+      // Full-text relevance is opt-in: computed only when the caller sorts by
+      // `_matchRelevance`, so every existing `matches` caller pays nothing. When
+      // present it rides the projection as an aggregated, aliased column that the
+      // ORDER BY (below) references — see `matchRelevanceExpression`.
+      let sortsByMatchRelevance = (sort ?? []).some(
+        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
+      );
+      let relevanceColumn: CardExpression = [];
+      if (sortsByMatchRelevance) {
+        // `assertQuery` already rejects this on the wire surfaces (as an
+        // HTTP 400); this re-check is the backstop for callers that reach the
+        // engine directly.
+        let matches = collectPositiveMatchTerms(filter);
+        if (matches.length === 0) {
+          throw new InvalidQueryError(
+            `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+          );
+        }
+        relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
+      }
+
       let query: CardExpression;
       if (conditionalLiveDoc) {
         // Outer-wrap the grouped projection so the conditional `pristine_doc`
@@ -899,6 +933,7 @@ export class IndexQueryEngine {
           'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
           'FROM (',
           ...selectClauseExpression,
+          ...relevanceColumn,
           ...innerSortColumns,
           `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
             opts,
@@ -913,6 +948,7 @@ export class IndexQueryEngine {
       } else {
         query = [
           ...selectClauseExpression,
+          ...relevanceColumn,
           `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
             opts,
           )} ${tableValuedFunctionsPlaceholder}`,
@@ -1120,17 +1156,28 @@ export class IndexQueryEngine {
     return [
       'ORDER BY',
       ...separatedByCommas([
-        ...sort.map((s) => [
-          // intentionally not using field arity here--not sure what it means to
-          // sort via a plural field
-          'ANY_VALUE(',
-          'on' in s
-            ? fieldQuery(s.by, s.on, false, 'sort')
-            : this.generalFieldSortColumn(s.by),
-          ')',
-          s.direction ?? 'asc',
-          'NULLS LAST',
-        ]),
+        ...sort.map((s) =>
+          // `_matchRelevance` is the aggregated relevance column projected by
+          // the SELECT (see `_search`); reference the alias directly and default
+          // to `desc` (best match first). Everything else sorts on a column.
+          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+            ? [
+                `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                s.direction ?? 'desc',
+                'NULLS LAST',
+              ]
+            : [
+                // intentionally not using field arity here--not sure what it
+                // means to sort via a plural field
+                'ANY_VALUE(',
+                'on' in s
+                  ? fieldQuery(s.by, s.on, false, 'sort')
+                  : this.generalFieldSortColumn(s.by),
+                ')',
+                s.direction ?? 'asc',
+                'NULLS LAST',
+              ],
+        ),
         // `url` then `type` are the final sort keys for deterministic results
         // (the two rows of a dual-indexed card `.json` share a url).
         ['i.url COLLATE "POSIX"'],
@@ -1160,6 +1207,17 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
+      // `_matchRelevance` is already projected by the inner SELECT (see
+      // `_search`), so it rides through `sub.*` — reference it in the outer
+      // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
+      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+        outerKeys.push([
+          `"${MATCH_RELEVANCE_SORT_KEY}"`,
+          s.direction ?? 'desc',
+          'NULLS LAST',
+        ]);
+        return;
+      }
       let alias = `_sort_${i}`;
       innerSortColumns.push(
         ', ANY_VALUE(',
@@ -1448,6 +1506,55 @@ export class IndexQueryEngine {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
     ]);
+  }
+
+  // The relevance value for a `matches` query, aggregated per (url, type) group.
+  //
+  // Postgres scores the row's markdown tsvector against the OR-union of the
+  // positive match terms with `ts_rank_cd` — cover-density (proximity/position
+  // aware), normalized to a bounded 0–1 range via flag 32 so it reads as a clean
+  // gauge. The tsvector is recomputed here (the markdown GIN index is a lossy
+  // expression index and can't hand a rankable vector back), through the SAME
+  // `markdown_search_text` wrapper as the match predicate and its index, so the
+  // ranked text is exactly the filtered text.
+  //
+  // SQLite has no full-text ranking, so it falls back to boolean 1/0 (did the
+  // LIKE predicate match at all) — enough for a deterministic sort in host
+  // in-browser tests; meaningful ranking is Postgres-only.
+  //
+  // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
+  // table-valued fan-out, where every fanned row shares the same markdown).
+  private matchRelevanceExpression(matches: string[]): CardExpression {
+    let pgTsQuery: Expression = [];
+    matches.forEach((m, i) => {
+      if (i > 0) {
+        pgTsQuery.push('||');
+      }
+      pgTsQuery.push(`websearch_to_tsquery('english',`, param(m), `)`);
+    });
+    let sqliteLike: Expression = [];
+    matches.forEach((m, i) => {
+      if (i > 0) {
+        sqliteLike.push('OR');
+      }
+      sqliteLike.push(
+        `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
+        param(`%${escapeSqliteLikePattern(m)}%`),
+        `) ESCAPE '\\'`,
+      );
+    });
+    return [
+      'MAX(',
+      dbExpression({
+        pg: [
+          `ts_rank_cd(to_tsvector('english', markdown_search_text(ph.markdown)), `,
+          ...pgTsQuery,
+          `, 32)`,
+        ],
+        sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
+      }),
+      `) AS "${MATCH_RELEVANCE_SORT_KEY}"`,
+    ];
   }
 
   // Full-text matches predicate. Postgres uses tsvector/tsquery on the
