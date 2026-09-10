@@ -103,7 +103,6 @@ class WatchedArray<T> {
   #subscriber: (oldArr: Array<T>, arr: Array<T>) => void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 interface WatchedArray<T = unknown> extends Array<T> {}
 
 export { WatchedArray };
