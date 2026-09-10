@@ -50,6 +50,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a realm config is a card, and a removal treats it as one', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('a write into the capture subtree is refused', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
@@ -87,6 +91,18 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a change after a removal has nothing to change', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a card the realm ignores has no removal to make', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a side-load cannot land on a card another entry is changing', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a batch cannot both remove a card and write it', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 

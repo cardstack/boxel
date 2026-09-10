@@ -52,6 +52,9 @@ interface StubOptions {
   stored?: Record<string, string>;
   // The realm's size ceiling, for the paths a batch stages.
   sizeLimit?: number;
+  // Local paths the realm's ignore rules exclude. Such a file is never
+  // visited by indexing, so it never has an index row to remove.
+  ignored?: string[];
   // The definition-cache entry a code ref resolves to, keyed by its name.
   definitions?: Record<string, Definition>;
   // What `serializeCard` does to a resource on its way to storage. The default
@@ -112,6 +115,9 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async drainIndexing() {
       drains++;
+    },
+    async isIgnored(url) {
+      return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
     },
     async commitUnlocked(batch, options) {
       readsOutsideLock += held > 0 ? 0 : 1;
@@ -583,16 +589,13 @@ const tests: SharedTests<Record<string, never>> = {
   },
 
   'a removal takes a card, not any stored json': async (assert) => {
-    // The realm's own configuration is the sharpest case: it is stored as
-    // `realm.json`, so it answers to a URL a removal can name, and removing
-    // it would take the realm's settings with it.
     let { core, commits } = stub({
       stored: {
-        'realm.json': JSON.stringify({ name: 'Test Realm' }, null, 2),
         'notes.json': JSON.stringify({ note: 'not a card' }, null, 2),
+        'empty.json': JSON.stringify({ data: null }, null, 2),
       },
     });
-    for (let href of [`${REALM}realm`, `${REALM}notes`]) {
+    for (let href of [`${REALM}notes`, `${REALM}empty`]) {
       let failed = await refusal(core, [{ op: 'delete', href }]);
       assert.deepEqual(
         failed,
@@ -601,6 +604,36 @@ const tests: SharedTests<Record<string, never>> = {
       );
     }
     assert.strictEqual(commits.length, 0, 'neither file is removed');
+  },
+
+  'a realm config is a card, and a removal treats it as one': async (
+    assert,
+  ) => {
+    // Stored the way a realm actually stores it, rather than as a bare
+    // settings object: a realm's config IS a card document. So the guard
+    // above does not exempt it, and this batch removes it — which is what
+    // `DELETE` does with the same URL. Pinned so that reading the guard as
+    // protection for the realm's own configuration fails here rather than in
+    // a realm.
+    let { core, commits } = stub({
+      stored: {
+        'realm.json': cardFile(
+          { cardInfo: { name: 'Test Realm' } },
+          { module: `${REALM}realm-config`, name: 'RealmConfig' },
+        ),
+      },
+    });
+    let results = await commitBatch(
+      core,
+      [{ op: 'delete', href: `${REALM}realm` }],
+      {},
+    );
+    assert.deepEqual(results, [null], 'the removal reports as any does');
+    assert.deepEqual(
+      commits[0].deletes,
+      ['realm.json'],
+      'the config is removed, at parity with the endpoint',
+    );
   },
 
   'a write into the capture subtree is refused': async (assert) => {
@@ -879,6 +912,122 @@ const tests: SharedTests<Record<string, never>> = {
         'card that was never there',
     );
     assert.strictEqual(commits.length, 0, 'the removal is abandoned too');
+  },
+
+  'a card the realm ignores has no removal to make': async (assert) => {
+    // An ignored file is never visited, so it never gets an index row, and
+    // `DELETE` — which needs one — refuses it forever. Reading the bytes off
+    // disk is not the same permission: removing it here would destroy a file
+    // no other caller can, and the realm would go on ignoring its absence.
+    let { core, commits } = stub({
+      stored: {
+        'hidden/Person/secret.json': cardFile({ firstName: 'Secret' }, PERSON),
+      },
+      ignored: ['hidden/Person/secret.json'],
+    });
+    let failed = await refusal(core, [
+      { op: 'delete', href: `${REALM}hidden/Person/secret` },
+    ]);
+    assert.deepEqual(failed, {
+      status: 404,
+      code: 'target-not-found',
+      entry: 0,
+    });
+    assert.strictEqual(commits.length, 0, 'the file stays on disk');
+  },
+
+  'a side-load cannot land on a card another entry is changing': async (
+    assert,
+  ) => {
+    // A side-loaded resource is serialized whole rather than merged, so it
+    // cannot compose over an earlier entry's change the way a second patch
+    // does — landing it last would drop that change silently while its entry
+    // still reported success.
+    let { core, commits } = stub({
+      stored: {
+        'Person/a.json': cardFile(
+          { firstName: 'Original', keepMe: 'yes' },
+          PERSON,
+        ),
+        'b.json': cardFile({ firstName: 'B' }, PERSON),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'update',
+        href: `${REALM}Person/a`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Patched' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+      {
+        op: 'update',
+        href: `${REALM}b`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'B' },
+            meta: { adoptsFrom: PERSON },
+          },
+          included: [
+            {
+              type: 'card',
+              lid: 'a',
+              attributes: { firstName: 'Clobbered' },
+              meta: { adoptsFrom: PERSON },
+            } as any,
+          ],
+        },
+      },
+    ]);
+    assert.strictEqual(failed?.code, 'invalid-params');
+    assert.strictEqual(failed?.entry, 1, 'the side-load is the refusal');
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a batch cannot both remove a card and write it': async (assert) => {
+    // Un-queueing the removal so the write can land would report the removal
+    // entry as a completed one, which a caller cannot tell from a real
+    // removal — the two entries are asking for opposite things.
+    let { core, commits } = stub({
+      stored: {
+        'Person/a.json': cardFile({ firstName: 'Original' }, PERSON),
+        'b.json': cardFile({ firstName: 'B' }, PERSON),
+      },
+    });
+    let failed = await refusal(core, [
+      { op: 'delete', href: `${REALM}Person/a` },
+      {
+        op: 'update',
+        href: `${REALM}b`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'B' },
+            meta: { adoptsFrom: PERSON },
+          },
+          included: [
+            {
+              type: 'card',
+              lid: 'a',
+              attributes: { firstName: 'Resurrected' },
+              meta: { adoptsFrom: PERSON },
+            } as any,
+          ],
+        },
+      },
+    ]);
+    assert.strictEqual(failed?.code, 'invalid-params');
+    assert.strictEqual(failed?.entry, 1);
+    assert.strictEqual(
+      commits.length,
+      0,
+      'the removal is not quietly cancelled',
+    );
   },
 
   'a card the batch creates is not a target for a later entry': async (

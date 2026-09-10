@@ -86,6 +86,9 @@ export interface BatchCore {
   // may still be indexing, so a batch drains before it stages rather than
   // failing to resolve a type the realm already holds.
   drainIndexing(): Promise<void>;
+  // Whether the realm's ignore rules exclude this URL. An ignored file is
+  // never visited by indexing, so it never gets an index row.
+  isIgnored(url: URL): Promise<boolean>;
 
   // The realm's unlocked commit: writes and removals under one index job and
   // one index event. Assumes the write lock is held, which it is.
@@ -184,6 +187,7 @@ export async function commitBatch(
     }
     assertWritesAllowed(staged);
     assertWritesFit(core, staged);
+    await assertRemovalsAllowed(core, paths, staged);
     await assertDestinationsFree(core, staged);
     // Everything above either produced bytes for every entry or threw, and a
     // throw leaves the realm as it was.
@@ -465,6 +469,36 @@ function assertWritesAllowed(staged: StagedChange[]): void {
   }
 }
 
+// A removal needs the realm to be willing to serve the card back. `DELETE`
+// requires an index row, and an ignored path never gets one — it is never
+// visited, so no amount of waiting produces it — which makes a card under an
+// ignored path permanently un-deletable over HTTP. Reading its bytes off disk
+// is not the same permission: a batch that removed one would be destroying a
+// file no other caller can, and the realm would go on ignoring the absence.
+async function assertRemovalsAllowed(
+  core: BatchCore,
+  paths: RealmPaths,
+  staged: StagedChange[],
+): Promise<void> {
+  for (let [index, change] of staged.entries()) {
+    for (let path of change.deletes) {
+      if (await core.isIgnored(paths.fileURL(path))) {
+        throw atEntry(
+          new OperationFailure({
+            status: 404,
+            code: 'target-not-found',
+            title: 'Not found',
+            detail:
+              `${paths.fileURL(path).href} is under a path the realm ` +
+              `ignores, so it holds no card to remove`,
+          }),
+          index,
+        );
+      }
+    }
+  }
+}
+
 // The realm refuses bytes over its size ceiling, and it refuses them one file
 // at a time as it writes. Reaching that inside the commit would leave the
 // files written before it on disk and unindexed — the commit rejects before
@@ -548,10 +582,44 @@ async function commitStaged(
   // entirely instead of writing bytes the same commit then unlinks.
   let writes = new Map<LocalPath, string | Uint8Array>();
   let deleted = new Set<LocalPath>();
-  for (let change of staged) {
+  let writtenBy = new Map<LocalPath, number>();
+  for (let [index, change] of staged.entries()) {
     for (let write of change.writes) {
+      if (deleted.has(write.path)) {
+        // The batch already removed this card, so writing it back is not a
+        // later step in one story — it is two entries asking for opposite
+        // things. Un-queueing the removal instead would report that entry as
+        // a completed removal, which is indistinguishable from a real one.
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Conflicting entries',
+          detail:
+            `entry ${index} writes ${write.path}, which an earlier entry ` +
+            `removes; a batch cannot both remove a card and write it`,
+          meta: { entry: index },
+        });
+      }
+      let owner = writtenBy.get(write.path);
+      if (owner !== undefined && write.path !== change.primaryPath) {
+        // Two entries changing one card compose because the later one merges
+        // over what the earlier staged. A side-loaded resource is serialized
+        // whole rather than merged, so it cannot compose over anything —
+        // letting it land last would drop the earlier entry's change with
+        // nothing said, while that entry still reported success.
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Conflicting entries',
+          detail:
+            `entries ${owner} and ${index} both write ${write.path}, and ` +
+            `entry ${index} carries it as a side-load, which replaces the ` +
+            `card rather than merging over it`,
+          meta: { entry: index, conflictsWith: owner },
+        });
+      }
       writes.set(write.path, write.content);
-      deleted.delete(write.path);
+      writtenBy.set(write.path, index);
     }
     for (let path of change.deletes) {
       deleted.add(path);

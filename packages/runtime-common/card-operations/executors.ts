@@ -509,14 +509,17 @@ export function stageDelete(
       detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
     });
   }
-  // A `.json` file on disk is not by itself a card. `realm.json` is the
-  // clearest case — it sits at a URL a delete can name, and removing it would
-  // take the realm's own configuration with it — but any stored JSON that is
-  // not a card document is one. The bytes already read answer this, so the
-  // check costs no read and keeps the just-written card above deletable,
-  // which asking the index would not. This is the answer `DELETE` gives for
-  // the same URL, where it is the index rather than the bytes that reports no
-  // card there.
+  // A `.json` file on disk is not by itself a card — a hand-written config,
+  // a fixture, anything the realm stores but does not serve as one. The bytes
+  // already read answer this, so the check costs no read and keeps the
+  // just-written card above deletable, which asking the index would not. This
+  // is the answer `DELETE` gives for the same URL, where it is the index
+  // rather than the bytes that reports no card there.
+  //
+  // `realm.json` is not covered by this and is not meant to be: a realm's
+  // config is itself a card document, and `DELETE` removes it too. Refusing
+  // it here would put the batch out of step with the endpoint rather than
+  // protecting anything the endpoint protects.
   if (!cardResourceIn(stored.content)) {
     throw new OperationFailure({
       id: url.href,

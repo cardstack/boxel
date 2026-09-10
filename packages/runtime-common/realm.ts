@@ -3344,6 +3344,7 @@ export class Realm {
         drainIndexing: async () => {
           await this.incrementalIndexing();
         },
+        isIgnored: (url) => this.isIgnored(url),
         commitUnlocked: (batch, options) =>
           this._commitBatchUnlocked(batch, options),
         serializeCard: (doc, relativeTo) =>
