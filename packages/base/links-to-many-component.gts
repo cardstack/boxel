@@ -46,6 +46,7 @@ import {
   CardContextName,
   RealmURLContextName,
   getNarrowestType,
+  loadCardDef,
   Loader,
   isCardInstance,
   type ResolvedCodeRef,
@@ -127,10 +128,34 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     this.chooseCard.perform();
   };
 
+  // getNarrowestType only narrows card refs; a FileDef constraint is checked here
+  private async narrowestFileDef(): Promise<typeof BaseDef> {
+    let fieldDef = this.args.field.card;
+    if (!this.args.typeConstraint) {
+      return fieldDef;
+    }
+    try {
+      let constrained = await loadCardDef(this.args.typeConstraint, {
+        loader: myLoader(),
+      });
+      if (
+        isFileDef(constrained) &&
+        (constrained === fieldDef ||
+          constrained.prototype instanceof (fieldDef as any))
+      ) {
+        return constrained;
+      }
+    } catch {
+      // unloadable constraint: keep the field's own type
+    }
+    return fieldDef;
+  }
+
   private chooseCard = restartableTask(async () => {
     if (isFileDef(this.args.field.card)) {
-      let fileType = identifyCard(this.args.field.card);
-      let fileTypeName = this.args.field.card.displayName;
+      let fileDef = await this.narrowestFileDef();
+      let fileType = identifyCard(fileDef);
+      let fileTypeName = fileDef.displayName;
       let file = await chooseFile(
         fileType ? { fileType, fileTypeName } : undefined,
       );

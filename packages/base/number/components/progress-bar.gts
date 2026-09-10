@@ -4,6 +4,7 @@ import {
   getNumericValue,
   calculatePercentage,
   getFormattedDisplayValue,
+  statusRampColor,
 } from '../util/index';
 
 export interface ProgressBarOptions {
@@ -59,19 +60,9 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
-    const p = this.percentage;
-    if (p <= 25) {
-      return 'var(--destructive, #ef4444)';
-    }
-    if (p <= 50) {
-      return 'var(--warning, #f59e0b)';
-    }
-    if (p <= 75) {
-      return 'var(--accent, #eab308)';
-    }
-    return 'var(--success, #22c55e)';
+    return statusRampColor(this.percentage);
   }
 
   get fillStyle() {
@@ -83,7 +74,11 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
   <template>
     <span class='progress-bar-atom'>
       <div class='progress-bar-track'>
-        <div class='progress-bar-fill' style={{this.fillStyle}}></div>
+        <div
+          class='progress-bar-fill'
+          style={{this.fillStyle}}
+          data-test-progress-bar-fill
+        ></div>
       </div>
     </span>
 
@@ -97,7 +92,7 @@ export class ProgressBarAtom extends GlimmerComponent<ProgressBarSignature> {
         position: relative;
         width: 100%;
         height: 0.5rem;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
         overflow: hidden;
       }
@@ -143,24 +138,9 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
 
   get fillColor() {
     if (this.options.useGradient === false) {
-      return 'var(--primary, #3b82f6)';
+      return 'var(--primary)';
     }
-    const p = this.percentage;
-    // State-based colors based on progress percentage
-    // 0-25%: Red (low progress)
-    if (p <= 25) {
-      return 'var(--destructive, #ef4444)';
-    }
-    // 25-50%: Orange (moderate progress)
-    if (p <= 50) {
-      return 'var(--warning, #f59e0b)';
-    }
-    // 50-75%: Yellow (good progress)
-    if (p <= 75) {
-      return 'var(--accent, #eab308)';
-    }
-    // 75-100%: Green (excellent progress)
-    return 'var(--success, #22c55e)';
+    return statusRampColor(this.percentage);
   }
 
   get fillStyle() {
@@ -212,6 +192,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
         <div
           class='progress-bar-fill {{if this.isGradient "gradient" "solid"}}'
           style={{this.fillStyle}}
+          data-test-progress-bar-fill
         >
           {{#if this.shouldShowText}}
             <div class='progress-bar-info'>
@@ -232,7 +213,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
         position: relative;
         width: 100%;
         height: 100%;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted);
         border-radius: 999px;
         overflow: hidden;
       }
@@ -259,7 +240,7 @@ export class ProgressBarEmbedded extends GlimmerComponent<ProgressBarSignature> 
       .progress-bar-label {
         font-size: 0.625rem;
         font-weight: 600;
-        color: var(--primary-foreground, #ffffff);
+        color: var(--primary-foreground);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

@@ -338,6 +338,56 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // A redirect target is a header value, and a header value is a
+        // ByteString — so a file name carrying anything outside Latin-1 (an
+        // emoji, a CJK character) cannot go into `Location` as the local path
+        // spells it. The realm has to percent-encode the target, which is also
+        // the form the client asked for on the wire.
+        test('serves a card-source redirect to a module whose name is outside Latin-1', async function (assert) {
+          let stem = 'ai\u{1F389}app-card';
+          await testRealm.write(`${stem}.gts`, '// a module named with emoji');
+
+          let response = await request
+            .get(new URL(stem, realmURL).pathname)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 302, 'HTTP 302 status');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL(`${stem}.gts`, realmURL).pathname,
+            'the redirect target is percent-encoded',
+          );
+
+          let followed = await request
+            .get(response.headers['location'])
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            followed.status,
+            200,
+            'following the redirect reaches the module',
+          );
+          assert.strictEqual(
+            followed.text,
+            '// a module named with emoji',
+            'the redirect resolves back to the same file',
+          );
+        });
+
+        test('serves a card instance .json redirect for a name outside Latin-1', async function (assert) {
+          let stem = 'ai\u{1F389}app-card-instance';
+
+          let response = await request
+            .get(new URL(`${stem}.json`, realmURL).pathname)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 302, 'HTTP 302 status');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL(stem, realmURL).pathname,
+            'the redirect target is percent-encoded',
+          );
+        });
+
         test('serves a card instance GET request with card-source accept header that results in redirect', async function (assert) {
           let response = await request
             .get('/person-1')

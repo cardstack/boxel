@@ -216,6 +216,9 @@ catalogs:
     '@types/koa__router':
       specifier: ^12.0.0
       version: 12.0.5
+    '@types/lodash':
+      specifier: ^4.17.15
+      version: 4.17.24
     '@types/lodash-es':
       specifier: ^4.17.12
       version: 4.17.12
@@ -516,6 +519,9 @@ catalogs:
     koa-proxies:
       specifier: ^0.12.3
       version: 0.12.4
+    lodash:
+      specifier: ^4.17.21
+      version: 4.18.1
     lodash-es:
       specifier: ^4.17.21
       version: 4.18.1
@@ -913,6 +919,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -1053,39 +1062,114 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@cardstack/view-transitions':
+        specifier: 'catalog:'
+        version: 0.2.0(@babel/core@7.29.7)(ember-modifier@4.3.0(@babel/core@7.29.7))
+      '@ember/test-helpers':
+        specifier: 'catalog:'
+        version: 5.4.3(@babel/core@7.29.7)
+      '@floating-ui/dom':
+        specifier: 'catalog:'
+        version: 1.7.6
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1
       '@glimmer/tracking':
         specifier: ^1.1.2
         version: 1.1.2
+      '@glimmer/validator':
+        specifier: ^0.95.0
+        version: 0.95.0
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
+      '@types/flat':
+        specifier: 'catalog:'
+        version: 5.0.5
+      '@types/lodash':
+        specifier: 'catalog:'
+        version: 4.17.24
+      '@types/lodash-es':
+        specifier: 'catalog:'
+        version: 4.17.12
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
+      '@types/rsvp':
+        specifier: 'catalog:'
+        version: 4.0.9
+      '@types/uuid':
+        specifier: 'catalog:'
+        version: 9.0.8
       '@universal-ember/test-support':
         specifier: 'catalog:'
         version: 0.5.1(@babel/core@7.29.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.8.0
       commander:
         specifier: ^13.1.0
         version: 13.1.0
       content-tag:
         specifier: 'catalog:'
         version: 4.2.0
+      date-fns:
+        specifier: 'catalog:'
+        version: 2.30.0
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      ember-animated:
+        specifier: 'catalog:'
+        version: 2.3.0(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glint/template@1.7.7)
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.29.7)(@glint/template@1.7.7)
+      ember-css-url:
+        specifier: ^1.0.0
+        version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.3.0(@babel/core@7.29.7)
+      ember-modify-based-class-resource:
+        specifier: 'catalog:'
+        version: 1.1.2(@babel/core@7.29.7)(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7))
+      ember-provide-consume-context:
+        specifier: ^0.8.0
+        version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+      ember-resources:
+        specifier: 'catalog:'
+        version: 7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7)
+      ember-source:
+        specifier: 'catalog:'
+        version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
+      ethers:
+        specifier: 'catalog:'
+        version: 6.16.0
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
+      flat:
+        specifier: 'catalog:'
+        version: 5.0.2
       ignore:
         specifier: 'catalog:'
         version: 5.3.2
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.3
+      lodash:
+        specifier: 'catalog:'
+        version: 4.18.1
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.18.1
+      matrix-js-sdk:
+        specifier: 'catalog:'
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
@@ -1095,9 +1179,24 @@ importers:
       qunit-dom:
         specifier: 'catalog:'
         version: 3.5.1
+      rsvp:
+        specifier: ^4.8.5
+        version: 4.8.5
+      super-fast-md5:
+        specifier: 'catalog:'
+        version: 1.0.3
+      tracked-built-ins:
+        specifier: ^4.1.2
+        version: 4.1.2(@babel/core@7.29.7)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      uuid:
+        specifier: 'catalog:'
+        version: 9.0.1
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
     devDependencies:
       '@cardstack/local-types':
         specifier: workspace:*
@@ -3088,6 +3187,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/bxl':
+        specifier: workspace:*
+        version: link:../bxl
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -3281,6 +3383,9 @@ importers:
       '@types/ms':
         specifier: 'catalog:'
         version: 2.1.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
@@ -7509,6 +7614,7 @@ packages:
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -8450,6 +8556,7 @@ packages:
 
   charm@1.0.2:
     resolution: {integrity: sha512-wqW3VdPnlSWT4eRiYX+hcs+C6ViBPUWk1qTCd+37qw9kEm/a5n2qcyQDMBWvSYKN/ctqZzeXNQaeBjOetJJUkw==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   check-error@2.1.3:
     resolution: {integrity: sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==}
@@ -10333,6 +10440,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -17049,7 +17157,7 @@ snapshots:
   '@cardstack/view-transitions@0.2.0(@babel/core@7.29.7)(ember-modifier@4.3.0(@babel/core@7.29.7))':
     dependencies:
       '@embroider/addon-shim': 1.10.3
-      decorator-transforms: 2.3.2(@babel/core@7.29.7)
+      decorator-transforms: 2.4.0(@babel/core@7.29.7)
       ember-modifier: 4.3.0(@babel/core@7.29.7)
     transitivePeerDependencies:
       - '@babel/core'
@@ -17232,7 +17340,7 @@ snapshots:
       '@ember/test-waiters': 4.1.2
       '@embroider/addon-shim': 1.10.3
       '@simple-dom/interface': 1.4.0
-      decorator-transforms: 2.3.2(@babel/core@7.29.7)
+      decorator-transforms: 2.4.0(@babel/core@7.29.7)
       dom-element-descriptors: 0.5.1
     transitivePeerDependencies:
       - '@babel/core'
@@ -22914,7 +23022,7 @@ snapshots:
       '@embroider/addon-shim': 1.10.3
       '@embroider/macros': 1.20.5(@babel/core@7.29.7)(@glint/template@1.7.7)
       assert-never: 1.4.0
-      decorator-transforms: 2.3.2(@babel/core@7.29.7)
+      decorator-transforms: 2.4.0(@babel/core@7.29.7)
       ember-element-helper: 0.8.8
     optionalDependencies:
       '@ember/test-helpers': 5.4.3(@babel/core@7.29.7)

@@ -50,6 +50,15 @@
  *                                   `include` in parse.ts's tsconfig
  *                                   (it's a workspace-only package, so
  *                                   it can't be a normal runtime dep).
+ * - `bundled-types/bxl/`         — `packages/bxl/src/*`, backing the
+ *                                   `@cardstack/bxl` path alias for card
+ *                                   `computeVia` formulas. Source, not
+ *                                   `.d.ts`: the package's own `exports`
+ *                                   resolve to `.ts`, so the source is
+ *                                   the type surface its consumers
+ *                                   already compile against. The suites
+ *                                   live in `packages/bxl/tests`, so
+ *                                   `src` needs no test filtering.
  *
  * This script runs from the monorepo only. The resulting tree is
  * committed-via-publish (`files` in package.json includes
@@ -545,6 +554,16 @@ const VENDORS: Vendor[] = [
     to: join(PACKAGE_ROOT, 'bundled-types', 'local-types'),
     filter: skipMonorepoArtifacts,
   },
+  {
+    // `@cardstack/bxl` is card-facing (a card's `computeVia` formula
+    // imports it) and its package `exports` resolve to `.ts` source, so
+    // the type surface is the source itself — no `.d.ts` emit needed.
+    // Reached through the `@cardstack/bxl` path alias in parse.ts.
+    name: 'bxl',
+    from: join(MONOREPO_PACKAGES, 'bxl', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'bxl'),
+    filter: skipMonorepoArtifacts,
+  },
 ];
 
 function skipMonorepoArtifacts(src: string): boolean {
@@ -636,6 +655,22 @@ function writeShims(outRoot: string): number {
 // internal structure, only on the fact that the import resolves.
 
 declare module '@cardstack/boxel-icons/*' {
+  const value: any;
+  export default value;
+}
+
+// The host shims these onto the virtual network as empty stubs, so card
+// code can import them and load. Neither resolves to a module without
+// help: ember-source's \`./types\` entry points at an ambient global
+// declaration file rather than a module, and \`./types/preview\` has no
+// export entry at all. Declaring them here keeps the import resolving,
+// as permissively as the stub it evaluates to.
+declare module 'ember-source/types' {
+  const value: any;
+  export default value;
+}
+
+declare module 'ember-source/types/preview' {
   const value: any;
   export default value;
 }

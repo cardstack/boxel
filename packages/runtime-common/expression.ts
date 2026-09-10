@@ -11,6 +11,7 @@ export type Expression = (
   | TableValuedTree
   | JsonContains
   | TypesContains
+  | SortDirection
   | DBSpecificExpression
 )[];
 
@@ -102,6 +103,22 @@ export interface TypesContains {
   key: string;
 }
 
+// An `ORDER BY` sort direction. A direction has no bind form: `ORDER BY x $1`
+// is a syntax error, and `ORDER BY $1` binds in the sort-key position, sorting
+// every row by one constant. So `expressionToSql` enumerates the two accepted
+// keywords when it renders one. Carrying the direction as a node rather than
+// as a bare string element is what routes it through that check — a string
+// element renders verbatim, so every direction reaching SQL travels as one of
+// these, whatever the caller assembled it from.
+export interface SortDirection {
+  kind: 'sort-direction';
+  // Wider than `'asc' | 'desc'` on purpose, and wider than the `Sort` type: a
+  // query-backed field interpolates its direction out of card data, so what
+  // arrives here is whatever the caller holds — including `null` from a field
+  // the author left unset. The renderer is what narrows it.
+  direction: string | null | undefined;
+}
+
 export interface FieldArity {
   type: CodeRef;
   path: string;
@@ -130,6 +147,7 @@ export type CardExpression = (
   | TableValuedTree
   | JsonContains
   | TypesContains
+  | SortDirection
   | JsonContainsQuery
   | FieldQuery
   | FieldValue
@@ -239,6 +257,19 @@ export function typesContains(key: string, column = 'i.types'): TypesContains {
     kind: 'types-contains',
     column,
     key,
+  };
+}
+
+// An unset direction renders `asc`. Both spellings of unset count: a sort
+// entry that omits the key, and one carrying `null` from an interpolated card
+// field. `makeInstanceComparator` sorts both ascending client-side, so the two
+// legs of a query agree on what an unset direction means.
+export function sortDirection(
+  direction: string | null | undefined,
+): SortDirection {
+  return {
+    kind: 'sort-direction',
+    direction,
   };
 }
 
@@ -582,6 +613,26 @@ export function expressionToSql(
       return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
         .map(renderElement)
         .join(' ');
+    } else if (element.kind === 'sort-direction') {
+      // What keeps a direction from becoming SQL text of its own choosing. A
+      // direction has no bind form, so the accepted keywords are enumerated
+      // here instead: unset renders the `asc` default, and anything else must
+      // be one of the two keywords exactly. `assertQuery` constrains this
+      // value as well on the paths that run it, and neither check relies on
+      // the other — a query reaching the engine without passing the grammar
+      // still cannot put arbitrary text in an `ORDER BY`.
+      let { direction } = element;
+      if (direction == null) {
+        return 'asc';
+      }
+      if (direction !== 'asc' && direction !== 'desc') {
+        throw new Error(
+          `sort direction must be either 'asc' or 'desc', not ${JSON.stringify(
+            direction,
+          )}`,
+        );
+      }
+      return direction;
     } else {
       throw assertNever(element);
     }

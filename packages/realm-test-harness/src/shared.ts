@@ -792,38 +792,6 @@ export function runCommand(command: string, args: string[], cwd: string) {
   }
 }
 
-export function cleanupStaleSynapseContainers() {
-  // Only clean up test harness Synapse containers (sf-test-synapse-* prefix).
-  // Do NOT touch boxel-synapse* containers — those belong to the dev
-  // environment (mise run dev-all) and killing them breaks the dev server.
-  let result = spawnSync(
-    'docker',
-    ['ps', '-aq', '--filter', 'name=sf-test-synapse-'],
-    {
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-    },
-  );
-
-  if (result.status !== 0) {
-    return;
-  }
-
-  let containerIds = result.stdout
-    .split(/\s+/)
-    .map((id) => id.trim())
-    .filter(Boolean);
-
-  if (containerIds.length === 0) {
-    return;
-  }
-
-  spawnSync('docker', ['rm', '-f', ...containerIds], {
-    cwd: workspaceRoot,
-    stdio: 'ignore',
-  });
-}
-
 export function maybeRequire(specifier: string) {
   if (typeof require === 'function') {
     return require(specifier);

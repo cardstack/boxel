@@ -7,6 +7,7 @@ import {
   type ResolvedCodeRef,
   isCardDef,
   isFieldDef,
+  isFileDef,
   isSpecCard,
   type Query,
   type Loader,
@@ -48,6 +49,11 @@ class SpecTypeGuesser {
   private guess(declaration: ModuleDeclaration): SpecType | undefined {
     // Check if it's a card or field declaration
     if (isCardOrFieldDeclaration(declaration)) {
+      // FileDef is a BaseDef sibling of FieldDef and CardDef, so test it first
+      if (isFileDef(declaration.cardOrField)) {
+        return 'file';
+      }
+
       // Check if it's a field definition
       if (isFieldDef(declaration.cardOrField)) {
         return 'field';

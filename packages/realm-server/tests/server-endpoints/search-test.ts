@@ -22,6 +22,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
+import { LiveSearchCache } from '../../live-search-cache.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -40,9 +42,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
     let testRealmHttpServer: Server;
 
     let ownerUserId = '@mango:localhost';
+    // A second principal with read access to both realms. Used to prove the
+    // live-search cache serves a body computed for one authorized caller to a
+    // different authorized caller — the sharing is keyed on the realm list, not
+    // the user.
+    let readerUserId = '@reader:localhost';
 
     // Two Person instances per realm: per-realm css dedup is exercised
     // within each realm (two renderings share one stylesheet), and the
@@ -92,10 +101,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       dbAdapter,
       publisher,
       runner,
+      liveSearchCache,
     }: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
+      liveSearchCache?: LiveSearchCache;
     }) {
       let virtualNetwork = createVirtualNetwork();
       let dir = dirSync();
@@ -110,6 +121,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             fileSystem: realmFileSystem,
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],
+              [readerUserId]: ['read'],
             },
           },
           {
@@ -117,6 +129,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             fileSystem: realmFileSystem,
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],
+              [readerUserId]: ['read'],
             },
           },
         ],
@@ -124,6 +137,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         publisher,
         runner,
         matrixURL,
+        liveSearchCache,
       });
 
       testRealmHttpServer = result.testRealmHttpServer;
@@ -144,8 +158,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     }
 
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
+        publisher = _publisher;
+        runner = _runner;
         await startSearchRealmServer({
           dbAdapter,
           publisher,
@@ -162,11 +178,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       },
     });
 
-    function ownerToken() {
+    function tokenFor(userId: string) {
       return createRealmServerJWT(
-        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        { user: userId, sessionRoom: `session-room-${userId}` },
         realmSecretSeed,
       );
+    }
+
+    function ownerToken() {
+      return tokenFor(ownerUserId);
     }
 
     // Anchor on the base CardDef ref: each realm's Person adopts from its
@@ -178,15 +198,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       };
     }
 
-    function postSearch(body: Record<string, unknown>) {
+    function postSearchAs(token: string, body: Record<string, unknown>) {
       let searchURL = new URL('/_federated-search', testRealm.url);
       return request
         .post(`${searchURL.pathname}${searchURL.search}`)
         .set('Accept', 'application/vnd.card+json')
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Authorization', `Bearer ${ownerToken()}`)
+        .set('Authorization', `Bearer ${token}`)
         .send(body);
+    }
+
+    function postSearch(body: Record<string, unknown>) {
+      return postSearchAs(ownerToken(), body);
     }
 
     test('QUERY /_federated-search federates entry results across realms', async function (assert) {
@@ -549,6 +573,176 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       } finally {
         resetSearchBoundsForTests();
       }
+    });
+
+    test('identical live searches within the TTL share one cached body', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let first = await postSearch(searchBody);
+      assert.strictEqual(first.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        first.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the first request computes',
+      );
+
+      let second = await postSearch(searchBody);
+      assert.strictEqual(second.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        second.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'an identical follow-up is served from the live cache',
+      );
+      // `.text` is the raw response string, so this is the byte comparison the
+      // message claims (`.body` is supertest's re-parsed JSON). A `hit` returns
+      // the first request's cached string, so equality here is expected.
+      assert.strictEqual(
+        second.text,
+        first.text,
+        'the cached body is byte-identical',
+      );
+
+      // A request differing in any body member addresses a different entry.
+      let differentRealms = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+      });
+      assert.strictEqual(
+        differentRealms.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'a different realm list is a different cache identity',
+      );
+    });
+
+    test('a body computed for one caller is served to a different authorized caller', async function (assert) {
+      // Pins that cross-user *sharing happens*: a body one user populated is
+      // served to the next authorized user off the TTL window. This alone does
+      // not prove the body is user-independent — the reader's `hit` returns the
+      // owner's cached string, so the two are equal by construction whether or
+      // not the compute is pure. The purity guard is the separate `ttlMs: 0`
+      // test below, where both callers compute.
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let owner = await postSearchAs(ownerToken(), searchBody);
+      assert.strictEqual(owner.status, 200, 'the owner request succeeds');
+      assert.strictEqual(
+        owner.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the first caller computes the body',
+      );
+
+      let reader = await postSearchAs(tokenFor(readerUserId), searchBody);
+      assert.strictEqual(reader.status, 200, 'the reader request succeeds');
+      assert.strictEqual(
+        reader.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'a different authorized caller is served the cached body',
+      );
+      assert.strictEqual(
+        reader.text,
+        owner.text,
+        'the reader is served the exact string the owner populated',
+      );
+    });
+
+    test('two authorized callers each compute a byte-identical body (cross-user purity)', async function (assert) {
+      // The purity guard the sharing test above can't provide. With retention
+      // off (`ttlMs: 0`) — coalescing stays on, but two sequential requests
+      // never coalesce — each caller runs its own compute and the second is a
+      // `miss`, not a `hit`. Comparing those two INDEPENDENTLY computed bodies
+      // is what pins the invariant the whole safety argument rests on: the body
+      // is a pure function of the realm list, not the requesting user. A change
+      // that folded a caller-derived value into the body would diverge here and
+      // trip this assertion — where the sharing test, comparing the one cached
+      // string to itself, would still pass.
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        liveSearchCache: new LiveSearchCache({
+          ttlMs: 0,
+          telemetryIntervalMs: 0,
+        }),
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let owner = await postSearchAs(ownerToken(), searchBody);
+      assert.strictEqual(owner.status, 200, 'the owner request succeeds');
+      assert.strictEqual(
+        owner.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the owner computes (retention is off)',
+      );
+
+      let reader = await postSearchAs(tokenFor(readerUserId), searchBody);
+      assert.strictEqual(reader.status, 200, 'the reader request succeeds');
+      assert.strictEqual(
+        reader.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the reader independently computes rather than being served a cached body',
+      );
+      assert.strictEqual(
+        reader.text,
+        owner.text,
+        'two independent computes produce a byte-identical body',
+      );
+    });
+
+    test('a write to a searched realm invalidates the live search cache', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      let first = await postSearch(searchBody);
+      assert.strictEqual(first.status, 200, 'HTTP 200 status');
+      assert.strictEqual(first.body.meta.page.total, 4, 'four people');
+      let primed = await postSearch(searchBody);
+      assert.strictEqual(
+        primed.headers[LIVE_SEARCH_CACHE_HEADER],
+        'hit',
+        'the entry is cached before the write',
+      );
+
+      // The default write waits for the incremental index, which advances the
+      // realm's generation — the device the cache key folds in for freshness.
+      await testRealm.write(
+        'mark.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Mark' },
+            meta: {
+              adoptsFrom: { module: rri('./person'), name: 'Person' },
+            },
+          },
+        }),
+      );
+
+      let afterWrite = await postSearch(searchBody);
+      assert.strictEqual(
+        afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'the generation bump addresses a fresh entry',
+      );
+      assert.strictEqual(
+        afterWrite.body.meta.page.total,
+        5,
+        'the new instance is in the fresh result',
+      );
     });
   });
 });

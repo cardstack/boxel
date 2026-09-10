@@ -212,6 +212,27 @@ export async function publishedHtmlHasCaughtUp(
 // publishes: per-URL update-wins merge, max generation/priority/timeout.
 // Callers fire-and-forget — an index pass must never block on, or fail
 // with, its prerender enqueue; a missed enqueue self-heals on the next pass.
+// Whether `realmURL` is configured to render no HTML.
+//
+// A realm's identity in a job is whichever of its `--fromUrl` / `--toUrl` pair
+// that job carries, and the two are not interchangeable across realms — one
+// bootstrap realm's jobs name its external URL while another's name its source
+// URL. So the configured value has to be written to match, and a trailing
+// slash is the one difference not worth making someone debug.
+//
+// Both the spawn site on a from-scratch index and the reconcile sweep consult
+// this: a realm that renders nothing has every row permanently unrendered, and
+// to the sweep that is indistinguishable from residue worth repairing.
+export function skipsPrerenderHtml(
+  realmURL: string,
+  skipPrerenderHtmlRealms: string[] | undefined,
+): boolean {
+  let normalize = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+  return (skipPrerenderHtmlRealms ?? []).some(
+    (configured) => normalize(configured) === normalize(realmURL),
+  );
+}
+
 export async function enqueuePrerenderHtmlJob(
   queuePublisher: QueuePublisher,
   {

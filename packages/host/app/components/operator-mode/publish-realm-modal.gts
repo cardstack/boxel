@@ -128,6 +128,7 @@ export default class PublishRealmModal extends Component<Signature> {
     | null = null;
 
   @tracked private initialSelectionsSet = false;
+  @tracked private realmMetaLoaded = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -155,8 +156,32 @@ export default class PublishRealmModal extends Component<Signature> {
     return (
       !this.hasSelectedPublishedRealmURLs ||
       this.isUnpublishingAnyRealms ||
-      this.isPublishing
+      this.isPublishing ||
+      this.isRealmFlaggedUnpublishable
     );
+  }
+
+  // Mirrors the publish endpoint, which accepts a realm only when its
+  // realm_metadata row says publishable is exactly true and 422s otherwise —
+  // a missing row included. Anything short of true is a refusal here too, so
+  // the dialog and the server agree on which workspaces can be published.
+  //
+  // Gated on the metadata actually having been read rather than on the value
+  // being non-null, because `realm.info` answers a placeholder carrying
+  // `publishable: null` while a realm's metadata is still in flight, and a
+  // dialog that opened ahead of its own realm info would otherwise refuse a
+  // perfectly publishable workspace. `realmMetaLoaded` distinguishes "not
+  // known yet" from "known, and not publishable"; the flag's own value is
+  // then compared without regard to how a given adapter spells a boolean.
+  //
+  // Named for the realm_metadata flag specifically: `publishable` also names
+  // the unrelated per-resource violation report this dialog fetches, which
+  // only warns and never blocks.
+  get isRealmFlaggedUnpublishable() {
+    if (!this.realmMetaLoaded) {
+      return false;
+    }
+    return this.realm.info(this.currentRealmURL).publishable !== true;
   }
 
   get shouldShowPrivateDependencyWarning() {
@@ -942,6 +967,9 @@ export default class PublishRealmModal extends Component<Signature> {
   ensureInitialSelectionsTask = restartableTask(
     async (claim: ClaimedDomain | null = null) => {
       await this.realm.ensureRealmMeta(this.currentRealmURL);
+      // The realm's own metadata — `publishable` included — is readable from
+      // here on, so the publishability gate can stop deferring.
+      this.realmMetaLoaded = true;
       this.applyInitialSelections(claim);
     },
   );
@@ -984,6 +1012,25 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
+        {{#if this.isRealmFlaggedUnpublishable}}
+          <div
+            class='publish-warning warning'
+            data-test-unpublishable-realm-warning
+          >
+            <WarningIcon
+              class='publish-warning-icon'
+              width='20'
+              height='20'
+              role='presentation'
+            />
+            <div class='publish-warning-body'>
+              <div>
+                This workspace is not publishable, so it cannot be published to
+                any domain.
+              </div>
+            </div>
+          </div>
+        {{/if}}
         {{#if this.privateDependencyCheckError}}
           <div class='publish-warning error' data-test-private-dependency-error>
             {{this.privateDependencyCheckError}}

@@ -26,13 +26,14 @@ When a module is edited (for example, if a definition is renamed), the spec migh
 
 Code categorization is endless, so we focus on a subset of exported code that interests us within the Boxel ecosystem.
 
-The Boxel ecosystem supports five distinct spec types:
+The Boxel ecosystem supports six distinct spec types:
 
 - **`card`**
 - **`field`**
 - **`component`**
 - **`app`**
 - **`command`**
+- **`file`**
 
 Each spec type has specific characteristics and use cases:
 
@@ -185,3 +186,19 @@ the deployed commit.
 - `PatchCardInstanceCommand` - Update card instance data
 - `OneShotLlmRequestCommand` - AI-powered content generation
 - `ReadTextFileCommand` - File reading and module loading commands
+
+### 6. File Specs (`specType: 'file'`)
+
+**Purpose**: Document file definitions — the `FileDef` family (`PngDef`, `MarkdownDef`, `WavDef`, …) whose instances are uploaded realm files rather than card documents.
+
+**Characteristics**:
+
+- Referenced from cards with `linksTo` / `linksToMany`
+- Instances are created by upload, so the example is a file, not a card
+- Support `fileExamples` (`linksToMany(FileDef)`); `linkedExamples` and `containedExamples` stay empty
+
+**Example Use Cases**:
+
+- `PngDef` - PNG image files with extracted dimensions
+- `MarkdownDef` - Markdown documents with card references
+- `CsvFileDef` - Tabular data files

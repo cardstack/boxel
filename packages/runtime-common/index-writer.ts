@@ -41,10 +41,13 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
-import type { ScreenshotManifest } from './capture-spec.ts';
+import {
+  screenshotLedgerSourceURL,
+  type ScreenshotManifest,
+} from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
-import type { Diagnostics } from './index.ts';
+import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -187,6 +190,14 @@ export interface FileEntry {
   markdown?: string;
   // See InstanceEntry.diagnostics.
   diagnostics?: Diagnostics;
+}
+
+// One prerendered_html row's declared-screenshot state, as
+// `priorScreenshotStates` reads it back for the next pass over the same URL.
+export interface PriorScreenshotState {
+  manifest: ScreenshotManifest | null;
+  screenshotErrors: DeclaredScreenshotError[] | null;
+  captureFailureRenders: number | null;
 }
 
 // The per-URL write payloads of a `prerenderHtmlOnly` batch — the HTML half
@@ -810,12 +821,11 @@ export class Batch {
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
       if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
+        let kind: 'instance' | 'file' =
+          entry.type === 'instance' ? 'instance' : 'file';
         manifestCopies.push({
-          // The extensionless card-id form the MediaCache ledger keys on
-          // (matching what the prerender-html visit derives from the file
-          // URL when it persists a capture).
-          sourceLedgerURL: entry.url.replace(/\.json$/, ''),
-          destLedgerURL: destURL.replace(/\.json$/, ''),
+          sourceLedgerURL: screenshotLedgerSourceURL(entry.url, kind),
+          destLedgerURL: screenshotLedgerSourceURL(destURL, kind),
           manifest: entry.screenshots as ScreenshotManifest,
         });
       }
@@ -1559,29 +1569,58 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot manifest the previous pass published for this
-  // row, read from production `prerendered_html` — the carry-forward input
-  // for `keyBy: 'file-content'` slots (skip re-rendering when the source
-  // bytes are unchanged). Null when no prior row exists or it carried no
-  // manifest.
-  async priorScreenshotManifest(
+  // The declared-screenshot state the previous pass published for this URL's
+  // rows, read from production `prerendered_html` in one query and keyed by
+  // row type: the manifest is the carry-forward input for
+  // `keyBy: 'file-content'` slots (skip re-rendering when the source bytes
+  // are unchanged), and the recorded capture failures seed this pass's
+  // consecutive-failure bookkeeping — per-slot runs (a slot that fails again
+  // extends its run) plus the row-level failing-render counter the reconcile
+  // sweep's bounded retry lane caps on. A row that doesn't exist has no key;
+  // fields it carried nothing for are null.
+  async priorScreenshotStates(
     url: URL,
-    type: PrerenderedHtmlTable['type'],
-  ): Promise<ScreenshotManifest | null> {
-    // This runs once per instance visit, so it selects only the manifest —
-    // the row's HTML columns are large and irrelevant here.
-    let [row] = (await this.#query([
-      `SELECT screenshots FROM prerendered_html WHERE`,
+  ): Promise<Partial<Record<'instance' | 'file', PriorScreenshotState>>> {
+    // This runs once per visit, so it selects only what the two rows'
+    // capture bookkeeping needs — the HTML columns are large and irrelevant
+    // here.
+    let rows = (await this.#query([
+      `SELECT type, screenshots, diagnostics FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
           [`url =`, param(url.href)],
           [`file_alias =`, param(url.href)],
         ]),
-        ['type =', param(type)],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
       ]),
-    ] as Expression)) as unknown as Pick<PrerenderedHtmlTable, 'screenshots'>[];
-    return (row?.screenshots as ScreenshotManifest | null) ?? null;
+    ] as Expression)) as unknown as Pick<
+      PrerenderedHtmlTable,
+      'type' | 'screenshots' | 'diagnostics'
+    >[];
+    let states: Partial<Record<'instance' | 'file', PriorScreenshotState>> = {};
+    for (let row of rows) {
+      if (row.type !== 'instance' && row.type !== 'file') {
+        continue;
+      }
+      let priorDiagnostics = row.diagnostics as Diagnostics | null;
+      let priorErrors = priorDiagnostics?.screenshotErrors;
+      let priorFailureRenders =
+        priorDiagnostics?.screenshotCaptureFailureRenders;
+      states[row.type] = {
+        manifest: (row.screenshots as ScreenshotManifest | null) ?? null,
+        screenshotErrors:
+          Array.isArray(priorErrors) && priorErrors.length > 0
+            ? priorErrors
+            : null,
+        captureFailureRenders:
+          typeof priorFailureRenders === 'number' ? priorFailureRenders : null,
+      };
+    }
+    return states;
   }
 
   private async getPrerenderedHtmlProductionVersion(
@@ -1872,10 +1911,22 @@ export class Batch {
   }
 
   private async applyBatchUpdates() {
+    // Reading the getter is what mints, so read it before asking whether it
+    // did. `loader_epoch` joins the upsert only when this batch minted one:
+    // the getter otherwise returns the token read at batch start, and writing
+    // that back would clobber any epoch minted after this batch began —
+    // including the one a concurrent module write minted for the definition
+    // it invalidated, whose whole purpose is to be current for the populate
+    // that follows the write rather than for the index pass. Omitted from the
+    // insert too; a realm's first row takes the column's own '0' default,
+    // which is the no-epoch-yet sentinel a fresh tab mismatches anyway.
+    let loaderEpoch = this.loaderEpoch;
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_generation: this.generation,
-      loader_epoch: this.loaderEpoch,
+      ...(this.#mintedLoaderEpoch === undefined
+        ? {}
+        : { loader_epoch: loaderEpoch }),
     } as RealmGenerationsTable);
     await this.#query([
       ...upsert(

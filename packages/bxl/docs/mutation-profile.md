@@ -147,9 +147,7 @@ current-revision loading, durable idempotency, transaction limits, network
 persistence, JSON:API Atomic lowering, and result publication.
 
 ```ts
-const update = updateViaBxl(
-  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
-);
+const update = updateViaBxl('"Line Item"[SKU = "COPY-03"].Quantity += 1;');
 
 const plan = update.call(invoice, {
   programId: 'assistant:call_123',
@@ -235,7 +233,10 @@ They remain readable and addressable, but any assignment, replacement,
 deletion, or collection operation targeting one produces no intent and reports
 zero affected values. The right-hand expression is not evaluated. This makes
 model-generated updates tolerant of derived Card Info fields without weakening
-the fail-closed behavior of query-backed or otherwise read-only Fields.
+the fail-closed behavior of query-backed or otherwise read-only Fields. Read-
+only overlays do not change this: a Field the schema speaks for is answered by
+the schema, so the same program plans the same way whether or not the Card is
+indexed.
 
 Relationship references are logical Card IDs in plans and source references at
 the persistence boundary. `resolveReference(reference, path)` expands authored
@@ -243,6 +244,187 @@ relative links when projecting a snapshot and may preserve portable RRI values
 such as `@catalog/...`. `formatReference(cardId, path)` performs the inverse for
 writes and may choose RRI, relative, or absolute form per edge. Reindexing never
 rewrites an untouched relationship's reference, metadata, or extension members.
+
+## Read-only overlays
+
+A Card's stored document holds its own Field values and its links to other
+Cards as references. Two other kinds of value exist only in the search index:
+**computed** values, which the indexer evaluates and writes to `pristine_doc`,
+and **linked-Card** values, the searchable Fields of the Cards this one links
+to, denormalized into `search_doc`. A host that does not instantiate Cards
+reads those columns itself and passes them to the planner as read-only
+overlays:
+
+Both overlays are keyed the way the snapshot is: by Field, from the Card's
+root. `search_doc` already has that shape. `pristine_doc` does not — it is the
+Card's JSON:API resource, so its Field values sit under `attributes`, and it
+has to be projected through the same adapter the snapshot came from before the
+planner will recognize a path in it:
+
+```ts
+const computeds = snapshotBxlCardSource({ data: pristineDoc }, schema, options);
+
+const plan = prepared.plan(storedSnapshot, {
+  programId: 'assistant:call_123',
+  overlays: {
+    computeds,
+    linked: searchDoc,
+    unavailable: [
+      { path: 'patient.name', tier: 'linked', reason: 'not-searchable' },
+    ],
+  },
+  onRead(event) {
+    log(event.path, event.tier, event.outcome);
+  },
+});
+```
+
+Passing the raw resource instead is not an error the planner can raise: every
+Field path simply goes unanswered, while `attributes`, `meta`, `type` and
+`links` become computed values in their own right.
+
+An author addresses stored, computed, and linked values through the same
+`.path` syntax. The rules the planner enforces:
+
+- **The stored document wins, and keeps its shape.** An overlay answers a path
+  only where the stored document holds nothing — an absent key or a `null`,
+  which is what a Card holds at a path it never persists. An overlay's stale
+  copy of a stored value never displaces the stored one. An empty list counts
+  as holding nothing, since a projection manufactures one for a list Field the
+  Card never persists and it carries none of the Card's own values either way.
+  Nor may an overlay _reshape_ the Card: a value whose path runs past a stored
+  scalar is dropped rather than retyping the scalar, and no path is ever
+  followed _into_ a list, empty or not. Index drift is routine and must not
+  change the document a program plans over.
+- **An overlay speaks only where it has something to say.** `pristine_doc` and
+  `search_doc` are whole documents: they carry the Card's own Fields alongside
+  the ones only they can answer. A Field the Card leaves unset therefore
+  arrives as a `null` in both, and a `null` supplies nothing — claiming it
+  would make an ordinary writable Field read-only for no reason. A host can
+  pass either column wholesale without narrowing it first — `search_doc`'s own
+  bookkeeping keys, which start with an underscore where a Field key never
+  does, are index columns rather than Field values and are dropped. An
+  `unavailable`
+  entry, by contrast, is refused rather than guessed at: a missing or
+  misspelled `path`, `tier`, or `reason` raises `overlay-invalid`, because a
+  marker the planner cannot read is a read it would wrongly allow.
+- **An overlay is data, not a path a program spelled out.** It is read out of
+  a column, so a key naming something on a JavaScript prototype
+  (`__proto__`, `prototype`, `constructor`) is dropped, the same refusal the
+  planner gives a program that spells one out.
+- **A list is one value.** An overlay may hand over a whole list the Card does
+  not store — a computed `containsMany` — and that list reads as itself and is
+  read-only whole, its own positions consistent with each other. It is never
+  descended into, so no overlay position is ever laid beside one of the Card's
+  own items.
+- **Overlays stop at a collection boundary.** No overlay value ever names a
+  position _inside_ a list: a path with a segment that reads as an index is
+  dropped, however it is spelled, and so is one that runs through a list the
+  Card stores. An overlay arrives keyed by position, and a position is an
+  identity only while nothing moves: inserting, deleting, reordering or moving
+  an item renumbers everything after it, and a copy written before the program
+  ran cannot say which item it meant. Contained items carry no id to re-key
+  against. So inside a collection the Card stores, its own items are the whole
+  answer: reads there are source reads, an `unavailable` marker there is
+  dropped for the same reason, and every collection operation plans, outputs
+  and records intents exactly as it would with no overlays at all. A computed
+  Field inside a collection is the schema's to answer for, through
+  `writeBehavior: 'skip'`.
+- **Overlay values are read-only, and the schema answers first.** Where the
+  schema already speaks for a Field, it decides: a Definition-derived schema
+  marks every computed Field `writeBehavior: 'skip'`, so a write to one stays
+  the intentional no-op described above whether or not the indexer has
+  answered. The overlay is the backstop for paths the schema has no opinion
+  about — there, a write that lands on a computed value fails with
+  `computed-read-only`, and one that lands on a linked Card's Field fails with
+  `write-through-link`, each naming the path. A container the overlay supplies
+  where the Card holds nothing is a computed value in its own right and is
+  read-only whole; a container the Card stores, into which an overlay merely
+  filled a Field, stays the Card's to write. Writing an _ancestor_ of a linked
+  value likewise stays an ordinary write: replacing a relationship edge changes
+  the Card's own document, not the Card on the far side of the link.
+- **A read reports an overlay whenever one participates in its value** — the
+  overlay supplied the path, the read sits inside a value it supplied, or the
+  value returned carries overlay-supplied descendants. Reading a stored
+  container whose Fields an overlay filled in is therefore an overlay read, not
+  a source read, so it cannot reach index data without saying so. That holds at
+  the root as well: reading the whole Card carries whatever an overlay put
+  under it, so an expression that indexes by a computed key, or pipes the Card
+  into a builtin, is an overlay read like any other.
+- **An unavailable read fails loudly.** `unavailable` entries name what the
+  host could not supply and why (`not-indexed`, `not-searchable`,
+  `key-absent`). A marker at the read path, or nested under it, makes the read
+  `unavailable` — the subtree returned would be missing what the host could not
+  supply. A marker _above_ the path applies only where the stored document has
+  nothing of its own there. Reading one raises `snapshot-unavailable` carrying
+  `{ path, tier, reason }` rather than leaking a `null` into a write or a
+  precondition. A marker carries no value, so it refuses no writes on its own.
+
+  A relationship Field is the case worth knowing about. `not-searchable`
+  markers sit under links, and a marker under one covers the link itself:
+  reading `.patient` where `patient.name` is unavailable is an unavailable
+  read, even though the Card's own edge is right there. Address the edge to
+  ask whether it is set — `.patient.id != null`, which reads from source —
+  rather than the Field that holds it.
+
+- **An assert over an overlay says so.** Overlay values can lag the stored
+  document by an indexing round, so an `assert` that reads one requires the
+  three-argument form `assert(condition, message, { snapshot: true })`; without
+  it the statement fails with `assert-snapshot-required`. With it, an
+  unavailable read fails the assert with the author's own message. The literal
+  `{ snapshot: true }` is the only accepted option record — `assert/2` is how
+  an assert says it requires stored values.
+- **An update sees the layered value, and stores the Card's.** `|=` is handed
+  the location's value with the overlays under it, so a Field an overlay filled
+  into a stored container is in scope the same way it is anywhere else — which
+  matters because `=` evaluates its value expression against the Card root, so
+  only `|=` can write a value derived from the location it is updating. What
+  the expression returns is settled back against the Card before it is written:
+  an overlay value carried straight through is put back to what the Card holds,
+  an expression that simply omits the path is not writing to it, and one that
+  writes something else there is refused. Reaching a supplied value may have
+  taken containers the Card does not hold either; those are put back the same
+  way, so a graft is never stored. Only paths an overlay supplied are settled,
+  and none of them lie inside a collection, so an update that reorders or
+  resizes one has nothing to carry.
+- **Choosing a write set is a read.** A `[* predicate]` selector consults the
+  document to decide what it matches, so an unavailable value stops it rather
+  than quietly settling which items a statement deletes. A location that
+  addresses one place selects nothing and adds no event of its own.
+- **A path a statement clears belongs to the program.** An overlay answers
+  where the Card holds nothing, and a place the program emptied is not one of
+  those — otherwise a stale index copy would fill it straight back in and
+  refuse the write that follows.
+- **The guards see the paths a program can be _proven_ to read.** Reads are
+  collected by walking an expression, and the walk reports a lower bound. It
+  skips anything conditional — `if`/`else`, the right side of `//`, `and` or
+  `or`, everything after the first argument of `IF`/`IFS`, a comma branch
+  inside `first` — because a path read only on the branch not taken must not
+  refuse the program. It also cannot see through a variable binding,
+  `reduce`/`foreach`, a computed key, `getpath`, `..`, or a builtin that may
+  re-root its argument — and that last one covers the formula functions, so a
+  path reached as an argument to `UPPER`, `LEN`, `ISBLANK` or any of their
+  neighbours is not seen either. `assert(UPPER(.status) == "OPEN"; …)` plans
+  without the option that `assert((.status | ascii_upcase) == "OPEN"; …)`
+  requires. A read reached any of those ways sees the same layered value as
+  any other, but the three guarantees above — the loud unavailable failure, the
+  assert opt-in, and the read event — do not speak for it. Treat them as
+  catching the ordinary `.path` spelling, not as a boundary that cannot be
+  stepped around.
+- **Every read an expression resolves is reported.** `onRead` fires once per
+  such path, in program order, with the tier that answered (`source`,
+  `computed`, `linked`) and the outcome (`value`, `null`, `unavailable`). A
+  selector reports only the paths an overlay answered: what it reads of the
+  Card's own document it reads to choose a write target, which the statement's
+  own paths already record.
+
+Overlays are additive: a plan built without them behaves exactly as one built
+before they existed. A plan's `output`, and the `before` recorded on every
+intent, carry stored values only — the planner's working state is the Card's
+own document, and the layered view exists only for the duration of an
+expression's evaluation, so an overlay answers reads without ever standing in
+for what the Card held. The planner receives overlay values already fetched by
+the host; it never queries the index itself.
 
 ## Why a profile is needed
 
@@ -329,19 +511,102 @@ interface BxlMutationExecution {
   };
   baseRevision?: string;
   schemaVersion?: string;
-  /** Stable principal supplied by the trusted host. */
-  actor?: string;
   delivery?: 'complete' | 'streaming';
   transaction?: 'atomic' | 'statement';
   /** Textual programs default to readable BXL; solidified is planner-facing mutation BXL. */
   syntax?: 'readable' | 'solidified';
-  parameters?: Readonly<Record<string, JsonValue>>;
+  /** Stable principal supplied by the trusted host, for authorization and audit. */
+  actor?: string;
+  /** Request-scoped values the program reads; see "Request context" below. */
+  context?: BxlMutationContext;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
 }
 ```
 
 Defaults are `delivery: 'complete'`, `transaction: 'atomic'`, and
 `syntax: 'readable'`. Structured operation programs ignore `syntax`.
+
+## Request context
+
+A program sees the document it is editing through `.`. Three builtins supply
+the rest of what a write operation needs, each reading a value the trusted
+host resolved before the program ran:
+
+| Call                             | Reads                                          |
+| -------------------------------- | ---------------------------------------------- |
+| `params("key")`                  | that entry of the payload the caller sent      |
+| `actor()` / `actor("key")`       | the authenticated caller, or one of its fields |
+| `instance()` / `instance("key")` | the stored document, or one of its fields      |
+
+`actor()` is what a _program_ reads. It is distinct from the envelope's
+`actor`, which the host carries alongside the plan into authorization and
+audit and which no program can see. A host that wants a program to record its
+caller supplies both.
+
+```ts
+type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
+
+interface BxlMutationContext {
+  params?: BxlMutationJsonObject;
+  actor?: { id: string; [key: string]: BxlMutationJson };
+  instance?: BxlMutationJsonObject;
+}
+```
+
+The host passes it as `context` on the plan options, and may keep and reuse
+that object freely. A value is copied on its way to a program — a builtin is
+free to write into the argument it is handed, and the copy is what keeps those
+writes off the host's own object — and a written value is copied again on its
+way into the plan, so a plan never shares structure with the context and is
+settled once made.
+
+These are functions rather than `$`-prefixed bindings, matching the form an
+operation is authored in. The name `params` rather than the more obvious
+`input` is forced by the profile: `input` is denied in `mutation`, and
+classification is by base name without arity, so an `input("key")` accessor
+would be refused before it ran. Registry resolution is per `NAME/arity`, so
+that accessor would land at the free `input/1` and hide jq's `input/0` from
+nothing — the collision is in the safety table, not the registry.
+
+Every failure is loud. Naming one of these where the host supplied no context,
+or asking for a key that is not there, fails the program — a `null` would land
+in the document as a missing comment author or a silently unset field. The
+operation layer validates declared keys before a program runs; the key check
+here is the backstop. `actor()` and `instance()` return the whole object, which
+is the reading to reach for when a key may legitimately be absent.
+
+A key is readable only if it is the object's own and its value is not
+`undefined`. A prototype-chain name would otherwise answer with a function,
+and `undefined` is not a JSON value — it would reach the planner as one and
+write an intent that unsets the field. A JSON `null` is a real value and reads
+as `null`.
+
+The context is checked against that same standard before a program can reach
+it: a slot carrying anything a JSON document cannot hold — a `Date`, `Map`,
+`Set`, `RegExp`, `TypedArray`, `URL` or any other value whose built-in type is
+neither a plain object nor an array, a `bigint`, a function, or a non-finite
+number, at any depth — fails the plan with `context-not-json` naming the path.
+An object carrying only its own data fields is a plain object whatever its
+prototype says, and is accepted. The type declares JSON, but a type is not a
+runtime guarantee, and a `bigint` read through `tostring` produces exactly the
+silent unset these builtins refuse.
+
+An absent array entry is refused too, whether it is a hole or an explicit
+`undefined`. An absent object member serializes as absent, but an absent array
+entry serializes as `null` — a value the host never sent.
+
+Only the `mutation` profile admits them. `derive` denies them because a stored
+derivation reused on later reads must not depend on whichever request last
+wrote it, and `policy`, `authorization` and `predicate` deny them because a
+mutation payload is not an input to an authorization decision or a query
+predicate.
+
+In readable syntax the quoted argument to these three is a literal key name.
+Everywhere else a quoted string is resolved against the schema's field labels
+— that is how a multi-word label like `"Packing Notes"` is written — which
+would otherwise turn `params("Image")` on a card with an `Image` field into a
+read of that field. A bare label still compiles as an expression, so a
+computed key stays available.
 
 The target defines what `.` means. For a Card target, `.` is the Card's
 editable projection. For a Field target, `.` is that Field's own value. The
@@ -353,12 +618,12 @@ solidified form uses `.` for the same root.
 
 This produces four meaningful combinations:
 
-| Delivery | Transaction | Meaning |
-| --- | --- | --- |
-| complete | atomic | Parse, validate, and commit the complete program once. |
-| streaming | atomic | Evaluate complete statements into a private preview, then commit once when the stream finishes. |
-| streaming | statement | Commit each complete statement independently inside one named undo session. This is the Scrabble-stream behavior. |
-| complete | statement | Execute a supplied batch statement by statement; useful for imports and resumable jobs. |
+| Delivery  | Transaction | Meaning                                                                                                           |
+| --------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| complete  | atomic      | Parse, validate, and commit the complete program once.                                                            |
+| streaming | atomic      | Evaluate complete statements into a private preview, then commit once when the stream finishes.                   |
+| streaming | statement   | Commit each complete statement independently inside one named undo session. This is the Scrabble-stream behavior. |
+| complete  | statement   | Execute a supplied batch statement by statement; useful for imports and resumable jobs.                           |
 
 “Streaming” never implies partial-statement execution. “Atomic” never describes
 a sequence whose earlier statements have already become durable.
@@ -373,24 +638,25 @@ arguments. The mutation AST may retain profile information such as a
 filter-all location that ordinary value-mode jq would collapse into an array.
 Statement-terminating semicolons are framed outside the expression parser.
 
-| Statement | Meaning | Cardinality |
-| --- | --- | --- |
-| `location = expression` | Set/upsert a schema-permitted location. | exactly one, or every match selected with `[* predicate]` |
-| `location \|= expression` | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
-| `replace(location, expression)` | Replace an existing value. | exactly one target |
-| `copy_value_to(source, destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
-| `del(location)` | Delete an existing member or item. | exactly one, or every match selected with `[* predicate]` |
-| `prepend(collection, expression)` | Insert at array start. | one collection, one value |
-| `append(collection, expression)` | Insert at array end. | one collection, one value |
-| `insert_at(collection, index, expression)` | Insert at a zero-based index. | one collection, one value |
-| `insert_item_before(value, anchor)` | Insert a value before a stable array item. | exactly one anchor |
-| `insert_item_after(value, anchor)` | Insert a value after a stable array item. | exactly one anchor |
-| `move_item_before(item, anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
-| `move_item_after(item, anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
-| `move_item_to_start(item, collection)` | Move an item to array start. | exactly one item, one collection |
-| `move_item_to_end(item, collection)` | Move an item to array end. | exactly one item, one collection |
-| `reorder_by(collection, key, order)` | Apply an exact key permutation. | one collection |
-| `assert(expression, message)` | Add a no-write precondition. | exactly one Boolean |
+| Statement                                         | Meaning                                                                         | Cardinality                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `location = expression`                           | Set/upsert a schema-permitted location.                                         | exactly one, or every match selected with `[* predicate]` |
+| `location \|= expression`                         | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
+| `replace(location, expression)`                   | Replace an existing value.                                                      | exactly one target                                        |
+| `copy_value_to(source, destination)`              | Deep-copy one loaded value to another writable field.                           | one source, one destination                               |
+| `del(location)`                                   | Delete an existing member or item.                                              | exactly one, or every match selected with `[* predicate]` |
+| `prepend(collection, expression)`                 | Insert at array start.                                                          | one collection, one value                                 |
+| `append(collection, expression)`                  | Insert at array end.                                                            | one collection, one value                                 |
+| `insert_at(collection, index, expression)`        | Insert at a zero-based index.                                                   | one collection, one value                                 |
+| `insert_item_before(value, anchor)`               | Insert a value before a stable array item.                                      | exactly one anchor                                        |
+| `insert_item_after(value, anchor)`                | Insert a value after a stable array item.                                       | exactly one anchor                                        |
+| `move_item_before(item, anchor)`                  | Move an item immediately before an anchor.                                      | exactly one item, exactly one anchor                      |
+| `move_item_after(item, anchor)`                   | Move an item immediately after an anchor.                                       | exactly one item, exactly one anchor                      |
+| `move_item_to_start(item, collection)`            | Move an item to array start.                                                    | exactly one item, one collection                          |
+| `move_item_to_end(item, collection)`              | Move an item to array end.                                                      | exactly one item, one collection                          |
+| `reorder_by(collection, key, order)`              | Apply an exact key permutation.                                                 | one collection                                            |
+| `assert(expression, message)`                     | Add a no-write precondition.                                                    | exactly one Boolean                                       |
+| `assert(expression, message, { snapshot: true })` | The same precondition, accepting a stale or missing overlay answer.             | exactly one Boolean                                       |
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
@@ -442,14 +708,36 @@ type BxlMutationOperation =
   | ({ id: string; op: 'set'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'update'; target: StructuredTarget; expression: string }
   | ({ id: string; op: 'set-all'; target: StructuredTarget } & OperationValue)
-  | { id: string; op: 'update-all'; target: StructuredTarget; expression: string }
+  | {
+      id: string;
+      op: 'update-all';
+      target: StructuredTarget;
+      expression: string;
+    }
   | ({ id: string; op: 'replace'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'copy'; from: StructuredTarget; target: StructuredTarget }
   | { id: string; op: 'delete'; target: StructuredTarget }
   | { id: string; op: 'delete-all'; target: StructuredTarget }
-  | ({ id: string; op: 'insert'; into: StructuredTarget; position: StructuredPosition } & OperationValue)
-  | { id: string; op: 'move'; target: StructuredTarget; into: StructuredTarget; position: StructuredPosition }
-  | { id: string; op: 'reorder'; target: StructuredTarget; key: JqPath; order: JsonScalar[] }
+  | ({
+      id: string;
+      op: 'insert';
+      into: StructuredTarget;
+      position: StructuredPosition;
+    } & OperationValue)
+  | {
+      id: string;
+      op: 'move';
+      target: StructuredTarget;
+      into: StructuredTarget;
+      position: StructuredPosition;
+    }
+  | {
+      id: string;
+      op: 'reorder';
+      target: StructuredTarget;
+      key: JqPath;
+      order: JsonScalar[];
+    }
   | { id: string; op: 'assert'; expression: string; message?: string }
   | StructuredRelationshipOperation;
 ```
@@ -477,7 +765,12 @@ Literal structured operations and equivalent textual statements must lower to
 the same intent. For example, these are semantically identical:
 
 ```json
-{ "id": "rename", "op": "set", "target": { "path": ["title"] }, "value": "Final" }
+{
+  "id": "rename",
+  "op": "set",
+  "target": { "path": ["title"] },
+  "value": "Final"
+}
 ```
 
 ```bxl
@@ -501,8 +794,8 @@ create sparse arrays. `|=` and `replace` require the target to exist.
 
 The right side of `=` and `replace` observes the current root snapshot. The
 right side of `|=` observes the selected value, matching jq update-assignment
-semantics. Host parameters are read through a dedicated `$params` binding;
-statements cannot bind variables for later statements.
+semantics. Host parameters are read through `params("key")`; statements cannot
+bind variables for later statements.
 
 Root replacement (`. = ...`) is forbidden for a Card target. It is permitted
 for an explicitly selected Field target because replacing a scalar or complete
@@ -653,7 +946,15 @@ interface BxlMutationStatementResult {
 }
 
 type BxlMutationIntent =
-  | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
+  | {
+      op: 'set';
+      path: JqPath;
+      before?: JsonValue;
+      after: JsonValue;
+      // Relationship Fields inside the replaced value, each named relative to
+      // `path`, whose edges this write leaves as the Card already holds them.
+      keepRelationships?: JqPath[];
+    }
   | { op: 'delete'; path: JqPath; before: JsonValue }
   | { op: 'copy'; from: JqPath; path: JqPath }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
@@ -701,6 +1002,108 @@ move_item_before(
 );
 ```
 
+A relationship reached through a contained value is written the same way.
+A `card(id)` standing inside the object or array a statement writes is resolved
+where it stands, at any depth:
+
+```bxl
+append(.comments; {body: "Looks right to me", author: card(params("who"))});
+```
+
+A link is an edge of the Card rather than a member of the value, so the stored
+contained value holds `body` alone and the plan carries a separate relationship
+intent at `["comments", 0, "author"]`. A `linksToMany` written this way takes
+one marker per edge, and every member of it must be one, because the whole
+collection leaves the stored value together.
+
+The schema is what decides a Field is a link, so this holds however the value
+was written. A relationship Field the schema reaches inside a written value can
+never hold data: `{body: "…", author: {id: "…"}}` is refused rather than stored,
+because an attribute that looks like a link is not one — nothing follows it,
+reindexes it, or notices when it goes stale.
+
+Two spellings carry no intent to change an edge, and neither is a refusal. A
+snapshot presents a link as `{"id": …}`, so an expression that rebuilds a value
+out of what it read carries its links along; a slot holding exactly what the
+Card already has there was written back unchanged, and its edge stands. And a
+slot the value empties — `null`, or `[]` for a collection — names no Card, so
+it clears the edge rather than storing anything.
+
+An update leaves what it does not mention alone, which is the whole difference
+between `|=` and `=` here:
+
+```bxl
+// keeps the author edge it never mentioned
+.comments[0] |= {body: "revised"};
+
+// replaces the value, so the author edge goes with everything else it dropped
+.comments[0] = {body: "revised"};
+```
+
+An edge lives as long as the value holding it, so an update that drops a
+contained value drops the edges inside it too.
+
+An edge does not follow its value to a new position either. A write addressed
+at one location pins it, so a link beside the value it belongs to stays put;
+but a write that rebuilds a _collection_ reassigns every index in it, and an
+edge has nothing but its index to hold onto — a contained value carries no
+identity, and every link projects as `{"id": …}`, so two edges to the same Card
+read alike. Such a write is refused wherever an edge would have to be matched
+back to a value:
+
+```bxl
+// refused: rebuilding the collection reassigns the indexes its edges sit on
+.comments |= map(. + {flagged: true});
+
+// the items themselves, each write pinned to one index
+.comments[* .flagged == null] |= (. + {flagged: true});
+```
+
+A rebuild that copies its items through untouched moves nothing, so those
+edges stand. It is still a collection replacement in every other respect: each
+item's `meta.fields` entry is discarded and written again from the value, the
+way any wholesale write to a collection rebuilds what it stores. To carry a
+value, its edges and its metadata together, use the collection operations —
+`move_item_before`, `reorder_by` and the rest.
+
+A marker reads its argument against the input the value expression itself was
+handed, so resolution follows the nodes that pass that input straight down and
+whose operands flow into the result: object entries, array and comma streams,
+the operands of `//` and `+`, and the branches of an `if`. A `card(id)`
+somewhere that re-roots the input — the body of `map`, either side of a pipe —
+is refused rather than answered against the wrong value, and so is one in a
+condition, which chooses a branch rather than being the value, and one in an
+argument read as a plain value, such as an `assert` message or a `reorder_by`
+order, which names no Field to relate a Card to.
+
+`+` is the merge a marker rides through; `*` is not. A recursive merge descends
+into a key both operands hold, and a marker merged into rather than replaced
+would lose the relationship while the rest of the write landed, so a marker in
+a `*` operand is refused as well. `.` merged with an object literal is how a
+value expression writes part of a contained value, and `+` is that merge.
+
+The argument is read when the program reaches the marker, so a marker in a
+branch that is not taken costs nothing:
+
+```bxl
+.owner = (card(params("preferred")) // card(params("fallback")));
+```
+
+`card(id)` is the only spelling that names a relationship target. A marker is
+recognised by an identity the planner mints from a `card(…)` node the program
+itself wrote, never by the shape of the value that node produced, so a value a
+program assembles to look like a reference is treated as the plain JSON it is.
+A statement whose whole value is one is refused where the target is a
+relationship (`relationship-value-required`) and stores it where the target is
+a slot the Card holds a value in. Written as a member of a contained value it
+is stored as that member, which is the same thing the Card does with any other
+value written where a link belongs.
+
+No route produces a relationship intent, so a program cannot point a link at a
+Card without writing `card(…)` — which is what lets declaration lowering, the
+profile's own classification and a reader of the program all reason about links
+from one vocabulary.
+
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,
 insert, and move to relationship intents when the target field is a
@@ -733,9 +1136,21 @@ type BxlRelationshipIntent =
   | { op: 'move-relation'; field: JqPath; cardId: string; toIndex: number };
 
 type StructuredRelationshipOperation =
-  | { id: string; op: 'relate'; target: StructuredTarget; cardId: string; position?: StructuredPosition }
+  | {
+      id: string;
+      op: 'relate';
+      target: StructuredTarget;
+      cardId: string;
+      position?: StructuredPosition;
+    }
   | { id: string; op: 'unrelate'; target: StructuredTarget; cardId: string }
-  | { id: string; op: 'move-relation'; target: StructuredTarget; cardId: string; position: StructuredPosition };
+  | {
+      id: string;
+      op: 'move-relation';
+      target: StructuredTarget;
+      cardId: string;
+      position: StructuredPosition;
+    };
 ```
 
 This is the key mechanism for avoiding reprinted relationship subtrees.
@@ -925,7 +1340,9 @@ location, target paths when safe, and phase (`parse`, `plan`, `validate`,
 - `relationship-invalid`, `authorization-denied`;
 - `revision-conflict`, `schema-version-conflict`;
 - `execution-identity-conflict`, `limit-exceeded`;
-- `stream-incomplete`, `commit-failed`, `rollback-conflict`.
+- `stream-incomplete`, `commit-failed`, `rollback-conflict`;
+- `computed-read-only`, `write-through-link`, `snapshot-unavailable`,
+  `assert-snapshot-required`, `assert-option-invalid`, `overlay-invalid`.
 
 ## Additional use cases covered by this contract
 
@@ -956,20 +1373,20 @@ transaction coordinator, authorization fan-out, and failure model.
 Tests should cross execution mode with mutation shape, not test each feature in
 only one happy path:
 
-| Area | Required cases |
-| --- | --- |
-| Streaming | every byte boundary; strings/comments with semicolons; truncated final statement; retry; backpressure; stop-on-error |
-| Encodings | structured/text equivalence, streamed JSON objects, streamed statements, canonical plan equality |
-| Atomic | all-or-nothing validation; final invariant failure; revision drift before commit; no observable intermediate state |
-| Statement commits | revision chaining; durable dedupe; partial success report; undo grouping; rollback conflict |
-| Scalar/object | set, update, replace, delete/null distinction, computed RHS, forbidden Card-root write, allowed Field-root replace |
-| Bulk | explicit multi-target success, zero matches, deterministic path order, per-target authorization failure |
-| Insert | start/end/index/before/after, empty array, invalid index, single-value cardinality |
-| Move | forward/backward, start/end, source-is-anchor, cross-array type validation, concurrent anchor drift |
-| Reorder | exact permutation, missing/extra/duplicate keys, primitive arrays, unchanged order no-op |
-| Relationships | loaded linksTo/linksToMany projection, Card Store resolution, singular/plural, duplicate edge, unlink missing edge, ordered edge move, query-backed read-only membership, no related-Card traversal, no raw JSON:API paths |
-| Safety | forbidden constructs, prototype paths, limits, output cardinality, unknown functions |
-| Audit | stable canonical hash, concrete intents, redaction, inverse plan, resulting revision |
+| Area              | Required cases                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Streaming         | every byte boundary; strings/comments with semicolons; truncated final statement; retry; backpressure; stop-on-error                                                                                                       |
+| Encodings         | structured/text equivalence, streamed JSON objects, streamed statements, canonical plan equality                                                                                                                           |
+| Atomic            | all-or-nothing validation; final invariant failure; revision drift before commit; no observable intermediate state                                                                                                         |
+| Statement commits | revision chaining; durable dedupe; partial success report; undo grouping; rollback conflict                                                                                                                                |
+| Scalar/object     | set, update, replace, delete/null distinction, computed RHS, forbidden Card-root write, allowed Field-root replace                                                                                                         |
+| Bulk              | explicit multi-target success, zero matches, deterministic path order, per-target authorization failure                                                                                                                    |
+| Insert            | start/end/index/before/after, empty array, invalid index, single-value cardinality                                                                                                                                         |
+| Move              | forward/backward, start/end, source-is-anchor, cross-array type validation, concurrent anchor drift                                                                                                                        |
+| Reorder           | exact permutation, missing/extra/duplicate keys, primitive arrays, unchanged order no-op                                                                                                                                   |
+| Relationships     | loaded linksTo/linksToMany projection, Card Store resolution, singular/plural, duplicate edge, unlink missing edge, ordered edge move, query-backed read-only membership, no related-Card traversal, no raw JSON:API paths |
+| Safety            | forbidden constructs, prototype paths, limits, output cardinality, unknown functions                                                                                                                                       |
+| Audit             | stable canonical hash, concrete intents, redaction, inverse plan, resulting revision                                                                                                                                       |
 
 Property tests should verify that plan application produces the returned output
 snapshot, inverse application restores the base snapshot in isolation, reorder

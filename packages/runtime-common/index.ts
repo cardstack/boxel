@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
   ScreenshotFormat,
   ScreenshotImageType,
@@ -79,6 +80,20 @@ export interface SearchablePathDiagnostic {
   fieldName: string;
   // The dotted `searchable` path that failed to resolve.
   path: string;
+}
+
+// A problem found while lowering an `@operation` declaration into the data
+// the realm executes — a clause naming a field the type does not have, a
+// write into a computed field, a raw program that does not parse. Recorded on
+// the module render's `meta.diagnostics` and persisted to
+// `modules.diagnostics`, the same channel `searchablePathIssues` travels, so
+// an author sees a bad declaration where they see a bad `searchable` path.
+// The operation is still stored (flagged `invalid` in the definition entry),
+// so invoking it reports the problem rather than reading as unknown.
+export interface OperationLoweringDiagnostic extends OperationLoweringIssue {
+  // The card/field def carrying the declaration, as the `internalKeyFor`
+  // CodeRef string.
+  codeRef: string;
 }
 
 // A failure to parse a markdown file's leading YAML frontmatter block,
@@ -248,6 +263,24 @@ export interface PrerenderMetaDiagnostics {
   // the manifest simply omits the name, so this is the only indexed signal
   // that a declared capture is missing. Omitted when every slot captured.
   screenshotErrors?: DeclaredScreenshotError[];
+  // How many consecutive prerender-html renders of this row have recorded
+  // at least one declared-capture failure, under any name. The row-level
+  // companion to each entry's `consecutiveFailures`: a per-name run resets
+  // whenever the failing name changes (a roster-level '*' failure
+  // alternating with a per-name one, format groups failing on alternating
+  // renders), so the reconcile sweep's retry cap is enforced against this
+  // counter, which no name change can reset. A render that records no
+  // capture errors drops it along with `screenshotErrors`.
+  screenshotCaptureFailureRenders?: number;
+  // Per-slot wall-clock of the declared-screenshot captures this visit
+  // performed, keyed by slot name — the per-name decomposition of the
+  // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
+  // attributable to its slot. Failed attempts appear here too (their time
+  // was spent all the same); carried-forward slots don't (nothing
+  // rendered). Slots captured from one shared format render each record
+  // that render's whole elapsed time, so entries can exceed the aggregate
+  // when summed. Omitted when the visit captured nothing.
+  screenshotTimingsMs?: Record<string, number>;
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -259,6 +292,11 @@ export interface PrerenderMetaDiagnostics {
   // module-prerender route's definition-build validation, not a card render.
   // Omitted entirely when every annotation in the module resolves.
   searchablePathIssues?: SearchablePathDiagnostic[];
+  // Problems found while lowering the module's `@operation` declarations,
+  // persisted to `modules.diagnostics` alongside `searchablePathIssues`.
+  // Omitted entirely when every declaration in the module lowers cleanly, and
+  // absent for a module that declares no operations.
+  operationIssues?: OperationLoweringDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -311,6 +349,13 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
+  // The card class's declared-screenshot captures, present when the visit
+  // args requested them (see PrerenderVisitArgs.screenshots) and this pass
+  // reached its capture step. Absent entirely on prerenderers that don't
+  // support capture (the in-browser twin) — the caller writes no manifest
+  // then. Carried on the pass sub-response because each rendering owns its
+  // captures: the file rendering's land on FileRenderResponse the same way.
+  screenshots?: DeclaredScreenshotVisitResult;
 }
 
 // `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
@@ -601,6 +646,9 @@ export interface FileRenderResponse {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
+  // The FileDef family's declared-screenshot captures — see
+  // RenderResponse.screenshots for the presence semantics.
+  screenshots?: DeclaredScreenshotVisitResult;
 }
 
 export type FileRenderArgs = ModulePrerenderArgs & {
@@ -732,6 +780,29 @@ export interface Diagnostics
   // row and drops every other meta key.
   hostShellHash?: string;
   hostShellHashAtCompletion?: string;
+  // The token the prerender pool had actually been re-warmed against, sampled
+  // at the same two moments. It trails the reported token for as long as a
+  // recycle takes, and indefinitely if that recycle fails — so the gap between
+  // the two is what says a page may still have been running the outgoing
+  // bundle. The reported token alone cannot: it can sit unchanged across a
+  // whole render while the pool never catches up to it, which is precisely the
+  // shape that poisons rows.
+  //
+  // Recorded so a decision made from these values is checkable afterwards
+  // rather than only asserted. `hostShellHash*` says what the server was told;
+  // these say what its pages were actually running.
+  //
+  // `null` and absent mean different things, and the difference decides
+  // whether a reader may act. `null` is a sampled answer — the pool has never
+  // been re-warmed against a token this server has heard, which is a genuinely
+  // stale pool. Absent means nothing sampled it, so there is no verdict to
+  // read: a server that predates these fields stamps nothing, and because the
+  // prerender server and the worker reading these deploy separately, a worker
+  // sees such responses throughout a rolling deploy. Treating absence as
+  // `null` would read "no information" as "stale" and suppress a row for a
+  // card that is genuinely broken, so a reader must require presence.
+  warmedHostShellHash?: string | null;
+  warmedHostShellHashAtCompletion?: string | null;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -899,10 +970,13 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
-  // Present when the caller wants the visit to capture the card's declared
-  // screenshots (`static screenshots`) on the same warm tab — the
-  // prerender-html indexing pass sends this when it has a MediaCache to
-  // persist into. Only honored by 'prerender-html' visits.
+  // Present when the caller wants the visit to capture declared screenshots
+  // (`static screenshots`) on the same warm tab — the prerender-html
+  // indexing pass sends this when it has a MediaCache to persist into. One
+  // opt-in covers both of the URL's renderings: the card pass captures the
+  // card class's roster, the file pass the FileDef family's, each keying
+  // carry-forward on its own row's prior manifest inside. Only honored by
+  // 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
   // The realm view this visit renders against — one realm at one generation.
   // An index pass and the `prerender_html` job it spawns are separate queue
@@ -914,18 +988,37 @@ export type PrerenderVisitArgs = {
   renderScope?: string;
 };
 
-// Inputs the declared-screenshot capture step needs from the indexing side:
+// Inputs the declared-screenshot capture steps need from the indexing side:
 // what the previous pass captured (so unchanged file-content-keyed slots can
 // carry forward without re-rendering) and the source file's current
-// realm_file_meta content hash to compare against.
+// realm_file_meta content hash to compare against. The content hash is the
+// one file's; the prior manifests are per rendering — a URL's 'instance' and
+// 'file' prerendered_html rows each carry their own — keyed by the same row
+// type the storage layer speaks.
 export type DeclaredScreenshotVisitArgs = {
-  priorManifest?: ScreenshotManifest | null;
   contentHash?: string | null;
+  priorManifests?: Partial<Record<'instance' | 'file', ScreenshotManifest>>;
 };
 
 export type DeclaredScreenshotError = {
   name: string;
   message: string;
+  // Wall-clock the engine spent on the render/capture attempt that failed
+  // this slot. On a roster-level '*' entry (the capture step failed as a
+  // unit — the roster read errored, or the step lost its timeout race)
+  // this is the whole step's elapsed time, not one slot's share. Absent
+  // when nothing rendered for the failure: the slot overflowed the capture
+  // cap, or the persist step failed after a successful capture — the
+  // capture's own time then rides the sibling timing entry.
+  captureMs?: number;
+  // How many consecutive prerender-html renders have failed this slot's
+  // capture, maintained by the persist path from the prior row's recorded
+  // errors. A successful capture of the slot ends the run by dropping its
+  // error entry outright — which means a run also resets when the failing
+  // name changes, so this is the per-name diagnostic term of the reconcile
+  // sweep's bounded retry lane; the lane's convergence bound is the
+  // row-level `screenshotCaptureFailureRenders` counter alongside it.
+  consecutiveFailures?: number;
 };
 
 // One declared slot's outcome from the visit's capture step. A fresh capture
@@ -945,6 +1038,12 @@ export type DeclaredScreenshotCaptureResult = {
   useAsThumbnail?: boolean;
   base64?: string;
   carriedForward?: boolean;
+  // Wall-clock of the render + capture that produced this slot's bytes.
+  // Slots captured from one shared format render each carry that render's
+  // whole elapsed time (an upper bound on their own share); a render-based
+  // slot's time is entirely its own. Absent on carry-forwards — nothing
+  // rendered.
+  captureMs?: number;
 };
 
 export interface DeclaredScreenshotVisitResult {
@@ -994,11 +1093,6 @@ export interface RenderVisitResponse {
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
-  // Declared-screenshot captures, present when the visit args requested them
-  // (see PrerenderVisitArgs.screenshots) and the card pass reached the
-  // capture step. Absent entirely on prerenderers that don't support
-  // capture (the in-browser twin) — the caller writes no manifest then.
-  screenshots?: DeclaredScreenshotVisitResult;
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
@@ -1246,7 +1340,15 @@ export * from './published-realm-url.ts';
 export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
+export * from './loader-epoch.ts';
 export * from './definitions.ts';
+// Only the lowered *shapes*, not the pass that produces them: lowering reaches
+// `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
+// pull bxl's sources into the typecheck program of every package that imports
+// anything from runtime-common. A caller that runs the pass imports
+// `@cardstack/runtime-common/card-operations` directly and takes that cost on
+// purpose.
+export type * from './card-operations/types.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
@@ -1291,6 +1393,7 @@ export * from './utils.ts';
 export * from './authorization-middleware.ts';
 export * from './resource-types.ts';
 export * from './prerender-headers.ts';
+export * from './lint-headers.ts';
 export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
