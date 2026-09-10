@@ -43,6 +43,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
+import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
@@ -146,6 +147,17 @@ export class SearchEntriesResource extends Resource<Args> {
   // would keep fetching members the replacement run already owns.
   #refreshEpoch = 0;
 
+  // Defers the event-triggered re-run so a burst of realm events — one
+  // write's index event plus its prerender_html follow-ups, or a stream of
+  // concurrent writes — costs one search, not one per event. The subscription
+  // callback accumulates what to refresh (`realmsNeedingRefresh`,
+  // `pendingSelectiveRefresh`) and arms this; the flush performs the search
+  // over everything accumulated. Only event-triggered re-runs are deferred —
+  // a query/realm change in modify() still searches immediately.
+  #refreshScheduler = new LiveSearchRefreshScheduler(() =>
+    this.#flushEventRefresh(),
+  );
+
   // A partial refresh splices fetched-realm rows into the standing result
   // set, so it is only sound once a full run has populated that set. Until
   // then every run fetches all realms (an event arriving during the initial
@@ -177,6 +189,7 @@ export class SearchEntriesResource extends Resource<Args> {
     super(owner);
     registerDestructor(this, () => {
       this.search.cancelAll();
+      this.#refreshScheduler.cancel();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
       }
@@ -250,6 +263,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.#previousRealms = undefined;
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
+      this.#refreshScheduler.cancel();
       // An in-flight selective refresh must stop issuing GETs for the
       // cleared query, same as on teardown.
       this.#refreshEpoch++;
@@ -336,7 +350,7 @@ export class SearchEntriesResource extends Resource<Args> {
               `prerender_html event on ${realm}; scheduling selective per-member refresh`,
             );
             this.#recordSelectiveRefresh(event);
-            this.#trackSearchLoad(this.search.perform());
+            this.#refreshScheduler.schedule();
             return;
           }
 
@@ -344,7 +358,7 @@ export class SearchEntriesResource extends Resource<Args> {
             `${event.eventName === 'prerender_html' ? 'prerender_html' : 'incremental index'} event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
-          this.#trackSearchLoad(this.search.perform());
+          this.#refreshScheduler.schedule();
         }),
       }));
     }
@@ -358,7 +372,10 @@ export class SearchEntriesResource extends Resource<Args> {
     // in place would otherwise be compared against itself and never re-run.
     this.#previousQuery = structuredClone(query);
     this.#previousRealms = realms;
-    // A query/realm change owns the whole result set again.
+    // A query/realm change owns the whole result set again — including any
+    // event-triggered refresh still waiting in the scheduler's window, whose
+    // accumulated state was just cleared.
+    this.#refreshScheduler.cancel();
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
@@ -422,6 +439,22 @@ export class SearchEntriesResource extends Resource<Args> {
 
   get errors() {
     return this._errors;
+  }
+
+  // The deferred arm of the subscription callback: performs one search over
+  // everything the window accumulated. Guarded the same way the callback is —
+  // the query may have been cleared (or the resource destroyed) between arm
+  // and flush, and cancel() on those paths makes this mostly belt and
+  // suspenders.
+  #flushEventRefresh(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    this.#trackSearchLoad(this.search.perform());
   }
 
   private search = restartableTask(async () => {

@@ -520,6 +520,80 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
   });
 
+  test(`a burst of realm events coalesces into a single live re-run`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let fetchCalls = 0;
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+      fetchCalls++;
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Abdel-Rahman',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      let baseline = fetchCalls;
+      let messageService = getService('message-service');
+
+      for (let generation = 1; generation <= 5; generation++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/1.json`],
+          generation,
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 1,
+        'five index events inside one window produce one search fetch',
+      );
+
+      // The scheduler re-arms after a flush: a later event is not starved by
+      // the earlier burst.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 6,
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        baseline + 2,
+        'an event after the flush schedules its own re-run',
+      );
+    } finally {
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
   test(`cards in search results live update`, async function (assert) {
     let query: Query = {
       filter: {

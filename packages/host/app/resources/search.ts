@@ -45,6 +45,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Filter, Query } from '@cardstack/runtime-common/query';
 
+import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -260,6 +261,21 @@ export class SearchResource<
   // side exact means stamping the resolution's own generation on the umbrella
   // relationship where the indexer resolves it.
   #resultGenerations = new Map<string, number>();
+  // Per realm, the highest generation carried by the realm events waiting on
+  // the scheduler's window — the coalesced form of what each event used to
+  // pass to its own `search.perform`. Consumed by the flush, which hands the
+  // batch to the search task to raise the floors above once the run
+  // succeeds. Untracked, like `#resultGenerations`: only the subscription
+  // callback writes it and only the flush reads it.
+  #pendingRefreshFloors = new Map<string, number>();
+  // Defers the event-triggered re-run so a burst of realm events costs one
+  // search, not one per event. The subscription callback accumulates the
+  // generation floors above and arms this; the flush performs the search.
+  // Only event-triggered re-runs are deferred — a query/realm change in
+  // modify() and a reseed's shortfall query still search immediately.
+  #refreshScheduler = new LiveSearchRefreshScheduler(() =>
+    this.#flushLiveRefresh(),
+  );
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -442,6 +458,7 @@ export class SearchResource<
   constructor(owner: object) {
     super(owner);
     registerDestructor(this, () => {
+      this.#refreshScheduler.cancel();
       for (let instance of this._instances) {
         this.runtimeStore.dropReference(instance.id);
       }
@@ -600,15 +617,21 @@ export class SearchResource<
             // The generation the indexing pass committed, and the realm whose
             // counter it belongs to. A search answering this event reads the
             // index at or after it, so together they stand as the floor for
-            // what the result set reflects of that realm.
+            // what the result set reflects of that realm. Accumulated rather
+            // than performed: the scheduler coalesces this event's re-run
+            // with the rest of its burst, and the flush passes the batch of
+            // floors to the one search that answers them all.
             let generation =
               'generation' in event && typeof event.generation === 'number'
                 ? event.generation
                 : undefined;
-            this.trackStoreLoad(
-              this.search.perform(this.#previousQuery, generation, realm),
-              'live-refresh',
-            );
+            if (generation !== undefined) {
+              let current = this.#pendingRefreshFloors.get(realm);
+              if (current === undefined || generation > current) {
+                this.#pendingRefreshFloors.set(realm, generation);
+              }
+            }
+            this.#refreshScheduler.schedule();
           }),
         };
       });
@@ -632,7 +655,13 @@ export class SearchResource<
     this.#previousRealms = realms;
     this.#previousQuery = query;
     this.#previousQueryString = queryString;
-    this.trackStoreLoad(this.search.perform(query), 'search');
+    // This run reads the index at least as fresh as any event still waiting
+    // on the scheduler's window, so fold the pending flush into it rather
+    // than letting a second search fire after it.
+    this.#refreshScheduler.cancel();
+    let floors = this.#pendingRefreshFloors;
+    this.#pendingRefreshFloors = new Map();
+    this.trackStoreLoad(this.search.perform(query, floors), 'search');
   }
 
   // Spelling-tolerant query identity, so a server-produced seed query
@@ -1088,8 +1117,31 @@ export class SearchResource<
     },
   );
 
+  // The deferred arm of the subscription callback: performs one search over
+  // the burst the scheduler's window accumulated, consuming the pending
+  // generation floors so the run carries them as its own. An event arriving
+  // after this consumes them lands in a fresh map and arms a fresh flush, so
+  // nothing is lost to the handoff; a run that fails (or is restarted by a
+  // query change) drops its batch, which only forgoes a floor raise — floors
+  // are a monotonic safety net, never load-bearing state.
+  #flushLiveRefresh(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    let floors = this.#pendingRefreshFloors;
+    this.#pendingRefreshFloors = new Map();
+    this.trackStoreLoad(
+      this.search.perform(this.#previousQuery, floors),
+      'live-refresh',
+    );
+  }
+
   private search = restartableTask(
-    async (query: Query, generation?: number, realm?: string) => {
+    async (query: Query, refreshFloors?: Map<string, number>) => {
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
@@ -1129,7 +1181,9 @@ export class SearchResource<
           // restoring the very set the search moved off. What orders this set
           // against a later document is the generation instead.
           this.#appliedSeedIdentity = undefined;
-          this.#raiseResultGeneration(realm, generation);
+          for (let [realm, generation] of refreshFloors ?? []) {
+            this.#raiseResultGeneration(realm, generation);
+          }
           this._meta = meta;
           this._errors = undefined;
           await this.updateInstances(instances, dependencyTrackingContext);

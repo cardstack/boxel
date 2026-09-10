@@ -526,6 +526,67 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
+  test('a burst of realm events coalesces into a single re-run', async function (assert) {
+    let searchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => {
+      searchCount++;
+      return entryCollectionDoc([
+        {
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 1,
+          html: '<div>Mango</div>',
+        },
+      ]);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      for (let i = 1; i <= 5; i++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/${i}.json`],
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'five index events inside one window produce one re-run',
+      );
+
+      // The scheduler re-arms after a flush: a later event is not starved by
+      // the earlier burst.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 2,
+        'an event after the flush schedules its own re-run',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
+  });
+
   // A prerender_html event can't change a structured query's membership, so a
   // live search refreshes only the invalidated members' HTML through a
   // conditional card+html GET — it never re-queries the whole search.
