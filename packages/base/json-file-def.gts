@@ -158,7 +158,11 @@ function renderTreeNode(
 
   let kind = kindOf(value);
   if (kind !== 'object' && kind !== 'array') {
-    return tag('div', keyLabelHtml(key) + leafValueHtml(value, kind), 'class="jt-row"');
+    return tag(
+      'div',
+      keyLabelHtml(key) + leafValueHtml(value, kind),
+      'class="jt-row"',
+    );
   }
 
   let entries: Array<[string, unknown]> =
@@ -586,10 +590,7 @@ export class JsonFileDef extends FileDef {
       // styles; a trailing newline shouldn't inflate the count, and empty
       // content is zero lines.
       lineCount: text
-        ? text
-            .replace(/\r\n?/g, '\n')
-            .replace(/\n$/, '')
-            .split('\n').length
+        ? text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').length
         : 0,
     };
   }

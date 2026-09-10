@@ -166,10 +166,7 @@ export default class PhoneNumberField extends FieldDef {
       }
       let parsed = parseForDisplay(value);
       if (parsed?.number?.international && parsed?.number?.rfc3966) {
-        return markdownLink(
-          parsed.number.international,
-          parsed.number.rfc3966,
-        );
+        return markdownLink(parsed.number.international, parsed.number.rfc3966);
       }
       return markdownEscape(value);
     }
@@ -268,8 +265,6 @@ export class ContactPhoneNumber extends FieldDef {
   static embedded = class Embedded extends Component<
     typeof ContactPhoneNumber
   > {
-    <template>
-      <@fields.phoneNumber @format='embedded' />
-    </template>
+    <template><@fields.phoneNumber @format='embedded' /></template>
   };
 }

@@ -138,9 +138,7 @@ export function audioAttributes(
       ...(sampleRateHz === undefined
         ? {}
         : { sampleRate: kilo(sampleRateHz, 'Hz') }),
-      ...(bitrateBps === undefined
-        ? {}
-        : { bitrate: kilo(bitrateBps, 'bps') }),
+      ...(bitrateBps === undefined ? {} : { bitrate: kilo(bitrateBps, 'bps') }),
       ...(channelMode === undefined
         ? {}
         : { channelMode: { code: channelMode, scheme: 'channel-mode' } }),

@@ -30,10 +30,7 @@ import { on } from '@ember/modifier';
 import { restartableTask, task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import { commandData } from './resources/command-data';
-import type {
-  GetAllRealmMetasResult,
-  RealmMetaField,
-} from './command';
+import type { GetAllRealmMetasResult, RealmMetaField } from './command';
 
 const ReasoningEffortField = enumField(StringField, {
   options: [
@@ -58,8 +55,7 @@ export class ModelConfiguration extends CardDef {
   });
 
   @field reasoningEffort = contains(ReasoningEffortField, {
-    description:
-      'Optional reasoning effort to pass when invoking this model',
+    description: 'Optional reasoning effort to pass when invoking this model',
   });
 
   @field inputModalities = containsMany(StringField, {
@@ -92,8 +88,7 @@ export class SystemCard extends CardDef {
   // kind-agnostically. When either is set on the user's active system card,
   // they replace the host's hardcoded default-skill list for new rooms.
   @field defaultSkillCards = linksToMany(Skill, {
-    description:
-      'Skill cards enabled by default in new AI assistant rooms',
+    description: 'Skill cards enabled by default in new AI assistant rooms',
     searchable: true,
   });
 
@@ -142,8 +137,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       return;
     }
     try {
-      let result =
-        await new GetUserSystemCardTool(toolContext).execute();
+      let result = await new GetUserSystemCardTool(toolContext).execute();
       this.activeSystemCardId = result.cardId ?? undefined;
       this.activeIsDefault = result.isDefault ?? false;
     } finally {
@@ -216,9 +210,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       return;
     }
     try {
-      let copyResult = await new CopyCardToRealmTool(
-        toolContext,
-      ).execute({
+      let copyResult = await new CopyCardToRealmTool(toolContext).execute({
         sourceCard: this.args.model as CardDef,
         targetRealm: targetRealmUrl,
       });
@@ -257,8 +249,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     });
     this.activeSystemCardId = this.args.model.id;
     // Re-check default status after setting active
-    let result =
-      await new GetUserSystemCardTool(toolContext).execute();
+    let result = await new GetUserSystemCardTool(toolContext).execute();
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
   });
@@ -274,8 +265,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     }
     await new SetUserSystemCardTool(toolContext).execute({});
     // Reload to pick up the new active system card (the default)
-    let result =
-      await new GetUserSystemCardTool(toolContext).execute();
+    let result = await new GetUserSystemCardTool(toolContext).execute();
     this.activeSystemCardId = result.cardId ?? undefined;
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
@@ -290,21 +280,37 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               <button
                 class='status-badge active {{if this.isExpanded "expanded"}}'
                 type='button'
-                aria-expanded={{if this.isExpanded "true" "false"}}
+                aria-expanded={{if this.isExpanded 'true' 'false'}}
                 {{on 'click' this.toggleExpanded}}
               >
                 Active System Card
-                <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+                <svg
+                  class='chevron'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2.5'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                ><polyline points='6 9 12 15 18 9'></polyline></svg>
               </button>
             {{else if this.isInactive}}
               <button
                 class='status-badge inactive {{if this.isExpanded "expanded"}}'
                 type='button'
-                aria-expanded={{if this.isExpanded "true" "false"}}
+                aria-expanded={{if this.isExpanded 'true' 'false'}}
                 {{on 'click' this.toggleExpanded}}
               >
                 Inactive
-                <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+                <svg
+                  class='chevron'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2.5'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                ><polyline points='6 9 12 15 18 9'></polyline></svg>
               </button>
             {{/if}}
           {{/unless}}
@@ -338,7 +344,8 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
             <div class='badge-panel-container'>
               {{#if this.isActive}}
                 <div class='badge-panel'>
-                  <span class='panel-label'>This system card is currently active.</span>
+                  <span class='panel-label'>This system card is currently
+                    active.</span>
                   {{#unless this.activeIsDefault}}
                     <BoxelButton
                       @kind='secondary'

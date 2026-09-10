@@ -294,9 +294,7 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
     }
 
     try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
-        toolContext,
-      );
+      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(toolContext);
       await generateReadmeSpecCommand.execute({
         spec: this.args.model as Spec,
       });
