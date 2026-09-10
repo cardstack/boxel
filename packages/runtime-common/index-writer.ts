@@ -312,6 +312,15 @@ export class Batch {
   // overwrites its tombstone, so counting them would leave a gap for every
   // URL rather than describe an order.
   //
+  // `#writePositions` holds the position each row has already taken, so a
+  // row written more than once in a pass keeps its first — the position
+  // records where in the pass the work on that row began, and a rewrite is
+  // that same work continuing. Keyed by row rather than by URL (a card's
+  // `file` and `instance` halves are separate rows), and held for the whole
+  // fan-out rather than for one buffer drain, because a rewrite can land on
+  // either side of a flush. A rewrite consumes no position, so a fan-out's
+  // sequences are gapless.
+  //
   // A retried job is the one case where a promoted generation holds rows
   // from two batches: `loadResumedRows` keeps the previous attempt's rows as
   // they are, so they retain that attempt's `invalidationId` and its
@@ -319,6 +328,7 @@ export class Batch {
   // Ordering within one `invalidationId` stays sound; a query that wants the
   // whole generation has to union the attempts' ids rather than assume one.
   #writeSeq = 0;
+  #writePositions = new Map<string, number>();
   // Aggregate wall of every physical `boxel_index_working` write in this
   // batch, surfaced on the job result's `phaseTimings.writeMs`.
   #writeMs = 0;
@@ -1002,7 +1012,11 @@ export class Batch {
     }
     this.#assertErrorEntryHasMessage(url, entry);
     this.#invalidations.add(url.href);
-    this.#writeBuffer.push({ url, entry, seq: this.#writeSeq++ });
+    this.#writeBuffer.push({
+      url,
+      entry,
+      seq: this.#positionOf(url, rowType(entry)),
+    });
     this.#writeBufferUrls.add(url.href);
     // Bound memory for long runs of dependency-free files; dependency reads
     // flush earlier. Renders dwarf the writes, so a forced flush here still
@@ -1027,25 +1041,16 @@ export class Batch {
     let start = Date.now();
     try {
       if (this.#splitPrerenderHtml) {
-        // Last write wins when the same (url, type) was buffered twice: a
-        // single multi-row upsert can't touch one conflict target twice. The
-        // surviving row keeps the EARLIER position, because `writeSeq` says
-        // where in the pass the URL's visit began writing, and a rewrite of
-        // a row that visit already wrote is still that visit's write. Taking
-        // the later position instead would move the row behind URLs the
-        // visit loop only reached afterwards, and could leave the pass with
-        // no row at position 0 at all.
+        // Last write wins when the same row was buffered twice: a single
+        // multi-row upsert can't touch one conflict target twice. Only the
+        // contents are the later write's — both items carry the position the
+        // row took when the pass first wrote it (see `#positionOf`).
         let deduped = new Map<
           string,
           { url: URL; entry: SearchIndexEntry; seq: number }
         >();
         for (let item of buffered) {
-          let key = `${item.url.href}|${rowType(item.entry)}`;
-          let firstWrite = deduped.get(key);
-          deduped.set(
-            key,
-            firstWrite ? { ...item, seq: firstWrite.seq } : item,
-          );
+          deduped.set(`${item.url.href}|${rowType(item.entry)}`, item);
         }
         let prepared = await Promise.all(
           [...deduped.values()].map(({ url, entry, seq }) =>
@@ -1098,7 +1103,11 @@ export class Batch {
     this.#invalidations.add(url.href);
     let start = Date.now();
     try {
-      await this.#writeEntryNow(url, entry, this.#writeSeq++);
+      await this.#writeEntryNow(
+        url,
+        entry,
+        this.#positionOf(url, rowType(entry)),
+      );
     } finally {
       this.#writeMs += Date.now() - start;
     }
@@ -1232,6 +1241,20 @@ export class Batch {
     return [...Object.entries(coerceTypes)]
       .filter(([, type]) => type === 'JSON')
       .map(([column]) => column);
+  }
+
+  // The position `url`'s `type` row takes in this fan-out's write order:
+  // the next number the first time the pass writes that row, and the same
+  // number every time after. See `#writePositions`.
+  #positionOf(url: URL, type: BoxelIndexTable['type']): number {
+    let key = `${url.href}|${type}`;
+    let taken = this.#writePositions.get(key);
+    if (taken !== undefined) {
+      return taken;
+    }
+    let position = this.#writeSeq++;
+    this.#writePositions.set(key, position);
+    return position;
   }
 
   // The write-side stamps every row this batch writes carries, on both
@@ -1476,7 +1499,11 @@ export class Batch {
     }
     // A prerenderHtmlOnly batch has no index half, so each rendering takes
     // its own position in this job's write order.
-    await this.writePrerenderedHtmlRow(url, entry, this.#writeSeq++);
+    await this.writePrerenderedHtmlRow(
+      url,
+      entry,
+      this.#positionOf(url, prerenderedRowType(entry)),
+    );
   }
 
   // The prerendered_html row write shared by the two producers of renderings:
@@ -1549,14 +1576,18 @@ export class Batch {
           type,
         );
         // The column is the canonical home for the failing render's
-        // diagnostics, and the only place the write-side stamps go: the copy
-        // on `error_doc.diagnostics` is the read path operator mode surfaces
-        // ("send error to AI assistant" renders the blob verbatim), so it
-        // carries what the render itself reported and nothing else — where
-        // in a pass the row was written is bookkeeping for the operator
-        // queries, not for that dialog. Unlike the HTML columns below,
-        // neither copy is taken from the last-known-good production row:
-        // both describe this failing render.
+        // diagnostics. The copy on `error_doc.diagnostics` is the read path
+        // operator mode surfaces ("send error to AI assistant" renders the
+        // blob verbatim), so it mirrors the entry's own diagnostics and adds
+        // nothing: this pass's stamps are bookkeeping for the operator
+        // queries rather than for that dialog. What the entry arrives with
+        // differs by pipeline, and the mirror follows it — a split
+        // pipeline's render entry carries render-produced fields only, while
+        // a fused visit's entry is built from its index half's blob
+        // (`prerenderedHtmlEntryFrom`) and so already has that row's stamps
+        // merged in. Unlike the HTML columns below, neither copy is taken
+        // from the last-known-good production row: both describe this
+        // failing render.
         let errorDoc = this.normalizeErrorDoc(
           {
             ...entry.error,
@@ -2422,11 +2453,13 @@ export class Batch {
     // Mint a fresh correlation ID for this invalidation fan-out; every
     // subsequent `updateEntry` on this batch stamps it into the row's
     // `diagnostics` so operators can group the rows touched by
-    // the same triggering change. The write sequence restarts with it, so
-    // `writeSeq` is 0-based within each `invalidationId` rather than within
-    // the batch's lifetime.
+    // the same triggering change. The write sequence restarts with it — and
+    // the positions rows have already taken are dropped — so `writeSeq` is
+    // 0-based within each `invalidationId` rather than within the batch's
+    // lifetime.
     this.#currentInvalidationId = uuidv4();
     this.#writeSeq = 0;
+    this.#writePositions.clear();
     let start = Date.now();
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
@@ -2963,6 +2996,21 @@ function baseTypeFromError(entry: {
 // The `boxel_index` row type an entry lands under — the pkey is
 // (url, realm_url, type), so this keys the flush dedup that keeps a single
 // multi-row upsert from touching one conflict target twice.
+// The `prerendered_html` row an entry writes to, error entries folded onto
+// the row they preserve — the render channel's `rowType`.
+function prerenderedRowType(
+  entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
+): BoxelIndexTable['type'] {
+  switch (entry.type) {
+    case 'instance-error':
+      return 'instance';
+    case 'file-error':
+      return 'file';
+    default:
+      return entry.type;
+  }
+}
+
 function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
   return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
 }

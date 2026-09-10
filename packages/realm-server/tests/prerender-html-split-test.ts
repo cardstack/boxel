@@ -1075,9 +1075,11 @@ module(basename(import.meta.filename), function () {
       // The visit loop hands its rows to a write-behind buffer that drains
       // them in one multi-row upsert, so a row's position has to be taken
       // where it entered the buffer: `indexedAt` alone cannot separate rows
-      // one drain wrote, and the drain itself may collapse two writes of the
-      // same row into one. A URL written twice in one pass keeps the position
-      // its visit started at, while the row's contents are the later write's.
+      // one drain wrote, and the drain itself collapses two writes of the
+      // same row into one. A row written again keeps the position its first
+      // write took — on either side of a flush, since a rewrite can land on
+      // either side of one — while its contents are the last write's. The
+      // positions stay gapless: the rewrites below consume none of their own.
       let batch = await indexWriter.createBatch(
         new URL(testRealm),
         virtualNetwork,
@@ -1096,7 +1098,11 @@ module(basename(import.meta.filename), function () {
       // Rewritten before the buffer drains — the same visit, correcting the
       // row it already wrote.
       await batch.bufferEntry(url('zzz.gts'), file(3));
-      await batch.bufferEntry(url('bbb.gts'), file(4));
+      await batch.flushWriteBuffer();
+      // Rewritten again after the drain, so the position has to outlive the
+      // buffer that carried it.
+      await batch.bufferEntry(url('zzz.gts'), file(4));
+      await batch.bufferEntry(url('bbb.gts'), file(5));
       await batch.done();
 
       let rows = (await adapter.execute(
@@ -1121,13 +1127,13 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         rows.map((row) => row.seq),
-        ['0', '1', '3'],
-        'the rewrite kept zzz.gts at position 0 and consumed position 2, which no row carries',
+        ['0', '1', '2'],
+        'the rewrites kept zzz.gts at position 0 and consumed no position of their own',
       );
       assert.strictEqual(
         Number(rows[0]?.last_modified),
-        3,
-        "the row's contents are the later write's, even though its position is the earlier",
+        4,
+        "the row's contents are the last write's, even though its position is the first write's",
       );
       assert.strictEqual(
         new Set(rows.map((row) => row.invalidation_id)).size,

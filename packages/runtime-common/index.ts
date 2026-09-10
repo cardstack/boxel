@@ -714,10 +714,14 @@ export interface IndexVisitClientTimings {
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
 // `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
-// write-side stamps. Every live row on either channel carries all three,
+// write-side stamps. Every live row either channel WRITES carries all three,
 // stamped as the row enters the IndexWriter's write path — so a row is
 // always attributable to the pass that wrote it, whether or not its render
-// reported anything:
+// reported anything. The exception is a row a realm COPY produced
+// (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
+// rows rather than rendering them): those keep whatever the source row
+// carried, so they name the source realm's pass, or nothing at all if that
+// row predates these stamps. The three stamps are:
 //
 //   - `invalidationId` — one UUID per invalidation fan-out: minted when the
 //     `Batch` is created, so a from-scratch pass (which never calls
@@ -778,6 +782,10 @@ export interface Diagnostics
   // `boxel_index` half and its `prerendered_html` half describe one position,
   // not two. A split pipeline's channels number independently, so a
   // sequence is only comparable within one `invalidationId`.
+  //
+  // A row written more than once in a pass keeps the position of its first
+  // write, so a sequence marks where the pass's work on that row began and a
+  // fan-out's positions stay gapless.
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
