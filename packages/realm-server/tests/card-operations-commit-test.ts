@@ -43,13 +43,15 @@ const PERSON = { module: rri(`${testRealmHref}person`), name: 'Person' };
 // ============================================================================
 // The batch coordinator, driven against a real realm.
 //
-// What is under test is the batch's all-or-nothing property and the things
-// that property is observable through: what lands on disk, how many index jobs
-// the commit enqueues, how many index events it broadcasts, and what each
-// entry's result reports. Those only exist against a real realm — the jobs
-// table and the Matrix room are where "one job, one event" is either true or
-// not — so the coordinator is called directly with the realm's own batch core
-// rather than through a stub.
+// What is under test is what only exists against a real realm: the bytes that
+// land on disk, how many index jobs the commit enqueues, how many index events
+// it broadcasts, and byte-for-byte agreement with the `PATCH` handler. The
+// coordinator is called directly with the realm's own batch core rather than
+// through a stub, since a stub is exactly what those properties are not
+// observable through. Everything a batch decides before it commits — which
+// files it would write, where a local id resolves, whether it commits at all —
+// is checked against a stub instead, where "nothing is committed" is the
+// property itself rather than a proxy for it.
 // ============================================================================
 
 function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
@@ -80,27 +82,27 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
-    'person-a.json': {
-      data: {
-        type: 'card',
-        attributes: { firstName: 'Original', hourlyRate: 10 },
-        meta: { adoptsFrom: PERSON },
-      },
-    },
-    'person-b.json': {
-      data: {
-        type: 'card',
-        attributes: { firstName: 'Original', hourlyRate: 10 },
-        meta: { adoptsFrom: PERSON },
-      },
-    },
-    'person-c.json': {
-      data: {
-        type: 'card',
-        attributes: { firstName: 'Doomed', hourlyRate: 1 },
-        meta: { adoptsFrom: PERSON },
-      },
-    },
+    ...Object.fromEntries(
+      [
+        // A card per test that mutates one, so the file's tests do not have to
+        // be ordered against each other.
+        'commit-write',
+        'commit-delete',
+        'version-target',
+        'patch-over-http',
+        'patch-over-batch',
+        'unchanged',
+      ].map((name) => [
+        `${name}.json`,
+        {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Original', hourlyRate: 10 },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      ]),
+    ),
   };
 }
 
@@ -113,7 +115,7 @@ module(basename(import.meta.filename), function (hooks) {
   let dir: DirResult;
 
   setupPermissionedRealmCached(hooks, {
-    mode: 'beforeEach',
+    mode: 'before',
     realmURL: testRealm,
     permissions: {
       '*': ['read', 'write'],
@@ -337,7 +339,7 @@ module(basename(import.meta.filename), function (hooks) {
       [
         {
           op: 'update',
-          href: `${testRealmHref}person-a`,
+          href: `${testRealmHref}commit-write`,
           document: {
             data: {
               type: 'card',
@@ -346,7 +348,7 @@ module(basename(import.meta.filename), function (hooks) {
             },
           },
         },
-        { op: 'delete', href: `${testRealmHref}person-c` },
+        { op: 'delete', href: `${testRealmHref}commit-delete` },
       ],
       'batch-1',
     );
@@ -358,11 +360,11 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.ok(results[0], 'the write reports its identity');
     assert.notOk(
-      existsSync(realmFile('person-c.json')),
+      existsSync(realmFile('commit-delete.json')),
       'the deleted card is gone from disk',
     );
     assert.true(
-      readFileSync(realmFile('person-a.json'), 'utf8').includes('Renamed'),
+      readFileSync(realmFile('commit-write.json'), 'utf8').includes('Renamed'),
       'the written card holds the patched value',
     );
 
@@ -394,7 +396,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       [...indexEvents[0].invalidations].sort(),
-      [`${testRealmHref}person-a`, `${testRealmHref}person-c`].sort(),
+      [`${testRealmHref}commit-write`, `${testRealmHref}commit-delete`].sort(),
       'the one event covers both the write and the removal',
     );
   });
@@ -403,7 +405,7 @@ module(basename(import.meta.filename), function (hooks) {
     let [first] = await commit([
       {
         op: 'update',
-        href: `${testRealmHref}person-a`,
+        href: `${testRealmHref}version-target`,
         document: {
           data: {
             type: 'card',
@@ -424,7 +426,7 @@ module(basename(import.meta.filename), function (hooks) {
     let [matched] = await commit([
       {
         op: 'update',
-        href: `${testRealmHref}person-a`,
+        href: `${testRealmHref}version-target`,
         baseVersion: version,
         document: {
           data: {
@@ -443,7 +445,7 @@ module(basename(import.meta.filename), function (hooks) {
     let [moved] = await commit([
       {
         op: 'update',
-        href: `${testRealmHref}person-a`,
+        href: `${testRealmHref}version-target`,
         baseVersion: version,
         document: {
           data: {
@@ -459,7 +461,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the file has moved past the base the caller named',
     );
     assert.true(
-      readFileSync(realmFile('person-a.json'), 'utf8').includes('Third'),
+      readFileSync(realmFile('version-target.json'), 'utf8').includes('Third'),
       'a moved base is reported, not refused — the write still lands',
     );
   });
@@ -474,30 +476,34 @@ module(basename(import.meta.filename), function (hooks) {
     };
 
     let response = await request
-      .patch('/person-a')
+      .patch('/patch-over-http')
       .send(patch)
       .set('Accept', 'application/vnd.card+json');
     assert.strictEqual(response.status, 200, 'the PATCH is served');
 
     await commit([
-      { op: 'update', href: `${testRealmHref}person-b`, document: patch },
+      {
+        op: 'update',
+        href: `${testRealmHref}patch-over-batch`,
+        document: patch,
+      },
     ]);
 
     assert.strictEqual(
-      readFileSync(realmFile('person-b.json'), 'utf8'),
-      readFileSync(realmFile('person-a.json'), 'utf8'),
+      readFileSync(realmFile('patch-over-batch.json'), 'utf8'),
+      readFileSync(realmFile('patch-over-http.json'), 'utf8'),
       'the two files are byte-identical',
     );
   });
 
   test('a patch that changes nothing leaves the file exactly as it is', async function (assert) {
-    let before = readFileSync(realmFile('person-a.json'), 'utf8');
+    let before = readFileSync(realmFile('unchanged.json'), 'utf8');
     let jobsBefore = await indexJobIds();
 
     let [result] = await commit([
       {
         op: 'update',
-        href: `${testRealmHref}person-a`,
+        href: `${testRealmHref}unchanged`,
         document: {
           data: {
             type: 'card',
@@ -509,7 +515,7 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
 
     assert.strictEqual(
-      readFileSync(realmFile('person-a.json'), 'utf8'),
+      readFileSync(realmFile('unchanged.json'), 'utf8'),
       before,
       'the stored bytes are untouched',
     );
@@ -521,188 +527,6 @@ module(basename(import.meta.filename), function (hooks) {
       await indexJobIds(),
       jobsBefore,
       'nothing is queued for indexing',
-    );
-  });
-
-  test('a local id claimed twice, and one nothing creates, are both refused', async function (assert) {
-    let duplicate: unknown;
-    try {
-      await commit([
-        {
-          op: 'create',
-          lid: 'twice',
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'One' },
-              meta: { adoptsFrom: PERSON },
-            },
-          },
-        },
-        {
-          op: 'create',
-          lid: 'twice',
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Two' },
-              meta: { adoptsFrom: PERSON },
-            },
-          },
-        },
-      ]);
-    } catch (err: unknown) {
-      duplicate = err;
-    }
-    assert.ok(isOperationFailure(duplicate), 'a duplicate local id is refused');
-    if (isOperationFailure(duplicate)) {
-      assert.strictEqual(duplicate.error.status, 400);
-      assert.strictEqual(duplicate.error.code, 'invalid-params');
-    }
-
-    let dangling: unknown;
-    try {
-      await commit([
-        {
-          op: 'create',
-          lid: 'lonely',
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Lonely' },
-              relationships: {
-                friend: { data: { lid: 'nobody', type: 'card' } },
-              },
-              meta: { adoptsFrom: PERSON },
-            },
-          },
-        },
-      ]);
-    } catch (err: unknown) {
-      dangling = err;
-    }
-    assert.ok(
-      isOperationFailure(dangling),
-      'a link to a local id no entry creates is refused',
-    );
-    if (isOperationFailure(dangling)) {
-      assert.strictEqual(dangling.error.status, 400);
-      assert.strictEqual(
-        dangling.error.meta?.entry,
-        0,
-        'the refusal names the entry that carried the link',
-      );
-    }
-    assert.notOk(
-      existsSync(realmFile('Person/lonely.json')),
-      'nothing is written for a refused batch',
-    );
-  });
-
-  test('a delete of a card that is not there refuses without touching the realm', async function (assert) {
-    let jobsBefore = await indexJobIds();
-    let failure: unknown;
-    try {
-      await commit([{ op: 'delete', href: `${testRealmHref}not-a-card` }]);
-    } catch (err: unknown) {
-      failure = err;
-    }
-    assert.ok(isOperationFailure(failure), 'the delete is refused');
-    if (isOperationFailure(failure)) {
-      assert.strictEqual(failure.error.status, 404);
-      assert.strictEqual(failure.error.code, 'target-not-found');
-    }
-    assert.deepEqual(
-      await indexJobIds(),
-      jobsBefore,
-      'no index job is enqueued',
-    );
-  });
-
-  test('two entries changing one card are refused rather than silently ordered', async function (assert) {
-    let failure: unknown;
-    try {
-      await commit([
-        {
-          op: 'update',
-          href: `${testRealmHref}person-a`,
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Left' },
-              meta: { adoptsFrom: PERSON },
-            },
-          },
-        },
-        {
-          op: 'update',
-          href: `${testRealmHref}person-a`,
-          document: {
-            data: {
-              type: 'card',
-              attributes: { hourlyRate: 99 },
-              meta: { adoptsFrom: PERSON },
-            },
-          },
-        },
-      ]);
-    } catch (err: unknown) {
-      failure = err;
-    }
-    assert.ok(isOperationFailure(failure), 'the batch is refused');
-    if (isOperationFailure(failure)) {
-      assert.strictEqual(failure.error.code, 'invalid-params');
-      assert.strictEqual(failure.error.meta?.conflictsWith, 0);
-    }
-    assert.true(
-      readFileSync(realmFile('person-a.json'), 'utf8').includes('Original'),
-      'the card is left as it was',
-    );
-  });
-
-  test('a batch cannot change a card to another type', async function (assert) {
-    let failure: unknown;
-    try {
-      await commit([
-        {
-          op: 'update',
-          href: `${testRealmHref}person-a`,
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Shapeshifter' },
-              meta: {
-                adoptsFrom: {
-                  module: rri('@cardstack/base/card-api'),
-                  name: 'CardDef',
-                },
-              },
-            },
-          },
-        },
-      ]);
-    } catch (err: unknown) {
-      failure = err;
-    }
-    assert.ok(isOperationFailure(failure), 'the type change is refused');
-    if (isOperationFailure(failure)) {
-      assert.strictEqual(failure.error.status, 400);
-    }
-  });
-
-  test('a base version on anything but an update is refused', async function (assert) {
-    let failure: unknown;
-    try {
-      await commit([
-        { op: 'delete', href: `${testRealmHref}person-c`, baseVersion: 'abc' },
-      ]);
-    } catch (err: unknown) {
-      failure = err;
-    }
-    assert.ok(isOperationFailure(failure), 'the base version is refused');
-    assert.ok(
-      existsSync(realmFile('person-c.json')),
-      'the card is left in place',
     );
   });
 });
