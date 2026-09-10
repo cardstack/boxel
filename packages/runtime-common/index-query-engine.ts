@@ -36,6 +36,7 @@ import {
   query,
   dbExpression,
   isDbExpression,
+  sortDirection,
 } from './expression.ts';
 import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
@@ -1163,7 +1164,7 @@ export class IndexQueryEngine {
           !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
             ? [
                 `"${MATCH_RELEVANCE_SORT_KEY}"`,
-                s.direction ?? 'desc',
+                sortDirection(s.direction ?? 'desc'),
                 'NULLS LAST',
               ]
             : [
@@ -1174,7 +1175,7 @@ export class IndexQueryEngine {
                   ? fieldQuery(s.by, s.on, false, 'sort')
                   : this.generalFieldSortColumn(s.by),
                 ')',
-                s.direction ?? 'asc',
+                sortDirection(s.direction),
                 'NULLS LAST',
               ],
         ),
@@ -1213,7 +1214,7 @@ export class IndexQueryEngine {
       if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
         outerKeys.push([
           `"${MATCH_RELEVANCE_SORT_KEY}"`,
-          s.direction ?? 'desc',
+          sortDirection(s.direction ?? 'desc'),
           'NULLS LAST',
         ]);
         return;
@@ -1226,7 +1227,7 @@ export class IndexQueryEngine {
           : this.generalFieldSortColumn(s.by),
         `) AS ${alias}`,
       );
-      outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
+      outerKeys.push([alias, sortDirection(s.direction), 'NULLS LAST']);
     });
     // `url` then `type` are the final tiebreakers, matching `orderExpression`
     // for deterministic results (a dual-indexed card `.json`'s two rows share
@@ -1812,7 +1813,8 @@ export class IndexQueryEngine {
             typeof element === 'string' ||
             element.kind === 'table-valued-tree' ||
             element.kind === 'json-contains' ||
-            element.kind === 'types-contains'
+            element.kind === 'types-contains' ||
+            element.kind === 'sort-direction'
           ) {
             return Promise.resolve([element]);
           } else if (element.kind === 'field-query') {
