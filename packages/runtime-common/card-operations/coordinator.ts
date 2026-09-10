@@ -1,4 +1,4 @@
-import { computeContentHash } from '../index.ts';
+import { computeContentHash } from '../content-hash.ts';
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   createIdentity,
