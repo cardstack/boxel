@@ -384,7 +384,14 @@ module(basename(import.meta.filename), function (hooks) {
       let seen = await incrementalIndexEventsSince(since);
       return seen.some((event) => event.clientRequestId === 'batch-1');
     });
-    let indexEvents = await incrementalIndexEventsSince(since);
+    // Filtered to the paths this batch touched rather than counted over the
+    // window: the realm is shared across this file's tests and broadcasts are
+    // fire-and-forget, so a straggler from an earlier test can land inside it.
+    let indexEvents = (await incrementalIndexEventsSince(since)).filter(
+      (event) =>
+        event.invalidations.includes(`${testRealmHref}commit-write`) ||
+        event.invalidations.includes(`${testRealmHref}commit-delete`),
+    );
     assert.strictEqual(
       indexEvents.length,
       1,
