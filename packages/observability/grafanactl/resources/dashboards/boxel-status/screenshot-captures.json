@@ -789,7 +789,8 @@
         },
         "type": "stat",
         "title": "Bucket size (CloudWatch)",
-        "description": "BucketSizeBytes for boxel-media-cache-${env}. The bucket deliberately has no S3 lifecycle expiry \u2014 the media_cache_ledger-driven GC sweep is the only deletion path \u2014 so this panel is the growth watch. CloudWatch S3 storage metrics are reported once per day, so the value can lag up to ~48h. Shows 'No data' locally \u2014 CloudWatch is staging/production only.",
+        "description": "BucketSizeBytes for boxel-media-cache-${env}. The bucket deliberately has no S3 lifecycle expiry \u2014 the media_cache_ledger-driven deletes (the GC sweep and putMedia's repoint reclaim) are the only deletion path \u2014 so this panel is the growth watch. CloudWatch S3 storage metrics are reported once per day, so the value can lag up to ~48h; this panel spans 2d regardless of the dashboard range so lastNotNull always finds the newest daily sample. Shows 'No data' locally \u2014 CloudWatch is staging/production only.",
+        "timeFrom": "2d",
         "gridPos": {
           "h": 4,
           "w": 6,
@@ -847,7 +848,8 @@
         },
         "type": "stat",
         "title": "Bucket objects (CloudWatch)",
-        "description": "NumberOfObjects for boxel-media-cache-${env}, reported daily. Compare with 'Ledger object keys': the bucket stores one object per distinct object_key (dedupe-on-write), so the two counts should track each other; a persistent excess of bucket objects means orphans no ledger row references \u2014 invisible to GC, which scans ledger rows and never enumerates the bucket.",
+        "description": "NumberOfObjects for boxel-media-cache-${env}, reported daily. Compare with 'Ledger object keys': the bucket stores one object per distinct object_key (dedupe-on-write), so the two counts should track each other; a persistent excess of bucket objects means orphans no ledger row references \u2014 invisible to GC, which scans ledger rows and never enumerates the bucket. Spans 2d regardless of the dashboard range so lastNotNull always finds the newest daily sample.",
+        "timeFrom": "2d",
         "gridPos": {
           "h": 4,
           "w": 6,
@@ -1005,7 +1007,8 @@
         },
         "type": "timeseries",
         "title": "Bucket growth (daily)",
-        "description": "BucketSizeBytes (left axis) and NumberOfObjects (right axis) for boxel-media-cache-${env}, one CloudWatch sample per day. With no lifecycle expiry on the bucket, unbounded growth here means the ledger-driven GC chain (cron enqueue on the realm-server \u2192 queue \u2192 media-cache-gc on a worker) is broken or leaking; check the stats to the left to tell leaked bytes from legitimate growth.",
+        "description": "BucketSizeBytes (left axis) and NumberOfObjects (right axis) for boxel-media-cache-${env}, one CloudWatch sample per day. With no lifecycle expiry on the bucket, unbounded growth here means the ledger-driven GC chain (cron enqueue in the worker-manager \u2192 queue \u2192 media-cache-gc on a worker) is broken or leaking; check the stats to the left to tell leaked bytes from legitimate growth. Spans 30d regardless of the dashboard range so the daily samples form a trend.",
+        "timeFrom": "30d",
         "gridPos": {
           "h": 8,
           "w": 12,
