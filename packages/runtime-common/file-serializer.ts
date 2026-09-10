@@ -21,7 +21,6 @@ import {
   isScopedReference,
   maybeRelativeReference as makeRelativeReference,
 } from './url.ts';
-import { rri } from './realm-identifiers.ts';
 
 export default async function serialize({
   doc,
@@ -323,6 +322,45 @@ async function resolveChildDef(
   return await definitionLookup.lookupDefinition(codeRef);
 }
 
+// What a relationship's `links.self` should be stored as.
+//
+// Inside the writing realm a link is stored relative, whichever form the
+// client sent. Outside it, a scoped reference is stored exactly as sent and
+// anything else is stored resolved.
+//
+// Whether a link is inside the realm is decided in URL space, so the link is
+// resolved before the question is asked: `relativeTo` is always a URL here,
+// and `relativeReference` refuses a mixed RRI/URL pair rather than resolve
+// across forms — handing it a scoped reference returns that reference
+// unchanged, which looks like "cannot be relativized" even for a link into
+// this very realm.
+//
+// Storing a resolved URL for a cross-realm scoped link is the bug this exists
+// to prevent: it bakes whatever URL the linked realm answers to in this
+// environment into a realm that is version controlled.
+export function storedRelationshipLink(
+  selfLink: string,
+  relativeTo: URL,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): string {
+  let resolved: URL;
+  try {
+    resolved = virtualNetwork.resolveURL(selfLink, relativeTo);
+  } catch (e) {
+    // A reference that will not resolve is left exactly as it arrived.
+    return selfLink;
+  }
+  let relative = makeRelativeReference(resolved, relativeTo, realmURL);
+  if (
+    relative === resolved.href &&
+    isScopedReference(selfLink, virtualNetwork)
+  ) {
+    return selfLink;
+  }
+  return relative;
+}
+
 async function processRelationships({
   relationships,
   definition,
@@ -350,24 +388,12 @@ async function processRelationships({
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
         if (realmURL && selfLink) {
-          try {
-            selfLink = makeRelativeReference(
-              // A scoped reference is passed through unresolved.
-              // `maybeRelativeReference` relativizes it when it points into
-              // the writing realm and otherwise preserves the form it was
-              // given, which is what keeps a cross-realm link canonical.
-              // Resolving first discards that form, so the fallback could only
-              // return a URL — whatever the linked realm answers to in this
-              // environment, baked into a version-controlled realm.
-              isScopedReference(selfLink, virtualNetwork)
-                ? rri(selfLink)
-                : virtualNetwork.resolveURL(selfLink, relativeTo),
-              relativeTo,
-              realmURL,
-            );
-          } catch (e) {
-            // ignore malformed URLs and leave as-is
-          }
+          selfLink = storedRelationshipLink(
+            selfLink,
+            relativeTo,
+            realmURL,
+            virtualNetwork,
+          );
         }
         processedValue.links = {
           self: selfLink,
