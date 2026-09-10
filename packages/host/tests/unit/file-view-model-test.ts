@@ -24,6 +24,8 @@ module('Unit | file-formats', function (hooks) {
   let fileViewModel: typeof FileViewModelModule.fileViewModel;
   let shortDate: typeof FilePresentationModule.shortDate;
   let relativeDate: typeof FilePresentationModule.relativeDate;
+  let now: () => number;
+  let nowDate: () => Date;
   let FITTED_TEXT_CHARACTER_BUDGET: number;
   let FITTED_TEXT_LINE_BUDGET: number;
   let FITTED_WAVEFORM_BAR_BUDGET: number;
@@ -41,6 +43,11 @@ module('Unit | file-formats', function (hooks) {
     );
     ({ profileForFile, contentTypeForFile, extensionOfFile } = profileModule);
     ({ shortDate, relativeDate } = presentationModule);
+    let clockModule = await loader.import<{
+      now: () => number;
+      nowDate: () => Date;
+    }>('@cardstack/base/helpers/clock');
+    ({ now, nowDate } = clockModule);
     ({
       fileViewModel,
       FITTED_TEXT_CHARACTER_BUDGET,
@@ -411,6 +418,99 @@ module('Unit | file-formats', function (hooks) {
         relativeDate(1_700_000_000).includes('56y'),
         'a seconds timestamp is not misread as a 1970 relative date',
       );
+    });
+
+    // `relativeDate` measures from `globalThis.__boxelNow` when that is set.
+    // Pinning it is what lets a rendered "3d ago" be compared between two
+    // builds: unpinned, the same timestamp walks through the thresholds as
+    // real time passes — daily while a file is under a month old — so a
+    // snapshot of it drifts on its own and has to be hidden to stay quiet.
+    module('a pinned clock', function (hooks) {
+      // 2026-01-15T12:00:00Z, in the epoch seconds the server stamps.
+      const PINNED = 1_768_478_400;
+      const DAY = 86_400;
+
+      hooks.beforeEach(function () {
+        (globalThis as { __boxelNow?: number }).__boxelNow = PINNED * 1000;
+      });
+      hooks.afterEach(function () {
+        delete (globalThis as { __boxelNow?: number }).__boxelNow;
+      });
+
+      test('measures from the pinned instant rather than the real clock', function (assert) {
+        assert.strictEqual(relativeDate(PINNED), 'today');
+        assert.strictEqual(relativeDate(PINNED - 3 * DAY), '3d ago');
+        assert.strictEqual(relativeDate(PINNED - 60 * DAY), '2mo ago');
+        assert.strictEqual(relativeDate(PINNED - 800 * DAY), '2y ago');
+      });
+
+      // Expected values rather than a self-comparison: `relativeDate(x)` twice
+      // within a tick agrees whether or not the clock is pinned, so that form
+      // demonstrates nothing it appears to. These also pin the boundaries where
+      // the format changes, which nothing else covers.
+      test('renders each threshold as a function of the pinned instant', function (assert) {
+        for (let [ageDays, expected] of [
+          [0, 'today'],
+          [1, '1d ago'],
+          [29, '29d ago'],
+          [30, '1mo ago'],
+          [364, '12mo ago'],
+          [365, '1y ago'],
+          [900, '2y ago'],
+        ] as [number, string][]) {
+          assert.strictEqual(
+            relativeDate(PINNED - ageDays * DAY),
+            expected,
+            `${ageDays}d old`,
+          );
+        }
+      });
+
+      // A timestamp after the pinned instant takes the future branch, which
+      // renders an absolute date — the reason a file with a future mtime shows
+      // a date where its neighbours show an age.
+      test('renders a timestamp after the pinned instant as an absolute date', function (assert) {
+        assert.strictEqual(
+          relativeDate(PINNED + 10 * DAY),
+          shortDate(PINNED + 10 * DAY),
+        );
+      });
+
+      test('is the same instant every card-side reader sees', function (assert) {
+        assert.strictEqual(now(), PINNED * 1000, 'now() reports the pin');
+        assert.strictEqual(
+          nowDate().getTime(),
+          PINNED * 1000,
+          'nowDate() reports the same instant',
+        );
+      });
+
+      // Asserted through `now()` rather than a rendered label, so it cannot rot
+      // as the pinned instant recedes from the real calendar. The numeric
+      // string is the realistic mistake — `String(Date.now())` out of a query
+      // param or an env var — and is exactly what `typeof` rejects and what a
+      // looser `Number.isFinite(Number(pinned))` would wrongly honour. `NaN`
+      // and `Infinity` are the half nothing else reaches.
+      test('ignores a pin that is not a finite number', function (assert) {
+        for (let bad of ['nonsense', String(PINNED * 1000), NaN, Infinity]) {
+          (globalThis as { __boxelNow?: unknown }).__boxelNow = bad;
+          let before = Date.now();
+          let reading = now();
+          let after = Date.now();
+          // Two assertions rather than one conjunction, so a failure says
+          // which way the reading escaped the window: below it means the pin
+          // was honoured and the reading came from the past, above it means
+          // something other than the real clock answered.
+          assert.ok(
+            reading >= before,
+            `${String(bad)} is ignored: reading is not earlier than the real clock`,
+          );
+          assert.ok(
+            reading <= after,
+            `${String(bad)} is ignored: reading is not later than the real clock`,
+          );
+        }
+      });
     });
   });
 });
