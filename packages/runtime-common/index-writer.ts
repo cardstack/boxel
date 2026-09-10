@@ -1028,13 +1028,24 @@ export class Batch {
     try {
       if (this.#splitPrerenderHtml) {
         // Last write wins when the same (url, type) was buffered twice: a
-        // single multi-row upsert can't touch one conflict target twice.
+        // single multi-row upsert can't touch one conflict target twice. The
+        // surviving row keeps the EARLIER position, because `writeSeq` says
+        // where in the pass the URL's visit began writing, and a rewrite of
+        // a row that visit already wrote is still that visit's write. Taking
+        // the later position instead would move the row behind URLs the
+        // visit loop only reached afterwards, and could leave the pass with
+        // no row at position 0 at all.
         let deduped = new Map<
           string,
           { url: URL; entry: SearchIndexEntry; seq: number }
         >();
         for (let item of buffered) {
-          deduped.set(`${item.url.href}|${rowType(item.entry)}`, item);
+          let key = `${item.url.href}|${rowType(item.entry)}`;
+          let firstWrite = deduped.get(key);
+          deduped.set(
+            key,
+            firstWrite ? { ...item, seq: firstWrite.seq } : item,
+          );
         }
         let prepared = await Promise.all(
           [...deduped.values()].map(({ url, entry, seq }) =>
@@ -1538,15 +1549,22 @@ export class Batch {
           type,
         );
         // The column is the canonical home for the failing render's
-        // diagnostics; the copy on `error_doc.diagnostics` mirrors the
-        // `boxel_index` error-row pattern so error-doc consumers read one
-        // shape on both channels. Unlike the HTML columns below, the
-        // diagnostics are NOT taken from the last-known-good production
-        // row — they describe this failing render.
+        // diagnostics, and the only place the write-side stamps go: the copy
+        // on `error_doc.diagnostics` is the read path operator mode surfaces
+        // ("send error to AI assistant" renders the blob verbatim), so it
+        // carries what the render itself reported and nothing else — where
+        // in a pass the row was written is bookkeeping for the operator
+        // queries, not for that dialog. Unlike the HTML columns below,
+        // neither copy is taken from the last-known-good production row:
+        // both describe this failing render.
         let errorDoc = this.normalizeErrorDoc(
           {
             ...entry.error,
-            diagnostics: diagnostics as Record<string, unknown>,
+            ...(entry.diagnostics
+              ? {
+                  diagnostics: entry.diagnostics as Record<string, unknown>,
+                }
+              : {}),
           },
           url,
         );

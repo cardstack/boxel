@@ -616,9 +616,10 @@ module(basename(import.meta.filename), function () {
     }
 
     // Every live row on either channel carries the three write-side stamps
-    // (see `Diagnostics`). Assert they are there, then return the rest of the
-    // blob so a render-side assertion can compare exactly what the render
-    // produced.
+    // in its `diagnostics` column (see `Diagnostics`). Assert they are there,
+    // then return the rest of the blob so a render-side assertion can compare
+    // exactly what the render produced. Not for `error_doc.diagnostics`: that
+    // mirror carries the render's own diagnostics only.
     function withoutWriteSideStamps(
       diagnostics: Record<string, unknown> | null | undefined,
       label: string,
@@ -887,13 +888,9 @@ module(basename(import.meta.filename), function () {
         "the failing render's diagnostics land on the row — not the last-known-good render's",
       );
       assert.deepEqual(
-        withoutWriteSideStamps(
-          row.error_doc?.diagnostics,
-          "the error row's error doc",
-          assert,
-        ),
+        row.error_doc?.diagnostics,
         failing as Record<string, unknown>,
-        'the same payload is mirrored onto the error doc',
+        'the same payload is mirrored onto the error doc, without the stamps',
       );
     });
 
@@ -1071,6 +1068,71 @@ module(basename(import.meta.filename), function () {
         rows[1]?.diagnostics?.renderElapsedMs,
         7,
         "the stamps merge around a rendering's own diagnostics rather than replacing them",
+      );
+    });
+
+    test('the index channel stamps each write with its position, and a rewrite keeps the first', async function (assert) {
+      // The visit loop hands its rows to a write-behind buffer that drains
+      // them in one multi-row upsert, so a row's position has to be taken
+      // where it entered the buffer: `indexedAt` alone cannot separate rows
+      // one drain wrote, and the drain itself may collapse two writes of the
+      // same row into one. A URL written twice in one pass keeps the position
+      // its visit started at, while the row's contents are the later write's.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      let file = (lastModified: number) => ({
+        type: 'file' as const,
+        lastModified,
+        resourceCreatedAt: lastModified,
+        deps: new Set<string>(),
+      });
+      let url = (path: string) => new URL(`${testRealm}${path}`);
+      await batch.invalidate([url('zzz.gts'), url('aaa.gts'), url('bbb.gts')]);
+      await batch.bufferEntry(url('zzz.gts'), file(1));
+      await batch.bufferEntry(url('aaa.gts'), file(2));
+      // Rewritten before the buffer drains — the same visit, correcting the
+      // row it already wrote.
+      await batch.bufferEntry(url('zzz.gts'), file(3));
+      await batch.bufferEntry(url('bbb.gts'), file(4));
+      await batch.done();
+
+      let rows = (await adapter.execute(
+        `SELECT url, last_modified,
+                diagnostics->>'writeSeq' AS seq,
+                diagnostics->>'invalidationId' AS invalidation_id
+           FROM boxel_index
+          WHERE realm_url = $1 AND type = 'file'
+          ORDER BY (diagnostics->>'writeSeq')::int`,
+        { bind: [testRealm] },
+      )) as {
+        url: string;
+        last_modified: string | number | null;
+        seq: string | null;
+        invalidation_id: string | null;
+      }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.url),
+        [url('zzz.gts').href, url('aaa.gts').href, url('bbb.gts').href],
+        'writeSeq replays the order the pass wrote its rows, not the lexical order',
+      );
+      assert.deepEqual(
+        rows.map((row) => row.seq),
+        ['0', '1', '3'],
+        'the rewrite kept zzz.gts at position 0 and consumed position 2, which no row carries',
+      );
+      assert.strictEqual(
+        Number(rows[0]?.last_modified),
+        3,
+        "the row's contents are the later write's, even though its position is the earlier",
+      );
+      assert.strictEqual(
+        new Set(rows.map((row) => row.invalidation_id)).size,
+        1,
+        'one grouping id covers the whole pass',
       );
     });
 
