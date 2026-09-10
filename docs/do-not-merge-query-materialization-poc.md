@@ -11,8 +11,8 @@ deploy it to production, or write experimental changes into the source realm.
 - Source deployment realm: `https://app.boxel.ai/tribecaprep/nucleus-lms/`.
 - Development fork:
   `https://realms-staging.stack.cards/ctse/nucleus-lms-query-materialization-poc/`.
-- The staging fork is private to its owner. Source-realm references are remapped
-  to the fork; independent external dependencies remain external references.
+- The staging fork is private to its owner and contains definitions only, plus
+  its default configuration. Do not copy production records into this fork.
 - Realm source/data stay outside the monorepo. Do not commit student records,
   source archives, credentials, or local sync history here.
 
@@ -23,12 +23,24 @@ remains a deployment realm for separately approved promotions and migrations.
 Initial branch status: environment setup and implementation plan only. The
 runtime feature and the realm summary definitions have not been implemented.
 
-Fork preparation: the source archive contains 1,411 files (about 9 MB). The 154
-definition/support files have been copied; all 29 card types used by the source
-instances passed schema generation on staging. The full 1,257-file JSON import
-is prepared with source-realm URL remapping and is awaiting explicit approval
-for copying student data into the staging account. Until then, the target holds
-its default configuration plus the copied definitions, not the source dataset.
+Paused at the user's request on September 10, 2026. No runtime implementation,
+synthetic fixture generation, or benchmarks have started. Resume only when asked.
+
+Fork preparation: 154 definition/support files have been copied and verified
+against their prepared source hashes; all 29 card types used by the source
+instances passed schema generation on staging. No production records were
+uploaded. The temporary production archive, 1,257 prepared JSON files, import
+inventory and temporary source authentication cache have been removed. Only
+aggregate counts remain for sizing synthetic fixtures.
+
+The benchmark data must be newly generated and deterministic, with fabricated
+identities, narratives and relationships. Do not anonymize or reuse production
+records. Initial planned sizes are 1,255 instances (approximately the current
+production count, excluding realm/index configuration), 12,550 instances and
+125,500 instances. These are planned fixture sizes, not generated datasets.
+Preserve a representative mix of card types. Vary total realm size separately
+from matching records per classroom/day and graph fan-out so the measurements
+distinguish unrelated data growth from growth of an individual materialization.
 
 ## Intended outcome
 
