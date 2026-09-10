@@ -8,6 +8,9 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # A file from the dist rather than `/`: a 200 for it means an icons server
   # is answering, not merely something on the port.
   PROBE_PATH="/@cardstack/boxel-icons/v1/icons/folder-pen.js"
+  answers() {
+    curl --fail --silent --max-time 2 "http://127.0.0.1:$1${PROBE_PATH}" >/dev/null 2>&1
+  }
 
   # The route file lives in the directory the running Traefik container
   # watches, which in a worktree can differ from this checkout's own
@@ -23,15 +26,24 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # server. Each start registers its own port under this one route file, last
   # writer winning, so a second instance that failed to come up would take the
   # route away from a first that was serving. An instance that finds the
-  # registered server answering steps aside. The check goes straight to the
-  # port the route names, the way Traefik reaches it, rather than through the
-  # hostname: that depends on nothing but the server being up — not on DNS,
-  # the mkcert trust, or Traefik having finished a reload.
+  # registered server answering stands by instead. The check goes straight to
+  # the port the route names, the way Traefik reaches it, rather than through
+  # the hostname: that depends on nothing but the server being up — not on
+  # DNS, the mkcert trust, or Traefik having finished a reload.
+  #
+  # Standing by rather than exiting: the server just probed may belong to a
+  # stack that is on its way down — a restart overlaps the previous stack's
+  # shutdown — and a single probe cannot tell. This instance keeps probing and
+  # starts a server of its own the moment the registered one stops answering,
+  # so the environment never ends up with a route and nothing behind it.
   if [ -f "$CONFIG_PATH" ]; then
     REGISTERED_PORT=$(sed -n 's/.*host\.docker\.internal:\([0-9]*\).*/\1/p' "$CONFIG_PATH" | head -1)
-    if [ -n "$REGISTERED_PORT" ] && curl --fail --silent --max-time 2 "http://127.0.0.1:${REGISTERED_PORT}${PROBE_PATH}" >/dev/null 2>&1; then
-      echo "icons already served for icons.${ENV_SLUG}.localhost on port ${REGISTERED_PORT}, skipping startup"
-      exit 0
+    if [ -n "$REGISTERED_PORT" ] && answers "$REGISTERED_PORT"; then
+      echo "icons already served for icons.${ENV_SLUG}.localhost on port ${REGISTERED_PORT}; standing by to replace it"
+      while answers "$REGISTERED_PORT"; do
+        sleep 5
+      done
+      echo "icons server on port ${REGISTERED_PORT} stopped answering; starting a replacement"
     fi
   fi
 
@@ -49,7 +61,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # would then fail with a 502 that no service log records, and the host app
   # cannot render a card without its icons.
   tries=0
-  until curl --fail --silent --max-time 2 "http://127.0.0.1:${ICONS_PORT}${PROBE_PATH}" >/dev/null 2>&1; do
+  until answers "$ICONS_PORT"; do
     if ! kill -0 "$ICONS_PID" 2>/dev/null; then
       echo "icons server exited before it answered on port ${ICONS_PORT}; not registering it" >&2
       exit 1
