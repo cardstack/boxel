@@ -187,27 +187,42 @@ export function shouldRerenderForStaleShell({
   );
 }
 
-// Whether the missing export *is* the failure, rather than merely present
-// among the console errors `RenderRunner` merged onto it.
+// The row types whose *own* failure is a missing export, rather than types
+// that merely carry one among the console errors `RenderRunner` merged onto
+// them.
 //
-// The broader test drives the re-render, where being wrong costs one extra
-// render. This one gates suppressing a row, where being wrong hides a genuine
-// break — so a render whose own failure was a timeout or a wedge, and whose
-// console happened to carry a missing-export line, is not grounds to withhold
-// the error it actually produced.
-function missingExportIsTheFailure(response: RenderVisitResponse): boolean {
-  for (let candidate of [
-    response.card?.error,
-    response.fileExtract?.error,
-    response.fileRender?.error,
-    response.pageUnusableError,
-  ]) {
+// Two narrowings, and both matter because of what the answer is used for. The
+// broader `hasMissingExportError` drives the re-render, where being wrong costs
+// one render; this gates withholding a row, where being wrong hides a genuine
+// break. And it answers per row type rather than per response, because a single
+// visit produces the instance and file rows independently — a card render that
+// hit the stale bundle says nothing about a file extraction that failed beside
+// it for its own reasons.
+function unattributableRowTypes(
+  response: RenderVisitResponse,
+): ('instance' | 'file')[] {
+  let types = new Set<'instance' | 'file'>();
+  let consider = (
+    candidate: { error?: { message?: unknown } } | undefined,
+    type: 'instance' | 'file',
+  ) => {
     let message = candidate?.error?.message;
     if (typeof message === 'string' && isMissingExportMessage(message)) {
-      return true;
+      types.add(type);
     }
+  };
+  consider(response.card?.error, 'instance');
+  consider(response.fileExtract?.error, 'file');
+  consider(response.fileRender?.error, 'file');
+  // A page that never became usable produced neither render, so the failure
+  // belongs to both rows rather than to one of them.
+  let pageUnusable = response.pageUnusableError;
+  let pageMessage = pageUnusable?.error?.message;
+  if (typeof pageMessage === 'string' && isMissingExportMessage(pageMessage)) {
+    types.add('instance');
+    types.add('file');
   }
-  return false;
+  return [...types];
 }
 
 function hasMissingExportError(response: RenderVisitResponse): boolean {
@@ -306,12 +321,18 @@ export function stampHostShellTokens(
 // and warmed tokens at the moment of the render. The write site checks for the
 // field's presence and nothing else — it does not re-derive the conclusion, so
 // there is one implementation of the rule rather than two that can drift.
-export function stampStaleShellFailure(response: RenderVisitResponse): void {
+export function stampStaleShellFailure(
+  response: RenderVisitResponse,
+  rowTypes: ('instance' | 'file')[],
+): void {
+  if (rowTypes.length === 0) {
+    return;
+  }
   response.meta = {
     ...(response.meta ?? {}),
     diagnostics: {
       ...(response.meta?.diagnostics ?? {}),
-      staleShellFailure: true,
+      staleShellFailure: rowTypes,
     },
   };
 }
@@ -1373,8 +1394,9 @@ export function buildPrerenderApp(options: {
         // merged onto an unrelated timeout, because being wrong there costs one
         // render. Withholding a row wants the missing export to be the failure
         // itself.
+        let unattributable = unattributableRowTypes(response);
         if (
-          missingExportIsTheFailure(response) &&
+          unattributable.length > 0 &&
           shouldRerenderForStaleShell({
             response,
             warmedAtStart,
@@ -1383,13 +1405,14 @@ export function buildPrerenderApp(options: {
           })
         ) {
           log.warn(
-            'visit of %s failed to resolve a module on a pool warmed against %s -> %s while the current host shell is %s, after a re-render; marking the failure unattributable to the card',
+            'visit of %s failed to resolve a module on a pool warmed against %s -> %s while the current host shell is %s, after a re-render; marking the %s row(s) unattributable to the card',
             url,
             warmedAtStart ?? 'none',
             warmedAtCompletion ?? 'none',
             shellAtCompletion,
+            unattributable.join(', '),
           );
-          stampStaleShellFailure(response);
+          stampStaleShellFailure(response, unattributable);
         }
       }
       let totalMs = Date.now() - start;

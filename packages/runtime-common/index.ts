@@ -814,7 +814,15 @@ export interface Diagnostics
   // Absent means no verdict, never "attributable". A reader must require
   // presence before suppressing anything, for the same reason the warmed
   // tokens distinguish `null` from absence.
-  staleShellFailure?: true;
+  // Which of this URL's row types the verdict covers, because one visit can
+  // produce several and they fail independently. A card render can hit the
+  // stale bundle while the file extraction beside it fails for reasons of its
+  // own, and withholding both on one response-level flag would hide that
+  // second, genuine failure.
+  //
+  // An empty array is not written: absence means no verdict, and a reader must
+  // find its own row type listed before withholding anything.
+  staleShellFailure?: ('instance' | 'file')[];
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table

@@ -1292,9 +1292,10 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(calls, 2, 'one re-render, and no more');
         assert.strictEqual(res.status, 201, 'the failure is still returned');
-        assert.true(
+        assert.deepEqual(
           res.body.data.attributes.meta.diagnostics.staleShellFailure,
-          'marked, so the write site can decline to publish it as content',
+          ['instance'],
+          'marked, and scoped to the row that actually failed this way',
         );
       });
 
@@ -1334,6 +1335,43 @@ module(basename(import.meta.filename), function () {
           res.body.data.attributes.card.error.error.message,
           MISSING_EXPORT,
           "and it is the card's own failure that is returned",
+        );
+      });
+
+      // The scoping the review asked for. One visit produces the instance and
+      // file rows independently: here the card render hit the stale bundle
+      // while the file extraction failed for a reason of its own. A verdict
+      // naming the response rather than the rows would withhold both, hiding
+      // the file's genuine failure.
+      test('a verdict names only the rows that failed on the stale bundle', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: { error: { error: { message: MISSING_EXPORT } } },
+            fileExtract: {
+              error: { error: { message: 'Unexpected end of JSON input' } },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}two-failures`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own failure stays visible",
         );
       });
 
