@@ -71,6 +71,9 @@ class TestContext extends GlimmerComponent<TestContextSignature> {
 
 const HASSAN = `${testRealmURL}Person/hassan`;
 const INERT_HTML = `<div class='inert' data-test-inert-card>Inert</div>`;
+// Inert HTML as the prerender captures it: the card-api container with its
+// boundary class already on it.
+const BOUNDED_INERT_HTML = `<div class='boxel-card-container boxel-card-container--boundaries inert' data-test-inert-card>Inert</div>`;
 
 // Drives a mount/unmount toggle so a teardown test can destroy the rendered
 // HydratableCard and assert it releases its Store reference.
@@ -292,6 +295,72 @@ module('Integration | Component | hydratable-card', function (hooks) {
       0,
       'the live element stays out of the tracker too',
     );
+  });
+
+  // The boundary ring is on by default and survives hydration: the inert HTML
+  // keeps whatever boundary class it was prerendered with, and the live card
+  // renders inside its own bounded container.
+  test('displayContainer defaults to true — the hydrated card keeps its container boundaries', async function (assert) {
+    let inert = htmlComponent(BOUNDED_INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-inert-card]')
+      .hasClass('boxel-card-container--boundaries', 'inert ring is kept')
+      .doesNotHaveClass('hide-boundaries', 'nothing hides the inert ring');
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-hydratable-card]')
+      .hasClass(
+        'boxel-card-container--boundaries',
+        'the live container draws its boundaries too',
+      );
+  });
+
+  // `@displayContainer={{false}}` hides the ring on both sides of the swap, the
+  // way `<@fields.x @displayContainer={{false}} />` does for a field render.
+  test('displayContainer=false — hides the boundaries on the inert HTML and the live card alike', async function (assert) {
+    let inert = htmlComponent(BOUNDED_INERT_HTML);
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @component={{inert}}
+            @mode='hover'
+            @displayContainer={{false}}
+          />
+        </TestContext>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-inert-card]')
+      .hasClass('hide-boundaries', 'the inert ring is suppressed');
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert
+      .dom('[data-test-live-card]')
+      .hasText('Live: Hassan', 'still hydrates');
+    assert
+      .dom('[data-test-hydratable-card]')
+      .doesNotHaveClass(
+        'boxel-card-container--boundaries',
+        'the live container renders without boundaries',
+      );
   });
 
   // `none` stays inert with the diagnostic attribute and never fetches.

@@ -200,6 +200,47 @@ module(
       );
     });
 
+    test('@displayContainer=false reaches the rows through the card-facing wrapper', async function (assert) {
+      // The wrapper forwards the arg explicitly; a row must lose its container
+      // boundaries both while inert and once hydrated.
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+        realms: [testRealmURL],
+      };
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent
+              @query={{query}}
+              @mode='hover'
+              @displayContainer={{false}}
+            />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result]')),
+      );
+
+      assert
+        .dom(`[data-test-hydratable-card="${BOOK_1}"]`)
+        .hasClass('hide-boundaries', 'the inert row suppresses its ring');
+
+      await triggerEvent(
+        `[data-test-hydratable-card="${BOOK_1}"]`,
+        'mouseenter',
+      );
+
+      assert
+        .dom(
+          `[data-test-hydratable-card="${BOOK_1}"][data-hydration="hydrated"]`,
+        )
+        .doesNotHaveClass(
+          'boxel-card-container--boundaries',
+          'the live container renders without boundaries',
+        );
+    });
+
     test('a no-realm card search scopes to the context default realm', async function (assert) {
       // The query carries no `realms`. Card-initiated, it targets the realm the
       // `@context` was provided with rather than fanning out across every

@@ -94,6 +94,7 @@ export class RenderableSearchEntry {
     private fallbackFormat: PrerenderedHtmlFormat,
     private mode: HydrationMode,
     private overlays: boolean,
+    private displayContainer: boolean,
   ) {}
 
   get id(): string {
@@ -214,6 +215,7 @@ export class RenderableSearchEntry {
         errorDoc: this.errorDoc,
         mode: this.mode,
         overlays: this.overlays,
+        displayContainer: this.displayContainer,
       });
     }
     return this.#component;
@@ -242,6 +244,7 @@ export class RenderableSearchEntries {
     private resource: ReturnType<typeof getSearchEntriesResource>,
     private getMode: () => HydrationMode,
     private getOverlays: () => boolean,
+    private getDisplayContainer: () => boolean,
   ) {}
 
   private get fallbackRenderType(): ResolvedCodeRef | undefined {
@@ -257,9 +260,11 @@ export class RenderableSearchEntries {
     let fallbackFormat = this.fallbackFormat;
     let mode = this.getMode();
     let overlays = this.getOverlays();
+    let displayContainer = this.getDisplayContainer();
     let inputsKey = JSON.stringify([
       mode,
       overlays,
+      displayContainer,
       fallbackRenderType,
       fallbackFormat,
     ]);
@@ -282,6 +287,7 @@ export class RenderableSearchEntries {
         fallbackFormat,
         mode,
         overlays,
+        displayContainer,
       );
       // Pure memoization keyed on the resource's stable entry identity — it
       // dirties no tracked state, and keeping unchanged rows' view-models (and
@@ -317,6 +323,7 @@ export function getRenderableSearchEntries(
   getQuery: () => SearchEntryWireQuery | undefined,
   getMode: () => HydrationMode,
   getOverlays: () => boolean = () => true,
+  getDisplayContainer: () => boolean = () => true,
   opts?: {
     // Forwarded to the underlying resource: scope a no-realm card search to the
     // current realm instead of fanning out. Set only by the card-facing
@@ -329,5 +336,6 @@ export function getRenderableSearchEntries(
     getSearchEntriesResource(owner, getQuery, opts),
     getMode,
     getOverlays,
+    getDisplayContainer,
   );
 }
