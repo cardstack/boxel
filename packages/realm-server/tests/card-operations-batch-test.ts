@@ -110,6 +110,26 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a create does not commit over a card already stored at its destination', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a create names its card by the local id on the resource', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a malformed side-load is refused rather than reaching the serializer', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('staging leaves the document it was handed alone', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a named create needs every value its declaration asks for', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('a create with nothing to create is refused', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

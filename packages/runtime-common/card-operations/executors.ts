@@ -128,6 +128,12 @@ export interface StagedWrite {
 export interface StagedChange {
   writes: StagedWrite[];
   deletes: LocalPath[];
+  // The files this entry brings into existence, as opposed to the ones it
+  // rewrites. A card already stored at one of these is not this entry's to
+  // replace, so the coordinator refuses the batch rather than committing over
+  // it — the same answer the atomic endpoint gives an `add` whose href is
+  // taken.
+  mints: LocalPath[];
   // The card the entry's result reports.
   id: string;
   // Echoed on a create, so a client can match the URL the realm minted back to
@@ -205,7 +211,7 @@ export async function stageCreate(
       content: await serializeForStorage(primary, identity, ctx),
     },
   ];
-  for (let resource of entry.document?.included ?? []) {
+  for (let resource of includedResources(entry.document)) {
     // A side-loaded resource with no `lid` is not staged: it has no id to be
     // created under and nothing in the batch can link to it, so the client
     // sent a resource the realm has no way to name. One naming another realm
@@ -220,25 +226,78 @@ export async function stageCreate(
       await stageSideLoaded(resource, resource.lid, identity.id, ctx),
     );
   }
+  let lid = localIdOf(entry);
   return {
     writes,
     deletes: [],
+    mints: writes.map((write) => write.path),
     id: identity.id,
-    ...(entry.lid ? { lid: entry.lid } : {}),
+    ...(lid ? { lid } : {}),
     primaryPath: identity.path,
   };
+}
+
+// The local id a create entry is named by. A raw JSON:API create carries it on
+// the resource, the way a `POST` body does; an entry may also name it
+// directly. Read through one function so both spellings name the same card —
+// otherwise a payload naming its card only on the resource is minted under a
+// generated id, and every relationship elsewhere in the batch pointing at that
+// local id resolves to nothing.
+export function localIdOf(entry: CreateEntry): string | undefined {
+  if (typeof entry.lid === 'string') {
+    return entry.lid;
+  }
+  let resourceLid = entry.document?.data?.lid;
+  return typeof resourceLid === 'string' ? resourceLid : undefined;
+}
+
+// The side-loaded resources a document carries, held to the shape the card
+// endpoints require of one: a list, of card resources. A malformed side-load
+// is the caller's payload to fix, so it is refused here rather than reaching
+// the serializer as an internal failure.
+export function includedResources(
+  document: BatchDocument | undefined,
+): CardResource[] {
+  let included = document?.included;
+  if (included === undefined) {
+    return [];
+  }
+  if (!Array.isArray(included)) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid document',
+      detail: `"included" is not an array`,
+    });
+  }
+  for (let resource of included) {
+    if (!isCardResource(resource)) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid document',
+        detail: `a side-loaded resource is not a valid card resource`,
+      });
+    }
+  }
+  return included;
 }
 
 // A card side-loaded alongside the one an entry names. Its module refs are
 // written relative to the card it was sent with, so they are resolved against
 // that card before it is serialized under its own URL.
 async function stageSideLoaded(
-  resource: CardResource,
+  sent: CardResource,
   lid: string,
   relativeTo: string,
   ctx: StagingContext,
 ): Promise<StagedWrite> {
   let identity = stagedLid(lid, ctx);
+  // Rewritten on a copy. Staging is what makes a batch abandonable, and a
+  // rewrite in place would leave the caller's own document carrying resolved
+  // links and absolutized modules after a batch that committed nothing —
+  // state a retry of the same entries would then stage on top of.
+  let resource = cloneDeep(sent);
   promoteStagedLinks(resource, ctx);
   visitModuleDeps(resource, (moduleId, setModuleId) => {
     setModuleId(ctx.resolveModuleId(moduleId, relativeTo));
@@ -329,7 +388,7 @@ export async function stageUpdate(
       )}`,
     });
   }
-  let included = entry.document.included ?? [];
+  let included = includedResources(entry.document);
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
   // prerendered manifest at serve time, and `type` is fixed by the document
@@ -396,7 +455,15 @@ export async function stageUpdate(
       writes.push(await stageSideLoaded(resource, resource.lid, url.href, ctx));
     }
   }
-  return { writes, deletes: [], id: url.href, primaryPath: sourcePath };
+  return {
+    writes,
+    deletes: [],
+    // The primary rewrites a card that is already there; only the side-loaded
+    // creates bring a file into existence.
+    mints: writes.map((write) => write.path).filter((p) => p !== sourcePath),
+    id: url.href,
+    primaryPath: sourcePath,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +490,7 @@ export function stageDelete(
       detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
     });
   }
-  return { writes: [], deletes: [sourcePath], id: url.href };
+  return { writes: [], deletes: [sourcePath], mints: [], id: url.href };
 }
 
 // ---------------------------------------------------------------------------
@@ -504,15 +571,16 @@ export function createIdentity(
   paths: RealmPaths,
   lids: LidIndex,
 ): StagedIdentity {
-  if (entry.lid) {
-    let staged = lids.get(entry.lid);
+  let lid = localIdOf(entry);
+  if (lid !== undefined) {
+    let staged = lids.get(lid);
     if (staged) {
       return staged;
     }
   }
   return stagedIdentity(
     resource?.meta?.adoptsFrom ?? entry.definition?.of,
-    entry.lid ?? uuidV4(),
+    lid ?? uuidV4(),
     entry.directory,
     paths,
   );
@@ -665,6 +733,22 @@ async function resourceFromTemplate(
   ctx: StagingContext,
 ): Promise<CardResource> {
   let of = definition.of!;
+  // The payload has to satisfy the declaration's own schema before anything is
+  // substituted from it. A missing value would otherwise resolve to
+  // `undefined` and the field would simply be left off the card, so a caller
+  // that forgot a required param would get a card quietly missing it rather
+  // than being told. This is the check dispatch applies before an executor
+  // runs, applied here for the callers that stage a batch directly.
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(entry.params, key) === undefined) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `this create requires a value for params("${key}")`,
+      });
+    }
+  }
   let anchor = entry.href ? anchorResource(entry, ctx) : undefined;
   let linkFields = await linkFieldsOf(of, entry, ctx);
   let resource: CardResource = { type: 'card', meta: { adoptsFrom: of } };

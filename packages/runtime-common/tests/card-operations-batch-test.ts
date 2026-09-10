@@ -86,6 +86,9 @@ function stub(opts: StubOptions = {}): Stub {
         held--;
       }
     },
+    async fileExists(localPath) {
+      return stored[localPath] !== undefined;
+    },
     async readSourceFile(localPath) {
       let content = stored[localPath];
       return content === undefined
@@ -1020,6 +1023,187 @@ const tests: SharedTests<Record<string, never>> = {
       ['Person/mango-1.json'],
       'an ordinary local id still names its own file under the type',
     );
+  },
+
+  'a create does not commit over a card already stored at its destination':
+    async (assert) => {
+      let { core, commits } = stub({
+        stored: {
+          'Person/taken.json': cardFile({ firstName: 'Incumbent' }, PERSON),
+        },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'create',
+          lid: 'taken',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Usurper' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 409,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    },
+
+  'a create names its card by the local id on the resource': async (assert) => {
+    let { core, commits } = stub();
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'create',
+          document: {
+            data: {
+              type: 'card',
+              lid: 'owner',
+              attributes: { firstName: 'Hassan' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+        {
+          op: 'create',
+          lid: 'pet',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              relationships: {
+                friend: { data: { type: 'card', lid: 'owner' } },
+              },
+              meta: { adoptsFrom: PET },
+            },
+          },
+        },
+      ],
+      {},
+    );
+    assert.deepEqual(
+      Object.keys(commits[0].writes).sort(),
+      ['Person/owner.json', 'Pet/pet.json'],
+      'a local id carried on the resource names the file, as a POST body does',
+    );
+    let staged = JSON.parse(commits[0].writes['Pet/pet.json']);
+    assert.strictEqual(
+      staged.data.relationships.friend.links.self,
+      `${REALM}Person/owner`,
+      'and another entry can link to it',
+    );
+  },
+
+  'a malformed side-load is refused rather than reaching the serializer':
+    async (assert) => {
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let create = (included: unknown): BatchEntry[] => [
+        {
+          op: 'create',
+          lid: 'primary',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Primary' },
+              meta: { adoptsFrom: PERSON },
+            },
+            included,
+          } as never,
+        },
+      ];
+      assert.deepEqual(
+        await refusal(core, create({ lid: 'not-a-list' })),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        "an `included` that is not a list is the caller's payload to fix",
+      );
+      assert.deepEqual(
+        await refusal(core, create([{ lid: 'x', attributes: {} }])),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'and so is a side-load that is not a card resource',
+      );
+      assert.deepEqual(
+        await refusal(core, [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Patched' },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: { lid: 'not-a-list' },
+            } as never,
+          },
+        ]),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'an update holds its side-loads to the same shape',
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    },
+
+  'staging leaves the document it was handed alone': async (assert) => {
+    let { core } = stub();
+    let sideLoaded = {
+      type: 'card' as const,
+      lid: 'sidecar',
+      attributes: { firstName: 'Sidecar' },
+      meta: { adoptsFrom: PET },
+    };
+    let before = JSON.stringify(sideLoaded);
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'create',
+          lid: 'primary',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Primary' },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [sideLoaded],
+          },
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      JSON.stringify(sideLoaded),
+      before,
+      'the side-loaded resource the caller owns is not rewritten in place',
+    );
+  },
+
+  'a named create needs every value its declaration asks for': async (
+    assert,
+  ) => {
+    let definition: OperationDefinition = {
+      base: 'create',
+      deterministic: true,
+      of: PERSON,
+      params: { title: { kind: 'field', codeRef: STRING } },
+      fill: { firstName: { $ref: 'params', key: 'title' } as never },
+    };
+    let { core, commits } = stub({
+      definitions: { Person: personDefinition() },
+    });
+    assert.deepEqual(
+      await refusal(core, [{ op: 'create', lid: 'missing', definition }]),
+      { status: 400, code: 'invalid-params', entry: 0 },
+      'a declared param with no value is refused, not left off the card',
+    );
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
   'a create with nothing to create is refused': async (assert) => {

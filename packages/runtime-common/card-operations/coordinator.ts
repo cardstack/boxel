@@ -1,6 +1,8 @@
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   createIdentity,
+  includedResources,
+  localIdOf,
   namesForeignRealm,
   stageCreate,
   stageDelete,
@@ -67,6 +69,10 @@ export interface BatchCore {
   readSourceFile(
     localPath: LocalPath,
   ): Promise<{ content: string; lastModified: number } | undefined>;
+  // Whether anything is stored at this path. Distinct from reading it: the
+  // destinations a create mints are checked for being free, and their bytes
+  // are of no interest.
+  fileExists(localPath: LocalPath): Promise<boolean>;
   // The write-time content fingerprints recorded for these paths, read in one
   // round-trip. A caller's `baseVersion` names one of these.
   contentHashes(
@@ -146,6 +152,7 @@ export async function commitBatch(
         }),
       );
     }
+    await assertDestinationsFree(core, staged);
     // Past this point the batch is committed. Everything above either produced
     // bytes for every entry or threw, and a throw leaves the realm as it was.
     return await commitStaged(core, entries, staged, stored, opts);
@@ -247,15 +254,22 @@ function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
     // whether it was found here or inside an executor.
     try {
       let primary = entry.document?.data;
-      if (entry.op === 'create' && entry.lid) {
-        claim(
-          entry.lid,
-          createIdentity(entry, primary, paths, new Map()),
-          `entry ${index}`,
-        );
+      // Both the local id and the side-loads are read through the same
+      // accessors the executors use, so the pre-pass claims exactly the
+      // identities staging will ask for and refuses a malformed payload in
+      // the same terms.
+      if (entry.op === 'create') {
+        let primaryLid = localIdOf(entry);
+        if (primaryLid !== undefined) {
+          claim(
+            primaryLid,
+            createIdentity(entry, primary, paths, new Map()),
+            `entry ${index}`,
+          );
+        }
       }
-      for (let [offset, resource] of (
-        entry.document?.included ?? []
+      for (let [offset, resource] of includedResources(
+        entry.document,
       ).entries()) {
         // A side-loaded resource with no `lid` is not staged and nothing can
         // link to it; one naming another realm is not this batch's to write.
@@ -350,6 +364,42 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // ---------------------------------------------------------------------------
 // Committing
 // ---------------------------------------------------------------------------
+
+// A create mints a card; it does not replace one. A caller choosing its own
+// local id can choose one a stored card already answers to, and committing
+// over it would destroy that card with nothing said — so an occupied
+// destination refuses the batch, which is the answer the atomic endpoint
+// gives an `add` whose href is taken.
+//
+// Checked inside the lock, against the same critical section the commit runs
+// in, so nothing can take the path between the check and the write.
+async function assertDestinationsFree(
+  core: BatchCore,
+  staged: StagedChange[],
+): Promise<void> {
+  let occupied = await Promise.all(
+    staged.map(async (change, index) => {
+      for (let path of change.mints) {
+        if (await core.fileExists(path)) {
+          return { index, path };
+        }
+      }
+      return undefined;
+    }),
+  );
+  let taken = occupied.find((entry) => entry !== undefined);
+  if (taken) {
+    throw new OperationFailure({
+      status: 409,
+      code: 'invalid-params',
+      title: 'Resource already exists',
+      detail:
+        `a card is already stored at ${taken.path}; a create mints a card ` +
+        `rather than replacing one`,
+      meta: { entry: taken.index },
+    });
+  }
+}
 
 async function commitStaged(
   core: BatchCore,
