@@ -719,18 +719,24 @@ export interface IndexVisitClientTimings {
 // always attributable to the pass that wrote it, whether or not its render
 // reported anything:
 //
-//   - `invalidationId` — one UUID per `Batch`; every row that batch writes
-//     shares it, so operators can `SELECT ... WHERE
-//     diagnostics->>'invalidationId' = '<id>'` and see the whole batch.
-//     Scoped to the batch, so an index pass and the `prerender_html` job it
-//     spawns carry DIFFERENT ids: each groups its own channel's fan-out.
-//     Join the two channels on `url` (plus `generation`), never on this.
+//   - `invalidationId` — one UUID per invalidation fan-out: minted when the
+//     `Batch` is created, so a from-scratch pass (which never calls
+//     `invalidate()`) still has one, and refreshed at the top of each
+//     `invalidate()` call so the id names one triggering change rather than
+//     the batch's whole lifetime. An index pass invalidates once, so in
+//     practice the id covers the batch too, and operators can `SELECT ...
+//     WHERE diagnostics->>'invalidationId' = '<id>'` to read back the whole
+//     fan-out. The `prerender_html` job an index pass spawns is its own
+//     batch with its own id: each groups its own channel's fan-out, so join
+//     the two channels on `url` (plus `generation`), never on this.
 //   - `indexedAt` — wall-clock the write happened.
-//   - `writeSeq` — the row's position within that batch's write order.
+//   - `writeSeq` — the row's position within that fan-out's write order.
 //
-// A tombstoned row carries none of them: the index channel's tombstones
-// predate the pass's visits and are overwritten by them, and the render
-// channel's clear `diagnostics` outright.
+// A tombstone takes no position in the write order, so `writeSeq` is absent
+// on one. The index channel's tombstones do carry the other two: they are
+// written by `invalidate()` under the id it just minted, and a visited URL's
+// row then overwrites its tombstone. The render channel's tombstones clear
+// `diagnostics` outright and so carry none of the three.
 //
 // Every other field is optional because writers populate incrementally:
 // render-side fields come from the Prerenderer's response meta. Any stage
@@ -749,9 +755,11 @@ export interface Diagnostics
   // millisecond, and a batch's rows drain through buffered multi-row upserts
   // that share one timestamp, so this is the only field that orders two rows
   // written by the same batch. Grouped with `invalidationId`, it
-  // reconstructs the visit order of either channel. A URL contributes two
-  // rows (`file` and `instance`), written back to back, so reduce to one
-  // position per URL rather than selecting rows:
+  // reconstructs the visit order of either channel. A card instance
+  // contributes two rows written back to back — its `file` row and its
+  // `instance` row — so reduce to one position per URL rather than selecting
+  // rows (a module, which has only a `file` row, is unaffected by the
+  // reduction):
   //
   //   SELECT url, min((diagnostics->>'writeSeq')::int) AS seq
   //     FROM boxel_index
@@ -760,8 +768,11 @@ export interface Diagnostics
   //    ORDER BY seq
   //
   // An incremental index pass writes the URLs its triggering write named
-  // before the dependents its fan-out discovered, so the lowest sequences in
-  // an index fan-out are its targets.
+  // ahead of the dependents its fan-out discovered, so the targets hold the
+  // lowest sequences — with two qualifications, both from
+  // `prioritizeWrittenURLs`: a recorded dependency still puts a dependency
+  // ahead of the URL that depends on it, and modules are written before
+  // instances whether or not the write named them.
   //
   // Sequences are per batch, and a fused visit's two rows share one — its
   // `boxel_index` half and its `prerendered_html` half describe one position,

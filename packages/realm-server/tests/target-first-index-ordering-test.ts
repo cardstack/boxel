@@ -10,22 +10,22 @@ import {
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
-import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
+import {
+  depsForIndexEntry,
+  settlePrerenderHtmlJobs,
+} from './helpers/indexing.ts';
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
-// One card definition with a self-referential `friend` link that its
-// templates RENDER. Rendering is what puts the link target on
-// `boxel_index.deps` — the rows the invalidation walk reads to find a card's
-// dependents and the dependency ordering reads to learn the edges between
-// them. A link the templates never read is not captured, however the field
-// is declared, and a card with no recorded dependency never reaches a
-// pass's fan-out.
+// One card definition with a `friend` link that its templates RENDER.
+// Rendering is what records the link target as a dependency of the card that
+// links to it, and those recorded dependencies are what the invalidation
+// walk reads to find a written URL's dependents. A link the templates never
+// read is not captured, however the field is declared, and a card with no
+// recorded dependency on the target never reaches the pass's fan-out at all.
 //
-// `friend` renders as `atom`, which reads only `firstName` and so follows
-// the link exactly one hop. That termination is what lets the scenarios
-// below link two cards to each other — a cycle the ordering has to resolve —
-// without the embedded render recursing through it.
+// `friend` renders as `atom`, which reads only `firstName`, so the render
+// follows the link exactly one hop rather than recursing through the graph.
 function makeFileSystem() {
   return {
     'person.gts': `
@@ -104,20 +104,14 @@ module(basename(import.meta.filename), function (hooks) {
     await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
   }
 
-  // The `deps` an instance row records. A dependent reaches an incremental
-  // pass's fan-out only by naming the written URL here, so every scenario
-  // asserts this before it asserts an order — a fan-out that came back empty
-  // otherwise reads as an ordering failure.
+  // The dependencies an instance records across both channels — the index
+  // visit's own edges plus the ones only a format render discovers — which is
+  // the union the invalidation walk consults. A dependent reaches a pass's
+  // fan-out only by naming the written URL somewhere in here, so every
+  // scenario asserts this before it asserts an order: a fan-out that came
+  // back empty would otherwise read as an ordering failure.
   async function depsOf(path: string): Promise<string[]> {
-    let [row] = (await testDbAdapter.execute(
-      `select deps from boxel_index where url = $1 and type = 'instance'`,
-      { bind: [`${realm.url}${path}`] },
-    )) as { deps: unknown }[];
-    let deps = row?.deps;
-    if (Array.isArray(deps)) {
-      return deps as string[];
-    }
-    return typeof deps === 'string' ? (JSON.parse(deps) as string[]) : [];
+    return depsForIndexEntry(testDbAdapter, `${realm.url}${path}`);
   }
 
   async function assertDependsOnTarget(
@@ -258,20 +252,18 @@ module(basename(import.meta.filename), function (hooks) {
   test("a write's own row is written before the dependents its fan-out found", async function (assert) {
     assert.timeout(300_000);
 
-    // `zzz` and `aaa` end up linked to each other and `bbb` links to `zzz`,
-    // so writing `zzz` fans out to all three and the dependency graph holds a
-    // cycle through the target. A cycle has no topological order, so the
-    // three fall through to the order they arrived in — where `zzz` sorts
-    // last. Target-first ordering is the only thing that puts it ahead.
+    // `aaa` and `bbb` both link to `zzz` and render the link, so writing
+    // `zzz` fans out to all three, and `zzz` sorts last of the three. The
+    // target links to neither of them, so no dependency of its own pins it
+    // ahead: what the pass falls back on is the order the URLs arrived in,
+    // where the target came last. Leading with the write's own URL is the
+    // only thing that puts it first.
     await push(assert, 'the target is created', [
       person('add', 'zzz.json', 'Zeta'),
     ]);
     await push(assert, 'the dependents are created', [
       person('add', 'aaa.json', 'Alpha', './zzz'),
       person('add', 'bbb.json', 'Beta', './zzz'),
-    ]);
-    await push(assert, 'the link back from the target closes the cycle', [
-      person('update', 'zzz.json', 'Zeta', './aaa'),
     ]);
 
     // Both dependents have to name the target for the fan-out to reach them.
@@ -280,7 +272,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     // The pass under test: one write naming `zzz.json`.
     await push(assert, 'the target is written', [
-      person('update', 'zzz.json', 'Zeta the Second', './aaa'),
+      person('update', 'zzz.json', 'Zeta the Second'),
     ]);
 
     let order = await writeOrderOfLatestPass();
@@ -300,8 +292,8 @@ module(basename(import.meta.filename), function (hooks) {
   test('a batch writes every target before any dependent', async function (assert) {
     assert.timeout(300_000);
 
-    // Two targets, each in a cycle with the dependent that links to it, and
-    // each sorting after that dependent lexically.
+    // Two targets, each with one dependent linking to it, and each sorting
+    // after both dependents lexically.
     await push(assert, 'the targets are created', [
       person('add', 'yyy.json', 'Ypsilon'),
       person('add', 'zzz.json', 'Zeta'),
@@ -310,18 +302,14 @@ module(basename(import.meta.filename), function (hooks) {
       person('add', 'aaa.json', 'Alpha', './zzz'),
       person('add', 'bbb.json', 'Beta', './yyy'),
     ]);
-    await push(assert, 'the links back from the targets close the cycles', [
-      person('update', 'yyy.json', 'Ypsilon', './bbb'),
-      person('update', 'zzz.json', 'Zeta', './aaa'),
-    ]);
 
     await assertDependsOnTarget(assert, 'aaa.json', 'zzz.json');
     await assertDependsOnTarget(assert, 'bbb.json', 'yyy.json');
 
     // The pass under test: one write naming both targets.
     await push(assert, 'both targets are written', [
-      person('update', 'yyy.json', 'Ypsilon the Second', './bbb'),
-      person('update', 'zzz.json', 'Zeta the Second', './aaa'),
+      person('update', 'yyy.json', 'Ypsilon the Second'),
+      person('update', 'zzz.json', 'Zeta the Second'),
     ]);
 
     let order = await writeOrderOfLatestPass();

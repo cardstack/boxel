@@ -205,10 +205,15 @@ ORDER BY seq;
 
 Two things this tells you:
 
-- **Which URLs the write actually named.** An incremental pass writes its **targets** — the URLs the triggering write named — before the dependents its fan-out discovered, so the lowest sequences in a fan-out are the targets and everything after them is dep closure. This is a guarantee, not a coincidence: `prioritizeWrittenURLs` in `index-runner.ts` leads the ordering input with the written URLs and the topological ordering treats that position as a priority. A **recorded dependency** still overrules it, and only that: a target instance is visited after a module it adopts from (whether or not the index has recorded the edge yet — the module's visit class wins), and after any URL in the same set whose `deps` row it names. A dependency cycle does not overrule it — its members' mutual edges are dropped and they compete on priority like everything else, since no order satisfies a cycle anyway. So a target appearing after a _module_ or after a URL it declares a dependency on is expected; a target appearing after an unrelated _instance_ is not, and is worth a second look.
+- **Which URLs the write actually named.** An incremental pass writes its **targets** — the URLs the triggering write named — before the dependents its fan-out discovered, so the lowest sequences in a fan-out are the targets and everything after them is dep closure. This is a guarantee, not a coincidence: `prioritizeWrittenURLs` in `index-runner.ts` ranks the written URLs ahead of the discovered ones and the topological ordering treats that rank as a priority. Exactly two things outrank being a target:
+  - **Visit class.** `realm.json` first, then non-`.json` files, then `.json` files — so every module in the fan-out is written before every instance, target or not. An instance whose module has no file entry yet cannot render at all, which is why this is not negotiable.
+  - **A recorded dependency.** A URL whose `deps` row names another URL in the same set is written after it. The exception is a dependency **cycle**: no order satisfies one, so the edges inside it are dropped and its members compete on priority like everything else — a target stranded in a cycle still leads.
+
+  So a target appearing after a _module_, or after a URL it declares a dependency on, is expected; a target appearing after an unrelated _instance_ is not, and is worth a second look.
+
 - **Where a stalled pass got to.** See [step 6](#6-reading-partial-progress-from-boxel_index_working).
 
-A URL contributes two rows (`file` and `instance`), buffered back to back, so reduce to one position per URL with `min((diagnostics->>'writeSeq')::int) … GROUP BY url` when you want a per-URL order.
+A card instance contributes two rows buffered back to back — its `file` row and its `instance` row — so reduce to one position per URL with `min((diagnostics->>'writeSeq')::int) … GROUP BY url` when you want a per-URL order. (A module has only a `file` row, so the reduction is a no-op for it.) A URL written twice in one pass keeps the position of its first write; the position its second write consumed belongs to no row, so a pass's sequences can have gaps.
 
 **Step 3 — classify each slow row.** For the top offenders, pull the full `diagnostics` and apply the [Classify in one pass](#classify-in-one-pass) table to each. Common patterns:
 
@@ -285,7 +290,7 @@ Recovery for the errored URLs is any later write touching them (error rows are e
 
 For everything else in this mode the diagnostic stance flips from "what timed out" (Mode A) or "what was slow" (Mode B) to **"what hasn't happened yet"**. You're reconstructing the work the job _would have done_ from three sources together:
 
-1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is _not yet_ in `boxel_index` (or has a higher `realm_version`) was already processed by the stuck job.
+1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is _not yet_ in `boxel_index` (or has a higher `generation`) was already processed by the stuck job.
 2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what _would_ have been invalidated by a from-scratch run, _before_ any `boxel_index_working` rows existed.
 3. **Worker logs** in CloudWatch (`ecs-boxel-worker-<env>`) — confirms the job's start, the file it was on at the freeze point, and any partial completion lines.
 
@@ -469,7 +474,7 @@ The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls
    - For executable file rows (`.gts` / `.ts` / `.js` / `.gjs`) with a `file_alias`: the `file_alias` (path with extension trimmed). Executable consumers see the _aliased_ URL in `deps`, not the source file with extension.
    - Otherwise (non-executable file rows): the row's `url`.
 
-5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` (line 684) inserts a `is_deleted = true` row for every invalidated URL into `boxel_index_working` with `realm_version = <next-version>`, stamped with the batch's current `invalidationId`. **This is the first DB-side write of the batch.** If the worker died before this, `boxel_index_working` will not yet contain partial-progress rows for the new realm version (step 6 will be empty).
+5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` (line 684) inserts a `is_deleted = true` row for every invalidated URL into `boxel_index_working` with `generation = <next-generation>`, stamped with the batch's current `invalidationId`. **This is the first DB-side write of the batch.** If the worker died before this, `boxel_index_working` will not yet contain partial-progress rows for the new realm version (step 6 will be empty).
 
 To reconstruct the consumer set against the live DB, run the iteration manually:
 
@@ -504,7 +509,7 @@ Two-hop fan-out: rerun with the first hop's `(url, file_alias, type)` plugged in
 
 ### 6. Reading partial progress from `boxel_index_working`
 
-`boxel_index_working` carries the batch's in-progress writes, keyed by `(url, realm_url)`. The indexer writes here continuously via `Batch.updateEntry` (line 310). On `Batch.done()` (line 476), rows are copied into `boxel_index` with the new `realm_version` and the working table is **left in place** — it's not truncated (each invalidation is keyed by realm version inside the table). For a stuck job, the rows already written carry the same `invalidationId` and bracket the freeze point.
+`boxel_index_working` carries the batch's in-progress writes, keyed by `(url, realm_url)`. The indexer writes here continuously via `Batch.updateEntry` (line 310). On `Batch.done()` (line 476), rows are copied into `boxel_index` with the new `generation` and the working table is **left in place** — it's not truncated (each invalidation is keyed by realm version inside the table). For a stuck job, the rows already written carry the same `invalidationId` and bracket the freeze point.
 
 ```sql
 -- Partial progress for a stuck batch: rows the in-progress job has
@@ -525,7 +530,7 @@ SELECT
   url,
   type,
   has_error,
-  realm_version,
+  generation,
   to_timestamp((diagnostics->>'indexedAt')::bigint / 1000)
                                                        AS indexed_at,
   diagnostics->>'invalidationId'                AS invalidation_id,
@@ -550,7 +555,7 @@ If you don't already have an `invalidationId`, find the most recent batch's ID a
 ```sql
 SELECT
   diagnostics->>'invalidationId'                AS invalidation_id,
-  realm_version,
+  generation,
   count(*)                                             AS rows_written,
   to_timestamp(
     min((diagnostics->>'indexedAt')::bigint) / 1000
@@ -596,18 +601,19 @@ To read which row would have been visited next from the working table (rows alre
 
 ```sql
 -- Tombstones the batch inserted but hasn't yet rewritten with content.
--- Filtered to the batch's realm_version so older tombstones don't leak
--- in. A tombstone carries no diagnostics at all — it is written before
--- the pass visits anything, and a visited URL's row overwrites it — so
--- the absence of a writeSeq is exactly what identifies an un-visited
--- URL here. Sort lexically: it is only an approximation of the planned
--- order (see the three ordering steps above), but the URLs the write
--- named are the ones already gone from this list, so what remains is
--- dep closure.
+-- Filtered to the batch's generation so older tombstones don't leak
+-- in. A tombstone is written by `invalidate()` before the pass visits
+-- anything, so it carries that pass's invalidationId and indexedAt but
+-- no writeSeq — it took no position in the write order, and a visited
+-- URL's row overwrites it. So a NULL writeSeq is exactly what
+-- identifies an un-visited URL here. Sort lexically: it is only an
+-- approximation of the planned order (see the three ordering steps
+-- above), but the URLs the write named are the ones already gone from
+-- this list, so what remains is dep closure.
 SELECT url, type, file_alias, is_deleted
 FROM boxel_index_working
 WHERE realm_url = '<realm-url>'
-  AND realm_version = <realm-version>
+  AND generation = <generation>
   AND is_deleted = TRUE
   AND diagnostics->>'writeSeq' IS NULL
 ORDER BY url ASC;
@@ -682,7 +688,7 @@ A short rubric for the most common shapes:
 
 - **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `indexedAt` for the batch's `invalidationId`) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
 - **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
-- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
+- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `generation`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
 - **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `attemptJobFinalize` in `packages/postgres/job-finalize.ts`); the reservation's `locked_until` will eventually expire and another worker can claim it.
 
   The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts` does `result = flattenErrorForJsonb(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
@@ -1477,10 +1483,12 @@ LIMIT 20;
 ```jsonc
 {
   "requestId": "b14e…",          // single ID across client/manager/prerender-server
-  "invalidationId": "a3e1…",     // single ID across every row this Batch wrote. Scoped to
-                                 // the batch, so an index pass and the prerender_html job
-                                 // it spawns carry DIFFERENT ids — join the channels on
-                                 // url, not on this.
+  "invalidationId": "a3e1…",     // single ID across every row of one invalidation fan-out.
+                                 // Minted when the Batch is created and refreshed by each
+                                 // invalidate() call, and an index pass invalidates once, so
+                                 // in practice it covers the batch too. The prerender_html
+                                 // job an index pass spawns is its own batch with its own id
+                                 // — join the channels on url, not on this.
   "indexedAt": 1776964391615,    // wall-clock ms when the row was written. Millisecond
                                  // resolution, and a buffered multi-row upsert stamps a
                                  // whole flush identically — so this CANNOT order two rows
@@ -1488,10 +1496,13 @@ LIMIT 20;
   "writeSeq": 0,                 // 0-based position of this row in its batch's write order.
                                  // An incremental index pass writes the URLs the triggering
                                  // write named before the dependents its fan-out found, so
-                                 // the lowest sequences in a fan-out are its targets. A URL
-                                 // contributes two rows (file, instance) written back to
-                                 // back. Absent on a tombstone — a tombstone lands before
-                                 // the pass visits anything and a visited URL's row
+                                 // the lowest sequences in a fan-out are its targets —
+                                 // except that modules are always written before instances
+                                 // and a recorded dependency still comes before what
+                                 // depends on it. A card instance contributes two rows
+                                 // (file, instance) written back to back; a module has only
+                                 // a file row. Absent on a tombstone — a tombstone lands
+                                 // before the pass visits anything and a visited URL's row
                                  // overwrites it, so a NULL here on an is_deleted row is
                                  // what identifies a URL the pass never reached.
   "priority": 10,                // worker-job priority that produced this render. Index
