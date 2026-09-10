@@ -173,36 +173,44 @@ export function isSpecCard(def: any) {
 // path. Throw on that exact case so callers' surrounding try/catch
 // leaves the original ref alone for the loader's importMap shim to
 // resolve. (URL-like refs and registered prefixes resolve normally.)
+// A code ref's module is canonical RRI, so resolving it is path math rather
+// than a naming question: `@scope/name/...` and anything carrying a URL scheme
+// are already absolute, and a relative reference joins against `relativeTo`.
+//
+// The rejection below no longer consults a prefix registry, because a bare
+// specifier is recognisable by shape: it is neither URL-like (relative, rooted,
+// or schemed) nor scoped. What it stops rejecting is a scoped reference whose
+// prefix this process has not registered — deliberately, since such a reference
+// is absolute and cross-realm by construction, which is the same rule the read
+// path applies. An unresolvable one fails at fetch, naming the module the
+// caller actually wrote.
 export function resolveModuleHref(
   module: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
 ): string {
-  if (!isUrlLike(module) && !virtualNetwork.isRegisteredPrefix(module)) {
+  if (!isUrlLike(module) && !module.startsWith('@')) {
     throw new Error(
-      `Cannot resolve bare package specifier "${module}" — no matching prefix mapping registered`,
+      `Cannot resolve bare package specifier "${module}" — a module reference must be scoped, URL-like, or relative`,
     );
   }
-  return virtualNetwork.resolveURL(module, relativeTo).href;
+  return resolveRRIReference(module, relativeTo);
 }
 
 export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   opts: { trimExecutableExtension?: true } | undefined,
-  // Optional: when a VirtualNetwork is supplied the module is resolved through
-  // it (legacy callers). When omitted, the module is resolved in RRI space via
-  // `resolveRRIReference` — no VirtualNetwork — since code refs are canonical
-  // RRI; relative modules join against `relativeTo`, absolute/prefix modules
-  // pass through unchanged.
-  virtualNetwork?: VirtualNetwork,
+  // Accepted and ignored. Resolution is the same either way now: a code ref's
+  // module is canonical RRI, so `resolveModuleHref` does path math and consults
+  // no mappings. The parameter stays until the wider sweep that removes the
+  // network from the Loader's consumers, so ~50 call sites need not change here.
+  _virtualNetwork?: VirtualNetwork,
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = (
-        virtualNetwork
-          ? resolveModuleHref(ref.module, relativeTo, virtualNetwork)
-          : resolveRRIReference(ref.module, relativeTo)
+      let moduleHref = resolveModuleHref(
+        ref.module,
+        relativeTo,
       ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
         moduleHref = trimExecutableExtension(moduleHref);
@@ -214,12 +222,7 @@ export function codeRefWithAbsoluteIdentifier(
   }
   return {
     ...ref,
-    card: codeRefWithAbsoluteIdentifier(
-      ref.card,
-      relativeTo,
-      undefined,
-      virtualNetwork,
-    ),
+    card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo, undefined),
   };
 }
 
@@ -238,18 +241,8 @@ export async function loadCardDef(
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
-  let virtualNetwork = loader.getVirtualNetwork();
-  if (!virtualNetwork) {
-    throw new Error(
-      `loadCardDef requires a Loader configured with a VirtualNetwork`,
-    );
-  }
   if (!('type' in ref)) {
-    let resolvedModuleURL = resolveModuleHref(
-      ref.module,
-      opts?.relativeTo,
-      virtualNetwork,
-    );
+    let resolvedModuleURL = resolveModuleHref(ref.module, opts?.relativeTo);
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,
@@ -270,11 +263,7 @@ export async function loadCardDef(
     return maybeCard;
   }
 
-  let resolvedFromRef = resolveModuleHref(
-    moduleFrom(ref),
-    opts?.relativeTo,
-    virtualNetwork,
-  );
+  let resolvedFromRef = resolveModuleHref(moduleFrom(ref), opts?.relativeTo);
   let err = new CardError(
     `Cannot find card ${humanReadable(ref)}. Make sure ${resolvedFromRef} exports ${exportFrom(ref)}`,
     {
