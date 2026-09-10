@@ -481,9 +481,18 @@ module('Unit | file-formats', function (hooks) {
           (globalThis as { __boxelNow?: unknown }).__boxelNow = bad;
           let before = Date.now();
           let reading = now();
+          let after = Date.now();
+          // Two assertions rather than one conjunction, so a failure says
+          // which way the reading escaped the window: below it means the pin
+          // was honoured and the reading came from the past, above it means
+          // something other than the real clock answered.
           assert.ok(
-            reading >= before && reading <= Date.now(),
-            `${String(bad)} is ignored in favour of the real clock`,
+            reading >= before,
+            `${String(bad)} is ignored: reading is not earlier than the real clock`,
+          );
+          assert.ok(
+            reading <= after,
+            `${String(bad)} is ignored: reading is not later than the real clock`,
           );
         }
       });
