@@ -24,14 +24,19 @@ module.exports = {
   // itself, and would have to be rediscovered.
   plugins: ['@typescript-eslint', '@cardstack/boxel'],
   overrides: [
+    // All four extensions `runtime-common`'s `executableExtensions` treats as
+    // realm modules, not just the two this package happens to use today. A
+    // guard that covers the current file list rather than the supported one
+    // stops guarding the moment somebody authors a card in another of them,
+    // and does it silently.
     {
-      files: ['**/*.ts'],
+      files: ['**/*.ts', '**/*.js'],
       parser: '@typescript-eslint/parser',
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
       rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
     },
     {
-      files: ['**/*.gts'],
+      files: ['**/*.gts', '**/*.gjs'],
       parser: 'ember-eslint-parser',
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
       rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
