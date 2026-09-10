@@ -467,8 +467,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let { indexVisits, canaryRenders, job, readiness } =
         await startRealmWithIdleTimeouts('ready');
 
-      assert.strictEqual(indexVisits.length, cardCount, 'visited every file');
-      // One canary per run of three idle timeouts: six files, two canaries.
+      // Every card plus realm.json.
+      assert.strictEqual(
+        indexVisits.length,
+        cardCount + 1,
+        'visited every file',
+      );
+      // One canary per run of three idle timeouts: seven files, two canaries.
       assert.strictEqual(canaryRenders(), 2, 'rendered the canary per streak');
       assert.strictEqual(job.status, 'resolved', 'the job completed');
       assert.strictEqual(

@@ -3,7 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
-  latestFromScratchIndexRejection,
+  unbuiltIndexFailure,
 } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import { settledBy } from './settled-by.ts';
@@ -1514,24 +1514,20 @@ export class Realm {
     }
 
     // The lane is clear, so every from-scratch job for this realm has run. A
-    // realm that still has no index whose newest such job was rejected never
-    // had its index built: reporting ready would hand the caller a realm that
-    // serves nothing, and `index` would keep it polling for work that is not
-    // coming. Both facts are read from shared state, so every replica answers
-    // alike, and a reindex from any path — this realm's own endpoints, a
-    // publish, the system-wide reindex — clears it as soon as it lands. The
-    // body carries the failure, since that is where the cause is.
-    if (await this.#realmIndexUpdater.isNewIndex()) {
-      let rejection = await latestFromScratchIndexRejection(
-        this.#dbAdapter,
-        this.url,
+    // realm that has never had an index built, whose newest such job was
+    // rejected, is mounted over nothing: reporting ready would hand the caller
+    // a realm that serves nothing, and `index` would keep it polling for work
+    // that is not coming. Both facts are read from shared state (see
+    // unbuiltIndexFailure), so every replica answers alike, and a pass that
+    // completes from any path — this realm's own endpoints, a publish, the
+    // system-wide reindex — clears it as soon as it lands. The body carries
+    // the failure, since that is where the cause is.
+    let unbuilt = await unbuiltIndexFailure(this.#dbAdapter, this.url);
+    if (unbuilt) {
+      return notReady(
+        'index-failed',
+        `The boot index of ${this.url} failed: ${unbuilt}`,
       );
-      if (rejection) {
-        return notReady(
-          'index-failed',
-          `The boot index of ${this.url} failed: ${rejection}`,
-        );
-      }
     }
 
     // Opt-in: also await the published HTML being live for the current
