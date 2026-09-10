@@ -2,6 +2,7 @@ import VideoIcon from '@cardstack/boxel-icons/file-video';
 import { NumberField, contains, field } from './card-api';
 import { FileDef } from './file-api';
 import { MediaEncodingField } from './file-formats/metadata-fields';
+import { VIDEO_FAMILY_SCREENSHOTS } from './file-formats/video-captures';
 import { displayDimensions, type VideoEncoding } from './video-metadata';
 
 // The video family. Like `AudioDef` it sits directly under `FileDef` and keeps
@@ -25,6 +26,12 @@ export class VideoDef extends FileDef {
   @field height = contains(NumberField);
 
   @field encoding = contains(MediaEncodingField);
+
+  // The fitted poster frame: a capture-only decode of one deterministic
+  // frame, keyed on the file's bytes and flagged useAsThumbnail, so the
+  // fitted cell shows a real frame through the view model's thumbnail seam
+  // with the current placeholder as the fallback.
+  static screenshots = VIDEO_FAMILY_SCREENSHOTS;
 }
 
 export default VideoDef;
