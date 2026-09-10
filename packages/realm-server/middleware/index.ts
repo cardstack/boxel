@@ -231,7 +231,10 @@ const SEARCH_ADMISSION_RELEASE = 'searchAdmissionRelease';
 // computation — a `join` or a `hit` — builds no result document of its own, so
 // it calls this the moment the cache says so and stops counting toward the
 // ceiling; only the request doing the computing keeps its slot until its
-// response ends. Idempotent, and a no-op for requests the gate never saw.
+// response ends. That holds for an indexing-lane admission too: an in-render
+// search served from another request's computation holds no document either,
+// and the count is of computations, whichever lane admitted them. Idempotent,
+// and a no-op for requests the gate never saw.
 export function releaseSearchAdmission(ctxt: Koa.Context): void {
   let release = ctxt.state[SEARCH_ADMISSION_RELEASE];
   if (typeof release === 'function') {
