@@ -696,6 +696,23 @@ jobs:
           # failure) is visible in the shard log for each snapshot.
           PERCY_LOGLEVEL: debug
           PERCY_TOKEN: ${{ needs.check-percy.outputs.percy_needed == 'true' && secrets.PERCY_TOKEN_HOST || '' }}
+          # Compare against main, not against whatever branch this one was cut
+          # from. Left unset, Percy infers the baseline from git history, so a
+          # branch stacked on another feature branch baselines against its
+          # parent and inherits whatever that parent's last build contained.
+          #
+          # A parent build that lost snapshots is the bad case. The child
+          # compares its full set against a partial one, every snapshot with no
+          # counterpart reads as new, and most of the suite lands needing review
+          # for a reason nothing on the build explains. The reject step below
+          # keeps a partial build from becoming a baseline on `main`, but a
+          # partial build on a feature branch is not rejected and can still be
+          # inherited by anything stacked on it.
+          #
+          # Set here rather than on the finalize step: the baseline is chosen
+          # when the build is created by the first shard to upload, and finalize
+          # only seals it.
+          PERCY_TARGET_BRANCH: main
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
