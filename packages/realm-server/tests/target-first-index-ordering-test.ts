@@ -10,6 +10,7 @@ import {
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
+import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
@@ -67,17 +68,17 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  // `?waitForIndex=true` makes `/_atomic` return once the incremental index
-  // job it enqueued has settled, so the rows a scenario asserts against are
-  // all present — and all attributed to a finished pass — by the time the
-  // response lands. Every `/_atomic` response is 201, add and update alike.
+  // A push, then both channels drained: the index job so its rows are
+  // written and attributed to a finished pass, and the prerender_html job it
+  // spawns so the next push starts from a quiet queue. Every `/_atomic`
+  // response is 201, add and update alike.
   async function push(
     assert: Assert,
     label: string,
     operations: Record<string, unknown>[],
   ): Promise<void> {
     let response = await request
-      .post('/_atomic?waitForIndex=true')
+      .post('/_atomic')
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -85,6 +86,68 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send(JSON.stringify({ 'atomic:operations': operations }));
     assert.strictEqual(response.status, 201, label);
+    await realm.incrementalIndexing();
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+  }
+
+  // The `deps` an instance row records. A dependent reaches an incremental
+  // pass's fan-out only by naming the written URL here, so every scenario
+  // asserts this before it asserts an order — a fan-out that came back empty
+  // otherwise reads as an ordering failure.
+  async function depsOf(path: string): Promise<string[]> {
+    let [row] = (await testDbAdapter.execute(
+      `select deps from boxel_index where url = $1 and type = 'instance'`,
+      { bind: [`${realm.url}${path}`] },
+    )) as { deps: unknown }[];
+    let deps = row?.deps;
+    if (Array.isArray(deps)) {
+      return deps as string[];
+    }
+    return typeof deps === 'string' ? (JSON.parse(deps) as string[]) : [];
+  }
+
+  async function assertDependsOnTarget(
+    assert: Assert,
+    dependent: string,
+    target: string,
+  ): Promise<void> {
+    let deps = await depsOf(dependent);
+    assert.ok(
+      deps.some((dep) => dep === `${realm.url}${target}`),
+      `precondition: ${dependent} records a dependency on ${target} (deps: ${JSON.stringify(deps)})`,
+    );
+  }
+
+  // Every stamped row in the realm, newest pass first. Carried into the
+  // ordering assertions' messages so a failure names what the pass actually
+  // wrote rather than only what it did not.
+  async function stampedRows(): Promise<string> {
+    let rows = (await testDbAdapter.execute(
+      `select url, type,
+              diagnostics->>'invalidationId' as invalidation_id,
+              diagnostics->>'writeSeq'       as seq,
+              diagnostics->>'indexedAt'      as indexed_at,
+              is_deleted
+         from boxel_index
+        where realm_url = $1
+        order by (diagnostics->>'indexedAt')::bigint desc nulls last, url`,
+      { bind: [realm.url] },
+    )) as {
+      url: string;
+      type: string;
+      invalidation_id: string | null;
+      seq: string | null;
+      indexed_at: string | null;
+      is_deleted: boolean | null;
+    }[];
+    return rows
+      .map(
+        (row) =>
+          `${row.url.slice(realm.url.length)}/${row.type} seq=${row.seq ?? '-'} ` +
+          `pass=${(row.invalidation_id ?? '-').slice(0, 8)} at=${row.indexed_at ?? '-'}` +
+          `${row.is_deleted ? ' deleted' : ''}`,
+      )
+      .join('; ');
   }
 
   function person(
@@ -197,16 +260,21 @@ module(basename(import.meta.filename), function (hooks) {
       person('update', 'zzz.json', 'Zeta', './aaa'),
     ]);
 
+    // Both dependents have to name the target for the fan-out to reach them.
+    await assertDependsOnTarget(assert, 'aaa.json', 'zzz.json');
+    await assertDependsOnTarget(assert, 'bbb.json', 'zzz.json');
+
     // The pass under test: one write naming `zzz.json`.
     await push(assert, 'the target is written', [
       person('update', 'zzz.json', 'Zeta the Second', './aaa'),
     ]);
 
     let order = await writeOrderOfLatestPass();
+    let rows = await stampedRows();
     assert.deepEqual(
       [...order].sort(),
       [`${realm.url}aaa.json`, `${realm.url}bbb.json`, `${realm.url}zzz.json`],
-      `the pass visited the target and both dependents (order: ${order.join(', ')})`,
+      `the pass visited the target and both dependents (order: ${order.join(', ')}) (rows: ${rows})`,
     );
     assert.strictEqual(
       order[0],
@@ -233,6 +301,9 @@ module(basename(import.meta.filename), function (hooks) {
       person('update', 'zzz.json', 'Zeta', './aaa'),
     ]);
 
+    await assertDependsOnTarget(assert, 'aaa.json', 'zzz.json');
+    await assertDependsOnTarget(assert, 'bbb.json', 'yyy.json');
+
     // The pass under test: one write naming both targets.
     await push(assert, 'both targets are written', [
       person('update', 'yyy.json', 'Ypsilon the Second', './bbb'),
@@ -240,6 +311,7 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
 
     let order = await writeOrderOfLatestPass();
+    let rows = await stampedRows();
     assert.deepEqual(
       [...order].sort(),
       [
@@ -248,7 +320,7 @@ module(basename(import.meta.filename), function (hooks) {
         `${realm.url}yyy.json`,
         `${realm.url}zzz.json`,
       ],
-      `the pass visited both targets and both dependents (order: ${order.join(', ')})`,
+      `the pass visited both targets and both dependents (order: ${order.join(', ')}) (rows: ${rows})`,
     );
     assert.deepEqual(
       order.slice(0, 2).sort(),
