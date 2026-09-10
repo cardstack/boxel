@@ -188,6 +188,11 @@ export interface IndexedFile {
   atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
+  // The file row's declared-screenshot manifest
+  // (`prerendered_html.screenshots`, type 'file') — joined into the served
+  // file-meta resource's `meta.screenshots` the way an instance row's
+  // manifest is joined into a card's.
+  screenshots: ScreenshotManifest | null;
   generation: number;
   // The generation the file's prerendered HTML was produced at
   // (`prerendered_html.generation`; a file with no prerendered row falls back
@@ -452,12 +457,19 @@ export class IndexQueryEngine {
   // is the realm-scoped raw-SQL twin, built from the same exported join
   // fragments.)
   #liveInstanceConditions(url: URL): Expression {
+    return this.#liveRowConditions(url, 'instance');
+  }
+
+  // The same predicate over the URL's 'file' row — the file-flavored liveness
+  // gate the `?name=` screenshot route falls back to when no instance
+  // matches (a FileDef family's declared captures live on the file row).
+  #liveRowConditions(url: URL, type: 'instance' | 'file'): Expression {
     return every([
       any([
         [`i.url =`, param(url.href)],
         [`i.file_alias =`, param(url.href)],
       ]),
-      ['i.type =', param('instance')],
+      ['i.type =', param(type)],
       any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       [`NOT ${effectiveHasError()}`],
     ]) as Expression;
@@ -500,27 +512,48 @@ export class IndexQueryEngine {
 
   // The declared-screenshot manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
-  // a name resolves exactly when a DSL capture of the same instance would),
-  // selecting only the manifest column. `undefined` means no live instance
-  // matches; `null` means the instance is live but nothing has been captured
-  // for it.
+  // a name resolves exactly when a DSL capture of the same instance would).
+  // `undefined` means no live instance matches; a live row comes back with
+  // its canonical `url` (the lookup also matches `file_alias`, and the
+  // MediaCache ledger is keyed off the row's own spelling, never the
+  // request's) and a `manifest` that is null when nothing has been captured.
   async liveInstanceScreenshots(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'instance', opts);
+  }
+
+  // The file-row twin of `liveInstanceScreenshots`: the declared-screenshot
+  // manifest of a live 'file' row. The `?name=` serving route falls back to
+  // this when the addressed path resolves to no live instance — a FileDef
+  // family's declared captures are persisted on the file rendering's row.
+  async liveFileScreenshots(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'file', opts);
+  }
+
+  async #liveRowScreenshots(
+    url: URL,
+    type: 'instance' | 'file',
+    opts?: GetEntryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     let rows = (await this.#query([
-      'SELECT ph.screenshots AS screenshots',
+      'SELECT i.url AS url, ph.screenshots AS screenshots',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
-      ...this.#liveInstanceConditions(url),
+      ...this.#liveRowConditions(url, type),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       screenshots: ScreenshotManifest | null;
     }[];
     if (rows.length === 0) {
       return undefined;
     }
-    return rows[0].screenshots ?? null;
+    return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
   }
 
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
@@ -697,6 +730,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       icon_html: iconHtml,
       markdown,
+      screenshots,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -723,6 +757,7 @@ export class IndexQueryEngine {
       atomHtml,
       iconHtml: iconHtml ?? null,
       markdown,
+      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -2384,6 +2419,11 @@ export function fileEntryFromResult(
     atomHtml: result.atom_html ?? null,
     iconHtml: result.icon_html ?? null,
     markdown: result.markdown ?? null,
+    // The search projections don't select the manifest — like an instance
+    // search entry, whose `meta.screenshots` joins only on the single-card
+    // GET — so this is null on the search path and populated on the
+    // `getFile`/`getFiles` paths, whose SELECT carries `ph.screenshots`.
+    screenshots: (result.screenshots as ScreenshotManifest | null) ?? null,
     lastModified,
     resourceCreatedAt,
     generation: result.generation ?? 0,

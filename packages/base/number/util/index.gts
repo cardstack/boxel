@@ -61,3 +61,23 @@ export function calculatePercentage(
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+/**
+ * Status color for a 0–100 progress value, in four bands from destructive up
+ * to success. The third band has no status token of its own, so it mixes its
+ * two neighbours: that keeps the ramp ordered under any theme, whatever hues
+ * the theme gives warning and success. Thresholds are inclusive, so 75 reads
+ * as success.
+ */
+export function statusRampColor(percentage: number): string {
+  if (percentage >= 75) {
+    return 'var(--success)';
+  }
+  if (percentage >= 50) {
+    return 'color-mix(in oklch, var(--warning), var(--success))';
+  }
+  if (percentage >= 25) {
+    return 'var(--warning)';
+  }
+  return 'var(--destructive)';
+}

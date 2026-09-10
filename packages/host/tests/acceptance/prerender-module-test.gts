@@ -8,6 +8,7 @@ import {
   baseRealmRRI,
   rri,
   trimExecutableExtension,
+  type OperationLoweringDiagnostic,
   type RenderRouteOptions,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
@@ -93,6 +94,31 @@ module('Acceptance | prerender | module', function (hooks) {
       @field reviewer = linksTo(() => SearchAuthor, { searchable: 'bogus' });
     }
   `;
+  // One declaration that lowers cleanly (Note.addTag) and one whose clause
+  // names a field the type does not have (Note.addNote), so the same visit
+  // covers both the captured `operations` and the recorded findings.
+  const OPERATIONS_MODULE = `
+    import { CardDef, field, contains, containsMany, StringField } from '@cardstack/base/card-api';
+    import { operation, params } from '@cardstack/base/operations';
+
+    export class Note extends CardDef {
+      static displayName = 'Note';
+      @field body = contains(StringField);
+      @field tags = containsMany(StringField);
+
+      @operation static addTag = {
+        base: 'transform',
+        params: { tag: StringField },
+        append: { to: 'tags', value: params('tag') },
+      };
+
+      @operation static addNote = {
+        base: 'transform',
+        params: { text: StringField },
+        set: { bdy: params('text') },
+      };
+    }
+  `;
 
   hooks.beforeEach(async function () {
     ({ adapter, realm } = await withCachedRealmSetup(async () =>
@@ -105,6 +131,7 @@ module('Acceptance | prerender | module', function (hooks) {
           'child.gts': CHILD_MODULE,
           'broken.gts': BROKEN_MODULE,
           'searchable-card.gts': SEARCHABLE_MODULE,
+          'note.gts': OPERATIONS_MODULE,
         },
       }),
     ));
@@ -403,6 +430,81 @@ module('Acceptance | prerender | module', function (hooks) {
       model.meta?.diagnostics?.searchablePathIssues,
       undefined,
       'no searchablePathIssues meta when nothing is annotated',
+    );
+  });
+
+  test('captures lowered @operation declarations onto the definition entry', async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { status, model } = captureModuleResult();
+    assert.strictEqual(status, 'ready', 'module loads');
+
+    let noteKey = `${trimExecutableExtension(rri(moduleURL))}/Note`;
+    let entry = model.definitions[noteKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    let operations =
+      entry?.type === 'definition' ? entry.definition.operations : undefined;
+    assert.deepEqual(
+      Object.keys(operations ?? {}).sort(),
+      ['addNote', 'addTag'],
+      'both declarations are captured — a declaration with findings is stored too, so invoking it reports them rather than reading as unknown',
+    );
+    assert.deepEqual(
+      operations?.addTag.program,
+      { source: 'append(.tags;params("tag"));', syntax: 'solidified' },
+      'the convenience clause reaches the entry as canonical BXL',
+    );
+    assert.true(operations?.addNote.invalid, 'the bad declaration is flagged');
+  });
+
+  test('records operation-lowering findings on meta.diagnostics, tagged with the owning def', async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let noteKey = `${trimExecutableExtension(rri(moduleURL))}/Note`;
+    assert.deepEqual(
+      model.meta?.diagnostics?.operationIssues?.map(
+        (issue: OperationLoweringDiagnostic) => ({
+          codeRef: issue.codeRef,
+          code: issue.code,
+          operation: issue.operation,
+          path: issue.path,
+        }),
+      ),
+      [
+        {
+          codeRef: noteKey,
+          code: 'unknown-field',
+          operation: 'addNote',
+          path: 'set.bdy',
+        },
+      ],
+      'only the bad clause is recorded, tagged with its owning def',
+    );
+  });
+
+  test('a module that declares no operations produces no operations key and no findings', async function (assert) {
+    let moduleURL = `${testRealmURL}person.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let personKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
+    let entry = model.definitions[personKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    assert.notOk(
+      entry?.type === 'definition'
+        ? 'operations' in entry.definition
+        : undefined,
+      'the definition entry for every existing card is unchanged',
+    );
+    assert.strictEqual(
+      model.meta?.diagnostics?.operationIssues,
+      undefined,
+      'and no operationIssues meta is emitted',
     );
   });
 });

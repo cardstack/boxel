@@ -36,6 +36,14 @@ const log = logger('search-bounds');
 //     surface: the host federates widely and runs its own searches freely.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
+//   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
+//     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
+//     bound on the process rather than on a request: how many searches it runs
+//     at once, across every caller. Each in-flight search holds tens of MB of
+//     heap while its result set is assembled, so this is the number that
+//     decides whether a burst exhausts the heap. Enforced at admission in the
+//     realm-server's request middleware; arrivals above the ceiling wait
+//     briefly for a slot and are then shed with 429 + Retry-After.
 //
 // All bounds are exported consts, overridable via env for ops tuning.
 // ---------------------------------------------------------------------------
@@ -46,6 +54,8 @@ const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
+const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
+const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
@@ -140,6 +150,30 @@ export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
   env.SEARCH_CONCURRENCY_CAP,
   DEFAULT_SEARCH_CONCURRENCY_CAP,
   MIN_CONCURRENCY,
+);
+
+// Max searches the realm-server process runs at once, across every caller.
+// Enforced server-side at admission (see the realm-server's
+// `search-inflight.ts`). Sized against the per-search heap cost: a few dozen
+// concurrent federated searches exhaust a 2 GB heap, so the default keeps a
+// process on the default heap alive and leaves headroom on a larger one.
+// Indexing traffic is admitted regardless of this ceiling (it is bounded
+// upstream by the prerender pool), so the effective room for interactive
+// searches is whatever indexing isn't using.
+export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
+  env.SERVER_MAX_IN_FLIGHT_SEARCHES,
+  DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES,
+  MIN_CONCURRENCY,
+);
+
+// How long a search arriving above SERVER_MAX_IN_FLIGHT_SEARCHES waits for a
+// slot before it is shed. Long enough that a burst which clears in well under
+// a second is served rather than rejected; short enough that a saturated
+// process answers quickly instead of parking connections. 0 sheds at once.
+export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
+  env.SEARCH_ADMISSION_WAIT_MS,
+  DEFAULT_SEARCH_ADMISSION_WAIT_MS,
+  0,
 );
 
 // The effective values the enforcement functions read. They default to the

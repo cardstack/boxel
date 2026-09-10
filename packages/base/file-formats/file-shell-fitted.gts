@@ -115,7 +115,7 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
 
   get thumbUrl() {
     let m = this.args.model;
-    if (m?.thumbnailUrl && !m?.thumbnailStale) {
+    if (m?.thumbnailUrl) {
       return String(m.thumbnailUrl);
     }
     if (!m?.imageUrl) {

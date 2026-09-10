@@ -120,6 +120,7 @@ import {
   type DeclaredScreenshotRoster,
   type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
+  type ScreenshotsMeta,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -149,6 +150,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
+import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -532,43 +534,77 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // the server's own result set rather than the reconciled one, so a locally
   // edited or created card can't be mistaken for a short page.
   readonly isPartial: boolean;
+  // Hand a running resource the result set a document fetched since it started
+  // carries. Optional: a store whose resources hold no state worth superseding
+  // implements no supersession.
+  reseed?(seed: StoreSearchSeed<T>): void;
+  // The identity of the seeded result set the resource holds, and `undefined`
+  // once a search has re-derived that set for itself. Read it to decide whether
+  // a seed is worth handing over: a remembered "last seed applied" would go on
+  // claiming a set the resource has since replaced, and would then skip a
+  // document restoring the earlier one.
+  readonly appliedSeedIdentity?: string;
 }
 
-export type GetSearchResourceFuncOpts = {
+// A result set a producer already resolved, handed to a search resource in
+// place of running the query. Generic in the row type so a `FileDef` search
+// seeds with file-meta rows rather than being narrowed to `CardDef`.
+export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
+  cards: T[];
+  // What this result set is, as against any other the same query could
+  // produce: two seeds sharing an identity assert the same thing, so a
+  // resource already holding one ignores the other. It has to cover
+  // everything the seed asserts and not just its rows — a page-clamped
+  // field whose match count moved holds the same row and a different
+  // answer.
+  identity?: string;
+  // The index generation this set was resolved at, and the realm whose counter
+  // that generation belongs to. Separate from the identity and doing a
+  // different job: the identity says whether two sets differ, these say which
+  // of them is newer. A generation counts writes within one realm, so it orders
+  // nothing without the realm that issued it.
+  //
+  // Keeping the generation out of the identity is deliberate — a realm
+  // generation moves on every write anywhere in the realm, so folding it in
+  // would make every set look different from every other and re-apply answers
+  // that had not changed.
+  generation?: number;
+  realm?: string;
+  searchURL?: string;
+  realms?: string[];
+  queryErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
+  // IDs the parent doc named in `relationships.{field}.data`. Used
+  // by the SearchResource when `cards` is empty and the parent
+  // skipped query-backed expansion — the resource loads each ID by
+  // URL instead of running a live re-query.
+  cardURLs?: string[];
+  // The result meta the seed was resolved under, chiefly `page.total` —
+  // the query's match count, which exceeds `cards.length` when the page
+  // ceiling clamped the expansion. Absent it, the resource takes the
+  // record count for the total and a truncated seed reads as complete.
+  meta?: QueryResultsMeta;
+  // The seed's match count is not knowable and must not be inferred from its
+  // rows — the producer resolved the field but deliberately reported no
+  // total, as a query-backed field does when one of its realms failed.
+  totalUnknown?: boolean;
+};
+
+export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: {
-    cards: CardDef[];
-    searchURL?: string;
-    realms?: string[];
-    queryErrors?: Array<{
-      realm: string;
-      type: string;
-      message: string;
-      status?: number;
-    }>;
-    // IDs the parent doc named in `relationships.{field}.data`. Used
-    // by the SearchResource when `cards` is empty and the parent
-    // skipped query-backed expansion — the resource loads each ID by
-    // URL instead of running a live re-query.
-    cardURLs?: string[];
-    // The result meta the seed was resolved under, chiefly `page.total` —
-    // the query's match count, which exceeds `cards.length` when the page
-    // ceiling clamped the expansion. Absent it, the resource takes the
-    // record count for the total and a truncated seed reads as complete.
-    meta?: QueryResultsMeta;
-    // The seed's match count is not knowable and must not be inferred from its
-    // rows — the producer resolved the field but deliberately reported no
-    // total, as a query-backed field does when one of its realms failed.
-    totalUnknown?: boolean;
-  };
+  seed?: StoreSearchSeed<T>;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: GetSearchResourceFuncOpts,
+  opts?: GetSearchResourceFuncOpts<T>,
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
@@ -2474,7 +2510,7 @@ interface InternalFieldInitializer {
 // userland `@field` under one of these would shadow the getter via the
 // prototype chain silently, so the decorator refuses them by name (the
 // `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
-const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
@@ -2885,6 +2921,23 @@ export type BaseDefComponent = ComponentLike<{
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
 // use a dedicated `render` component there.
+//
+// Render deterministically. A capture is stored under a hash of its bytes,
+// so two renders of unchanged data should produce identical pixels — the
+// platform's side of that bargain is settling fonts and images before
+// shooting, and the author's side is keeping nondeterminism out of the
+// rendered output. Avoid anything that differs run to run: `Date.now()` /
+// `new Date()` rendered into the markup ("3 minutes ago" timestamps),
+// `Math.random`, CSS animations or transitions mid-flight at capture time,
+// autoplaying carousels, or content fetched from an endpoint that answers
+// differently on each call. For media-derived captures, decode
+// deterministically too: seek to an exact timestamp rather than "current
+// frame", position WebGL cameras explicitly, and avoid ambient animation
+// loops. Nondeterministic output doesn't break anything visibly — the row
+// publishes and the durable screenshot URLs don't change — but every
+// reindex captures "new" bytes, wasting renders and storage churn and
+// defeating image caching (each rotation changes the image's ETag, so
+// every viewer re-downloads it).
 export type ScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
@@ -3426,26 +3479,65 @@ export class CSSField extends TextAreaField {
             --border,
             color-mix(in oklab, var(--field-fg) 20%, var(--field-bg))
           );
+          --field-fade: 1.5rem;
           position: relative;
+          background-color: var(--field-bg);
+          border: 1px solid var(--field-border);
+          border-radius: var(--radius, var(--boxel-border-radius));
+          overflow: hidden;
         }
         .css-field-copy-button {
           position: absolute;
           top: var(--boxel-sp-xs);
           right: var(--boxel-sp-xs);
+          z-index: 1;
         }
         .css-field {
           margin-block: 0;
           padding: var(--boxel-sp);
-          background-color: var(--field-bg);
-          border: 1px solid var(--field-border);
-          border-radius: var(--radius, var(--boxel-border-radius));
           color: var(--field-fg);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
           );
           font-size: var(--boxel-font-size-xs);
-          overflow-x: auto;
+          max-height: var(--css-field-max-height, none);
+          overflow: auto;
+          /* iOS-style edge fades: text dissolves into the background at an
+             edge only while more content lies beyond it. Each mask layer is
+             taller than the box by the fade height, so shifting it up by that
+             amount parks its fade offscreen; the scroll timeline slides them
+             into view. Base positions show no fade, which is also what
+             browsers without scroll-driven animations render. */
+          mask-image:
+            linear-gradient(to bottom, transparent, black var(--field-fade)),
+            linear-gradient(to top, transparent, black var(--field-fade));
+          mask-size: 100% calc(100% + var(--field-fade));
+          mask-repeat: no-repeat;
+          mask-composite: intersect;
+          mask-position:
+            0 calc(-1 * var(--field-fade)),
+            0 0;
+          animation: css-field-edge-fade linear both;
+          animation-timeline: scroll(self);
+        }
+        @keyframes css-field-edge-fade {
+          0% {
+            mask-position:
+              0 calc(-1 * var(--field-fade)),
+              0 calc(-1 * var(--field-fade));
+          }
+          8%,
+          92% {
+            mask-position:
+              0 0,
+              0 calc(-1 * var(--field-fade));
+          }
+          100% {
+            mask-position:
+              0 0,
+              0 0;
+          }
         }
         .css-field::placeholder {
           opacity: 0.5;
@@ -3647,10 +3739,17 @@ export class FileDef extends BaseDef {
   }
 
   // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
-  // file-backed defs. The prerender pass captures only instance rows, so a
-  // file's declared names read `undefined` until file rows capture too.
+  // file-backed defs. The prerender pass captures a URL's file rendering
+  // alongside its instance rendering, so a file family's declared names
+  // resolve here just as a card's do.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // See CardDef.screenshotsMeta — the same reserved, meta-derived getter for
+  // file-backed defs.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   // The four shared format shells own identity, facts, budgets, and state for
@@ -3776,6 +3875,14 @@ export class ImageDef extends FileDef {
   // The four formats come from FileDef's shared shells; the family supplies
   // only the renderer that draws its pixels.
   static previewComponent: FilePreviewComponent = ImagePreview;
+
+  // The family-wide capture: a `thumb` that feeds the thumbnail fallback
+  // chain and the fitted cell, for vectors and rasters alike. The srcset
+  // renditions are declared one level down on `RasterImageDef` — srcset
+  // excludes vectors, so an SVG must not pay for captures nothing reads.
+  // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
+  // See `image-captures` for the boxes and the capture-only components.
+  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -3965,6 +4072,17 @@ export class CardDef extends BaseDef {
   // decorator so a userland field can't shadow it.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // The instance's `meta.screenshots` entries verbatim — the dimensional
+  // companion to `screenshotURLs` for consumers that need more than the URL:
+  // each captured slot's width/height/deviceScaleFactor (a `srcset`
+  // assembler's inputs) and its `useAsThumbnail` flag. Same absence
+  // semantics: a slot appears only once `meta.screenshots` holds it, so an
+  // uncaptured live instance reads `undefined` here. Reserved like
+  // `screenshotURLs`, so a userland field can't shadow it.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {

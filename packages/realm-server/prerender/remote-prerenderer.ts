@@ -10,6 +10,9 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import {
+  isUndeliveredRequestError,
+  PRERENDER_DISPATCH_HEADER,
+  PRERENDER_DISPATCH_NONE,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -17,7 +20,9 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
+  retryPolicyForPath,
   sanitizePrerenderJobId,
+  type PrerenderEndpoint,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
@@ -29,9 +34,18 @@ const jsonApiHeaders = {
 
 class RetryablePrerenderError extends Error {
   status?: number;
-  constructor(message: string, status?: number) {
+  // Whether the manager answered without any prerender server having received
+  // the request. Only such a failure is safe to retry under
+  // `only-when-undelivered`.
+  undelivered: boolean;
+  constructor(
+    message: string,
+    status?: number,
+    opts?: { undelivered?: boolean },
+  ) {
     super(message);
     this.status = status;
+    this.undelivered = opts?.undelivered ?? false;
   }
 }
 
@@ -58,7 +72,7 @@ export function createRemotePrerenderer(
   const requestTimeoutMs = resolvePrerenderManagerRequestTimeoutMs();
 
   async function requestWithRetry<T>(
-    path: string,
+    path: PrerenderEndpoint,
     type: string,
     attributes: {
       affinityType: AffinityType;
@@ -71,6 +85,7 @@ export function createRemotePrerenderer(
     },
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
+    let retryPolicy = retryPolicyForPath(path);
 
     let endpoint = new URL(path, prerenderURL);
     // jobId is request metadata, not part of the validated body — strip
@@ -151,7 +166,11 @@ export function createRemotePrerenderer(
             message += `: ${text}`;
           }
           if (response.status === 503 || draining || serverError) {
-            throw new RetryablePrerenderError(message, response.status);
+            throw new RetryablePrerenderError(message, response.status, {
+              undelivered:
+                response.headers.get(PRERENDER_DISPATCH_HEADER) ===
+                PRERENDER_DISPATCH_NONE,
+            });
           }
           throw new Error(message);
         }
@@ -189,13 +208,39 @@ export function createRemotePrerenderer(
         // underlying error (ECONNREFUSED, ECONNRESET, etc.) in e.cause.
         // Check both e.code and e.cause.code to catch these.
         let code = e?.code ?? e?.cause?.code;
-        let retryable =
+        let retryableUnderAnyFailure =
           e instanceof RetryablePrerenderError ||
           code === 'ECONNREFUSED' ||
           code === 'ETIMEDOUT' ||
           code === 'ECONNRESET' ||
           (e instanceof TypeError && e.message === 'fetch failed');
+        // A request that must not run twice is retried only when the failure
+        // proves no prerender server received it: the manager saying it never
+        // dispatched, or a connection that was never established. A timeout, a
+        // reset, or a 5xx from a server that may have run the request is a
+        // completed side effect whose response was lost, and repeating it
+        // would perform that side effect a second time.
+        let undelivered =
+          e instanceof RetryablePrerenderError
+            ? e.undelivered
+            : isUndeliveredRequestError(e);
+        let retryable =
+          retryPolicy === 'only-when-undelivered'
+            ? undelivered
+            : retryableUnderAnyFailure;
         if (!retryable || attempts >= maxAttempts) {
+          if (
+            retryableUnderAnyFailure &&
+            !retryable &&
+            attempts < maxAttempts
+          ) {
+            log.warn(
+              `Prerender request to ${endpoint.href} failed and is not retryable ` +
+                `(requestId=${requestId}, affinity=${affinityTag}): the request may ` +
+                `already have been carried out, so a retry could repeat its side ` +
+                `effects: ${e.message}`,
+            );
+          }
           throw e;
         }
         let delayMs = Math.min(

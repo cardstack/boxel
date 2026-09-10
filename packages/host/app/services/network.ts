@@ -63,15 +63,7 @@ export default class NetworkService extends Service {
     return this.virtualNetwork.mount.bind(this.virtualNetwork);
   }
 
-  private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
-      // Native (un-stubbed) timer so the fetch retry path's header-timeout
-      // abort and retry backoff still fire during prerender, where
-      // render-timer-stub disables the global setTimeout — otherwise a stalled
-      // fetch there can neither abort nor retry and hangs the render. Outside
-      // prerender this is the global setTimeout, so behavior is unchanged.
-      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
-    });
+  private configureVirtualNetwork(virtualNetwork: VirtualNetwork) {
     // Registered from the shared declaration rather than one block per realm,
     // so this set cannot drift from the one the realm-server registers.
     //
@@ -127,11 +119,31 @@ export default class NetworkService extends Service {
         );
       }
     }
+  }
+
+  private makeVirtualNetwork() {
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
+      // Native (un-stubbed) timer so the fetch retry path's header-timeout
+      // abort and retry backoff still fire during prerender, where
+      // render-timer-stub disables the global setTimeout — otherwise a stalled
+      // fetch there can neither abort nor retry and hangs the render. Outside
+      // prerender this is the global setTimeout, so behavior is unchanged.
+      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
+    });
+    this.configureVirtualNetwork(virtualNetwork);
     return virtualNetwork;
   }
 
+  // Returns this service's network to its just-booted configuration without
+  // replacing it. The instance is handed to consumers that keep it — the
+  // Loader folds cache keys through it, `fetcher` closes over it — so
+  // swapping in a replacement would leave them naming through a network
+  // nothing else consults, and their mapping-change subscriptions attached to
+  // the discarded one. `reset()` clears the mappings and tells the
+  // subscribers; re-registering restores the set every boot installs.
   resetState = () => {
-    this.virtualNetwork = this.makeVirtualNetwork();
+    this.virtualNetwork.reset();
+    this.configureVirtualNetwork(this.virtualNetwork);
   };
 }
 

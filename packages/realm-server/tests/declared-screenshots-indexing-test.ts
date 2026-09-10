@@ -294,6 +294,20 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'no screenshotErrors diagnostics on a clean capture',
     );
+
+    let timings = (row!.diagnostics as any)?.screenshotTimingsMs;
+    assert.deepEqual(
+      Object.keys(timings ?? {}).sort(),
+      ['card', 'hero'],
+      'each captured slot records its per-name timing',
+    );
+    for (let name of ['card', 'hero']) {
+      let timing = typeof timings[name] === 'number' ? timings[name] : -1;
+      assert.true(
+        timing > 0,
+        `the "${name}" capture timing is a positive duration`,
+      );
+    }
   });
 
   test('card+json joins the manifest into meta.screenshots and the ?name= URL serves the capture', async function (assert) {

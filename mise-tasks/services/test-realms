@@ -79,7 +79,14 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+# Storeless like CI: this stack's ledger lives in PGDATABASE_TEST, and the
+# slug-scoped MEDIA_CACHE_DIR pairs with the dev database's ledger — two
+# ledgers over one object directory let either stack's reclaim/GC delete
+# bytes the other still serves (see the media-cache block in
+# mise-tasks/lib/env-vars.sh). The suites inject their own media-cache
+# adapters, so a real store here would only add capture work at boot.
 NODE_ENV=test \
+  MEDIA_CACHE_DIR= \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE_TEST}" \
   NODE_NO_WARNINGS=1 \

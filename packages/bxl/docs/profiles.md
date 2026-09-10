@@ -401,6 +401,7 @@ Restrictions:
 - no jq `label` / `break`
 - no jq format filters such as `@csv`
 - no request, actor, mutation, or environment contexts such as `@User`, `@Env`, `$new`, or `$old`
+- no request-context calls — `params`, `actor`, `instance` — which belong to the `mutation` profile
 - no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
 - no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
 - record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, aggregate calls, **and explicit `reduce`/`foreach` folds** are allowed
@@ -446,13 +447,22 @@ runtime-metadata calls are rejected. Assignment is permitted only as part of
 the mutation statement grammar. The planner itself is pure and performs no
 storage or network I/O.
 
+This is the one profile that admits the request-context calls `params`,
+`actor` and `instance`, because a mutation program is planned for a single
+request and reading that request's payload and caller is its job. The host
+supplies their values as `context` on the plan options; a program naming one
+without a context fails rather than reading `null`.
+
 ```ts
-const prepared = prepareBxlMutation('Status = "review";', {
+const prepared = prepareBxlMutation('append(Comment, params("note"));', {
   targetKind: 'card',
   schema,
 });
 
-const plan = prepared.plan(card, { programId: 'assistant:call-42' });
+const plan = prepared.plan(card, {
+  programId: 'assistant:call-42',
+  context: { params: { note: 'looks right to me' }, actor: { id: 'user:ada' } },
+});
 ```
 
 Use [`mutation-profile.md`](./mutation-profile.md) for the full source,

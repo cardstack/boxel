@@ -271,6 +271,175 @@ const tests = Object.freeze({
       accessibleRealms: ['http://localhost:4201/experiments/'],
     });
   },
+  // The realm verifies a session token by comparing its permissions claim
+  // against the union of the realm's `users` and `*` grants with the runner's
+  // own row, and rejects any difference as a PermissionMismatch. These cover
+  // the mint side of that contract.
+  'mints the union of the wildcard grant and the runner row': async (
+    assert,
+  ) => {
+    assert.expect(1);
+    let authCall:
+      | { userId: string; permissions: Record<string, unknown> }
+      | undefined;
+
+    let task = runCommand(
+      makeTaskArgs({
+        dbRows: [
+          {
+            username: '*',
+            realm_url: 'http://localhost:4201/experiments/',
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+          {
+            username: '@alice:localhost',
+            realm_url: 'http://localhost:4201/experiments/',
+            read: false,
+            write: true,
+            realm_owner: false,
+          },
+        ],
+        onCreatePrerenderAuth: (userId, permissions) => {
+          authCall = { userId, permissions };
+        },
+      }),
+    );
+
+    await task({
+      realmURL: 'http://localhost:4201/experiments/',
+      realmUsername: '@alice:localhost',
+      runAs: '@alice:localhost',
+      command: '@cardstack/catalog/commands/noop/default',
+      commandInput: {},
+      dedupeKey: null,
+      jobInfo: { id: 5 } as any,
+    });
+
+    assert.deepEqual(authCall, {
+      userId: '@alice:localhost',
+      permissions: {
+        'http://localhost:4201/experiments/': ['read', 'write'],
+      },
+    });
+  },
+
+  'mints the union of the users grant for a registered matrix user': async (
+    assert,
+  ) => {
+    assert.expect(2);
+    let profileRequests: string[] = [];
+    let realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+      let url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/_matrix/client/v3/profile/')) {
+        profileRequests.push(url);
+        return new Response(JSON.stringify({ displayname: 'Alice' }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input, init);
+    }) as typeof fetch;
+
+    let authCall:
+      | { userId: string; permissions: Record<string, unknown> }
+      | undefined;
+
+    try {
+      let task = runCommand(
+        makeTaskArgs({
+          dbRows: [
+            {
+              username: 'users',
+              realm_url: 'http://localhost:4201/experiments/',
+              read: true,
+              write: false,
+              realm_owner: false,
+            },
+            {
+              username: '@alice:localhost',
+              realm_url: 'http://localhost:4201/experiments/',
+              read: false,
+              write: true,
+              realm_owner: false,
+            },
+          ],
+          onCreatePrerenderAuth: (userId, permissions) => {
+            authCall = { userId, permissions };
+          },
+        }),
+      );
+
+      await task({
+        realmURL: 'http://localhost:4201/experiments/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/catalog/commands/noop/default',
+        commandInput: {},
+        dedupeKey: null,
+        jobInfo: { id: 6 } as any,
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    assert.deepEqual(authCall, {
+      userId: '@alice:localhost',
+      permissions: {
+        'http://localhost:4201/experiments/': ['read', 'write'],
+      },
+    });
+    assert.strictEqual(
+      profileRequests.length,
+      1,
+      'resolves the users grant against the homeserver once',
+    );
+  },
+
+  'runs for a runner whose only access is the wildcard grant': async (
+    assert,
+  ) => {
+    assert.expect(2);
+    let authCall:
+      | { userId: string; permissions: Record<string, unknown> }
+      | undefined;
+
+    let task = runCommand(
+      makeTaskArgs({
+        dbRows: [
+          {
+            username: '*',
+            realm_url: 'http://localhost:4201/experiments/',
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+        ],
+        onCreatePrerenderAuth: (userId, permissions) => {
+          authCall = { userId, permissions };
+        },
+      }),
+    );
+
+    let result = await task({
+      realmURL: 'http://localhost:4201/experiments/',
+      realmUsername: '@alice:localhost',
+      runAs: '@alice:localhost',
+      command: '@cardstack/catalog/commands/noop/default',
+      commandInput: {},
+      dedupeKey: null,
+      jobInfo: { id: 7 } as any,
+    });
+
+    assert.strictEqual(result.status, 'ready');
+    assert.deepEqual(authCall, {
+      userId: '@alice:localhost',
+      permissions: {
+        'http://localhost:4201/experiments/': ['read'],
+      },
+    });
+  },
 } as SharedTests<{}>);
 
 export default tests;

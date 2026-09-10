@@ -10,7 +10,6 @@ import OpenAI from 'openai';
 import {
   logger,
   aiBotUsername,
-  DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -38,12 +37,12 @@ import {
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
-  readRealmFileTool,
   classifyToolCalls,
   READ_REALM_FILE_TOOL_NAME,
 } from './lib/read-realm-file.ts';
 import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
+import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
   shouldSetRoomTitle,
   setTitle,
@@ -54,7 +53,6 @@ import * as Sentry from '@sentry/node';
 
 import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
-import type { ChatCompletionMessageParam } from 'openai/resources';
 import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
@@ -115,72 +113,15 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    // Whether to offer the bot-fulfilled readRealmFile tool. The caller decides
-    // (delegation configured + a single-human room); the bot never advertises
-    // a tool it won't run.
     offerRealmFileRead = false,
   ) {
-    if (!prompt.model) {
-      throw new Error('Model is required');
-    }
-
-    let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
-      model: this.getModel(prompt),
-      messages: prompt.messages as ChatCompletionMessageParam[],
-      // A streamed response reports no token counts unless asked. With this
-      // the provider delivers a usage block at the end of the stream — on a
-      // trailing chunk whose `choices` is empty or carries no finish_reason,
-      // which is why the Responder's end-of-stream detection must never
-      // un-set itself on a later chunk (see onChunk).
-      stream_options: { include_usage: true },
-    };
-    // OpenRouter's usage accounting. On top of the OpenAI-shaped counts above
-    // it adds `prompt_tokens_details.cached_tokens` (the prompt-cache split)
-    // and an inline `cost` to the same trailing usage payload. The inline
-    // cost also lets the chunk handler's preferred billing path run instead
-    // of the slower generation-API fallback. Not in the OpenAI types, hence
-    // the cast.
-    (request as Record<string, unknown>).usage = { include: true };
-
-    // Prompt caches live per provider, and the router is otherwise free to
-    // spread a room's requests across providers — which turns a warm cache
-    // prefix into a full-price miss mid-conversation. Bias Anthropic-model
-    // requests to Anthropic itself, keeping fallbacks for availability.
-    if (this.getModel(prompt).startsWith('anthropic/')) {
-      (request as Record<string, unknown>).provider = {
-        order: ['anthropic'],
-        allow_fallbacks: true,
-      };
-    }
-
-    if (prompt.reasoningEffort !== undefined) {
-      request.reasoning_effort = prompt.reasoningEffort;
-    }
-
-    if (
-      prompt.toolsSupported === true &&
-      prompt.tools &&
-      prompt.tools.length > 0
-    ) {
-      request.tools = prompt.tools;
-      request.tool_choice = prompt.toolChoice;
-    }
-
-    // Offer the bot-executed readRealmFile tool when the caller allows it, even
-    // in rooms that carry no other tools.
-    if (prompt.toolsSupported === true && offerRealmFileRead) {
-      request.tools = [...(request.tools ?? []), readRealmFileTool];
-    }
-
-    if (senderMatrixUserId) {
-      request.user = senderMatrixUserId;
-    }
-
-    return this.openai.chat.completions.stream(request);
-  }
-
-  getModel(prompt: PromptParts) {
-    return prompt.model ?? DEFAULT_FALLBACK_MODEL_ID;
+    return this.openai.chat.completions.stream(
+      buildChatCompletionRequest(
+        prompt,
+        senderMatrixUserId,
+        offerRealmFileRead,
+      ),
+    );
   }
 
   async handleDebugCommands(
@@ -594,15 +535,15 @@ Common issues are:
           let costInUsd: number | undefined;
           let generationCompleted = false;
 
-          // Serialize this user's credit gate → generate → debit across all
-          // rooms and replicas with the per-user cost lock (CS-11128),
-          // mirroring the realm-server proxy paths. The room lock only
-          // serializes per room, so without this a user firing concurrent
-          // requests in N rooms passes the balance gate N times against the
-          // same stale balance and overspends (CS-11504). The inline-cost
-          // debit is awaited inside the lock so the next same-user request
-          // cannot validate against a pre-deduction balance.
-          await assistant.pgAdapter.withUserCostLock(
+          // The per-user cost lock guards the credit gate here and the debit
+          // in the finally below, across all of this user's rooms and all
+          // replicas. It does not wrap the generation itself: a user with two
+          // rooms open gets two generations at once, and every debit still
+          // lands before the next gate on that user runs. What the short
+          // sections give up is that rooms started together are all gated on
+          // the same balance, so the overshoot is one turn per open room
+          // rather than one turn. The room lock still serializes per room.
+          let creditGatePassed = await assistant.pgAdapter.withUserCostLock(
             senderMatrixUserId,
             async () => {
               // Do not generate new responses if previous ones' cost is still being reported
@@ -615,7 +556,7 @@ Common issues are:
                 await responder.onError(
                   'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
                 );
-                return;
+                return false;
               }
 
               const creditValidation = await profTime(
@@ -631,160 +572,166 @@ Common issues are:
                   `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
                   { reloadBillingData: true },
                 );
-                return;
+                return false;
               }
+              return true;
+            },
+          );
+          if (!creditGatePassed) {
+            return;
+          }
 
-              log.info(
-                `[${eventId}] Starting generation with model %s`,
-                promptParts.model,
-              );
-              const requestStart = Date.now();
-              let firstChunkAt: number | undefined;
-              if (profEnabled()) {
-                profNote(eventId, 'llm:request:start', {
-                  model: promptParts.model,
-                });
-              }
-              try {
-                let roundCostInUsd: number | undefined;
-                const runner = assistant
-                  .getResponse(
-                    promptParts,
-                    senderMatrixUserId,
-                    realmFileReadingAllowed,
-                  )
-                  .on('chunk', async (chunk, snapshot) => {
-                    log.info(`[${eventId}] Received chunk %s`, chunk.id);
-                    if (profEnabled() && firstChunkAt == null) {
-                      firstChunkAt = Date.now();
-                      profNote(eventId, 'llm:ttft', {
-                        ms: firstChunkAt - requestStart,
-                        model: promptParts.model,
-                      });
-                    }
-                    generationId = chunk.id;
-                    if (chunk.usage && (chunk.usage as any).cost != null) {
-                      roundCostInUsd = (chunk.usage as any).cost;
-                    }
-                    let activeGeneration = activeGenerations.get(room.roomId);
-                    if (activeGeneration) {
-                      activeGeneration.lastGeneratedChunkId = generationId;
-                    }
-
-                    let chunkProcessingResult = await profTime(
-                      eventId,
-                      'llm:chunk:onChunk',
-                      async () => responder.onChunk(chunk, snapshot),
-                    );
-                    let chunkProcessingResultError = chunkProcessingResult.find(
-                      (promiseResult) =>
-                        promiseResult &&
-                        'errorMessage' in promiseResult &&
-                        promiseResult.errorMessage != null,
-                    ) as { errorMessage: string } | undefined;
-
-                    if (chunkProcessingResultError) {
-                      chunkHandlingError =
-                        chunkProcessingResultError.errorMessage;
-
-                      // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                      // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                      // where the await responder.finalize() is called (the catch block below will handle this)
-                      runner.abort();
-                    }
-                  })
-                  .on('error', async (error) => {
-                    await responder.onError(error);
+          log.info(
+            `[${eventId}] Starting generation with model %s`,
+            promptParts.model,
+          );
+          const requestStart = Date.now();
+          let firstChunkAt: number | undefined;
+          if (profEnabled()) {
+            profNote(eventId, 'llm:request:start', {
+              model: promptParts.model,
+            });
+          }
+          try {
+            let roundCostInUsd: number | undefined;
+            const runner = assistant
+              .getResponse(
+                promptParts,
+                senderMatrixUserId,
+                realmFileReadingAllowed,
+              )
+              .on('chunk', async (chunk, snapshot) => {
+                log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                if (profEnabled() && firstChunkAt == null) {
+                  firstChunkAt = Date.now();
+                  profNote(eventId, 'llm:ttft', {
+                    ms: firstChunkAt - requestStart,
+                    model: promptParts.model,
                   });
+                }
+                generationId = chunk.id;
+                if (chunk.usage && (chunk.usage as any).cost != null) {
+                  roundCostInUsd = (chunk.usage as any).cost;
+                }
+                let activeGeneration = activeGenerations.get(room.roomId);
+                if (activeGeneration) {
+                  activeGeneration.lastGeneratedChunkId = generationId;
+                }
 
-                activeGenerations.set(room.roomId, {
-                  responder,
-                  runner,
-                  lastGeneratedChunkId: generationId,
-                  completionPromise: generationCompletionPromise,
-                });
-
-                let completion = await profTime(
+                let chunkProcessingResult = await profTime(
                   eventId,
-                  'llm:finalChatCompletion',
-                  async () => runner.finalChatCompletion(),
+                  'llm:chunk:onChunk',
+                  async () => responder.onChunk(chunk, snapshot),
                 );
-                if (typeof roundCostInUsd === 'number') {
-                  costInUsd = (costInUsd ?? 0) + roundCostInUsd;
-                }
+                let chunkProcessingResultError = chunkProcessingResult.find(
+                  (promiseResult) =>
+                    promiseResult &&
+                    'errorMessage' in promiseResult &&
+                    promiseResult.errorMessage != null,
+                ) as { errorMessage: string } | undefined;
 
-                log.info(`[${eventId}] Generation complete`);
-                await profTime(eventId, 'response:finalize', async () =>
-                  responder.finalize(),
-                );
-                log.info(`[${eventId}] Response finalized`);
+                if (chunkProcessingResultError) {
+                  chunkHandlingError = chunkProcessingResultError.errorMessage;
 
-                // readRealmFile is a tool ai-bot fulfills itself. The answer has
-                // already streamed (with the reads surfaced as executedBy:
-                // 'ai-bot' command requests); now fetch each file, attach it to
-                // a command-result event, and let the normal command-result path
-                // drive the continuation on a later turn — exactly as a host
-                // command result would. Because reads now resolve next-turn like
-                // host commands, an answer may freely mix the two; the host
-                // fulfills its commands, we fulfill ours, and getShouldRespond
-                // waits for all of them before generating again.
-                let message = completion.choices?.[0]?.message;
-                let { botToolCalls } = message
-                  ? classifyToolCalls(message)
-                  : { botToolCalls: [] };
-                if (
-                  realmFileReadingAllowed &&
-                  botToolCalls.length > 0 &&
-                  responder.responseEventId
-                ) {
-                  // Defer fulfillment until after the room lock is released
-                  // (see the finally below): fulfilling posts a result event
-                  // that re-triggers the bot, and that re-trigger needs the
-                  // room lock this handler still holds here.
-                  pendingFulfillBotToolCalls = botToolCalls;
-                  pendingFulfillRequestEventId = responder.responseEventId;
-                  pendingFulfillAgentId = agentId;
+                  // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                  // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                  // where the await responder.finalize() is called (the catch block below will handle this)
+                  runner.abort();
                 }
-              } catch (error) {
-                // Aborting the runner always surfaces as APIUserAbortError, but
-                // the user is not the only one who aborts it: the chunk handler
-                // does too when publishing a chunk fails, and that failure is
-                // the answer being cut off rather than withdrawn. Telling them
-                // apart by `chunkHandlingError` keeps a send failure from being
-                // recorded as a cancellation — which reads to the user as an
-                // answer that simply stops mid-sentence, with no error to act on
-                // and nothing in the log but "canceled by user".
-                if (error instanceof APIUserAbortError && chunkHandlingError) {
-                  log.error(
-                    `[${eventId}] Generation aborted after a chunk could not be published`,
-                  );
-                  log.error(chunkHandlingError);
-                  await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-                } else if (error instanceof APIUserAbortError) {
-                  log.info(`[${eventId}] Generation was canceled by user`);
-                  await responder.finalize({ isCanceled: true });
-                } else {
-                  log.error(
-                    `[${eventId}] Error during generation or finalization`,
-                  );
-                  log.error(error);
-                  if (chunkHandlingError) {
-                    await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-                  } else {
-                    await responder.onError(error as OpenAIError);
-                  }
-                }
-              } finally {
-                // Debit the inline cost INSIDE the lock so the next same-user
-                // request observes it before validating. This path has the
-                // best data (both costInUsd from inline chunks and
-                // generationId). The user-facing response is already
-                // finalized, so a billing-write failure here must not skip the
-                // activeGenerations cleanup below (a stale entry would make a
-                // later message abort an already-finished run); swallow and log
-                // it, and let the next request surface any billing error via
-                // validateAICredits / waitForPendingCreditTracking.
-                try {
+              })
+              .on('error', async (error) => {
+                await responder.onError(error);
+              });
+
+            activeGenerations.set(room.roomId, {
+              responder,
+              runner,
+              lastGeneratedChunkId: generationId,
+              completionPromise: generationCompletionPromise,
+            });
+
+            let completion = await profTime(
+              eventId,
+              'llm:finalChatCompletion',
+              async () => runner.finalChatCompletion(),
+            );
+            if (typeof roundCostInUsd === 'number') {
+              costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+            }
+
+            log.info(`[${eventId}] Generation complete`);
+            await profTime(eventId, 'response:finalize', async () =>
+              responder.finalize(),
+            );
+            log.info(`[${eventId}] Response finalized`);
+
+            // readRealmFile is a tool ai-bot fulfills itself. The answer has
+            // already streamed (with the reads surfaced as executedBy:
+            // 'ai-bot' command requests); now fetch each file, attach it to
+            // a command-result event, and let the normal command-result path
+            // drive the continuation on a later turn — exactly as a host
+            // command result would. Because reads now resolve next-turn like
+            // host commands, an answer may freely mix the two; the host
+            // fulfills its commands, we fulfill ours, and getShouldRespond
+            // waits for all of them before generating again.
+            let message = completion.choices?.[0]?.message;
+            let { botToolCalls } = message
+              ? classifyToolCalls(message)
+              : { botToolCalls: [] };
+            if (
+              realmFileReadingAllowed &&
+              botToolCalls.length > 0 &&
+              responder.responseEventId
+            ) {
+              // Defer fulfillment until after the room lock is released
+              // (see the finally below): fulfilling posts a result event
+              // that re-triggers the bot, and that re-trigger needs the
+              // room lock this handler still holds here.
+              pendingFulfillBotToolCalls = botToolCalls;
+              pendingFulfillRequestEventId = responder.responseEventId;
+              pendingFulfillAgentId = agentId;
+            }
+          } catch (error) {
+            // Aborting the runner always surfaces as APIUserAbortError, but
+            // the user is not the only one who aborts it: the chunk handler
+            // does too when publishing a chunk fails, and that failure is
+            // the answer being cut off rather than withdrawn. Telling them
+            // apart by `chunkHandlingError` keeps a send failure from being
+            // recorded as a cancellation — which reads to the user as an
+            // answer that simply stops mid-sentence, with no error to act on
+            // and nothing in the log but "canceled by user".
+            if (error instanceof APIUserAbortError && chunkHandlingError) {
+              log.error(
+                `[${eventId}] Generation aborted after a chunk could not be published`,
+              );
+              log.error(chunkHandlingError);
+              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+            } else if (error instanceof APIUserAbortError) {
+              log.info(`[${eventId}] Generation was canceled by user`);
+              await responder.finalize({ isCanceled: true });
+            } else {
+              log.error(`[${eventId}] Error during generation or finalization`);
+              log.error(error);
+              if (chunkHandlingError) {
+                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+              } else {
+                await responder.onError(error as OpenAIError);
+              }
+            }
+          } finally {
+            // Debit the inline cost under the per-user lock so the next
+            // same-user gate observes it before validating. This path has the
+            // best data (both costInUsd from inline chunks and
+            // generationId). The user-facing response is already
+            // finalized, so a billing-write failure here must not skip the
+            // activeGenerations cleanup below (a stale entry would make a
+            // later message abort an already-finished run); swallow and log
+            // it, and let the next request surface any billing error via
+            // validateAICredits / waitForPendingCreditTracking.
+            try {
+              await assistant.pgAdapter.withUserCostLock(
+                senderMatrixUserId,
+                async () => {
                   if (
                     typeof costInUsd === 'number' &&
                     Number.isFinite(costInUsd) &&
@@ -815,19 +762,18 @@ Common issues are:
                       `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
                     );
                   }
-                } catch (costError) {
-                  log.error(`[${eventId}] Failed to record AI usage cost`);
-                  log.error(costError);
-                  Sentry.captureException(costError, {
-                    extra: { roomId: room.roomId, eventId },
-                  });
-                }
-                activeGenerations.delete(room.roomId);
-              }
-
-              generationCompleted = true;
-            },
-          );
+                },
+              );
+            } catch (costError) {
+              log.error(`[${eventId}] Failed to record AI usage cost`);
+              log.error(costError);
+              Sentry.captureException(costError, {
+                extra: { roomId: room.roomId, eventId },
+              });
+            }
+            activeGenerations.delete(room.roomId);
+          }
+          generationCompleted = true;
 
           if (
             generationCompleted &&
