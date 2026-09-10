@@ -273,6 +273,12 @@ export interface OperationHeadResult {
 // nothing else.
 export interface OperationIdentityResult {
   id: string;
+  // Echoed by a create, so a caller can match the URL the realm minted back to
+  // the `lid` it named the card with. A `lid` is the caller's own id for a card
+  // that does not exist yet, so this is the only thing that ties the two
+  // together — nothing in the minted URL carries it once the realm has chosen
+  // one.
+  lid?: string;
   meta: {
     // The token a later request passes as `baseVersion`.
     version: string;
