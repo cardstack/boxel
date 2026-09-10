@@ -385,9 +385,9 @@ async function commitStaged(
     let written = byPath.get(change.primaryPath);
     if (!written) {
       // Every staged write is handed to the commit and every one comes back,
-      // so a missing result means the two no longer agree about what was
-      // staged. Reporting an empty version would hand the caller a token it
-      // could send back as a `baseVersion` that matches nothing.
+      // so a missing result means the two disagree about what was staged.
+      // Reporting an empty version would hand the caller a token it could
+      // send back as a `baseVersion` that matches nothing.
       throw new OperationFailure({
         id: change.id,
         status: 500,

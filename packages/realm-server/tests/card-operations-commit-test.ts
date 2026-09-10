@@ -28,13 +28,17 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
+  waitUntil,
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 const testRealmHref = testRealm.href;
-const PERSON = { module: rri('./person'), name: 'Person' };
+// The module named absolutely rather than relative to the realm root: a create
+// lands under its type's directory, one level deep, so a root-relative
+// spelling would resolve against that directory instead of the realm.
+const PERSON = { module: rri(`${testRealmHref}person`), name: 'Person' };
 
 // ============================================================================
 // The batch coordinator, driven against a real realm.
@@ -154,6 +158,15 @@ module(basename(import.meta.filename), function (hooks) {
     return messages
       .filter((message) => message.type === APP_BOXEL_REALM_EVENT_TYPE)
       .map((message) => message.content as RealmEventContent);
+  }
+
+  async function incrementalIndexEventsSince(
+    since: number,
+  ): Promise<IncrementalIndexEventContent[]> {
+    return (await realmEventsSince(since)).filter(
+      (event): event is IncrementalIndexEventContent =>
+        event.eventName === 'index' && event.indexType === 'incremental',
+    );
   }
 
   // The realm events a batch is answerable for: the incremental index event it
@@ -362,10 +375,13 @@ module(basename(import.meta.filename), function (hooks) {
       `the write and the delete share one index job (got ${newJobs.length})`,
     );
 
-    let indexEvents = (await realmEventsSince(since)).filter(
-      (event): event is IncrementalIndexEventContent =>
-        event.eventName === 'index' && event.indexType === 'incremental',
-    );
+    // The realm broadcasts into the Matrix room out of band from the commit,
+    // so wait for the batch's own event to arrive before counting.
+    await waitUntil(async () => {
+      let seen = await incrementalIndexEventsSince(since);
+      return seen.some((event) => event.clientRequestId === 'batch-1');
+    });
+    let indexEvents = await incrementalIndexEventsSince(since);
     assert.strictEqual(
       indexEvents.length,
       1,

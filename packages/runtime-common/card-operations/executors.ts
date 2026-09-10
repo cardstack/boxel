@@ -543,6 +543,14 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
 // The bytes a card's file holds. The realm stamps its own URL on the resource
 // before serializing, the same way it does for every card it stores, and the
 // serializer resolves each field against the type's definition.
+//
+// The document's own module references resolve against the file it lands in,
+// which for a created card is its type's directory rather than the realm root.
+// So a caller naming a module relatively has to name it relative to that
+// file — a realm-root-relative spelling addresses a module inside the type
+// directory, where there is none. An absolute URL or a registered prefix
+// resolves the same wherever the card is stored, which is what a caller that
+// does not want to reason about the directory sends.
 async function serializeForStorage(
   resource: CardResource,
   identity: StagedIdentity,
