@@ -36,10 +36,6 @@ export class LiveSearchRefreshScheduler {
     this.#flush = flush;
   }
 
-  get isScheduled(): boolean {
-    return this.#timer !== undefined;
-  }
-
   schedule(): void {
     if (this.#timer !== undefined) {
       return;
