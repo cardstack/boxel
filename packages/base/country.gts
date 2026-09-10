@@ -22,9 +22,7 @@ export class Country extends CardDef {
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.name />
-    </template>
+    <template><@fields.name /></template>
   };
 }
 
@@ -119,9 +117,7 @@ export default class CountryField extends FieldDef {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model.name}}
-    </template>
+    <template>{{@model.name}}</template>
   };
 
   // CS-10786: the country's display name, markdown-escaped. The ISO code is
@@ -140,8 +136,6 @@ export class CardWithCountryField extends CardDef {
   @field country = contains(CountryField);
 
   static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <@fields.country @format='atom' />
-    </template>
+    <template><@fields.country @format='atom' /></template>
   };
 }

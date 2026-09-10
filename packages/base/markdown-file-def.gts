@@ -10,8 +10,8 @@ import {
   type ToolContext,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   CardDef,
   Component,
   NumberField,
