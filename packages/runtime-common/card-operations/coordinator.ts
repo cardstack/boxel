@@ -157,30 +157,75 @@ export async function commitBatch(
     let lids = indexLids(entries, paths);
     let stored = await readStoredFiles(core, entries, paths);
     let staged: StagedChange[] = [];
+    // The version each entry's merge was computed over, captured as it stages
+    // rather than read back at the end: `stored` moves underneath the batch
+    // as entries compose, so by the commit it no longer holds what the first
+    // entry to touch a file merged over.
+    let baseHashes: (string | undefined)[] = [];
     for (let [index, entry] of entries.entries()) {
-      staged.push(
-        await stageEntry(entry, index, {
-          realmURL: core.realmURL,
-          paths,
-          lids,
-          stored,
-          actor: opts.actor ?? '',
-          serializeCard: core.serializeCard,
-          codeRefKey: core.codeRefKey,
-          resolveModuleId: core.resolveModuleId,
-          lookupDefinition: core.lookupDefinition,
-        }),
+      let change = await stageEntry(entry, index, {
+        realmURL: core.realmURL,
+        paths,
+        lids,
+        stored,
+        actor: opts.actor ?? '',
+        serializeCard: core.serializeCard,
+        codeRefKey: core.codeRefKey,
+        resolveModuleId: core.resolveModuleId,
+        lookupDefinition: core.lookupDefinition,
+      });
+      baseHashes.push(
+        change.primaryPath
+          ? stored.get(change.primaryPath)?.contentHash
+          : undefined,
       );
+      compose(stored, entry, change);
+      staged.push(change);
     }
     assertWritesAllowed(staged);
     assertWritesFit(core, staged);
     await assertDestinationsFree(core, staged);
     // Everything above either produced bytes for every entry or threw, and a
-    // throw leaves the realm as it was. `commitStaged` still refuses a batch
-    // whose entries claim one file twice, which it can only see once every
-    // entry has staged.
-    return await commitStaged(core, entries, staged, stored, opts);
+    // throw leaves the realm as it was.
+    return await commitStaged(core, entries, staged, baseHashes, opts);
   });
+}
+
+// Fold what an entry staged into the state the next entry stages against. A
+// batch is a sequence, so two entries may name one card and the second is
+// meant to build on the first: it merges over the bytes the first staged, not
+// over the bytes the batch started from, and the commit writes the file once.
+// Composing is what makes that safe — the alternative, letting both merge
+// over the pre-batch state, is how the second silently discards the first.
+//
+// A removal takes its path back out, so an entry that follows one aimed at
+// the same card finds nothing there and refuses the way it would outside a
+// batch.
+//
+// A create's bytes are deliberately not folded in. The card it mints is
+// reached by the `lid` other entries link to, not by an href they target, and
+// letting a later entry address it by URL would tie the batch's meaning to
+// path math the caller has to reproduce to predict it.
+function compose(
+  stored: Map<LocalPath, StoredFile>,
+  entry: BatchEntry,
+  change: StagedChange,
+): void {
+  for (let path of change.deletes) {
+    stored.delete(path);
+  }
+  if (entry.op === 'create') {
+    return;
+  }
+  for (let write of change.writes) {
+    stored.set(write.path, {
+      content: write.content,
+      // The file has not been written yet, so its modification time is still
+      // the one on disk; the commit reports the real one.
+      lastModified: stored.get(write.path)?.lastModified ?? 0,
+      contentHash: computeContentHash(write.content),
+    });
+  }
 }
 
 // Run one executor, and label whatever it refuses with the entry's position.
@@ -493,42 +538,27 @@ async function commitStaged(
   core: BatchCore,
   entries: BatchEntry[],
   staged: StagedChange[],
-  stored: Map<LocalPath, StoredFile>,
+  baseHashes: (string | undefined)[],
   opts: CommitBatchOptions,
 ): Promise<BatchEntryResult[]> {
+  // One entry per file, in batch order. Two entries may name one card, and
+  // the second built on the first rather than racing it — it merged over the
+  // bytes the first staged — so the file is written once holding the last of
+  // them rather than twice, and a removal that follows drops the write
+  // entirely instead of writing bytes the same commit then unlinks.
   let writes = new Map<LocalPath, string | Uint8Array>();
-  let deletes: LocalPath[] = [];
-  // Which entry claimed each file. Two entries touching one file would each
-  // have been computed against the state the batch started from, so the second
-  // would silently discard the first — the very loss the write lock exists to
-  // prevent, reintroduced inside one batch. Refused rather than ordered: which
-  // change the caller meant to keep is not something the realm can infer.
-  let claimedBy = new Map<LocalPath, number>();
-  let claim = (path: LocalPath, index: number) => {
-    let owner = claimedBy.get(path);
-    if (owner !== undefined) {
-      throw new OperationFailure({
-        status: 400,
-        code: 'invalid-params',
-        title: 'Conflicting entries',
-        detail:
-          `entries ${owner} and ${index} both change ${path}; a batch names ` +
-          `one change per card`,
-        meta: { entry: index, conflictsWith: owner },
-      });
-    }
-    claimedBy.set(path, index);
-  };
-  for (let [index, change] of staged.entries()) {
+  let deleted = new Set<LocalPath>();
+  for (let change of staged) {
     for (let write of change.writes) {
-      claim(write.path, index);
       writes.set(write.path, write.content);
+      deleted.delete(write.path);
     }
     for (let path of change.deletes) {
-      claim(path, index);
-      deletes.push(path);
+      deleted.add(path);
+      writes.delete(path);
     }
   }
+  let deletes = [...deleted];
   let committed = await core.commitUnlocked(
     { writes, deletes },
     {
@@ -539,6 +569,13 @@ async function commitStaged(
   let byPath = new Map(committed.writes.map((write) => [write.path, write]));
   return staged.map((change, index) => {
     if (!change.primaryPath) {
+      return null;
+    }
+    if (deleted.has(change.primaryPath)) {
+      // A later entry removed the card this one wrote. There is no state left
+      // to describe, which is what a removal reports, so this entry reports
+      // it too rather than a version for a file the commit did not leave
+      // behind.
       return null;
     }
     let written = byPath.get(change.primaryPath);
@@ -569,10 +606,7 @@ async function commitStaged(
         // happened, and what a moved base means is the caller's to decide.
         ...(baseVersion === undefined
           ? {}
-          : {
-              baseMatched:
-                stored.get(change.primaryPath)?.contentHash === baseVersion,
-            }),
+          : { baseMatched: baseHashes[index] === baseVersion }),
       },
     };
   });

@@ -740,7 +740,7 @@ const tests: SharedTests<Record<string, never>> = {
     assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
-  'two entries changing one card are refused rather than ordered': async (
+  'two entries changing one card compose, and the file is written once': async (
     assert,
   ) => {
     let { core, commits } = stub({
@@ -753,15 +753,167 @@ const tests: SharedTests<Record<string, never>> = {
         data: { type: 'card', attributes, meta: { adoptsFrom: PERSON } },
       },
     });
-    let failed = await refusal(core, [
-      entry({ firstName: 'Left' }),
-      entry({ age: 9 }),
-    ]);
-    assert.strictEqual(failed?.code, 'invalid-params');
+    let results = await commitBatch(
+      core,
+      [entry({ firstName: 'Left' }), entry({ nickname: 'Lefty' })],
+      {},
+    );
+
+    assert.strictEqual(commits.length, 1, 'one commit');
+    assert.deepEqual(
+      Object.keys(commits[0].writes),
+      ['person-1.json'],
+      'the card is written once, not twice',
+    );
+    let { data } = JSON.parse(commits[0].writes['person-1.json']);
+    assert.deepEqual(
+      data.attributes,
+      { firstName: 'Left', nickname: 'Lefty' },
+      'the second entry merged over what the first staged, so neither ' +
+        'change is discarded',
+    );
     assert.strictEqual(
-      failed?.entry,
-      1,
-      'the second claim on the file is the refusal',
+      results[0]!.meta.version,
+      results[1]!.meta.version,
+      'both entries report the version the file was committed at',
+    );
+  },
+
+  'a base version names what the entry merged over, not the batch pre-state':
+    async (assert) => {
+      let stored = cardFile({ firstName: 'Original' }, PERSON);
+      let { core } = stub({ stored: { 'person-1.json': stored } });
+      let entry = (
+        attributes: Record<string, unknown>,
+        baseVersion: string,
+      ): BatchEntry => ({
+        op: 'update',
+        href: `${REALM}person-1`,
+        baseVersion,
+        document: {
+          data: { type: 'card', attributes, meta: { adoptsFrom: PERSON } },
+        },
+      });
+      let preBatch = computeContentHash(stored);
+      let results = await commitBatch(
+        core,
+        [
+          entry({ firstName: 'Left' }, preBatch),
+          entry({ nickname: 'Lefty' }, preBatch),
+        ],
+        {},
+      );
+
+      assert.true(
+        results[0]!.meta.baseMatched,
+        'the first entry did merge over the bytes the batch started from',
+      );
+      assert.false(
+        results[1]!.meta.baseMatched,
+        'the second merged over what the first staged, so the pre-batch ' +
+          'version is not the base it was computed against',
+      );
+    },
+
+  'a removal after a change takes the card, and the write with it': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
+    });
+    let results = await commitBatch(
+      core,
+      [
+        {
+          op: 'update',
+          href: `${REALM}person-1`,
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Doomed' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+        { op: 'delete', href: `${REALM}person-1` },
+      ],
+      {},
+    );
+
+    assert.deepEqual(
+      Object.keys(commits[0].writes),
+      [],
+      'the superseded write never reaches the commit — writing bytes the ' +
+        'same commit then unlinks is work with no observable result',
+    );
+    assert.deepEqual(commits[0].deletes, ['person-1.json']);
+    assert.deepEqual(
+      results,
+      [null, null],
+      'neither entry has state left to report',
+    );
+  },
+
+  'a change after a removal has nothing to change': async (assert) => {
+    let { core, commits } = stub({
+      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
+    });
+    let failed = await refusal(core, [
+      { op: 'delete', href: `${REALM}person-1` },
+      {
+        op: 'update',
+        href: `${REALM}person-1`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Too late' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    assert.deepEqual(
+      failed,
+      { status: 404, code: 'target-not-found', entry: 1 },
+      'the batch already removed it, which is the answer it would get for a ' +
+        'card that was never there',
+    );
+    assert.strictEqual(commits.length, 0, 'the removal is abandoned too');
+  },
+
+  'a card the batch creates is not a target for a later entry': async (
+    assert,
+  ) => {
+    let { core, commits } = stub();
+    let failed = await refusal(core, [
+      {
+        op: 'create',
+        lid: 'fresh',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Fresh' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+      {
+        op: 'update',
+        href: `${REALM}Person/fresh`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Amended' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    assert.deepEqual(
+      failed,
+      { status: 404, code: 'target-not-found', entry: 1 },
+      'a minted card is reached by the local id other entries link to, not ' +
+        'by a URL they target',
     );
     assert.strictEqual(commits.length, 0, 'nothing is committed');
   },

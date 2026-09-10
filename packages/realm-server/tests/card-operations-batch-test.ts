@@ -74,7 +74,23 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
-    test('two entries changing one card are refused rather than ordered', async function (assert) {
+    test('two entries changing one card compose, and the file is written once', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a base version names what the entry merged over, not the batch pre-state', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a removal after a change takes the card, and the write with it', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a change after a removal has nothing to change', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a card the batch creates is not a target for a later entry', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
