@@ -14,11 +14,18 @@ import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
-// One card definition whose `friend` link is `searchable`, which is what puts
-// the link on `boxel_index.deps` — the same rows the invalidation walk reads
-// to find a card's dependents and the dependency ordering reads to learn the
-// edges between them. `friend` appears in no template, so a card that never
-// sets it renders identically.
+// One card definition with a self-referential `friend` link that its
+// templates RENDER. Rendering is what puts the link target on
+// `boxel_index.deps` — the rows the invalidation walk reads to find a card's
+// dependents and the dependency ordering reads to learn the edges between
+// them. A link the templates never read is not captured, however the field
+// is declared, and a card with no recorded dependency never reaches a
+// pass's fan-out.
+//
+// `friend` renders as `atom`, which reads only `firstName` and so follows
+// the link exactly one hop. That termination is what lets the scenarios
+// below link two cards to each other — a cycle the ordering has to resolve —
+// without the embedded render recursing through it.
 function makeFileSystem() {
   return {
     'person.gts': `
@@ -28,14 +35,21 @@ function makeFileSystem() {
       export class Person extends CardDef {
         @field firstName = contains(StringField);
         @field friend = linksTo(() => Person, { searchable: true });
+        static atom = class Atom extends Component<typeof this> {
+          <template>
+            <span><@fields.firstName /></span>
+          </template>
+        }
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1><@fields.firstName /></h1>
+            <p>friend <@fields.friend @format='atom' /></p>
           </template>
         }
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <h1>Embedded: <@fields.firstName/></h1>
+            <p>friend <@fields.friend @format='atom' /></p>
           </template>
         }
         static fitted = class Fitted extends Component<typeof this> {
