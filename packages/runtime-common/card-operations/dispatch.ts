@@ -333,11 +333,11 @@ export async function resolveOperation(
 ): Promise<OperationDefinition> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
-    // Before the lookup, not merely without it: for a module path the lookup
-    // cannot succeed, and reaching it at all would gate a read of bytes on a
-    // definition. The kind still decides whether the target carries the
-    // operation, so it comes from the target alone — which is where an
-    // instance target's kind comes from anyway.
+    // Before the lookup, not merely without it — see
+    // `DEFINITION_FREE_OPERATIONS` for what that rests on. The kind still
+    // decides whether the target carries the operation, so it comes from the
+    // target alone, which is where an instance target's kind comes from
+    // anyway.
     let kind = definitionFreeKind(target);
     if (!kind || !own(ALLOWED_BASE_OPERATIONS[kind], name)) {
       throw notAllowed(target, name, kind, name);
