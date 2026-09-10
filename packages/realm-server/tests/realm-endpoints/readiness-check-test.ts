@@ -7,6 +7,7 @@ const { ensureDirSync, writeJSONSync } = fsExtra;
 import { dirSync } from 'tmp';
 import type {
   LooseSingleCardDocument,
+  ModuleRenderResponse,
   Prerenderer,
   Realm,
   RenderError,
@@ -218,9 +219,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   // A brand-new realm whose first from-scratch index cannot complete is the
   // other way a readiness poll could run forever. Here every render times out
   // with the page idle — the shape a prerender takes when its browser cannot
-  // reach an origin it needs — so the job gives up after a few files instead
-  // of paying the full render timeout for every file, and the realm reports
-  // that as a terminal not-ready rather than a ready over an empty index.
+  // reach an origin it needs. Whether a base module renders decides what that
+  // means: when it cannot, the job gives up after a few files instead of
+  // paying the full render timeout for every file, and the realm reports that
+  // as a terminal not-ready rather than a ready over an empty index; when it
+  // can, the idle timeouts are the cards' own and the pass completes.
   module('boot index whose renders all time out idle', function (hooks) {
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
@@ -236,6 +239,138 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     const realmURL = 'http://127.0.0.1:6678/idle-timeouts/';
     const cardCount = 6;
+
+    function moduleResponse(
+      url: string,
+      outcome: 'ready' | 'timeout',
+    ): ModuleRenderResponse {
+      let base = {
+        id: url,
+        nonce: 'canary',
+        isShimmed: false,
+        lastModified: 0,
+        createdAt: 0,
+        deps: [],
+        definitions: {},
+      };
+      if (outcome === 'ready') {
+        return { ...base, status: 'ready' };
+      }
+      return {
+        ...base,
+        status: 'error',
+        error: {
+          type: 'module-error',
+          error: {
+            id: url,
+            status: 504,
+            title: 'Render timeout',
+            message: 'Render timed-out after 60000 ms',
+            additionalErrors: null,
+          },
+        },
+      };
+    }
+
+    function idleTimeoutFileSystem(): Record<string, LooseSingleCardDocument> {
+      let fileSystem: Record<string, LooseSingleCardDocument> = {
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Idle Timeouts Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: rri('@cardstack/base/realm-config'),
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      };
+      for (let i = 0; i < cardCount; i++) {
+        fileSystem[`card-${i}.json`] = {
+          data: {
+            type: 'card',
+            attributes: { title: `Card ${i}` },
+            meta: {
+              adoptsFrom: {
+                module: rri('https://cardstack.com/base/card-api'),
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+      return fileSystem;
+    }
+
+    // A realm whose every index visit times out idle, with the canary module
+    // render behaving as `canary` says; started, so its boot index has run.
+    async function startRealmWithIdleTimeouts(canary: 'ready' | 'timeout') {
+      let real = await getTestPrerenderer();
+      let indexVisits: string[] = [];
+      let canaryRenders = 0;
+      let prerenderer: Prerenderer = {
+        prerenderModule: async (args) => {
+          // The prerender-html job that follows a completed pass may render
+          // modules too; only the canary's module counts here.
+          if (args.url === 'https://cardstack.com/base/card-api') {
+            canaryRenders++;
+          }
+          return moduleResponse(args.url, canary);
+        },
+        runCommand: (args) => real.runCommand(args),
+        releaseBatch: async () => {},
+        prerenderVisit: async (args) => {
+          if (args.visitType === 'index') {
+            indexVisits.push(args.url);
+          }
+          return idleTimeoutVisitResponse(args.url);
+        },
+      };
+      let virtualNetwork = createVirtualNetwork();
+      let definitionLookup = new CachingDefinitionLookup(
+        dbAdapter,
+        real,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      let dir = join(dirSync().name, 'idle-timeouts');
+      ensureDirSync(dir);
+      let { realm } = await createRealm({
+        dir,
+        fileSystem: idleTimeoutFileSystem(),
+        definitionLookup,
+        realmURL,
+        permissions: { '*': ['read'] },
+        virtualNetwork,
+        publisher,
+        runner,
+        dbAdapter,
+        withWorker: true,
+        prerenderer,
+      });
+      virtualNetwork.mount(realm.handle);
+      // Startup awaits a brand-new index's from-scratch job; the job's failure
+      // is swallowed there, so this resolves either way.
+      await realm.start();
+      let [job] = (await dbAdapter.execute(
+        `SELECT status, result FROM jobs
+           WHERE job_type = 'from-scratch-index' AND concurrency_group = $1`,
+        { bind: [indexingConcurrencyGroup(realm.url)] },
+      )) as { status: string; result: unknown }[];
+      let readiness = await realm.handle(
+        new Request(`${realmURL}_readiness-check`, {
+          headers: { Accept: SupportedMimeType.RealmInfo },
+        }),
+      );
+      return {
+        indexVisits,
+        canaryRenders: () => canaryRenders,
+        job,
+        readiness: readiness!,
+      };
+    }
 
     // The response the prerender server sends for a render that hit its
     // timeout while waiting on nothing: a `Render timeout` error on the pass
@@ -283,80 +418,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       };
     }
 
-    test('gives up after a few idle timeouts and reports the failure as terminal', async function (assert) {
-      let real = await getTestPrerenderer();
-      let indexVisits: string[] = [];
-      let prerenderer: Prerenderer = {
-        prerenderModule: (args) => real.prerenderModule(args),
-        runCommand: (args) => real.runCommand(args),
-        releaseBatch: async () => {},
-        prerenderVisit: async (args) => {
-          if (args.visitType === 'index') {
-            indexVisits.push(args.url);
-          }
-          return idleTimeoutVisitResponse(args.url);
-        },
-      };
+    test('gives up when a base module cannot render either, and reports the failure as terminal', async function (assert) {
+      let { indexVisits, canaryRenders, job, readiness } =
+        await startRealmWithIdleTimeouts('timeout');
 
-      let fileSystem: Record<string, LooseSingleCardDocument> = {
-        'realm.json': {
-          data: {
-            type: 'card',
-            attributes: { cardInfo: { name: 'Idle Timeouts Realm' } },
-            meta: {
-              adoptsFrom: {
-                module: rri('@cardstack/base/realm-config'),
-                name: 'RealmConfig',
-              },
-            },
-          },
-        },
-      };
-      for (let i = 0; i < cardCount; i++) {
-        fileSystem[`card-${i}.json`] = {
-          data: {
-            type: 'card',
-            attributes: { title: `Card ${i}` },
-            meta: {
-              adoptsFrom: {
-                module: rri('https://cardstack.com/base/card-api'),
-                name: 'CardDef',
-              },
-            },
-          },
-        };
-      }
-
-      let virtualNetwork = createVirtualNetwork();
-      let definitionLookup = new CachingDefinitionLookup(
-        dbAdapter,
-        real,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      let dir = join(dirSync().name, 'idle-timeouts');
-      ensureDirSync(dir);
-      let { realm } = await createRealm({
-        dir,
-        fileSystem,
-        definitionLookup,
-        realmURL,
-        permissions: { '*': ['read'] },
-        virtualNetwork,
-        publisher,
-        runner,
-        dbAdapter,
-        withWorker: true,
-        prerenderer,
-      });
-      virtualNetwork.mount(realm.handle);
-
-      // Startup awaits a brand-new index's from-scratch job; the job's failure
-      // is swallowed there, so this resolves either way.
-      await realm.start();
-
-      // Three consecutive idle timeouts end the pass; the render-ahead loop
-      // may have started one more visit before the third was finished.
+      // Three consecutive idle timeouts trigger the canary; the render-ahead
+      // loop may have started one more visit before the third was finished.
       assert.true(
         indexVisits.length >= 3,
         `made at least the three visits it takes to give up (made ${indexVisits.length})`,
@@ -365,38 +432,49 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         indexVisits.length <= 4,
         `gave up after ${indexVisits.length} index visits rather than visiting all ${cardCount} files`,
       );
+      assert.strictEqual(canaryRenders(), 1, 'rendered the canary once');
 
-      let [job] = (await dbAdapter.execute(
-        `SELECT status, result FROM jobs
-           WHERE job_type = 'from-scratch-index' AND concurrency_group = $1`,
-        { bind: [indexingConcurrencyGroup(realm.url)] },
-      )) as { status: string; result: unknown }[];
       assert.strictEqual(job.status, 'rejected', 'the job was rejected');
+      let reason = JSON.stringify(job.result);
       assert.true(
-        JSON.stringify(job.result).includes('timed out with the page idle'),
-        'the rejection names the idle timeouts as the reason',
+        reason.includes('timed out with the page idle'),
+        'the rejection names the idle timeouts',
+      );
+      assert.true(
+        reason.includes('a base module could not render either'),
+        'the rejection names the failed canary',
       );
 
-      let response = await realm.handle(
-        new Request(`${realmURL}_readiness-check`, {
-          headers: { Accept: SupportedMimeType.RealmInfo },
-        }),
-      );
-      assert.strictEqual(response!.status, 503, 'reports not-ready');
+      assert.strictEqual(readiness.status, 503, 'reports not-ready');
       assert.strictEqual(
-        response!.headers.get('X-Boxel-Not-Ready'),
+        readiness.headers.get('X-Boxel-Not-Ready'),
         'index-failed',
         'names the failed boot index as the stage',
       );
       assert.strictEqual(
-        response!.headers.get('Retry-After'),
+        readiness.headers.get('Retry-After'),
         null,
         'carries no retry hint: the state is terminal',
       );
-      let body = await response!.text();
+      let body = await readiness.text();
       assert.true(
         body.includes('timed out with the page idle'),
         `the body carries the failure: ${body}`,
+      );
+    });
+
+    test("keeps going when a base module renders: the idle timeouts are the cards' own", async function (assert) {
+      let { indexVisits, canaryRenders, job, readiness } =
+        await startRealmWithIdleTimeouts('ready');
+
+      assert.strictEqual(indexVisits.length, cardCount, 'visited every file');
+      // One canary per run of three idle timeouts: six files, two canaries.
+      assert.strictEqual(canaryRenders(), 2, 'rendered the canary per streak');
+      assert.strictEqual(job.status, 'resolved', 'the job completed');
+      assert.strictEqual(
+        readiness.status,
+        200,
+        'the realm is ready: its index exists, with the files recorded as errors',
       );
     });
   });

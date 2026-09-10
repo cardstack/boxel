@@ -30,6 +30,7 @@ import {
   type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
+import { baseRealm } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -94,11 +95,21 @@ const IDLE_SCRIPT_BUSY_MAX = 0.05;
 
 const RENDER_TIMEOUT_TITLE = 'Render timeout';
 
+// A module every realm depends on and none owns. When consecutive renders
+// have timed out idle, whether this renders decides between a stack that
+// cannot render anything and cards that happen to hang on their own.
+const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
+
 // Whether a visit's render timed out with nothing in flight. The timeout error
 // carries the diagnostics the prerender server captured as it fired (see
-// RenderTimeoutDiagnostics), flattened onto the visit's `diagnostics`. A
-// timeout whose diagnostics are missing, or show work in progress, is a slow
-// or stuck render rather than an idle one and does not count.
+// RenderTimeoutDiagnostics), flattened onto the visit's `diagnostics`. The
+// signals that decide idleness are the ones captured from outside the page —
+// the responsiveness probe, the CPU sample, the CDP request list — and each
+// must be present and idle: a timeout whose diagnostics are missing, or show
+// work in progress, is a slow or stuck render rather than an idle one and does
+// not count. The in-page counters are captured only once the page has reached
+// a render stage; when present they can show work the outside view cannot, and
+// then disqualify, but their absence says nothing.
 export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
   let errors = [
     result.pageUnusableError,
@@ -113,12 +124,26 @@ export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
   if (!d || d.mainThreadResponsive !== true) {
     return false;
   }
-  return (
-    (d.scriptBusyFraction ?? 0) < IDLE_SCRIPT_BUSY_MAX &&
-    (d.pendingNetworkRequests?.length ?? 0) === 0 &&
-    (d.inFlightModuleImports?.length ?? 0) === 0 &&
-    (d.cardDocsInFlight?.length ?? 0) === 0 &&
-    (d.fileMetaDocsInFlight?.length ?? 0) === 0
+  if (
+    typeof d.scriptBusyFraction !== 'number' ||
+    d.scriptBusyFraction >= IDLE_SCRIPT_BUSY_MAX
+  ) {
+    return false;
+  }
+  if (
+    !Array.isArray(d.pendingNetworkRequests) ||
+    d.pendingNetworkRequests.length > 0
+  ) {
+    return false;
+  }
+  let busy = (list: unknown[] | undefined) =>
+    Array.isArray(list) && list.length > 0;
+  return !(
+    busy(d.inFlightModuleImports) ||
+    busy(d.cardDocsInFlight) ||
+    busy(d.fileMetaDocsInFlight) ||
+    busy(d.cardDocLoadsInFlight) ||
+    busy(d.fileMetaDocLoadsInFlight)
   );
 }
 
@@ -840,19 +865,64 @@ export class IndexRunner {
           idleTimeouts = [];
         }
         if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
+          // Consecutive idle timeouts are not proof of a broken stack on their
+          // own: the visit order groups a definition's instances together, so
+          // one card type that hangs on an untracked promise produces the same
+          // run. A module the realm does not own settles it — if that cannot
+          // render either, nothing in this pass can.
+          let canary = await this.#canaryRenderFailure();
+          if (!canary) {
+            this.#log.warn(
+              `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
+                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+            );
+            idleTimeouts = [];
+            continue;
+          }
           // Thrown past #handleVisitError on purpose: this is not one file's
           // failure to isolate but the pass's inability to render anything,
           // and the job's rejection is what carries that to whoever awaits
           // it (readiness, a publish, an operator).
           let message =
             `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
-            `(main thread responsive, no script running, nothing fetching, no module import in flight), so the page was ` +
-            `waiting on nothing and no later file can render either. Check that the prerender's browser can reach the ` +
-            `host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
+            `(main thread responsive, no script running, nothing fetching, no module import in flight), and a base module ` +
+            `could not render either (${canary}), so the page is waiting on nothing and no file in this pass can render. ` +
+            `Check that the prerender's browser can reach the host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
           this.#log.error(message);
           throw new Error(message);
         }
       }
+    }
+  }
+
+  // Renders CANARY_MODULE_URL on this pass's affinity and reports why it did
+  // not render, or undefined when it did. A module render rather than a card
+  // render: it needs nothing from this realm but the loader epoch, and it goes
+  // through the same page, host bundle, realm-server and icons origins every
+  // visit in the pass depends on.
+  async #canaryRenderFailure(): Promise<string | undefined> {
+    try {
+      let response = await this.#prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: this.#realmURL.href,
+        realm: this.#realmURL.href,
+        url: CANARY_MODULE_URL,
+        auth: this.#auth,
+        priority: this.#jobPriority,
+        renderOptions: { loaderEpoch: this.batch.loaderEpoch },
+      });
+      if (response.status === 'ready') {
+        return undefined;
+      }
+      return (
+        response.error?.error?.message ??
+        `module render reported status ${response.status}`
+      );
+    } catch (err) {
+      return coerceErrorMessage(
+        err,
+        'module render threw with no error message',
+      );
     }
   }
 
