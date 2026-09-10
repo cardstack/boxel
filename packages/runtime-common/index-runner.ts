@@ -1190,29 +1190,36 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
-// Hoist the URLs the triggering write named — the pass's targets — ahead of
-// the dependents its invalidation fan-out discovered, so a target's row is
-// written before any row that merely depends on it. Within the targets, and
-// within the dependents, the visit classes stay in order (see
-// `visitClassRank`) — a target instance never overtakes a target module, even
-// when it was written first and the index holds no `deps` row joining them
-// yet. Inside one class, targets keep the order they were written in and
-// dependents keep the order they arrived in.
+// Order the pass's visit list so the URLs the triggering write named — the
+// pass's targets — come first, in the order they were written, ahead of the
+// dependents the invalidation fan-out discovered.
 //
-// The result is the input to `orderInvalidationsByDependencies`, which reads
-// position as a priority rather than as a fixed order: a recorded dependency
-// edge still wins outright. What the hoist decides is the cases the
-// dependency graph leaves open — a dependent no persisted `deps` row
-// connects to its target, and a target stranded in a dependency cycle, where
-// the ordering falls back to the incoming order and could otherwise put the
-// target last.
+// Visit class outranks being a target (see `visitClassRank`), for targets and
+// dependents alike: a module is visited before any instance whether or not
+// the write named it, because an instance rendering before the module it
+// adopts from has no file entry to render against — a failure, not a stale
+// read. Ranking class first is also what carries the target-first guarantee
+// through `orderInvalidationsByDependencies`, which treats this order as a
+// tie-break priority rather than a fixed sequence: inside a dependency cycle
+// it has no satisfiable order to offer and ranks the members by priority
+// alone, so a module that arrived behind an instance would stay behind it.
 //
-// A target can displace `realm.json` from its class-0 head position, but
-// only another target: a `realm.json` that is itself a target keeps class 0
-// inside the target group, and one that reaches the fan-out as a dependent
-// stays ahead of the other dependents. Either way the pass promotes its whole
-// working table in one transaction, so no reader observes one row of a pass
-// ahead of another.
+// Within one class the targets lead, in the order they were written, then the
+// dependents in the order they arrived in. Every URL in a class is either a
+// target with its own write position or a dependent with its own arrival
+// position, so the comparison is total and the result does not depend on the
+// sort being stable.
+//
+// A recorded dependency edge still overrules all of this downstream. What the
+// priority decides is the cases the dependency graph leaves open — a
+// dependent no persisted `deps` row connects to its target, and a target
+// stranded in a dependency cycle — where the ordering falls back to the
+// incoming order and would otherwise be free to leave the target last.
+//
+// This is a guarantee about the order in which a pass writes its rows, not
+// about what a concurrent reader can observe: the pass promotes its whole
+// working table in one transaction (`batch.done()`), so no reader ever sees
+// one row of a pass ahead of another.
 export function prioritizeWrittenURLs(
   invalidations: URL[],
   written: URL[],
@@ -1221,32 +1228,33 @@ export function prioritizeWrittenURLs(
   if (invalidations.length < 2) {
     return invalidations;
   }
-  let byHref = new Map(invalidations.map((url) => [url.href, url]));
-  let targetHrefs = new Set<string>();
-  let targets: URL[] = [];
+  let inFanOut = new Set(invalidations.map((url) => url.href));
+  // A written URL missing from the fan-out is one the invalidation walk
+  // recorded under its node-resolved alias instead. Nothing to rank: the
+  // dependency graph and the incoming order decide, as they always have.
+  let writePositions = new Map<string, number>();
   for (let url of written) {
-    // A written URL is absent from the fan-out when the invalidation walk
-    // recorded it under its node-resolved alias instead. Nothing to hoist:
-    // the dependency graph and the lexical order decide, as they always have.
-    let match = byHref.get(url.href);
-    if (match && !targetHrefs.has(url.href)) {
-      targetHrefs.add(url.href);
-      targets.push(match);
+    if (inFanOut.has(url.href) && !writePositions.has(url.href)) {
+      writePositions.set(url.href, writePositions.size);
     }
   }
-  if (targetHrefs.size === 0) {
-    return invalidations;
-  }
-  // Stable, so write order survives inside each class.
   let realmConfigHref = realmConfigHrefFor(realmURL);
-  targets.sort(
+  let ranked = invalidations.map((url, arrival) => {
+    let writePosition = writePositions.get(url.href);
+    return {
+      url,
+      visitClass: visitClassRank(url, realmConfigHref),
+      isDependent: writePosition === undefined ? 1 : 0,
+      position: writePosition ?? arrival,
+    };
+  });
+  ranked.sort(
     (a, b) =>
-      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref),
+      a.visitClass - b.visitClass ||
+      a.isDependent - b.isDependent ||
+      a.position - b.position,
   );
-  return [
-    ...targets,
-    ...invalidations.filter((url) => !targetHrefs.has(url.href)),
-  ];
+  return ranked.map(({ url }) => url);
 }
 
 // Visit-class priority, in the order a pass must write the classes:

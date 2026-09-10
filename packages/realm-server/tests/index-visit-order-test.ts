@@ -48,13 +48,16 @@ function orderingOver(
       return [];
     },
     async getOrderingDependencyRows(requested: string[]) {
+      // A URL with no entry here is one the index holds no `deps` row for,
+      // which is how the real projection reports it. Ordering reads only
+      // `url` and `deps`; `type` is carried for the projection's shape.
       return requested
         .filter((url) => deps[url])
         .map(
           (url) =>
             ({
               url,
-              type: 'instance',
+              type: url.endsWith('.json') ? 'instance' : 'module',
               deps: deps[url]!.map((dep) => `${realmURL}${dep}`),
             }) as Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>,
         );
@@ -127,6 +130,24 @@ module(basename(import.meta.filename), function () {
         ),
         ['person.gts', 'card.json'],
         'the module keeps its class priority over the instance that adopts from it',
+      );
+    });
+
+    test('never leads with a target instance ahead of a module it did not name', function (assert) {
+      // The write named only the instance; the module reached the fan-out as
+      // a dependent. Visit class is not a preference between targets — an
+      // instance whose module has no file entry yet cannot render at all — so
+      // being the target does not buy the instance a place ahead of it.
+      assert.deepEqual(
+        paths(
+          prioritizeWrittenURLs(
+            urls('card.json', 'person.gts'),
+            urls('card.json'),
+            new URL(realmURL),
+          ),
+        ),
+        ['person.gts', 'card.json'],
+        'the dependent module is still visited before the target instance',
       );
     });
 
@@ -238,11 +259,11 @@ module(basename(import.meta.filename), function () {
     test('a target stranded in a cycle still outranks a dependent with no edge', async function (assert) {
       // The mixed graph: `zzz` (the target) and `aaa` link to each other, so
       // both are stranded in a cycle, while `ddd` is in the fan-out with no
-      // usable persisted edge — a `deps` entry whose canonical form does not
-      // match any URL in the set — so it is immediately schedulable. Ranking
-      // the cycle's members only after every schedulable URL would put the
-      // target behind `ddd`; dropping the cycle's own edges lets priority
-      // decide, which is all a cycle's order can be decided by anyway.
+      // persisted `deps` row of its own and so nothing holding it back.
+      // Ranking the cycle's members only after every schedulable URL would
+      // put the target behind `ddd`; dropping the cycle's own edges lets
+      // priority decide, which is all a cycle's order can be decided by
+      // anyway.
       let order = orderingOver({
         [`${realmURL}aaa.json`]: ['zzz.json'],
         [`${realmURL}zzz.json`]: ['aaa.json'],
@@ -282,21 +303,17 @@ module(basename(import.meta.filename), function () {
           ),
         ),
       );
-      assert.ok(
-        visited.indexOf('one.js') < visited.indexOf('card.json'),
-        `the module it adopts from is visited first (order: ${visited.join(', ')})`,
-      );
       assert.deepEqual(
-        [...visited].sort(),
-        ['card.json', 'one.js', 'two.js'],
-        'every URL is still visited exactly once',
+        visited,
+        ['one.js', 'two.js', 'card.json'],
+        'both modules are visited before the instance that adopts from one of them',
       );
     });
 
     test('an acyclic set is unaffected by the cycle handling', async function (assert) {
-      // The second scheduling pass only runs when the first strands
-      // something, so an acyclic graph keeps exactly the order it always
-      // had: dependencies first, priority breaking every tie.
+      // Dropping the edges inside a cycle removes nothing from an acyclic
+      // graph, which therefore keeps exactly the order it always had:
+      // dependencies first, priority breaking every tie.
       let order = orderingOver({
         [`${realmURL}aaa.json`]: ['person.gts'],
         [`${realmURL}bbb.json`]: ['person.gts'],

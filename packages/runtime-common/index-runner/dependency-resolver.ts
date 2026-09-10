@@ -129,8 +129,8 @@ export class IndexRunnerDependencyManager {
     let rows = await this.#getOrderingDependencyRows(hrefs);
 
     // dependency -> the URLs in this set that depend on it. Indegrees are
-    // derived from these edges by `#kahnByPriority`, which runs over a
-    // reduced edge set on a second pass.
+    // derived from these edges by `#kahnByPriority`, over the reduced edge
+    // set that survives the cycle drop below.
     let edges = new Map<string, Set<string>>();
     for (let row of rows) {
       if (!byHref.has(row.url)) {
