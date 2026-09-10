@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { writeFileSync } from 'fs';
+import { basename, join } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
@@ -144,15 +145,22 @@ module(basename(import.meta.filename), function () {
     let testRealmHttpServer: Server;
     let realmRequest: RealmRequest;
 
+    // The realm's directory on disk, for the one case that has to reach past
+    // the realm to set itself up: a file changed without the realm's write
+    // path seeing it.
+    let testRealmPath: string;
+
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
+      testRealmPath: string;
       request: SuperTest<Test>;
       dir: DirResult;
       dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
+      testRealmPath = args.testRealmPath;
       realmRequest = withRealmPath(args.request, realmURL);
     }
 
@@ -447,6 +455,79 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a stored-bytes read of an underscore-prefixed file reaches it', async function (assert) {
+      // Only the specific registered `_` endpoints are realm endpoints. A file
+      // stored under such a name is one `upsertCardSource` writes and the byte
+      // routes serve, so a read of its bytes must not report it missing.
+      await testRealm.write('_notes.md', '# notes');
+
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}_notes.md` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'text/markdown');
+      assert.strictEqual(await textOf(source.body), '# notes');
+
+      let response = await realmRequest
+        .get('/_notes.md')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `the source route serves it too: ${response.text}`,
+      );
+      assert.strictEqual(await textOf(source.body), response.text);
+    });
+
+    test('a stored-bytes read never reports a version that describes other bytes', async function (assert) {
+      // `version` identifies the body it comes back with, and the realm's
+      // file-meta row is refreshed only by the realm's own write path. A file
+      // overwritten out of band therefore has a row describing bytes that are
+      // gone, and reporting that hash would let a conditional GET answer 304
+      // for content that changed.
+      await testRealm.write('notes.md', '# first');
+      let recorded = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}notes.md` },
+            'readSource',
+          ),
+        ),
+      );
+      assert.strictEqual(
+        recorded.version,
+        computeContentHash('# first'),
+        'a realm write records the hash of what it wrote',
+      );
+
+      // Straight to disk, so nothing refreshes the row.
+      writeFileSync(join(testRealmPath, 'notes.md'), '# second, and longer');
+      let overwritten = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}notes.md` },
+            'readSource',
+          ),
+        ),
+      );
+      assert.strictEqual(
+        await textOf(overwritten.body),
+        '# second, and longer',
+        'the read serves the bytes that are on disk',
+      );
+      assert.strictEqual(
+        overwritten.version,
+        computeContentHash('# second, and longer'),
+        'and `version` identifies those bytes rather than the recorded ones',
+      );
+    });
+
     test('a headers-only stored-bytes read reports the same metadata with no body', async function (assert) {
       let target: OperationTarget = {
         kind: 'instance',
@@ -478,7 +559,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a stored-bytes read of a path with no bytes is not found', async function (assert) {
-      for (let path of ['does-not-exist', 'dir', '_search']) {
+      // A name nothing is stored under, and a name that is a directory. Both
+      // are "no bytes here" and answer alike; `_search` is deliberately not
+      // among them, since what makes a path unreadable is having no file, not
+      // its name.
+      for (let path of ['does-not-exist', 'dir']) {
         let error = await refusalFrom(() =>
           runOperation(
             testRealm.operationCore,

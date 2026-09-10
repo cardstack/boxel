@@ -69,13 +69,20 @@ export interface OperationCore {
   ): Promise<OperationStoredFile | undefined>;
   // The write-time record behind a path's bytes: the content hash a
   // stored-bytes read reports as `version`, and when the realm first saw the
-  // path. Both come from the realm's own file-meta row, and resolving the hash
-  // is the realm's job rather than the executor's for two reasons — the row is
-  // authoritative for it (it is written in the same critical section as the
-  // bytes), and where the row carries none the fallback is to hash the bytes,
-  // which only the side that can open a second handle on them can do without
-  // consuming the one a read is about to serve.
-  storedFileMeta(localPath: LocalPath): Promise<OperationStoredFileMeta>;
+  // path. Resolving the hash is the realm's job rather than the executor's,
+  // because the realm is the side that can both read its own file-meta row and
+  // open a second handle on the bytes to hash them — which is what it takes to
+  // answer without consuming the handle a read is about to serve.
+  //
+  // `observedSize` is the byte size of the handle the caller is reading from,
+  // where its adapter knew it from a stat rather than from the bytes. The
+  // realm needs it to tell whether its recorded hash still describes the file:
+  // a `version` that identifies bytes other than the ones it is returned with
+  // is what a conditional GET would build a wrong validator from.
+  storedFileMeta(
+    localPath: LocalPath,
+    observedSize?: number,
+  ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
   isIgnored(url: URL): Promise<boolean>;

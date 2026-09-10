@@ -53,8 +53,8 @@ interface StubOptions {
   // Whether the file target has an index row.
   fileRow?: boolean;
   // The bytes the realm holds, by local path. A path absent from this is one
-  // the realm has nothing to open at: a missing file, a directory, an
-  // `_`-prefixed endpoint. Those refusals live on the realm's side of
+  // the realm has nothing to open at: a missing file, a directory, a path it
+  // serves no bytes from. Those refusals live on the realm's side of
   // `openStoredFile`, so the stub expresses all of them the one way the core
   // can observe.
   stored?: Record<string, string | Uint8Array>;
@@ -68,6 +68,10 @@ interface StubOptions {
 interface Stub {
   core: OperationCore;
   calls: string[];
+  // What each `storedFileMeta` call was asked about, for the one part of the
+  // version contract that is the core's: handing the realm the size of the
+  // handle whose bytes it is returning.
+  metaCalls: { localPath: string; observedSize: number | undefined }[];
 }
 
 // `getInstance` matches `i.url` / `i.file_alias`, so a row answers to the
@@ -86,6 +90,7 @@ function isCanonicalKey(url: URL): boolean {
 
 function stub(opts: StubOptions = {}): Stub {
   let calls: string[] = [];
+  let metaCalls: Stub['metaCalls'] = [];
   let {
     document = 'ok',
     row = 'ok',
@@ -211,8 +216,13 @@ function stub(opts: StubOptions = {}): Stub {
         size: typeof content === 'string' ? content.length : content.byteLength,
       };
     },
-    async storedFileMeta(localPath) {
+    async storedFileMeta(localPath, observedSize) {
       calls.push('storedFileMeta');
+      // Recorded rather than acted on: deciding whether a recorded hash still
+      // describes the file is the realm's, so what the core owes is passing
+      // the size of the handle it is reading from. The realm-server suite
+      // holds the realm to the decision.
+      metaCalls.push({ localPath, observedSize });
       return {
         version: storedVersions[localPath],
         createdAt: storedCreatedAt[localPath],
@@ -241,7 +251,7 @@ function stub(opts: StubOptions = {}): Stub {
       calls.push('unresolveInstanceIds');
     },
   };
-  return { core, calls };
+  return { core, calls, metaCalls };
 }
 
 const MARKDOWN: CodeRef = {
@@ -890,12 +900,32 @@ const tests = Object.freeze({
         content: new Uint8Array([137, 80, 78, 71]),
         contentType: 'image/png',
       },
+      // An `_`-prefixed name. Only the specific registered `_` endpoints are
+      // realm endpoints; a file stored under such a name is one the byte
+      // routes serve, so a read of its bytes has to reach it rather than
+      // reporting it missing.
+      {
+        path: '_notes.md',
+        content: '# notes',
+        contentType: 'text/markdown',
+      },
     ];
     for (let { path, content, contentType } of cases) {
-      let { core } = stub({ stored: { [path]: content } });
+      let { core, metaCalls } = stub({ stored: { [path]: content } });
       let result = await runOperation(
         core,
         invoke({ kind: 'instance', url: `${REALM}${path}` }, 'readSource'),
+      );
+      assert.deepEqual(
+        metaCalls,
+        [
+          {
+            localPath: path,
+            observedSize:
+              typeof content === 'string' ? content.length : content.byteLength,
+          },
+        ],
+        `${path} asks for its version against the handle being read`,
       );
       assert.true(isSourceResult(result), `${path} reads as stored bytes`);
       if (isSourceResult(result)) {
@@ -1011,8 +1041,9 @@ const tests = Object.freeze({
   ) => {
     // Every way there is nothing to read answers alike, because the realm
     // applies its own refusals inside `openStoredFile` and the core cannot
-    // tell them apart: a missing file, a directory, an `_`-prefixed endpoint.
-    for (let path of ['does-not-exist', 'dir', '_search']) {
+    // tell them apart: a missing file, a directory, a path it serves no bytes
+    // from.
+    for (let path of ['does-not-exist', 'dir']) {
       let { core } = stub({ stored: { 'sample.md': '# hi' } });
       let error = await refusalFrom(() =>
         runOperation(

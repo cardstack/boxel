@@ -72,9 +72,8 @@ export async function readSourceOperation(
   if (!file) {
     // One refusal for every way there is nothing to read: no such path, a
     // directory, or a path the realm declines to serve at all. The realm
-    // applies its own refusals inside `openStoredFile`, so a `_`-prefixed
-    // realm endpoint lands here the same way a missing file does, which is
-    // what the byte routes answer for one.
+    // applies its own refusals inside `openStoredFile`, so whichever of those
+    // it was arrives here the same way.
     //
     // Never `target-not-indexed`. That code says waiting will resolve the
     // absence, and it is the index it is waiting for; the bytes either exist
@@ -92,7 +91,10 @@ export async function readSourceOperation(
   // has to describe the bytes that actually arrived rather than the name they
   // were asked for.
   let contentType = inferContentType(file.path);
-  let meta = await core.storedFileMeta(localPath);
+  // The size travels with the request for the version so the realm can check
+  // its recorded hash against the very handle these bytes come from, rather
+  // than against whatever a later stat would see.
+  let meta = await core.storedFileMeta(localPath, file.size);
   let result: OperationSourceResult = {
     contentType,
     lastModified: file.lastModified,
