@@ -2059,7 +2059,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // through `serializeNonPresentLink` instead of collapsing to `data: null`.
     rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: null,
           },
@@ -2068,7 +2068,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (isNonPresentLink(value)) {
-        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+        relationships[`${this.name}.${i}`] = serializeNonPresentLink(
           value.reference,
           relationshipType,
           opts,
@@ -2081,7 +2081,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (visited.has(value.id)) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: makeRelativeURL(value.id, opts),
           },
@@ -2090,7 +2090,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (visited.has((value as CardDef)[localId])) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           data: { type: relationshipType, lid: (value as CardDef)[localId] },
         };
         return;
@@ -2120,7 +2120,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         doc.included.push(serialized);
       }
 
-      relationships[`${this.name}\.${i}`] = {
+      relationships[`${this.name}.${i}`] = {
         ...(value.id
           ? {
               links: {
@@ -2726,12 +2726,12 @@ export class BaseDef {
       ) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeReference: string) {
+      let makeAbsoluteURL = (maybeRelativeReference: string) => {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
         return resolveRef(maybeRelativeReference, value[relativeTo]);
-      }
+      };
       return Object.fromEntries(
         Object.entries(
           getFields(value, {
@@ -5955,6 +5955,7 @@ class FallbackCardStore implements CardStore {
   }
   async loaded() {
     let observedGeneration = this.#loadGeneration;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.#inFlight.size === 0) {
         await Promise.resolve();
