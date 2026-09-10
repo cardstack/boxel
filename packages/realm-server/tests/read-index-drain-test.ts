@@ -109,10 +109,20 @@ module(basename(import.meta.filename), function () {
     }
 
     test("a reader is not held by another user's in-flight indexing", async function (assert) {
-      // Warm the endpoint so the timed request below measures the drain, not
-      // cold module/doc assembly.
+      // Warm both endpoints so the timed requests below measure the drain,
+      // not cold module/doc assembly.
       let warm = await getPersonAs('john', ['read']);
       assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
+      let warmHtml = await getPersonAs(
+        'john',
+        ['read'],
+        'application/vnd.card+html',
+      );
+      assert.strictEqual(
+        warmHtml.status,
+        200,
+        `card+html warm-up GET: ${warmHtml.text}`,
+      );
 
       // hassan has a (never-settling) job in flight; the unscoped gate is
       // also held open, so a read that (wrongly) consulted it would hold for
@@ -160,8 +170,12 @@ module(basename(import.meta.filename), function () {
       let gate = resolveAfter(GATE_RESOLVE_MS).then(() => {
         gateResolved = true;
       });
+      // The unscoped gate must report the job as pending too: a real tagged
+      // job always appears in both gates, and the drain's fast-path probe
+      // reads the unscoped one.
       let restore = stubUpdaterGates(testRealm, {
         initiatedBy: (user) => (user === 'hassan' ? gate : undefined),
+        all: () => gate,
       });
       try {
         let startedAt = Date.now();
@@ -187,6 +201,7 @@ module(basename(import.meta.filename), function () {
 
       let restore = stubUpdaterGates(testRealm, {
         initiatedBy: (user) => (user === 'hassan' ? NEVER : undefined),
+        all: () => NEVER,
       });
       try {
         let startedAt = Date.now();
@@ -204,6 +219,84 @@ module(basename(import.meta.filename), function () {
       } finally {
         restore();
       }
+    });
+
+    // End-to-end (no stubs): the authenticated write handlers must tag their
+    // deferred indexing jobs with the writer, or this same-user
+    // write-then-read sees the pre-write schema. The public-writable variant
+    // of this flow cannot cover the tagging — an unauthenticated write
+    // produces an untagged job and an unidentified read takes the
+    // conservative all-jobs hold, so it passes with the tags removed.
+    test("an authenticated writer's follow-up read sees their own deferred write indexed", async function (assert) {
+      let auth = () =>
+        `Bearer ${createJWT(testRealm, 'hassan', ['read', 'write'])}`;
+      let cardSource = (secondField: string) => `
+        import { contains, field, CardDef } from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+
+        export class DrainTestCard extends CardDef {
+          @field field1 = contains(StringField);
+          @field ${secondField} = contains(StringField);
+        }
+      `;
+
+      let createDef = await request
+        .post('/drain-test-card.gts')
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', auth())
+        .send(cardSource('field2'));
+      assert.strictEqual(createDef.status, 204, `HTTP 204: ${createDef.text}`);
+
+      let createInstance = await request
+        .post('/')
+        .set('Accept', 'application/vnd.card+json')
+        .set('Authorization', auth())
+        .send({
+          data: {
+            type: 'card',
+            attributes: { field1: 'a', field2: 'b' },
+            meta: {
+              adoptsFrom: {
+                module: `${realmURL.href}drain-test-card`,
+                name: 'DrainTestCard',
+              },
+            },
+          },
+        });
+      assert.strictEqual(
+        createInstance.status,
+        201,
+        `HTTP 201: ${createInstance.text}`,
+      );
+      let id = createInstance.body.data.id as string;
+
+      // The +source POST answers once the bytes are durable; its indexing is
+      // the deferred job the follow-up GET must wait out.
+      let renameField = await request
+        .post('/drain-test-card.gts')
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', auth())
+        .send(cardSource('field2a'));
+      assert.strictEqual(
+        renameField.status,
+        204,
+        `HTTP 204: ${renameField.text}`,
+      );
+
+      let readBack = await request
+        .get(new URL(id).pathname)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Authorization', auth());
+      assert.strictEqual(readBack.status, 200, `HTTP 200: ${readBack.text}`);
+      let attributes = readBack.body.data.attributes;
+      assert.true(
+        'field2a' in attributes,
+        `post-rename schema is served: ${JSON.stringify(attributes)}`,
+      );
+      assert.false(
+        'field2' in attributes,
+        `pre-rename field is gone: ${JSON.stringify(attributes)}`,
+      );
     });
   });
 
@@ -238,14 +331,44 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    test('an anonymous reader conservatively waits, bounded, on any pending indexing', async function (assert) {
+    test('an anonymous reader skips the pending-indexing hold', async function (assert) {
       let warm = await request
         .get('/person-1')
         .set('Accept', 'application/vnd.card+json');
       assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
 
-      // With no verifiable identity the drain cannot rule the requester out
-      // as the writer, so it covers every pending incremental job.
+      // Every tagged job comes from an authenticated write, so a caller with
+      // no Authorization header at all provably isn't the writer behind any
+      // of them — the gate has nothing to hold the read for.
+      let restore = stubUpdaterGates(testRealm, {
+        initiatedBy: () => NEVER,
+        all: () => NEVER,
+      });
+      try {
+        let startedAt = Date.now();
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        let elapsed = Date.now() - startedAt;
+        assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+        assert.true(
+          elapsed < NO_WAIT_CEILING_MS,
+          `anonymous read skipped the pending-indexing hold (took ${elapsed}ms)`,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('a reader with an unverifiable token conservatively waits, bounded, on any pending indexing', async function (assert) {
+      let warm = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
+
+      // A token that fails verification leaves the requester unknown — they
+      // presented credentials, so they might be the writer — and the drain
+      // covers every pending incremental job.
       let gateResolved = false;
       let gate = resolveAfter(GATE_RESOLVE_MS).then(() => {
         gateResolved = true;
@@ -257,16 +380,61 @@ module(basename(import.meta.filename), function () {
         let startedAt = Date.now();
         let response = await request
           .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', 'Bearer not-a-real-token');
         let elapsed = Date.now() - startedAt;
         assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
         assert.true(
           gateResolved,
-          'the anonymous read did not return before the gate settled',
+          'the unidentified read did not return before the gate settled',
         );
         assert.true(
           elapsed >= GATE_RESOLVE_MS - 20,
-          `anonymous read held for pending indexing (took ${elapsed}ms)`,
+          `unidentified read held for pending indexing (took ${elapsed}ms)`,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('a token accompanied by X-Boxel-Assume-User is not trusted for identity on the public path', async function (assert) {
+      let warm = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
+
+      // Public read authorizes without the assume-user permission check, so
+      // the indirection can't be honored — and recording the bearer instead
+      // would desynchronize the read identity from the assumed-user tag the
+      // same client's writes carry. The requester stays unknown and takes
+      // the conservative bounded hold.
+      let gateResolved = false;
+      let gate = resolveAfter(GATE_RESOLVE_MS).then(() => {
+        gateResolved = true;
+      });
+      let restore = stubUpdaterGates(testRealm, {
+        initiatedBy: () => undefined,
+        all: () => gate,
+      });
+      try {
+        let startedAt = Date.now();
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set('X-Boxel-Assume-User', 'someone-else')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+          );
+        let elapsed = Date.now() - startedAt;
+        assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+        assert.true(
+          gateResolved,
+          'the assume-user read did not return before the gate settled',
+        );
+        assert.true(
+          elapsed >= GATE_RESOLVE_MS - 20,
+          `assume-user read held for pending indexing (took ${elapsed}ms)`,
         );
       } finally {
         restore();

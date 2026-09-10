@@ -983,6 +983,14 @@ export type RequestContext = {
   // writes; it is identity, not authority — authorization decisions never
   // read it.
   authenticatedUser?: string;
+  // Set by `checkPermission` when the request presented no Authorization
+  // header at all. Distinguishes a provably credential-less caller (who
+  // cannot be the writer behind any user-tagged indexing job) from a caller
+  // whose identity is merely unknown — a token that failed verification, an
+  // assume-user indirection the public path cannot validate, or a
+  // realm-internal dispatch that never ran `checkPermission`. Identity, not
+  // authority, like `authenticatedUser`.
+  anonymous?: true;
 };
 
 export class Realm {
@@ -996,6 +1004,9 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
+  // One line per card read that arrives while incremental indexing is
+  // pending — see drainRequestersOwnIndexing for the outcome grammar.
+  #readGateLog = logger('realm:read-index-gate');
   #perfLog = logger('perf');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
@@ -5015,16 +5026,23 @@ export class Realm {
         (requiredPermission === 'write' &&
           realmPermissions['*']?.includes('write')))
     ) {
-      // Authorized without needing a token — but when the caller sent one
-      // anyway, capture who they are for `requestContext.authenticatedUser`.
-      // Identity only (see the RequestContext field): verification failures
-      // here must not fail a request that public permissions already
-      // authorized, so they simply leave the identity unset. The
-      // `X-Boxel-Assume-User` indirection is not honored on this path —
-      // honoring it requires the assume-user permission check the main path
-      // runs, and identity capture must stay free of matrix round-trips.
+      // Authorized without needing a token. Record what we can about who the
+      // caller is for the read endpoints' indexing gate (identity, not
+      // authority — see RequestContext): a verifiable token identifies them,
+      // and no Authorization header at all marks them anonymous. Two cases
+      // deliberately leave both fields unset, landing the caller in the
+      // gate's conservative bucket: a token that fails verification (must
+      // not fail a request that public permissions already authorized), and
+      // a request carrying `X-Boxel-Assume-User` — honoring the indirection
+      // requires the assume-user permission check the main path runs (and
+      // identity capture must stay free of matrix round-trips), while
+      // recording the bearer instead would desynchronize this identity from
+      // the assumed-user tag the same client's writes carry, since writes
+      // always take the main path.
       let publicAuthHeader = request.headers.get('Authorization');
-      if (publicAuthHeader) {
+      if (!publicAuthHeader) {
+        requestContext.anonymous = true;
+      } else if (!request.headers.get('X-Boxel-Assume-User')) {
         try {
           let publicToken = this.#adapter.verifyJWT(
             publicAuthHeader.replace('Bearer ', ''),
@@ -6568,10 +6586,16 @@ export class Realm {
   //     has a read-your-writes expectation; every other reader takes the
   //     current generation immediately. A write-heavy user (or a module edit
   //     whose invalidation set spans the realm's module graph) must not park
-  //     every reader of the realm behind their job. When the requester's
-  //     identity is unknown (no verifiable token on a public realm, or a
-  //     realm-internal dispatch), the drain conservatively covers all
-  //     pending incremental jobs — the writer might be behind any of them.
+  //     every reader of the realm behind their job. A provably anonymous
+  //     caller (no Authorization header) skips the gate too: every tagged
+  //     job comes from an authenticated write, so a credential-less caller
+  //     cannot be its writer, and the untagged jobs (file watcher, realm
+  //     copy) have no reader with a read-your-writes claim on them. Only
+  //     when the requester is genuinely unknown — a token that failed
+  //     verification, an assume-user indirection the public path cannot
+  //     validate, or a realm-internal dispatch — does the drain
+  //     conservatively cover all pending incremental jobs, since the writer
+  //     might be behind any of them.
   //   - Bounded. The job being awaited can also sit queued behind other
   //     realms' work in a saturated worker pool; past the budget the read
   //     proceeds on the current generation and the index event that follows
@@ -6580,32 +6604,64 @@ export class Realm {
   // A prerender-originated request skips the gate entirely: its tab holds a
   // render slot that the pending job may itself be waiting on, so any wait
   // here is at best dead time and at worst a deadlock held for the budget.
+  //
+  // Every read that arrives while incremental indexing is pending emits one
+  // `realm:read-index-gate` key=value line (`outcome=` skipped-prerender /
+  // skipped-not-writer / skipped-anonymous / settled / budget-expired, with
+  // `waitMs=` on the waited outcomes) — the skipped outcomes count reads an
+  // unscoped gate would have parked, the waited ones measure what the
+  // writer-scoped hold actually costs. Steady-state reads (nothing pending)
+  // emit nothing. budget-expired logs at warn; the rest at info.
   private async drainRequestersOwnIndexing(
     request: Request,
     requestContext: RequestContext,
   ): Promise<void> {
+    let anyPending = this.incrementalIndexing();
+    if (!anyPending) {
+      return;
+    }
+    let emit = (
+      level: 'info' | 'warn',
+      outcome: string,
+      fragment: string = '',
+    ) =>
+      this.#readGateLog[level](
+        `outcome=${outcome}${fragment} url=${request.url}`,
+      );
     if (isDuringPrerenderRequest(request)) {
+      emit('info', 'skipped-prerender');
       return;
     }
     let user = requestContext.authenticatedUser;
-    let pending =
-      user !== undefined
-        ? this.#realmIndexUpdater.incrementalIndexingInitiatedBy(user)
-        : this.incrementalIndexing();
-    if (!pending) {
+    let pending: Promise<void> | undefined;
+    let scope: 'own' | 'all';
+    if (user !== undefined) {
+      pending = this.#realmIndexUpdater.incrementalIndexingInitiatedBy(user);
+      if (!pending) {
+        emit('info', 'skipped-not-writer');
+        return;
+      }
+      scope = 'own';
+    } else if (requestContext.anonymous) {
+      emit('info', 'skipped-anonymous');
       return;
+    } else {
+      pending = anyPending;
+      scope = 'all';
     }
     let waitStartedAt = Date.now();
-    if (
-      !(await settledBy(pending, waitStartedAt + this.#readIndexDrainBudgetMs))
-    ) {
-      this.#log.warn(
-        `card read for ${request.url} proceeding after waiting ${
-          Date.now() - waitStartedAt
-        }ms on in-flight incremental indexing${
-          user !== undefined ? ` initiated by ${user}` : ''
-        }; serving the current index generation`,
-      );
+    let settled = await settledBy(
+      pending,
+      waitStartedAt + this.#readIndexDrainBudgetMs,
+    );
+    let fragment =
+      ` scope=${scope} waitMs=${Date.now() - waitStartedAt}` +
+      (user !== undefined ? ` user=${user}` : '');
+    if (settled) {
+      emit('info', 'settled', fragment);
+    } else {
+      // Past the budget the read proceeds on the current index generation.
+      emit('warn', 'budget-expired', fragment);
     }
   }
 
@@ -7887,7 +7943,7 @@ export class Realm {
     // pushes a fix and immediately polls this endpoint could otherwise
     // see a stale snapshot — either still reporting an error the just-
     // pushed fix cleared, or missing a fresh failure from the same write.
-    // Same hazard publishability() guards against (see realm.ts:5629).
+    // Same hazard publishability() guards against.
     let pending = this.incrementalIndexing();
     if (pending) {
       await pending;
