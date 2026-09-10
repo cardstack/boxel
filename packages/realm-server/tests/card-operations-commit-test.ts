@@ -504,9 +504,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a version reported for an unchanged file is one a later write can name as its base', async function (assert) {
+  test('a version is read from the file, and an unchanged write records it', async function (assert) {
     // A file written before the realm recorded content hashes carries none on
-    // its row. Blanking the row is how that state is reached here.
+    // its row. Blanking the row reaches that state, and is what makes both
+    // halves of this test falsifiable: a version is computed from the bytes,
+    // so it is issued and honored with the row empty, and the no-op write
+    // fills the row in on its way past.
     await testDbAdapter.execute(
       `update realm_file_meta set content_hash = null
          where realm_url = $1 and file_path = $2`,
@@ -529,6 +532,21 @@ module(basename(import.meta.filename), function (hooks) {
     let version = unchanged!.meta.version;
     assert.true(version.length > 0, 'the no-op write still reports a version');
 
+    // The row the blanking emptied now carries the version the write
+    // reported. Nothing about `baseVersion` depends on this — that is read
+    // from the bytes — but the file's own metadata resource reads the row,
+    // and a file the realm has never rewritten would otherwise carry none.
+    let [row] = await testDbAdapter.execute(
+      `select content_hash from realm_file_meta
+         where realm_url = $1 and file_path = $2`,
+      { bind: [realm.url, 'legacy-version.json'] },
+    );
+    assert.strictEqual(
+      row?.content_hash,
+      version,
+      'the unchanged write records the version it reported',
+    );
+
     let [next] = await commit([
       {
         op: 'update',
@@ -545,7 +563,8 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.true(
       next!.meta.baseMatched,
-      'the version the no-op reported is the one the file is recorded at',
+      'the version the no-op reported names the bytes the merge is computed ' +
+        'over, so a later write can quote it as its base',
     );
   });
 

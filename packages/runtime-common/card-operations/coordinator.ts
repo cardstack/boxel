@@ -1,4 +1,5 @@
 import { computeContentHash } from '../content-hash.ts';
+import { isCardError } from '../error.ts';
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   createIdentity,
@@ -77,8 +78,8 @@ export interface BatchCore {
   // are of no interest.
   fileExists(localPath: LocalPath): Promise<boolean>;
   // Refuses bytes the realm will not store at this path — the size ceiling a
-  // card or a file is held to. Throws the realm's own error, which already
-  // carries the status a caller sees.
+  // card or a file is held to. Throws the realm's own error, whose status the
+  // coordinator carries through to the caller.
   assertWriteSize(localPath: LocalPath, content: string): void;
   // Waits for indexing already in flight. A card's serialization resolves the
   // definitions its type is built from, and a module written moments earlier
@@ -171,6 +172,7 @@ export async function commitBatch(
         }),
       );
     }
+    assertWritesAllowed(staged);
     assertWritesFit(core, staged);
     await assertDestinationsFree(core, staged);
     // Everything above either produced bytes for every entry or threw, and a
@@ -393,6 +395,31 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // Committing
 // ---------------------------------------------------------------------------
 
+// `_screenshot/` is claimed by capture serving, so a realm file stored there
+// could never be read back — it would index and list, and answer every GET as
+// an uncaptured miss. Direct writes and `/_atomic` operations each refuse the
+// subtree before writing anything, and a batch is the third way in, so it
+// refuses it too. Removals are not covered, deliberately: they are the
+// recovery path for anything already stored there, which is why the other two
+// admit them as well.
+function assertWritesAllowed(staged: StagedChange[]): void {
+  for (let [index, change] of staged.entries()) {
+    for (let write of change.writes) {
+      if (write.path.startsWith('_screenshot/')) {
+        throw atEntry(
+          new OperationFailure({
+            status: 422,
+            code: 'invalid-params',
+            title: 'Reserved path',
+            detail: `cannot write "${write.path}": "_screenshot/" is reserved for serving captures`,
+          }),
+          index,
+        );
+      }
+    }
+  }
+}
+
 // The realm refuses bytes over its size ceiling, and it refuses them one file
 // at a time as it writes. Reaching that inside the commit would leave the
 // files written before it on disk and unindexed — the commit rejects before
@@ -405,7 +432,22 @@ function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
       try {
         core.assertWriteSize(write.path, write.content);
       } catch (err: unknown) {
-        throw atEntry(err, index);
+        // The realm answers an oversized payload with 413, and that status is
+        // the whole remedy: it tells the caller to send less rather than to
+        // send again. Carried across rather than flattened into the generic
+        // staging failure, which would report the realm as broken and leave
+        // retrying as the caller's obvious next move.
+        throw atEntry(
+          isCardError(err)
+            ? new OperationFailure({
+                status: err.status,
+                code: 'payload-too-large',
+                title: err.title ?? 'Payload Too Large',
+                detail: err.message,
+              })
+            : err,
+          index,
+        );
       }
     }
   }

@@ -2489,12 +2489,14 @@ export class Realm {
           // so a caller reading a version off this result gets the one the
           // file already holds rather than nothing.
           //
-          // Recorded on the row as well as returned. A file written before the
-          // realm began recording hashes has none stored, and returning a
-          // token the row does not carry would make the next write quoting it
-          // as `baseVersion` report a moved base for a file that has not
-          // moved. Writing the hash it already has is a no-op for every file
-          // that has one.
+          // Recorded on the row as well as returned. A file written before
+          // the realm began recording hashes carries none, and the row is
+          // what the file's metadata resource reports as its content hash —
+          // so a file the realm has never rewritten would answer without one
+          // until something changed its bytes. Writing the hash it already
+          // has is a no-op for every file that has one. This is not what
+          // makes `baseVersion` work: that is computed from the bytes read
+          // inside the write lock and never consults the row.
           let unchangedHash = computeContentHash(content);
           results.push({
             path,

@@ -499,13 +499,31 @@ export function stageDelete(
   // an update merges over it: a card written a moment ago is on disk before it
   // is in the index, and refusing to delete it until indexing catches up would
   // make a client unable to remove what it just created.
-  if (!ctx.stored.has(sourcePath)) {
+  let stored = ctx.stored.get(sourcePath);
+  if (!stored) {
     throw new OperationFailure({
       id: url.href,
       status: 404,
       code: 'target-not-found',
       title: 'Not found',
       detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  // A `.json` file on disk is not by itself a card. `realm.json` is the
+  // clearest case — it sits at a URL a delete can name, and removing it would
+  // take the realm's own configuration with it — but any stored JSON that is
+  // not a card document is one. The bytes already read answer this, so the
+  // check costs no read and keeps the just-written card above deletable,
+  // which asking the index would not. This is the answer `DELETE` gives for
+  // the same URL, where it is the index rather than the bytes that reports no
+  // card there.
+  if (!cardResourceIn(stored.content)) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} is not a card in realm ${ctx.realmURL}`,
     });
   }
   return { writes: [], deletes: [sourcePath], mints: [], id: url.href };
@@ -740,17 +758,26 @@ async function serializeForStorage(
   return JSON.stringify(serialized, null, 2);
 }
 
-// The card resource a stored file holds. A file that is not a card document is
-// reported as the realm's own fault rather than the caller's: the caller asked
-// to patch a card, and what is on disk is not one.
-function storedResource(content: string, url: URL): CardResource {
+// The card resource a stored file holds, or nothing when the file is not a
+// card document. Both callers ask the same question of the same bytes and
+// differ only in what they make of a miss, so they read it through here
+// rather than each parsing for itself.
+function cardResourceIn(content: string): CardResource | undefined {
   let resource: unknown;
   try {
     resource = (JSON.parse(content) as { data?: unknown }).data;
   } catch (err: unknown) {
     resource = undefined;
   }
-  if (!isCardResource(resource)) {
+  return isCardResource(resource) ? resource : undefined;
+}
+
+// The card resource a stored file holds. A file that is not a card document is
+// reported as the realm's own fault rather than the caller's: the caller asked
+// to patch a card, and what is on disk is not one.
+function storedResource(content: string, url: URL): CardResource {
+  let resource = cardResourceIn(content);
+  if (!resource) {
     throw new OperationFailure({
       id: url.href,
       status: 500,

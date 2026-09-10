@@ -46,6 +46,14 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a removal takes a card, not any stored json', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a write into the capture subtree is refused', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('a base version is compared to the bytes the merge is computed over', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

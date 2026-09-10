@@ -6,6 +6,7 @@ import {
   type OperationDefinition,
 } from '../card-operations/index.ts';
 import { computeContentHash } from '../index.ts';
+import { CardError } from '../error.ts';
 import type { CodeRef } from '../code-ref.ts';
 import type { RealmIdentifier } from '../realm-identifiers.ts';
 import type { Definition } from '../definitions.ts';
@@ -100,7 +101,13 @@ function stub(opts: StubOptions = {}): Stub {
     assertWriteSize(localPath, content) {
       let limit = opts.sizeLimit;
       if (limit !== undefined && content.length > limit) {
-        throw new Error(`${localPath} is over the realm's size limit`);
+        // The shape `Realm.assertWriteSize` throws, down to the status: a
+        // stub that threw a bare `Error` here could not tell whether the
+        // coordinator carries the realm's 413 through or flattens it.
+        throw new CardError(`${localPath} is over the realm's size limit`, {
+          status: 413,
+          title: 'Payload Too Large',
+        });
       }
     },
     async drainIndexing() {
@@ -513,14 +520,15 @@ const tests: SharedTests<Record<string, never>> = {
       undefined,
       'a client cannot persist a screenshot manifest',
     );
-    // `realmURL` is stripped from the patch and then stamped by the realm on
-    // the way to storage; the serializer drops it again before the bytes
-    // land, so what this pins is that the client's value never survives the
-    // merge — not that the realm's does.
-    assert.notStrictEqual(
+    // What keeps a client's `realmURL` out of the file is the realm stamping
+    // its own over it on the way to storage, not the strip in the merge —
+    // the strip is defensive, and removing it would change nothing about the
+    // bytes. So this pins the stamp, which is the property a reader of the
+    // file depends on, and would fail if the realm stopped applying it.
+    assert.strictEqual(
       data.meta.realmURL,
-      'http://elsewhere.example/',
-      'a client cannot persist a realm URL of its choosing',
+      REALM,
+      "the realm's own URL is stored, whatever the client sent",
     );
   },
 
@@ -572,6 +580,54 @@ const tests: SharedTests<Record<string, never>> = {
       entry: 0,
     });
     assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a removal takes a card, not any stored json': async (assert) => {
+    // The realm's own configuration is the sharpest case: it is stored as
+    // `realm.json`, so it answers to a URL a removal can name, and removing
+    // it would take the realm's settings with it.
+    let { core, commits } = stub({
+      stored: {
+        'realm.json': JSON.stringify({ name: 'Test Realm' }, null, 2),
+        'notes.json': JSON.stringify({ note: 'not a card' }, null, 2),
+      },
+    });
+    for (let href of [`${REALM}realm`, `${REALM}notes`]) {
+      let failed = await refusal(core, [{ op: 'delete', href }]);
+      assert.deepEqual(
+        failed,
+        { status: 404, code: 'target-not-found', entry: 0 },
+        `${href} holds no card, which is what DELETE answers for it too`,
+      );
+    }
+    assert.strictEqual(commits.length, 0, 'neither file is removed');
+  },
+
+  'a write into the capture subtree is refused': async (assert) => {
+    let { core, commits } = stub({
+      definitions: { Person: personDefinition() },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'create',
+        lid: 'shot',
+        directory: '_screenshot',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Captured' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(failed?.status, 422, 'the answer /_atomic gives');
+    assert.strictEqual(failed?.entry, 0);
+    assert.strictEqual(
+      commits.length,
+      0,
+      'a file the realm would never serve back is not written',
+    );
   },
 
   'a base version is compared to the bytes the merge is computed over': async (
@@ -1333,6 +1389,13 @@ const tests: SharedTests<Record<string, never>> = {
       },
     ]);
     assert.strictEqual(failed?.entry, 1, 'the oversized entry is named');
+    assert.strictEqual(
+      failed?.status,
+      413,
+      "the realm's own answer for an oversized payload, so the caller is " +
+        'told to send less rather than to send again',
+    );
+    assert.strictEqual(failed?.code, 'payload-too-large');
     assert.strictEqual(
       commits.length,
       0,

@@ -349,6 +349,11 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The bytes an operation would store are over the realm's ceiling for a
+  // card or a file of that kind. Separate from `invalid-params` because the
+  // payload is well formed and the remedy is to send less of it, and because
+  // it carries the realm's own 413.
+  | 'payload-too-large'
   // The operation is sound but is not carried out here. A `query` is the case:
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
