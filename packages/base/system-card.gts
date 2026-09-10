@@ -13,7 +13,7 @@ import enumField from './enum';
 import { MarkdownDef } from './markdown-file-def';
 import { Skill } from './skill';
 import { getMenuItems, rri } from '@cardstack/runtime-common';
-import { type GetMenuItemParams } from './menu-items';
+import type { GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardTool from '@cardstack/boxel-host/commands/set-user-system-card';
 import GetUserSystemCardTool from '@cardstack/boxel-host/commands/get-user-system-card';

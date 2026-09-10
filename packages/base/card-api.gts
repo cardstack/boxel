@@ -1,4 +1,4 @@
-import Modifier from 'ember-modifier';
+import type Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
@@ -26,10 +26,6 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
-  CardContextName,
-  CardError,
-  CodeRef,
-  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -57,12 +53,10 @@ import {
   loadCardDocument,
   Loader,
   localId,
-  LocalPath,
   meta,
   primitive,
   realmURL,
   relativeTo,
-  SingleCardDocument,
   uuidv4,
   NumberSerializer,
   type Format,
@@ -88,9 +82,6 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  CardResource,
-  LooseLinkableResource,
-  LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
@@ -226,12 +217,23 @@ import {
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';
-import {
+import type {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
-import type { FileMetaResource } from '@cardstack/runtime-common';
+import type {
+  FileMetaResource,
+  CardContextName,
+  CardError,
+  CodeRef,
+  ToolContext,
+  LocalPath,
+  SingleCardDocument,
+  CardResource,
+  LooseLinkableResource,
+  LooseSingleResourceDocument,
+} from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 

@@ -4,8 +4,8 @@ import FileIcon from '@cardstack/boxel-icons/file';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   Component,
   FieldDef,
   NumberField,

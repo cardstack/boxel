@@ -10,10 +10,10 @@ import type {
   WheelColorFormat,
   WheelVariantConfiguration,
 } from '../util/color-utils';
+import type { RGBA } from '@cardstack/boxel-ui/helpers';
 import {
   detectColorFormat,
   hslToRgb,
-  RGBA,
   rgbaToFormatString,
   rgbaToHsv,
 } from '@cardstack/boxel-ui/helpers';

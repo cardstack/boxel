@@ -33,6 +33,7 @@ import ActivityIcon from '@cardstack/boxel-icons/activity';
 import DoorOpenIcon from '@cardstack/boxel-icons/door-open';
 import SearchIcon from '@cardstack/boxel-icons/search';
 
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   codeRef,
@@ -51,7 +52,6 @@ import {
   type Query,
   type Filter,
   type CodeRef,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {
@@ -79,7 +79,7 @@ import {
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
 import type { RealmEventContent } from './matrix-event';
-import { Spec } from './spec';
+import type { Spec } from './spec';
 
 // This file is always loaded through the Boxel loader, which supplies
 // `import.meta`. When type-checking, tsc sees the file as CommonJS output and

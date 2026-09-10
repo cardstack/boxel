@@ -16,9 +16,9 @@ import {
   CardContextName,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
-import {
-  type BfmRefFormat,
-  type BfmRefRange,
+import type {
+  BfmRefFormat,
+  BfmRefRange,
 } from '@cardstack/runtime-common/bfm-card-references';
 import { consume } from 'ember-provide-consume-context';
 import {

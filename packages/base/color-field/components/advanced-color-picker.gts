@@ -11,12 +11,11 @@ import PipetteIcon from '@cardstack/boxel-icons/pipette';
 
 import type { ColorFieldConfiguration } from '../util/color-utils';
 import { parseCssColor, parseCssColorSafe } from '../util/color-utils';
+import type { RichColorFormat, RGBA } from '@cardstack/boxel-ui/helpers';
 import {
   detectColorFormat,
-  RichColorFormat,
   hexToRgba,
   hsvToRgb,
-  RGBA,
   rgbaToFormatString,
   rgbaToHexString,
   rgbaToHsl,

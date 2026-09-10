@@ -22,6 +22,7 @@ import {
   FieldContainer,
   GridContainer,
 } from '@cardstack/boxel-ui/components';
+import type { CssVariableEntry } from '@cardstack/boxel-ui/helpers';
 import {
   buildCssGroups,
   entriesToCssRuleMap,
@@ -30,7 +31,6 @@ import {
   buildCssVariableName,
   sanitizeHtmlSafe,
   eq,
-  CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
