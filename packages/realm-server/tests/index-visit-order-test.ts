@@ -205,10 +205,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a target inside a dependency cycle is visited before its dependents', async function (assert) {
-      // `zzz` and `aaa` link to each other and `bbb` links to `zzz`. A cycle
-      // has no topological order, so the three fall through to the order they
-      // arrived in — which without the hoist is the lexical one, putting the
-      // target last.
+      // `zzz` and `aaa` link to each other, so those two are the cycle; `bbb`
+      // links to `zzz` and merely sits behind it, keeping its edge and so
+      // still waiting for `zzz`. Between the two cycle members no order is
+      // satisfiable, so priority decides — and without the hoist that hands
+      // it to lexically-first `aaa`, putting the target second.
       let order = orderingOver({
         [`${realmURL}aaa.json`]: ['zzz.json'],
         [`${realmURL}bbb.json`]: ['zzz.json'],
@@ -216,8 +217,8 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(
         paths(await order(urls('aaa.json', 'bbb.json', 'zzz.json'))),
-        ['aaa.json', 'bbb.json', 'zzz.json'],
-        'the cycle strands all three, so the incoming order decides',
+        ['aaa.json', 'zzz.json', 'bbb.json'],
+        'the cycle member that arrived first wins, and the target lands second',
       );
       assert.deepEqual(
         paths(
@@ -258,6 +259,37 @@ module(basename(import.meta.filename), function () {
         ),
         ['zzz.json', 'aaa.json', 'ddd.json'],
         'the target leads even though a cycle strands it and another dependent is ready',
+      );
+    });
+
+    test('a URL behind a cycle still waits for the cycle member it depends on', async function (assert) {
+      // `one.js` and `two.js` import each other, and `card.json` adopts from
+      // `one.js`. Only the two modules are in the cycle; `card.json` merely
+      // sits behind it. Dropping every edge out of a cycle member would free
+      // `card.json` to render before `one.js` had a file entry — the edge
+      // that leaves the cycle is the one that must survive.
+      let order = orderingOver({
+        [`${realmURL}one.js`]: ['two.js'],
+        [`${realmURL}two.js`]: ['one.js'],
+        [`${realmURL}card.json`]: ['one.js'],
+      });
+      let visited = paths(
+        await order(
+          prioritizeWrittenURLs(
+            urls('card.json', 'one.js', 'two.js'),
+            urls('card.json'),
+            new URL(realmURL),
+          ),
+        ),
+      );
+      assert.ok(
+        visited.indexOf('one.js') < visited.indexOf('card.json'),
+        `the module it adopts from is visited first (order: ${visited.join(', ')})`,
+      );
+      assert.deepEqual(
+        [...visited].sort(),
+        ['card.json', 'one.js', 'two.js'],
+        'every URL is still visited exactly once',
       );
     });
 

@@ -109,13 +109,15 @@ export class IndexRunnerDependencyManager {
   // pass leads its input with the URLs its triggering write named
   // (`prioritizeWrittenURLs`).
   //
-  // A dependency cycle has no topological order, so its members' mutual
-  // edges are dropped and they are scheduled by priority alongside
-  // everything else (see `#kahnByPriority`). Dropping them costs nothing a
-  // cycle had not already cost — no order satisfies every edge in a cycle —
-  // and it is what keeps priority meaningful for a URL caught in one:
-  // otherwise a cycle member could never be scheduled until every
-  // acyclic URL had been, however high its priority.
+  // A dependency cycle has no topological order, so the edges running
+  // through one are dropped and its members are scheduled by priority
+  // alongside everything else (see `#edgesWithinCyclesDropped`). Dropping
+  // them costs nothing a cycle had not already cost — no order satisfies
+  // every edge in a cycle — and it is what keeps priority meaningful for a
+  // URL caught in one: otherwise a cycle member could never be scheduled
+  // until every acyclic URL had been, however high its priority. A URL that
+  // merely depends on a cycle member is not itself in the cycle, so its edge
+  // survives and it still waits.
   async orderInvalidationsByDependencies(urls: URL[]): Promise<URL[]> {
     if (urls.length < 2) {
       return urls;
@@ -149,37 +151,27 @@ export class IndexRunnerDependencyManager {
       }
     }
 
-    let ordered = this.#kahnByPriority(hrefs, edges, order);
+    // Only the edges INSIDE a cycle are unsatisfiable, so only those are
+    // dropped. Scoping the drop to a strongly-connected component is what
+    // keeps a URL that merely sits *behind* a cycle waiting for its
+    // dependency: its incoming edge comes from a cycle member but crosses
+    // out of that component, so it survives and still orders the pair. The
+    // condensation of a digraph by its components is a DAG, so what remains
+    // always schedules completely.
+    let ordered = this.#kahnByPriority(
+      hrefs,
+      this.#edgesWithinCyclesDropped(hrefs, edges),
+      order,
+    );
+    // Belt and braces: a URL the scheduler somehow still could not place is
+    // appended rather than dropped, because losing one from the visit list
+    // would leave its tombstone to be promoted.
     if (ordered.length !== hrefs.length) {
-      // Whatever a first pass could not schedule is exactly the set of URLs
-      // that sit in, or behind, a dependency cycle. Every edge out of such a
-      // URL leads to another one of them (a URL reachable from a cycle can
-      // never clear its indegree either), so dropping their out-edges
-      // removes at least one edge from every cycle and leaves the rest of
-      // the graph's edges untouched. The second pass is therefore acyclic —
-      // it always completes — and schedules the freed URLs by priority
-      // instead of dumping them at the end.
-      let stranded = new Set(hrefs);
-      for (let href of ordered) {
-        stranded.delete(href);
-      }
-      let acyclicEdges = new Map<string, Set<string>>();
-      for (let [from, to] of edges) {
-        if (!stranded.has(from)) {
-          acyclicEdges.set(from, to);
-        }
-      }
-      ordered = this.#kahnByPriority(hrefs, acyclicEdges, order);
-      // Belt and braces: a URL the second pass somehow still could not
-      // schedule is appended rather than dropped, because losing one from
-      // the visit list would leave its tombstone to be promoted.
-      if (ordered.length !== hrefs.length) {
-        let orderedSet = new Set(ordered);
-        for (let href of hrefs) {
-          if (!orderedSet.has(href)) {
-            ordered.push(href);
-            orderedSet.add(href);
-          }
+      let orderedSet = new Set(ordered);
+      for (let href of hrefs) {
+        if (!orderedSet.has(href)) {
+          ordered.push(href);
+          orderedSet.add(href);
         }
       }
     }
@@ -189,10 +181,118 @@ export class IndexRunnerDependencyManager {
       .filter((url): url is URL => Boolean(url));
   }
 
+  // `edges` minus the edges whose endpoints share a strongly-connected
+  // component of more than one URL — that is, minus exactly the edges a
+  // dependency cycle runs through. Every other edge, including one leading
+  // out of a cycle into a URL that depends on it, is preserved.
+  #edgesWithinCyclesDropped(
+    hrefs: string[],
+    edges: Map<string, Set<string>>,
+  ): Map<string, Set<string>> {
+    let { componentOf, componentSize } = this.#stronglyConnectedComponents(
+      hrefs,
+      edges,
+    );
+    let kept = new Map<string, Set<string>>();
+    for (let [dependency, dependents] of edges) {
+      let component = componentOf.get(dependency);
+      let inCycle =
+        component !== undefined && (componentSize.get(component) ?? 1) > 1;
+      let keptDependents = inCycle
+        ? new Set(
+            [...dependents].filter(
+              (dependent) => componentOf.get(dependent) !== component,
+            ),
+          )
+        : dependents;
+      if (keptDependents.size > 0) {
+        kept.set(dependency, keptDependents);
+      }
+    }
+    return kept;
+  }
+
+  // Tarjan's strongly-connected components, iterative so a deep dependency
+  // graph cannot overflow the stack. Two URLs share a component id exactly
+  // when each is reachable from the other — i.e. they sit in one cycle. A
+  // URL in no cycle gets a component of its own, of size 1.
+  #stronglyConnectedComponents(
+    hrefs: string[],
+    edges: Map<string, Set<string>>,
+  ): {
+    componentOf: Map<string, number>;
+    componentSize: Map<number, number>;
+  } {
+    let visitIndex = new Map<string, number>();
+    let lowLink = new Map<string, number>();
+    let onStack = new Set<string>();
+    let componentStack: string[] = [];
+    let componentOf = new Map<string, number>();
+    let componentSize = new Map<number, number>();
+    let nextIndex = 0;
+    let nextComponent = 0;
+
+    for (let root of hrefs) {
+      if (visitIndex.has(root)) {
+        continue;
+      }
+      let frames: { href: string; dependents: string[]; cursor: number }[] = [];
+      let enter = (href: string) => {
+        visitIndex.set(href, nextIndex);
+        lowLink.set(href, nextIndex);
+        nextIndex++;
+        componentStack.push(href);
+        onStack.add(href);
+        frames.push({
+          href,
+          dependents: [...(edges.get(href) ?? [])],
+          cursor: 0,
+        });
+      };
+      enter(root);
+      while (frames.length > 0) {
+        let frame = frames[frames.length - 1]!;
+        if (frame.cursor < frame.dependents.length) {
+          let dependent = frame.dependents[frame.cursor++]!;
+          if (!visitIndex.has(dependent)) {
+            enter(dependent);
+          } else if (onStack.has(dependent)) {
+            lowLink.set(
+              frame.href,
+              Math.min(lowLink.get(frame.href)!, visitIndex.get(dependent)!),
+            );
+          }
+          continue;
+        }
+        frames.pop();
+        if (lowLink.get(frame.href) === visitIndex.get(frame.href)) {
+          let component = nextComponent++;
+          let size = 0;
+          for (;;) {
+            let member = componentStack.pop()!;
+            onStack.delete(member);
+            componentOf.set(member, component);
+            size++;
+            if (member === frame.href) {
+              break;
+            }
+          }
+          componentSize.set(component, size);
+        }
+        let parent = frames[frames.length - 1];
+        if (parent) {
+          lowLink.set(
+            parent.href,
+            Math.min(lowLink.get(parent.href)!, lowLink.get(frame.href)!),
+          );
+        }
+      }
+    }
+    return { componentOf, componentSize };
+  }
+
   // Kahn's algorithm with a priority queue keyed on `order`: of the URLs
   // whose dependencies are all scheduled, the lowest-`order` one goes next.
-  // Returns fewer entries than `hrefs` when `edges` contains a cycle — the
-  // caller reads a short result as "these are the URLs a cycle stranded".
   #kahnByPriority(
     hrefs: string[],
     edges: Map<string, Set<string>>,
