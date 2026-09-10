@@ -3,6 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
+  latestFromScratchIndexRejection,
 } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import { settledBy } from './settled-by.ts';
@@ -968,12 +969,6 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
-  // The from-scratch index a brand-new realm's startup awaited, when it
-  // failed. Such a realm is mounted and answers requests, but its index holds
-  // nothing, so readiness reports the failure (`X-Boxel-Not-Ready:
-  // index-failed`) rather than a false ready. Cleared by a later full index
-  // that completes.
-  #bootIndexFailure: Error | undefined;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
@@ -1478,16 +1473,6 @@ export class Realm {
       );
       return notReady('startup');
     }
-    // A brand-new realm whose first index failed is mounted over an empty
-    // index. Reporting ready would hand the caller a realm that serves
-    // nothing; reporting `index` would keep it polling for work that is not
-    // coming. The body carries the failure, since that is where the cause is.
-    if (this.#bootIndexFailure) {
-      return notReady(
-        'index-failed',
-        `The boot index of ${this.url} failed: ${this.#bootIndexFailure.message}`,
-      );
-    }
     let startupSettledAt = Date.now();
     let inflight = this.indexing();
     if (inflight && !(await settledBy(inflight, requestDeadline))) {
@@ -1526,6 +1511,27 @@ export class Realm {
       // caller polling instead of reporting a realm ready whose index is
       // knowably behind its source.
       return notReady('index');
+    }
+
+    // The lane is clear, so every from-scratch job for this realm has run. A
+    // realm that still has no index whose newest such job was rejected never
+    // had its index built: reporting ready would hand the caller a realm that
+    // serves nothing, and `index` would keep it polling for work that is not
+    // coming. Both facts are read from shared state, so every replica answers
+    // alike, and a reindex from any path — this realm's own endpoints, a
+    // publish, the system-wide reindex — clears it as soon as it lands. The
+    // body carries the failure, since that is where the cause is.
+    if (await this.#realmIndexUpdater.isNewIndex()) {
+      let rejection = await latestFromScratchIndexRejection(
+        this.#dbAdapter,
+        this.url,
+      );
+      if (rejection) {
+        return notReady(
+          'index-failed',
+          `The boot index of ${this.url} failed: ${rejection}`,
+        );
+      }
     }
 
     // Opt-in: also await the published HTML being live for the current
@@ -1948,7 +1954,6 @@ export class Realm {
       },
     );
     await completed;
-    this.#bootIndexFailure = undefined;
     // The from-scratch swap has landed in boxel_index: drop searchCards
     // in-flight entries + the cached RealmInfo (which may have been
     // re-parsed from /realm.json during the pass), and broadcast the
@@ -3229,7 +3234,7 @@ export class Realm {
         let promise = this.#realmIndexUpdater.fullIndex(priority);
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
-          this.#bootIndexFailure = await promise;
+          await promise;
         }
         // not sure how useful this event is--nothing is currently listening for
         // it, and it may happen during or after the full index...

@@ -106,8 +106,10 @@ the worker gave up, or the job hit its wall-clock limit — is mounted over an e
 index. Readiness answers 503 with `X-Boxel-Not-Ready: index-failed`, the failure
 in the body, and no `Retry-After`: a false ready would hand the caller a realm that
 serves nothing, and `index` would keep it polling for work that is not coming.
-The publish flow's poll and the CI realm wait both stop on it. A later full index
-that completes clears the state.
+The publish flow's poll and the CI realm wait both stop on it. The state is read
+from the same rows every replica reads — the realm has no index, and the newest
+from-scratch job for it was rejected — so a reindex from any path clears it the
+moment it lands.
 
 The gating has to read shared state, because in a multi-replica deployment the poll
 need not reach the replica that did the work. In-process indexing state is

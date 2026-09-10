@@ -157,6 +157,36 @@ export function prerenderSpawnedPriority({
 // deadline only between requests, so an attempt started just under the wire
 // overshoots by up to the length of the hold. A shorter budget bounds that
 // overshoot; no budget removes it.
+// The failure of the newest from-scratch job in a realm's index lane, when
+// that job was rejected; undefined when there is no such job or it completed.
+// Meaningful alongside the realm's index state: over an index that has since
+// been built a rejected job is history, but over a realm that has never had an
+// index it is the reason the realm serves nothing. Read from the same rows
+// every replica reads, so it holds whichever replica ran the job and whichever
+// path enqueued it — a realm's own reindex endpoints, a publish, a system-wide
+// reindex — and a later job that completes supersedes it the moment it lands.
+export async function latestFromScratchIndexRejection(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  if (dbAdapter.kind !== 'pg') {
+    return undefined;
+  }
+  let [row] = (await query(dbAdapter, [
+    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND concurrency_group =`,
+    param(indexingConcurrencyGroup(realmURL)),
+    'ORDER BY id DESC LIMIT 1',
+  ])) as { status: string; result: unknown }[];
+  if (!row || row.status !== 'rejected') {
+    return undefined;
+  }
+  let { result } = row;
+  if (isObjectLike(result) && typeof (result as any).message === 'string') {
+    return (result as any).message;
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result);
+}
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
