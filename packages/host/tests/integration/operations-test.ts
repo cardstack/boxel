@@ -137,6 +137,7 @@ module('Integration | operations', function (hooks) {
         'listMine',
         'query',
         'read',
+        'readSource',
         'transform',
         'update',
       ],
