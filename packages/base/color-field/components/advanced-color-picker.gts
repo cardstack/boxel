@@ -291,11 +291,9 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
     }
     this.svCanvasElement = element;
     element.addEventListener('pointerdown', this.handleSVMouseDown);
-    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- first paint of the canvas; the model and input sync ride on the same frame
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
     requestAnimationFrame(() => {
       this.drawSVCanvas();
-      this.syncFromModel();
-      this.syncInputValues();
     });
   }
 
@@ -530,7 +528,9 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
   // ========== Lifecycle ==========
   constructor(owner: Owner, args: ColorFieldSignature['Args']) {
     super(owner, args);
-    // Minimal initialization - just sync HSV from model
+    // Derive HSV and the text inputs from the model here, so the first render
+    // already shows the color and nothing has to write tracked state after
+    // the first paint.
     const rgba = parseCssColor(this.args.model || '#3b82f6');
     const hsv = rgbaToHsv(rgba);
     this.h = hsv.h;
@@ -538,6 +538,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
     this.v = hsv.v;
     this.a = rgba.a;
     this.lastModelValue = this.args.model;
+    this.syncInputValues();
   }
 
   willDestroy() {
