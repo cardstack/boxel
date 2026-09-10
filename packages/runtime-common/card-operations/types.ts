@@ -1,3 +1,4 @@
+import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
 import type { ScreenshotManifest } from '../capture-spec.ts';
 import type {
@@ -201,7 +202,7 @@ export interface LowerOperationDeclarationsResult {
 // the payload, which are known only at invocation.
 // ============================================================================
 
-// The six built-in behaviors, under the operation runtime's own name. The
+// The built-in behaviors, under the operation runtime's own name. The
 // authoring API owns the list because that is where a declaration names one;
 // re-stating it here lets a consumer of the runtime types stay clear of the
 // card authoring surface, which only loads inside a card module.
@@ -224,9 +225,9 @@ export type OperationTarget =
 
 export interface OperationRequest {
   target: OperationTarget;
-  // The name the operation is invoked under — a declared name, or one of the
-  // six base names for the built-in behavior. Never `base`: a `delete` built
-  // on `transform` is invoked as `delete`.
+  // The name the operation is invoked under — a declared name, or a base name
+  // for the built-in behavior. Never `base`: a `delete` built on `transform`
+  // is invoked as `delete`.
   name: string;
   // The payload, keyed the way the definition's `params` schema declares it.
   params?: Record<string, unknown>;
@@ -266,6 +267,41 @@ export interface OperationHeadResult {
   deps: string[] | null;
 }
 
+// The stored bytes of a resource, and what the byte-serve headers are computed
+// from. This is what the source and byte-serve routes answer with: a card
+// instance's `.json`, a module's text, an image's bytes — the resource exactly
+// as it sits on disk, with no assembly and no index read behind it.
+export interface OperationSourceResult {
+  // Inferred from the path's extension by `inferContentType`, which is what
+  // both byte routes infer theirs with. A path with no extension the platform
+  // knows resolves to `application/octet-stream`, the byte-preserving
+  // default.
+  contentType: string;
+  lastModified: number;
+  // When the realm first saw this path, in epoch seconds, and null where it
+  // holds no record of it — a file written outside the realm's own write path,
+  // say. The byte serve omits `x-created` in that case rather than
+  // substituting the modification time, so this reports the absence rather
+  // than filling it in.
+  created: number | null;
+  // The content hash of the stored bytes — the same identity the rest of the
+  // project calls `version`, and what the source route's `ETag` is built
+  // from. Null only where the realm can neither recall nor compute one.
+  version: string | null;
+  // The bytes. Absent in the headers-only mode, which is the whole difference
+  // between the two: a `HEAD` reports the metadata above and would discard
+  // this. Whatever form the realm's file adapter produced — a string, a byte
+  // array, or an unread stream — so a caller hands it to a response body
+  // rather than materializing it.
+  body?: OperationSourceBody;
+}
+
+export type OperationSourceBody =
+  | string
+  | Uint8Array
+  | ReadableStream<Uint8Array>
+  | Readable;
+
 // A write's answer: the identity of what was written and the version it now
 // holds, without reprinting the document. A caller that wants the new state
 // reads it; a caller that wrote it already has it, and the common case is a
@@ -290,6 +326,7 @@ export type OperationResult =
   | OperationDocumentResult
   | OperationHeadResult
   | OperationIdentityResult
+  | OperationSourceResult
   | null;
 
 export function isDocumentResult(
@@ -308,6 +345,15 @@ export function isIdentityResult(
   result: OperationResult,
 ): result is OperationIdentityResult {
   return result != null && 'id' in result;
+}
+
+// Keyed on `contentType` rather than on `body`, which the headers-only mode
+// leaves out: a guard that read the body would report false for exactly the
+// result a `HEAD` asks for.
+export function isSourceResult(
+  result: OperationResult,
+): result is OperationSourceResult {
+  return result != null && 'contentType' in result;
 }
 
 export type OperationErrorCode =

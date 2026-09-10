@@ -1,12 +1,14 @@
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { readOperation } from './read.ts';
+import { readSourceOperation } from './read-source.ts';
 import {
   OperationFailure,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
   type OperationRequest,
+  type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
@@ -46,10 +48,34 @@ export interface OperationCore {
   realmURL: string;
   definitionLookup: OperationDefinitionLookup;
   indexQueryEngine: OperationIndexQueryEngine;
-  // The target's source file as stored on disk, by local path. The index is
-  // what a read serves, so this is how a behavior distinguishes "no such card"
-  // from "the write landed and the index row is still coming".
-  readSource(localPath: LocalPath): Promise<string | undefined>;
+  // The target's source file as stored on disk, decoded as text, by local
+  // path. The index is what a read serves, so this is how a behavior
+  // distinguishes "no such card" from "the write landed and the index row is
+  // still coming".
+  readFileAsText(localPath: LocalPath): Promise<string | undefined>;
+  // The stored bytes at a local path, opened the way the realm's own byte
+  // serve opens them, with the realm's own refusals applied: a path it will
+  // not serve — an empty one, an `_`-prefixed realm endpoint, a directory —
+  // answers undefined, and so does one that is not there. Unlike
+  // `fileMetaDocument` this does not decline a card's `.json`: that path names
+  // the card's stored source, which is exactly what a stored-bytes read is
+  // for.
+  //
+  // `content` is unread until it is touched. The adapter opens a real stream
+  // on first touch, so a caller that wants only the metadata must leave it
+  // alone rather than open and strand one.
+  openStoredFile(
+    localPath: LocalPath,
+  ): Promise<OperationStoredFile | undefined>;
+  // The write-time record behind a path's bytes: the content hash a
+  // stored-bytes read reports as `version`, and when the realm first saw the
+  // path. Both come from the realm's own file-meta row, and resolving the hash
+  // is the realm's job rather than the executor's for two reasons — the row is
+  // authoritative for it (it is written in the same critical section as the
+  // bytes), and where the row carries none the fallback is to hash the bytes,
+  // which only the side that can open a second handle on them can do without
+  // consuming the one a read is about to serve.
+  storedFileMeta(localPath: LocalPath): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
   isIgnored(url: URL): Promise<boolean>;
@@ -84,6 +110,29 @@ export interface OperationCore {
   }): void;
 }
 
+// The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
+// here rather than imported so the core does not depend on the realm module it
+// is a collaborator of.
+export interface OperationStoredFile {
+  path: LocalPath;
+  // A lazy getter on every adapter that can stream: reading it opens the
+  // stream, so the headers-only mode leaves it untouched. Typed as the body a
+  // stored-bytes read answers with, since it is handed through unchanged.
+  content: OperationSourceBody;
+  lastModified: number;
+  // The byte size where the adapter knows it from the stat it already
+  // performed, and absent where knowing it would cost reading the bytes.
+  size?: number;
+}
+
+export interface OperationStoredFileMeta {
+  // The content hash of the stored bytes, absent where the realm can neither
+  // recall nor compute one.
+  version?: string;
+  // Epoch seconds, absent where the realm holds no record of this path.
+  createdAt?: number;
+}
+
 // `CachingDefinitionLookup`, narrowed to the one read an operation makes.
 export interface OperationDefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition | undefined>;
@@ -103,8 +152,10 @@ export interface OperationIndexQueryEngine {
 }
 
 export interface RunOperationOptions {
-  // A `read` that needs only the values the card+json response headers are
-  // computed from, and no document. Ignored by every other behavior.
+  // The metadata a response's headers are computed from, and no body: for a
+  // `read` the four values the card+json headers rest on and no document, for
+  // a `readSource` everything but the bytes. What a `HEAD`, or a conditional
+  // `GET` deciding on a validator, asks for. Ignored by every other behavior.
   headersOnly?: true;
   // Leave a query-backed field unexpanded. A render inside a prerender request
   // must not recurse back into the search that would resolve one, so a read
@@ -155,18 +206,20 @@ export function newOperationScope(core: OperationCore): OperationScope {
 // from a UUID — which is the same assumption the index query engine's own
 // file/instance split rests on. The one path that does carry one is a card's
 // `.json` source spelling, and that is classified as a file deliberately: it
-// names the card's stored bytes rather than the card.
+// names the card's stored bytes rather than the card, and a `readSource` of it
+// is what serves them.
 //
 // A `type` target has only its ref, so its kind comes from the entry, and a
 // file def named that way therefore carries nothing. That is correct rather
-// than a gap: operations belong to cards, and the one operation a file has is
-// `read`, which needs an instance to read.
+// than a gap: operations belong to cards, and what a file has are its two
+// reads, both of which need an instance to read.
 type DefKind = 'card-def' | 'file-def' | 'field-def';
 
-// Exhaustive over `BaseOperation` on purpose: a seventh built-in behavior has
+// Exhaustive over `BaseOperation` on purpose: a further built-in behavior has
 // to say here whether a card carries it, rather than defaulting to "no".
 const CARD_DEF_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   read: true,
+  readSource: true,
   create: true,
   update: true,
   delete: true,
@@ -179,15 +232,42 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
 > = {
   'card-def': CARD_DEF_OPERATIONS,
   // A file's metadata is derived from its bytes and read-only: there is no
-  // JSON:API mutation surface for anything else to reach.
-  'file-def': { read: true },
+  // JSON:API mutation surface for anything else to reach. Its bytes are the
+  // representation that matters for a file, though, so it carries the
+  // stored-bytes read alongside the document one.
+  'file-def': { read: true, readSource: true },
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
   'field-def': {},
 };
 
+// The base operations that resolve without consulting a definition.
+//
+// A definition is consulted for two reasons — to find a declaration of the
+// requested name, and to learn a type target's def kind — and a stored-bytes
+// read needs neither. Nothing may declare one (the authoring decorator refuses
+// it, and so does the declared branch below), so no declaration can take the
+// name; and a type has no stored bytes, so there is no type-target form whose
+// kind would have to be resolved.
+//
+// That is what makes skipping the lookup correct rather than merely cheaper. A
+// module path is the case that needs it: `.gts` is a registered extension, so
+// resolving a definition for one means a cache lookup on the file def its
+// extension names, and a path whose type nothing can resolve would then refuse
+// a read of bytes that are plainly on disk. Definition-free means
+// definition-free.
+const DEFINITION_FREE_OPERATIONS: Readonly<
+  Partial<Record<BaseOperation, true>>
+> = {
+  readSource: true,
+};
+
 function isBaseOperation(name: string): name is BaseOperation {
   return own(CARD_DEF_OPERATIONS, name) !== undefined;
+}
+
+function isDefinitionFreeOperation(name: string): name is BaseOperation {
+  return own(DEFINITION_FREE_OPERATIONS, name) !== undefined;
 }
 
 // Read a record by a key that arrived over the wire. Every name-keyed lookup
@@ -223,6 +303,18 @@ export async function resolveOperation(
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
   assertInRealm(core, target);
+  if (isDefinitionFreeOperation(name)) {
+    // Before the lookup, not merely without it: for a module path the lookup
+    // cannot succeed, and reaching it at all would gate a read of bytes on a
+    // definition. The kind still decides whether the target carries the
+    // operation, so it comes from the target alone — which is where an
+    // instance target's kind comes from anyway.
+    let kind = definitionFreeKind(target);
+    if (!kind || !own(ALLOWED_BASE_OPERATIONS[kind], name)) {
+      throw notAllowed(target, name, kind, name);
+    }
+    return { base: name, deterministic: true };
+  }
   let definition = await definitionFor(core, target, scope);
   if (target.kind === 'type' && !definition) {
     // Nothing else can be said about a type nobody can resolve: whether it
@@ -248,6 +340,26 @@ export async function resolveOperation(
           `operation "${name}" is declared but could not be lowered to a ` +
           `runnable form: ${describeIssues(declared)}`,
         meta: { issues: declared.issues ?? [] },
+      });
+    }
+    if (own(DEFINITION_FREE_OPERATIONS, declared.base)) {
+      // A declaration wins over the built-in of the same name, which is what
+      // lets an author specialize `read` or rebind `delete` onto `transform`.
+      // A definition-free behavior is the one thing that cannot be won that
+      // way: it serves the bytes on disk, so there is no payload to reshape
+      // and no stage to run, and dispatching a declared name to it would
+      // answer under the author's name without doing what the author wrote.
+      // The authoring decorator refuses such a declaration; this refuses one
+      // that reached a stored definition regardless.
+      throw new OperationFailure({
+        id: targetId(target),
+        status: 405,
+        code: 'operation-not-allowed',
+        title: 'Operation not allowed',
+        detail:
+          `operation "${name}" is declared on "${declared.base}", which is ` +
+          `not a behavior a declaration may build on: a "${declared.base}" ` +
+          `serves the bytes stored at the target's URL`,
       });
     }
     if (!own(ALLOWED_BASE_OPERATIONS[kind], declared.base)) {
@@ -287,6 +399,11 @@ export async function runOperation(
   switch (definition.base) {
     case 'read':
       return await readOperation(core, canonical, definition, opts, scope);
+    case 'readSource':
+      // No definition and no scope: the operation is resolved without either,
+      // and an executor that peeked a row would put back the index read
+      // resolving it definition-free just took out.
+      return await readSourceOperation(core, canonical, opts);
     case 'query':
       // A declared query is a saved search, not work the realm carries out
       // here: an invocation resolves its markers with `lowerQueryOperation`
@@ -403,11 +520,10 @@ export function canonicalizeTarget(
   }
   // A `.json` path is deliberately left alone. It names a card's stored source
   // rather than the card, and the stored bytes of an instance are a different
-  // read from the instance itself — one this core does not serve yet. So the
-  // extension stands and the target routes as a file, which is where that read
-  // will live. Resolving it to the card instead would answer a question nobody
-  // asked, and would be the one spelling where the extension test and the rest
-  // of the core disagreed.
+  // read from the instance itself — the `readSource` this spelling routes to.
+  // Resolving it to the card instead would answer a question nobody asked, and
+  // would be the one spelling where the extension test and the rest of the
+  // core disagreed.
   let canonical = paths.fileURL(localPath).href;
   return canonical === target.url
     ? target
@@ -535,6 +651,18 @@ async function adoptsFromOf(
   return row.instance.meta?.adoptsFrom;
 }
 
+// The target's kind as far as the target itself can say, for a behavior that
+// will not read a definition to find out. An instance target's kind never
+// needed one — it comes from the URL — so the only answer lost is a type
+// target's, which is `undefined` here rather than guessed. That is the whole
+// answer for a stored-bytes read: a type has no stored bytes, so it carries no
+// operation that serves them, and saying so does not depend on which kind of
+// def the type turns out to be. A `FieldDef` type refuses for that reason and
+// not because a field def carries nothing.
+function definitionFreeKind(target: OperationTarget): DefKind | undefined {
+  return target.kind === 'instance' ? defKindFor(target, undefined) : undefined;
+}
+
 function defKindFor(
   target: OperationTarget,
   definition: Definition | undefined,
@@ -564,14 +692,17 @@ function parseTargetURL(url: string): URL | undefined {
 function notAllowed(
   target: OperationTarget,
   name: string,
-  kind: DefKind,
+  // Absent only for a type target reached by a behavior that reads no
+  // definition, and unread in that case: the message below takes a type
+  // target's own terms instead.
+  kind: DefKind | undefined,
   base: BaseOperation,
 ): OperationFailure {
   // A type target's kind is inferred from an entry that cannot say `file-def`,
   // so naming the kind there would report a file def as a field def. The
   // target's own terms are accurate either way.
   let because =
-    target.kind === 'instance'
+    target.kind === 'instance' && kind
       ? `a ${kind} allows ${describeAllowed(kind)}`
       : `a type carries only what its definition declares, and a "${base}" ` +
         `runs against an instance`;

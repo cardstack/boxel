@@ -4,12 +4,18 @@ import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType, baseRealm, rri } from '@cardstack/runtime-common';
+import type { CodeRef, Realm } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  baseRealm,
+  computeContentHash,
+  rri,
+} from '@cardstack/runtime-common';
 import {
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
+  isSourceResult,
   lowerQueryOperation,
   runOperation,
   type OperationCore,
@@ -17,6 +23,8 @@ import {
   type OperationHeadResult,
   type OperationRequest,
   type OperationResult,
+  type OperationSourceBody,
+  type OperationSourceResult,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -31,6 +39,12 @@ import type { PgAdapter } from '@cardstack/postgres';
 // The operation core, exercised the way the HTTP surfaces will once they route
 // to it: obtain the core from a realm and call `runOperation` directly. Nothing
 // is routed here yet, so these are the only callers.
+//
+// A `read` is held against what the card+json GET serves and a `readSource`
+// against what the `card+source` GET serves, because those are the surfaces
+// each will delegate to. Where a result is checked against a handler's
+// response rather than against a literal, that is deliberate: the parity is
+// the requirement, and a literal would let the two drift together.
 
 function request(
   target: OperationTarget,
@@ -62,6 +76,49 @@ function headersOf(result: OperationResult): OperationHeadResult {
     throw new Error(`expected a headers result, got ${JSON.stringify(result)}`);
   }
   return result;
+}
+
+function sourceOf(result: OperationResult): OperationSourceResult {
+  if (!isSourceResult(result)) {
+    throw new Error(`expected a source result, got ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
+// A stored-bytes read hands back whatever form the realm's file adapter
+// produced — under Node that is an unread stream — so a test comparing content
+// has to materialize it. Doing so here rather than in the executor is the
+// point: a facade puts the body on a response without ever reading it.
+async function bytesOf(
+  body: OperationSourceBody | undefined,
+): Promise<Uint8Array> {
+  if (body === undefined) {
+    throw new Error('expected a body');
+  }
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body);
+  }
+  if (body instanceof Uint8Array) {
+    return body;
+  }
+  let chunks: Uint8Array[] = [];
+  for await (let chunk of body as AsyncIterable<Uint8Array | string>) {
+    chunks.push(
+      typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk,
+    );
+  }
+  let total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function textOf(body: OperationSourceBody | undefined): Promise<string> {
+  return new TextDecoder().decode(await bytesOf(body));
 }
 
 // The failure a call is expected to produce. Rethrows anything that is not an
@@ -286,6 +343,192 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.code, 'target-not-found');
       assert.strictEqual(error.status, 404);
+    });
+
+    test('a stored-bytes read serves a card instance source verbatim', async function (assert) {
+      // The `.json` spelling names the card's stored bytes, which is why
+      // dispatch leaves it as written rather than resolving it to the card.
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}person-1.json` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(
+        source.contentType,
+        'application/json',
+        'the content type is inferred from the path, as both byte routes infer it',
+      );
+
+      // Against the `card+source` GET rather than the card+json one: that is
+      // the surface this read will serve, so it is the one it has to
+      // reproduce.
+      let response = await realmRequest
+        .get('/person-1.json')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+      assert.strictEqual(
+        await textOf(source.body),
+        response.text,
+        'the bytes are the ones the source route serves',
+      );
+      assert.true(
+        response.headers['etag'].startsWith(source.version!),
+        `the source ETag is built from the version the read reports: ${response.headers['etag']} / ${source.version}`,
+      );
+    });
+
+    test('a stored-bytes read of a module serves its text', async function (assert) {
+      // A module has no `adoptsFrom` and no definition-cache entry, so this is
+      // the target the definition-free dispatch exists for. Its extension is
+      // a registered one, which is what would otherwise send it through a
+      // file def's type and a cache lookup on it.
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}person.gts` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'text/typescript+glimmer');
+
+      let response = await realmRequest
+        .get('/person.gts')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+      assert.strictEqual(await textOf(source.body), response.text);
+    });
+
+    test('a stored-bytes read of an image serves its bytes and its content type', async function (assert) {
+      // Written through the realm rather than taken from the fixture, for two
+      // reasons: the fixture holds no binary file, and a realm write is what
+      // persists the content-meta row, so this is also the case where
+      // `version` is the hash the realm recorded rather than one computed from
+      // the bytes on read.
+      let bytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff,
+      ]);
+      await testRealm.write('logo.png', bytes);
+
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}logo.png` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'image/png');
+      assert.deepEqual(
+        Array.from(await bytesOf(source.body)),
+        Array.from(bytes),
+        'the bytes come back undecoded',
+      );
+      assert.strictEqual(
+        source.version,
+        computeContentHash(bytes),
+        'and `version` is the content hash of the bytes the realm stored',
+      );
+      assert.strictEqual(
+        typeof source.created,
+        'number',
+        'a realm write records when the realm first saw the path',
+      );
+    });
+
+    test('a headers-only stored-bytes read reports the same metadata with no body', async function (assert) {
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${testRealmHref}sample.md`,
+      };
+      let headers = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(target, 'readSource'),
+          { headersOnly: true },
+        ),
+      );
+      assert.strictEqual(headers.body, undefined, 'no bytes in this mode');
+      assert.strictEqual(headers.contentType, 'text/markdown');
+      assert.strictEqual(typeof headers.version, 'string');
+
+      let withBody = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(target, 'readSource'),
+        ),
+      );
+      let { body: _body, ...metadata } = withBody;
+      assert.deepEqual(
+        metadata,
+        headers,
+        'the two modes agree on every value a response header is computed from',
+      );
+    });
+
+    test('a stored-bytes read of a path with no bytes is not found', async function (assert) {
+      for (let path of ['does-not-exist', 'dir', '_search']) {
+        let error = await refusalFrom(() =>
+          runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'instance', url: `${testRealmHref}${path}` },
+              'readSource',
+            ),
+          ),
+        );
+        assert.strictEqual(
+          error.code,
+          'target-not-found',
+          `${path} has no bytes to read: ${error.detail}`,
+        );
+        assert.strictEqual(error.status, 404);
+      }
+    });
+
+    test('a type target carries no stored-bytes read', async function (assert) {
+      // A type has no stored bytes, and the refusal does not depend on which
+      // kind of def the type turns out to be: a `FieldDef` refuses for the
+      // same reason a `CardDef` does, rather than because a field def carries
+      // nothing.
+      let types: { label: string; codeRef: CodeRef }[] = [
+        {
+          label: 'a card def',
+          codeRef: { module: rri(`${testRealmHref}person`), name: 'Person' },
+        },
+        {
+          label: 'a field def',
+          codeRef: { module: rri(`${baseRealm.url}string`), name: 'default' },
+        },
+      ];
+      for (let { label, codeRef } of types) {
+        let error = await refusalFrom(() =>
+          runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'type', codeRef, realm: testRealmHref },
+              'readSource',
+            ),
+          ),
+        );
+        assert.strictEqual(
+          error.code,
+          'operation-not-allowed',
+          `${label} type target is refused: ${error.detail}`,
+        );
+        assert.strictEqual(error.status, 405);
+      }
     });
 
     test('a target outside the realm is not this core to serve', async function (assert) {

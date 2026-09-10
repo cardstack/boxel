@@ -62,7 +62,7 @@ import {
 
 // The behaviors every declaration builds on. Which of them a def carries is
 // implied by the def type rather than written in author code — a `CardDef`
-// has all six, a `FileDef` only `read`, a `FieldDef` none — so
+// has all of them, a `FileDef` only the two reads, a `FieldDef` none — so
 // `getOperations` synthesizes them. A declaration *named* after a base op
 // takes its place: it specializes that behavior when it names the same
 // `base`, and rebinds the verb when it names another — a `delete` declared
@@ -72,6 +72,7 @@ import {
 // and neither is inferred from the other.
 export const BASE_OPERATIONS = [
   'read',
+  'readSource',
   'create',
   'update',
   'delete',
@@ -80,6 +81,14 @@ export const BASE_OPERATIONS = [
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
+
+// The base operations no declaration may name as its `base`. A stored-bytes
+// read serves what is on disk: there is no payload to reshape, no program
+// stage to run, and no result to project, so a declaration built on it would
+// describe work nothing carries out. Refusing at the decorator is what keeps
+// the realm's dispatch free to answer it without consulting a definition —
+// the two rules are the same rule, read from opposite ends.
+const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
 
 // ============================================================================
 // Typed references
@@ -420,6 +429,10 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   update: [],
   delete: [],
   read: [],
+  // A stored-bytes read takes no clauses because it takes no declaration at
+  // all; the entry is here because this table is exhaustive over the base
+  // operations, so a new one has to say what it accepts.
+  readSource: [],
   query: ['query'],
 };
 
@@ -547,14 +560,19 @@ function impliedOperations(
   }
   if (isSubclassOf(owner, FileDef)) {
     // A file's metadata is content-derived and read-only: there is no
-    // JSON:API mutation surface for anything else to reach.
+    // JSON:API mutation surface for anything else to reach. Its bytes are the
+    // representation that matters, so it carries the stored-bytes read too.
     return READ_ONLY;
   }
-  // The one operation every addressable def shares.
+  // The operations every addressable def shares.
   return READ_ONLY;
 }
 
-const READ_ONLY = ['read'] as const;
+// The two reads, neither of which writes. A `read` serves the def's indexed
+// document; a `readSource` serves the bytes stored at the instance's URL, a
+// representation every addressable def has whether or not its document is the
+// interesting one — for a file it is the bytes that are the point.
+const READ_ONLY = ['read', 'readSource'] as const;
 
 function declaredOperations(
   owner: typeof BaseDef,
@@ -692,6 +710,11 @@ function assertValidDeclaration(
   if (!isBaseOperationName(base)) {
     throw new Error(
       `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
+    );
+  }
+  if (NOT_DECLARABLE.includes(base)) {
+    throw new Error(
+      `${label}: a "${base}" operation serves the bytes stored at the def's URL, so there is nothing for a declaration to specialize or rebind`,
     );
   }
   // An author may only specialize a base operation the def type actually

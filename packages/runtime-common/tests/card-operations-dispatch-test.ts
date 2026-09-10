@@ -2,6 +2,7 @@ import {
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
+  isSourceResult,
   newOperationScope,
   resolveOperation,
   runOperation,
@@ -25,7 +26,10 @@ import type { SharedTests } from '../helpers/index.ts';
 //
 // The `read` executor rides along, since its refusals come from the same
 // taxonomy and its status mapping is the one thing a caller can observe about
-// a card that will not read cleanly.
+// a card that will not read cleanly. So does `readSource`, whose whole
+// contract is about what dispatch does *not* consult: the stub records every
+// collaborator call, which is what makes "definition-free" checkable rather
+// than merely asserted.
 // ============================================================================
 
 const REALM = 'http://example.com/test/';
@@ -48,6 +52,17 @@ interface StubOptions {
   fileMeta?: boolean;
   // Whether the file target has an index row.
   fileRow?: boolean;
+  // The bytes the realm holds, by local path. A path absent from this is one
+  // the realm has nothing to open at: a missing file, a directory, an
+  // `_`-prefixed endpoint. Those refusals live on the realm's side of
+  // `openStoredFile`, so the stub expresses all of them the one way the core
+  // can observe.
+  stored?: Record<string, string | Uint8Array>;
+  // The content hash the realm recorded for a path. Absent means it recorded
+  // none, which is a case the executor has to report rather than invent a
+  // value for.
+  storedVersions?: Record<string, string>;
+  storedCreatedAt?: Record<string, number>;
 }
 
 interface Stub {
@@ -79,6 +94,9 @@ function stub(opts: StubOptions = {}): Stub {
     source,
     fileMeta = true,
     fileRow = false,
+    stored = {},
+    storedVersions = {},
+    storedCreatedAt = {},
   } = opts;
 
   let core: OperationCore = {
@@ -168,9 +186,37 @@ function stub(opts: StubOptions = {}): Stub {
           : undefined;
       },
     },
-    async readSource() {
-      calls.push('readSource');
+    async readFileAsText() {
+      calls.push('readFileAsText');
       return source;
+    },
+    async openStoredFile(localPath) {
+      calls.push('openStoredFile');
+      let content = Object.prototype.hasOwnProperty.call(stored, localPath)
+        ? stored[localPath]
+        : undefined;
+      if (content === undefined) {
+        return undefined;
+      }
+      return {
+        path: localPath,
+        // A getter, as every streaming adapter's is, and it records the touch:
+        // the headers-only mode has to leave the bytes alone rather than open
+        // a stream it discards, and only reading the read tells us it did.
+        get content() {
+          calls.push('storedContent');
+          return content;
+        },
+        lastModified: 1699,
+        size: typeof content === 'string' ? content.length : content.byteLength,
+      };
+    },
+    async storedFileMeta(localPath) {
+      calls.push('storedFileMeta');
+      return {
+        version: storedVersions[localPath],
+        createdAt: storedCreatedAt[localPath],
+      };
     },
     async isIgnored() {
       return false;
@@ -676,7 +722,8 @@ const tests = Object.freeze({
   'a card source spelling names the source, not the card': async (assert) => {
     // `<card>.json` names the card's stored bytes. That is a different read
     // from the card, so the target routes as a file rather than resolving to
-    // the instance — and a file carries only `read`.
+    // the instance — and a file carries neither `update` nor anything else
+    // that writes.
     let { core, calls } = stub();
     let error = await refusalFrom(() =>
       runOperation(
@@ -710,8 +757,8 @@ const tests = Object.freeze({
       'the file def type entry is consulted',
     );
 
-    // The allowance still holds: a file carries `read` and nothing else,
-    // whatever it declares.
+    // The allowance still holds: a file carries its two reads and nothing
+    // else, whatever it declares.
     let mutating = stub({
       operations: {
         touch: { base: 'transform' as const, deterministic: true },
@@ -816,6 +863,240 @@ const tests = Object.freeze({
         `a read carrying \`${clause}\` is refused rather than flattened`,
       );
     }
+  },
+
+  'a stored-bytes read serves the bytes and infers their content type': async (
+    assert,
+  ) => {
+    let cases = [
+      // A card's stored source. The `.json` spelling names the bytes rather
+      // than the card, which is why dispatch leaves it as written.
+      {
+        path: 'person-1.json',
+        content: '{"data":{"type":"card"}}',
+        contentType: 'application/json',
+      },
+      // A module, which has no `adoptsFrom` and no definition entry — the
+      // case the whole definition-free path exists for.
+      {
+        path: 'person.gts',
+        content: 'export class Person {}',
+        contentType: 'text/typescript+glimmer',
+      },
+      // Bytes rather than text, handed back as the adapter produced them: a
+      // read of an image must not decode them.
+      {
+        path: 'logo.png',
+        content: new Uint8Array([137, 80, 78, 71]),
+        contentType: 'image/png',
+      },
+    ];
+    for (let { path, content, contentType } of cases) {
+      let { core } = stub({ stored: { [path]: content } });
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}${path}` }, 'readSource'),
+      );
+      assert.true(isSourceResult(result), `${path} reads as stored bytes`);
+      if (isSourceResult(result)) {
+        assert.strictEqual(
+          result.contentType,
+          contentType,
+          `${path} carries the content type its extension names`,
+        );
+        assert.strictEqual(
+          result.body,
+          content,
+          `${path} hands back exactly what the adapter produced`,
+        );
+        assert.strictEqual(result.lastModified, 1699);
+      }
+    }
+  },
+
+  'a stored-bytes read consults neither a definition nor the index': async (
+    assert,
+  ) => {
+    // The hard constraint, as the only thing that can check it: a module has
+    // no definition entry, so a read that reached the cache for one would
+    // refuse bytes that are on disk. `.gts` is a registered extension, so this
+    // is the path that would otherwise resolve a file def's type and look it
+    // up.
+    let { core, calls } = stub({
+      stored: { 'person.gts': 'export class Person {}' },
+    });
+    await runOperation(
+      core,
+      invoke({ kind: 'instance', url: `${REALM}person.gts` }, 'readSource'),
+    );
+    assert.deepEqual(
+      calls,
+      ['openStoredFile', 'storedFileMeta', 'storedContent'],
+      'one file open, one file-meta row, one touch of the bytes — and no ' +
+        'definition lookup and no index read at all',
+    );
+  },
+
+  'the headers-only mode reports the metadata without touching the bytes':
+    async (assert) => {
+      let { core, calls } = stub({
+        stored: { 'sample.md': '# hi' },
+        storedVersions: { 'sample.md': 'abc123' },
+        storedCreatedAt: { 'sample.md': 1600 },
+      });
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${REALM}sample.md`,
+      };
+      let headers = await runOperation(core, invoke(target, 'readSource'), {
+        headersOnly: true,
+      });
+      assert.true(isSourceResult(headers), 'the metadata comes back');
+      if (isSourceResult(headers)) {
+        assert.strictEqual(headers.body, undefined, 'and no bytes with it');
+        assert.deepEqual(
+          {
+            contentType: headers.contentType,
+            lastModified: headers.lastModified,
+            created: headers.created,
+            version: headers.version,
+          },
+          {
+            contentType: 'text/markdown',
+            lastModified: 1699,
+            created: 1600,
+            version: 'abc123',
+          },
+        );
+      }
+      assert.false(
+        calls.includes('storedContent'),
+        'the adapter opens a stream on first touch, so a HEAD must not touch it',
+      );
+
+      // Identical metadata either way, which is what lets a `HEAD` and a
+      // conditional `GET` agree on a validator for the same file.
+      let bytes = await runOperation(core, invoke(target, 'readSource'));
+      assert.true(isSourceResult(bytes));
+      if (isSourceResult(bytes) && isSourceResult(headers)) {
+        let { body: _body, ...metadata } = bytes;
+        assert.deepEqual(metadata, headers);
+      }
+    },
+
+  'a stored-bytes read reports a version the realm never recorded as absent':
+    async (assert) => {
+      // The realm resolves the hash — from its own row, or by hashing the
+      // bytes when the row carries none — so a null here means it could do
+      // neither. Reporting the absence is what lets the facade omit an `ETag`
+      // rather than emit one that identifies nothing.
+      let { core } = stub({ stored: { 'sample.md': '# hi' } });
+      let result = await runOperation(
+        core,
+        invoke({ kind: 'instance', url: `${REALM}sample.md` }, 'readSource'),
+      );
+      assert.true(isSourceResult(result));
+      if (isSourceResult(result)) {
+        assert.strictEqual(result.version, null);
+        assert.strictEqual(
+          result.created,
+          null,
+          'and the same for a path the realm has no record of',
+        );
+      }
+    },
+
+  'a path with no stored bytes is not found, never not-indexed': async (
+    assert,
+  ) => {
+    // Every way there is nothing to read answers alike, because the realm
+    // applies its own refusals inside `openStoredFile` and the core cannot
+    // tell them apart: a missing file, a directory, an `_`-prefixed endpoint.
+    for (let path of ['does-not-exist', 'dir', '_search']) {
+      let { core } = stub({ stored: { 'sample.md': '# hi' } });
+      let error = await refusalFrom(() =>
+        runOperation(
+          core,
+          invoke({ kind: 'instance', url: `${REALM}${path}` }, 'readSource'),
+        ),
+      );
+      assert.strictEqual(error.code, 'target-not-found', `${path} is 404`);
+      assert.strictEqual(error.status, 404);
+    }
+
+    // `target-not-indexed` says waiting will resolve the absence, and what it
+    // waits for is the index. A read of bytes has nothing to wait for, so a
+    // source file already on disk does not change the answer for a path whose
+    // own bytes are missing.
+    let { core } = stub({ source: '{"data":{"type":"card"}}' });
+    let error = await refusalFrom(() =>
+      runOperation(
+        core,
+        invoke(
+          { kind: 'instance', url: `${REALM}person-1.json` },
+          'readSource',
+        ),
+      ),
+    );
+    assert.strictEqual(error.code, 'target-not-found');
+  },
+
+  'a type has no stored bytes to read': async (assert) => {
+    let { core, calls } = stub();
+    let error = await refusalFrom(() =>
+      resolveOperation(
+        core,
+        { kind: 'type', codeRef: PERSON, realm: REALM },
+        'readSource',
+      ),
+    );
+    assert.strictEqual(error.code, 'operation-not-allowed');
+    assert.strictEqual(error.status, 405);
+    assert.deepEqual(
+      calls,
+      [],
+      'and the refusal costs no definition lookup: the answer does not ' +
+        'depend on which kind of def the type turns out to be',
+    );
+
+    // A field def type refuses for the same reason rather than because a
+    // field carries nothing — the stub is set up to say `field-def`, and the
+    // refusal still arrives without the entry being read.
+    let field = stub({ definitionType: 'field-def' });
+    let onField = await refusalFrom(() =>
+      resolveOperation(
+        field.core,
+        { kind: 'type', codeRef: PERSON, realm: REALM },
+        'readSource',
+      ),
+    );
+    assert.strictEqual(onField.code, 'operation-not-allowed');
+    assert.deepEqual(field.calls, []);
+  },
+
+  'a declaration may not build on a stored-bytes read': async (assert) => {
+    // A declaration wins over the built-in of the same name, which is how a
+    // `read` is specialized and how a `delete` is rebound onto `transform`.
+    // A stored-bytes read is the one behavior that cannot be won that way:
+    // there is no payload to reshape and no stage to run, so dispatching a
+    // declared name to it would answer under the author's name without doing
+    // what the author wrote. The authoring decorator refuses such a
+    // declaration; this is the realm refusing one that reached a stored
+    // definition regardless.
+    let { core } = stub({
+      operations: {
+        exportBytes: { base: 'readSource' as const, deterministic: true },
+      },
+    });
+    let error = await refusalFrom(() =>
+      runOperation(core, invoke(CARD, 'exportBytes')),
+    );
+    assert.strictEqual(error.code, 'operation-not-allowed');
+    assert.strictEqual(error.status, 405);
+    assert.true(
+      error.detail.includes('readSource'),
+      `the refusal names the base it was built on: ${error.detail}`,
+    );
   },
 
   'the row peek is memoized for one invocation and no longer': async (

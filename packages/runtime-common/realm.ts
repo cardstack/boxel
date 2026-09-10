@@ -143,7 +143,10 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
-import type { OperationCore } from './card-operations/dispatch.ts';
+import type {
+  OperationCore,
+  OperationStoredFileMeta,
+} from './card-operations/dispatch.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import { merge } from 'lodash-es';
@@ -3172,8 +3175,10 @@ export class Realm {
         realmURL: this.url,
         definitionLookup: this.#definitionLookup,
         indexQueryEngine: this.#realmIndexQueryEngine,
-        readSource: async (localPath) =>
+        readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
+        openStoredFile: (localPath) => this.#operationStoredFile(localPath),
+        storedFileMeta: (localPath) => this.#operationStoredFileMeta(localPath),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -5522,6 +5527,25 @@ export class Realm {
     return this.#adapter.openFile(localPath);
   }
 
+  // The stored bytes at a local path, as the operation core opens them:
+  // `openFileForMetadata`'s guard above minus its `.json` refusal. That
+  // refusal is right for metadata — a `.json` is a card's source, not a file
+  // with metadata of its own — and wrong here, because a card's stored source
+  // is exactly what a stored-bytes read reads. The two it keeps are the byte
+  // routes' own: an empty path names the realm root, which is a listing rather
+  // than a file, and an `_`-prefixed path names a realm endpoint the realm
+  // serves no bytes from. `#adapter.openFile` answers undefined for a
+  // directory and for a path that is not there, so every way there is nothing
+  // to read arrives at the core the same way.
+  async #operationStoredFile(
+    localPath: LocalPath,
+  ): Promise<FileRef | undefined> {
+    if (!localPath || localPath.startsWith('_')) {
+      return undefined;
+    }
+    return await this.#adapter.openFile(localPath);
+  }
+
   private async nonJsonFileExists(localPath: LocalPath): Promise<boolean> {
     if (localPath?.endsWith('.json')) {
       localPath = localPath.slice(0, -5);
@@ -5788,6 +5812,37 @@ export class Realm {
       return undefined;
     }
     return await this.#fileMetaDocumentFromDisk(localPath);
+  }
+
+  // The write-time record behind a path's bytes, resolved exactly as
+  // `#fileMetaDocumentFromDisk` resolves the same two values: the persisted
+  // row is authoritative for the content hash because it is written in the
+  // same critical section as the bytes, and a path with no hash recorded falls
+  // back to hashing them. The fallback opens its own handle on the file, so it
+  // never consumes the one a read is serving from.
+  //
+  // Two things about the cost, for whoever routes a byte response through
+  // here. Every realm write records a hash, so the fallback is reached only by
+  // a path that arrived on disk outside the realm's write path — a copied
+  // fixture, an rsync — and it costs a full read of the bytes when it is. And
+  // this is one row lookup more than `getSourceOrRedirect` pays, since that
+  // computes the hash from bytes it has already materialized; both lookups
+  // here are single-row reads on `realm_file_meta`'s primary key.
+  async #operationStoredFileMeta(
+    localPath: LocalPath,
+  ): Promise<OperationStoredFileMeta> {
+    let persisted = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined };
+    let version = persisted.contentHash;
+    if (version === undefined) {
+      let fileRef = await this.#operationStoredFile(localPath);
+      version = fileRef ? await computeContentHashFromRef(fileRef) : undefined;
+    }
+    return {
+      version,
+      createdAt: await this.getCreatedTime(localPath),
+    };
   }
 
   private async getFileMeta(

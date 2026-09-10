@@ -173,13 +173,14 @@ module('Integration | operations', function (hooks) {
       getOperations(CardDef),
       {
         read: { base: 'read' },
+        readSource: { base: 'readSource' },
         create: { base: 'create' },
         update: { base: 'update' },
         delete: { base: 'delete' },
         query: { base: 'query' },
         transform: { base: 'transform' },
       },
-      'a card def carries all six, implied by the def type',
+      'a card def carries every base operation, implied by the def type',
     );
     assert.deepEqual(
       Object.keys(getDeclaredOperations(CardDef)),
@@ -188,8 +189,8 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       getOperations(FileDef),
-      { read: { base: 'read' } },
-      "a file's metadata is read-only, so a file def carries only read",
+      { read: { base: 'read' }, readSource: { base: 'readSource' } },
+      "a file's metadata is read-only, so a file def carries only its two reads",
     );
     assert.deepEqual(
       getOperations(FieldDef),
@@ -211,7 +212,15 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       Object.keys(getOperations(Report)).sort(),
-      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      [
+        'create',
+        'delete',
+        'query',
+        'read',
+        'readSource',
+        'transform',
+        'update',
+      ],
       'and adds no name, because it is that base operation',
     );
 
@@ -230,7 +239,15 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       Object.keys(getOperations(Archivable)).sort(),
-      ['create', 'delete', 'query', 'read', 'transform', 'update'],
+      [
+        'create',
+        'delete',
+        'query',
+        'read',
+        'readSource',
+        'transform',
+        'update',
+      ],
       'which stands in for the removal rather than beside it',
     );
   });
@@ -390,7 +407,7 @@ module('Integration | operations', function (hooks) {
     );
   });
 
-  test('a file definition can only declare read operations', function (assert) {
+  test('a file definition can only declare document reads', function (assert) {
     class Attachment extends FileDef {
       @operation static readRedacted = { base: 'read', output: { name: true } };
     }
@@ -409,8 +426,41 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /carries only "read"/,
+      /carries only "read", "readSource"/,
       'file metadata is content-derived, so it has no mutation surface',
+    );
+  });
+
+  test('a stored-bytes read takes no declaration at all', function (assert) {
+    // The other half of the realm's definition-free dispatch: it answers a
+    // `readSource` without consulting a definition, which is only safe while
+    // no declaration can take that name. Refusing here is what makes it so.
+    for (let Def of [CardDef, FileDef]) {
+      assert.throws(
+        () => {
+          class Exported extends (Def as typeof CardDef) {
+            @operation static exportBytes = { base: 'readSource' };
+          }
+          return Exported;
+        },
+        /serves the bytes stored at the def's URL/,
+        `a ${Def.name} cannot build an operation on a stored-bytes read`,
+      );
+    }
+    assert.throws(
+      () => {
+        class Redacted extends CardDef {
+          // Not even under its own name: specializing it is the same ask as
+          // rebinding a verb onto it, since there is no stage to specialize.
+          @operation static readSource = {
+            base: 'readSource',
+            output: { redacted: true },
+          };
+        }
+        return Redacted;
+      },
+      /serves the bytes stored at the def's URL/,
+      'and it cannot be specialized under its own name either',
     );
   });
 
@@ -1378,12 +1428,12 @@ module('Integration | operations', function (hooks) {
     }
   });
 
-  test('a def with no mutation surface carries only read', function (assert) {
+  test('a def with no mutation surface carries only its reads', function (assert) {
     class Bare extends cardAPI.BaseDef {}
     assert.deepEqual(
       getOperations(Bare),
-      { read: { base: 'read' } },
-      'read is the one operation every addressable def shares',
+      { read: { base: 'read' }, readSource: { base: 'readSource' } },
+      'the two reads are what every addressable def shares',
     );
     assert.throws(
       () => {
@@ -1395,7 +1445,7 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /carries only "read"/,
+      /carries only "read", "readSource"/,
       'and a def that carries no mutation base cannot declare one',
     );
   });

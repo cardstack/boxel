@@ -14,9 +14,12 @@ export type {
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
   OperationScope,
+  OperationStoredFile,
+  OperationStoredFileMeta,
   RunOperationOptions,
 } from './dispatch.ts';
 export { readOperation } from './read.ts';
+export { readSourceOperation } from './read-source.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {
@@ -25,6 +28,7 @@ export {
   isHeadResult,
   isIdentityResult,
   isOperationFailure,
+  isSourceResult,
 } from './types.ts';
 export type {
   BaseOperation,
@@ -41,6 +45,8 @@ export type {
   OperationProgram,
   OperationRequest,
   OperationResult,
+  OperationSourceBody,
+  OperationSourceResult,
   OperationTarget,
   OperationTemplate,
 } from './types.ts';
