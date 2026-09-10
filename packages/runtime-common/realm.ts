@@ -241,7 +241,11 @@ import {
   fileSizeLimitFor,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { computeContentHash, isSampledContentHash } from './content-hash.ts';
+import {
+  computeContentHash,
+  computeContentHashFromRanges,
+  isSampledContentHash,
+} from './content-hash.ts';
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -753,11 +757,62 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
 // extension — a card's stored source, or a module — and takes its
 // `bypassCache` path for everything else, where the `ETag` rests on
 // `lastModified` and no hash is computed at all. A stored-bytes read reports
-// `version` on the same terms: the value is there for the routes that build a
-// validator from one, and no read of an image or a video is spent producing a
-// hash the route serving it would not use.
+// `version` on the same terms, so a facade reproducing either validator has
+// what that route uses and spends nothing on a value the route serving an
+// image or a video would not look at.
 function storedPathIsHashed(localPath: LocalPath): boolean {
   return localPath.endsWith('.json') || hasExecutableExtension(localPath);
+}
+
+// A handle's content fingerprint, read in bounded ranges rather than by
+// streaming the file.
+//
+// The cost is bounded by the fingerprint's own shape:
+// `computeContentHashFromRanges` asks for the whole content up to
+// `CONTENT_HASH_WHOLE_LIMIT_BYTES` and for a fixed head and tail above it, so
+// no file costs more than that limit to hash however large it is, and the
+// value is the same one hashing the whole content would produce.
+//
+// Nothing here touches `content`. That keeps this off the handle a body is
+// served from, which matters twice: `content` is a lazy getter on every
+// streaming adapter, so reading it here would strand a stream for a
+// headers-only read, and it is single-use, so it would take the bytes a full
+// read is about to return. Both modes therefore reach the same fingerprint at
+// the same cost, and neither pays for the other's.
+//
+// Undefined rather than an unbounded read where the adapter cannot serve a
+// range or does not know the size without reading the bytes: a bounded read
+// is worth a validator and an unbounded one is not, so an adapter declares
+// the bounded read by implementing `createRangeStream` and the value is
+// simply absent for one that does not.
+async function contentHashFromRanges(
+  file: Pick<FileRef, 'size' | 'createRangeStream'>,
+): Promise<string | undefined> {
+  let { size, createRangeStream } = file;
+  if (size === undefined || !createRangeStream) {
+    return undefined;
+  }
+  try {
+    return await computeContentHashFromRanges(size, async (start, length) => {
+      let bytes = await fileContentToBytes({
+        // `createRangeStream` bounds are inclusive on both ends.
+        content: createRangeStream(start, start + length - 1),
+      });
+      if (bytes.length !== length) {
+        // The file is no longer the one `size` describes, and a fingerprint
+        // built from a file that moved under the read identifies neither
+        // version of it.
+        throw new Error(
+          `read ${bytes.length} of ${length} bytes at offset ${start}: content changed while hashing`,
+        );
+      }
+      return bytes;
+    });
+  } catch {
+    // Every consumer of a version handles its absence, so a failed read costs
+    // the validator rather than the response the bytes are for.
+    return undefined;
+  }
 }
 
 // Cheap helper for the source endpoint: returns the content fingerprint of the
@@ -3192,8 +3247,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, file, opts) =>
-          this.#operationStoredFileMeta(localPath, file, opts),
+        storedFileMeta: (localPath, file) =>
+          this.#operationStoredFileMeta(localPath, file),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -5851,28 +5906,25 @@ export class Realm {
   // disk. `persistFileMeta` is reached from the realm's own write path and
   // nowhere else, so a file overwritten out of band (a deploy rsync, an
   // operator editing the volume) keeps a row describing bytes that are gone.
-  // Handing that hash back would be worse than computing one slowly: it is
-  // what a conditional GET builds its validator from, so a stale one answers
-  // 304 for content that changed.
+  // Handing that hash back would be worse than computing one: it is what a
+  // conditional GET builds its validator from, so a stale one answers 304 for
+  // content that changed.
   //
   // So the row is trusted only where the length it recorded matches the handle
-  // the caller is reading from — `observedSize`, taken from the adapter's stat
-  // rather than from the bytes — and the bytes are hashed otherwise. An
-  // out-of-band overwrite that preserves the exact byte length is the one case
-  // this does not catch; closing it needs either an unconditional hash on
-  // every read or an mtime on the row, and which of those the byte facade
-  // wants is its call to make.
+  // the caller is reading from — that handle's `size`, taken from the
+  // adapter's stat rather than from its bytes — and the fingerprint is read
+  // from the file otherwise, in the bounded ranges `contentHashFromRanges`
+  // describes. An out-of-band overwrite that preserves the exact byte length
+  // is the one case the length check does not catch; closing it needs an mtime
+  // on the row to validate against, and whether the byte facade wants that is
+  // its call to make.
   //
-  // The hash is computed from its own handle, so it never consumes the one a
-  // read is serving from, and it costs a full read of the file when it is
-  // reached (`computeContentHash` samples large content, but only after
-  // materializing it). Both values come from one row, so this is one query on
+  // Both values come from one row, so this is one query on
   // `realm_file_meta`'s primary key rather than a lookup per value — worth
   // holding to, since a byte response routed through here pays it per request.
   async #operationStoredFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
-    { mayReadBytes }: { mayReadBytes: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
@@ -5887,11 +5939,10 @@ export class Realm {
     ) {
       return { version: persisted.contentHash, createdAt };
     }
-    if (!mayReadBytes || !storedPathIsHashed(localPath)) {
+    if (!storedPathIsHashed(localPath)) {
       return { createdAt };
     }
-    let bytes = await fileContentToBytes({ content: file.content });
-    return { version: computeContentHash(bytes), createdAt, bytes };
+    return { version: await contentHashFromRanges(file), createdAt };
   }
 
   private async getFileMeta(

@@ -68,3 +68,40 @@ export function computeContentHash(content: string | Uint8Array): string {
 export function isSampledContentHash(contentHash: string): boolean {
   return contentHash.startsWith(`${SAMPLED_MARKER}:`);
 }
+
+// The same fingerprint as `computeContentHash`, assembled from bounded reads
+// instead of from the whole content.
+//
+// Above the limit the value is a function of three things — the byte length,
+// the head and the tail — and a length comes from a stat rather than a read,
+// so nothing above the limit needs the middle to produce an identical value.
+// That gives the sampling an I/O bound to match the CPU bound it already has:
+// `readRange` is asked for at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` whatever
+// the file's size, and for exactly the head and tail the whole-content path
+// hashes, so the two forms return the same string for the same content. A
+// caller can reach for whichever is cheaper where it stands without the two
+// ever disagreeing about what a fingerprint identifies, which is what lets a
+// value computed one way validate against one stored the other.
+//
+// `size` is the caller's own measure of the content, and above the limit it is
+// part of the value. A `readRange` that answers from content of a different
+// length than `size` describes is reading something else by then, so a caller
+// that cannot pin the two to one snapshot has to treat a short read as a
+// failure rather than as bytes.
+export async function computeContentHashFromRanges(
+  size: number,
+  readRange: (start: number, length: number) => Promise<Uint8Array>,
+): Promise<string> {
+  if (size <= 0) {
+    // Empty content has one hash and no bytes to read for it.
+    return md5(new Uint8Array());
+  }
+  if (size <= CONTENT_HASH_WHOLE_LIMIT_BYTES) {
+    return md5(await readRange(0, size));
+  }
+  let head = md5(await readRange(0, CONTENT_HASH_HEAD_BYTES));
+  let tail = md5(
+    await readRange(size - CONTENT_HASH_TAIL_BYTES, CONTENT_HASH_TAIL_BYTES),
+  );
+  return `${SAMPLED_MARKER}:${size}:${head}:${tail}`;
+}

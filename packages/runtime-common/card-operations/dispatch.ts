@@ -1,3 +1,4 @@
+import type { Readable } from 'stream';
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { readOperation } from './read.ts';
@@ -69,26 +70,21 @@ export interface OperationCore {
     localPath: LocalPath,
   ): Promise<OperationStoredFile | undefined>;
   // The version and creation time of the bytes at `file`, resolved by the
-  // realm because it owns both its file-meta row and the policy for when a
-  // content hash is worth reading bytes to get.
+  // realm because it owns both its file-meta row and the policy for which
+  // paths carry a content hash at all.
   //
-  // `file` is the handle the caller will serve from, not just its path: the
+  // `file` is the handle the caller will serve from, not just its path. The
   // realm validates its recorded hash against that handle's size, since a
   // `version` identifying bytes other than the ones it is returned with is
-  // what a conditional GET would build a wrong validator from. Where the
-  // realm has to read the bytes to hash them it reads them from this handle
-  // and returns them as `bytes`, so one open serves both the hash and the
-  // body and the two cannot describe different files.
-  //
-  // `mayReadBytes` is false for a headers-only read, which returns no body and
-  // so must leave the handle's `content` untouched. The realm then answers
-  // from its row alone and reports no version where it has none recorded —
-  // an absence a caller can act on, rather than a value bought with a read it
-  // asked not to pay.
+  // what a conditional GET would build a wrong validator from, and where it
+  // has to read the file to fingerprint it, it reads bounded ranges of that
+  // same handle. What it never reads is the handle's `content`: that is the
+  // single-use body a full read returns and a headers-only read leaves
+  // untouched, so both modes reach the same version at the same cost and
+  // neither spends the other's.
   storedFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
-    opts: { mayReadBytes: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -137,20 +133,23 @@ export interface OperationStoredFile {
   // The byte size where the adapter knows it from the stat it already
   // performed, and absent where knowing it would cost reading the bytes.
   size?: number;
+  // A bounded read of `[start, end]`, both inclusive, present where the
+  // adapter can serve one without materializing the rest. It is what lets a
+  // version be read from a file without streaming it, so an adapter that
+  // offers none simply has no version to report for a path the realm holds no
+  // record of.
+  createRangeStream?: (
+    start: number,
+    end: number,
+  ) => ReadableStream<Uint8Array> | Readable;
 }
 
 export interface OperationStoredFileMeta {
   // The content hash of the stored bytes, absent where the realm has none
-  // recorded and reading the bytes to compute one is not warranted for this
-  // path.
+  // recorded and this is not a path whose validator is built from one.
   version?: string;
   // Epoch seconds, absent where the realm holds no record of this path.
   createdAt?: number;
-  // The bytes, present exactly when the realm read them to hash them. Serving
-  // these rather than the handle's own `content` is what makes `version`
-  // describe the body it is returned with — and the handle has been consumed
-  // producing them, so a caller that has these must serve these.
-  bytes?: Uint8Array;
 }
 
 // `CachingDefinitionLookup`, narrowed to the one read an operation makes.

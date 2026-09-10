@@ -122,11 +122,15 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
-    test('a version read from the bytes is the version of the bytes served', async function (assert) {
+    test('a version read from the file costs the body nothing', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
-    test('a headers-only read asks for no version it would have to read bytes for', async function (assert) {
+    test('both modes report the same version, neither paying for the other', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('an adapter with no bounded read reports no version', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 

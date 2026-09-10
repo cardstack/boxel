@@ -32,9 +32,9 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     generation to join on, so it costs one file open and one file-meta row
 //     — never a search read. That is also why it can answer for a path the
 //     index has no row for, and for one it never will. Where the realm has no
-//     recorded hash and the path is one whose validator is built from one, it
-//     also reads the bytes it is about to serve, to hash them; it reads them
-//     once and serves those.
+//     recorded hash for a path whose validator is built from one, it reads
+//     the file to fingerprint it, in ranges bounded by the fingerprint's own
+//     shape rather than by the file's size.
 //
 // Two modes, as `read` has:
 //
@@ -44,11 +44,12 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //               adapter's `content` untouched rather than reading and
 //               discarding it, which matters concretely: `content` is a lazy
 //               getter that opens a real stream on first touch, so touching it
-//               to throw it away would strand one. So it reports no `version`
-//               where the realm has none recorded: an absence a caller can act
-//               on, rather than a value bought with the read it asked not to
-//               pay. The two modes never contradict each other — one answers
-//               with a hash where the other answers with nothing.
+//               to throw it away would strand one. Every value it reports is
+//               therefore identical to the one the other mode reports for the
+//               same handle, `version` included — a fingerprint is read in
+//               bounded ranges of its own rather than out of the body, so
+//               neither mode pays for the other's and the two cannot
+//               disagree about what a validator identifies.
 //
 // What stays outside, and what a facade routing here has to keep:
 //
@@ -70,10 +71,11 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //   * The pairing of `lastModified` with the bytes. It is the stat taken when
 //     the handle opened, and a streamed body is read from that handle later,
 //     so a write landing in between pairs one with the other — exactly as it
-//     does for the byte routes reading the same handle. `version` is not
-//     exposed to that window: it either describes a file of the size this
-//     handle reported, or it was computed from the very bytes returned
-//     alongside it.
+//     does for the byte routes reading the same handle. `version` sits in the
+//     same window and narrows it the two ways it can: a recorded hash is
+//     reported only for a file of the size this handle stat'd, and a
+//     fingerprint read from the file is abandoned rather than reported if the
+//     ranges it reads no longer add up to that size.
 //   * A batching envelope over operations does not carry this one at all:
 //     bytes do not belong in a JSON batch, and a stream cannot be one member
 //     of one.
@@ -120,11 +122,9 @@ export async function readSourceOperation(
   // describing one file and the version another.
   let servedPath = file.path;
   // The handle goes with the request, not just its path: the realm checks its
-  // recorded hash against this handle's size, and where it has to read bytes
-  // to hash them it reads them from this handle and hands them back.
-  let meta = await core.storedFileMeta(servedPath, file, {
-    mayReadBytes: !opts.headersOnly,
-  });
+  // recorded hash against this handle's size, and reads bounded ranges of this
+  // handle where it has to fingerprint the file itself.
+  let meta = await core.storedFileMeta(servedPath, file);
   let result: OperationSourceResult = {
     contentType: inferContentType(servedPath),
     lastModified: file.lastModified,
@@ -135,7 +135,7 @@ export async function readSourceOperation(
   if (opts.headersOnly) {
     return result;
   }
-  // `meta.bytes` when the realm read them to hash them — the handle is spent
-  // producing those, and they are the bytes `version` describes.
-  return { ...result, body: meta.bytes ?? file.content };
+  // The first and only touch of `content`, which is where a streaming adapter
+  // opens its stream.
+  return { ...result, body: file.content };
 }

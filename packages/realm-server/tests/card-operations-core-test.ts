@@ -1,6 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { writeFileSync } from 'fs';
+import { rmSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -10,6 +10,8 @@ import {
   SupportedMimeType,
   baseRealm,
   computeContentHash,
+  isSampledContentHash,
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
   rri,
 } from '@cardstack/runtime-common';
 import {
@@ -533,6 +535,23 @@ module(basename(import.meta.filename), function () {
         computeContentHash('export const second = 2; // and longer'),
         'and `version` identifies those bytes rather than the recorded ones',
       );
+      let overwrittenHeaders = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}notes.gts` },
+            'readSource',
+          ),
+          { headersOnly: true },
+        ),
+      );
+      assert.strictEqual(
+        overwrittenHeaders.version,
+        overwritten.version,
+        'and the mode that returns no body reports the same one — a ' +
+          'fingerprint is read in bounded ranges of the file rather than out ' +
+          'of the body, so declining the body costs no part of it',
+      );
 
       // The same overwrite on a path whose validator rests on `lastModified`
       // rather than a hash. The recorded hash is equally untrustworthy, and
@@ -553,6 +572,49 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a stored-bytes read fingerprints a file larger than it reads', async function (assert) {
+      // Above `CONTENT_HASH_WHOLE_LIMIT_BYTES` the fingerprint is the byte
+      // length plus a hash of the head and one of the tail, so the realm
+      // assembles it from two bounded reads and the stat — the same value
+      // hashing the whole file yields, for a read that does not grow with the
+      // file. Written straight to disk so there is no row to recall it from,
+      // and under an extension whose validator is built from a hash, which is
+      // what sends the read at the file in the first place.
+      let content = new Uint8Array(CONTENT_HASH_WHOLE_LIMIT_BYTES + 4096);
+      for (let i = 0; i < content.length; i++) {
+        content[i] = (i * 31 + 7) & 0xff;
+      }
+      writeFileSync(join(testRealmPath, 'large.json'), content);
+      let large = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}large.json` },
+            'readSource',
+          ),
+          { headersOnly: true },
+        ),
+      );
+      // Off the realm's directory before anything can fail, so nothing that
+      // runs after this reads a fixture this case invented.
+      rmSync(join(testRealmPath, 'large.json'));
+      assert.strictEqual(
+        large.size,
+        content.length,
+        'the size comes from the stat',
+      );
+      assert.true(
+        isSampledContentHash(large.version!),
+        'the fingerprint samples rather than covering the whole file',
+      );
+      assert.strictEqual(
+        large.version,
+        computeContentHash(content),
+        'and it is the same value hashing the whole content produces, so one ' +
+          'compares equal to the other wherever they meet',
+      );
+    });
+
     test('a headers-only stored-bytes read reports the same metadata with no body', async function (assert) {
       let target: OperationTarget = {
         kind: 'instance',
@@ -567,10 +629,6 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(headers.body, undefined, 'no bytes in this mode');
       assert.strictEqual(headers.contentType, 'text/markdown');
-      // A fixture file, so the realm has no hash recorded for it, and a `.md`
-      // is not a path whose validator is built from one. The mode reports the
-      // absence rather than reading the body it declined to return.
-      assert.strictEqual(headers.version, null);
 
       let withBody = sourceOf(
         await runOperation(
@@ -582,7 +640,9 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         metadata,
         headers,
-        'the two modes agree on every value a response header is computed from',
+        'the two modes agree on every value a response header is computed ' +
+          'from — `version` included, which is why neither mode may reach ' +
+          'for the body to produce one',
       );
     });
 
