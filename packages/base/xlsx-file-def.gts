@@ -2,6 +2,7 @@ import FileTypeXlsIcon from '@cardstack/boxel-icons/file-type-xls';
 import { contains, field } from './card-api';
 import { FileDef, type ByteStream, type SerializedFile } from './file-api';
 import { OfficeMetadataField } from './file-formats/metadata-fields';
+import { OFFICE_FAMILY_SCREENSHOTS } from './file-formats/office-captures';
 import { OfficePreview } from './file-formats/office-preview';
 import { extractXlsxMetadata } from './xlsx-meta-extractor';
 import { extractOfficeMetadata } from './office-extract';
@@ -30,6 +31,11 @@ export class XlsxDef extends FileDef {
   @field officeMetadata = contains(OfficeMetadataField);
 
   static previewComponent: FilePreviewComponent = OfficePreview;
+
+  // The fitted poster: a capture-only render of the extracted structure's
+  // first unit, keyed on the file's bytes and flagged useAsThumbnail. The
+  // typed placeholder stays the fallback until a capture serves.
+  static screenshots = OFFICE_FAMILY_SCREENSHOTS;
 
   static async extractAttributes(
     url: string,

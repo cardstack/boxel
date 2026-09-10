@@ -7,11 +7,12 @@
 // information derived from the source" provenance; it branches on the file's
 // `previewKind` for the domain-specific body.
 //
-// The fitted first-page/first-slide poster is deliberately not drawn here — it
-// needs the derived-artifact contract (CS-12231) to rasterize and store a real
-// rendition. Once that lands and populates `thumbnailUrl`, the preview stage
-// prefers the real poster over the typed placeholder automatically, with no
-// change to this component.
+// The fitted first-page/first-slide poster is deliberately not drawn here:
+// the families' declared `poster` capture (see `office-captures`) renders the
+// extracted structure's first unit during the prerender pass, and the preview
+// stage prefers that rendition over the typed placeholder through the view
+// model's `thumbnailUrl` — the placeholder is the graceful fallback for an
+// uncaptured file.
 import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -53,6 +54,34 @@ const KIND_LABEL: Record<string, { badge: string; noun: string }> = {
   spreadsheet: { badge: 'XLSX', noun: 'workbook' },
 };
 
+// Shared with the poster capture (`office-captures`): its no-first-unit branch
+// draws the same badge and structural count as the fitted placeholder here, so
+// the two renderings of "an Office file of this kind, this big" cannot drift.
+export function officeKindBadge(kind: string, extension?: string): string {
+  return KIND_LABEL[kind]?.badge ?? (extension || 'OOXML').toUpperCase();
+}
+
+export function officeStructureLabel(
+  meta:
+    | { pageCount?: number; slideCount?: number; sheetCount?: number }
+    | undefined,
+  kind: string,
+): string {
+  if (!meta) {
+    return '';
+  }
+  if (kind === 'presentation' && meta.slideCount != null) {
+    return `${meta.slideCount} ${meta.slideCount === 1 ? 'slide' : 'slides'}`;
+  }
+  if (kind === 'spreadsheet' && meta.sheetCount != null) {
+    return `${meta.sheetCount} ${meta.sheetCount === 1 ? 'sheet' : 'sheets'}`;
+  }
+  if (meta.pageCount != null) {
+    return `${meta.pageCount} ${meta.pageCount === 1 ? 'page' : 'pages'}`;
+  }
+  return '';
+}
+
 export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
   get meta() {
     return this.args.model?.officeMetadata;
@@ -65,10 +94,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get badge(): string {
-    return (
-      KIND_LABEL[this.kind]?.badge ??
-      (this.args.model?.extension || 'OOXML').toUpperCase()
-    );
+    return officeKindBadge(this.kind, this.args.model?.extension);
   }
 
   get noun(): string {
@@ -78,20 +104,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
   // The one structural count that matters to this format, for the placeholder
   // and the header.
   get structureLabel(): string {
-    let m = this.meta;
-    if (!m) {
-      return '';
-    }
-    if (this.kind === 'presentation' && m.slideCount != null) {
-      return `${m.slideCount} ${m.slideCount === 1 ? 'slide' : 'slides'}`;
-    }
-    if (this.kind === 'spreadsheet' && m.sheetCount != null) {
-      return `${m.sheetCount} ${m.sheetCount === 1 ? 'sheet' : 'sheets'}`;
-    }
-    if (m.pageCount != null) {
-      return `${m.pageCount} ${m.pageCount === 1 ? 'page' : 'pages'}`;
-    }
-    return '';
+    return officeStructureLabel(this.meta, this.kind);
   }
 
   get heading(): string {
@@ -296,10 +309,8 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         content: '';
         position: absolute;
         inset: 12% 12%;
-        background-image: repeating-linear-gradient(
-            var(--border) 0 1px,
-            transparent 1px 16px
-          ),
+        background-image:
+          repeating-linear-gradient(var(--border) 0 1px, transparent 1px 16px),
           repeating-linear-gradient(
             90deg,
             var(--border) 0 1px,
