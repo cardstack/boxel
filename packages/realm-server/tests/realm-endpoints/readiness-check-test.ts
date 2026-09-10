@@ -6,12 +6,17 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync, writeJSONSync } = fsExtra;
 import { dirSync } from 'tmp';
 import type {
+  LooseSingleCardDocument,
+  Prerenderer,
   Realm,
+  RenderError,
+  RenderVisitResponse,
   QueuePublisher,
   QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
+  rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
@@ -206,6 +211,192 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(
         elapsed < 60_000,
         `answered within the in-process budget (took ${elapsed}ms)`,
+      );
+    });
+  });
+
+  // A brand-new realm whose first from-scratch index cannot complete is the
+  // other way a readiness poll could run forever. Here every render times out
+  // with the page idle — the shape a prerender takes when its browser cannot
+  // reach an origin it needs — so the job gives up after a few files instead
+  // of paying the full render timeout for every file, and the realm reports
+  // that as a terminal not-ready rather than a ready over an empty index.
+  module('boot index whose renders all time out idle', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
+
+    setupDB(hooks, {
+      beforeEach: async (adapter, pub, run) => {
+        dbAdapter = adapter;
+        publisher = pub;
+        runner = run;
+      },
+    });
+
+    const realmURL = 'http://127.0.0.1:6678/idle-timeouts/';
+    const cardCount = 6;
+
+    // The response the prerender server sends for a render that hit its
+    // timeout while waiting on nothing: a `Render timeout` error on the pass
+    // and on `pageUnusableError`, with the diagnostics captured as the timer
+    // fired showing a responsive, idle page.
+    function idleTimeoutVisitResponse(url: string): RenderVisitResponse {
+      let timeout: RenderError = {
+        type: 'instance-error',
+        error: {
+          id: url,
+          status: 504,
+          title: 'Render timeout',
+          message: 'Render timed-out after 60000 ms',
+          additionalErrors: null,
+        },
+        evict: true,
+      };
+      return {
+        card: {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+          isolatedHTML: null,
+          headHTML: null,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+          iconHTML: null,
+          markdown: null,
+          error: timeout,
+        },
+        pageUnusableError: timeout,
+        meta: {
+          diagnostics: {
+            mainThreadResponsive: true,
+            scriptBusyFraction: 0,
+            pendingNetworkRequests: [],
+            inFlightModuleImports: [],
+            cardDocsInFlight: [],
+            fileMetaDocsInFlight: [],
+          },
+        },
+      };
+    }
+
+    test('gives up after a few idle timeouts and reports the failure as terminal', async function (assert) {
+      let real = await getTestPrerenderer();
+      let indexVisits: string[] = [];
+      let prerenderer: Prerenderer = {
+        prerenderModule: (args) => real.prerenderModule(args),
+        runCommand: (args) => real.runCommand(args),
+        releaseBatch: async () => {},
+        prerenderVisit: async (args) => {
+          if (args.visitType === 'index') {
+            indexVisits.push(args.url);
+          }
+          return idleTimeoutVisitResponse(args.url);
+        },
+      };
+
+      let fileSystem: Record<string, LooseSingleCardDocument> = {
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Idle Timeouts Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: rri('@cardstack/base/realm-config'),
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      };
+      for (let i = 0; i < cardCount; i++) {
+        fileSystem[`card-${i}.json`] = {
+          data: {
+            type: 'card',
+            attributes: { title: `Card ${i}` },
+            meta: {
+              adoptsFrom: {
+                module: rri('https://cardstack.com/base/card-api'),
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+
+      let virtualNetwork = createVirtualNetwork();
+      let definitionLookup = new CachingDefinitionLookup(
+        dbAdapter,
+        real,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      let dir = join(dirSync().name, 'idle-timeouts');
+      ensureDirSync(dir);
+      let { realm } = await createRealm({
+        dir,
+        fileSystem,
+        definitionLookup,
+        realmURL,
+        permissions: { '*': ['read'] },
+        virtualNetwork,
+        publisher,
+        runner,
+        dbAdapter,
+        withWorker: true,
+        prerenderer,
+      });
+      virtualNetwork.mount(realm.handle);
+
+      // Startup awaits a brand-new index's from-scratch job; the job's failure
+      // is swallowed there, so this resolves either way.
+      await realm.start();
+
+      // Three consecutive idle timeouts end the pass; the render-ahead loop
+      // may have started one more visit before the third was finished.
+      assert.true(
+        indexVisits.length >= 3,
+        `made at least the three visits it takes to give up (made ${indexVisits.length})`,
+      );
+      assert.true(
+        indexVisits.length <= 4,
+        `gave up after ${indexVisits.length} index visits rather than visiting all ${cardCount} files`,
+      );
+
+      let [job] = (await dbAdapter.execute(
+        `SELECT status, result FROM jobs
+           WHERE job_type = 'from-scratch-index' AND concurrency_group = $1`,
+        { bind: [indexingConcurrencyGroup(realm.url)] },
+      )) as { status: string; result: unknown }[];
+      assert.strictEqual(job.status, 'rejected', 'the job was rejected');
+      assert.true(
+        JSON.stringify(job.result).includes('timed out with the page idle'),
+        'the rejection names the idle timeouts as the reason',
+      );
+
+      let response = await realm.handle(
+        new Request(`${realmURL}_readiness-check`, {
+          headers: { Accept: SupportedMimeType.RealmInfo },
+        }),
+      );
+      assert.strictEqual(response!.status, 503, 'reports not-ready');
+      assert.strictEqual(
+        response!.headers.get('X-Boxel-Not-Ready'),
+        'index-failed',
+        'names the failed boot index as the stage',
+      );
+      assert.strictEqual(
+        response!.headers.get('Retry-After'),
+        null,
+        'carries no retry hint: the state is terminal',
+      );
+      let body = await response!.text();
+      assert.true(
+        body.includes('timed out with the page idle'),
+        `the body carries the failure: ${body}`,
       );
     });
   });

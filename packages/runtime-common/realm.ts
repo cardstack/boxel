@@ -968,6 +968,12 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
+  // The from-scratch index a brand-new realm's startup awaited, when it
+  // failed. Such a realm is mounted and answers requests, but its index holds
+  // nothing, so readiness reports the failure (`X-Boxel-Not-Ready:
+  // index-failed`) rather than a false ready. Cleared by a later full index
+  // that completes.
+  #bootIndexFailure: Error | undefined;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
@@ -1421,13 +1427,18 @@ export class Realm {
     // names which stage is outstanding — each has a different cause and a
     // different remedy, and the poll loops that consume this discard the
     // body, so the header is the only place an operator can read it from.
-    let notReady = (stage: 'startup' | 'index' | 'prerender-html') =>
+    let notReady = (
+      stage: 'startup' | 'index' | 'index-failed' | 'prerender-html',
+      detail?: string,
+    ) =>
       createResponse({
-        body: null,
+        body: detail ?? null,
         init: {
           headers: {
-            'content-type': 'text/html',
-            'Retry-After': '1',
+            'content-type': detail ? 'text/plain' : 'text/html',
+            // `index-failed` is terminal — the realm cannot become ready
+            // without a reindex or a restart — so it carries no retry hint.
+            ...(stage === 'index-failed' ? {} : { 'Retry-After': '1' }),
             'X-Boxel-Not-Ready': stage,
           },
           status: 503,
@@ -1466,6 +1477,16 @@ export class Realm {
         `readiness check for ${this.url} is still waiting on realm startup after ${Date.now() - waitStartedAt}ms`,
       );
       return notReady('startup');
+    }
+    // A brand-new realm whose first index failed is mounted over an empty
+    // index. Reporting ready would hand the caller a realm that serves
+    // nothing; reporting `index` would keep it polling for work that is not
+    // coming. The body carries the failure, since that is where the cause is.
+    if (this.#bootIndexFailure) {
+      return notReady(
+        'index-failed',
+        `The boot index of ${this.url} failed: ${this.#bootIndexFailure.message}`,
+      );
     }
     let startupSettledAt = Date.now();
     let inflight = this.indexing();
@@ -1927,6 +1948,7 @@ export class Realm {
       },
     );
     await completed;
+    this.#bootIndexFailure = undefined;
     // The from-scratch swap has landed in boxel_index: drop searchCards
     // in-flight entries + the cached RealmInfo (which may have been
     // re-parsed from /realm.json during the pass), and broadcast the
@@ -3207,7 +3229,7 @@ export class Realm {
         let promise = this.#realmIndexUpdater.fullIndex(priority);
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
-          await promise;
+          this.#bootIndexFailure = await promise;
         }
         // not sure how useful this event is--nothing is currently listening for
         // it, and it may happen during or after the full index...

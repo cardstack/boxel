@@ -32,12 +32,14 @@
 # body — which is what tells a Traefik-originated `404 page not found` apart
 # from a realm-server 404.
 #
-# Three conditions end the wait early instead of running the whole budget
+# Four conditions end the wait early instead of running the whole budget
 # down against an environment that can no longer become ready:
 #   - the service stack process has exited;
 #   - a host that the realm-server had been answering for now gets Traefik's
 #     own 404, i.e. its route file was removed (the realm-server deregisters
 #     every route for the environment on shutdown);
+#   - the realm reports that its boot index failed (`X-Boxel-Not-Ready:
+#     index-failed`), which no amount of waiting cures;
 #   - the time budget is spent.
 # Each failure prints the failing URL's response headers and the Traefik
 # diagnostics (ci:traefik-diagnostics) before exiting, while the stack is
@@ -140,7 +142,13 @@ probe() {
 describe() {
   case "$code" in
     200) printf '200' ;;
-    503) printf '503 not-ready=%s' "${not_ready:-unknown}" ;;
+    503)
+      if [ "$not_ready" = "index-failed" ]; then
+        printf '503 not-ready=index-failed (%s)' "$body_line"
+      else
+        printf '503 not-ready=%s' "${not_ready:-unknown}"
+      fi
+      ;;
     000) printf 'no response (%s)' "$body_line" ;;
     *) printf '%s %s "%s"' "$code" "${ctype:-no-content-type}" "$body_line" ;;
   esac
@@ -230,6 +238,9 @@ wait_for_200() {
       return 0
     fi
     echo "t+$(elapsed)s  ${label} -> $(describe)"
+    if [ "$code" = "503" ] && [ "$not_ready" = "index-failed" ]; then
+      fail "$url" "${label}: the realm's boot index failed, so it cannot become ready without a restart — ${body_line}"
+    fi
     if realm_server_answered; then
       mark_routed "$host"
     elif is_traefik_404 && was_routed "$host"; then

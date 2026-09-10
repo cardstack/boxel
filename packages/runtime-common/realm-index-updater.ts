@@ -201,14 +201,21 @@ export class RealmIndexUpdater {
     };
   }
 
-  async fullIndex(priority = systemInitiatedPriority) {
+  // Resolves to the failure when the job rejected and to undefined when it
+  // completed. The failure is returned rather than thrown so a caller that
+  // does not wait on the result — a bootstrap realm's per-boot reindex — is
+  // unaffected, while a startup that awaits a brand-new index can record that
+  // the index was never built.
+  async fullIndex(
+    priority = systemInitiatedPriority,
+  ): Promise<Error | undefined> {
     let { completed } = this.publishFullIndex(priority);
     try {
       await completed;
+      return undefined;
     } catch (e: any) {
       this.#log.error(`Error running from-scratch-index: ${e.message}`);
-      // Preserve the historical fullIndex() behavior for fire-and-forget
-      // callers such as startup.
+      return e instanceof Error ? e : new Error(String(e));
     }
   }
 
