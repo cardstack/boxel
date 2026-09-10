@@ -14,6 +14,8 @@ import {
   baseCardRef,
   CardError,
   Deferred,
+  definitionDisplayName,
+  definitionKind,
   getFieldDefinitions,
   identifyCard,
   internalKeyFor,
@@ -515,8 +517,8 @@ function makeDefinitionLookup(
         codeRef,
         fields,
         fieldDefs,
-        type: isCardDef(card) ? 'card-def' : 'field-def',
-        displayName: isCardDef(card) ? card.displayName : null,
+        type: definitionKind(card),
+        displayName: definitionDisplayName(card),
       };
     } catch (err: any) {
       console.warn(
@@ -607,10 +609,8 @@ async function makeDefinition(
       codeRef,
       fields,
       fieldDefs,
-      type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
-      displayName: isCardDef(cardOrFieldDef)
-        ? cardOrFieldDef.displayName
-        : null,
+      type: definitionKind(cardOrFieldDef),
+      displayName: definitionDisplayName(cardOrFieldDef),
     };
     let operations = await captureOperations(
       cardOrFieldDef,
