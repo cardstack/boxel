@@ -230,34 +230,43 @@ function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
     if (entry.op === 'delete') {
       continue;
     }
-    let primary = entry.document?.data;
-    if (entry.op === 'create' && entry.lid) {
-      claim(
-        entry.lid,
-        createIdentity(entry, primary, paths, new Map()),
-        `entry ${index}`,
-      );
-    }
-    for (let [offset, resource] of (entry.document?.included ?? []).entries()) {
-      // A side-loaded resource with no `lid` is not staged and nothing can
-      // link to it; one naming another realm is not this batch's to write.
-      // Neither takes an identity here, so neither can be linked to either.
-      if (
-        typeof resource.lid !== 'string' ||
-        namesForeignRealm(resource, paths.url)
-      ) {
-        continue;
+    // Labelled with the entry's position like every other refusal: a caller
+    // reading one needs to know which of the entries it sent produced it,
+    // whether it was found here or inside an executor.
+    try {
+      let primary = entry.document?.data;
+      if (entry.op === 'create' && entry.lid) {
+        claim(
+          entry.lid,
+          createIdentity(entry, primary, paths, new Map()),
+          `entry ${index}`,
+        );
       }
-      claim(
-        resource.lid,
-        stagedIdentity(
-          resource.meta?.adoptsFrom,
+      for (let [offset, resource] of (
+        entry.document?.included ?? []
+      ).entries()) {
+        // A side-loaded resource with no `lid` is not staged and nothing can
+        // link to it; one naming another realm is not this batch's to write.
+        // Neither takes an identity here, so neither can be linked to either.
+        if (
+          typeof resource.lid !== 'string' ||
+          namesForeignRealm(resource, paths.url)
+        ) {
+          continue;
+        }
+        claim(
           resource.lid,
-          entry.op === 'create' ? entry.directory : undefined,
-          paths,
-        ),
-        `entry ${index}, included[${offset}]`,
-      );
+          stagedIdentity(
+            resource.meta?.adoptsFrom,
+            resource.lid,
+            entry.op === 'create' ? entry.directory : undefined,
+            paths,
+          ),
+          `entry ${index}, included[${offset}]`,
+        );
+      }
+    } catch (err: unknown) {
+      throw atEntry(err, index);
     }
   }
   return lids;

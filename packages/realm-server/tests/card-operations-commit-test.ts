@@ -92,6 +92,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'patch-over-http',
         'patch-over-batch',
         'unchanged',
+        'legacy-version',
       ].map((name) => [
         `${name}.json`,
         {
@@ -493,6 +494,51 @@ module(basename(import.meta.filename), function (hooks) {
       readFileSync(realmFile('patch-over-batch.json'), 'utf8'),
       readFileSync(realmFile('patch-over-http.json'), 'utf8'),
       'the two files are byte-identical',
+    );
+  });
+
+  test('a version reported for an unchanged file is one a later write can name as its base', async function (assert) {
+    // A file written before the realm recorded content hashes carries none on
+    // its row. Blanking the row is how that state is reached here.
+    await testDbAdapter.execute(
+      `update realm_file_meta set content_hash = null
+         where realm_url = $1 and file_path = $2`,
+      { bind: [realm.url, 'legacy-version.json'] },
+    );
+
+    let [unchanged] = await commit([
+      {
+        op: 'update',
+        href: `${testRealmHref}legacy-version`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Original' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    let version = unchanged!.meta.version;
+    assert.true(version.length > 0, 'the no-op write still reports a version');
+
+    let [next] = await commit([
+      {
+        op: 'update',
+        href: `${testRealmHref}legacy-version`,
+        baseVersion: version,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Moved on' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    assert.true(
+      next!.meta.baseMatched,
+      'the version the no-op reported is the one the file is recorded at',
     );
   });
 

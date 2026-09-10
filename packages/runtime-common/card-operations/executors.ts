@@ -434,19 +434,63 @@ export function stageDelete(
 // realm root unless the entry names a directory. Path math only — no read and
 // no serialization — which is what makes a create's URL knowable before
 // anything is written.
+//
+// The id and the directory come from the caller and are spliced into a path,
+// so both are held to naming what they appear to name. Two checks, because
+// neither covers the other: each has to be a plain path segment, which is what
+// refuses a separator; and the path that comes back has to be the path that
+// went in, which is what refuses everything that only shows up once a URL is
+// resolved — `..` and its percent-encoded spellings walking out of the type's
+// directory, and a `?` or `#` cutting the stored path short so the card's id
+// and its file stop naming each other.
 export function stagedIdentity(
   adoptsFrom: CodeRef | undefined,
   id: string,
   directory: string | undefined,
   paths: RealmPaths,
 ): StagedIdentity {
-  let segments = [
-    ...(directory ?? '').split('/'),
+  let directorySegments = (directory ?? '').split('/').filter(Boolean);
+  for (let segment of directorySegments) {
+    assertPathSegment(segment, `directory segment "${segment}"`);
+  }
+  assertPathSegment(id, `id "${id}"`);
+  let intended = `${[
+    ...directorySegments,
     getCardDirectoryName(adoptsFrom, paths),
     id,
-  ].filter(Boolean);
-  let url = paths.fileURL(`${segments.join('/')}.json`);
-  return { id: url.href.replace(/\.json$/, ''), path: paths.local(url) };
+  ].join('/')}.json` as LocalPath;
+  let url = paths.fileURL(intended);
+  if (paths.local(url) !== intended) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid id',
+      detail:
+        `a card created as "${id}" would be stored at ${paths.local(url)} ` +
+        `rather than ${intended}, so the id and the file would not name each ` +
+        `other`,
+    });
+  }
+  return { id: url.href.replace(/\.json$/, ''), path: intended };
+}
+
+// One name in a path, and nothing else. A separator would spread one card over
+// a path the caller did not ask for, and the relative names address a
+// directory rather than a card.
+function assertPathSegment(value: string, what: string): void {
+  if (
+    value.length === 0 ||
+    value === '.' ||
+    value === '..' ||
+    /[/\\]/.test(value)
+  ) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid id',
+      detail: `${what} is not a single path segment`,
+    });
+  }
 }
 
 // The identity a create entry's card takes, whether the entry sent a document

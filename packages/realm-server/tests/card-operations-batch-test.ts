@@ -106,6 +106,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a local id cannot name a file outside the type it creates', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('a create with nothing to create is refused', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

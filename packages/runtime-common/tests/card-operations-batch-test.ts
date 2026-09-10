@@ -983,6 +983,45 @@ const tests: SharedTests<Record<string, never>> = {
     );
   },
 
+  'a local id cannot name a file outside the type it creates': async (
+    assert,
+  ) => {
+    let { core, commits } = stub();
+    let create = (lid: string): BatchEntry[] => [
+      {
+        op: 'create',
+        lid,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Escapee' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ];
+    // Each of these resolves, through a URL, to a file the create does not
+    // name: the first two walk out of the type's directory and land on the
+    // realm's own config, the third spreads one card over a path nobody asked
+    // for, and the last two are cut short by a query or a fragment so the
+    // card's id and its file stop naming each other.
+    for (let lid of ['../realm', '%2e%2e/realm', 'a/b', 'a?b', 'a#b']) {
+      assert.deepEqual(
+        await refusal(core, create(lid)),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        `a local id of "${lid}" is refused`,
+      );
+    }
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+
+    await commitBatch(core, create('mango-1'), {});
+    assert.deepEqual(
+      Object.keys(commits[0].writes),
+      ['Person/mango-1.json'],
+      'an ordinary local id still names its own file under the type',
+    );
+  },
+
   'a create with nothing to create is refused': async (assert) => {
     let { core, commits } = stub();
     let failed = await refusal(core, [{ op: 'create', lid: 'empty' }]);

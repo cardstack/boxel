@@ -2482,12 +2482,24 @@ export class Realm {
           // still the file's own — the bytes in hand are the bytes on disk —
           // so a caller reading a version off this result gets the one the
           // file already holds rather than nothing.
+          //
+          // Recorded on the row as well as returned. A file written before the
+          // realm began recording hashes has none stored, and returning a
+          // token the row does not carry would make the next write quoting it
+          // as `baseVersion` report a moved base for a file that has not
+          // moved. Writing the hash it already has is a no-op for every file
+          // that has one.
+          let unchangedHash = computeContentHash(content);
           results.push({
             path,
             lastModified: existingFile.lastModified,
-            contentHash: computeContentHash(content),
+            contentHash: unchangedHash,
           });
-          fileMetaRows.push({ path });
+          fileMetaRows.push({
+            path,
+            contentHash: unchangedHash,
+            contentSize: computeContentSize(content),
+          });
           continue;
         }
         isNewFile = !existingFile;
