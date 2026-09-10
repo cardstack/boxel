@@ -11,6 +11,7 @@ import './matrix-util-test.ts';
 import './debug-test.ts';
 import './modality-test.ts';
 import './locking-test.ts';
+import './room-event-serializer-test.ts';
 import './interrupt-test.ts';
 import './credit-tracking-test.ts';
 import './user-delegated-realm-server-session-test.ts';
