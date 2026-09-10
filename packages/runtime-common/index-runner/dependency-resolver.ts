@@ -102,13 +102,20 @@ export class IndexRunnerDependencyManager {
   // Topologically order an invalidation set so a URL is visited after every
   // URL it depends on, using the `deps` rows the index has persisted.
   //
-  // The incoming order is the tie-break: among the URLs whose dependencies
-  // are all satisfied, the one that arrived earliest goes first, and the
-  // leftovers of a dependency cycle — which no topological order can
-  // resolve — are appended in that same order. Callers therefore express a
-  // preference by the order they pass, and get it wherever the dependency
-  // graph does not overrule it. The incremental pass leads its input with
-  // the URLs its triggering write named (`prioritizeWrittenURLs`).
+  // The incoming order is the priority: among the URLs whose dependencies
+  // are all satisfied, the one that arrived earliest goes first. Callers
+  // therefore express a preference by the order they pass, and get it
+  // wherever a recorded dependency does not overrule it. The incremental
+  // pass leads its input with the URLs its triggering write named
+  // (`prioritizeWrittenURLs`).
+  //
+  // A dependency cycle has no topological order, so its members' mutual
+  // edges are dropped and they are scheduled by priority alongside
+  // everything else (see `#kahnByPriority`). Dropping them costs nothing a
+  // cycle had not already cost — no order satisfies every edge in a cycle —
+  // and it is what keeps priority meaningful for a URL caught in one:
+  // otherwise a cycle member could never be scheduled until every
+  // acyclic URL had been, however high its priority.
   async orderInvalidationsByDependencies(urls: URL[]): Promise<URL[]> {
     if (urls.length < 2) {
       return urls;
@@ -119,12 +126,10 @@ export class IndexRunnerDependencyManager {
     let order = new Map(hrefs.map((href, index) => [href, index]));
     let rows = await this.#getOrderingDependencyRows(hrefs);
 
+    // dependency -> the URLs in this set that depend on it. Indegrees are
+    // derived from these edges by `#kahnByPriority`, which runs over a
+    // reduced edge set on a second pass.
     let edges = new Map<string, Set<string>>();
-    let indegree = new Map<string, number>();
-    for (let href of hrefs) {
-      indegree.set(href, 0);
-    }
-
     for (let row of rows) {
       if (!byHref.has(row.url)) {
         continue;
@@ -140,25 +145,81 @@ export class IndexRunnerDependencyManager {
           dependents = new Set<string>();
           edges.set(normalized, dependents);
         }
-        if (!dependents.has(row.url)) {
-          dependents.add(row.url);
-          indegree.set(row.url, (indegree.get(row.url) ?? 0) + 1);
+        dependents.add(row.url);
+      }
+    }
+
+    let ordered = this.#kahnByPriority(hrefs, edges, order);
+    if (ordered.length !== hrefs.length) {
+      // Whatever a first pass could not schedule is exactly the set of URLs
+      // that sit in, or behind, a dependency cycle. Every edge out of such a
+      // URL leads to another one of them (a URL reachable from a cycle can
+      // never clear its indegree either), so dropping their out-edges
+      // removes at least one edge from every cycle and leaves the rest of
+      // the graph's edges untouched. The second pass is therefore acyclic —
+      // it always completes — and schedules the freed URLs by priority
+      // instead of dumping them at the end.
+      let stranded = new Set(hrefs);
+      for (let href of ordered) {
+        stranded.delete(href);
+      }
+      let acyclicEdges = new Map<string, Set<string>>();
+      for (let [from, to] of edges) {
+        if (!stranded.has(from)) {
+          acyclicEdges.set(from, to);
+        }
+      }
+      ordered = this.#kahnByPriority(hrefs, acyclicEdges, order);
+      // Belt and braces: a URL the second pass somehow still could not
+      // schedule is appended rather than dropped, because losing one from
+      // the visit list would leave its tombstone to be promoted.
+      if (ordered.length !== hrefs.length) {
+        let orderedSet = new Set(ordered);
+        for (let href of hrefs) {
+          if (!orderedSet.has(href)) {
+            ordered.push(href);
+            orderedSet.add(href);
+          }
         }
       }
     }
 
+    return ordered
+      .map((href) => byHref.get(href))
+      .filter((url): url is URL => Boolean(url));
+  }
+
+  // Kahn's algorithm with a priority queue keyed on `order`: of the URLs
+  // whose dependencies are all scheduled, the lowest-`order` one goes next.
+  // Returns fewer entries than `hrefs` when `edges` contains a cycle — the
+  // caller reads a short result as "these are the URLs a cycle stranded".
+  #kahnByPriority(
+    hrefs: string[],
+    edges: Map<string, Set<string>>,
+    order: Map<string, number>,
+  ): string[] {
+    let indegree = new Map<string, number>();
+    for (let href of hrefs) {
+      indegree.set(href, 0);
+    }
+    for (let dependents of edges.values()) {
+      for (let dependent of dependents) {
+        indegree.set(dependent, (indegree.get(dependent) ?? 0) + 1);
+      }
+    }
+
+    let priorityOf = (href: string) =>
+      order.get(href) ?? Number.MAX_SAFE_INTEGER;
     let queue = hrefs
       .filter((href) => (indegree.get(href) ?? 0) === 0)
-      .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-    let ordered: string[] = [];
+      .sort((a, b) => priorityOf(a) - priorityOf(b));
     let insertByOrder = (href: string) => {
-      let priority = order.get(href) ?? Number.MAX_SAFE_INTEGER;
+      let priority = priorityOf(href);
       let low = 0;
       let high = queue.length;
       while (low < high) {
         let mid = Math.floor((low + high) / 2);
-        let midPriority = order.get(queue[mid]!) ?? Number.MAX_SAFE_INTEGER;
-        if (midPriority <= priority) {
+        if (priorityOf(queue[mid]!) <= priority) {
           low = mid + 1;
         } else {
           high = mid;
@@ -167,6 +228,7 @@ export class IndexRunnerDependencyManager {
       queue.splice(low, 0, href);
     };
 
+    let ordered: string[] = [];
     while (queue.length > 0) {
       let href = queue.shift()!;
       ordered.push(href);
@@ -178,20 +240,7 @@ export class IndexRunnerDependencyManager {
         }
       }
     }
-
-    if (ordered.length !== hrefs.length) {
-      let orderedSet = new Set(ordered);
-      for (let href of hrefs) {
-        if (!orderedSet.has(href)) {
-          ordered.push(href);
-          orderedSet.add(href);
-        }
-      }
-    }
-
-    return ordered
-      .map((href) => byHref.get(href))
-      .filter((url): url is URL => Boolean(url));
+    return ordered;
   }
 
   extractDirectRelationshipDeps(

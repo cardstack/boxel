@@ -749,12 +749,19 @@ export interface Diagnostics
   // millisecond, and a batch's rows drain through buffered multi-row upserts
   // that share one timestamp, so this is the only field that orders two rows
   // written by the same batch. Grouped with `invalidationId`, it
-  // reconstructs the visit order of either channel:
-  // `SELECT url FROM boxel_index WHERE diagnostics->>'invalidationId' = '<id>'
-  //  ORDER BY (diagnostics->>'writeSeq')::int`. An incremental index pass
-  // writes the URLs its triggering write named before the dependents its
-  // fan-out discovered, so the lowest sequences in an index fan-out are its
-  // targets.
+  // reconstructs the visit order of either channel. A URL contributes two
+  // rows (`file` and `instance`), written back to back, so reduce to one
+  // position per URL rather than selecting rows:
+  //
+  //   SELECT url, min((diagnostics->>'writeSeq')::int) AS seq
+  //     FROM boxel_index
+  //    WHERE diagnostics->>'invalidationId' = '<id>'
+  //    GROUP BY url
+  //    ORDER BY seq
+  //
+  // An incremental index pass writes the URLs its triggering write named
+  // before the dependents its fan-out discovered, so the lowest sequences in
+  // an index fan-out are its targets.
   //
   // Sequences are per batch, and a fused visit's two rows share one — its
   // `boxel_index` half and its `prerendered_html` half describe one position,

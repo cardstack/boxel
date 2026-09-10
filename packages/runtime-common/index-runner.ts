@@ -488,7 +488,11 @@ export class IndexRunner {
           current.batch.invalidations.map((href) => new URL(href)),
           current.realmURL,
         );
-        invalidations = prioritizeWrittenURLs(invalidations, urls);
+        invalidations = prioritizeWrittenURLs(
+          invalidations,
+          urls,
+          current.realmURL,
+        );
         invalidations =
           await current.#dependencyResolver.orderInvalidationsByDependencies(
             invalidations,
@@ -1188,28 +1192,31 @@ function assertURLEndsWithJSON(url: URL): URL {
 
 // Hoist the URLs the triggering write named — the pass's targets — ahead of
 // the dependents its invalidation fan-out discovered, so a target's row is
-// written before any row that merely depends on it. Targets keep the order
-// they were written in; the dependents keep the order they arrived in.
+// written before any row that merely depends on it. Within the targets, and
+// within the dependents, the visit classes stay in order (see
+// `visitClassRank`) — a target instance never overtakes a target module, even
+// when it was written first and the index holds no `deps` row joining them
+// yet. Inside one class, targets keep the order they were written in and
+// dependents keep the order they arrived in.
 //
 // The result is the input to `orderInvalidationsByDependencies`, which reads
-// position as a priority rather than as a fixed order: a topological edge
-// still wins, so a target that depends on another URL in the same set (an
-// instance written alongside the module it adopts from) is visited after it,
-// and the module's file entry exists before the instance renders. What the
-// hoist decides is the cases the dependency graph leaves open — a dependent
-// no persisted `deps` row connects to its target, and a target that shares a
-// dependency cycle with its dependents, where the ordering falls back to the
-// incoming `sortInvalidations` order and can otherwise put the target last.
+// position as a priority rather than as a fixed order: a recorded dependency
+// edge still wins outright. What the hoist decides is the cases the
+// dependency graph leaves open — a dependent no persisted `deps` row
+// connects to its target, and a target stranded in a dependency cycle, where
+// the ordering falls back to the incoming order and could otherwise put the
+// target last.
 //
-// A target can displace `realm.json` from the head position
-// `sortInvalidations` gives it. That costs nothing: the pass promotes its
-// whole working table into `boxel_index` in one transaction, so no reader
-// can observe one row of a pass ahead of another, and `realm.json` reaches
-// the fan-out as a dependent only of the module it adopts from — which a
-// topological edge still orders ahead of it.
+// A target can displace `realm.json` from its class-0 head position, but
+// only another target: a `realm.json` that is itself a target keeps class 0
+// inside the target group, and one that reaches the fan-out as a dependent
+// stays ahead of the other dependents. Either way the pass promotes its whole
+// working table in one transaction, so no reader observes one row of a pass
+// ahead of another.
 export function prioritizeWrittenURLs(
   invalidations: URL[],
   written: URL[],
+  realmURL: URL,
 ): URL[] {
   if (invalidations.length < 2) {
     return invalidations;
@@ -1230,40 +1237,57 @@ export function prioritizeWrittenURLs(
   if (targetHrefs.size === 0) {
     return invalidations;
   }
+  // Stable, so write order survives inside each class.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
+  targets.sort(
+    (a, b) =>
+      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref),
+  );
   return [
     ...targets,
     ...invalidations.filter((url) => !targetHrefs.has(url.href)),
   ];
 }
 
+// Visit-class priority, in the order a pass must write the classes:
+//
+//   0. The realm's RealmConfig card at <realmURL>realm.json — write its
+//      working-index row first so any /_info query that lands AFTER the
+//      pass commits (`batch.done()` swaps boxel_index_working into
+//      boxel_index) sees the RealmConfig overlay and resolves the realm's
+//      display name. parseRealmInfo's overlay path queries the live
+//      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+//      see realm.json mid-pass; this ordering only guarantees a correct
+//      answer at and after the pass-end commit (and on subsequent
+//      passes). Host-side prerender caching of stale realmInfo (see
+//      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+//      concern not addressed here.
+//   1. Non-.json files (modules, source) — file entries must exist before
+//      the cards that depend on them are rendered.
+//   2. Other .json files.
+//
+// Class 1 before class 2 is a correctness requirement, not a preference,
+// and it holds for a class-2 URL whose dependency on a class-1 URL the index
+// has not recorded yet — a brand-new instance and the module it adopts from,
+// written by one job. Both orderers below therefore rank by class before
+// applying their own tie-break.
+function visitClassRank(url: URL, realmConfigHref: string): number {
+  if (url.href === realmConfigHref) {
+    return 0;
+  }
+  return url.href.endsWith('.json') ? 2 : 1;
+}
+
+function realmConfigHrefFor(realmURL: URL): string {
+  return new RealmPaths(realmURL).fileURL('realm.json').href;
+}
+
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
-  // Visit order priority:
-  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
-  //      working-index row first so any /_info query that lands AFTER the
-  //      pass commits (`batch.done()` swaps boxel_index_working into
-  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
-  //      display name. parseRealmInfo's overlay path queries the live
-  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
-  //      see realm.json mid-pass; this ordering only guarantees a correct
-  //      answer at and after the pass-end commit (and on subsequent
-  //      passes). Host-side prerender caching of stale realmInfo (see
-  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
-  //      concern not addressed here.
-  //   2. Non-.json files (modules, source) — file entries must exist before
-  //      the cards that depend on them are rendered.
-  //   3. Other .json files, sorted lexically for determinism.
-  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
+  // Class order (see visitClassRank), then lexical by href for determinism.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
   return urls.sort((a, b) => {
-    let aRealmConfig = a.href === realmConfigHref;
-    let bRealmConfig = b.href === realmConfigHref;
-    if (aRealmConfig !== bRealmConfig) {
-      return aRealmConfig ? -1 : 1;
-    }
-    let aJson = a.href.endsWith('.json');
-    let bJson = b.href.endsWith('.json');
-    if (aJson === bJson) {
-      return a.href.localeCompare(b.href);
-    }
-    return aJson ? 1 : -1;
+    let rank =
+      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref);
+    return rank !== 0 ? rank : a.href.localeCompare(b.href);
   });
 }

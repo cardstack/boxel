@@ -301,14 +301,23 @@ export class Batch {
   // the row records.
   #writeBuffer: { url: URL; entry: SearchIndexEntry; seq: number }[] = [];
   #writeBufferUrls = new Set<string>();
-  // Monotonic counter behind `diagnostics.writeSeq`. Advanced where a row
-  // enters the write path (`bufferEntry` / `updateEntry`) rather than where
-  // it is prepared, so the sequence records the order the pass produced its
-  // rows — which for an index pass is its visit order — independent of how
-  // the buffer batches the physical upserts. Tombstones do not advance it:
-  // `invalidate()` writes one for every URL in the fan-out before any visit,
-  // and a visited URL's row overwrites its tombstone, so counting them would
-  // leave a gap for every URL rather than describe an order.
+  // Monotonic counter behind `diagnostics.writeSeq`, reset alongside
+  // `#currentInvalidationId` so the two stamps always describe the same
+  // fan-out. Advanced where a row enters the write path (`bufferEntry` /
+  // `updateEntry`) rather than where it is prepared, so the sequence records
+  // the order the pass produced its rows — which for an index pass is its
+  // visit order — independent of how the buffer batches the physical
+  // upserts. Tombstones do not advance it: `invalidate()` writes one for
+  // every URL in the fan-out before any visit, and a visited URL's row
+  // overwrites its tombstone, so counting them would leave a gap for every
+  // URL rather than describe an order.
+  //
+  // A retried job is the one case where a promoted generation holds rows
+  // from two batches: `loadResumedRows` keeps the previous attempt's rows as
+  // they are, so they retain that attempt's `invalidationId` and its
+  // sequences, and only the URLs this attempt visits carry the current pair.
+  // Ordering within one `invalidationId` stays sound; a query that wants the
+  // whole generation has to union the attempts' ids rather than assume one.
   #writeSeq = 0;
   // Aggregate wall of every physical `boxel_index_working` write in this
   // batch, surfaced on the job result's `phaseTimings.writeMs`.
@@ -2385,11 +2394,21 @@ export class Batch {
       );
     }
     await this.ready;
+    // Drain anything still buffered under the OUTGOING correlation ID before
+    // rotating it. `#prepareIndexRow` reads the ID at flush time, so a row
+    // buffered before this call and flushed after it would be filed under the
+    // new fan-out while carrying the old one's write sequence — attributed to
+    // a change it had nothing to do with. A no-op on the production path,
+    // where `invalidate()` runs once per batch before any visit.
+    await this.flushWriteBuffer();
     // Mint a fresh correlation ID for this invalidation fan-out; every
     // subsequent `updateEntry` on this batch stamps it into the row's
     // `diagnostics` so operators can group the rows touched by
-    // the same triggering change.
+    // the same triggering change. The write sequence restarts with it, so
+    // `writeSeq` is 0-based within each `invalidationId` rather than within
+    // the batch's lifetime.
     this.#currentInvalidationId = uuidv4();
+    this.#writeSeq = 0;
     let start = Date.now();
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,

@@ -75,6 +75,7 @@ module(basename(import.meta.filename), function () {
           prioritizeWrittenURLs(
             urls('aaa.json', 'bbb.json', 'yyy.json', 'zzz.json'),
             urls('zzz.json', 'yyy.json'),
+            new URL(realmURL),
           ),
         ),
         ['zzz.json', 'yyy.json', 'aaa.json', 'bbb.json'],
@@ -88,6 +89,7 @@ module(basename(import.meta.filename), function () {
           prioritizeWrittenURLs(
             urls('aaa.json', 'bbb.json'),
             urls('elsewhere.json'),
+            new URL(realmURL),
           ),
         ),
         ['aaa.json', 'bbb.json'],
@@ -101,6 +103,7 @@ module(basename(import.meta.filename), function () {
           prioritizeWrittenURLs(
             urls('aaa.json', 'zzz.json'),
             urls('zzz.json', 'zzz.json'),
+            new URL(realmURL),
           ),
         ),
         ['zzz.json', 'aaa.json'],
@@ -108,10 +111,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('never hoists a target instance ahead of a target module', function (assert) {
+      // One job naming a brand-new instance and the module it adopts from —
+      // a coalesced pair, or a write the module-then-instance gate did not
+      // split. The instance was written first, but no persisted `deps` row
+      // joins them yet, so nothing downstream can restore module-first: the
+      // hoist has to preserve it.
+      assert.deepEqual(
+        paths(
+          prioritizeWrittenURLs(
+            urls('card.json', 'person.gts'),
+            urls('card.json', 'person.gts'),
+            new URL(realmURL),
+          ),
+        ),
+        ['person.gts', 'card.json'],
+        'the module keeps its class priority over the instance that adopts from it',
+      );
+    });
+
+    test('keeps a target realm config at the head of the target group', function (assert) {
+      assert.deepEqual(
+        paths(
+          prioritizeWrittenURLs(
+            urls('aaa.json', 'realm.json', 'zzz.json'),
+            urls('zzz.json', 'realm.json'),
+            new URL(realmURL),
+          ),
+        ),
+        ['realm.json', 'zzz.json', 'aaa.json'],
+        'the realm config leads the targets, which lead the dependents',
+      );
+    });
+
     test('passes a single-URL invalidation set through untouched', function (assert) {
       let single = urls('zzz.json');
       assert.strictEqual(
-        prioritizeWrittenURLs(single, urls('zzz.json')),
+        prioritizeWrittenURLs(single, urls('zzz.json'), new URL(realmURL)),
         single,
         'a set of one has no order to decide',
       );
@@ -138,6 +174,7 @@ module(basename(import.meta.filename), function () {
             prioritizeWrittenURLs(
               urls('person.gts', 'zzz.json'),
               urls('zzz.json', 'person.gts'),
+              new URL(realmURL),
             ),
           ),
         ),
@@ -158,6 +195,7 @@ module(basename(import.meta.filename), function () {
             prioritizeWrittenURLs(
               urls('aaa.json', 'bbb.json', 'zzz.json'),
               urls('zzz.json'),
+              new URL(realmURL),
             ),
           ),
         ),
@@ -187,11 +225,57 @@ module(basename(import.meta.filename), function () {
             prioritizeWrittenURLs(
               urls('aaa.json', 'bbb.json', 'zzz.json'),
               urls('zzz.json'),
+              new URL(realmURL),
             ),
           ),
         ),
         ['zzz.json', 'aaa.json', 'bbb.json'],
         'leading with the target puts it first',
+      );
+    });
+
+    test('a target stranded in a cycle still outranks a dependent with no edge', async function (assert) {
+      // The mixed graph: `zzz` (the target) and `aaa` link to each other, so
+      // both are stranded in a cycle, while `ddd` is in the fan-out with no
+      // usable persisted edge — a `deps` entry whose canonical form does not
+      // match any URL in the set — so it is immediately schedulable. Ranking
+      // the cycle's members only after every schedulable URL would put the
+      // target behind `ddd`; dropping the cycle's own edges lets priority
+      // decide, which is all a cycle's order can be decided by anyway.
+      let order = orderingOver({
+        [`${realmURL}aaa.json`]: ['zzz.json'],
+        [`${realmURL}zzz.json`]: ['aaa.json'],
+      });
+      assert.deepEqual(
+        paths(
+          await order(
+            prioritizeWrittenURLs(
+              urls('aaa.json', 'ddd.json', 'zzz.json'),
+              urls('zzz.json'),
+              new URL(realmURL),
+            ),
+          ),
+        ),
+        ['zzz.json', 'aaa.json', 'ddd.json'],
+        'the target leads even though a cycle strands it and another dependent is ready',
+      );
+    });
+
+    test('an acyclic set is unaffected by the cycle handling', async function (assert) {
+      // The second scheduling pass only runs when the first strands
+      // something, so an acyclic graph keeps exactly the order it always
+      // had: dependencies first, priority breaking every tie.
+      let order = orderingOver({
+        [`${realmURL}aaa.json`]: ['person.gts'],
+        [`${realmURL}bbb.json`]: ['person.gts'],
+        [`${realmURL}zzz.json`]: ['person.gts'],
+      });
+      assert.deepEqual(
+        paths(
+          await order(urls('aaa.json', 'bbb.json', 'person.gts', 'zzz.json')),
+        ),
+        ['person.gts', 'aaa.json', 'bbb.json', 'zzz.json'],
+        'the dependency is visited first, then the dependents in priority order',
       );
     });
 
@@ -210,6 +294,7 @@ module(basename(import.meta.filename), function () {
             prioritizeWrittenURLs(
               urls('aaa.json', 'bbb.json', 'yyy.json', 'zzz.json'),
               urls('yyy.json', 'zzz.json'),
+              new URL(realmURL),
             ),
           ),
         ),

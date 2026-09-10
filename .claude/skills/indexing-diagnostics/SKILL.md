@@ -205,7 +205,7 @@ ORDER BY seq;
 
 Two things this tells you:
 
-- **Which URLs the write actually named.** An incremental pass writes its **targets** — the URLs the triggering write named — before the dependents its fan-out discovered, so the lowest sequences in a fan-out are the targets and everything after them is dep closure. This is a guarantee, not a coincidence: `prioritizeWrittenURLs` in `index-runner.ts` leads the ordering input with the written URLs and the topological ordering treats that position as a priority. A dependency edge still overrules it — a module written alongside an instance that adopts from it is visited first — so a target appearing after a _module_ is expected, whereas a target appearing after another _instance_ is not, and is worth a second look.
+- **Which URLs the write actually named.** An incremental pass writes its **targets** — the URLs the triggering write named — before the dependents its fan-out discovered, so the lowest sequences in a fan-out are the targets and everything after them is dep closure. This is a guarantee, not a coincidence: `prioritizeWrittenURLs` in `index-runner.ts` leads the ordering input with the written URLs and the topological ordering treats that position as a priority. A **recorded dependency** still overrules it, and only that: a target instance is visited after a module it adopts from (whether or not the index has recorded the edge yet — the module's visit class wins), and after any URL in the same set whose `deps` row it names. A dependency cycle does not overrule it — its members' mutual edges are dropped and they compete on priority like everything else, since no order satisfies a cycle anyway. So a target appearing after a _module_ or after a URL it declares a dependency on is expected; a target appearing after an unrelated _instance_ is not, and is worth a second look.
 - **Where a stalled pass got to.** See [step 6](#6-reading-partial-progress-from-boxel_index_working).
 
 A URL contributes two rows (`file` and `instance`), buffered back to back, so reduce to one position per URL with `min((diagnostics->>'writeSeq')::int) … GROUP BY url` when you want a per-URL order.
@@ -568,6 +568,23 @@ LIMIT 10;
 ```
 
 `rows_deep` is how far into its write order the batch got. A URL contributes two rows, so it is roughly twice the number of files visited; for the planned total and a files-completed count, read the job's `job_progress` row (`total_files` / `files_completed` — an UNLOGGED table the manager's `IndexingEventSink` upserts from the worker's progress events, debounced, so it can lag the last write by a tick).
+
+**A retried job holds two batches' worth of rows.** When an expired reservation is retried, `loadResumedRows` keeps the previous attempt's working rows exactly as they are and promotes them alongside the new attempt's — so the promoted generation mixes two `invalidationId`s, each numbered from 0. Grouping by the newest id shows only what this attempt re-visited and silently omits every URL the earlier attempt already finished, which for a stuck-job investigation is precisely the wrong half. Find every id at the generation first, then union them:
+
+```sql
+SELECT diagnostics->>'invalidationId'          AS invalidation_id,
+       count(*)                               AS rows_written,
+       min((diagnostics->>'writeSeq')::int)    AS first_seq,
+       max((diagnostics->>'writeSeq')::int)    AS last_seq
+FROM boxel_index_working
+WHERE realm_url = '<realm-url>'
+  AND job_id = <job-id>
+  AND diagnostics->>'writeSeq' IS NOT NULL
+GROUP BY 1
+ORDER BY min((diagnostics->>'indexedAt')::bigint);
+```
+
+Sequences are only comparable within one id, so order each attempt's rows separately — `indexedAt` is what puts the attempts in order relative to each other.
 
 The bottom row of the per-`invalidationId` query (max `writeSeq`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order. That order is: `index-runner.ts::sortInvalidations` (realm config first, then non-`.json` files before the `.json` ones that depend on them, otherwise lexical by href), then `prioritizeWrittenURLs` hoists the URLs the triggering write named ahead of the dependents the fan-out found, then `orderInvalidationsByDependencies` topologically orders the result — treating the position it was handed as a priority, so a dependency edge wins and everything else keeps the order above. Combine three signals to pin it down:
 
