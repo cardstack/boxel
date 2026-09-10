@@ -26,14 +26,26 @@ import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 // ============================================================================
 // The batch coordinator.
 //
-// A batch is all-or-nothing: several changes to several cards either all land
-// or none do, under one index job and one index event. Getting that is a
-// matter of ordering. The coordinator takes the realm's write lock, reads
-// every file the batch touches, runs every executor in memory, and only then
-// commits. Nothing is written until every entry has produced its bytes, so an
-// entry that cannot be carried out is found while the realm is still
-// untouched — there is no partial write to undo, no index job to cancel, and
-// no event a subscriber could have already acted on.
+// A batch is all-or-nothing against every way an entry can be wrong: several
+// changes to several cards either all land or none do, under one index job and
+// one index event. Getting that is a matter of ordering. The coordinator takes
+// the realm's write lock, reads every file the batch touches, runs every
+// executor in memory, and only then commits. Nothing is written until every
+// entry has produced its bytes, so an entry that cannot be carried out — a
+// malformed document, a missing target, a rejected field, a local id naming
+// nothing or naming two cards — is found while the realm is still untouched:
+// no partial write to undo, no index job to cancel, no event a subscriber
+// could have already acted on.
+//
+// What that does not cover is the commit itself failing partway. The realm
+// writes a batch's files one at a time and has no rollback, so a file system
+// that fails mid-commit — out of space, a path that will not open — leaves the
+// files written before it on disk, and this method rejects with the realm in
+// that state. Every multi-file write the realm serves behaves this way; a
+// batch is not more exposed to it than the atomic endpoint is, and reaching
+// past it needs transactional staging in the write primitive rather than
+// anything the coordinator can do above it. The guarantee here is over the
+// entries, which is what a caller composing a batch controls.
 //
 // The lock is taken once, here, and never re-entered. Everything below it
 // works from the state read inside it, and the commit it hands the staged

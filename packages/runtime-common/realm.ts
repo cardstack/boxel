@@ -2351,6 +2351,12 @@ export class Realm {
   // Assumes the realm's write lock is held — the caller reads the pre-state it
   // stages from inside the same critical section. `write`, `writeMany` and
   // `delete` are the locked public entry points.
+  //
+  // Files are changed one at a time and there is no rollback: a file system
+  // failure partway through leaves the files handled before it changed, and
+  // this method rejects with the realm in that state. A caller offering its
+  // own callers an all-or-nothing batch is offering it over what it validates
+  // before calling here, not over the file system underneath.
   private async _commitBatchUnlocked(
     batch: CommitBatch,
     options?: WriteOptions,
