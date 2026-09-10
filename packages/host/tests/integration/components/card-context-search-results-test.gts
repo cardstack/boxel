@@ -14,13 +14,14 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
+  CardSearchDefaultRealmContextName,
   GetCardContextName,
   type getCard as GetCardType,
   type SearchEntryWireQuery,
   type SearchResultsComponentSignature,
 } from '@cardstack/runtime-common';
 
-import SearchResults from '@cardstack/host/components/search/search-results';
+import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type StoreService from '@cardstack/host/services/store';
@@ -78,11 +79,22 @@ const BOOK_2 = `${testRealmURL}books/2`;
 // `GetCardContextName` is provided too so the nested hydratable rows resolve
 // their live instances, the way the route wires it.
 class CardSearchContext extends GlimmerComponent<{
+  Args: {
+    // The realm a card-initiated no-realm search defaults to, mirroring what the
+    // host route provides on `CardSearchDefaultRealmContextName`. Omit to
+    // simulate a card whose default realm can't be resolved yet.
+    defaultRealm?: string;
+  };
   Blocks: { default: [CardContext] };
 }> {
   @provide(GetCardContextName)
   get getCardFn() {
     return getCard;
+  }
+
+  @provide(CardSearchDefaultRealmContextName)
+  get cardSearchDefaultRealm(): () => string | undefined {
+    return () => this.args.defaultRealm;
   }
 
   get context(): CardContext {
@@ -92,7 +104,7 @@ class CardSearchContext extends GlimmerComponent<{
       getCards: store.getSearchResource.bind(store),
       getCardCollection,
       store,
-      searchResultsComponent: SearchResults,
+      searchResultsComponent: CardContextSearchResults,
     };
   }
 
@@ -186,6 +198,65 @@ module(
         isCardInstance(storeService.peek(BOOK_1)),
         'the hydration GET deposited the card into the store',
       );
+    });
+
+    test('a no-realm card search scopes to the context default realm', async function (assert) {
+      // The query carries no `realms`. Card-initiated, it targets the realm the
+      // `@context` was provided with rather than fanning out across every
+      // readable realm.
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+      };
+      await render(
+        <template>
+          <CardSearchContext @defaultRealm={{testRealmURL}} as |context|>
+            <context.searchResultsComponent @query={{query}} @mode='none' />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-search-result]')),
+      );
+
+      assert
+        .dom(`[data-test-search-result="${BOOK_1}"]`)
+        .exists('the default realm is searched');
+      assert
+        .dom(`[data-test-search-result="${BOOK_2}"]`)
+        .exists('the default realm is searched');
+    });
+
+    test('a no-realm card search with no resolvable default realm returns nothing', async function (assert) {
+      // No `realms` on the query and no default realm on the context (the card's
+      // model has no id yet): it must not fall back to scanning every realm.
+      let query: SearchEntryWireQuery = {
+        filter: { 'item.on': bookRef },
+      };
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent
+              @query={{query}}
+              @mode='none'
+              as |results|
+            >
+              {{#unless results.isLoading}}
+                <span data-test-settled></span>
+              {{/unless}}
+              {{#each results.entries key='id' as |entry|}}
+                <entry.component data-test-search-result={{entry.id}} />
+              {{/each}}
+            </context.searchResultsComponent>
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(document.querySelector('[data-test-settled]')),
+      );
+
+      assert
+        .dom('[data-test-search-result]')
+        .doesNotExist('no fan-out across all realms when no default realm');
     });
 
     test('the converged @context exposes the entry + deprecated rendering surfaces and the instances surface', async function (assert) {

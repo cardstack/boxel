@@ -50,12 +50,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
+interface TestNamedArgs {
+  query: SearchEntryWireQuery | undefined;
+  cardInitiated?: boolean;
+  getDefaultRealm?: () => string | undefined;
+}
+
 function getResourceForTest(
   parent: object,
   args: () => {
-    named: {
-      query: SearchEntryWireQuery | undefined;
-    };
+    named: TestNamedArgs;
   },
 ) {
   return SearchEntriesResource.from(parent, args) as unknown as Omit<
@@ -64,12 +68,7 @@ function getResourceForTest(
   > & {
     // we expose the private loaded promise just for our tests
     loaded: Promise<void>;
-    modify: (
-      positional: never[],
-      named: {
-        query: SearchEntryWireQuery | undefined;
-      },
-    ) => void;
+    modify: (positional: never[], named: TestNamedArgs) => void;
   };
 }
 
@@ -274,6 +273,75 @@ module('Integration | search-entries resource', function (hooks) {
         'an html-bearing entry has no item fallback',
       );
     }
+  });
+
+  test('a card-initiated no-realm search scopes to the default realm instead of fanning out', async function (assert) {
+    // The footgun this guards against: a card whose realms array resolves to
+    // empty (e.g. its model has no id yet) would otherwise turn a single-realm
+    // render into a federated scan across every readable realm. Card-initiated,
+    // it targets the default realm (the realm the `@context` was provided with)
+    // and never sees realm2's matching book.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => testRealmURL,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      2,
+      'only the two books in the default realm are returned',
+    );
+    assert.true(
+      search.entries.every((entry) => entry.realmUrl === testRealmURL),
+      'every result is from the default realm',
+    );
+    assert.false(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 was never searched — no fan-out',
+    );
+  });
+
+  test('a card-initiated no-realm search with no resolvable default realm yields no results', async function (assert) {
+    // When the default realm cannot be determined (the model has no id yet), a
+    // card search returns nothing rather than falling back to every realm.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => undefined,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      0,
+      'no results, rather than a fan-out across all realms',
+    );
+  });
+
+  test('a host-owned no-realm search keeps the all-realms fallback', async function (assert) {
+    // Host-owned surfaces (the search sheet, choosers, playground) legitimately
+    // want every readable realm — leaving `cardInitiated` unset preserves that.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+      },
+    }));
+    await search.loaded;
+
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealmURL),
+      'the default realm is searched',
+    );
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 is searched too — the all-realms fallback still fans out',
+    );
   });
 
   test('registers file result URLs so clicks/overlay classify them as files', async function (assert) {
