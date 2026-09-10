@@ -282,6 +282,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
       let id = nextFetchId++;
       let epoch = currentTestEpoch;
       let startedAt = Date.now();
+      let rejected = false;
       inFlightFetches.set(id, {
         desc: `${method} ${url}`,
         startedAt,
@@ -308,13 +309,20 @@ function setupFetchDebugging(hooks: NestedHooks) {
         }
         return await boundFetch(input, init);
       } catch (error) {
+        rejected = true;
         let reason = formatErrorForLog(error);
         console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
         rememberFailedFetch(epoch, method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
-        rememberSlowFetch(epoch, method, url, Date.now() - startedAt);
+        // Only requests that answered: one that rejected is already named in
+        // `recentFailedFetches`, and counting it here as well would both
+        // double-report it and inflate a total the dump presents as the cost
+        // of work that succeeded.
+        if (!rejected) {
+          rememberSlowFetch(epoch, method, url, Date.now() - startedAt);
+        }
       }
     };
     globalThis.fetch = wrappedFetch;

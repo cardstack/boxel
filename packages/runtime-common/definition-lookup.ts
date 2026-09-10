@@ -127,6 +127,10 @@ const POPULATE_RACE_MAX_ATTEMPTS = 3;
 // anything having to be restarted or cleared.
 const REALM_PROBE_TIMEOUT_MS = 5_000;
 const REALM_PROBE_UNREACHABLE_TTL_MS = ERROR_CACHE_TTL_MS;
+// How many unreachable origins are remembered at once. Sized well above the
+// number of realms any one deployment federates with, so the cap is a guard
+// against caller-supplied origins accumulating rather than a working limit.
+const REALM_PROBE_UNREACHABLE_MAX = 100;
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -417,43 +421,57 @@ function originOf(moduleURL: string): string | undefined {
   }
 }
 
-// Settles with `work` if it finishes inside `ms`, and rejects otherwise. The
-// abandoned promise's rejection is absorbed so it cannot surface as an
-// unhandled rejection after the deadline has already been reported.
-async function withDeadline<T>(
-  work: Promise<T>,
-  ms: number,
-  description: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`${description} exceeded ${ms}ms`)),
-          ms,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) {
+// One timer serving both halves of a probe's bound.
+//
+// `signal` goes on the request, and the reason it aborts with is named
+// `AbortError` rather than the `TimeoutError` an `AbortSignal.timeout` would
+// raise. That name is load-bearing: the virtual network's retry wrapper
+// treats an `AbortError` as caller cancellation and rethrows it, while any
+// other rejection enters its retry loop — so a `TimeoutError` here would
+// leave attempts running in the background after the deadline had already
+// been reported, which is the opposite of a bound.
+//
+// `expired` settles the caller's own race, so the bound holds even where the
+// signal is dropped between here and the socket.
+function probeDeadline(ms: number, description: string) {
+  let controller = new AbortController();
+  let rejectExpired: (reason: unknown) => void;
+  let expired = new Promise<never>((_resolve, reject) => {
+    rejectExpired = reject;
+  });
+  // Never surfaces as an unhandled rejection: `settle` attaches a sink, and
+  // when the request wins the race the timer is cleared before it can fire.
+  expired.catch(() => {});
+  let timer = setTimeout(() => {
+    let reason = new DOMException(
+      `${description} exceeded ${ms}ms`,
+      'AbortError',
+    );
+    controller.abort(reason);
+    rejectExpired(reason);
+  }, ms);
+  return {
+    signal: controller.signal,
+    expired,
+    settle() {
       clearTimeout(timer);
-    }
-    work.catch(() => {});
-  }
+    },
+  };
 }
 
 // Identifies the caller a probe is answered for, so probes are shared only
-// among callers whose visibility answer must agree.
+// among callers whose visibility answer must agree. `forEach` rather than
+// `entries()`: `Headers` is iterable only under a `dom.iterable` lib, and
+// this module is type-checked by packages that do not enable one.
 function probeAuthKey(headers?: HeadersInit): string {
   if (!headers) {
     return '';
   }
-  return [...new Headers(headers).entries()]
-    .map(([name, value]) => `${name}:${value}`)
-    .sort()
-    .join(',');
+  let parts: string[] = [];
+  new Headers(headers).forEach((value, name) => {
+    parts.push(`${name}:${value}`);
+  });
+  return parts.sort().join(',');
 }
 
 export class CachingDefinitionLookup implements DefinitionLookup {
@@ -1464,24 +1482,37 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     headers?: HeadersInit,
   ): Promise<RemoteRealmProbe | null> {
     let startedAt = Date.now();
+    // The deadline is enforced on the caller, not only on the request. The
+    // signal is passed as well so the socket is torn down wherever the fetch
+    // stack honors it, but a probe must be bounded even where it does not:
+    // the request travels through the virtual network's remapping, retry and
+    // dispatcher layers, each of which rebuilds it, and a platform connect
+    // timeout an order of magnitude longer than this deadline sits underneath
+    // them all. Racing here makes the bound hold regardless of which layer
+    // the signal survives.
+    let deadline = probeDeadline(
+      REALM_PROBE_TIMEOUT_MS,
+      `remote realm visibility probe for ${moduleURL}`,
+    );
+    let request = this.#fetch(moduleURL, {
+      method: 'HEAD',
+      headers,
+      signal: deadline.signal,
+    });
+    // The abandoned request settles after the race is already lost, so its
+    // rejection needs a sink of its own.
+    request.catch(() => {});
     try {
-      // The deadline is enforced on the caller, not only on the request. The
-      // signal is passed as well so the socket is torn down wherever the
-      // fetch stack honors it, but a probe must be bounded even where it does
-      // not: the request travels through the virtual network's remapping,
-      // retry and dispatcher layers, each of which rebuilds it, and a
-      // platform connect timeout an order of magnitude longer than this
-      // deadline sits underneath them all. Racing here makes the bound hold
-      // regardless of which layer the signal survives.
-      let response = await withDeadline(
-        this.#fetch(moduleURL, {
-          method: 'HEAD',
-          headers,
-          signal: AbortSignal.timeout(REALM_PROBE_TIMEOUT_MS),
-        }),
-        REALM_PROBE_TIMEOUT_MS,
-        `remote realm visibility probe for ${moduleURL}`,
-      );
+      let response = await Promise.race([request, deadline.expired]);
+      // Any HTTP answer proves the origin is reachable, whatever its status.
+      // Clearing here matters when probes for the same origin overlap: one
+      // may fail at the transport and record the origin while another is
+      // being answered, and leaving that record standing would hide a
+      // demonstrably reachable realm — reporting its types as nonexistent —
+      // until the window lapsed.
+      if (origin) {
+        this.#unreachableOrigins.delete(origin);
+      }
       if (!response.ok) {
         log.debug(
           `Remote realm visibility probe for ${moduleURL} answered ${response.status} in ${Date.now() - startedAt}ms`,
@@ -1502,10 +1533,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       };
     } catch (err) {
       if (origin) {
-        this.#unreachableOrigins.set(
-          origin,
-          Date.now() + REALM_PROBE_UNREACHABLE_TTL_MS,
-        );
+        this.recordUnreachableOrigin(origin);
       }
       log.warn(
         `Failed to probe remote realm visibility for ${moduleURL} after ${Date.now() - startedAt}ms${
@@ -1516,6 +1544,36 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         err,
       );
       return null;
+    } finally {
+      deadline.settle();
+    }
+  }
+
+  // A filter carries arbitrary module URLs, so the origins reaching this are
+  // caller-supplied and unbounded in variety. Expiry alone would not contain
+  // the map — a record is only read, and so only retired, when that same
+  // origin is probed again, which for a one-off origin never happens — so
+  // sweep what has lapsed on the way in and cap what remains. Evicting the
+  // oldest insertion is the right sacrifice: it costs one probe the next time
+  // that origin is named, and the origins worth remembering are the ones
+  // being named repeatedly.
+  private recordUnreachableOrigin(origin: string): void {
+    let now = Date.now();
+    for (let [recorded, expiresAt] of this.#unreachableOrigins) {
+      if (expiresAt <= now) {
+        this.#unreachableOrigins.delete(recorded);
+      }
+    }
+    // Re-inserting moves the origin to the end of the Map's insertion order,
+    // which is what makes the eviction below oldest-first.
+    this.#unreachableOrigins.delete(origin);
+    this.#unreachableOrigins.set(origin, now + REALM_PROBE_UNREACHABLE_TTL_MS);
+    while (this.#unreachableOrigins.size > REALM_PROBE_UNREACHABLE_MAX) {
+      let oldest = this.#unreachableOrigins.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      this.#unreachableOrigins.delete(oldest.value);
     }
   }
 

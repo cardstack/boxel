@@ -2815,7 +2815,22 @@ module(basename(import.meta.filename), function () {
     };
 
     let virtualNetwork: VirtualNetwork;
+    let sharedLookup: CachingDefinitionLookup;
     let lookup: DefinitionLookup;
+
+    // A realm like the one above but owned by someone else, so a lookup
+    // scoped to it probes as a different user.
+    function realmOwnedBy(url: string, userId: string) {
+      return {
+        url,
+        async getRealmOwnerUserId() {
+          return userId;
+        },
+        async visibility(): Promise<'private'> {
+          return 'private';
+        },
+      };
+    }
 
     hooks.before(async function () {
       prepareTestDB();
@@ -2828,12 +2843,14 @@ module(basename(import.meta.filename), function () {
 
     hooks.beforeEach(function () {
       virtualNetwork = createVirtualNetwork();
-      lookup = new CachingDefinitionLookup(
+      // One instance per test, so the probe maps a test observes are its own.
+      sharedLookup = new CachingDefinitionLookup(
         adapter,
         unusedPrerenderer,
         virtualNetwork,
         testCreatePrerenderAuth,
-      ).forRealm(localRealm);
+      );
+      lookup = sharedLookup.forRealm(localRealm);
     });
 
     test('a probe whose remote never answers is abandoned at its own deadline', async function (assert) {
@@ -2959,6 +2976,198 @@ module(basename(import.meta.filename), function () {
           probes,
           1,
           'the origin is probed once; later lookups under it read the record instead of the network',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('a deadline is not mistaken for a retryable failure on a retryable origin', async function (assert) {
+      // `localhost` is a retryable host in the test suite, so this probe goes
+      // through the retry loop rather than past it. The retry layer classifies
+      // by error name and treats only a caller's abort as final; a deadline
+      // that raised anything else would be retried, leaving attempts running
+      // in the background after the deadline had been reported.
+      let remoteModuleURL = 'http://localhost:9/person.gts';
+      let attempts = 0;
+
+      // Rejects with the abort reason the way a real fetch does, which is what
+      // puts the reason's name in front of the retry layer's classifier. A
+      // handler that ignored the signal would leave the request pending
+      // instead, and the retry loop — which only ever sees rejections — would
+      // never be reached at all, so the test would pass whatever the name.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        attempts++;
+        return await new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            'abort',
+            () => reject(request.signal.reason),
+            { once: true },
+          );
+        });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let startedAt = Date.now();
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(remoteModuleURL),
+            name: 'Person',
+          }),
+          'a retryable origin that never answers still cannot place the module',
+        );
+        let elapsed = Date.now() - startedAt;
+
+        assert.strictEqual(attempts, 1, 'the probe was attempted once');
+        assert.ok(
+          elapsed < 9_000,
+          `the deadline ended the probe rather than the retry ladder (took ${elapsed}ms)`,
+        );
+
+        // Longer than the first retry's backoff, so a retried attempt would
+        // have landed by now.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        assert.strictEqual(
+          attempts,
+          1,
+          'no further attempt is issued after the deadline is reported',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('an origin answering one probe clears a record another probe left', async function (assert) {
+      // The record is written by a probe that fails at the transport, and read
+      // before any probe is made — so the only way a probe reaches an origin
+      // that is already recorded is by having been in flight when the record
+      // was written. That overlap is what this covers: leaving the record
+      // standing would hide a realm that is demonstrably answering.
+      let remoteRealmURL = 'http://recovering-remote-realm/';
+      let attempted: string[] = [];
+      let releaseFailing: (() => void) | undefined;
+      let releaseAnswering: (() => void) | undefined;
+      let failingGate = new Promise<void>((resolve) => {
+        releaseFailing = resolve;
+      });
+      let answeringGate = new Promise<void>((resolve) => {
+        releaseAnswering = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (
+          request.method !== 'HEAD' ||
+          !request.url.startsWith(remoteRealmURL)
+        ) {
+          return null;
+        }
+        attempted.push(request.url);
+        if (request.url.endsWith('/fails.gts')) {
+          await failingGate;
+          throw new TypeError('fetch failed');
+        }
+        await answeringGate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let failing = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}fails.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe fails at the transport cannot be placed',
+        );
+        let answering = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}answers.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe is answered 404 has no module to place',
+        );
+
+        // Both probes are past the record check before either settles; the
+        // failing one then records the origin, and the answered one has to
+        // clear it.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        releaseFailing!();
+        await failing;
+        releaseAnswering!();
+        await answering;
+
+        attempted.length = 0;
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}later.gts`),
+            name: 'Person',
+          }),
+          'a later entry under the same origin still cannot be placed',
+        );
+        assert.deepEqual(
+          attempted,
+          [`${remoteRealmURL}later.gts`],
+          'the origin is probed again rather than read as unreachable',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('two owners probing one module do not share a visibility result', async function (assert) {
+      // The probe's answer decides `cacheScope` and `cacheUserId`, so sharing
+      // one across callers would hand one user's view of a private realm to
+      // another. Each caller must get its own request, carrying its own
+      // assumed user.
+      let remoteRealmURL = 'http://per-user-remote-realm/';
+      let remoteModuleURL = `${remoteRealmURL}person.gts`;
+      let firstOwner = '@owner-one:localhost';
+      let secondOwner = '@owner-two:localhost';
+      let assumedUsers: string[] = [];
+      let release: (() => void) | undefined;
+      let gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        assumedUsers.push(request.headers.get('X-Boxel-Assume-User') ?? '');
+        await gate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let asFirst = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4454/', firstOwner),
+        );
+        let asSecond = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4455/', secondOwner),
+        );
+
+        let lookups = [asFirst, asSecond].map((scoped) =>
+          assert.rejects(
+            scoped.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            'neither caller finds a module to place',
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        release!();
+        await Promise.all(lookups);
+
+        assert.deepEqual(
+          assumedUsers.slice().sort(),
+          [firstOwner, secondOwner].slice().sort(),
+          'each owner gets its own probe, carrying its own assumed user',
         );
       } finally {
         virtualNetwork.unmount(handler);
