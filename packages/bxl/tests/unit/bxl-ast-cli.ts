@@ -548,6 +548,54 @@ strictEqual(
   'storage source uses field keys, not display labels',
 );
 
+// The request-context builtins. They read state that belongs to one request,
+// so `mutation` is the only profile that admits them: a derivation is stored
+// and reused on later reads, and an authorization decision is not made from a
+// mutation payload.
+for (const call of ['params("body")', 'actor("id")', 'instance("id")']) {
+  strictEqual(
+    parseBxlAst(call, { profile: 'mutation', readableSyntax: false })
+      .profileIssues.length,
+    0,
+    `mutation profile accepts ${call}`,
+  );
+  expectProfileIssue(call, 'derive', 'derive-call-banned', {
+    readableSyntax: false,
+    messageIncludes: 'whichever request last wrote it',
+  });
+  expectProfileIssue(call, 'policy', 'policy-call-banned', {
+    readableSyntax: false,
+    messageIncludes: 'request-context calls',
+  });
+  expectProfileIssue(call, 'authorization', 'authorization-call-banned', {
+    readableSyntax: false,
+    messageIncludes: 'request-context calls',
+  });
+  // `predicate` is an allowlist rather than a denylist, so an unlisted name is
+  // already refused and needs no entry of its own.
+  expectProfileIssue(call, 'predicate', 'predicate-call-banned', {
+    readableSyntax: false,
+  });
+}
+
+// Giving `mutation` its own deny set must not have relaxed anything else it
+// denied when it shared `derive`'s.
+for (const [call, category] of [
+  ['now', 'volatile'],
+  ['debug', 'control/side-effect'],
+  ['builtins', 'runtime metadata'],
+  ['env', 'control/side-effect'],
+] as const) {
+  expectProfileIssue(call, 'mutation', 'mutation-call-banned', {
+    readableSyntax: false,
+    messageIncludes: category,
+  });
+  expectProfileIssue(call, 'derive', 'derive-call-banned', {
+    readableSyntax: false,
+    messageIncludes: category,
+  });
+}
+
 const readable = storageToReadableBxlExpression(stored.source, { schema });
 strictEqual(
   readable.source.includes('"Line Item"'),

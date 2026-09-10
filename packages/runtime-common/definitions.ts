@@ -5,6 +5,7 @@ import {
   isResolvedCodeRef,
   type CodeRef,
 } from './index.ts';
+import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
@@ -38,6 +39,14 @@ export interface Definition {
   displayName: string | null;
   fields: { [fieldName: string]: string };
   fieldDefs: { [defId: string]: FieldDefinition };
+  // The type's `@operation` declarations, lowered to base-operation data plus
+  // BXL and keyed by operation name. This is what makes an operation
+  // resolvable from a card's `adoptsFrom` alone: a card's JSON names its
+  // type, and the type's entry carries everything needed to run the
+  // operation, so the realm never loads the card's module to invoke one.
+  // Omitted when the type declares no operations, which keeps the entry for
+  // every other type unchanged.
+  operations?: { [operationName: string]: OperationDefinition };
 }
 
 // Stable JSON serialization for content-keyed interning. Keys sorted at

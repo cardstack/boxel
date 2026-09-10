@@ -81,11 +81,11 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
-// CS-11038 regression test: loadLinks must batch in-realm link resolution
-// rather than issuing one DB round-trip per relationship. With 50 source
-// cards each linking to 5 targets, the original implementation would have
-// fired 250 sequential `WHERE i.url = $1` lookups. The new BFS path issues
-// one batched `WHERE i.url IN (...)` per recursion depth.
+// loadLinks resolves in-realm links in batches rather than one DB round-trip
+// per relationship: each BFS layer issues a single `WHERE i.url IN (...)`
+// lookup for every link it has to follow. Resolved per link with
+// `WHERE i.url = $1`, 50 source cards with 5 links each would cost 250
+// sequential queries.
 module(basename(import.meta.filename), function () {
   module('loadLinks batching', function (hooks) {
     let realm: Realm;
@@ -109,6 +109,17 @@ module(basename(import.meta.filename), function () {
         execute: typeof testDbAdapter.execute;
       };
 
+      // Only lookups that bind one of the fixture's link targets count. The
+      // search path issues one instance lookup of its own: assembling the
+      // result runs attachRealmInfo → getRealmInfo → parseRealmInfo, which
+      // overlays the indexed RealmConfig card through a single `i.url = $1`
+      // query the first time after indexing has cleared the realm-info cache.
+      // That query resolves no link, and neither would any other lookup the
+      // search path grows; counting by shape alone would fail on all of them.
+      let targetPrefix = `${testRealm.href}target-`;
+      let looksUpALinkTarget = (bind: unknown[]) =>
+        bind.some((v) => typeof v === 'string' && v.startsWith(targetPrefix));
+
       try {
         dbExecute.execute = async (sql, opts) => {
           // `param('instance')` becomes a `$N` placeholder in the rendered
@@ -116,10 +127,11 @@ module(basename(import.meta.filename), function () {
           // is filtering for instance rows.
           let bind = opts?.bind ?? [];
           let normalized = sql.replace(/\s+/g, ' ');
-          let isBoxelIndexInstanceLookup =
+          let isLinkTargetInstanceLookup =
             /FROM boxel_index\b/.test(normalized) &&
-            bind.some((v) => v === 'instance');
-          if (isBoxelIndexInstanceLookup) {
+            bind.some((v) => v === 'instance') &&
+            looksUpALinkTarget(bind);
+          if (isLinkTargetInstanceLookup) {
             // Old per-link path: WHERE i.url = $1 OR i.file_alias = $1
             // New batched path:  WHERE i.url IN ($1, ..., $N) OR i.file_alias IN (...)
             if (/\bi\.url\s+IN\s*\(/.test(normalized)) {

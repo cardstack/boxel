@@ -2,6 +2,12 @@ import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import * as os from 'os';
+import {
+  BOOT_SETTLE_TIMEOUT_MS,
+  DRAIN_BUDGET_MS,
+  DB_CLOSE_BUDGET_MS,
+} from './fixture-budgets.ts';
+import { withBudget } from './with-budget.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import { runBoxel } from './run-boxel.ts';
 import {
@@ -113,19 +119,6 @@ function fixtureTotalMs(): number {
 }
 
 /**
- * How long teardown waits for an in-flight boot to publish its results (or
- * fail), so that it sees everything the boot created.
- *
- * A cap rather than an unbounded wait, because a boot that never settles would
- * otherwise hold teardown until the hook budget above it. Reaching the cap is
- * the one case teardown cannot clean up: the boot has by definition not
- * reached its `listen` yet, so there is nothing to close and nothing for the
- * next file's pre-flight check to see either. Generous enough that a boot
- * costing an order of magnitude over its usual second is still waited out.
- */
-const BOOT_SETTLE_TIMEOUT_MS = 60_000;
-
-/**
  * True when something is accepting connections at `host:port`. Used to tell a
  * leaked fixture server apart from a clean start, so the leak is reported at
  * the boot that trips over it.
@@ -146,6 +139,12 @@ export function isPortListening(host: string, port: number): Promise<boolean> {
   });
 }
 
+/**
+ * Wait for the in-flight boot to publish its results (or fail) so teardown
+ * sees everything it created. A boot that outlives this window is reported by
+ * `startTestRealmServer`'s own pre-flight check in the next file rather than
+ * hanging teardown here.
+ */
 async function settleBoot(): Promise<void> {
   let boot = pendingBoot;
   if (!boot) {
@@ -376,6 +375,20 @@ export function getTestDbAdapter(): PgAdapter | undefined {
   return dbAdapter;
 }
 
+// The two budgeted steps below both wait on the same thing: index work this
+// suite started and stopped caring about. A suite whose assertions finish
+// before the from-scratch index does is asking teardown to sit through a whole
+// index pass, prerender round-trips included. `fixture-budgets` carries why
+// each step can wait indefinitely and why a harness must not.
+//
+// Abandoning that work is safe in the one way that matters: `prepareTestDB`
+// names a database per process and per call, so the job runs on a database
+// belonging to this file alone and cannot reach the next file's data. It logs
+// connection errors once the pool is gone, and its pool stays checked out
+// until the process exits — noise and a handful of connections against a
+// throwaway test cluster, in exchange for ports that are free when the next
+// suite starts.
+
 export async function stopTestRealmServer(): Promise<void> {
   // A boot whose caller stopped waiting for it is still going to publish a
   // listening server into the module state below, so teardown waits for it
@@ -396,12 +409,49 @@ export async function stopTestRealmServer(): Promise<void> {
     publisher = undefined;
   }
   if (runner) {
-    await runner.destroy();
+    let drain = await withBudget(
+      'queue runner drain',
+      runner.destroy(),
+      DRAIN_BUDGET_MS,
+    );
     runner = undefined;
+    // Same consequence either way — a job may still be running against this
+    // file's database — but not the same cause, and the log is the only place
+    // that distinction survives. An expired budget is the mechanism working;
+    // a rejection is a shutdown path that broke.
+    if (drain === 'expired') {
+      console.warn(
+        `[teardown] a claimed job outlived its ${DRAIN_BUDGET_MS / 1000}s drain ` +
+          `budget and is left running against ${process.env.PGDATABASE}. Queue or ` +
+          `database errors logged past this point belong to the suite that just ended.`,
+      );
+    } else if (drain === 'failed') {
+      console.warn(
+        `[teardown] the queue runner did not shut down cleanly, so a job may ` +
+          `still be running against ${process.env.PGDATABASE}. Queue or database ` +
+          `errors logged past this point belong to the suite that just ended.`,
+      );
+    }
   }
   if (dbAdapter) {
-    await dbAdapter.close();
+    let close = await withBudget(
+      'database pool close',
+      dbAdapter.close(),
+      DB_CLOSE_BUDGET_MS,
+    );
     dbAdapter = undefined;
+    if (close === 'expired') {
+      console.warn(
+        `[teardown] the pool for ${process.env.PGDATABASE} still had clients ` +
+          `checked out after ${DB_CLOSE_BUDGET_MS / 1000}s; its connections are ` +
+          `left to the process exit.`,
+      );
+    } else if (close === 'failed') {
+      console.warn(
+        `[teardown] the pool for ${process.env.PGDATABASE} did not close; its ` +
+          `connections are left to the process exit.`,
+      );
+    }
   }
   if (realmsRootDir) {
     fs.rmSync(realmsRootDir, { recursive: true, force: true });

@@ -139,6 +139,17 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     seed?:
       | {
           cards: T[];
+          // What this result set is, as against any other the same query could
+          // produce. A resource already holding a seed with this identity
+          // ignores the seed rather than re-applying it.
+          identity?: string;
+          // The index generation the producer resolved this set at, and the
+          // realm whose counter it belongs to. Together they order this set
+          // against one the resource already holds — a generation counts
+          // writes within a single realm, so it means nothing without the
+          // realm that issued it.
+          generation?: number;
+          realm?: string;
           searchURL?: string;
           realms?: string[];
           meta?: QueryResultsMeta;
@@ -216,6 +227,39 @@ export class SearchResource<
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
+  // Identity of the seeded result set this resource holds, cleared once a search
+  // completes and re-derives that set for itself. Deliberately untracked: the
+  // query-field getter reads it and then hands over a seed that writes it in the
+  // same render, and a tracked write there would trip the backtracking
+  // assertion. Reading it untracked is safe because that getter also consumes
+  // `instances`, so a search that cleared this has already dirtied what brought
+  // the reader here.
+  #appliedSeedIdentity: string | undefined;
+  // Per realm, the index generation this resource's result set is known to
+  // reflect, as a floor. It is what orders a document against a search: both
+  // name a generation, so the newer of the two wins rather than whichever
+  // arrived last. Each entry is raised and never lowered, so a set whose
+  // generation cannot be established keeps the floor already established
+  // rather than reverting to none — that refuses a fresh document at worst,
+  // where the other direction would let a stale one overwrite a newer answer.
+  //
+  // Keyed by realm because a generation counts writes within one realm and
+  // nothing else: `realm_generations` is per `realm_url`, so a document's
+  // generation and a search's are the same scale only when they came from the
+  // same realm. A query whose realms differ from its owner's would otherwise
+  // compare two unrelated sequences, and whichever ran ahead would decide every
+  // handover for that field — either declining all of them or none.
+  //
+  // Both sides are floors rather than exact resolution generations. A search
+  // is stamped with the generation of the event that woke it, and the index it
+  // then reads is at or after that. A document is stamped with the generation
+  // its owner's row was written at, which a query field's own membership never
+  // advances: dependencies reached only through a query context are left out of
+  // the row's deps, so a matching card changing never rewrites the owner. Both
+  // err toward declining a document that is in fact fresh. Making the document
+  // side exact means stamping the resolution's own generation on the umbrella
+  // relationship where the indexer resolves it.
+  #resultGenerations = new Map<string, number>();
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -464,6 +508,10 @@ export class SearchResource<
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
     if (seed && !this.#seedApplied) {
+      // Recorded before the application starts, because the application itself
+      // reads it to confirm it is still the seed the resource reports holding.
+      this.#appliedSeedIdentity = seed.identity;
+      this.#raiseResultGeneration(seed.realm, seed.generation);
       this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
       this.#seedApplied = true;
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
@@ -549,8 +597,16 @@ export class SearchResource<
             if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
               return;
             }
+            // The generation the indexing pass committed, and the realm whose
+            // counter it belongs to. A search answering this event reads the
+            // index at or after it, so together they stand as the floor for
+            // what the result set reflects of that realm.
+            let generation =
+              'generation' in event && typeof event.generation === 'number'
+                ? event.generation
+                : undefined;
             this.trackStoreLoad(
-              this.search.perform(this.#previousQuery),
+              this.search.perform(this.#previousQuery, generation, realm),
               'live-refresh',
             );
           }),
@@ -584,6 +640,102 @@ export class SearchResource<
   // compare equal and the seed can satisfy the initial search.
   private querySignature(query: Query): string {
     return canonicalQuerySignature(query, this.network.virtualNetwork);
+  }
+
+  // Apply a result set to a resource that is already running. A document
+  // fetched for the owner carries this field resolved as of that read, which
+  // supersedes what the resource holds: the live subscription refreshes only on
+  // events for the realms the query targets, so a session that never received
+  // one — a dropped subscription, a tab resumed after a gap, or a write to a
+  // realm outside the query's own set — is behind until something hands it a
+  // fresher answer. A result set the producer resolved in full costs nothing to
+  // take: the query is suppressed the same way the initial seed suppresses it,
+  // because the document already paid for the resolution. Only a set a realm
+  // failure cut short sends the field back to a live query (below).
+  //
+  // A seed asserting what this resource already holds is dropped here rather
+  // than at the call site, so the comparison is against the resource's own
+  // state and not a caller's memory of it. Supersession needs an identity to
+  // compare: a seed carrying none cannot be told apart from any other and is
+  // always applied.
+  //
+  // Both `perform`s below write ember-concurrency's tracked task state, and
+  // this runs from the query-field getter during a render. A consumer that
+  // reads `getRelationshipMembershipState(...).isLoading` for a query field
+  // *before* reading the field itself in the same render would see that write
+  // land after its own read.
+  reseed(seed: NonNullable<Args<T>['named']['seed']>): void {
+    if (seed.identity && seed.identity === this.#appliedSeedIdentity) {
+      return;
+    }
+    // Older than what this resource holds for the realm the document came from,
+    // so it is not news — it is a read that was already in flight when a later
+    // one landed. Without this the handover has no ordering at all and the last
+    // arrival wins, which loses a completed search to a document resolved
+    // before it. The comparison needs a realm and a generation on both sides;
+    // absent any of them the identity check above decides alone.
+    let seedFloor =
+      seed.realm != null ? this.#resultGenerations.get(seed.realm) : undefined;
+    if (
+      seed.generation != null &&
+      seedFloor != null &&
+      seed.generation < seedFloor
+    ) {
+      this.#log.info(
+        `decline seed from generation ${seed.generation}; holding generation ${seedFloor} for realm ${seed.realm}`,
+      );
+      return;
+    }
+    // Before the application starts, for the reason the initial seed records it
+    // first: the application confirms against this that it has not been
+    // superseded.
+    this.#appliedSeedIdentity = seed.identity;
+    this.#raiseResultGeneration(seed.realm, seed.generation);
+    this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
+    let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
+    if (seed.searchURL && !hasQueryErrors) {
+      let { query: seedQuery } = parseSearchURL(seed.searchURL);
+      this.#previousQueryString = this.querySignature(seedQuery);
+    }
+    if (seed.realms) {
+      this.#previousRealms = seed.realms;
+    }
+    // A producer that could not reach every realm resolved a set that is short
+    // by what the failure withheld, so its rows are a floor and not an answer.
+    // The initial seed reaches a live query for exactly this case by leaving
+    // the query signature unset and falling through to `modify`'s search; run
+    // that query directly here, because nothing brings a running resource back
+    // through that fall-through — its query and realms are unchanged, so the
+    // next `modify` skips, and the field would stay short until an unrelated
+    // event.
+    //
+    // Live only, matching the initial seed: a prerender treats the document's
+    // relationships as the authoritative cardinality and runs no query at all,
+    // and a query per field per loaded card is the cascade that rules out.
+    if (this.#isLive && hasQueryErrors && this.#previousQuery) {
+      this.trackStoreLoad(this.search.perform(this.#previousQuery), 'search');
+    }
+  }
+
+  get appliedSeedIdentity() {
+    return this.#appliedSeedIdentity;
+  }
+
+  // Move one realm's floor up, never down. An unknown realm or generation
+  // leaves every floor alone: neither says anything about what the set
+  // reflects, and lowering a floor to `none` would reopen the ordering the
+  // floor exists to close.
+  #raiseResultGeneration(
+    realm: string | undefined,
+    generation: number | undefined,
+  ): void {
+    if (realm == null || generation == null) {
+      return;
+    }
+    let current = this.#resultGenerations.get(realm);
+    if (current == null || generation > current) {
+      this.#resultGenerations.set(realm, generation);
+    }
   }
 
   // Both routes to a result set count as loading. A seeded resource commonly
@@ -912,6 +1064,19 @@ export class SearchResource<
           return type !== 'card-error';
         }) as unknown as T[];
       }
+      // Another seed has been handed over since this one, and it is the set the
+      // resource reports holding. This task runs unbounded — two documents
+      // arriving close together resolve their rows concurrently — so applying
+      // this one now would leave the resource holding the older answer under
+      // the newer identity, whichever of the two happens to finish last. The
+      // check is inert for a producer that supplies no identity, whose seeds
+      // are indistinguishable by design.
+      if (seed.identity !== this.#appliedSeedIdentity) {
+        this.#log.info(
+          `abandon seed superseded while resolving; searchURL=${seed.searchURL}`,
+        );
+        return;
+      }
       // The row count stands in for the total only when the seed didn't report
       // one AND didn't say the count is unknowable. A producer that withheld
       // the count deliberately sets `totalUnknown`, and inferring it from the
@@ -923,81 +1088,95 @@ export class SearchResource<
     },
   );
 
-  private search = restartableTask(async (query: Query) => {
-    this.#log.info(
-      `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
-    );
-    // we cannot use the `waitForPromise` test waiter helper as that will cast
-    // the Task instance to a promise which makes it uncancellable. When this is
-    // uncancellable it results in a flaky test.
-    let token = waiter.beginAsync();
-    try {
-      let dependencyTrackingContext = this.dependencyTrackingContext(
-        'search-resource:search',
+  private search = restartableTask(
+    async (query: Query, generation?: number, realm?: string) => {
+      this.#log.info(
+        `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
+      // we cannot use the `waitForPromise` test waiter helper as that will cast
+      // the Task instance to a promise which makes it uncancellable. When this is
+      // uncancellable it results in a flaky test.
+      let token = waiter.beginAsync();
       try {
-        // A card-`@context` search runs card-initiated — under the page,
-        // realms, and concurrency caps inside `store.search`. `realmsToSearch`
-        // has already resolved a no-realm card search to the current realm
-        // (see modify). Host-internal searches pass no flag and are unbounded.
-        let { instances, meta } = await this.runtimeStore.search<T>(
-          query,
-          this.realmsToSearch,
-          {
-            includeMeta: true,
-            dependencyTrackingContext,
-            cardInitiated: this.#cardInitiated,
-          },
+        let dependencyTrackingContext = this.dependencyTrackingContext(
+          'search-resource:search',
         );
-        this.#log.info(
-          `search task complete; total instances=${instances.length}; refs=${instances
-            .map((r) => r.id)
-            .join(',')}`,
-        );
-        // A completed search reports its own count, which supersedes a seed
-        // that had none.
-        this.seedTotalUnknown = false;
-        this._meta = meta;
-        this._errors = undefined;
-        await this.updateInstances(instances, dependencyTrackingContext);
-      } catch (err) {
-        if (didCancel(err)) {
-          throw err;
-        }
-        this.#log.error(`search task failed`, err);
-        this._errors = [searchErrorEntry(err)];
-        // Zero rows, and zero is not a count of anything: the search failed as
-        // a unit, so what the query matches was never computed. The zero is
-        // kept because the loading and rendering paths need the shape, and both
-        // markers beside it say it is not a count — a rollup reading it would
-        // otherwise settle on the one number no failure can justify, and it is
-        // the most believable wrong answer there is, an empty result set and an
-        // empty match set rendering identically.
-        //
-        // Both are needed, because they are read separately and answer
-        // different halves. `seedTotalUnknown` is what `totalMatchCount`
-        // consults, so it withholds the count. `incomplete` is what the field's
-        // probe consults for the shortfall, and without it the count comes back
-        // unknown while nothing reports rows missing — "how many is unknown,
-        // and you hold all of them", which is the contradiction the shortfall
-        // signal exists to prevent.
-        this.seedTotalUnknown = true;
-        this._meta = { page: { total: 0 }, incomplete: true };
-        if (this._instances.length > 0) {
-          try {
-            await this.updateInstances([], dependencyTrackingContext);
-          } catch (cleanupErr) {
-            if (didCancel(cleanupErr)) {
-              throw cleanupErr;
+        try {
+          // A card-`@context` search runs card-initiated — under the page,
+          // realms, and concurrency caps inside `store.search`. `realmsToSearch`
+          // has already resolved a no-realm card search to the current realm
+          // (see modify). Host-internal searches pass no flag and are unbounded.
+          let { instances, meta } = await this.runtimeStore.search<T>(
+            query,
+            this.realmsToSearch,
+            {
+              includeMeta: true,
+              dependencyTrackingContext,
+              cardInitiated: this.#cardInitiated,
+            },
+          );
+          this.#log.info(
+            `search task complete; total instances=${instances.length}; refs=${instances
+              .map((r) => r.id)
+              .join(',')}`,
+          );
+          // A completed search reports its own count, which supersedes a seed
+          // that had none.
+          this.seedTotalUnknown = false;
+          // This set is the search's own, so no seed describes it any more.
+          // Keeping the last-applied identity here would go on claiming a set
+          // that has been replaced, and would then turn away a document
+          // restoring the very set the search moved off. What orders this set
+          // against a later document is the generation instead.
+          this.#appliedSeedIdentity = undefined;
+          this.#raiseResultGeneration(realm, generation);
+          this._meta = meta;
+          this._errors = undefined;
+          await this.updateInstances(instances, dependencyTrackingContext);
+        } catch (err) {
+          if (didCancel(err)) {
+            throw err;
+          }
+          this.#log.error(`search task failed`, err);
+          this._errors = [searchErrorEntry(err)];
+          // Zero rows, and zero is not a count of anything: the search failed as
+          // a unit, so what the query matches was never computed. The zero is
+          // kept because the loading and rendering paths need the shape, and both
+          // markers beside it say it is not a count — a rollup reading it would
+          // otherwise settle on the one number no failure can justify, and it is
+          // the most believable wrong answer there is, an empty result set and an
+          // empty match set rendering identically.
+          //
+          // Both are needed, because they are read separately and answer
+          // different halves. `seedTotalUnknown` is what `totalMatchCount`
+          // consults, so it withholds the count. `incomplete` is what the field's
+          // probe consults for the shortfall, and without it the count comes back
+          // unknown while nothing reports rows missing — "how many is unknown,
+          // and you hold all of them", which is the contradiction the shortfall
+          // signal exists to prevent.
+          this.seedTotalUnknown = true;
+          this._meta = { page: { total: 0 }, incomplete: true };
+          // The applied seed identity deliberately survives a failure, unlike a
+          // completed search above. A failed search computed nothing, so what a
+          // document last asserted about this field is still the last thing
+          // anyone asserted; clearing it here would let the next read reinstate
+          // those rows and, with them, clear the error this failure is reporting.
+          if (this._instances.length > 0) {
+            try {
+              await this.updateInstances([], dependencyTrackingContext);
+            } catch (cleanupErr) {
+              if (didCancel(cleanupErr)) {
+                throw cleanupErr;
+              }
+              this.#log.error(`search cleanup failed`, cleanupErr);
             }
-            this.#log.error(`search cleanup failed`, cleanupErr);
           }
         }
+      } finally {
+        waiter.endAsync(token);
       }
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
+    },
+  );
 }
 
 // WARNING! please don't import this directly into your component's module.
@@ -1024,6 +1203,9 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
     seed?:
       | {
           cards: T[];
+          identity?: string;
+          generation?: number;
+          realm?: string;
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];

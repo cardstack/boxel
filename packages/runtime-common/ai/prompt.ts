@@ -251,7 +251,6 @@ export async function getPromptParts(
   let messages = await buildPromptForModel(
     history,
     aiBotUserId,
-    tools,
     skills,
     disabledSkillIds,
     client,
@@ -268,6 +267,31 @@ export async function getPromptParts(
     reasoningEffort,
     pendingCodePatchCorrectnessChecks,
   };
+}
+
+// The host reports a patch result with the fenced block's position among ALL
+// code blocks in the message, while `codePatchBlocks` holds the patch blocks
+// only. A message that quotes an example code fence before its first patch
+// therefore reports indexes that never line up with 0..n-1, so matching by
+// position waited forever on a patch the host had long applied. Match by
+// count instead: a result per distinct block index, at least one per patch.
+function allCodePatchesHaveAResult(
+  codePatchBlocks: string[],
+  results: CodePatchResultEvent[],
+  onlyApplied = false,
+): boolean {
+  if (codePatchBlocks.length === 0) {
+    return true;
+  }
+  let indexes = new Set(
+    results
+      .filter(
+        (result) =>
+          !onlyApplied || result.content['m.relates_to']?.key === 'applied',
+      )
+      .map((result) => result.content.codeBlockIndex),
+  );
+  return indexes.size >= codePatchBlocks.length;
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
@@ -311,16 +335,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  let allCodePatchesHaveResults =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_codePatchBlock: string, codePatchIndex: number) => {
-      return recentEventsToCheck.some((event) => {
-        return (
-          isCodePatchResultEvent(event) &&
-          event.content.codeBlockIndex === codePatchIndex
-        );
-      });
-    });
+  let allCodePatchesHaveResults = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    recentEventsToCheck.filter(isCodePatchResultEvent),
+  );
   if (!allToolsHaveResults || !allCodePatchesHaveResults) {
     return false;
   }
@@ -699,33 +717,6 @@ export function getRelevantCards(
     mostRecentlyAttachedCard: mostRecentlyAttachedCard,
     attachedCards: sortedCards,
   };
-}
-
-export function hasSomeAttachedCards(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): boolean {
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-
-    if (event.sender !== aiBotUserId) {
-      let { content } = event;
-      let attachedCards = (content as CardMessageContent).data?.attachedCards
-        ?.map((attachedCard: SerializedFileDef) =>
-          attachedCard.content
-            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
-            : undefined,
-        )
-        .filter((card) => card !== undefined);
-      if (attachedCards?.length) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 // A message's rendering must depend only on the message itself, never on
@@ -1304,9 +1295,13 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using one or more SEARCH/REPLACE blocks (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
-2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
-3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+// Sent after a correctness check fails. The fix must be a SEARCH/REPLACE block
+// against the file: a card that just failed its check is usually not indexed,
+// so any card-editing tool (patch-fields, patchCardInstance) applies to
+// nothing and costs a turn. Name no tool, ban them all.
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Fix the errors above by editing the failing file(s) with SEARCH/REPLACE blocks. Do not call any tool to make the fix — a card that just failed its check is not indexed yet, so a tool applies to nothing.
+2. First re-fetch the files that have errors so the SEARCH block matches their current content, then write the fixing blocks in the same reply.
+3. One short sentence of prose before the blocks saying there is an issue you are fixing; do not mention SEARCH/REPLACE blocks in the prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
@@ -1566,7 +1561,6 @@ function toCheckCorrectnessResultContent(
 export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[] = [],
   skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
@@ -1674,7 +1668,6 @@ export async function buildPromptForModel(
   let contextContent = await buildContextMessage(
     history,
     aiBotUserId,
-    tools,
     disabledSkillIds,
   );
   // The context carries the current time, so its bytes change on every
@@ -1818,13 +1811,10 @@ function collectPendingCodePatchCorrectnessCheck(
     let appliedCodePatchResults = codePatchResults.filter(
       (result) => result.content['m.relates_to']?.key === 'applied',
     );
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        appliedCodePatchResults.some(
-          (result) => result.content.codeBlockIndex === index,
-        ),
-      );
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      appliedCodePatchResults,
+    );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1894,15 +1884,11 @@ function hasUnresolvedCodePatches(
     if (isCancelled && !appliedChanges) {
       return false;
     }
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        codePatchResults.some(
-          (result) =>
-            result.content['m.relates_to']?.key === 'applied' &&
-            result.content.codeBlockIndex === index,
-        ),
-      );
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      codePatchResults,
+      true,
+    );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1957,13 +1943,10 @@ function buildCodePatchCorrectnessMessage(
   let appliedCodePatchResults = codePatchResults.filter(
     (result) => result.content['m.relates_to']?.key === 'applied',
   );
-  let allCodePatchesResolved =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_block, index) =>
-      appliedCodePatchResults.some(
-        (result) => result.content.codeBlockIndex === index,
-      ),
-    );
+  let allCodePatchesResolved = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    appliedCodePatchResults,
+  );
   let allRelevantToolsResolved =
     relevantTools.length === 0 ||
     relevantTools.every((request) =>
@@ -2342,7 +2325,6 @@ export const buildCurrentTurnMediaParts = async (
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[],
   disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
@@ -2449,30 +2431,6 @@ export const buildContextMessage = async (
     result += `The user has no open cards.\n`;
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
-
-  // What grants card editing is a card-patch tool in the request —
-  // patch-fields supplied by a skill, or a legacy patchCardInstance sitting
-  // in an old room's history. Interactive messages themselves carry no
-  // tools, so nothing about the UI state (open cards, attachments) implies
-  // edit access. When cards are in play but no such tool is present, say so
-  // — otherwise the model proposes patches it has no way to apply. Reading
-  // the tools array here is cache-safe: this message trails the cache
-  // breakpoint and is re-serialized every turn anyway.
-  let hasCardPatchTool = tools.some((t) =>
-    CARD_PATCH_COMMAND_NAMES.has(t.function.name),
-  );
-  let currentMessageHasAttachedFiles = Boolean(
-    (lastEventWithContext as MatrixEventWithBoxelContext | undefined)?.content
-      ?.data?.attachedFiles?.length,
-  );
-  if (
-    !currentMessageHasAttachedFiles &&
-    !hasCardPatchTool &&
-    hasSomeAttachedCards(history, aiBotUserId)
-  ) {
-    result +=
-      'You are unable to edit any cards: no card-editing tool is available in this room. Editing becomes possible when the user enables a skill that provides one (such as patch-fields). Ask them to do that if they want changes made.';
-  }
 
   return result;
 };

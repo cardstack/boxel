@@ -1,9 +1,12 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { createServer } from 'http';
+import { createServer, type ServerResponse } from 'http';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import {
+  PRERENDER_DISPATCH_DELIVERED,
+  PRERENDER_DISPATCH_HEADER,
+  PRERENDER_DISPATCH_NONE,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
@@ -525,6 +528,299 @@ module(basename(import.meta.filename), function (hooks) {
         assert.ok(attempts >= 2, 'retried after 500');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+  });
+
+  // A command is not idempotent: it creates cards, matrix rooms and outbound
+  // calls, and nothing downstream collapses two identical invocations. So a
+  // retry is only ever safe on a failure that proves no prerender server
+  // received the request — a manager that says it never dispatched, or a
+  // connection that was never established. Every other failure leaves open
+  // that the command ran and only its response was lost.
+  module('run-command retries', function (hooks) {
+    hooks.beforeEach(function () {
+      process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
+      process.env.PRERENDER_MANAGER_RETRY_DELAY_MS = '1';
+    });
+
+    let commandArgs = {
+      userId: '@user:localhost',
+      auth: '{}',
+      command: 'create-card',
+      commandInput: null,
+    } as const;
+
+    // Stands in for the manager: `requests` counts what it received. What a
+    // request stands for is the responder's to say — a 5xx answered after the
+    // command ran to completion, or a rejection that never reached a prerender
+    // server — so each assertion reads the count against its own responder.
+    function makeCommandServer(
+      respond: (res: ServerResponse, requestCount: number) => void,
+    ) {
+      let requests = 0;
+      let server = createServer((_req, res) => {
+        requests++;
+        respond(res, requests);
+      }).listen(0);
+      return {
+        url: () => `http://127.0.0.1:${(server.address() as any).port}`,
+        requests: () => requests,
+        stop: () =>
+          new Promise<void>((resolve) => server.close(() => resolve())),
+      };
+    }
+
+    function succeed(res: ServerResponse) {
+      res.statusCode = 201;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(
+        JSON.stringify({
+          data: { attributes: { status: 'ready', cardResultString: null } },
+        }),
+      );
+    }
+
+    test('does not retry a 5xx that may be a lost response', async function (assert) {
+      // A proxy in front of the manager answers 502 for a request whose
+      // command already ran to completion — the response is what was lost,
+      // not the work.
+      let manager = makeCommandServer((res) => {
+        res.statusCode = 502;
+        res.end('Upstream error');
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /status 502/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
+      } finally {
+        await manager.stop();
+      }
+    });
+
+    test('does not retry a 503 from a manager that may have dispatched', async function (assert) {
+      // 503 with no dispatch header: the manager gives no assurance that the
+      // request stopped short of a prerender server.
+      let manager = makeCommandServer((res) => {
+        res.statusCode = 503;
+        res.end('No servers');
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /status 503/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(
+          manager.requests(),
+          1,
+          'the command ran at most once',
+        );
+      } finally {
+        await manager.stop();
+      }
+    });
+
+    test('retries a failure the manager reports as never dispatched', async function (assert) {
+      let manager = makeCommandServer((res, runs) => {
+        if (runs === 1) {
+          res.statusCode = 503;
+          res.setHeader(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_NONE);
+          res.end('No servers');
+          return;
+        }
+        succeed(res);
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        let result = await prerenderer.runCommand(commandArgs);
+        assert.strictEqual(result.status, 'ready', 'the caller gets a result');
+        assert.strictEqual(
+          manager.requests(),
+          2,
+          'retried the request the manager never handed to a server',
+        );
+      } finally {
+        await manager.stop();
+      }
+    });
+
+    test('retries when the connection was never established', async function (assert) {
+      let manager = makeCommandServer((res) => succeed(res));
+      let originalFetch = globalThis.fetch;
+      let refusedOnce = false;
+
+      try {
+        (globalThis as any).fetch = (...args: Parameters<typeof fetch>) => {
+          if (!refusedOnce) {
+            refusedOnce = true;
+            let err: any = new TypeError('fetch failed');
+            err.cause = Object.assign(new Error('connect ECONNREFUSED'), {
+              code: 'ECONNREFUSED',
+            });
+            return Promise.reject(err);
+          }
+          return originalFetch(...args);
+        };
+
+        let prerenderer = createRemotePrerenderer(manager.url());
+        let result = await prerenderer.runCommand(commandArgs);
+
+        assert.strictEqual(result.status, 'ready', 'the caller gets a result');
+        assert.true(refusedOnce, 'the first attempt was refused');
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+        await manager.stop();
+      }
+    });
+
+    test('retries a connect-phase timeout', async function (assert) {
+      // undici raises this only from the timer it clears once the socket
+      // connects, so it cannot describe a request that was already written.
+      let manager = makeCommandServer((res) => succeed(res));
+      let originalFetch = globalThis.fetch;
+      let timedOutOnce = false;
+
+      try {
+        (globalThis as any).fetch = (...args: Parameters<typeof fetch>) => {
+          if (!timedOutOnce) {
+            timedOutOnce = true;
+            let err: any = new TypeError('fetch failed');
+            err.cause = Object.assign(new Error('Connect Timeout Error'), {
+              name: 'ConnectTimeoutError',
+              code: 'UND_ERR_CONNECT_TIMEOUT',
+            });
+            return Promise.reject(err);
+          }
+          return originalFetch(...args);
+        };
+
+        let prerenderer = createRemotePrerenderer(manager.url());
+        let result = await prerenderer.runCommand(commandArgs);
+
+        assert.strictEqual(result.status, 'ready', 'the caller gets a result');
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+        await manager.stop();
+      }
+    });
+
+    test('does not retry a routing failure', async function (assert) {
+      // A route can die while the request is in flight, and undici forwards
+      // the socket error raw, so the code alone cannot tell that case from a
+      // `connect` that never left the host.
+      let originalFetch = globalThis.fetch;
+      let attempts = 0;
+
+      try {
+        (globalThis as any).fetch = () => {
+          attempts++;
+          let err: any = new TypeError('fetch failed');
+          err.cause = Object.assign(new Error('connect EHOSTUNREACH'), {
+            code: 'EHOSTUNREACH',
+          });
+          return Promise.reject(err);
+        };
+
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /fetch failed/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(attempts, 1, 'made a single attempt');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    });
+
+    test('does not retry a connection reset', async function (assert) {
+      // A reset can land after the server read the request and started the
+      // command, so it proves nothing about whether the command ran.
+      let originalFetch = globalThis.fetch;
+      let attempts = 0;
+
+      try {
+        (globalThis as any).fetch = () => {
+          attempts++;
+          let err: any = new TypeError('fetch failed');
+          err.cause = Object.assign(new Error('socket hang up'), {
+            code: 'ECONNRESET',
+          });
+          return Promise.reject(err);
+        };
+
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /fetch failed/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(attempts, 1, 'made a single attempt');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    });
+
+    test('does not retry a 5xx that reports itself as delivered', async function (assert) {
+      // The header is what the client reads; a failure naming itself
+      // `delivered` is refused as firmly as one that says nothing.
+      let manager = makeCommandServer((res) => {
+        res.statusCode = 500;
+        res.setHeader(PRERENDER_DISPATCH_HEADER, PRERENDER_DISPATCH_DELIVERED);
+        res.end('Upstream error');
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        await assert.rejects(
+          prerenderer.runCommand(commandArgs),
+          /status 500/,
+          'surfaces the failure to the caller',
+        );
+        assert.strictEqual(manager.requests(), 1, 'the command ran once');
+      } finally {
+        await manager.stop();
+      }
+    });
+
+    test('renders still retry a 5xx', async function (assert) {
+      // The narrow policy is scoped to commands: a render is a pure read, so
+      // repeating it costs time and nothing else.
+      let manager = makeCommandServer((res, runs) => {
+        if (runs === 1) {
+          res.statusCode = 502;
+          res.end('Upstream error');
+          return;
+        }
+        res.statusCode = 201;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+      });
+
+      try {
+        let prerenderer = createRemotePrerenderer(manager.url());
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm',
+          realm: 'realm',
+          url: 'https://example.com/card',
+          auth: '{}',
+        });
+        assert.true((result as any).ok, 'succeeds on the retry');
+        assert.strictEqual(manager.requests(), 2, 'retried the render');
+      } finally {
+        await manager.stop();
       }
     });
   });

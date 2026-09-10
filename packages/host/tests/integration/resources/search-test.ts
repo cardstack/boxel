@@ -400,6 +400,68 @@ module(`Integration | search resource`, function (hooks) {
     }
   });
 
+  test(`a search the realm server sheds with 429 is retried after Retry-After`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let fetchCalls = 0;
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+      fetchCalls++;
+      if (fetchCalls === 1) {
+        // What the realm-server's search admission gate answers when it is
+        // already running its maximum of concurrent searches.
+        return new Response(
+          JSON.stringify({
+            errors: [
+              { status: '429', title: 'Too Many Requests', message: 'shed' },
+            ],
+          }),
+          {
+            status: 429,
+            headers: {
+              'content-type': 'application/vnd.card+json',
+              'retry-after': '0',
+            },
+          },
+        );
+      }
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      assert.strictEqual(fetchCalls, 2, 'the shed search was sent again');
+      assert.strictEqual(
+        search.instances[0].id,
+        `${testRealmURL}card-2`,
+        'and the retry produced the result',
+      );
+    } finally {
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
   test(`can perform a live search for cards`, async function (assert) {
     let query: Query = {
       filter: {

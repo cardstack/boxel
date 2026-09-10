@@ -193,29 +193,44 @@ module('Unit | file-formats', function (hooks) {
       );
     });
 
-    // A rendition produced from bytes the file no longer has must not be shown
-    // as if it were current.
-    test('marks a thumbnail stale when its source hash no longer matches', function (assert) {
+    // The thumbnail is the declared capture flagged `useAsThumbnail`, read
+    // from the model's `meta.screenshots` projection (`screenshotsMeta` on a
+    // real instance; a wire-shape object carries the same key).
+    test('derives the thumbnail from the useAsThumbnail screenshot entry', function (assert) {
       let base = {
-        url: 'http://test.com/clip.mp4',
-        name: 'clip.mp4',
-        contentHash: 'aaa',
-        thumbnailImage: { url: 'http://test.com/thumb.png' },
+        url: 'http://test.com/photo.png',
+        name: 'photo.png',
       };
-      assert.false(
+      assert.strictEqual(
         fileViewModel({
           ...base,
-          thumbnailMetadata: { sourceHash: 'aaa' },
-        }).thumbnailStale,
+          screenshotsMeta: {
+            'rendition-640': {
+              url: 'http://test.com/_screenshot/photo.png?name=rendition-640',
+            },
+            thumb: {
+              url: 'http://test.com/_screenshot/photo.png?name=thumb',
+              useAsThumbnail: true,
+            },
+          },
+        }).thumbnailUrl,
+        'http://test.com/_screenshot/photo.png?name=thumb',
       );
-      assert.true(
+      // Captured slots without the flag never masquerade as the thumbnail.
+      assert.strictEqual(
         fileViewModel({
           ...base,
-          thumbnailMetadata: { sourceHash: 'bbb' },
-        }).thumbnailStale,
+          screenshotsMeta: {
+            'rendition-640': {
+              url: 'http://test.com/_screenshot/photo.png?name=rendition-640',
+            },
+          },
+        }).thumbnailUrl,
+        '',
       );
-      // No recorded provenance is not evidence of staleness.
-      assert.false(fileViewModel(base).thumbnailStale);
+      // Nothing captured yet reads as no thumbnail, the absence signal the
+      // fitted cell's fallback (live preview, then icon) relies on.
+      assert.strictEqual(fileViewModel(base).thumbnailUrl, '');
     });
   });
 
@@ -429,15 +444,24 @@ module('Unit | file-formats', function (hooks) {
         assert.strictEqual(relativeDate(PINNED - 800 * DAY), '2y ago');
       });
 
-      // The property the Percy comparison depends on: same input, same output,
-      // however much real time passes between two renders.
-      test('is stable across the thresholds it would otherwise drift through', function (assert) {
-        for (let ageDays of [0, 1, 29, 30, 364, 365, 900]) {
-          let stamp = PINNED - ageDays * DAY;
+      // Expected values rather than a self-comparison: `relativeDate(x)` twice
+      // within a tick agrees whether or not the clock is pinned, so that form
+      // demonstrates nothing it appears to. These also pin the boundaries where
+      // the format changes, which nothing else covers.
+      test('renders each threshold as a function of the pinned instant', function (assert) {
+        for (let [ageDays, expected] of [
+          [0, 'today'],
+          [1, '1d ago'],
+          [29, '29d ago'],
+          [30, '1mo ago'],
+          [364, '12mo ago'],
+          [365, '1y ago'],
+          [900, '2y ago'],
+        ] as [number, string][]) {
           assert.strictEqual(
-            relativeDate(stamp),
-            relativeDate(stamp),
-            `${ageDays}d old renders identically on repeat`,
+            relativeDate(PINNED - ageDays * DAY),
+            expected,
+            `${ageDays}d old`,
           );
         }
       });
@@ -459,22 +483,33 @@ module('Unit | file-formats', function (hooks) {
           PINNED * 1000,
           'nowDate() reports the same instant',
         );
-        // The property the whole seam exists for: two reads separated by real
-        // work agree, so anything rendered from them can be compared.
-        let first = now();
-        for (let i = 0; i < 1e5; i++) {
-          /* burn enough wall-clock that an unpinned clock would move */
-        }
-        assert.strictEqual(now(), first, 'repeated reads do not advance');
       });
 
-      test('falls back to the real clock when the pin is not a number', function (assert) {
-        (globalThis as { __boxelNow?: unknown }).__boxelNow = 'nonsense';
-        assert.strictEqual(
-          relativeDate(Date.now()),
-          'today',
-          'a non-numeric pin is ignored rather than breaking the format',
-        );
+      // Asserted through `now()` rather than a rendered label, so it cannot rot
+      // as the pinned instant recedes from the real calendar. The numeric
+      // string is the realistic mistake — `String(Date.now())` out of a query
+      // param or an env var — and is exactly what `typeof` rejects and what a
+      // looser `Number.isFinite(Number(pinned))` would wrongly honour. `NaN`
+      // and `Infinity` are the half nothing else reaches.
+      test('ignores a pin that is not a finite number', function (assert) {
+        for (let bad of ['nonsense', String(PINNED * 1000), NaN, Infinity]) {
+          (globalThis as { __boxelNow?: unknown }).__boxelNow = bad;
+          let before = Date.now();
+          let reading = now();
+          let after = Date.now();
+          // Two assertions rather than one conjunction, so a failure says
+          // which way the reading escaped the window: below it means the pin
+          // was honoured and the reading came from the past, above it means
+          // something other than the real clock answered.
+          assert.ok(
+            reading >= before,
+            `${String(bad)} is ignored: reading is not earlier than the real clock`,
+          );
+          assert.ok(
+            reading <= after,
+            `${String(bad)} is ignored: reading is not later than the real clock`,
+          );
+        }
       });
     });
   });
