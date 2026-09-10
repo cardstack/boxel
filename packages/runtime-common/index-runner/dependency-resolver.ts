@@ -99,6 +99,16 @@ export class IndexRunnerDependencyManager {
     );
   }
 
+  // Topologically order an invalidation set so a URL is visited after every
+  // URL it depends on, using the `deps` rows the index has persisted.
+  //
+  // The incoming order is the tie-break: among the URLs whose dependencies
+  // are all satisfied, the one that arrived earliest goes first, and the
+  // leftovers of a dependency cycle — which no topological order can
+  // resolve — are appended in that same order. Callers therefore express a
+  // preference by the order they pass, and get it wherever the dependency
+  // graph does not overrule it. The incremental pass leads its input with
+  // the URLs its triggering write named (`prioritizeWrittenURLs`).
   async orderInvalidationsByDependencies(urls: URL[]): Promise<URL[]> {
     if (urls.length < 2) {
       return urls;

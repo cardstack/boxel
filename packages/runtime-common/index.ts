@@ -713,8 +713,8 @@ export interface IndexVisitClientTimings {
 // url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
-// write-side stamps applied at `IndexWriter.updateEntry` time:
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
+// write-side stamps applied when a row enters the IndexWriter's write path:
 //
 //   - `invalidationId` — one UUID per `Batch`; every row touched by
 //     the same indexing pass (incremental fan-out or fromScratch)
@@ -722,6 +722,7 @@ export interface IndexVisitClientTimings {
 //     diagnostics->>'invalidationId' = '<id>'` and see the
 //     whole batch.
 //   - `indexedAt` — wall-clock the write happened.
+//   - `writeSeq` — the row's position within that pass's write order.
 //
 // All fields are optional because writers populate incrementally:
 // render-side fields come from the Prerenderer's response meta, the
@@ -737,6 +738,19 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // 0-based position of this row among the pass's row writes, stamped when
+  // the row enters the write path. `indexedAt` only resolves to the
+  // millisecond, and a pass's rows drain through buffered multi-row upserts
+  // that share one timestamp, so this is the only field that orders two rows
+  // written by the same pass. Grouped with `invalidationId`, it reconstructs
+  // the pass's visit order:
+  // `SELECT url FROM boxel_index WHERE diagnostics->>'invalidationId' = '<id>'
+  //  ORDER BY (diagnostics->>'writeSeq')::int`. An incremental pass writes
+  // the URLs its triggering write named before the dependents its fan-out
+  // discovered, so the lowest sequences in a fan-out are its targets.
+  // Absent on a row a pass only tombstoned (a deletion never reaches a
+  // visit) and on rows written by a pass predating the stamp.
+  writeSeq?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved

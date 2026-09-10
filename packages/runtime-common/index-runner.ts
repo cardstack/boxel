@@ -488,6 +488,7 @@ export class IndexRunner {
           current.batch.invalidations.map((href) => new URL(href)),
           current.realmURL,
         );
+        invalidations = prioritizeWrittenURLs(invalidations, urls);
         invalidations =
           await current.#dependencyResolver.orderInvalidationsByDependencies(
             invalidations,
@@ -1183,6 +1184,56 @@ function assertURLEndsWithJSON(url: URL): URL {
     return new URL(`${url}.json`);
   }
   return url;
+}
+
+// Hoist the URLs the triggering write named — the pass's targets — ahead of
+// the dependents its invalidation fan-out discovered, so a target's row is
+// written before any row that merely depends on it. Targets keep the order
+// they were written in; the dependents keep the order they arrived in.
+//
+// The result is the input to `orderInvalidationsByDependencies`, which reads
+// position as a priority rather than as a fixed order: a topological edge
+// still wins, so a target that depends on another URL in the same set (an
+// instance written alongside the module it adopts from) is visited after it,
+// and the module's file entry exists before the instance renders. What the
+// hoist decides is the cases the dependency graph leaves open — a dependent
+// no persisted `deps` row connects to its target, and a target that shares a
+// dependency cycle with its dependents, where the ordering falls back to the
+// incoming `sortInvalidations` order and can otherwise put the target last.
+//
+// A target can displace `realm.json` from the head position
+// `sortInvalidations` gives it. That costs nothing: the pass promotes its
+// whole working table into `boxel_index` in one transaction, so no reader
+// can observe one row of a pass ahead of another, and `realm.json` reaches
+// the fan-out as a dependent only of the module it adopts from — which a
+// topological edge still orders ahead of it.
+export function prioritizeWrittenURLs(
+  invalidations: URL[],
+  written: URL[],
+): URL[] {
+  if (invalidations.length < 2) {
+    return invalidations;
+  }
+  let byHref = new Map(invalidations.map((url) => [url.href, url]));
+  let targetHrefs = new Set<string>();
+  let targets: URL[] = [];
+  for (let url of written) {
+    // A written URL is absent from the fan-out when the invalidation walk
+    // recorded it under its node-resolved alias instead. Nothing to hoist:
+    // the dependency graph and the lexical order decide, as they always have.
+    let match = byHref.get(url.href);
+    if (match && !targetHrefs.has(url.href)) {
+      targetHrefs.add(url.href);
+      targets.push(match);
+    }
+  }
+  if (targetHrefs.size === 0) {
+    return invalidations;
+  }
+  return [
+    ...targets,
+    ...invalidations.filter((url) => !targetHrefs.has(url.href)),
+  ];
 }
 
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
