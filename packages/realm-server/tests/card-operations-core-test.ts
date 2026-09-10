@@ -497,9 +497,10 @@ module(basename(import.meta.filename), function () {
       // gone, and reporting that hash would let a conditional GET answer 304
       // for content that changed.
       //
-      // A module, so this is also a path whose validator the byte routes build
-      // from a content hash — which is what makes recomputing one warranted
-      // when the row cannot be trusted.
+      // Run against a module and against a `.md`, the two sides of the line
+      // the byte routes draw for their own validators, since a stored-bytes
+      // read draws none: what a stale row means does not depend on the
+      // extension it sits under.
       let read = async (localPath: string) =>
         sourceOf(
           await runOperation(
@@ -553,10 +554,11 @@ module(basename(import.meta.filename), function () {
           'of the body, so declining the body costs no part of it',
       );
 
-      // The same overwrite on a path whose validator rests on `lastModified`
-      // rather than a hash. The recorded hash is equally untrustworthy, and
-      // reading an image or a video to replace it is a cost the route serving
-      // it would not pay — so the answer is the absence, never the stale hash.
+      // The same overwrite on a path the source route would validate on
+      // `lastModified` rather than on a hash. The recorded hash is equally
+      // untrustworthy here, and the read that replaces it is equally bounded,
+      // so this answers with the new bytes' fingerprint too — which route asks
+      // for one is the facade's business, not this read's.
       await testRealm.write('notes.md', '# first');
       writeFileSync(join(testRealmPath, 'notes.md'), '# second, and longer');
       let unhashed = await read('notes.md');
@@ -567,8 +569,8 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         unhashed.version,
-        null,
-        'and no version is reported rather than one that describes other bytes',
+        computeContentHash('# second, and longer'),
+        'and `version` identifies them rather than the recorded bytes',
       );
     });
 
@@ -578,18 +580,21 @@ module(basename(import.meta.filename), function () {
       // assembles it from two bounded reads and the stat — the same value
       // hashing the whole file yields, for a read that does not grow with the
       // file. Written straight to disk so there is no row to recall it from,
-      // and under an extension whose validator is built from a hash, which is
-      // what sends the read at the file in the first place.
+      // and under an extension the source route would validate on
+      // `lastModified`: the bounded read is what makes fingerprinting every
+      // path affordable, so this is the case that would be tempting to skip
+      // and is exactly the one a large media serve wants a strong validator
+      // for.
       let content = new Uint8Array(CONTENT_HASH_WHOLE_LIMIT_BYTES + 4096);
       for (let i = 0; i < content.length; i++) {
         content[i] = (i * 31 + 7) & 0xff;
       }
-      writeFileSync(join(testRealmPath, 'large.json'), content);
+      writeFileSync(join(testRealmPath, 'large.bin'), content);
       let large = sourceOf(
         await runOperation(
           testRealm.operationCore,
           request(
-            { kind: 'instance', url: `${testRealmHref}large.json` },
+            { kind: 'instance', url: `${testRealmHref}large.bin` },
             'readSource',
           ),
           { headersOnly: true },
@@ -597,7 +602,7 @@ module(basename(import.meta.filename), function () {
       );
       // Off the realm's directory before anything can fail, so nothing that
       // runs after this reads a fixture this case invented.
-      rmSync(join(testRealmPath, 'large.json'));
+      rmSync(join(testRealmPath, 'large.bin'));
       assert.strictEqual(
         large.size,
         content.length,

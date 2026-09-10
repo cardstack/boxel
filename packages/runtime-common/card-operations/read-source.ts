@@ -32,9 +32,9 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     generation to join on, so it costs one file open and one file-meta row
 //     — never a search read. That is also why it can answer for a path the
 //     index has no row for, and for one it never will. Where the realm has no
-//     recorded hash for a path whose validator is built from one, it reads
-//     the file to fingerprint it, in ranges bounded by the fingerprint's own
-//     shape rather than by the file's size.
+//     recorded hash it reads the file to fingerprint it, in ranges bounded by
+//     the fingerprint's own shape rather than by the file's size — so this
+//     answers for a path of any size at a cost that does not grow with it.
 //
 // Two modes, as `read` has:
 //
@@ -62,11 +62,12 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     and the byte routes do not make one choice: the source route builds an
 //     `ETag` from a content hash for a `.json` or an executable extension, and
 //     from `lastModified` for everything else, computing no hash at all on
-//     that second path. `version` is populated on the same terms, so a facade
-//     reproducing either validator has what that route uses and nothing it
-//     does not. A `Range` needs more than this result carries — the adapter's
-//     bounded-read capability does not travel through it — so a facade serving
-//     206s holds the handle itself.
+//     that second path. Both members are here for either choice — a content
+//     identity for every path, whether or not the route serving it asks for
+//     one, since reading it is bounded and withholding it would only narrow
+//     what a facade can validate on. A `Range` needs more than this result
+//     carries — the adapter's bounded-read capability does not travel through
+//     it — so a facade serving 206s holds the handle itself.
 //
 //   * The pairing of `lastModified` with the bytes. It is the stat taken when
 //     the handle opened, and a streamed body is read from that handle later,

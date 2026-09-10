@@ -64,11 +64,10 @@ interface StubOptions {
   // value for.
   storedVersions?: Record<string, string>;
   storedCreatedAt?: Record<string, number>;
-  // Paths for which the realm has no recorded hash but reads one out of the
-  // file — its behavior for a path whose validator is built from a hash. The
-  // stub reads it through the handle's bounded range and never through
-  // `content`, as the realm does, so a case can hold both modes to the same
-  // version without either spending the body the other returns.
+  // Paths for which the realm has no recorded hash and reads one out of the
+  // file instead. The stub reads it through the handle's bounded range and
+  // never through `content`, as the realm does, so a case can hold both modes
+  // to the same version without either spending the body the other returns.
   storedRangeHash?: Record<string, string>;
   // An adapter that reports no `size`, which the realm cannot validate a
   // recorded hash against.
@@ -1098,10 +1097,10 @@ const tests = Object.freeze({
 
   'a stored-bytes read reports a version the realm never recorded as absent':
     async (assert) => {
-      // The realm resolves the hash — from its own row, or by hashing the
-      // bytes when the row carries none — so a null here means it could do
-      // neither. Reporting the absence is what lets the facade omit an `ETag`
-      // rather than emit one that identifies nothing.
+      // The realm resolves the fingerprint — from its own row, or by reading
+      // bounded ranges of the file when the row carries none — so a null here
+      // means it could do neither. Reporting the absence is what lets the
+      // facade omit an `ETag` rather than emit one that identifies nothing.
       let { core } = stub({ stored: { 'sample.md': '# hi' } });
       let result = await runOperation(
         core,

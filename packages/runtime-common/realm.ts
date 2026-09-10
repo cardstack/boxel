@@ -752,18 +752,6 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
-// Whether the byte routes build this path's validator from a content hash.
-// `getSourceOrRedirect` caches and hashes a `.json` or an executable
-// extension — a card's stored source, or a module — and takes its
-// `bypassCache` path for everything else, where the `ETag` rests on
-// `lastModified` and no hash is computed at all. A stored-bytes read reports
-// `version` on the same terms, so a facade reproducing either validator has
-// what that route uses and spends nothing on a value the route serving an
-// image or a video would not look at.
-function storedPathIsHashed(localPath: LocalPath): boolean {
-  return localPath.endsWith('.json') || hasExecutableExtension(localPath);
-}
-
 // A handle's content fingerprint, read in bounded ranges rather than by
 // streaming the file.
 //
@@ -5919,6 +5907,14 @@ export class Realm {
   // on the row to validate against, and whether the byte facade wants that is
   // its call to make.
   //
+  // Every path is fingerprinted, an image or a video included. Which validator
+  // a byte route builds is that route's own choice — `getSourceOrRedirect`
+  // rests its `ETag` on a content hash for a `.json` or an executable
+  // extension and on `lastModified` for everything else — but the read that
+  // produces a hash is bounded, so declining to answer for the paths one route
+  // happens not to ask about would withhold a content identity rather than
+  // save anything worth saving.
+  //
   // Both values come from one row, so this is one query on
   // `realm_file_meta`'s primary key rather than a lookup per value — worth
   // holding to, since a byte response routed through here pays it per request.
@@ -5938,9 +5934,6 @@ export class Realm {
       persisted.contentSize === file.size
     ) {
       return { version: persisted.contentHash, createdAt };
-    }
-    if (!storedPathIsHashed(localPath)) {
-      return { createdAt };
     }
     return { version: await contentHashFromRanges(file), createdAt };
   }

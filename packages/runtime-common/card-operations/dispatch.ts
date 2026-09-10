@@ -70,8 +70,8 @@ export interface OperationCore {
     localPath: LocalPath,
   ): Promise<OperationStoredFile | undefined>;
   // The version and creation time of the bytes at `file`, resolved by the
-  // realm because it owns both its file-meta row and the policy for which
-  // paths carry a content hash at all.
+  // realm because it owns both its file-meta row and how a fingerprint is
+  // reached for a path the row does not describe.
   //
   // `file` is the handle the caller will serve from, not just its path. The
   // realm validates its recorded hash against that handle's size, since a
@@ -145,8 +145,8 @@ export interface OperationStoredFile {
 }
 
 export interface OperationStoredFileMeta {
-  // The content hash of the stored bytes, absent where the realm has none
-  // recorded and this is not a path whose validator is built from one.
+  // The content hash of the stored bytes, absent only where the realm can
+  // neither recall one nor read one within a bounded cost.
   version?: string;
   // Epoch seconds, absent where the realm holds no record of this path.
   createdAt?: number;
