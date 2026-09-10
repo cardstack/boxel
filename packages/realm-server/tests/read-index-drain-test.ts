@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
-import type { Realm } from '@cardstack/runtime-common';
+import { ANONYMOUS_REQUESTER, type Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   closeServer,
@@ -298,6 +298,178 @@ module(basename(import.meta.filename), function () {
         `pre-rename field is gone: ${JSON.stringify(attributes)}`,
       );
     });
+
+    // Pins the wiring between requestContext.authenticatedUser and the job
+    // tag for every HTTP write route: a handler that drops its
+    // `initiatingUser` argument silently disables read-your-writes for that
+    // route, which no black-box read test can catch deterministically. The
+    // spy shadows `enqueueUpdate` (the synchronous `update` path calls
+    // through it, so one spy covers both), delegates to the prototype, and
+    // captures each job's `initiatedBy`.
+    test('every HTTP write route tags its indexing job with the writer', async function (assert) {
+      let auth = () =>
+        `Bearer ${createJWT(testRealm, 'hassan', ['read', 'write'])}`;
+      let updater = testRealm.realmIndexUpdater as any;
+      let proto = Object.getPrototypeOf(updater);
+      let tags = new Map<string, string | null | undefined>();
+      let currentOp = 'none';
+      updater.enqueueUpdate = function (urls: URL[], opts?: any) {
+        tags.set(currentOp, opts?.initiatedBy);
+        return proto.enqueueUpdate.call(this, urls, opts);
+      };
+      let drainJobs = async () => {
+        let pending = testRealm.incrementalIndexing();
+        if (pending) {
+          await pending;
+        }
+      };
+      try {
+        currentOp = 'source POST';
+        let sourcePost = await request
+          .post('/tag-probe.gts')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', auth()).send(`
+            import { contains, field, CardDef } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+
+            export class TagProbe extends CardDef {
+              @field name = contains(StringField);
+            }
+          `);
+        assert.strictEqual(
+          sourcePost.status,
+          204,
+          `source POST: ${sourcePost.text}`,
+        );
+        await drainJobs();
+
+        currentOp = 'card POST';
+        let cardPost = await request
+          .post('/')
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', auth())
+          .send({
+            data: {
+              type: 'card',
+              attributes: { name: 'probe' },
+              meta: {
+                adoptsFrom: {
+                  module: `${realmURL.href}tag-probe`,
+                  name: 'TagProbe',
+                },
+              },
+            },
+          });
+        assert.strictEqual(cardPost.status, 201, `card POST: ${cardPost.text}`);
+        let cardPath = new URL(cardPost.body.data.id as string).pathname;
+
+        currentOp = 'card PATCH';
+        let cardPatch = await request
+          .patch(cardPath)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', auth())
+          .send({
+            data: {
+              type: 'card',
+              attributes: { name: 'probe2' },
+              meta: {
+                adoptsFrom: {
+                  module: `${realmURL.href}tag-probe`,
+                  name: 'TagProbe',
+                },
+              },
+            },
+          });
+        assert.strictEqual(
+          cardPatch.status,
+          200,
+          `card PATCH: ${cardPatch.text}`,
+        );
+
+        currentOp = '_invalidate POST';
+        let invalidatePost = await request
+          .post('/_invalidate')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Authorization', auth())
+          .send({
+            data: { attributes: { urls: [`${realmURL.href}tag-probe.gts`] } },
+          });
+        assert.strictEqual(
+          invalidatePost.status,
+          204,
+          `_invalidate POST: ${invalidatePost.text}`,
+        );
+
+        currentOp = '_atomic POST';
+        let atomicPost = await request
+          .post('/_atomic')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Authorization', auth())
+          .send({
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: 'atomic-tag-probe.txt',
+                data: {
+                  type: 'source',
+                  attributes: { content: 'tag probe payload' },
+                  meta: {},
+                },
+              },
+            ],
+          });
+        assert.strictEqual(
+          atomicPost.status,
+          201,
+          `_atomic POST: ${atomicPost.text}`,
+        );
+        await drainJobs();
+
+        currentOp = 'card DELETE';
+        let cardDelete = await request
+          .delete(cardPath)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', auth());
+        assert.strictEqual(
+          cardDelete.status,
+          204,
+          `card DELETE: ${cardDelete.text}`,
+        );
+
+        currentOp = 'source DELETE';
+        let sourceDelete = await request
+          .delete('/tag-probe.gts')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', auth());
+        assert.strictEqual(
+          sourceDelete.status,
+          204,
+          `source DELETE: ${sourceDelete.text}`,
+        );
+        await drainJobs();
+
+        for (let op of [
+          'source POST',
+          'card POST',
+          'card PATCH',
+          '_invalidate POST',
+          '_atomic POST',
+          'card DELETE',
+          'source DELETE',
+        ]) {
+          assert.strictEqual(
+            tags.get(op),
+            'hassan',
+            `${op} tagged its indexing job with the writer (got ${JSON.stringify(
+              tags.get(op),
+            )})`,
+          );
+        }
+      } finally {
+        await drainJobs();
+        delete updater.enqueueUpdate;
+      }
+    });
   });
 
   module('card read drain | public readable realm', function (hooks) {
@@ -331,17 +503,17 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    test('an anonymous reader skips the pending-indexing hold', async function (assert) {
+    test("an anonymous reader skips identified users' pending indexing", async function (assert) {
       let warm = await request
         .get('/person-1')
         .set('Accept', 'application/vnd.card+json');
       assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
 
-      // Every tagged job comes from an authenticated write, so a caller with
-      // no Authorization header at all provably isn't the writer behind any
-      // of them — the gate has nothing to hold the read for.
+      // A credential-less caller acts as the shared anonymous principal, so
+      // an identified user's in-flight job holds nothing for them.
       let restore = stubUpdaterGates(testRealm, {
-        initiatedBy: () => NEVER,
+        initiatedBy: (user) =>
+          user === ANONYMOUS_REQUESTER ? undefined : NEVER,
         all: () => NEVER,
       });
       try {
@@ -353,7 +525,45 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
         assert.true(
           elapsed < NO_WAIT_CEILING_MS,
-          `anonymous read skipped the pending-indexing hold (took ${elapsed}ms)`,
+          `anonymous read skipped the identified user's hold (took ${elapsed}ms)`,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('an anonymous reader waits on anonymous-initiated indexing', async function (assert) {
+      let warm = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
+
+      // Anonymous write-then-read stays consistent: a credential-less write
+      // tags its job with the anonymous principal, and a credential-less
+      // read waits on jobs so tagged.
+      let gateResolved = false;
+      let gate = resolveAfter(GATE_RESOLVE_MS).then(() => {
+        gateResolved = true;
+      });
+      let restore = stubUpdaterGates(testRealm, {
+        initiatedBy: (user) =>
+          user === ANONYMOUS_REQUESTER ? gate : undefined,
+        all: () => gate,
+      });
+      try {
+        let startedAt = Date.now();
+        let response = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        let elapsed = Date.now() - startedAt;
+        assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+        assert.true(
+          gateResolved,
+          'the anonymous read did not return before the gate settled',
+        );
+        assert.true(
+          elapsed >= GATE_RESOLVE_MS - 20,
+          `anonymous read held for anonymous-initiated indexing (took ${elapsed}ms)`,
         );
       } finally {
         restore();
