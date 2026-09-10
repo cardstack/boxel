@@ -222,9 +222,11 @@ export async function stageCreate(
     ) {
       continue;
     }
-    writes.push(
-      await stageSideLoaded(resource, resource.lid, identity.id, ctx),
-    );
+    // A create's side-load keeps the module references it was sent with.
+    // Resolving them against the primary would resolve them against a card
+    // one directory deep, which is not where the side-load lands and not
+    // what a caller writing them meant.
+    writes.push(await stageSideLoaded(resource, resource.lid, undefined, ctx));
   }
   let lid = localIdOf(entry);
   return {
@@ -283,13 +285,15 @@ export function includedResources(
   return included;
 }
 
-// A card side-loaded alongside the one an entry names. Its module refs are
-// written relative to the card it was sent with, so they are resolved against
-// that card before it is serialized under its own URL.
+// A card side-loaded alongside the one an entry names. `relativeTo` is the
+// card its module references were written against, when there is one: an
+// update's side-load is sent alongside a stored card and names modules
+// relative to it, while a create's is sent alongside a card that does not
+// exist yet and names them for itself.
 async function stageSideLoaded(
   sent: CardResource,
   lid: string,
-  relativeTo: string,
+  relativeTo: string | undefined,
   ctx: StagingContext,
 ): Promise<StagedWrite> {
   let identity = stagedLid(lid, ctx);
@@ -299,9 +303,11 @@ async function stageSideLoaded(
   // state a retry of the same entries would then stage on top of.
   let resource = cloneDeep(sent);
   promoteStagedLinks(resource, ctx);
-  visitModuleDeps(resource, (moduleId, setModuleId) => {
-    setModuleId(ctx.resolveModuleId(moduleId, relativeTo));
-  });
+  if (relativeTo !== undefined) {
+    visitModuleDeps(resource, (moduleId, setModuleId) => {
+      setModuleId(ctx.resolveModuleId(moduleId, relativeTo));
+    });
+  }
   return {
     path: identity.path,
     content: await serializeForStorage(resource, identity, ctx),
@@ -360,6 +366,15 @@ export async function stageUpdate(
     });
   }
   let original = storedResource(stored.content, url);
+  if (!entry.document?.data) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid document',
+      detail: `an update carries the patch to apply, and this one carries none`,
+    });
+  }
   let patch = cloneDeep(entry.document.data);
   if (!isCardResource(patch)) {
     throw new OperationFailure({
@@ -458,9 +473,12 @@ export async function stageUpdate(
   return {
     writes,
     deletes: [],
-    // The primary rewrites a card that is already there; only the side-loaded
-    // creates bring a file into existence.
-    mints: writes.map((write) => write.path).filter((p) => p !== sourcePath),
+    // Nothing here is a mint. The primary rewrites a card that is already
+    // there, and a side-load addressed by a local id the caller chose may
+    // name a card it is deliberately rewriting — which is what a `PATCH`
+    // carrying the same side-load does. Refusing it here would make a batch
+    // answer 409 where the handler it mirrors succeeds.
+    mints: [],
     id: url.href,
     primaryPath: sourcePath,
   };
@@ -510,6 +528,11 @@ export function stageDelete(
 // resolved — `..` and its percent-encoded spellings walking out of the type's
 // directory, and a `?` or `#` cutting the stored path short so the card's id
 // and its file stop naming each other.
+//
+// The type's directory is not one of the two. It comes from the type's own
+// name rather than from the request, and a card adopting a type whose name
+// carries a separator is stored under the nested path that name spells — the
+// same place the card endpoints store it.
 export function stagedIdentity(
   adoptsFrom: CodeRef | undefined,
   id: string,
@@ -527,15 +550,24 @@ export function stagedIdentity(
     id,
   ].join('/')}.json` as LocalPath;
   let url = paths.fileURL(intended);
-  if (paths.local(url) !== intended) {
+  // `paths.local` throws for a URL that resolved outside the realm, which is
+  // the loudest of the cases this is here to catch, so the comparison is made
+  // where that throw becomes the same refusal a merely-wrong path gets.
+  let resolved: string | undefined;
+  try {
+    resolved = paths.local(url);
+  } catch {
+    resolved = undefined;
+  }
+  if (resolved !== intended) {
     throw new OperationFailure({
       status: 400,
       code: 'invalid-params',
       title: 'Invalid id',
       detail:
-        `a card created as "${id}" would be stored at ${paths.local(url)} ` +
-        `rather than ${intended}, so the id and the file would not name each ` +
-        `other`,
+        `a card created as "${id}" would be stored at ` +
+        `${resolved ?? url.href} rather than ${intended}, so the id and the ` +
+        `file would not name each other`,
     });
   }
   return { id: url.href.replace(/\.json$/, ''), path: intended };
@@ -635,10 +667,26 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
         if (!('lid' in item)) {
           continue;
         }
+        // A collection's edges are stored one key per member — `field.0`,
+        // `field.1` — and that is the only spelling whose links survive
+        // serialization. A local id written inside a single `data` array has
+        // no key of its own to carry a link, so it is refused: staging it
+        // would store the collection with the edge missing and say nothing,
+        // which is the one outcome worse than a refusal for the mechanism
+        // the whole batch exists to provide.
         let indexed = normalized[`${fieldName}.${index}`];
-        if (indexed) {
-          setSelfLink(indexed, item.lid);
+        if (!indexed) {
+          throw new OperationFailure({
+            status: 400,
+            code: 'invalid-params',
+            title: 'Unlinkable local id',
+            detail:
+              `"${fieldName}" carries local id "${item.lid}" inside a \`data\` ` +
+              `array, which has no per-member key to record the link on; ` +
+              `write each member under its own "${fieldName}.N" key`,
+          });
         }
+        setSelfLink(indexed, item.lid);
       }
       continue;
     }
@@ -928,6 +976,16 @@ function resolveMarker(
       };
     }
     case 'actor':
+      if (!ctx.actor) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'No actor in scope',
+          detail:
+            `\`${path}\` reads the invoking actor, and this invocation was ` +
+            `made without one`,
+        });
+      }
       // The realm knows the actor by identity, which is what a link to them
       // needs and the only member there is to read.
       if (marker.key !== undefined && marker.key !== 'id') {
@@ -956,7 +1014,7 @@ function resolveMarker(
         return { value: anchor.id, isLink: false };
       }
       return {
-        value: anchor.resource.attributes?.[String(marker.key)],
+        value: own(anchor.resource.attributes, String(marker.key)),
         isLink: false,
       };
     }

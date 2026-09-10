@@ -73,7 +73,6 @@ import {
   removeFileMeta,
   getCreatedTime,
   getContentMeta,
-  getFileMetaForPaths,
 } from './file-meta.ts';
 import {
   systemError,
@@ -2342,15 +2341,16 @@ export class Realm {
   // different snapshots of the realm, and two events would let a subscriber
   // observe the batch half-applied.
   //
-  // Writes land before removals. A write's serialization resolves the
-  // definitions its instance adopts from, which the write leg's own
-  // module-then-instance flush is what keeps current; a removal invalidates
-  // rows and touches no definition, so it has nothing to contribute to that
-  // flush and nothing to gain from running ahead of it.
+  // Writes land before removals. The write leg carries a mid-loop index flush
+  // that a module followed by an instance depends on, so it has an ordering
+  // constraint of its own; a removal invalidates rows, touches no definition,
+  // and has nothing to contribute to that flush or to gain from running ahead
+  // of it.
   //
   // Assumes the realm's write lock is held — the caller reads the pre-state it
-  // stages from inside the same critical section. `write`, `writeMany` and
-  // `delete` are the locked public entry points.
+  // stages from inside the same critical section. `write` and `writeMany` are
+  // the locked public entry points that reach this; `delete` and `deleteAll`
+  // have their own unlocked primitives and do not.
   //
   // Files are changed one at a time and there is no rollback: a file system
   // failure partway through leaves the files handled before it changed, and
@@ -3333,18 +3333,14 @@ export class Realm {
             ? { content: file.content, lastModified: file.lastModified }
             : undefined;
         },
-        contentHashes: async (localPaths) => {
-          let meta = await getFileMetaForPaths(
-            this.#dbAdapter,
-            this.url,
-            localPaths,
-          );
-          return new Map(
-            localPaths.map((localPath) => [
-              localPath,
-              meta.get(localPath)?.contentHash,
-            ]),
-          );
+        assertWriteSize: (localPath, content) =>
+          this.assertWriteSize(
+            content,
+            isCardDocumentString(content) ? 'card' : 'file',
+            localPath,
+          ),
+        drainIndexing: async () => {
+          await this.incrementalIndexing();
         },
         commitUnlocked: (batch, options) =>
           this._commitBatchUnlocked(batch, options),

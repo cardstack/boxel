@@ -46,7 +46,7 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
-    test('a base version is reported against the fingerprint the file carried', async function (assert) {
+    test('a base version is compared to the bytes the merge is computed over', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
@@ -86,7 +86,7 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
-    test('the write lock is taken once for the whole batch', async function (assert) {
+    test('every read and the commit happen inside one holding of the write lock', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
@@ -127,6 +127,46 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a named create needs every value its declaration asks for', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a local id inside a data array is refused rather than dropped', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a member written under its own key still links', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('bytes the realm will not store are refused before anything commits', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an empty batch touches nothing at all', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a batch drains in-flight indexing before it serializes anything', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an update rewrites a side-loaded card that is already stored', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a template that reads the actor needs one', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an update carries the patch to apply', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a patch merges relationship keys rather than replacing the map', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a replaced array drops the field metadata of the members it removed', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 

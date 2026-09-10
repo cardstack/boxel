@@ -5,6 +5,7 @@ import {
   type BatchEntry,
   type OperationDefinition,
 } from '../card-operations/index.ts';
+import { computeContentHash } from '../index.ts';
 import type { CodeRef } from '../code-ref.ts';
 import type { RealmIdentifier } from '../realm-identifiers.ts';
 import type { Definition } from '../definitions.ts';
@@ -41,13 +42,15 @@ interface Stub {
   core: BatchCore;
   commits: Commit[];
   lockDepth: () => number;
+  drainCount: () => number;
+  readsOutsideLock: () => number;
 }
 
 interface StubOptions {
   // The stored source files the realm holds, by local path.
   stored?: Record<string, string>;
-  // The write-time fingerprint each stored path carries.
-  hashes?: Record<string, string>;
+  // The realm's size ceiling, for the paths a batch stages.
+  sizeLimit?: number;
   // The definition-cache entry a code ref resolves to, keyed by its name.
   definitions?: Record<string, Definition>;
   // What `serializeCard` does to a resource on its way to storage. The default
@@ -65,15 +68,12 @@ function cardFile(attributes: Record<string, unknown>, adoptsFrom: unknown) {
 }
 
 function stub(opts: StubOptions = {}): Stub {
-  let {
-    stored = {},
-    hashes = {},
-    definitions = {},
-    serialize = (doc: any) => doc,
-  } = opts;
+  let { stored = {}, definitions = {}, serialize = (doc: any) => doc } = opts;
   let commits: Commit[] = [];
   let held = 0;
   let maxHeld = 0;
+  let drains = 0;
+  let readsOutsideLock = 0;
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -87,20 +87,27 @@ function stub(opts: StubOptions = {}): Stub {
       }
     },
     async fileExists(localPath) {
+      readsOutsideLock += held > 0 ? 0 : 1;
       return stored[localPath] !== undefined;
     },
     async readSourceFile(localPath) {
+      readsOutsideLock += held > 0 ? 0 : 1;
       let content = stored[localPath];
       return content === undefined
         ? undefined
         : { content, lastModified: 1000 };
     },
-    async contentHashes(localPaths) {
-      return new Map(
-        localPaths.map((localPath) => [localPath, hashes[localPath]]),
-      );
+    assertWriteSize(localPath, content) {
+      let limit = opts.sizeLimit;
+      if (limit !== undefined && content.length > limit) {
+        throw new Error(`${localPath} is over the realm's size limit`);
+      }
+    },
+    async drainIndexing() {
+      drains++;
     },
     async commitUnlocked(batch, options) {
+      readsOutsideLock += held > 0 ? 0 : 1;
       let writes = Object.fromEntries(
         [...(batch.writes ?? new Map<string, string | Uint8Array>())].map(
           ([path, content]) => [path, String(content)],
@@ -139,7 +146,13 @@ function stub(opts: StubOptions = {}): Stub {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
   };
-  return { core, commits, lockDepth: () => maxHeld };
+  return {
+    core,
+    commits,
+    lockDepth: () => maxHeld,
+    drainCount: () => drains,
+    readsOutsideLock: () => readsOutsideLock,
+  };
 }
 
 function personDefinition(): Definition {
@@ -500,10 +513,14 @@ const tests: SharedTests<Record<string, never>> = {
       undefined,
       'a client cannot persist a screenshot manifest',
     );
-    assert.strictEqual(
+    // `realmURL` is stripped from the patch and then stamped by the realm on
+    // the way to storage; the serializer drops it again before the bytes
+    // land, so what this pins is that the client's value never survives the
+    // merge — not that the realm's does.
+    assert.notStrictEqual(
       data.meta.realmURL,
-      REALM,
-      'the realm stamps its own URL rather than taking the one it was sent',
+      'http://elsewhere.example/',
+      'a client cannot persist a realm URL of its choosing',
     );
   },
 
@@ -557,18 +574,16 @@ const tests: SharedTests<Record<string, never>> = {
     assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
-  'a base version is reported against the fingerprint the file carried': async (
+  'a base version is compared to the bytes the merge is computed over': async (
     assert,
   ) => {
-    let { core } = stub({
-      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
-      hashes: { 'person-1.json': 'v1' },
-    });
-    let patch = (firstName: string): BatchEntry[] => [
+    let content = cardFile({ firstName: 'Original' }, PERSON);
+    let onDisk = computeContentHash(content);
+    let patch = (firstName: string, baseVersion: string): BatchEntry[] => [
       {
         op: 'update',
         href: `${REALM}person-1`,
-        baseVersion: 'v1',
+        baseVersion,
         document: {
           data: {
             type: 'card',
@@ -579,27 +594,24 @@ const tests: SharedTests<Record<string, never>> = {
       },
     ];
 
-    let [matched] = await commitBatch(core, patch('Matched'), {});
+    let { core } = stub({ stored: { 'person-1.json': content } });
+    let [matched] = await commitBatch(core, patch('Matched', onDisk), {});
     assert.true(
       matched?.meta.baseMatched,
-      'the base the caller named is the one the file carried',
+      'the base the caller named fingerprints the bytes on disk',
     );
 
-    let { core: moved } = stub({
-      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
-      hashes: { 'person-1.json': 'v2' },
-    });
-    let [result] = await commitBatch(moved, patch('Moved'), {});
+    let { core: moved } = stub({ stored: { 'person-1.json': content } });
+    let [result] = await commitBatch(moved, patch('Moved', 'stale'), {});
     assert.false(
       result?.meta.baseMatched,
-      'the file has moved past the base the caller named',
+      'the bytes have moved past the base the caller named',
     );
   },
 
   'an unconditional write reports no base match': async (assert) => {
     let { core } = stub({
       stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
-      hashes: { 'person-1.json': 'v1' },
     });
     let [result] = await commitBatch(
       core,
@@ -789,44 +801,53 @@ const tests: SharedTests<Record<string, never>> = {
       });
     },
 
-  'the write lock is taken once for the whole batch': async (assert) => {
-    let { core, lockDepth } = stub({
-      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
-    });
-    await commitBatch(
-      core,
-      [
-        {
-          op: 'create',
-          lid: 'one',
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'One' },
-              meta: { adoptsFrom: PERSON },
+  'every read and the commit happen inside one holding of the write lock':
+    async (assert) => {
+      let { core, lockDepth, readsOutsideLock } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'one',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'One' },
+                meta: { adoptsFrom: PERSON },
+              },
             },
           },
-        },
-        {
-          op: 'update',
-          href: `${REALM}person-1`,
-          document: {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Two' },
-              meta: { adoptsFrom: PERSON },
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Two' },
+                meta: { adoptsFrom: PERSON },
+              },
             },
           },
-        },
-      ],
-      {},
-    );
-    assert.strictEqual(
-      lockDepth(),
-      1,
-      'the lock is never re-entered, whatever the batch contains',
-    );
-  },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        lockDepth(),
+        1,
+        'the lock is never re-entered, whatever the batch contains',
+      );
+      assert.strictEqual(
+        readsOutsideLock(),
+        0,
+        'nothing the batch acts on is read before the lock is held, and the ' +
+          'commit runs while it still is',
+      );
+    },
 
   'a named create stages the type and attributes its declaration names': async (
     assert,
@@ -1204,6 +1225,326 @@ const tests: SharedTests<Record<string, never>> = {
       'a declared param with no value is refused, not left off the card',
     );
     assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a local id inside a data array is refused rather than dropped': async (
+    assert,
+  ) => {
+    let { core, commits } = stub();
+    let failed = await refusal(core, [
+      {
+        op: 'create',
+        lid: 'target',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Target' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+      {
+        op: 'create',
+        lid: 'linker',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Linker' },
+            // No per-member key to record the link on, so serialization would
+            // store the collection with the edge missing.
+            relationships: {
+              friend: { data: [{ type: 'card', lid: 'target' }] },
+            },
+            meta: { adoptsFrom: PERSON },
+          } as never,
+        },
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 1 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a member written under its own key still links': async (assert) => {
+    let { core, commits } = stub();
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'create',
+          lid: 'target',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Target' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+        {
+          op: 'create',
+          lid: 'linker',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Linker' },
+              relationships: {
+                'friend.0': { data: { type: 'card', lid: 'target' } },
+              },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ],
+      {},
+    );
+    let { data } = JSON.parse(commits[0].writes['Person/linker.json']);
+    assert.strictEqual(
+      data.relationships['friend.0'].links.self,
+      `${REALM}Person/target`,
+    );
+  },
+
+  'bytes the realm will not store are refused before anything commits': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({ sizeLimit: 1000 });
+    let failed = await refusal(core, [
+      {
+        op: 'create',
+        lid: 'small',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Small' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+      {
+        op: 'create',
+        lid: 'huge',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'H'.repeat(4000) },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(failed?.entry, 1, 'the oversized entry is named');
+    assert.strictEqual(
+      commits.length,
+      0,
+      'the entry ahead of it is not written either — the size ceiling is ' +
+        'reached while the realm is still untouched',
+    );
+  },
+
+  'an empty batch touches nothing at all': async (assert) => {
+    let { core, commits, lockDepth, drainCount } = stub();
+    assert.deepEqual(await commitBatch(core, [], {}), []);
+    assert.strictEqual(commits.length, 0, 'no commit');
+    assert.strictEqual(lockDepth(), 0, 'the write lock is never taken');
+    assert.strictEqual(drainCount(), 0, 'indexing is not drained');
+  },
+
+  'a batch drains in-flight indexing before it serializes anything': async (
+    assert,
+  ) => {
+    let { core, drainCount } = stub();
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'create',
+          lid: 'one',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'One' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      drainCount(),
+      1,
+      'a card is serialized against a definition the realm has finished ' +
+        'indexing',
+    );
+  },
+
+  'an update rewrites a side-loaded card that is already stored': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: {
+        'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        'Pet/side.json': cardFile({ firstName: 'Stored' }, PET),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'update',
+          href: `${REALM}person-1`,
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Patched' },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [
+              {
+                type: 'card',
+                lid: 'side',
+                attributes: { firstName: 'Rewritten' },
+                meta: { adoptsFrom: PET },
+              },
+            ],
+          },
+        },
+      ],
+      {},
+    );
+    assert.true(
+      commits[0].writes['Pet/side.json'].includes('Rewritten'),
+      'a side-load names a card the caller is rewriting, as it does on a PATCH',
+    );
+  },
+
+  'a template that reads the actor needs one': async (assert) => {
+    let definition: OperationDefinition = {
+      base: 'create',
+      deterministic: true,
+      of: PERSON,
+      fill: { firstName: { $ref: 'actor' } as never },
+    };
+    let { core, commits } = stub({
+      definitions: { Person: personDefinition() },
+    });
+    assert.deepEqual(
+      await refusal(core, [{ op: 'create', lid: 'anon', definition }]),
+      { status: 400, code: 'invalid-params', entry: 0 },
+      'an actor-less invocation does not write an empty author',
+    );
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'an update carries the patch to apply': async (assert) => {
+    let { core, commits } = stub({
+      stored: { 'person-1.json': cardFile({ firstName: 'Original' }, PERSON) },
+    });
+    assert.deepEqual(
+      await refusal(core, [
+        { op: 'update', href: `${REALM}person-1` } as never,
+      ]),
+      { status: 400, code: 'invalid-params', entry: 0 },
+      'a document-less update is the payload to fix, not a crash',
+    );
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a patch merges relationship keys rather than replacing the map': async (
+    assert,
+  ) => {
+    let stored = JSON.stringify(
+      {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Original' },
+          relationships: {
+            friend: { links: { self: `${REALM}a` } },
+            pet: { links: { self: `${REALM}b` } },
+          },
+          meta: { adoptsFrom: PERSON },
+        },
+      },
+      null,
+      2,
+    );
+    let { core, commits } = stub({ stored: { 'person-1.json': stored } });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'update',
+          href: `${REALM}person-1`,
+          document: {
+            data: {
+              type: 'card',
+              relationships: { pet: { links: { self: `${REALM}c` } } },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ],
+      {},
+    );
+    let { data } = JSON.parse(commits[0].writes['person-1.json']);
+    assert.strictEqual(
+      data.relationships.friend.links.self,
+      `${REALM}a`,
+      'a relationship the patch does not name is kept',
+    );
+    assert.strictEqual(
+      data.relationships.pet.links.self,
+      `${REALM}c`,
+      'and one it does name is replaced',
+    );
+  },
+
+  'a replaced array drops the field metadata of the members it removed': async (
+    assert,
+  ) => {
+    let stored = JSON.stringify(
+      {
+        data: {
+          type: 'card',
+          attributes: { nicknames: ['a', 'b', 'c'] },
+          meta: {
+            adoptsFrom: PERSON,
+            fields: {
+              'nicknames.0': { adoptsFrom: PET },
+              'nicknames.2': { adoptsFrom: PET },
+            },
+          },
+        },
+      },
+      null,
+      2,
+    );
+    let { core, commits } = stub({ stored: { 'person-1.json': stored } });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'update',
+          href: `${REALM}person-1`,
+          document: {
+            data: {
+              type: 'card',
+              attributes: { nicknames: ['z'] },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ],
+      {},
+    );
+    let { data } = JSON.parse(commits[0].writes['person-1.json']);
+    assert.deepEqual(data.attributes.nicknames, ['z'], 'the array is replaced');
+    assert.strictEqual(
+      data.meta.fields,
+      undefined,
+      "the removed members' per-index metadata does not survive to be " +
+        're-applied when the array grows again',
+    );
   },
 
   'a create with nothing to create is refused': async (assert) => {

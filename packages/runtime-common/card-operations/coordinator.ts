@@ -1,3 +1,4 @@
+import { computeContentHash } from '../index.ts';
 import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   createIdentity,
@@ -28,16 +29,18 @@ import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 // ============================================================================
 // The batch coordinator.
 //
-// A batch is all-or-nothing against every way an entry can be wrong: several
+// A batch is all-or-nothing against every way an entry can be wrong — a
+// malformed document, a missing target, a rejected field, bytes over the
+// realm's size ceiling, a local id naming nothing or naming two cards: several
 // changes to several cards either all land or none do, under one index job and
 // one index event. Getting that is a matter of ordering. The coordinator takes
 // the realm's write lock, reads every file the batch touches, runs every
 // executor in memory, and only then commits. Nothing is written until every
-// entry has produced its bytes, so an entry that cannot be carried out — a
-// malformed document, a missing target, a rejected field, a local id naming
-// nothing or naming two cards — is found while the realm is still untouched:
-// no partial write to undo, no index job to cancel, no event a subscriber
-// could have already acted on.
+// entry has produced its bytes, and every check the realm would apply per file
+// as it writes is applied to the staged bytes first — so an entry that cannot
+// be carried out is found while the realm is still untouched: no partial write
+// to undo, no index job to cancel, no event a subscriber could have already
+// acted on.
 //
 // What that does not cover is the commit itself failing partway. The realm
 // writes a batch's files one at a time and has no rollback, so a file system
@@ -73,11 +76,16 @@ export interface BatchCore {
   // destinations a create mints are checked for being free, and their bytes
   // are of no interest.
   fileExists(localPath: LocalPath): Promise<boolean>;
-  // The write-time content fingerprints recorded for these paths, read in one
-  // round-trip. A caller's `baseVersion` names one of these.
-  contentHashes(
-    localPaths: LocalPath[],
-  ): Promise<Map<LocalPath, string | undefined>>;
+  // Refuses bytes the realm will not store at this path — the size ceiling a
+  // card or a file is held to. Throws the realm's own error, which already
+  // carries the status a caller sees.
+  assertWriteSize(localPath: LocalPath, content: string): void;
+  // Waits for indexing already in flight. A card's serialization resolves the
+  // definitions its type is built from, and a module written moments earlier
+  // may still be indexing, so a batch drains before it stages rather than
+  // failing to resolve a type the realm already holds.
+  drainIndexing(): Promise<void>;
+
   // The realm's unlocked commit: writes and removals under one index job and
   // one index event. Assumes the write lock is held, which it is.
   commitUnlocked(
@@ -129,7 +137,18 @@ export async function commitBatch(
   opts: CommitBatchOptions = {},
 ): Promise<BatchEntryResult[]> {
   let paths = new RealmPaths(new URL(core.realmURL));
+  if (entries.length === 0) {
+    // Nothing to serialize the realm's writers behind, and nothing to
+    // announce. Taking the lock and broadcasting an empty index event would
+    // tell every subscriber that something changed.
+    return [];
+  }
   return await core.withWriteLock(async () => {
+    // Drained inside the lock, before anything is staged. Staging serializes
+    // each card against its type's definition, and a module written moments
+    // earlier may still be indexing; without this a batch that follows a
+    // module upload fails to resolve a type the realm already has on disk.
+    await core.drainIndexing();
     // Every `lid` in the batch resolves to a URL before any executor runs. A
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
@@ -152,9 +171,12 @@ export async function commitBatch(
         }),
       );
     }
+    assertWritesFit(core, staged);
     await assertDestinationsFree(core, staged);
-    // Past this point the batch is committed. Everything above either produced
-    // bytes for every entry or threw, and a throw leaves the realm as it was.
+    // Everything above either produced bytes for every entry or threw, and a
+    // throw leaves the realm as it was. `commitStaged` still refuses a batch
+    // whose entries claim one file twice, which it can only see once every
+    // entry has staged.
     return await commitStaged(core, entries, staged, stored, opts);
   });
 }
@@ -305,9 +327,10 @@ function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
 // Every file the batch reads, loaded once inside the write lock: the merge base
 // for each update, the existence check for each delete, and the anchoring card
 // a named create reads through `instance(…)`. Loading them up front is what
-// makes the executors pure — they resolve nothing and read nothing — and what
-// makes the pre-write content hashes, which a `baseVersion` is compared to, a
-// snapshot from inside the same critical section as the write.
+// makes the executors pure — they resolve nothing and read nothing — and it is
+// what makes the bytes a `baseVersion` is compared against the same bytes the
+// merge is computed over, read inside the critical section the write happens
+// in.
 async function readStoredFiles(
   core: BatchCore,
   entries: BatchEntry[],
@@ -325,11 +348,9 @@ async function readStoredFiles(
       wanted.add(localPath);
     }
   }
-  let localPaths = [...wanted];
-  let hashes = await core.contentHashes(localPaths);
   let stored = new Map<LocalPath, StoredFile>();
   await Promise.all(
-    localPaths.map(async (localPath) => {
+    [...wanted].map(async (localPath) => {
       let file = await core.readSourceFile(localPath);
       if (!file) {
         return;
@@ -337,7 +358,14 @@ async function readStoredFiles(
       stored.set(localPath, {
         content: file.content,
         lastModified: file.lastModified,
-        contentHash: hashes.get(localPath),
+        // Fingerprinted from the bytes just read, not from the file's
+        // recorded row. The row is written when the realm writes a file, and
+        // a file changed out from under the realm is re-indexed without it
+        // being rewritten — so the row can name a version the bytes no longer
+        // hold. A `baseVersion` exists to catch exactly that, and comparing
+        // it to the row would report a match for the state it is meant to
+        // detect. This is the fingerprint of what the merge is computed over.
+        contentHash: computeContentHash(file.content),
       });
     }),
   );
@@ -364,6 +392,24 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // ---------------------------------------------------------------------------
 // Committing
 // ---------------------------------------------------------------------------
+
+// The realm refuses bytes over its size ceiling, and it refuses them one file
+// at a time as it writes. Reaching that inside the commit would leave the
+// files written before it on disk and unindexed — the commit rejects before
+// it enqueues anything — over a payload the caller could have been told about
+// while the realm was still untouched. So the ceiling is applied to every
+// staged write here, where a refusal still costs nothing.
+function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
+  for (let [index, change] of staged.entries()) {
+    for (let write of change.writes) {
+      try {
+        core.assertWriteSize(write.path, write.content);
+      } catch (err: unknown) {
+        throw atEntry(err, index);
+      }
+    }
+  }
+}
 
 // A create mints a card; it does not replace one. A caller choosing its own
 // local id can choose one a stored card already answers to, and committing
