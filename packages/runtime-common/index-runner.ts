@@ -63,6 +63,65 @@ type VisitRenderOutcome =
   | { status: 'skipped' }
   | { status: 'error'; error: unknown };
 
+// A render that times out while its page is idle — main thread responsive, no
+// script running, nothing fetching, no module import or document load in
+// flight — was waiting on nothing, and nothing about the next file changes
+// that. Several in a row therefore describe the stack rather than the files:
+// an origin the page needs (the host bundle, the realm-server, the icons
+// server) is unreachable from the browser, and every remaining file would
+// cost the full render timeout to fail the same way. A from-scratch pass gives
+// up after this many consecutive idle timeouts, so the job fails within
+// minutes naming the cause instead of grinding to its wall-clock limit and
+// being rejected with nothing written. 0 disables the guard.
+const DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER = 3;
+const envIdleRenderTimeoutAbortAfter = Number(
+  (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.INDEX_IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+);
+export const IDLE_RENDER_TIMEOUT_ABORT_AFTER =
+  Number.isFinite(envIdleRenderTimeoutAbortAfter) &&
+  envIdleRenderTimeoutAbortAfter >= 0
+    ? envIdleRenderTimeoutAbortAfter
+    : DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER;
+
+// Script-busy fraction below which the page counts as idle. The CPU sample
+// covers a short window, so a page that is doing nothing useful can still show
+// a few percent of housekeeping.
+const IDLE_SCRIPT_BUSY_MAX = 0.05;
+
+const RENDER_TIMEOUT_TITLE = 'Render timeout';
+
+// Whether a visit's render timed out with nothing in flight. The timeout error
+// carries the diagnostics the prerender server captured as it fired (see
+// RenderTimeoutDiagnostics), flattened onto the visit's `diagnostics`. A
+// timeout whose diagnostics are missing, or show work in progress, is a slow
+// or stuck render rather than an idle one and does not count.
+export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
+  let errors = [
+    result.pageUnusableError,
+    result.card?.error,
+    result.fileExtract?.error,
+    result.fileRender?.error,
+  ];
+  if (!errors.some((e) => e?.error?.title === RENDER_TIMEOUT_TITLE)) {
+    return false;
+  }
+  let d = result.diagnostics;
+  if (!d || d.mainThreadResponsive !== true) {
+    return false;
+  }
+  return (
+    (d.scriptBusyFraction ?? 0) < IDLE_SCRIPT_BUSY_MAX &&
+    (d.pendingNetworkRequests?.length ?? 0) === 0 &&
+    (d.inFlightModuleImports?.length ?? 0) === 0 &&
+    (d.cardDocsInFlight?.length ?? 0) === 0 &&
+    (d.fileMetaDocsInFlight?.length ?? 0) === 0
+  );
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -123,6 +182,7 @@ export class IndexRunner {
   // warm loader ownership — intended). Populated in the constructor after
   // jobInfo is known so the id is easy to correlate with a job in logs.
   #batchId!: string;
+  #idleRenderTimeoutAbortAfter: number;
 
   constructor({
     realmURL,
@@ -140,6 +200,7 @@ export class IndexRunner {
     auth,
     fetch,
     realmOwnerUserId,
+    idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -151,6 +212,9 @@ export class IndexRunner {
     auth: string;
     fetch: typeof globalThis.fetch;
     realmOwnerUserId: string;
+    // Consecutive idle render timeouts after which a from-scratch pass gives
+    // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
+    idleRenderTimeoutAbortAfter?: number;
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -189,6 +253,7 @@ export class IndexRunner {
     this.#auth = auth;
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
+    this.#idleRenderTimeoutAbortAfter = idleRenderTimeoutAbortAfter;
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
@@ -300,6 +365,7 @@ export class IndexRunner {
     let resumedSkipped = 0;
     try {
       await current.#runVisitLoop(invalidations, {
+        abortAfterIdleRenderTimeouts: current.#idleRenderTimeoutAbortAfter,
         // Resume guard. If a previous attempt of this same job already wrote
         // URL_X to the working table AND the EFS mtime hasn't changed since,
         // skip the visit — the existing working row is still authoritative
@@ -709,14 +775,21 @@ export class IndexRunner {
       skipReason,
       onSkip,
       onVisited,
+      abortAfterIdleRenderTimeouts = 0,
     }: {
       skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
       onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
       onVisited: (url: URL) => void;
+      // When set, the pass throws — abandoning the batch — once this many
+      // consecutive visits time out idle (see isIdleRenderTimeout). A
+      // from-scratch pass sets it; an incremental pass, whose rows are the
+      // only record of a write, does not.
+      abortAfterIdleRenderTimeouts?: number;
     },
   ): Promise<void> {
     let n = invalidations.length;
     let renders = new Map<number, Promise<VisitRenderOutcome>>();
+    let idleTimeouts: string[] = [];
     // Start the render for the next non-skipped URL at or after `from`,
     // keeping exactly one render in flight ahead of the finish cursor.
     let prefetch = (from: number) => {
@@ -757,6 +830,29 @@ export class IndexRunner {
         await this.#handleVisitError(url, err);
       }
       onVisited(url);
+      if (abortAfterIdleRenderTimeouts > 0) {
+        if (
+          outcome.status === 'rendered' &&
+          isIdleRenderTimeout(outcome.result)
+        ) {
+          idleTimeouts.push(url.href);
+        } else {
+          idleTimeouts = [];
+        }
+        if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
+          // Thrown past #handleVisitError on purpose: this is not one file's
+          // failure to isolate but the pass's inability to render anything,
+          // and the job's rejection is what carries that to whoever awaits
+          // it (readiness, a publish, an operator).
+          let message =
+            `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
+            `(main thread responsive, no script running, nothing fetching, no module import in flight), so the page was ` +
+            `waiting on nothing and no later file can render either. Check that the prerender's browser can reach the ` +
+            `host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
+          this.#log.error(message);
+          throw new Error(message);
+        }
+      }
     }
   }
 
