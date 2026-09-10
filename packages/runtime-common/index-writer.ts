@@ -1125,7 +1125,7 @@ export class Batch {
       seq,
     );
     if (!this.#splitPrerenderHtml) {
-      await this.writePrerenderedHtmlRow(url, htmlEntry);
+      await this.writePrerenderedHtmlRow(url, htmlEntry, seq);
     }
     let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
       jsonFields: this.#jsonColumnNames(),
@@ -1214,6 +1214,20 @@ export class Batch {
       .map(([column]) => column);
   }
 
+  // The write-side stamps every row this batch writes carries, on both
+  // channels: which pass wrote it, when, and where it sits in that pass's
+  // write order. `seq` comes from the caller rather than from `#writeSeq`
+  // here, so the two rows a fused visit produces — its `boxel_index` half
+  // and its `prerendered_html` half — share one position instead of
+  // consuming two.
+  #writeSideStamps(seq: number): Diagnostics {
+    return {
+      invalidationId: this.#currentInvalidationId,
+      indexedAt: Date.now(),
+      writeSeq: seq,
+    };
+  }
+
   // Build the sanitized `boxel_index_working` row payload — and the paired
   // `prerendered_html` entry the fused path writes — for an entry, without
   // performing the upsert.
@@ -1236,9 +1250,7 @@ export class Batch {
     let href = url.href;
     let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
-      invalidationId: this.#currentInvalidationId,
-      indexedAt: Date.now(),
-      writeSeq,
+      ...this.#writeSideStamps(writeSeq),
     };
     let errorEntry = isErrorEntry(entry)
       ? {
@@ -1442,15 +1454,27 @@ export class Batch {
         `updatePrerenderedHtmlEntry is only valid on a prerenderHtmlOnly batch`,
       );
     }
-    await this.writePrerenderedHtmlRow(url, entry);
+    // A prerenderHtmlOnly batch has no index half, so each rendering takes
+    // its own position in this job's write order.
+    await this.writePrerenderedHtmlRow(url, entry, this.#writeSeq++);
   }
 
   // The prerendered_html row write shared by the two producers of renderings:
   // a `prerenderHtmlOnly` batch (via `updatePrerenderedHtmlEntry`) and a fused
   // batch (via `updateEntry`, which lands each visit's HTML half here inline).
+  //
+  // `seq` is this row's position in the batch's write order; the write-side
+  // stamps built from it are merged over the render's own diagnostics, so a
+  // rendering is groupable and orderable by the same two keys as an index
+  // row (`invalidationId` + `writeSeq`). A `prerenderHtmlOnly` batch mints
+  // its `invalidationId` in the constructor and never calls `invalidate()`,
+  // so the id groups that whole job — it is the render channel's own
+  // grouping key and does not equal the spawning index pass's id. Join the
+  // two channels on `url` (plus `generation`), not on `invalidationId`.
   private async writePrerenderedHtmlRow(
     url: URL,
     entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
+    seq: number,
   ): Promise<void> {
     if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       return;
@@ -1469,6 +1493,13 @@ export class Batch {
       );
     }
     this.#invalidations.add(url.href);
+    // Every rendering carries the stamps, whether or not the render itself
+    // reported any diagnostics — an unstamped row could not be attributed to
+    // a pass at all, which is what the render channel lacked.
+    let diagnostics: Diagnostics = {
+      ...(entry.diagnostics ?? {}),
+      ...this.#writeSideStamps(seq),
+    };
     let payload: Record<string, unknown>;
     switch (entry.type) {
       case 'instance':
@@ -1485,7 +1516,7 @@ export class Batch {
           deps,
           last_known_good_deps: deps,
           error_doc: null,
-          diagnostics: entry.diagnostics ?? null,
+          diagnostics,
           screenshots: entry.screenshots ?? null,
         };
         break;
@@ -1506,11 +1537,7 @@ export class Batch {
         let errorDoc = this.normalizeErrorDoc(
           {
             ...entry.error,
-            ...(entry.diagnostics
-              ? {
-                  diagnostics: entry.diagnostics as Record<string, unknown>,
-                }
-              : {}),
+            diagnostics: diagnostics as Record<string, unknown>,
           },
           url,
         );
@@ -1542,7 +1569,7 @@ export class Batch {
           ],
           last_known_good_deps: production?.last_known_good_deps ?? null,
           error_doc: errorDoc,
-          diagnostics: entry.diagnostics ?? null,
+          diagnostics,
           // Like the HTML columns above: the manifest is a last-known-good
           // artifact — its objects still exist in the MediaCache and the
           // preserved HTML may reference them by name.

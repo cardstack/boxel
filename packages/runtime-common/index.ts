@@ -714,42 +714,54 @@ export interface IndexVisitClientTimings {
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
 // `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
-// write-side stamps applied when a row enters the IndexWriter's write path:
+// write-side stamps. Every live row on either channel carries all three,
+// stamped as the row enters the IndexWriter's write path — so a row is
+// always attributable to the pass that wrote it, whether or not its render
+// reported anything:
 //
-//   - `invalidationId` — one UUID per `Batch`; every row touched by
-//     the same indexing pass (incremental fan-out or fromScratch)
+//   - `invalidationId` — one UUID per `Batch`; every row that batch writes
 //     shares it, so operators can `SELECT ... WHERE
-//     diagnostics->>'invalidationId' = '<id>'` and see the
-//     whole batch.
+//     diagnostics->>'invalidationId' = '<id>'` and see the whole batch.
+//     Scoped to the batch, so an index pass and the `prerender_html` job it
+//     spawns carry DIFFERENT ids: each groups its own channel's fan-out.
+//     Join the two channels on `url` (plus `generation`), never on this.
 //   - `indexedAt` — wall-clock the write happened.
-//   - `writeSeq` — the row's position within that pass's write order.
+//   - `writeSeq` — the row's position within that batch's write order.
 //
-// All fields are optional because writers populate incrementally:
-// render-side fields come from the Prerenderer's response meta, the
-// write-side stamps come from the IndexWriter. Any stage may skip
-// pieces that aren't applicable (e.g. non-timeout renders have no
+// A tombstoned row carries none of them: the index channel's tombstones
+// predate the pass's visits and are overwritten by them, and the render
+// channel's clear `diagnostics` outright.
+//
+// Every other field is optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta. Any stage
+// may skip pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
 // Extends both render-side diagnostic shapes so the persisted blob types
 // every field that actually lands in it: server-observed timings from
 // `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
 // `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
-// The two write-side stamps below are added at `IndexWriter.updateEntry`.
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
-  // 0-based position of this row among the pass's row writes, stamped when
+  // 0-based position of this row among the batch's row writes, stamped when
   // the row enters the write path. `indexedAt` only resolves to the
-  // millisecond, and a pass's rows drain through buffered multi-row upserts
+  // millisecond, and a batch's rows drain through buffered multi-row upserts
   // that share one timestamp, so this is the only field that orders two rows
-  // written by the same pass. Grouped with `invalidationId`, it reconstructs
-  // the pass's visit order:
+  // written by the same batch. Grouped with `invalidationId`, it
+  // reconstructs the visit order of either channel:
   // `SELECT url FROM boxel_index WHERE diagnostics->>'invalidationId' = '<id>'
-  //  ORDER BY (diagnostics->>'writeSeq')::int`. An incremental pass writes
-  // the URLs its triggering write named before the dependents its fan-out
-  // discovered, so the lowest sequences in a fan-out are its targets.
-  // Absent on a row a pass only tombstoned (a deletion never reaches a
-  // visit) and on rows written by a pass predating the stamp.
+  //  ORDER BY (diagnostics->>'writeSeq')::int`. An incremental index pass
+  // writes the URLs its triggering write named before the dependents its
+  // fan-out discovered, so the lowest sequences in an index fan-out are its
+  // targets.
+  //
+  // Sequences are per batch, and a fused visit's two rows share one — its
+  // `boxel_index` half and its `prerendered_html` half describe one position,
+  // not two. A split pipeline's channels number independently, so a
+  // sequence is only comparable within one `invalidationId`.
+  //
+  // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
