@@ -703,6 +703,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     return [...urls];
   }
 
+  // These getters create their resource on first read and memoize it in
+  // untracked fields; nothing tracked is written.
+  /* eslint-disable ember/no-side-effects */
   get resolvedCards(): CardDef[] {
     if (!this._cardRefResourceCreated) {
       this._cardRefResourceCreated = true;
@@ -743,6 +746,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     }
     return this._fileRefResource?.instances ?? [];
   }
+  /* eslint-enable ember/no-side-effects */
 
   // ── Card slot resolution ─────────────────────────────────────────────────
 

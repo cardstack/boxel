@@ -116,8 +116,10 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
 
     // Compute and cache
     const rgb = hsvToRgb({ h: this.h, s: this.s, v: this.v });
+    /* eslint-disable ember/no-side-effects -- memoizes into untracked fields */
     this.cachedRgba = { ...rgb, a: this.a };
     this.cachedHsv = { h: this.h, s: this.s, v: this.v, a: this.a };
+    /* eslint-enable ember/no-side-effects */
     return this.cachedRgba;
   }
 
@@ -175,6 +177,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
       this.updateHSVFromRgba(rgba);
       this.syncInputValues();
       // Redraw canvas when model changes
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => {
         this.drawSVCanvas();
       });
@@ -183,6 +186,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
       const rgba = parseCssColor('#3b82f6');
       this.updateHSVFromRgba(rgba);
       this.syncInputValues();
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => {
         this.drawSVCanvas();
       });
@@ -287,6 +291,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
     }
     this.svCanvasElement = element;
     element.addEventListener('pointerdown', this.handleSVMouseDown);
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- first paint of the canvas; the model and input sync ride on the same frame
     requestAnimationFrame(() => {
       this.drawSVCanvas();
       this.syncFromModel();
@@ -343,6 +348,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
     this.h = newValue;
 
     // Redraw canvas when h changes - canvas gradient depends on h
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
     requestAnimationFrame(() => {
       this.drawSVCanvas();
     });
@@ -400,6 +406,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
         this.saveColor(rgba, format);
         this.syncInputValues();
         // Redraw canvas after updating HSV
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
         requestAnimationFrame(() => {
           this.drawSVCanvas();
         });
@@ -442,6 +449,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
       this.saveColor(rgba, 'hex');
       this.syncInputValues();
       // Redraw canvas after updating HSV
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => {
         this.drawSVCanvas();
       });
@@ -462,6 +470,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
       this.saveColor(rgba, this.outputFormat);
       this.syncInputValues();
       // Redraw canvas after updating HSV
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => {
         this.drawSVCanvas();
       });
@@ -482,6 +491,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
       this.saveColor(rgba, this.outputFormat);
       this.syncInputValues();
       // Redraw canvas after updating HSV
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => {
         this.drawSVCanvas();
       });
@@ -507,6 +517,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
         // Save color - triggers color change
         this.saveColor(newRgba, 'hex');
         this.syncInputValues();
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
         requestAnimationFrame(() => {
           this.drawSVCanvas();
         });

@@ -36,6 +36,7 @@ function arrayIndex(prop: string | symbol): number | undefined {
   return undefined;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging -- the constructor returns a Proxy over a real array; the merged interface types it as one
 class WatchedArray<T> {
   constructor(
     subscriber: (oldArr: Array<T>, arr: Array<T>) => void,
