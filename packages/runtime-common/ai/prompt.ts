@@ -269,6 +269,31 @@ export async function getPromptParts(
   };
 }
 
+// The host reports a patch result with the fenced block's position among ALL
+// code blocks in the message, while `codePatchBlocks` holds the patch blocks
+// only. A message that quotes an example code fence before its first patch
+// therefore reports indexes that never line up with 0..n-1, so matching by
+// position waited forever on a patch the host had long applied. Match by
+// count instead: a result per distinct block index, at least one per patch.
+function allCodePatchesHaveAResult(
+  codePatchBlocks: string[],
+  results: CodePatchResultEvent[],
+  onlyApplied = false,
+): boolean {
+  if (codePatchBlocks.length === 0) {
+    return true;
+  }
+  let indexes = new Set(
+    results
+      .filter(
+        (result) =>
+          !onlyApplied || result.content['m.relates_to']?.key === 'applied',
+      )
+      .map((result) => result.content.codeBlockIndex),
+  );
+  return indexes.size >= codePatchBlocks.length;
+}
+
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command or code patch results, it should not respond yet.
   let lastEventExcludingResults = findLast(
@@ -310,16 +335,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  let allCodePatchesHaveResults =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_codePatchBlock: string, codePatchIndex: number) => {
-      return recentEventsToCheck.some((event) => {
-        return (
-          isCodePatchResultEvent(event) &&
-          event.content.codeBlockIndex === codePatchIndex
-        );
-      });
-    });
+  let allCodePatchesHaveResults = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    recentEventsToCheck.filter(isCodePatchResultEvent),
+  );
   if (!allToolsHaveResults || !allCodePatchesHaveResults) {
     return false;
   }
@@ -1792,13 +1811,10 @@ function collectPendingCodePatchCorrectnessCheck(
     let appliedCodePatchResults = codePatchResults.filter(
       (result) => result.content['m.relates_to']?.key === 'applied',
     );
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        appliedCodePatchResults.some(
-          (result) => result.content.codeBlockIndex === index,
-        ),
-      );
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      appliedCodePatchResults,
+    );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1868,15 +1884,11 @@ function hasUnresolvedCodePatches(
     if (isCancelled && !appliedChanges) {
       return false;
     }
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        codePatchResults.some(
-          (result) =>
-            result.content['m.relates_to']?.key === 'applied' &&
-            result.content.codeBlockIndex === index,
-        ),
-      );
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      codePatchResults,
+      true,
+    );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1931,13 +1943,10 @@ function buildCodePatchCorrectnessMessage(
   let appliedCodePatchResults = codePatchResults.filter(
     (result) => result.content['m.relates_to']?.key === 'applied',
   );
-  let allCodePatchesResolved =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_block, index) =>
-      appliedCodePatchResults.some(
-        (result) => result.content.codeBlockIndex === index,
-      ),
-    );
+  let allCodePatchesResolved = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    appliedCodePatchResults,
+  );
   let allRelevantToolsResolved =
     relevantTools.length === 0 ||
     relevantTools.every((request) =>
