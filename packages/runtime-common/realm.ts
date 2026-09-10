@@ -418,6 +418,15 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // carries its own, longer one — a published realm's HTML can take minutes and
 // its callers are pollers with deadlines to match.
 const READINESS_REQUEST_BUDGET_MS = 10_000;
+// How long a card read holds its connection on the read-your-writes indexing
+// drain (see `drainRequestersOwnIndexing`) before serving the current index
+// generation anyway. Bounded for the same reason the readiness gates are: an
+// unbounded hold is worse than a slightly stale answer. The index stays
+// consistent throughout — incremental jobs write into the working table and
+// only swap on completion — so a read that outlives the budget serves the
+// previous generation, and the index event that follows the swap refreshes
+// live clients.
+const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
@@ -850,6 +859,12 @@ export interface WriteOptions {
   // the JSON-API card handlers do not, writing a single file and instances
   // respectively.
   waitForIndex?: boolean | null;
+  // The matrix user (post assume-user) whose request produced this write,
+  // when known — `requestContext.authenticatedUser` at the HTTP handlers.
+  // Tags the resulting incremental index job so read endpoints can scope
+  // their read-your-writes drain to this user's own reads. Absent for
+  // system-originated writes.
+  initiatingUser?: string | null;
 }
 
 export interface RealmAdapter {
@@ -938,6 +953,12 @@ interface Options {
   // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the timeout
   // path without holding real time.
   screenshotSyncWaitMs?: number;
+  // How long a card read (card+json / card+html GET) holds its connection
+  // waiting on the requester's own in-flight incremental indexing before
+  // serving the current index generation anyway. Defaults to
+  // READ_INDEX_DRAIN_BUDGET_MS; tests shrink it to exercise the timeout path
+  // without holding real time.
+  readIndexDrainBudgetMs?: number;
 }
 
 interface UpdateItem {
@@ -950,7 +971,19 @@ export interface MatrixConfig {
   username: string;
 }
 
-export type RequestContext = { realm: Realm; permissions: RealmPermissions };
+export type RequestContext = {
+  realm: Realm;
+  permissions: RealmPermissions;
+  // The effective matrix user this request runs as (post `X-Boxel-Assume-User`
+  // indirection), recorded by `checkPermission` when it sees a verifiable
+  // token. Undefined when the request was authorized without one — a public
+  // endpoint or public-permission realm where no (valid) token accompanied
+  // the request, or a realm-internal (isLocal) dispatch. Used to scope the
+  // read endpoints' read-your-writes indexing drain to the requester's own
+  // writes; it is identity, not authority — authorization decisions never
+  // read it.
+  authenticatedUser?: string;
+};
 
 export class Realm {
   #startedUp = new Deferred<void>();
@@ -1064,6 +1097,7 @@ export class Realm {
   #virtualNetwork: VirtualNetwork;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #screenshotSyncWaitMs: number;
+  #readIndexDrainBudgetMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
@@ -1199,6 +1233,8 @@ export class Realm {
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#screenshotSyncWaitMs =
       opts?.screenshotSyncWaitMs ?? SCREENSHOT_SYNC_WAIT_BUDGET_MS;
+    this.#readIndexDrainBudgetMs =
+      opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -1705,6 +1741,7 @@ export class Realm {
     opts?: {
       delete?: true;
       clientRequestId?: string | null;
+      initiatedBy?: string | null;
     },
   ): Promise<{ invalidations: string[]; generation?: number }> {
     if (urls.length === 0) {
@@ -1716,6 +1753,7 @@ export class Realm {
     await this.#realmIndexUpdater.update(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
+      initiatedBy: opts?.initiatedBy ?? null,
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -1755,6 +1793,7 @@ export class Realm {
     opts: {
       delete?: true;
       clientRequestId?: string | null;
+      initiatedBy?: string | null;
       onSettled?: (
         invalidations: string[],
         meta: { generation?: number },
@@ -1773,6 +1812,7 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
+      initiatedBy: opts?.initiatedBy ?? null,
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -2336,10 +2376,12 @@ export class Realm {
     let invalidations: Set<string> = new Set();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
+    let initiatingUser: string | null = options?.initiatingUser ?? null;
     let performIndex = async () => {
       let { invalidations: workingInvalidations, generation } =
         await this.updateIndexAndCollectInvalidations(urls, {
           clientRequestId,
+          initiatedBy: initiatingUser,
         });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       indexGeneration = generation ?? indexGeneration;
@@ -2573,6 +2615,7 @@ export class Realm {
           urls,
           {
             clientRequestId,
+            initiatedBy: initiatingUser,
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -2932,6 +2975,7 @@ export class Realm {
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             serializeFile: true,
             waitForIndex,
+            initiatingUser: requestContext.authenticatedUser ?? null,
           });
         } catch (e: any) {
           if (e instanceof CardError) {
@@ -3048,7 +3092,7 @@ export class Realm {
 
   async delete(
     path: LocalPath,
-    options?: { waitForIndex?: boolean },
+    options?: { waitForIndex?: boolean; initiatingUser?: string | null },
   ): Promise<void> {
     await this.#dbAdapter.withWriteLock(this.url, () =>
       this._deleteUnlocked(path, options),
@@ -3057,7 +3101,7 @@ export class Realm {
 
   private async _deleteUnlocked(
     path: LocalPath,
-    options?: { waitForIndex?: boolean },
+    options?: { waitForIndex?: boolean; initiatingUser?: string | null },
   ): Promise<void> {
     let url = this.paths.fileURL(path);
     this.sendIndexInitiationEvent(url.href);
@@ -3077,6 +3121,7 @@ export class Realm {
       let { invalidations, generation } =
         await this.updateIndexAndCollectInvalidations([url], {
           delete: true,
+          initiatedBy: options?.initiatingUser ?? null,
         });
       this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
     } else {
@@ -3090,6 +3135,7 @@ export class Realm {
         [url],
         {
           delete: true,
+          initiatedBy: options?.initiatingUser ?? null,
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
@@ -4969,6 +5015,26 @@ export class Realm {
         (requiredPermission === 'write' &&
           realmPermissions['*']?.includes('write')))
     ) {
+      // Authorized without needing a token — but when the caller sent one
+      // anyway, capture who they are for `requestContext.authenticatedUser`.
+      // Identity only (see the RequestContext field): verification failures
+      // here must not fail a request that public permissions already
+      // authorized, so they simply leave the identity unset. The
+      // `X-Boxel-Assume-User` indirection is not honored on this path —
+      // honoring it requires the assume-user permission check the main path
+      // runs, and identity capture must stay free of matrix round-trips.
+      let publicAuthHeader = request.headers.get('Authorization');
+      if (publicAuthHeader) {
+        try {
+          let publicToken = this.#adapter.verifyJWT(
+            publicAuthHeader.replace('Bearer ', ''),
+            this.#realmSecretSeed,
+          );
+          requestContext.authenticatedUser = publicToken.user;
+        } catch (e) {
+          // fall through with no identity
+        }
+      }
       return;
     }
 
@@ -5045,6 +5111,7 @@ export class Realm {
             AuthenticationErrorMessages.PermissionMismatch,
           );
         }
+        requestContext.authenticatedUser = user;
         return;
       }
 
@@ -5060,6 +5127,7 @@ export class Realm {
 
       // if the client is the realm matrix user then we permit all actions
       if (user === this.#matrixClientUserId) {
+        requestContext.authenticatedUser = user;
         return;
       }
 
@@ -5085,6 +5153,7 @@ export class Realm {
           'Insufficient permissions to perform this action',
         );
       }
+      requestContext.authenticatedUser = user;
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         this.#log.warn(
@@ -5118,6 +5187,7 @@ export class Realm {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
         waitForIndex: false,
+        initiatingUser: requestContext.authenticatedUser ?? null,
       },
     );
     return createResponse({
@@ -5148,6 +5218,7 @@ export class Realm {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
         waitForIndex: false,
+        initiatingUser: requestContext.authenticatedUser ?? null,
       },
     );
     return createResponse({
@@ -5402,7 +5473,10 @@ export class Realm {
     if (!handle) {
       return notFound(request, requestContext, `${localName} not found`);
     }
-    await this.delete(handle.path, { waitForIndex: false });
+    await this.delete(handle.path, {
+      waitForIndex: false,
+      initiatingUser: requestContext.authenticatedUser ?? null,
+    });
     return createResponse({
       body: null,
       init: { status: 204 },
@@ -5945,6 +6019,7 @@ export class Realm {
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      initiatingUser: requestContext.authenticatedUser ?? null,
       ...(duringPrerender ? { waitForIndex: false } : {}),
     });
 
@@ -6276,6 +6351,7 @@ export class Realm {
       // connection).
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        initiatingUser: requestContext.authenticatedUser ?? null,
         ...(duringPrerender ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
@@ -6478,21 +6554,69 @@ export class Realm {
     }
   }
 
+  // Read-your-writes gate for the card read endpoints (card+json /
+  // card+html GET). The +source POST indexes deferred (it returns once the
+  // bytes are durable), so a GET that immediately follows the same client's
+  // definition rewrite would otherwise read a stale snapshot — e.g. a
+  // post-rename instance still serialized under the old schema. Waiting is a freshness courtesy, not a correctness
+  // requirement: incremental jobs write into the working table and the
+  // production rows stay live (and mutually consistent) until the completed
+  // batch swaps in, so a read during indexing serves the previous
+  // generation, never a torn one. That shapes both bounds here:
+  //
+  //   - Scoped to the requester. Only the user whose own write is in flight
+  //     has a read-your-writes expectation; every other reader takes the
+  //     current generation immediately. A write-heavy user (or a module edit
+  //     whose invalidation set spans the realm's module graph) must not park
+  //     every reader of the realm behind their job. When the requester's
+  //     identity is unknown (no verifiable token on a public realm, or a
+  //     realm-internal dispatch), the drain conservatively covers all
+  //     pending incremental jobs — the writer might be behind any of them.
+  //   - Bounded. The job being awaited can also sit queued behind other
+  //     realms' work in a saturated worker pool; past the budget the read
+  //     proceeds on the current generation and the index event that follows
+  //     the swap refreshes the client.
+  //
+  // A prerender-originated request skips the gate entirely: its tab holds a
+  // render slot that the pending job may itself be waiting on, so any wait
+  // here is at best dead time and at worst a deadlock held for the budget.
+  private async drainRequestersOwnIndexing(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<void> {
+    if (isDuringPrerenderRequest(request)) {
+      return;
+    }
+    let user = requestContext.authenticatedUser;
+    let pending =
+      user !== undefined
+        ? this.#realmIndexUpdater.incrementalIndexingInitiatedBy(user)
+        : this.incrementalIndexing();
+    if (!pending) {
+      return;
+    }
+    let waitStartedAt = Date.now();
+    if (
+      !(await settledBy(pending, waitStartedAt + this.#readIndexDrainBudgetMs))
+    ) {
+      this.#log.warn(
+        `card read for ${request.url} proceeding after waiting ${
+          Date.now() - waitStartedAt
+        }ms on in-flight incremental indexing${
+          user !== undefined ? ` initiated by ${user}` : ''
+        }; serving the current index generation`,
+      );
+    }
+  }
+
   private async getCard(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Drain any in-flight incremental indexing before reading the card from
-    // the index. With CS-11003's deferred +source POST, an immediately-
-    // following GET +json after a definition rewrite would otherwise read
-    // a stale snapshot — e.g. a post-rename instance still serialized
-    // under the old schema. Read endpoints serve the realm's canonical
-    // indexed view; the small wait when indexing is genuinely pending is
-    // the right tradeoff vs returning stale state.
-    let pending = this.incrementalIndexing();
-    if (pending) {
-      await pending;
-    }
+    // Read-your-writes: wait (scoped, bounded) on the requester's own
+    // in-flight incremental indexing before reading the card from the
+    // index. See drainRequestersOwnIndexing.
+    await this.drainRequestersOwnIndexing(request, requestContext);
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
     // `.json` requests always 302 to the canonical no-extension URL,
@@ -6771,12 +6895,10 @@ export class Realm {
         ? SupportedMimeType.FileMetaHtml
         : SupportedMimeType.CardHtml;
 
-    // Read endpoints serve the realm's canonical indexed view — drain any
-    // in-flight incremental indexing first, exactly as `getCard` does.
-    let pending = this.incrementalIndexing();
-    if (pending) {
-      await pending;
-    }
+    // Read-your-writes: wait (scoped, bounded) on the requester's own
+    // in-flight incremental indexing first, exactly as `getCard` does. See
+    // drainRequestersOwnIndexing.
+    await this.drainRequestersOwnIndexing(request, requestContext);
 
     let htmlQuery: HtmlQuery;
     let fieldset: SearchEntryFieldset;
@@ -6944,7 +7066,9 @@ export class Realm {
       return notFound(request, requestContext);
     }
     let path = this.paths.local(url) + '.json';
-    await this.delete(path);
+    await this.delete(path, {
+      initiatingUser: requestContext.authenticatedUser ?? null,
+    });
     return createResponse({
       body: null,
       init: { status: 204 },
