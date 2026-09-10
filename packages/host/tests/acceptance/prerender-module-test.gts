@@ -113,6 +113,8 @@ module('Acceptance | prerender | module', function (hooks) {
     export class PhotoFile extends FileDef {
       static displayName = 'PhotoFile';
     }
+
+    export class PlainFile extends FileDef {}
   `;
   // One declaration that lowers cleanly (Note.addTag) and one whose clause
   // names a field the type does not have (Note.addNote), so the same visit
@@ -211,8 +213,8 @@ module('Acceptance | prerender | module', function (hooks) {
     let moduleAlias = trimExecutableExtension(rri(moduleURL));
     let definitionFor = (name: string) => {
       let entry = model.definitions[`${moduleAlias}/${name}`];
-      assert.strictEqual(entry.type, 'definition', `${name} has a definition`);
-      return entry.type === 'definition' ? entry.definition : undefined;
+      assert.strictEqual(entry?.type, 'definition', `${name} has a definition`);
+      return entry?.type === 'definition' ? entry.definition : undefined;
     };
     let photo = definitionFor('Photo');
     let caption = definitionFor('Caption');
@@ -234,7 +236,18 @@ module('Acceptance | prerender | module', function (hooks) {
       'PhotoFile',
       "a file's display name",
     );
-    assert.strictEqual(caption?.displayName, null, 'a field def carries none');
+    assert.strictEqual(
+      caption?.displayName,
+      null,
+      'the entry for a field def records none',
+    );
+    // A file def that declares no name of its own still records one: the entry
+    // carries whatever the class resolves to, inherited included.
+    assert.strictEqual(
+      definitionFor('PlainFile')?.displayName,
+      'File',
+      "an undeclared file def's inherited display name",
+    );
 
     // A file def's own fields are captured the same way a card's are, so a
     // consumer reads a file's metadata off its entry without loading the

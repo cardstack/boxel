@@ -386,7 +386,7 @@ export async function buildModuleModel(
             {
               name,
               url: moduleURL,
-              cardOrFieldDef: maybeBaseDef,
+              def: maybeBaseDef,
             },
             context,
             found,
@@ -546,7 +546,7 @@ function makeDefinitionLookup(
 // the `searchable` pass is — a failure is logged and captures no operations
 // rather than failing the definition.
 async function captureOperations(
-  cardOrFieldDef: typeof BaseDef,
+  def: typeof BaseDef,
   definition: Definition,
   api: typeof CardAPI,
   context: ModuleModelContext,
@@ -560,14 +560,14 @@ async function captureOperations(
     // The authored view, not `getOperations`: a base operation reached with no
     // declaration has nothing to lower, and the clause a base requires is
     // only guaranteed present on an entry that went through the decorator.
-    let declared = operationsApi.getDeclaredOperations(cardOrFieldDef);
+    let declared = operationsApi.getDeclaredOperations(def);
     if (Object.keys(declared).length === 0) {
       return undefined;
     }
     let lowered = await lowerOperationDeclarations(declared, {
       definition,
       lookupDefinition: makeDefinitionLookup(api, loader, 'operation lowering'),
-      identifyCard: (def) => identifyCard(def),
+      identifyCard: (card) => identifyCard(card),
     });
     for (let issue of lowered.issues) {
       console.warn(
@@ -586,11 +586,11 @@ async function makeDefinition(
   {
     url,
     name,
-    cardOrFieldDef,
+    def,
   }: {
     url: RealmResourceIdentifier | URL;
     name: string;
-    cardOrFieldDef: typeof BaseDef;
+    def: typeof BaseDef;
   },
   context: ModuleModelContext,
   // Collects the operation-lowering findings for this def. The caller tags
@@ -603,17 +603,17 @@ async function makeDefinition(
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       '@cardstack/base/card-api',
     );
-    let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
-    let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
+    let { fields, fieldDefs } = getFieldDefinitions(api, def);
+    let codeRef = identifyCard(def) as ResolvedCodeRef;
     let definition: Definition = {
       codeRef,
       fields,
       fieldDefs,
-      type: definitionKind(cardOrFieldDef),
-      displayName: definitionDisplayName(cardOrFieldDef),
+      type: definitionKind(def),
+      displayName: definitionDisplayName(def),
     };
     let operations = await captureOperations(
-      cardOrFieldDef,
+      def,
       definition,
       api,
       context,
@@ -622,8 +622,8 @@ async function makeDefinition(
     if (operations) {
       definition.operations = operations;
     }
-    let typesMaybeError = isCardDef(cardOrFieldDef)
-      ? await getTypes(cardOrFieldDef, context)
+    let typesMaybeError = isCardDef(def)
+      ? await getTypes(def, context)
       : { type: 'types' as const, types: [] };
     if (typesMaybeError.type === 'error') {
       console.warn(

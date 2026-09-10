@@ -29,12 +29,11 @@ export interface FieldDefinition {
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
-// own URL and is the target of card operations; a field is a value that only
-// exists inside a card and has no URL; a file describes uploaded bytes, which
-// have a URL and read-only, content-derived metadata. Files are a sibling of
-// cards under `BaseDef`, not a kind of field, and consumers that reason about
-// what a target supports — operation dispatch, lowering, authorization — read
-// this to tell the three apart without loading the type's module.
+// own URL; a field is a value that only exists inside a card and has no URL; a
+// file describes uploaded bytes, which have a URL and read-only,
+// content-derived metadata. Files are a sibling of cards under `BaseDef`, not a
+// kind of field, so recording the family is what lets a reader holding only the
+// cached entry tell a file from a field without loading the type's module.
 export type DefinitionKind = 'card-def' | 'field-def' | 'file-def';
 
 // Classify a def for its definition entry. This is the single test the
@@ -50,10 +49,13 @@ export function definitionKind(def: typeof BaseDef): DefinitionKind {
   return 'field-def';
 }
 
-// A def's `displayName` is only meaningful for the families that name a thing
-// a user sees — a card or a file. A field def carries none.
+// The display name a definition entry records. Every family declares one on its
+// class, but the entry carries it only for the families a consumer can address
+// by URL — a card or a file — where the name identifies something the reader
+// can go and fetch. Derived from `definitionKind` so the two cannot disagree
+// about which families those are.
 export function definitionDisplayName(def: typeof BaseDef): string | null {
-  return isCardDef(def) || isFileDef(def) ? def.displayName : null;
+  return definitionKind(def) === 'field-def' ? null : def.displayName;
 }
 
 // `Definition.fields` only carries the **immediate** field map. Dotted

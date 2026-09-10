@@ -290,12 +290,15 @@ module(basename(import.meta.filename), function () {
         `SELECT definitions FROM modules WHERE url = ANY($1) OR file_alias = ANY($1)`,
         { bind: [[`${realmURL}families`, `${realmURL}families.gts`]] },
       )) as { definitions: unknown }[];
-      assert.ok(rows.length > 0, 'the sweep cached the module');
-      let raw = rows[0].definitions;
+      // Exactly one row: `modules` is keyed on (url, cache_scope, auth_user_id),
+      // so a second row for this module would mean the lookup below is reading
+      // an arbitrary one of them.
+      assert.strictEqual(rows.length, 1, 'the sweep cached the module once');
+      let raw = rows[0]?.definitions;
       let persisted =
         typeof raw === 'string'
           ? (JSON.parse(raw) as Record<string, any>)
-          : (raw as Record<string, any>);
+          : ((raw ?? {}) as Record<string, any>);
       let byExportName = Object.fromEntries(
         Object.entries(persisted).map(([key, entry]) => [
           key.split('/').pop(),
@@ -330,7 +333,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         byExportName.Caption?.displayName,
         null,
-        'a field def carries none',
+        'the entry for a field def records none',
       );
       // A file def's own fields are captured the way a card's are, so a
       // consumer reads a file's metadata off its entry without loading the
