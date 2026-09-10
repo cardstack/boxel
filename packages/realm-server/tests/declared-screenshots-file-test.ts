@@ -66,6 +66,106 @@ const FILEDEF_MISMATCH_SOURCE = `
       }
     `;
 
+// A minimal ZIP with every part stored uncompressed — the OOXML container the
+// office reader opens. CRCs and timestamps stay zero: the reader addresses
+// parts via the central directory and never validates them. Same builder as
+// packages/host/tests/unit/office-metadata-extractor-test.ts.
+function zipOf(parts: { name: string; content: string }[]): Uint8Array {
+  let encoder = new TextEncoder();
+  let chunks: Uint8Array[] = [];
+  let central: Uint8Array[] = [];
+  let offset = 0;
+
+  let u16 = (n: number) => new Uint8Array([n & 0xff, (n >> 8) & 0xff]);
+  let u32 = (n: number) =>
+    new Uint8Array([
+      n & 0xff,
+      (n >> 8) & 0xff,
+      (n >> 16) & 0xff,
+      (n >>> 24) & 0xff,
+    ]);
+  let concat = (list: Uint8Array[]) => {
+    let total = list.reduce((sum, c) => sum + c.length, 0);
+    let out = new Uint8Array(total);
+    let at = 0;
+    for (let c of list) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  };
+
+  for (let part of parts) {
+    let nameBytes = encoder.encode(part.name);
+    let data = encoder.encode(part.content);
+    let local = concat([
+      u32(0x04034b50),
+      u16(20),
+      u16(0),
+      u16(0), // method 0 (stored)
+      u16(0),
+      u16(0),
+      u32(0), // crc
+      u32(data.length),
+      u32(data.length),
+      u16(nameBytes.length),
+      u16(0),
+      nameBytes,
+      data,
+    ]);
+    central.push(
+      concat([
+        u32(0x02014b50),
+        u16(20),
+        u16(20),
+        u16(0),
+        u16(0),
+        u16(0),
+        u16(0),
+        u32(0),
+        u32(data.length),
+        u32(data.length),
+        u16(nameBytes.length),
+        u16(0),
+        u16(0),
+        u16(0),
+        u16(0),
+        u32(0),
+        u32(offset),
+        nameBytes,
+      ]),
+    );
+    chunks.push(local);
+    offset += local.length;
+  }
+
+  let cd = concat(central);
+  let eocd = concat([
+    u32(0x06054b50),
+    u16(0),
+    u16(0),
+    u16(parts.length),
+    u16(parts.length),
+    u32(cd.length),
+    u32(offset),
+    u16(0),
+  ]);
+  return concat([...chunks, cd, eocd]);
+}
+
+// A well-formed Word package with an empty body: the extract yields no first
+// unit, which is what routes the poster capture to its placeholder branch.
+function emptyBodyDocx(): Uint8Array {
+  return zipOf([
+    { name: '[Content_Types].xml', content: '<?xml version="1.0"?><Types/>' },
+    {
+      name: 'word/document.xml',
+      content:
+        '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>',
+    },
+  ]);
+}
+
 function makeFileSystem() {
   return {
     'filedef-mismatch.gts': FILEDEF_MISMATCH_SOURCE,
@@ -428,6 +528,48 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
   }
+
+  test('an office file whose extraction yields no first unit captures the typed-placeholder poster', async function (assert) {
+    // A valid OOXML package whose document body carries no text: the office
+    // extract succeeds but yields no preview payload, so the capture
+    // component takes its typed-placeholder branch. Garbage bytes under a
+    // `.docx` name would not reach that branch at all — the parser's
+    // FileContentMismatchError falls the file back to plain FileDef, which
+    // declares no poster slot.
+    await writeAndSettle('empty.docx', emptyBodyDocx());
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}empty.docx`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    // The capture must land rather than decline: the prerendered fitted cell
+    // serves the declaration-injected poster URL with no image fallback, so
+    // a declined slot would leave the tile an empty box. The component's
+    // placeholder branch is what keeps the degenerate capture informative.
+    assert.ok(
+      manifest?.poster,
+      'the placeholder poster landed on the file row',
+    );
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/empty.docx?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(
+        0,
+        500,
+      )})`,
+    );
+  });
 
   test('a corrupt PDF captures no poster and the fitted cell keeps the placeholder', async function (assert) {
     // Not a PDF at all: the capture component's decode fails, readiness

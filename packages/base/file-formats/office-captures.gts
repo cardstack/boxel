@@ -7,22 +7,24 @@
 // has no decode path for OOXML, so the extracted-structure rendering IS the
 // office viewer, and screenshotting it is the pattern rather than an
 // exception. The render is synchronous DOM over already-extracted fields, so
-// a poster that has a renderable first unit captures on the engine's settle
-// with no readiness signal. A file whose extraction yielded no such unit — an
-// oversize document the extractor skipped, or a format with no preview
-// payload — instead holds `data-screenshot-pending`, so the engine's bounded
-// wait declines the slot: the typed fitted placeholder (format badge + count)
-// stays the tile rather than a filename-on-white capture displacing it
-// through `useAsThumbnail`. The attribute is set once at the initial (and
-// only) render off a synchronous getter — not flipped from an async
-// continuation — so the tracked-update caveat on `data-screenshot-pending`
-// does not apply.
+// every poster captures on the engine's settle with no readiness signal. A
+// file whose extraction yielded no renderable first unit — an oversize
+// document the extractor skipped, or a format with no preview payload —
+// captures the typed placeholder look (paper + format badge + structural
+// count) rather than a filename-on-white page. Declining the capture (the
+// PDF sibling's move for an undecodable document) is not an option here: the
+// prerendered fitted cell serves the declaration-injected poster URL without
+// knowing the capture outcome, and its `<img>` has no error fallback, so a
+// declined slot leaves that tile empty — worse than either rendering.
+// Capturing the placeholder keeps the prerendered and live tiles agreeing on
+// the degenerate case.
 import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { ensureFileViewModel, type FileViewModel } from './file-view-model';
+import { officeKindBadge, officeStructureLabel } from './office-preview';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -100,9 +102,17 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
     );
   }
 
-  // A poster earns a capture only when the extracted structure carries a
-  // renderable first unit; otherwise the slot declines (see the file header)
-  // so the heading-only white page never displaces the typed placeholder.
+  get badge(): string {
+    return officeKindBadge(this.kind, this.model.extension);
+  }
+
+  get structureLabel(): string {
+    return officeStructureLabel(this.meta, this.kind);
+  }
+
+  // Selects between the extracted first unit and the typed-placeholder branch
+  // (see the file header): only a renderable first unit earns the page-shaped
+  // rendering; anything less captures the placeholder look instead.
   get hasPosterContent(): boolean {
     if (this.kind === 'presentation') {
       let slide = this.titleSlide;
@@ -115,45 +125,59 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
   }
 
   <template>
-    <div
-      class='office-poster'
-      data-kind={{this.kind}}
-      data-screenshot-pending={{unless this.hasPosterContent 'true'}}
-    >
-      {{#if (eq this.kind 'presentation')}}
-        <div class='slide'>
-          <div class='slide-title'>{{if
-              this.titleSlide.title
-              this.titleSlide.title
-              this.heading
-            }}</div>
-          {{#each this.titleSlide.bullets as |bullet|}}
-            <div class='slide-bullet'>{{bullet}}</div>
-          {{/each}}
-        </div>
-      {{else if (eq this.kind 'spreadsheet')}}
-        <div class='sheet'>
-          {{#if this.sheet.name}}<div
-              class='sheet-tab'
-            >{{this.sheet.name}}</div>{{/if}}
-          <table class='sheet-grid'>
-            <tbody>
-              {{#each this.sheetRows as |row|}}
-                <tr>
-                  {{#each row as |cell|}}
-                    <td>{{cell}}</td>
-                  {{/each}}
-                </tr>
-              {{/each}}
-            </tbody>
-          </table>
-        </div>
+    <div class='office-poster' data-kind={{this.kind}}>
+      {{#if this.hasPosterContent}}
+        {{#if (eq this.kind 'presentation')}}
+          <div class='slide'>
+            <div class='slide-title'>{{if
+                this.titleSlide.title
+                this.titleSlide.title
+                this.heading
+              }}</div>
+            {{#each this.titleSlide.bullets as |bullet|}}
+              <div class='slide-bullet'>{{bullet}}</div>
+            {{/each}}
+          </div>
+        {{else if (eq this.kind 'spreadsheet')}}
+          <div class='sheet'>
+            {{#if this.sheet.name}}<div
+                class='sheet-tab'
+              >{{this.sheet.name}}</div>{{/if}}
+            <table class='sheet-grid'>
+              <tbody>
+                {{#each this.sheetRows as |row|}}
+                  <tr>
+                    {{#each row as |cell|}}
+                      <td>{{cell}}</td>
+                    {{/each}}
+                  </tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        {{else}}
+          <div class='page'>
+            <div class='page-title'>{{this.heading}}</div>
+            {{#each this.blocks as |block|}}
+              <p
+                class='page-block'
+                data-style={{block.style}}
+              >{{block.text}}</p>
+            {{/each}}
+          </div>
+        {{/if}}
       {{else}}
-        <div class='page'>
-          <div class='page-title'>{{this.heading}}</div>
-          {{#each this.blocks as |block|}}
-            <p class='page-block' data-style={{block.style}}>{{block.text}}</p>
-          {{/each}}
+        {{! The typed-placeholder branch: the same paper + badge + count the
+            fitted cell draws for an uncaptured file, rendered as the capture
+            itself so the always-served poster URL resolves to an informative
+            tile (see the file header). }}
+        <div class='placeholder'>
+          <div class='ph-paper ph-{{this.kind}}'>
+            <span class='ph-badge'>{{this.badge}}</span>
+            {{#if this.structureLabel}}
+              <span class='ph-count'>{{this.structureLabel}}</span>
+            {{/if}}
+          </div>
         </div>
       {{/if}}
     </div>
@@ -241,6 +265,75 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
         text-overflow: ellipsis;
         max-width: 48px;
       }
+
+      /* The typed-placeholder branch, mirroring the fitted cell's uncaptured
+         placeholder (office-preview's .off-fitted/.paper) with the capture
+         palette pinned: a capture render must not depend on the host theme
+         tokens the live placeholder reads. */
+      .placeholder {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 10px;
+        background: #eceef1;
+      }
+      .ph-paper {
+        position: relative;
+        width: 72%;
+        aspect-ratio: 3 / 4;
+        background: #fff;
+        border: 1px solid #d8d8d8;
+        border-radius: 3px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        overflow: hidden;
+      }
+      .ph-presentation {
+        aspect-ratio: 4 / 3;
+      }
+      .ph-word::before {
+        content: '';
+        position: absolute;
+        inset: 14% 16%;
+        background-image: repeating-linear-gradient(
+          #d8d8d8 0 1px,
+          transparent 1px 9px
+        );
+        opacity: 0.5;
+      }
+      .ph-spreadsheet::before {
+        content: '';
+        position: absolute;
+        inset: 12% 12%;
+        background-image:
+          repeating-linear-gradient(#d8d8d8 0 1px, transparent 1px 16px),
+          repeating-linear-gradient(90deg, #d8d8d8 0 1px, transparent 1px 22px);
+        opacity: 0.5;
+      }
+      .ph-badge {
+        position: relative;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #f7f7f5;
+        background: #262626;
+        padding: 2px 8px;
+        border-radius: 3px;
+      }
+      .ph-count {
+        position: relative;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 0.5625rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #555;
+      }
     </style>
   </template>
 }
@@ -249,7 +342,9 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
 // recommended thumbnail box (the CardsGrid tile, 170×250 at the default
 // deviceScaleFactor of 2), keyed on file content, feeding the thumbnail
 // fallback chain and the fitted cell through the view model's thumbnail
-// seam. The typed placeholder remains the fallback until a capture serves.
+// seam. Every office file captures — a real first unit when the extraction
+// carried one, the typed-placeholder rendering when it didn't — so the
+// live placeholder only stands in while a capture is still outstanding.
 export const OFFICE_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
   poster: {
     render: OfficePosterCapture,
