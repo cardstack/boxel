@@ -49,9 +49,20 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //   * The redirects. An extension-less URL naming `foo.gts`, or a card id
 //     naming its `.json`, is resolved by the facade — this executor takes the
 //     resolved path and reads it. A read has no redirect to give.
-//   * The response around the bytes. The `ETag` built from `version` and its
-//     source variant, `Last-Modified`, `x-created`, the 304, `Range` and the
-//     source cache are all the facade's, computed from what comes back here.
+//   * The response around the bytes. `Last-Modified`, `x-created`, the
+//     validator, the 304 and the source cache are all the facade's, computed
+//     from what comes back here. Which validator is the facade's choice too,
+//     and the byte routes do not make one choice: the source route builds an
+//     `ETag` from a content hash for a `.json` or an executable extension, and
+//     from `lastModified` for everything else. A `Range` needs more than this
+//     result carries — the adapter's bounded-read capability does not travel
+//     through it — so a facade serving 206s holds the handle itself.
+//
+//   * The pairing of the metadata with the bytes. `lastModified` is the stat
+//     taken when the handle opened and the body is read from it later, so a
+//     write landing in between pairs one with the other, exactly as it does
+//     for the byte routes reading the same handle. A caller that cannot
+//     tolerate that has to revalidate after reading rather than before.
 //   * A batching envelope over operations does not carry this one at all:
 //     bytes do not belong in a JSON batch, and a stream cannot be one member
 //     of one.
@@ -64,8 +75,12 @@ export async function readSourceOperation(
 ): Promise<OperationSourceResult> {
   // `runOperation` canonicalized the target already; doing it again is a no-op
   // and keeps a direct caller of this executor addressing the same path
-  // dispatch would have.
-  let target = canonicalizeTarget(core, request.target);
+  // dispatch would have — including the addressing, since a stored-bytes read
+  // names a path and the realm root is that realm's directory rather than its
+  // index card.
+  let target = canonicalizeTarget(core, request.target, {
+    rootNamesIndexCard: false,
+  });
   let url = instanceTargetURL({ ...request, target });
   let localPath = localPathFor(core, url);
   let file = await core.openStoredFile(localPath);
@@ -100,6 +115,7 @@ export async function readSourceOperation(
     lastModified: file.lastModified,
     created: meta.createdAt ?? null,
     version: meta.version ?? null,
+    size: file.size,
   };
   if (opts.headersOnly) {
     return result;

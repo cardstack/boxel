@@ -940,6 +940,11 @@ const tests = Object.freeze({
           `${path} hands back exactly what the adapter produced`,
         );
         assert.strictEqual(result.lastModified, 1699);
+        assert.strictEqual(
+          result.size,
+          typeof content === 'string' ? content.length : content.byteLength,
+          `${path} carries the size a Content-Length is set from`,
+        );
       }
     }
   },
@@ -1070,6 +1075,45 @@ const tests = Object.freeze({
       ),
     );
     assert.strictEqual(error.code, 'target-not-found');
+  },
+
+  'the realm root is a directory, not a stored file': async (assert) => {
+    // A card read resolves the realm root to the realm's index card, which is
+    // what makes the root readable at all. A stored-bytes read addresses a
+    // path, and the root is the realm's own directory — so it must not resolve
+    // to `index` and serve whatever file happens to carry that bare name.
+    let { core } = stub({ stored: { index: 'not the index card' } });
+    for (let url of [REALM, REALM.replace(/\/$/, '')]) {
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke({ kind: 'instance', url }, 'readSource')),
+      );
+      assert.strictEqual(
+        error.code,
+        'target-not-found',
+        `${url} names a directory: ${error.detail}`,
+      );
+    }
+
+    // The bare name still reads when it is asked for by name.
+    let byName = await runOperation(
+      core,
+      invoke({ kind: 'instance', url: `${REALM}index` }, 'readSource'),
+    );
+    assert.true(isSourceResult(byName), 'the file itself is readable');
+    if (isSourceResult(byName)) {
+      assert.strictEqual(byName.body, 'not the index card');
+    }
+
+    // And the card read still resolves the root to the index card, which is
+    // the behavior the two addressings differ on.
+    let card = await runOperation(
+      core,
+      invoke({ kind: 'instance', url: REALM }, 'read'),
+    );
+    assert.true(
+      isDocumentResult(card),
+      'a card read of the root serves the index card',
+    );
   },
 
   'a type has no stored bytes to read': async (assert) => {

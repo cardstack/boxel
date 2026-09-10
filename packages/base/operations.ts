@@ -82,13 +82,23 @@ export const BASE_OPERATIONS = [
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
 
-// The base operations no declaration may name as its `base`. A stored-bytes
-// read serves what is on disk: there is no payload to reshape, no program
-// stage to run, and no result to project, so a declaration built on it would
-// describe work nothing carries out. Refusing at the decorator is what keeps
-// the realm's dispatch free to answer it without consulting a definition —
-// the two rules are the same rule, read from opposite ends.
+// The base operations a declaration may neither build on nor be named after.
+// A stored-bytes read serves what is on disk: there is no payload to reshape,
+// no program stage to run, and no result to project, so a declaration built on
+// it would describe work nothing carries out.
+//
+// Both halves of that refusal matter, because a name and a base are
+// independent. The realm answers one of these by name without reading a
+// definition at all, so a declaration under the name — whatever base it
+// builds on — would be dispatched straight past: the built-in would run and
+// the author's operation would never be reached. Refusing the name is what
+// makes answering it definition-free correct, and refusing the base is what
+// stops the behavior being reached under some other name.
 const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
+
+function isNotDeclarable(name: string): boolean {
+  return NOT_DECLARABLE.includes(name as BaseOperationName);
+}
 
 // ============================================================================
 // Typed references
@@ -472,6 +482,11 @@ export const operation = function (
     );
   }
   let owner = assertOperationTarget(target, key);
+  if (isNotDeclarable(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — a "${key}" serves the bytes stored at the def's URL, which the realm answers without reading a definition, so a declaration under this name would never be reached`,
+    );
+  }
   assertNameAvailable(owner, key);
   if (typeof descriptor?.initializer !== 'function') {
     throw new Error(
@@ -712,7 +727,7 @@ function assertValidDeclaration(
       `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
     );
   }
-  if (NOT_DECLARABLE.includes(base)) {
+  if (isNotDeclarable(base)) {
     throw new Error(
       `${label}: a "${base}" operation serves the bytes stored at the def's URL, so there is nothing for a declaration to specialize or rebind`,
     );

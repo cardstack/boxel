@@ -268,9 +268,10 @@ export interface OperationHeadResult {
 }
 
 // The stored bytes of a resource, and what the byte-serve headers are computed
-// from. This is what the source and byte-serve routes answer with: a card
-// instance's `.json`, a module's text, an image's bytes — the resource exactly
-// as it sits on disk, with no assembly and no index read behind it.
+// from. This is the representation the source and byte-serve routes answer
+// with: a card instance's `.json`, a module's text, an image's bytes — the
+// resource exactly as it sits on disk, with no assembly and no index read
+// behind it.
 export interface OperationSourceResult {
   // Inferred from the path's extension by `inferContentType`, which is what
   // both byte routes infer theirs with. A path with no extension the platform
@@ -285,14 +286,29 @@ export interface OperationSourceResult {
   // than filling it in.
   created: number | null;
   // The content hash of the stored bytes — the same identity the rest of the
-  // project calls `version`, and what the source route's `ETag` is built
-  // from. Null only where the realm can neither recall nor compute one.
+  // project calls `version`. It identifies these bytes and no others, which is
+  // what a validator needs, but it is not by itself the byte routes' `ETag`:
+  // the source route builds one from a content hash for a `.json` or an
+  // executable extension and from `lastModified` for everything else, so a
+  // facade reproducing those validators chooses between the two. Null only
+  // where the realm can neither recall nor compute a hash.
   version: string | null;
+  // The byte size, where the adapter knew it from the stat it already
+  // performed, and absent where knowing it would cost reading the bytes. A
+  // facade needs it for `Content-Length` and to decide whether it can offer a
+  // `Range` at all. The bounded-read capability itself does not travel here —
+  // it is a function on the adapter's handle — so a facade serving 206s reads
+  // from the handle rather than from this result.
+  size?: number;
   // The bytes. Absent in the headers-only mode, which is the whole difference
   // between the two: a `HEAD` reports the metadata above and would discard
   // this. Whatever form the realm's file adapter produced — a string, a byte
   // array, or an unread stream — so a caller hands it to a response body
   // rather than materializing it.
+  //
+  // The metadata above describes the handle as it opened; the bytes are read
+  // from it afterwards. A write landing in between pairs one with the other,
+  // the same way it does for a byte route reading the same handle.
   body?: OperationSourceBody;
 }
 

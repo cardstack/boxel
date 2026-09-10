@@ -29,6 +29,17 @@ let card: (typeof OperationsModule)['card'];
 let bxl: (typeof OperationsModule)['bxl'];
 let linkTo: (typeof OperationsModule)['linkTo'];
 
+// The entry `getOperations` synthesizes for a base operation a def carries.
+// The cast is load-bearing rather than convenience: `OperationDeclaration`
+// deliberately cannot express `base: 'readSource'`, because nothing may
+// declare one and the authoring types are the first place that is refused —
+// while `getOperations` still reports the entry every card and file def
+// carries. That asymmetry lives here rather than being spelled out at each
+// expectation.
+function implied(base: string): OperationsModule.OperationDeclaration {
+  return { base } as OperationsModule.OperationDeclaration;
+}
+
 // Compile-time assertions. The call does nothing at run time; it fails to
 // type-check unless the two types are identical, so the call is the assertion.
 type Identical<Left, Right> =
@@ -172,13 +183,13 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       getOperations(CardDef),
       {
-        read: { base: 'read' },
-        readSource: { base: 'readSource' },
-        create: { base: 'create' },
-        update: { base: 'update' },
-        delete: { base: 'delete' },
-        query: { base: 'query' },
-        transform: { base: 'transform' },
+        read: implied('read'),
+        readSource: implied('readSource'),
+        create: implied('create'),
+        update: implied('update'),
+        delete: implied('delete'),
+        query: implied('query'),
+        transform: implied('transform'),
       },
       'a card def carries every base operation, implied by the def type',
     );
@@ -189,7 +200,7 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       getOperations(FileDef),
-      { read: { base: 'read' }, readSource: { base: 'readSource' } },
+      { read: implied('read'), readSource: implied('readSource') },
       "a file's metadata is read-only, so a file def carries only its two reads",
     );
     assert.deepEqual(
@@ -459,8 +470,28 @@ module('Integration | operations', function (hooks) {
         }
         return Redacted;
       },
-      /serves the bytes stored at the def's URL/,
+      /reserved operation name/,
       'and it cannot be specialized under its own name either',
+    );
+
+    // The name is reserved independently of the base, because the two are
+    // independent everywhere else: a declaration is invoked under its name and
+    // carried out by its base. The realm answers this name without reading a
+    // definition, so a declaration under it — whatever base it builds on —
+    // would be dispatched straight past, and the built-in would run in place
+    // of what the author wrote.
+    assert.throws(
+      () => {
+        class Sneaky extends CardDef {
+          @operation static readSource = {
+            base: 'read',
+            output: { redacted: true },
+          };
+        }
+        return Sneaky;
+      },
+      /reserved operation name/,
+      'a declaration cannot take the name by building on another base',
     );
   });
 
@@ -1432,7 +1463,7 @@ module('Integration | operations', function (hooks) {
     class Bare extends cardAPI.BaseDef {}
     assert.deepEqual(
       getOperations(Bare),
-      { read: { base: 'read' }, readSource: { base: 'readSource' } },
+      { read: implied('read'), readSource: implied('readSource') },
       'the two reads are what every addressable def shares',
     );
     assert.throws(

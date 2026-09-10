@@ -73,6 +73,7 @@ import {
   removeFileMeta,
   getCreatedTime,
   getContentMeta,
+  getFileMetaForPaths,
 } from './file-meta.ts';
 import {
   systemError,
@@ -5843,32 +5844,30 @@ export class Realm {
   // wants is its call to make.
   //
   // The hash is computed from its own handle, so it never consumes the one a
-  // read is serving from. Two notes on cost for whoever routes a byte response
-  // through here: hashing reads the whole file (`computeContentHash` samples
-  // large content, but only after materializing it), and this is one row
-  // lookup more than `getSourceOrRedirect` pays, since that hashes bytes it
-  // has already materialized. Both lookups here are single-row reads on
-  // `realm_file_meta`'s primary key.
+  // read is serving from, and it costs a full read of the file when it is
+  // reached (`computeContentHash` samples large content, but only after
+  // materializing it). Both values come from one row, so this is one query on
+  // `realm_file_meta`'s primary key rather than a lookup per value — worth
+  // holding to, since a byte response routed through here pays it per request.
   async #operationStoredFileMeta(
     localPath: LocalPath,
     observedSize?: number,
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
-      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-      : { contentHash: undefined, contentSize: undefined };
+      ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
+          localPath,
+        )
+      : undefined;
     let describesThisFile =
-      persisted.contentHash !== undefined &&
+      persisted?.contentHash !== undefined &&
       observedSize !== undefined &&
       persisted.contentSize === observedSize;
-    let version = describesThisFile ? persisted.contentHash : undefined;
+    let version = describesThisFile ? persisted!.contentHash : undefined;
     if (version === undefined) {
       let fileRef = await this.#operationStoredFile(localPath);
       version = fileRef ? await computeContentHashFromRef(fileRef) : undefined;
     }
-    return {
-      version,
-      createdAt: await this.getCreatedTime(localPath),
-    };
+    return { version, createdAt: persisted?.createdAt };
   }
 
   private async getFileMeta(

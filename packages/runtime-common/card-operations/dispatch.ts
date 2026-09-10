@@ -55,11 +55,11 @@ export interface OperationCore {
   readFileAsText(localPath: LocalPath): Promise<string | undefined>;
   // The stored bytes at a local path, opened the way the realm's own byte
   // serve opens them, with the realm's own refusals applied: a path it will
-  // not serve — an empty one, an `_`-prefixed realm endpoint, a directory —
-  // answers undefined, and so does one that is not there. Unlike
-  // `fileMetaDocument` this does not decline a card's `.json`: that path names
-  // the card's stored source, which is exactly what a stored-bytes read is
-  // for.
+  // not serve — the realm root, which is a directory, or a name nothing is
+  // stored under — answers undefined. It applies no refusal to a name as
+  // such, which is what keeps this in step with the byte routes: they serve a
+  // card's `.json` and an `_`-prefixed file alike, so a read of stored bytes
+  // has to reach both.
   //
   // `content` is unread until it is touched. The adapter opens a real stream
   // on first touch, so a caller that wants only the metadata must leave it
@@ -397,7 +397,15 @@ export async function runOperation(
   request: OperationRequest,
   opts: RunOperationOptions = {},
 ): Promise<OperationResult> {
-  let target = canonicalizeTarget(core, request.target);
+  // A definition-free name is a read of stored bytes, which addresses a path
+  // rather than a card — so the realm root stays the realm root rather than
+  // resolving to the index card. Reading the addressing off the name is sound
+  // for the same reason answering it without a definition is: no declaration
+  // can take one of these names, so the name settles which behavior this is
+  // before anything is read.
+  let target = canonicalizeTarget(core, request.target, {
+    rootNamesIndexCard: !isDefinitionFreeOperation(request.name),
+  });
   let canonical: OperationRequest =
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core);
@@ -504,9 +512,20 @@ export function pathsFor(core: OperationCore): RealmPaths {
 // Idempotent, and deliberately tolerant: a URL that does not parse, or that
 // belongs to another realm, is returned untouched so the refusal for it comes
 // from the code that has something to say about it.
+export interface CanonicalizeOptions {
+  // Whether the realm root names the realm's index card. It does for a read of
+  // a card, which is what makes the root readable at all. It does not for a
+  // read of stored bytes, which addresses a path: the root is the realm's
+  // directory, so resolving it to `index` there would serve whatever file
+  // happens to carry that bare name in answer to a request for a directory.
+  // Defaults to true — a caller addressing paths says so.
+  rootNamesIndexCard?: boolean;
+}
+
 export function canonicalizeTarget(
   core: OperationCore,
   target: OperationTarget,
+  opts: CanonicalizeOptions = {},
 ): OperationTarget {
   if (target.kind !== 'instance') {
     return target;
@@ -522,7 +541,7 @@ export function canonicalizeTarget(
   } catch {
     return target;
   }
-  if (localPath === '') {
+  if (localPath === '' && (opts.rootNamesIndexCard ?? true)) {
     localPath = 'index' as LocalPath;
   }
   // A `.json` path is deliberately left alone. It names a card's stored source
@@ -531,6 +550,10 @@ export function canonicalizeTarget(
   // Resolving it to the card instead would answer a question nobody asked, and
   // would be the one spelling where the extension test and the rest of the
   // core disagreed.
+  //
+  // Everything else here is common to both addressings: a trailing slash, a
+  // query string and a fragment all name the thing they hang off, whether that
+  // thing is a card or a file.
   let canonical = paths.fileURL(localPath).href;
   return canonical === target.url
     ? target

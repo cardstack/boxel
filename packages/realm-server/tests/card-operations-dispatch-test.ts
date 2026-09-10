@@ -122,6 +122,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('the realm root is a directory, not a stored file', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('a type has no stored bytes to read', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
