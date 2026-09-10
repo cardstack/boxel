@@ -946,7 +946,15 @@ interface BxlMutationStatementResult {
 }
 
 type BxlMutationIntent =
-  | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
+  | {
+      op: 'set';
+      path: JqPath;
+      before?: JsonValue;
+      after: JsonValue;
+      // Relationship Fields inside the replaced value, each named relative to
+      // `path`, whose edges this write leaves as the Card already holds them.
+      keepRelationships?: JqPath[];
+    }
   | { op: 'delete'; path: JqPath; before: JsonValue }
   | { op: 'copy'; from: JqPath; path: JqPath }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
@@ -993,6 +1001,108 @@ move_item_before(
   .reviewers[] | select(.id == "https://example.com/people/grace")
 );
 ```
+
+A relationship reached through a contained value is written the same way.
+A `card(id)` standing inside the object or array a statement writes is resolved
+where it stands, at any depth:
+
+```bxl
+append(.comments; {body: "Looks right to me", author: card(params("who"))});
+```
+
+A link is an edge of the Card rather than a member of the value, so the stored
+contained value holds `body` alone and the plan carries a separate relationship
+intent at `["comments", 0, "author"]`. A `linksToMany` written this way takes
+one marker per edge, and every member of it must be one, because the whole
+collection leaves the stored value together.
+
+The schema is what decides a Field is a link, so this holds however the value
+was written. A relationship Field the schema reaches inside a written value can
+never hold data: `{body: "…", author: {id: "…"}}` is refused rather than stored,
+because an attribute that looks like a link is not one — nothing follows it,
+reindexes it, or notices when it goes stale.
+
+Two spellings carry no intent to change an edge, and neither is a refusal. A
+snapshot presents a link as `{"id": …}`, so an expression that rebuilds a value
+out of what it read carries its links along; a slot holding exactly what the
+Card already has there was written back unchanged, and its edge stands. And a
+slot the value empties — `null`, or `[]` for a collection — names no Card, so
+it clears the edge rather than storing anything.
+
+An update leaves what it does not mention alone, which is the whole difference
+between `|=` and `=` here:
+
+```bxl
+// keeps the author edge it never mentioned
+.comments[0] |= {body: "revised"};
+
+// replaces the value, so the author edge goes with everything else it dropped
+.comments[0] = {body: "revised"};
+```
+
+An edge lives as long as the value holding it, so an update that drops a
+contained value drops the edges inside it too.
+
+An edge does not follow its value to a new position either. A write addressed
+at one location pins it, so a link beside the value it belongs to stays put;
+but a write that rebuilds a _collection_ reassigns every index in it, and an
+edge has nothing but its index to hold onto — a contained value carries no
+identity, and every link projects as `{"id": …}`, so two edges to the same Card
+read alike. Such a write is refused wherever an edge would have to be matched
+back to a value:
+
+```bxl
+// refused: rebuilding the collection reassigns the indexes its edges sit on
+.comments |= map(. + {flagged: true});
+
+// the items themselves, each write pinned to one index
+.comments[* .flagged == null] |= (. + {flagged: true});
+```
+
+A rebuild that copies its items through untouched moves nothing, so those
+edges stand. It is still a collection replacement in every other respect: each
+item's `meta.fields` entry is discarded and written again from the value, the
+way any wholesale write to a collection rebuilds what it stores. To carry a
+value, its edges and its metadata together, use the collection operations —
+`move_item_before`, `reorder_by` and the rest.
+
+A marker reads its argument against the input the value expression itself was
+handed, so resolution follows the nodes that pass that input straight down and
+whose operands flow into the result: object entries, array and comma streams,
+the operands of `//` and `+`, and the branches of an `if`. A `card(id)`
+somewhere that re-roots the input — the body of `map`, either side of a pipe —
+is refused rather than answered against the wrong value, and so is one in a
+condition, which chooses a branch rather than being the value, and one in an
+argument read as a plain value, such as an `assert` message or a `reorder_by`
+order, which names no Field to relate a Card to.
+
+`+` is the merge a marker rides through; `*` is not. A recursive merge descends
+into a key both operands hold, and a marker merged into rather than replaced
+would lose the relationship while the rest of the write landed, so a marker in
+a `*` operand is refused as well. `.` merged with an object literal is how a
+value expression writes part of a contained value, and `+` is that merge.
+
+The argument is read when the program reaches the marker, so a marker in a
+branch that is not taken costs nothing:
+
+```bxl
+.owner = (card(params("preferred")) // card(params("fallback")));
+```
+
+`card(id)` is the only spelling that names a relationship target. A marker is
+recognised by an identity the planner mints from a `card(…)` node the program
+itself wrote, never by the shape of the value that node produced, so a value a
+program assembles to look like a reference is treated as the plain JSON it is.
+A statement whose whole value is one is refused where the target is a
+relationship (`relationship-value-required`) and stores it where the target is
+a slot the Card holds a value in. Written as a member of a contained value it
+is stored as that member, which is the same thing the Card does with any other
+value written where a link belongs.
+
+No route produces a relationship intent, so a program cannot point a link at a
+Card without writing `card(…)` — which is what lets declaration lowering, the
+profile's own classification and a reader of the program all reason about links
+from one vocabulary.
 
 The schema determines whether a selected location is contained data,
 `linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,

@@ -865,9 +865,9 @@ function holdsReference(node: unknown): boolean {
 
 // A def class stands in for the code ref lowering derives from it. The
 // sentinel satisfies the realm's code-ref check, which reads `module` and
-// `name`, while carrying a function as its first entry — the entry the
-// realm's JSON check reaches — so it is accepted exactly where a type belongs
-// and refused wherever a value does.
+// `name`, while carrying a function under `notJson` — which the realm's JSON
+// check refuses anywhere it walks a value — so the sentinel is accepted
+// exactly where a type belongs and refused wherever a value does.
 function withTypeSentinels(node: unknown): unknown {
   if (typeof node === 'function') {
     return {

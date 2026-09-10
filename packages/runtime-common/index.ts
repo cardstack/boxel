@@ -779,6 +779,29 @@ export interface Diagnostics
   // row and drops every other meta key.
   hostShellHash?: string;
   hostShellHashAtCompletion?: string;
+  // The token the prerender pool had actually been re-warmed against, sampled
+  // at the same two moments. It trails the reported token for as long as a
+  // recycle takes, and indefinitely if that recycle fails — so the gap between
+  // the two is what says a page may still have been running the outgoing
+  // bundle. The reported token alone cannot: it can sit unchanged across a
+  // whole render while the pool never catches up to it, which is precisely the
+  // shape that poisons rows.
+  //
+  // Recorded so a decision made from these values is checkable afterwards
+  // rather than only asserted. `hostShellHash*` says what the server was told;
+  // these say what its pages were actually running.
+  //
+  // `null` and absent mean different things, and the difference decides
+  // whether a reader may act. `null` is a sampled answer — the pool has never
+  // been re-warmed against a token this server has heard, which is a genuinely
+  // stale pool. Absent means nothing sampled it, so there is no verdict to
+  // read: a server that predates these fields stamps nothing, and because the
+  // prerender server and the worker reading these deploy separately, a worker
+  // sees such responses throughout a rolling deploy. Treating absence as
+  // `null` would read "no information" as "stale" and suppress a row for a
+  // card that is genuinely broken, so a reader must require presence.
+  warmedHostShellHash?: string | null;
+  warmedHostShellHashAtCompletion?: string | null;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1354,7 +1377,6 @@ export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
-export * from './definitions.ts';
 export * from './index-structure.ts';
 export * from './db.ts';
 export * from './tasks/index.ts';

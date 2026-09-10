@@ -1,8 +1,19 @@
 import { isEqual } from 'lodash-es';
-import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef, generalSortFields } from './index.ts';
+import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
+import {
+  type CodeRef,
+  isCodeRef,
+  generalSortFields,
+  MATCH_RELEVANCE_SORT_KEY,
+} from './index.ts';
+
+// `query.ts` is where callers reach for the grammar's error, so it stays
+// exported from here even though the class itself lives one module down.
+export { InvalidQueryError };
+
 type JSONValue =
   | string
   | number
@@ -10,13 +21,6 @@ type JSONValue =
   | null
   | JSONValue[]
   | { [key: string]: JSONValue };
-
-export class InvalidQueryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidQueryError';
-  }
-}
 
 export type SparseFieldsets = Record<string, string[]>;
 
@@ -79,7 +83,11 @@ export interface TypedFilter {
   on?: CodeRef;
 }
 
-type GeneralSortField = keyof typeof generalSortFields;
+// The anchorless sort keys: the column-backed general fields plus the
+// synthetic `_matchRelevance` (computed per query, no stored column).
+type GeneralSortField =
+  | keyof typeof generalSortFields
+  | typeof MATCH_RELEVANCE_SORT_KEY;
 
 type SortExpressionWithoutCodeRef = {
   by: GeneralSortField;
@@ -193,6 +201,40 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
 }
 
+// Every positive-polarity `matches` string in a filter tree — the terms a
+// `_matchRelevance` sort scores. Terms under an odd number of `not`s still
+// filter rows out through their predicate but must not contribute to "how
+// relevant", and whitespace-only terms rank nothing (mirroring the predicate's
+// empty-query short-circuit), so both are excluded. Shared by `assertQuery`'s
+// parse-time validation and the engine's rank expression so the two agree on
+// what counts as a rankable term.
+export function collectPositiveMatchTerms(
+  filter: Filter | undefined,
+  polarity: 'positive' | 'negated' = 'positive',
+): string[] {
+  if (!filter) {
+    return [];
+  }
+  if ('matches' in filter) {
+    return polarity === 'positive' && filter.matches.trim() !== ''
+      ? [filter.matches]
+      : [];
+  }
+  if ('not' in filter) {
+    return collectPositiveMatchTerms(
+      filter.not,
+      polarity === 'positive' ? 'negated' : 'positive',
+    );
+  }
+  if ('every' in filter) {
+    return filter.every.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+  }
+  if ('any' in filter) {
+    return filter.any.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+  }
+  return [];
+}
+
 // True when a filter path's leaf is a card/file reference (`id` / `url`). Such
 // leaves get canonical-RRI tolerance in `in` filters — a registered-prefix
 // value also matches its equivalent real-URL / virtual-alias spellings — while
@@ -278,6 +320,24 @@ export function assertQuery(
       `${pointer.join('/') || '/'}: fields requires asData to be true`,
     );
   }
+
+  // A `_matchRelevance` sort scores the filter's positive `matches` terms, so
+  // a query with none has nothing to rank by. Validated here — where every
+  // wire surface parses — so a bad request fails as an `InvalidQueryError`
+  // (HTTP 400) rather than surfacing from the engine as a 500; the engine
+  // re-checks as a backstop for callers that bypass `assertQuery`.
+  if (
+    Array.isArray(query.sort) &&
+    query.sort.some(
+      (s: Record<string, unknown>) =>
+        !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
+    ) &&
+    collectPositiveMatchTerms(query.filter).length === 0
+  ) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+    );
+  }
 }
 
 function assertRealm(realm: any, pointer: string[]): asserts realm is string {
@@ -350,16 +410,10 @@ function assertSortExpression(
       `${pointer.concat('by').join('/') || '/'}: by must be a string`,
     );
   }
-  if (!('on' in sort)) {
-    if (Object.keys(generalSortFields).includes(sort.by)) {
-      return;
-    }
-    throw new InvalidQueryError(
-      `${pointer.concat('on').join('/') || '/'}: missing on object`,
-    );
-  }
-  assertCardType(sort.on, pointer.concat('on'));
-
+  // Every sort entry carries a direction, whether or not it names a type: a
+  // general sort field is anchored by the column it maps to rather than by
+  // `on`, so it takes the same `asc`/`desc` constraint. Checked ahead of the
+  // branching below so neither shape can reach a `return` with it unchecked.
   if ('direction' in sort) {
     if (sort.direction !== 'asc' && sort.direction !== 'desc') {
       throw new InvalidQueryError(
@@ -369,6 +423,19 @@ function assertSortExpression(
       );
     }
   }
+
+  if (!('on' in sort)) {
+    if (
+      Object.keys(generalSortFields).includes(sort.by) ||
+      sort.by === MATCH_RELEVANCE_SORT_KEY
+    ) {
+      return;
+    }
+    throw new InvalidQueryError(
+      `${pointer.concat('on').join('/') || '/'}: missing on object`,
+    );
+  }
+  assertCardType(sort.on, pointer.concat('on'));
 }
 
 function assertPage(
@@ -399,6 +466,10 @@ function assertPage(
   }
 }
 
+// The operator validators below report a failure by throwing and return
+// nothing on success, so a collection of them is walked with `forEach`.
+// `every` reads each callback's `undefined` as false and stops, which would
+// check a collection's first entry and silently accept the rest.
 function assertFilter(
   filter: any,
   pointer: string[],
@@ -460,21 +531,21 @@ function assertAnyFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('any');
+  let anyPointer = pointer.concat('any');
   if (!('any' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: AnyFilter must have any property`,
+      `${anyPointer.join('/') || '/'}: AnyFilter must have any property`,
     );
   }
 
   if (!Array.isArray(filter.any)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: any must be an array of Filters`,
+      `${anyPointer.join('/') || '/'}: any must be an array of Filters`,
     );
   } else {
-    filter.any.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`)),
-    );
+    filter.any.forEach((value: any, index: number) => {
+      assertFilter(value, anyPointer.concat(`[${index}]`));
+    });
   }
 }
 
@@ -487,20 +558,20 @@ function assertEveryFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('every');
+  let everyPointer = pointer.concat('every');
   if (!('every' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: EveryFilter must have every property`,
+      `${everyPointer.join('/') || '/'}: EveryFilter must have every property`,
     );
   }
 
   if (!Array.isArray(filter.every)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: every must be an array of Filters`,
+      `${everyPointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
     filter.every.forEach((value: any, index: number) => {
-      assertFilter(value, pointer.concat(`[${index}]`));
+      assertFilter(value, everyPointer.concat(`[${index}]`));
     });
   }
 }
@@ -514,14 +585,14 @@ function assertNotFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('not');
+  let notPointer = pointer.concat('not');
   if (!('not' in filter)) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: NotFilter must have not property`,
+      `${notPointer.join('/') || '/'}: NotFilter must have not property`,
     );
   }
 
-  assertFilter(filter.not, pointer);
+  assertFilter(filter.not, notPointer);
 }
 
 function assertEqFilter(
@@ -533,22 +604,20 @@ function assertEqFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('eq');
+  let eqPointer = pointer.concat('eq');
   if (!('eq' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('eq').join('/') || '/'
-      }: EqFilter must have eq property`,
+      `${eqPointer.join('/') || '/'}: EqFilter must have eq property`,
     );
   }
   if (typeof filter.eq !== 'object' || filter.eq == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: eq must be an object`,
+      `${eqPointer.join('/') || '/'}: eq must be an object`,
     );
   }
   Object.entries(filter.eq).forEach(([key, value]) => {
-    assertKey(key, pointer);
-    assertJSONValue(value, pointer.concat(key));
+    assertKey(key, eqPointer);
+    assertJSONValue(value, eqPointer.concat(key));
   });
 }
 
@@ -594,22 +663,20 @@ function assertContainsFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('contains');
+  let containsPointer = pointer.concat('contains');
   if (!('contains' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('contains').join('/') || '/'
-      }: ContainsFilter must have contains property`,
+      `${containsPointer.join('/') || '/'}: ContainsFilter must have contains property`,
     );
   }
   if (typeof filter.contains !== 'object' || filter.contains == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: contains must be an object`,
+      `${containsPointer.join('/') || '/'}: contains must be an object`,
     );
   }
   Object.entries(filter.contains).forEach(([key, value]) => {
-    assertKey(key, pointer);
-    assertJSONValue(value, pointer.concat(key));
+    assertKey(key, containsPointer);
+    assertJSONValue(value, containsPointer.concat(key));
   });
 }
 
@@ -622,27 +689,25 @@ function assertRangeFilter(
       `${pointer.join('/') || '/'}: filter must be an object`,
     );
   }
-  pointer.concat('range');
+  let rangePointer = pointer.concat('range');
   if (!('range' in filter)) {
     throw new InvalidQueryError(
-      `${
-        pointer.concat('range').join('/') || '/'
-      }: RangeFilter must have range property`,
+      `${rangePointer.join('/') || '/'}: RangeFilter must have range property`,
     );
   }
   if (typeof filter.range !== 'object' || filter.range == null) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: range must be an object`,
+      `${rangePointer.join('/') || '/'}: range must be an object`,
     );
   }
-  Object.entries(filter.range).every(([fieldPath, constraints]) => {
-    let innerPointer = [...pointer, fieldPath];
+  Object.entries(filter.range).forEach(([fieldPath, constraints]) => {
+    let innerPointer = [...rangePointer, fieldPath];
     if (typeof constraints !== 'object' || constraints == null) {
       throw new InvalidQueryError(
         `${innerPointer.join('/') || '/'}: range constraint must be an object`,
       );
     }
-    Object.entries(constraints).every(([key, value]) => {
+    Object.entries(constraints).forEach(([key, value]) => {
       switch (key) {
         case 'gt':
         case 'gte':
@@ -653,7 +718,7 @@ function assertRangeFilter(
         default:
           throw new InvalidQueryError(
             `${
-              innerPointer.join('/') || '/'
+              innerPointer.concat(key).join('/') || '/'
             }: range item must be gt, gte, lt, or lte`,
           );
       }
