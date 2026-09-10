@@ -470,7 +470,12 @@ module(basename(import.meta.filename), function () {
       );
       let source = sourceOf(result);
       assert.strictEqual(source.contentType, 'text/markdown');
-      assert.strictEqual(await textOf(source.body), '# notes');
+      // Read once and hold it. The body is whatever the adapter produced — a
+      // single-use stream under Node — so reading it twice yields the bytes
+      // and then nothing, which is what a facade putting it on a response
+      // gets too: one pass.
+      let bytes = await textOf(source.body);
+      assert.strictEqual(bytes, '# notes');
 
       let response = await realmRequest
         .get('/_notes.md')
@@ -480,7 +485,7 @@ module(basename(import.meta.filename), function () {
         200,
         `the source route serves it too: ${response.text}`,
       );
-      assert.strictEqual(await textOf(source.body), response.text);
+      assert.strictEqual(bytes, response.text);
     });
 
     test('a stored-bytes read never reports a version that describes other bytes', async function (assert) {
