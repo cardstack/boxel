@@ -1,10 +1,13 @@
 import {
   identifyCard,
+  isCardDef,
+  isFileDef,
   primitive,
   fieldSerializer,
   isResolvedCodeRef,
   type CodeRef,
 } from './index.ts';
+import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
@@ -25,6 +28,36 @@ export interface FieldDefinition {
   searchable?: Searchable;
 }
 
+// Which of the three `BaseDef` families a definition describes. A card has its
+// own URL; a field is a value that only exists inside a card and has no URL; a
+// file describes uploaded bytes, which have a URL and read-only,
+// content-derived metadata. Files are a sibling of cards under `BaseDef`, not a
+// kind of field, so recording the family is what lets a reader holding only the
+// cached entry tell a file from a field without loading the type's module.
+export type DefinitionKind = 'card-def' | 'field-def' | 'file-def';
+
+// Classify a def for its definition entry. This is the single test the
+// definition producers share, so every entry in the cache answers the question
+// the same way.
+export function definitionKind(def: typeof BaseDef): DefinitionKind {
+  if (isCardDef(def)) {
+    return 'card-def';
+  }
+  if (isFileDef(def)) {
+    return 'file-def';
+  }
+  return 'field-def';
+}
+
+// The display name a definition entry records. Every family declares one on its
+// class, but the entry carries it only for the families a consumer can address
+// by URL — a card or a file — where the name identifies something the reader
+// can go and fetch. Derived from `definitionKind` so the two cannot disagree
+// about which families those are.
+export function definitionDisplayName(def: typeof BaseDef): string | null {
+  return definitionKind(def) === 'field-def' ? null : def.displayName;
+}
+
 // `Definition.fields` only carries the **immediate** field map. Dotted
 // paths like `cardInfo.theme.cardInfo.name` are resolved at lookup time
 // by chasing each segment's `fieldOrCard` codeRef through
@@ -33,11 +66,19 @@ export interface FieldDefinition {
 // `cardInfo.theme`), and the per-segment cost at lookup time is
 // dominated by the `CachingDefinitionLookup`'s warm-cache hit.
 export interface Definition {
-  type: 'card-def' | 'field-def';
+  type: DefinitionKind;
   codeRef: CodeRef;
   displayName: string | null;
   fields: { [fieldName: string]: string };
   fieldDefs: { [defId: string]: FieldDefinition };
+  // The type's `@operation` declarations, lowered to base-operation data plus
+  // BXL and keyed by operation name. This is what makes an operation
+  // resolvable from a card's `adoptsFrom` alone: a card's JSON names its
+  // type, and the type's entry carries everything needed to run the
+  // operation, so the realm never loads the card's module to invoke one.
+  // Omitted when the type declares no operations, which keeps the entry for
+  // every other type unchanged.
+  operations?: { [operationName: string]: OperationDefinition };
 }
 
 // Stable JSON serialization for content-keyed interning. Keys sorted at

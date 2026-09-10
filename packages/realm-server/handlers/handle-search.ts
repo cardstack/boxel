@@ -31,13 +31,24 @@ import {
 } from '../middleware/multi-realm-authorization.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { fetchRealmGenerations } from '../job-scoped-search-cache.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
+import { LiveSearchCache } from '../live-search-cache.ts';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
+
+// Response header naming how the live-search cache satisfied a request:
+// `miss` (fresh compute), `join` (awaited an identical in-flight compute), or
+// `hit` (served from the TTL window). Diagnostic only — the body is
+// byte-identical across the three. Added to the CORS `exposeHeaders` list
+// (server.ts) so a cross-origin browser caller can read it, not just
+// server-side supertest/curl.
+export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,
@@ -50,8 +61,16 @@ import {
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
+  // Reads each searched realm's generation fingerprints (the freshness signal
+  // the live-search cache keys on). Required — every route wiring passes it.
+  dbAdapter: DBAdapter;
+  // Injectable per test; when unset the handler builds one with production
+  // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
+  // off) to make two sequential callers each compute.
+  liveSearchCache?: LiveSearchCache;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let { reconciler, searchCache } = opts;
+  let { reconciler, searchCache, dbAdapter } = opts;
+  let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
     let loggingCorrelationId = sanitizeLoggingCorrelationId(
@@ -226,6 +245,7 @@ export default function handleSearch(opts: {
         opts: cacheKeyOpts,
         runSearch,
         emitTimeline,
+        liveSearch: { cache: liveSearchCache, dbAdapter },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A bounded search
@@ -282,6 +302,7 @@ async function respondWithJobScopedSearchCache(
     opts: unknown;
     runSearch: () => Promise<string>;
     emitTimeline?: () => void;
+    liveSearch?: { cache: LiveSearchCache; dbAdapter: DBAdapter };
   },
 ): Promise<void> {
   let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
@@ -334,6 +355,39 @@ async function respondWithJobScopedSearchCache(
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ETag: expectedEtag,
+        },
+      }),
+    );
+    emitTimeline();
+    return;
+  }
+
+  // The live (non-indexer) path: coalesce identical concurrent requests and
+  // serve a short-TTL cache. The key folds in each realm's generation
+  // fingerprints — the same freshness device the job-scoped key uses above —
+  // so any index or prerendered-HTML swap on a searched realm changes the key
+  // and the next request recomputes; the TTL only bounds retention.
+  // Authorization is realm-scoped and was validated for this exact realm list
+  // by `multiRealmAuthorization` before the handler ran, so a body computed
+  // for one caller is byte-identical to what any other authorized caller
+  // would compute.
+  if (args.liveSearch) {
+    let generations = await fetchRealmGenerations(
+      args.liveSearch.dbAdapter,
+      realms,
+    );
+    let { body, outcome } = await args.liveSearch.cache.getOrPopulate({
+      realms,
+      query,
+      opts: { ...(args.opts as Record<string, unknown>), generations },
+      populate: runSearch,
+    });
+    await setContextResponse(
+      ctxt,
+      new Response(body, {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          [LIVE_SEARCH_CACHE_HEADER]: outcome,
         },
       }),
     );

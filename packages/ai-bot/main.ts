@@ -27,7 +27,8 @@ import {
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
-  INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE,
+  SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
@@ -57,6 +58,7 @@ import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireRoomLock, releaseRoomLock } from './lib/queries.ts';
+import { RoomEventSerializer } from './lib/room-event-serializer.ts';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger.js';
 import { setupSignalHandlers } from './lib/signal-handlers.ts';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown.ts';
@@ -84,6 +86,7 @@ let activeGenerations = new Map<
 >();
 
 let aiBotInstanceId = uuidv4();
+let roomEventSerializer = new RoomEventSerializer();
 
 class Assistant {
   private openai: OpenAI;
@@ -225,11 +228,11 @@ Common issues are:
     }
   });
 
-  // TODO: Set this up to use a queue that gets drained (CS-8516)
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
+      let releaseRoomTurn: (() => void) | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -324,6 +327,25 @@ Common issues are:
           return;
         }
 
+        // Only events that can produce a response participate in the
+        // newest-event-wins queue. Otherwise a later reaction or other
+        // timeline event could make a user message stand down, then exit
+        // without responding.
+        if (!Responder.eventMayTriggerResponse(event)) {
+          return;
+        }
+
+        // One sync response can deliver several events for this room at once,
+        // and each gets its own run of this handler. Wait for any earlier
+        // handler for the room to finish before taking the room lock, so the
+        // handlers do not race for it and lose events. Only the newest event
+        // waits: an older event is covered by the newer event's history, so
+        // it stands down (see RoomEventSerializer).
+        releaseRoomTurn = await roomEventSerializer.claim(room.roomId, eventId);
+        if (!releaseRoomTurn) {
+          return;
+        }
+
         // Acquire a lock so that only one instance processes events for this room at a time.
         let roomLock = await profTime(eventId, 'lock:acquire', async () =>
           acquireRoomLock(
@@ -336,6 +358,7 @@ Common issues are:
 
         if (!roomLock) {
           // Some other instance is already processing a recent event in this room. Ignore it.
+          releaseRoomTurn();
           return;
         }
 
@@ -356,10 +379,6 @@ Common issues are:
         let pendingFulfillAgentId: string | undefined;
 
         try {
-          if (!Responder.eventMayTriggerResponse(event)) {
-            return; // early exit for events that will not trigger a response
-          }
-
           log.info(
             '(%s) (Room: "%s" %s) (Message: %s %s)',
             event.getType(),
@@ -811,6 +830,7 @@ Common issues are:
           // lock as released before attempting to acquire it.
           await releaseRoomLock(assistant.pgAdapter, room.roomId);
           resolveGenerationCompletion();
+          releaseRoomTurn();
 
           // Now that the lock is free, fulfill any reads. Each fulfillment
           // posts a command-result event that re-triggers the bot for the
@@ -841,6 +861,8 @@ Common issues are:
           },
         });
         return;
+      } finally {
+        releaseRoomTurn?.();
       }
     },
   );
@@ -900,18 +922,20 @@ Common issues are:
   });
 
   let lists: Map<string, MSC3575List> = new Map();
+  // See SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE for why the window is this wide:
+  // a narrower one drops events whenever several rooms are active at once.
   lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
-    ranges: [[0, 0]],
+    ranges: [SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE],
     filters: {
       is_dm: false,
     },
-    timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+    timeline_limit: SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
     required_state: [['*', '*']],
   });
   let slidingSync = new SlidingSync(
     client.baseUrl,
     lists,
-    { timeline_limit: INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT },
+    { timeline_limit: SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT },
     client,
     SLIDING_SYNC_TIMEOUT,
   );

@@ -22,7 +22,11 @@ export interface BxlBoxelSourceFieldDefinition<CodeReference = unknown> {
 
 /** Loaderless subset of Boxel's runtime-common `Definition` shape. */
 export interface BxlBoxelSourceDefinition<CodeReference = unknown> {
-  type?: 'card-def' | 'field-def';
+  // The three families a Boxel definition can describe: a card, a field that
+  // only exists inside a card, and a file whose metadata comes from uploaded
+  // bytes. Mirrored so a caller can hand over any definition it holds; nothing
+  // here branches on the kind.
+  type?: 'card-def' | 'field-def' | 'file-def';
   codeRef?: CodeReference;
   displayName?: string | null;
   fields: Record<string, string>;
@@ -963,6 +967,41 @@ function permuteCollectionSidecars(
   permuteRelationshipIndexes(resource, collectionPath, oldToNew);
 }
 
+/**
+ * The relationship entries a `set` names as untouched, lifted out before the
+ * write clears the replaced value's sidecars and put back afterwards.
+ *
+ * Re-establishing them as `relate` intents would not do: a `relate` carries a
+ * Card id and nothing else, so an edge that never changed would come back
+ * without the `links.related` and `meta` the Card had been keeping on it.
+ */
+function captureKeptRelationships(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+  keep: BxlMutationPath[] | undefined,
+): Array<[string, BxlCardSourceRelationship | BxlCardSourceRelationship[]]> {
+  if (!keep?.length || !resource.relationships) return [];
+  const kept = keep.map((relative) => [...path, ...relative].join('.'));
+  return Object.entries(resource.relationships)
+    .filter(([key]) =>
+      kept.some((prefix) => key === prefix || key.startsWith(`${prefix}.`)),
+    )
+    .map(([key, relationship]) => [key, cloneJson(relationship)]);
+}
+
+function restoreKeptRelationships(
+  resource: BxlCardSourceResource,
+  captured: Array<
+    [string, BxlCardSourceRelationship | BxlCardSourceRelationship[]]
+  >,
+): void {
+  if (captured.length === 0) return;
+  resource.relationships ??= {};
+  for (const [key, relationship] of captured) {
+    resource.relationships[key] = relationship;
+  }
+}
+
 function removeRelationshipSubtree(
   resource: BxlCardSourceResource,
   path: BxlMutationPath,
@@ -1244,6 +1283,11 @@ export function applyBxlMutationPlanToCardSource(
           (replacingCollection ||
             typeof intent.path.at(-1) === 'number' ||
             resolved.field.fieldType === 'contains');
+        const kept = captureKeptRelationships(
+          resource,
+          intent.path,
+          intent.keepRelationships,
+        );
         if (replacingComposite) {
           if (replacingCollection) {
             permuteCollectionSidecars(
@@ -1308,6 +1352,7 @@ export function applyBxlMutationPlanToCardSource(
             );
           }
         }
+        restoreKeptRelationships(resource, kept);
         break;
       }
       case 'copy': {

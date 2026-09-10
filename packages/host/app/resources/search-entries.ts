@@ -96,6 +96,14 @@ export interface SearchEntry {
 interface Args {
   named: {
     query: SearchEntryWireQuery | undefined;
+    // Scope a no-realm search to the current realm rather than fanning out to
+    // every readable realm. Set only by the card-facing `searchResultsComponent`
+    // surface; host-owned callers (the search sheet, choosers, playground) leave
+    // it unset and keep the all-realms default.
+    cardInitiated?: boolean;
+    // The realm a no-realm card search targets (the realm the `@context` was
+    // provided with). Only meaningful with `cardInitiated`.
+    getDefaultRealm?: () => string | undefined;
   };
 }
 
@@ -157,6 +165,8 @@ export class SearchEntriesResource extends Resource<Args> {
 
   #previousQuery: SearchEntryWireQuery | undefined;
   #previousRealms: string[] | undefined;
+  #cardInitiated = false;
+  #getDefaultRealm: (() => string | undefined) | undefined;
   #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
@@ -217,7 +227,16 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query } = named;
+    let { query, cardInitiated, getDefaultRealm } = named;
+
+    // Keep the previously provided values when optional args are omitted on
+    // subsequent modify() calls (mirrors how the query is re-read each pass).
+    if (cardInitiated !== undefined) {
+      this.#cardInitiated = cardInitiated;
+    }
+    if (getDefaultRealm !== undefined) {
+      this.#getDefaultRealm = getDefaultRealm;
+    }
 
     if (query === undefined) {
       // Clear stale state so live subscriptions don't re-fire the old query.
@@ -264,10 +283,17 @@ export class SearchEntriesResource extends Resource<Args> {
       return;
     }
 
+    // A no-realm card search targets the current realm (the realm the
+    // `@context` was provided with), never every visible realm — an empty
+    // realms array turns a render into a federated scan across the whole
+    // server. A host-owned search (not card-initiated) keeps the all-realms
+    // default.
     let realms = normalizeRealms(
       query.realms && query.realms.length > 0
         ? query.realms
-        : this.realmServer.availableRealmIdentifiers,
+        : this.#cardInitiated
+          ? this.#currentRealmList()
+          : this.realmServer.availableRealmIdentifiers,
     );
     this.realmsToSearch = realms;
 
@@ -359,6 +385,14 @@ export class SearchEntriesResource extends Resource<Args> {
         () => loaded.fulfill(),
       );
     });
+  }
+
+  // The realm a no-realm card search targets: the current realm from the
+  // `@context` provider, or an empty list if none is known (which yields no
+  // results rather than fanning out to every realm).
+  #currentRealmList(): string[] {
+    let current = this.#getDefaultRealm?.();
+    return current ? [current] : [];
   }
 
   get isLoading() {
@@ -459,7 +493,14 @@ export class SearchEntriesResource extends Resource<Args> {
         : this.realmsToSearch;
 
       try {
-        let doc = await this.runtimeStore.searchEntries(query, realmsToFetch);
+        // A card-initiated search must not fan out to every realm when its
+        // realm list is empty (the current realm is unknown). `realmsToFetch`
+        // has already resolved a no-realm card search to the current realm (see
+        // modify); the flag keeps `searchEntries` from re-expanding an empty
+        // list back to all realms.
+        let doc = await this.runtimeStore.searchEntries(query, realmsToFetch, {
+          cardInitiated: this.#cardInitiated,
+        });
         await this.loadStylesheets(doc);
         let fresh = this.buildEntries(doc);
 
@@ -929,10 +970,19 @@ function memberValidator(member: SearchEntry): string {
 export function getSearchEntriesResource(
   parent: object,
   getQuery: () => SearchEntryWireQuery | undefined,
+  opts?: {
+    // Set by the card-facing `searchResultsComponent` surface: scope a no-realm
+    // search to `getDefaultRealm` instead of every readable realm. Host-owned
+    // callers leave these unset and keep the all-realms default.
+    cardInitiated?: boolean;
+    getDefaultRealm?: () => string | undefined;
+  },
 ) {
   return SearchEntriesResource.from(parent, () => ({
     named: {
       query: getQuery(),
+      cardInitiated: opts?.cardInitiated,
+      getDefaultRealm: opts?.getDefaultRealm,
     },
   })) as SearchEntriesResource;
 }

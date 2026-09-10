@@ -107,7 +107,10 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
         {{applyFileFont null this.resourceUrl this.specimenFamily}}
         data-test-font-specimen='embedded'
       >
-        <div class='name-line' title={{this.displayName}}>{{this.displayName}}</div>
+        <div
+          class='name-line'
+          title={{this.displayName}}
+        >{{this.displayName}}</div>
         <div class='pangram pangram--embedded'>{{this.pangram}}</div>
         <div class='mini-waterfall'>
           <div class='waterfall-line wf-30'>{{this.pangram}}</div>
@@ -121,7 +124,10 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
         data-test-font-specimen='isolated'
       >
         <header class='specimen-head'>
-          <div class='hero' title={{this.displayName}}>{{this.displayName}}</div>
+          <div
+            class='hero'
+            title={{this.displayName}}
+          >{{this.displayName}}</div>
           {{#if this.subfamily}}
             <div class='hero-sub'>{{this.subfamily}}</div>
           {{/if}}

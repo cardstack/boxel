@@ -130,6 +130,7 @@ import {
   type LintResult,
   codeRefFromInternalKey,
   codeRefWithAbsoluteIdentifier,
+  isResolvedCodeRef,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -142,6 +143,7 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
+import type { OperationCore } from './card-operations/dispatch.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import { merge } from 'lodash-es';
@@ -957,6 +959,7 @@ export class Realm {
   #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
+  #operationCore: OperationCore | undefined;
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
@@ -3152,6 +3155,43 @@ export class Realm {
 
   get realmIndexQueryEngine() {
     return this.#realmIndexQueryEngine;
+  }
+
+  // The operation core, built from the realm's own collaborators. What it is
+  // handed is deliberately narrow: the definition cache and the index query
+  // engine, plus plain functions for the few resolutions that belong to the
+  // realm's fetch layer. It gets no network capability and no
+  // `VirtualNetwork` — that resolves author-controlled identifiers, and an
+  // operation runs in a trusted context where nothing author-written should be
+  // able to steer a lookup. So the realm absolutizes a code ref and
+  // canonicalizes a document's ids on the core's behalf, and an operation
+  // never resolves either itself.
+  get operationCore(): OperationCore {
+    if (!this.#operationCore) {
+      this.#operationCore = {
+        realmURL: this.url,
+        definitionLookup: this.#definitionLookup,
+        indexQueryEngine: this.#realmIndexQueryEngine,
+        readSource: async (localPath) =>
+          (await this.readFileAsText(localPath))?.content,
+        isIgnored: (url) => this.isIgnored(url),
+        fileMetaDocument: (localPath) =>
+          this.#operationFileMetaDocument(localPath),
+        resolveCodeRef: (codeRef, relativeTo) => {
+          let absolute = codeRefWithAbsoluteIdentifier(
+            codeRef,
+            relativeTo,
+            undefined,
+            this.#virtualNetwork,
+          );
+          return isResolvedCodeRef(absolute) ? absolute : undefined;
+        },
+        fileDefCodeRef: (url) =>
+          resolveFileDefCodeRef(url, this.#virtualNetwork),
+        unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
+      };
+    }
+    return this.#operationCore;
   }
 
   async reindex() {
@@ -5539,6 +5579,28 @@ export class Realm {
     localPath: LocalPath,
     contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response | undefined> {
+    let doc = await this.#fileMetaDocumentFromDisk(localPath);
+    if (!doc) {
+      return undefined;
+    }
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': contentType,
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // A file's metadata document read from the bytes on disk — the answer for a
+  // file the index has no row for. Content-derived values come from the
+  // write-time record where there is one and are computed from the bytes
+  // otherwise.
+  async #fileMetaDocumentFromDisk(
+    localPath: LocalPath,
+  ): Promise<SingleFileMetaDocument | undefined> {
     let fileRef = await this.openFileForMetadata(localPath);
     if (!fileRef) {
       return undefined;
@@ -5588,15 +5650,7 @@ export class Realm {
       },
     };
     this.#serveInstanceIdsAsRRI(doc);
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': contentType,
-        },
-      },
-      requestContext,
-    });
+    return doc;
   }
 
   private async fileMetaDocumentFromIndex(
@@ -5719,6 +5773,21 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // The file-meta document for a path that holds bytes rather than a card, as
+  // the operation core reads it — the card+json read's own answer for such a
+  // path, derived from the bytes, with no response around it. The guard is the
+  // one that read applies: a path whose sibling `.json` makes it a card's
+  // source is not a file, and answers undefined so the read falls back to its
+  // own not-found handling.
+  async #operationFileMetaDocument(
+    localPath: LocalPath,
+  ): Promise<SingleFileMetaDocument | undefined> {
+    if (!(await this.nonJsonFileExists(localPath))) {
+      return undefined;
+    }
+    return await this.#fileMetaDocumentFromDisk(localPath);
   }
 
   private async getFileMeta(

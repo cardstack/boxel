@@ -19,9 +19,7 @@ class View extends Component<typeof AmountWithCurrency> {
     return `${currencySymbol} ${num.toLocaleString('en-US')}`;
   }
 
-  <template>
-    {{this.formatNumberWithSeparator}}
-  </template>
+  <template>{{this.formatNumberWithSeparator}}</template>
 }
 
 class Edit extends Component<typeof AmountWithCurrency> {
