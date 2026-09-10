@@ -5,6 +5,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
+  MATCH_RELEVANCE_SORT_KEY,
   VirtualNetwork,
   expressionToSql,
   normalizeQueryDefinition,
@@ -418,6 +419,29 @@ module(basename(import.meta.filename), function () {
         'no SQL carrying the direction was executed',
       );
       assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
+    });
+
+    test('a relevance sort direction that is not a keyword never reaches the database', async function (assert) {
+      // The relevance sort resolves against a per-query computed column rather
+      // than a stored one, so it takes its own branch in both ORDER BY
+      // builders — and defaults to `desc` there rather than `asc`. A direction
+      // spliced raw on that branch would be invisible to every other test
+      // here, so pin it directly.
+      for (let sort of [
+        [{ by: MATCH_RELEVANCE_SORT_KEY, direction: SUBQUERY_DIRECTION }],
+        [{ by: MATCH_RELEVANCE_SORT_KEY, direction: 'ASC' }],
+      ] as unknown as Sort[]) {
+        executedSql = [];
+        await assert.rejects(
+          engine.searchCards(new URL(testRealmURL), {
+            filter: { matches: 'anything' },
+            sort,
+          }),
+          /sort direction must be either 'asc' or 'desc'/,
+          `${JSON.stringify(sort[0].direction)} is refused on the relevance branch`,
+        );
+        assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
+      }
     });
 
     test('an interpolated direction still sorts when the card field is set or empty', async function (assert) {
