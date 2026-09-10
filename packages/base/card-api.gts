@@ -2759,10 +2759,6 @@ export class BaseDef {
               ];
             }
             if (isNonPresentLink(rawValue)) {
-              let normalizedId = rawValue.reference;
-              if (value[relativeTo]) {
-                normalizedId = resolveRef(normalizedId, value[relativeTo]);
-              }
               return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
             }
             // Reuse the value we already peeked above instead of re-reading
