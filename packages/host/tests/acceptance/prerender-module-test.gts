@@ -228,8 +228,8 @@ module('Acceptance | prerender | module', function (hooks) {
     );
     assert.strictEqual(photoFile?.type, 'file-def', 'a file def is a file def');
 
-    // `displayName` names the thing a user sees, which a card and a file both
-    // have and a field does not.
+    // Every family declares a display name on its class; the entry records one
+    // only for the families a consumer can address by URL.
     assert.strictEqual(photo?.displayName, 'Photo', "a card's display name");
     assert.strictEqual(
       photoFile?.displayName,
@@ -255,6 +255,34 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.ok(
       'contentType' in (photoFile?.fields ?? {}),
       "a file def's fields are captured",
+    );
+
+    // Ancestry is recorded for both families that have one to filter on, each
+    // walked up to its own family's root. A field def has no URL, so none.
+    let typesFor = (name: string) => {
+      let entry = model.definitions[`${moduleAlias}/${name}`];
+      return entry?.type === 'definition' ? entry.types : [];
+    };
+    assert.ok(
+      typesFor('Photo').includes(`${baseRealmRRI}card-api/CardDef`),
+      "a card's ancestry reaches CardDef",
+    );
+    assert.ok(
+      typesFor('PhotoFile').includes(`${moduleAlias}/PhotoFile`),
+      "a file's ancestry includes itself",
+    );
+    assert.ok(
+      typesFor('PhotoFile').includes(`${baseRealmRRI}card-api/FileDef`),
+      "a file's ancestry reaches FileDef",
+    );
+    assert.notOk(
+      typesFor('PhotoFile').includes(`${baseRealmRRI}card-api/CardDef`),
+      "a file's ancestry stops at its own family root",
+    );
+    assert.deepEqual(
+      typesFor('Caption'),
+      [],
+      'a field def records no ancestry',
     );
   });
 

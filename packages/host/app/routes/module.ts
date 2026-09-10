@@ -12,6 +12,7 @@ import { isEqual } from 'lodash-es';
 
 import {
   baseCardRef,
+  baseFileRef,
   CardError,
   Deferred,
   definitionDisplayName,
@@ -22,6 +23,7 @@ import {
   isBaseDef,
   isCardDef,
   isCardError,
+  isFileDef,
   loadCardDef,
   parseRenderRouteOptions,
   rri,
@@ -64,7 +66,7 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
 import type * as CardAPI from '@cardstack/base/card-api';
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 import type * as OperationsAPI from '@cardstack/base/operations';
 
 export type Model = {
@@ -622,9 +624,12 @@ async function makeDefinition(
     if (operations) {
       definition.operations = operations;
     }
-    let typesMaybeError = isCardDef(def)
-      ? await getTypes(def, context)
-      : { type: 'types' as const, types: [] };
+    // A card and a file each have a URL and an ancestry a consumer can filter
+    // on, so both record theirs. A field def has neither and records none.
+    let typesMaybeError =
+      isCardDef(def) || isFileDef(def)
+        ? await getTypes(def, context)
+        : { type: 'types' as const, types: [] };
     if (typesMaybeError.type === 'error') {
       console.warn(
         `encountered error indexing definition  "${urlString}/${name}": ${typesMaybeError.error.message}`,
@@ -657,38 +662,45 @@ async function makeDefinition(
   }
 }
 
+// Walk a def's ancestry, from the def itself up to and including the root of
+// its own family — `CardDef` for a card, `FileDef` for a file. The two families
+// are disjoint, so the walk stays within the one it started in and the root it
+// stops at is what says which that was.
 async function getTypes(
-  card: typeof CardDef,
+  def: typeof BaseDef,
   context: ModuleModelContext,
 ): Promise<TypesWithErrors> {
   let cache = context.state.getTypesCache();
-  let cached = cache.get(card);
+  let cached = cache.get(def);
   if (cached) {
     return await cached;
   }
-  let ref = identifyCard(card);
+  let ref = identifyCard(def);
   if (!ref) {
-    throw new Error(`could not identify card ${card.name}`);
+    throw new Error(`could not identify type ${def.name}`);
   }
+  let isFile = isFileDef(def);
+  let familyRootRef = isFile ? baseFileRef : baseCardRef;
+  let inFamily = isFile ? isFileDef : isCardDef;
   let deferred = new Deferred<TypesWithErrors>();
-  cache.set(card, deferred.promise);
+  cache.set(def, deferred.promise);
   let types: CardType[] = [];
   let fullRef: CodeRef = ref;
   let result: TypesWithErrors | undefined;
   try {
     for (;;) {
-      let loadedCard: typeof CardAPI.CardDef,
+      let loadedCard: typeof CardAPI.BaseDef,
         loadedCardRef: CodeRef | undefined;
       try {
         let maybeCard = await loadCardDef(fullRef, {
           loader: context.loaderService.loader,
         });
-        if (!isCardDef(maybeCard)) {
+        if (!inFamily(maybeCard)) {
           result = {
             type: 'error' as const,
             error: toSerializedError(
               undefined,
-              `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+              `The definition at ${JSON.stringify(fullRef)} is not a ${familyRootRef.name}`,
             ),
           };
           return result;
@@ -727,7 +739,7 @@ async function getTypes(
         codeRef: loadedCardRef,
         displayName: getDisplayName(loadedCard),
       });
-      if (!isEqual(loadedCardRef, baseCardRef)) {
+      if (!isEqual(loadedCardRef, familyRootRef)) {
         fullRef = {
           type: 'ancestorOf',
           card: loadedCardRef,
@@ -745,7 +757,7 @@ async function getTypes(
       deferred.fulfill({
         type: 'error',
         error: serializableError(
-          new Error(`unable to determine result for card type ${card.name}`),
+          new Error(`unable to determine result for type ${def.name}`),
         ),
       });
     }
@@ -891,10 +903,13 @@ function parseRfc7321Time(time: string) {
   );
 }
 
-function getDisplayName(card: typeof CardDef) {
-  if (card.displayName === 'Card') {
-    return card.name;
+// A def that declares no display name of its own inherits its family's
+// placeholder — 'Card' or 'File' — which names the family rather than the type.
+// The class name is the more useful answer in that case.
+function getDisplayName(def: typeof BaseDef) {
+  if (def.displayName === 'Card' || def.displayName === 'File') {
+    return def.name;
   } else {
-    return card.displayName;
+    return def.displayName;
   }
 }
