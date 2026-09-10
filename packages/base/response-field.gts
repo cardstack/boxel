@@ -15,15 +15,12 @@ export default class ResponseField extends FieldDef {
         return '';
       }
       let status = typeof model.status === 'number' ? model.status : undefined;
-      let statusText = typeof model.statusText === 'string'
-        ? model.statusText
-        : '';
+      let statusText =
+        typeof model.statusText === 'string' ? model.statusText : '';
       if (status == null) {
         return '[HTTP response]';
       }
-      let summary = statusText
-        ? `${status} ${statusText}`
-        : String(status);
+      let summary = statusText ? `${status} ${statusText}` : String(status);
       return `[HTTP response: ${markdownEscape(summary)}]`;
     }
     <template>{{this.text}}</template>
