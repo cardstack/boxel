@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { readFileSync } from 'fs';
 import { basename } from 'path';
+import { fileURLToPath } from 'url';
 
 import {
   declaredCaptureSpecHash,
@@ -335,6 +337,87 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/picture.svg?name=thumb`),
       `the fitted rendering carries the captured thumbnail URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('the PDF family captures a first-page poster onto the file row', async function (assert) {
+    let pdfBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/pdf-simple.pdf',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    await writeAndSettle('doc.pdf', pdfBytes);
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}doc.pdf`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the first-page poster landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.strictEqual(manifest!.poster.contentType, 'image/png');
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+
+    // The fitted shell prefers the captured poster over the typed page
+    // placeholder, via the view model's thumbnail seam.
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/doc.pdf?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('a corrupt PDF captures no poster and the fitted cell keeps the placeholder', async function (assert) {
+    // Not a PDF at all: the capture component's decode fails, readiness
+    // never resolves, and the slot's capture fails after the bounded wait —
+    // no manifest entry may land, or the blank white capture box would
+    // masquerade as a first page in every grid.
+    await writeAndSettle(
+      'broken.pdf',
+      new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.pdf`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an undecodable document',
+    );
+    // No capture was ever persisted: the ledger is the durable signal here.
+    // (Per-pass failure diagnostics and the retry lane's failure-cap
+    // bookkeeping have their own coverage; which pass's diagnostics survive
+    // on the row depends on how many retries ran before settle.)
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.pdf`)).length,
+      0,
+      'no ledger row lands for an undecodable document',
+    );
+    // The declaration-derived injection still embeds the durable URL — it is
+    // class-level and cannot know this document is unreadable. With no
+    // manifest entry, that URL stays an uncaptured 404 miss; the fitted
+    // cell's image fallback is what keeps the tile presentable.
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/broken.pdf?name=poster`),
+      'the injected durable URL is embedded regardless of capture outcome',
     );
   });
 

@@ -1961,12 +1961,20 @@ async function waitForScreenshotPendingClear(
   name: string,
 ): Promise<RenderError | undefined> {
   try {
-    // Interval polling, not 'raf': pooled tabs can be backgrounded, where
-    // Chromium throttles animation frames (the settle hook avoids RAF for
-    // the same reason).
+    // Mutation polling, not 'raf' and not an interval: pooled tabs are
+    // backgrounded, where Chromium throttles animation frames AND timers —
+    // under intensive timer throttling an in-page interval poll can fire
+    // less than once per wait budget, timing this wait out after the
+    // attribute was already removed (observed: removal ~100ms into the
+    // wait, next poll never came within 15s). Mutation polling evaluates
+    // once at injection (covering an already-clear document) and then on
+    // DOM changes, which is exactly when the readiness attribute is
+    // removed. This pairs with the component-side contract that readiness
+    // is cleared by direct DOM mutation — a tracked re-render's flush rides
+    // the same throttled timers and would not produce the mutation in time.
     await page.waitForFunction(
       () => document.querySelector('[data-screenshot-pending]') == null,
-      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 100 },
+      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 'mutation' },
     );
     return undefined;
   } catch {

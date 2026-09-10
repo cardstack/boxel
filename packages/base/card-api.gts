@@ -2917,6 +2917,14 @@ export type BaseDefComponent = ComponentLike<{
 // element fails that slot's capture rather than persisting an unready frame.
 // Components with no async work omit the attribute and capture immediately.
 //
+// Clear the attribute with `el.removeAttribute('data-screenshot-pending')`
+// from the async continuation — never by re-rendering it off a tracked
+// property (`data-screenshot-pending={{if this.pending 'true'}}`). Capture
+// pages run in backgrounded tabs, where the browser throttles the timers a
+// tracked update's render flush rides, so the flip can sit unflushed past
+// the engine's whole wait; the engine watches for the DOM mutation itself,
+// which a direct `removeAttribute` produces immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
