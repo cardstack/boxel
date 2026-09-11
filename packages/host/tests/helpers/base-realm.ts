@@ -8,7 +8,6 @@ import type * as CardsGridModule from '@cardstack/base/cards-grid';
 import type * as CodeRefModule from '@cardstack/base/code-ref';
 import type * as ColorFieldModule from '@cardstack/base/color';
 import type * as DateFieldModule from '@cardstack/base/date';
-import type * as MonthFieldModule from '@cardstack/base/date/month';
 import type * as MonthDayFieldModule from '@cardstack/base/date/month-day';
 import type * as MonthYearFieldModule from '@cardstack/base/date/month-year';
 import type * as QuarterFieldModule from '@cardstack/base/date/quarter';
@@ -40,6 +39,7 @@ import type * as TimeRangeFieldModule from '@cardstack/base/time/time-range';
 import type * as WorkspaceModule from '@cardstack/base/workspace';
 
 export { default as DayField } from '@cardstack/base/date/day';
+export { default as MonthField } from '@cardstack/base/date/month';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -61,9 +61,6 @@ let DatetimeStampField: DatetimeStampField;
 
 type DateRangeField = (typeof DateRangeFieldModule)['default'];
 let DateRangeField: DateRangeField;
-
-type MonthField = (typeof MonthFieldModule)['default'];
-let MonthField: MonthField;
 
 type MonthDayField = (typeof MonthDayFieldModule)['default'];
 let MonthDayField: MonthDayField;
@@ -240,10 +237,6 @@ async function initialize() {
     await loader.import<typeof DateRangeFieldModule>(
       '@cardstack/base/date-range-field',
     )
-  ).default;
-
-  MonthField = (
-    await loader.import<typeof MonthFieldModule>('@cardstack/base/date/month')
   ).default;
 
   MonthDayField = (
@@ -459,7 +452,6 @@ export {
   ColorField,
   DatetimeStampField,
   DateRangeField,
-  MonthField,
   MonthDayField,
   MonthYearField,
   YearField,
