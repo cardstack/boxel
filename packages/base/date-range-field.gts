@@ -16,6 +16,7 @@ import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
 import { eq, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { formatDateRangeForMarkdown } from './markdown-helpers';
 import { BusinessDays } from './components/business-days';
+import { nowDate } from './helpers/clock';
 
 interface DateRangeFieldConfiguration {
   minDate?: 'today' | Date;
@@ -28,7 +29,7 @@ function resolveConfiguredDate(
 ): Date | undefined {
   if (!value) return undefined;
   if (value === 'today') {
-    let today = new Date();
+    let today = nowDate();
     today.setHours(0, 0, 0, 0);
     return today;
   }

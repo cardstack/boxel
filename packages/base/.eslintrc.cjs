@@ -4,6 +4,9 @@ const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
 } = require('../../eslint/erasable-syntax-selectors.cjs');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
+const {
+  AMBIENT_CLOCK_SELECTORS,
+} = require('../../eslint/ambient-clock-selectors.cjs');
 
 // Everything in this package is card code, compiled by the realm's transform
 // pipeline rather than run directly by Node, so decorators (`@field`,
@@ -23,6 +26,7 @@ const CARD_CODE_RESTRICTED_SYNTAX = [
   'error',
   ...ERASABLE_MINUS_DECORATOR,
   ...DATA_TEST_SELECTORS,
+  ...AMBIENT_CLOCK_SELECTORS,
 ];
 
 // Rules that apply to `.ts` and `.gts` alike.
@@ -126,6 +130,28 @@ module.exports = {
         'ember/no-runloop': 'off',
         'ember/no-empty-glimmer-component-classes': 'off',
         'ember/no-test-support-import': 'off',
+      },
+    },
+    {
+      // `executableExtensions` in runtime-common counts `.js` and `.gjs` as
+      // realm modules as well, so a card could be authored in either. The
+      // card-code rules above are deliberately scoped to the extensions this
+      // package uses today; the clock guard is not, because a renderer that
+      // reads the wall clock directly drifts wherever it lives.
+      files: ['**/*.js', '**/*.gjs'],
+      excludedFiles: ['./.template-lintrc.js', './scripts/**'],
+      rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
+    },
+    {
+      // The seam is the one place allowed to read the real clock. It keeps the
+      // rest of the card-code restrictions.
+      files: ['helpers/clock.ts'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          ...ERASABLE_MINUS_DECORATOR,
+          ...DATA_TEST_SELECTORS,
+        ],
       },
     },
     {
