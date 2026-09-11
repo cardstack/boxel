@@ -17,12 +17,22 @@ import {
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
-// One card definition with a `friend` link that its templates RENDER.
-// Rendering is what records the link target as a dependency of the card that
-// links to it, and those recorded dependencies are what the invalidation
-// walk reads to find a written URL's dependents. A link the templates never
-// read is not captured, however the field is declared, and a card with no
-// recorded dependency on the target never reaches the pass's fan-out at all.
+// One card definition with a `friend` link that its templates RENDER, and
+// that is deliberately NOT `searchable`. Rendering is what records the link
+// target as a dependency of the card that links to it, and those recorded
+// dependencies are what the invalidation walk reads to find a written URL's
+// dependents. A link the templates never read is not captured, however the
+// field is declared, and a card with no recorded dependency on the target
+// never reaches the pass's fan-out at all.
+//
+// Leaving `searchable` off is what makes these scenarios exercise the
+// ordering under test. A `searchable` link is followed by the search-doc
+// walk, whose collected targets the meta route unions into the index
+// channel's own `deps` — an edge the dependency ordering reads, which would
+// put the target first on its own. Recorded only by the render, the edge
+// lands on the render channel, which the invalidation walk reads and the
+// ordering does not: the fan-out still finds the dependents, and nothing but
+// the write's own URL can put the target ahead of them.
 //
 // `friend` renders as `atom`, which reads only `firstName`, so the render
 // follows the link exactly one hop rather than recursing through the graph.
@@ -34,7 +44,7 @@ function makeFileSystem() {
 
       export class Person extends CardDef {
         @field firstName = contains(StringField);
-        @field friend = linksTo(() => Person, { searchable: true });
+        @field friend = linksTo(() => Person);
         static atom = class Atom extends Component<typeof this> {
           <template>
             <span><@fields.firstName /></span>
