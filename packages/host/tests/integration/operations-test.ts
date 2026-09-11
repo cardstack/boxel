@@ -1,6 +1,8 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { DEFINITION_FREE_BASE_OPERATIONS } from '@cardstack/runtime-common/card-operations';
+
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
@@ -494,6 +496,40 @@ module('Integration | operations', function (hooks) {
       /reserved operation name/,
       'a declaration cannot take the name by building on another base',
     );
+  });
+
+  test('the decorator refuses every name the realm answers definition-free', function (assert) {
+    // The two lists are one decision with two homes: dispatch skips the
+    // definition lookup for `DEFINITION_FREE_BASE_OPERATIONS`, and that is
+    // sound only while the decorator refuses the same names — otherwise a
+    // declaration takes one, the built-in answers, and nothing reports the
+    // declaration that never ran. `base/operations.ts` cannot import the
+    // constant (the `runtime-common` barrel carries only the types from
+    // `card-operations/types.ts`, and reaching the value pulls in the entry
+    // that type-checks bxl), so this case is what holds them equal: adding a
+    // definition-free operation to the runtime list alone fails here.
+    //
+    // The decorator is a plain function, so a name from the list drives it
+    // directly — decorator syntax cannot spell a computed one. `base: 'read'`
+    // is deliberate: it is the hole that matters, a reserved name declared on
+    // a base that is otherwise allowed.
+    assert.ok(
+      DEFINITION_FREE_BASE_OPERATIONS.length > 0,
+      'the list is non-empty, so the loop below asserts something',
+    );
+    for (let name of DEFINITION_FREE_BASE_OPERATIONS) {
+      assert.throws(
+        () => {
+          class Shadow extends CardDef {}
+          operation(Shadow, name, {
+            initializer: () => ({ base: 'read' }),
+          });
+          return Shadow;
+        },
+        /reserved operation name/,
+        `${name} is refused as a declaration name`,
+      );
+    }
   });
 
   test('the decorator rejects an operation name that is already a static', function (assert) {

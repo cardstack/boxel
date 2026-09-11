@@ -313,12 +313,15 @@ export interface OperationSourceResult {
   // Two things a facade building a validator from it has to know. It is not by
   // itself the byte routes' `ETag`: the source route builds one from a hash for
   // a `.json` or an executable extension and from `lastModified` for
-  // everything else, and `version` is populated on those same terms, so it is
-  // null exactly where that route computes no hash. And `computeContentHash`
-  // samples above its whole-content limit, so a large file's hash covers its
-  // head, tail and length rather than all of it — `isSampledContentHash` tells
-  // one from the other, and the realm's own `ETag` joins a sampled hash with
-  // `lastModified` rather than trusting it alone.
+  // everything else, so which of the two to reproduce is the facade's choice
+  // — but a content identity is reported for every path, whether or not the
+  // route serving it asks for one, so the choice is never forced by an absent
+  // value. Null means only that the realm could neither recall a fingerprint
+  // nor read one within a bounded cost. And `computeContentHash` samples above
+  // its whole-content limit, so a large file's hash covers its head, tail and
+  // length rather than all of it — `isSampledContentHash` tells one from the
+  // other, and the realm's own `ETag` joins a sampled hash with `lastModified`
+  // rather than trusting it alone.
   version: string | null;
   // The byte size, where the adapter knew it from the stat it already
   // performed, and null where knowing it would cost reading the bytes — the

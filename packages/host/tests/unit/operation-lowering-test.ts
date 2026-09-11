@@ -13,7 +13,10 @@ import {
   type Definition,
   type LowerOperationDeclarationsResult,
 } from '@cardstack/runtime-common';
-import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
+import {
+  DEFINITION_FREE_BASE_OPERATIONS,
+  lowerOperationDeclarations,
+} from '@cardstack/runtime-common/card-operations';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -1034,5 +1037,45 @@ module('Unit | operation lowering', function (hooks) {
       { operations: {}, issues: [] },
       'the base operations a def type carries are not declarations, so there is nothing to lower',
     );
+  });
+
+  test('a reserved name is refused rather than lowered', async function (assert) {
+    // The decorator refuses these names, so no class can carry one and this
+    // branch is unreachable through a real declaration — which is why it is
+    // driven from a raw record. It is worth driving: a type's entry outlives
+    // the code that built it, and this refusal is the only thing standing
+    // between a stored entry under a definition-free name and the built-in
+    // running in place of it. The realm resolves the name before reading any
+    // definition, so a lowered entry here would be dispatched straight past
+    // rather than reported.
+    let { field, contains, CardDef } = api;
+    class Reserved extends CardDef {
+      static displayName = 'Reserved';
+      @field title = contains(StringField);
+    }
+    shim({ Reserved });
+
+    for (let name of DEFINITION_FREE_BASE_OPERATIONS) {
+      let result = await lowerOperationDeclarations(
+        { [name]: { base: 'read' } } as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Reserved),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+      assert.deepEqual(
+        codes(result),
+        ['reserved-name'],
+        `${name} is recorded as reserved`,
+      );
+      assert.true(
+        result.operations[name]?.invalid,
+        `${name} is marked invalid rather than dropped, so a consumer reading the entry sees the refusal`,
+      );
+    }
   });
 });

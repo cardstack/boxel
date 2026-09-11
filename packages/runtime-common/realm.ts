@@ -765,10 +765,11 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
 // streaming the file.
 //
 // The cost is bounded by the fingerprint's own shape:
-// `computeContentHashFromRanges` asks for the whole content up to
-// `CONTENT_HASH_WHOLE_LIMIT_BYTES` and for a fixed head and tail above it, so
-// no file costs more than that limit to hash however large it is, and the
-// value is the same one hashing the whole content would produce.
+// `computeContentHashFromRanges` asks for min(size,
+// `CONTENT_HASH_WHOLE_LIMIT_BYTES`) — the whole content up to that limit, and
+// a fixed head and tail above it. So the read has a ceiling no file can
+// exceed rather than a flat cost, and the value is the same one hashing the
+// whole content would produce.
 //
 // Nothing here touches `content`. That keeps this off the handle a body is
 // served from, which matters twice: `content` is a lazy getter on every

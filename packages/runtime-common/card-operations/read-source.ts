@@ -33,8 +33,15 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     — never a search read. That is also why it can answer for a path the
 //     index has no row for, and for one it never will. Where the realm has no
 //     recorded hash it reads the file to fingerprint it, in ranges bounded by
-//     the fingerprint's own shape rather than by the file's size — so this
-//     answers for a path of any size at a cost that does not grow with it.
+//     the fingerprint's own shape: min(size, `CONTENT_HASH_WHOLE_LIMIT_BYTES`)
+//     — the whole file below that limit, a fixed head and tail above it. So
+//     the read has a ceiling no file can exceed, not a flat cost. Worth
+//     sizing for rather than treating as the exception: indexing records a
+//     path's creation time without hashing it, so every path the realm has
+//     indexed but never written through has no recorded hash and reaches this
+//     read, and both modes pay it — the fingerprint is resolved before the
+//     headers-only return, so a `HEAD` of an unrecorded file reads as much of
+//     it as a full read would.
 //
 // Two modes, as `read` has:
 //
