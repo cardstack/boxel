@@ -269,6 +269,22 @@ function prerenderedHtmlEntryFrom(
   };
 }
 
+// Whether a verdict from the prerender server covers the row type about to be
+// written. Presence *and* membership: the mark names which of a visit's rows it
+// applies to, so a card render that hit a stale bundle cannot withhold a file
+// row that failed for its own reasons.
+//
+// Absence means no verdict, never "attributable" — a response from anything
+// that does not stamp this (a server predating the field, which a worker sees
+// throughout a rolling deploy) must not read as licence to withhold a row.
+function verdictCoversRow(
+  diagnostics: Diagnostics | undefined,
+  type: 'instance' | 'file',
+): boolean {
+  let covered = diagnostics?.staleShellFailure;
+  return Array.isArray(covered) && covered.includes(type);
+}
+
 // Rows held in the write-behind buffer before a flush is forced (see
 // `Batch.bufferEntry`). Dependency reads flush earlier; this only bounds
 // memory across long runs of dependency-free files. Renders dwarf the writes,
@@ -1365,6 +1381,25 @@ export class Batch {
         let production: Record<string, any> =
           (await this.getProductionVersion(url, baseTypeFromError(entry))) ??
           {};
+        // A failure the prerender server marked unattributable to the card is
+        // not published as the card's content, provided there is content to
+        // keep: the carried-forward `pristine_doc` and friends stay as the last
+        // good pass left them and `has_error` stays false, so readers keep
+        // seeing the card until a render that *can* be attributed replaces it.
+        //
+        // Presence of the mark is the whole test. The conclusion belongs to the
+        // prerender server, which is the only place holding the tokens it rests
+        // on, so this site does not re-derive it — one implementation of the
+        // rule rather than two that can drift. Absence means no verdict, never
+        // "attributable", so nothing is withheld by default.
+        //
+        // Gated on a prior published row. A brand-new card has no good content
+        // to protect, and withholding its error would leave nothing at all —
+        // the failure has to surface somewhere, and an error row is the right
+        // output there even when the environment caused it.
+        let withholdFailure =
+          verdictCoversRow(diagnostics, baseTypeFromError(entry)) &&
+          Boolean(production.pristine_doc);
         entryPayload = {
           types: entry.types,
           // favor the last known good types over the types derived from the error state
@@ -1375,9 +1410,16 @@ export class Batch {
           // the current searchData onto that doc keeps an instance's rich fields
           // when it degrades to a sparse error searchData, while a file /
           // dependency-error row (full searchData) wins outright.
-          search_doc: entry.searchData
-            ? { ...(production.search_doc ?? {}), ...entry.searchData }
-            : (production.search_doc ?? null),
+          //
+          // A withheld failure keeps the published doc untouched instead: the
+          // error's sparse searchData describes a render whose result is not
+          // being published, so overlaying it would degrade a row that is
+          // otherwise staying exactly as the last good pass left it.
+          search_doc: withholdFailure
+            ? (production.search_doc ?? null)
+            : entry.searchData
+              ? { ...(production.search_doc ?? {}), ...entry.searchData }
+              : (production.search_doc ?? null),
           // preserve last_known_good_deps through error cycles (may have been cleared
           // by getProductionVersion if it returned undefined, so we explicitly preserve it)
           last_known_good_deps: await this.getLastKnownGoodDeps(
@@ -1385,8 +1427,26 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: errorEntry?.error ?? entry.error,
-          has_error: true,
+          // A failure the prerender server marked unattributable to the card
+          // is not published as the card's content, provided there is content
+          // to keep. The row's carried-forward `pristine_doc` and friends stay
+          // exactly as the last good pass left them, and `has_error` is left
+          // false, so readers keep seeing the card until a render that can be
+          // attributed replaces it.
+          //
+          // Presence of the mark is the whole test — the conclusion is the
+          // prerender server's, which is the only place holding the tokens it
+          // rests on. Absence means no verdict, never "attributable", so
+          // nothing is withheld by default.
+          //
+          // Gated on there being a prior published row. A brand-new card has no
+          // good content to protect, and withholding its error would leave
+          // nothing at all: the failure has to surface somewhere, and an error
+          // row is the right output there even if the environment caused it.
+          error_doc: withholdFailure
+            ? null
+            : (errorEntry?.error ?? entry.error),
+          has_error: !withholdFailure,
           diagnostics: diagnostics,
         };
         break;
@@ -1609,6 +1669,18 @@ export class Batch {
           },
           url,
         );
+        // Any preserved render is content worth keeping; `isolated_html` alone
+        // is not the test, since a FileDef family may carry only markdown.
+        let hasPriorRender = Boolean(
+          production?.isolated_html ??
+          production?.embedded_html ??
+          production?.fitted_html ??
+          production?.atom_html ??
+          production?.head_html ??
+          production?.markdown,
+        );
+        let withholdHtmlFailure =
+          verdictCoversRow(diagnostics, type) && hasPriorRender;
         if (errorDoc.visitRequestFailure) {
           // Consecutive-failure bookkeeping for the reconcile sweep's
           // bounded retry lane: extend the prior row's run when it was also
@@ -1636,7 +1708,19 @@ export class Batch {
             ...new Set([...(production?.deps ?? []), ...(errorDoc.deps ?? [])]),
           ],
           last_known_good_deps: production?.last_known_good_deps ?? null,
-          error_doc: errorDoc,
+          // The same withholding as the index channel, and it has to be here
+          // too: `effectiveHasError()` is
+          // `COALESCE(i.has_error, FALSE) OR (ph.error_doc IS NOT NULL AND
+          // ph.generation >= i.generation)`, so a current error on this channel
+          // makes the row read as errored whatever `boxel_index` says — and
+          // `effectiveErrorDoc()` then serves this column. Suppressing only the
+          // index channel would leave the transient failure published on the
+          // split path, which is the default on Postgres.
+          //
+          // Gated on prior HTML for the same reason the other channel gates on
+          // `pristine_doc`: with nothing to fall back to, the failure has to
+          // surface rather than leave the row blank.
+          error_doc: withholdHtmlFailure ? null : errorDoc,
           diagnostics,
           // Like the HTML columns above: the manifest is a last-known-good
           // artifact — its objects still exist in the MediaCache and the

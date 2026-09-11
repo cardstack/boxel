@@ -9,6 +9,7 @@ import {
   raceAgainstDrain,
   shouldRerenderForStaleShell,
   stampHostShellTokens,
+  stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
@@ -386,6 +387,48 @@ module(basename(import.meta.filename), function () {
         response.meta,
         { requestId: 'abc' } as unknown as typeof response.meta,
         'no empty keys, and no diagnostics object invented',
+      );
+    });
+  });
+
+  module('stampStaleShellFailure', function () {
+    // The write site tests only for this field's presence, so its encoding is
+    // the whole contract: absence has to mean "no verdict" rather than
+    // "attributable", or a response from anything that does not stamp it would
+    // read as a licence to withhold a row.
+    test('names the rows it covers and leaves the rest of diagnostics alone', function (assert) {
+      let response = {
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampStaleShellFailure(response, ['instance']);
+      assert.deepEqual(response.meta, {
+        requestId: 'abc',
+        diagnostics: { renderMs: 12, staleShellFailure: ['instance'] },
+      } as unknown as typeof response.meta);
+    });
+
+    // A visit's rows fail independently, so a verdict that named the response
+    // rather than the rows would let one row's stale failure withhold
+    // another's genuine one. The write site tests membership, so an empty
+    // verdict must not be written at all.
+    test('an empty verdict stamps nothing', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampStaleShellFailure(response, []);
+      assert.false(
+        'staleShellFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than an empty array a reader might mis-test',
+      );
+    });
+
+    test('an unmarked response carries no verdict at all', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      assert.false(
+        'staleShellFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than false — a reader must require presence',
       );
     });
   });
