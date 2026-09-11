@@ -14,9 +14,61 @@ import {
   testRealmURL,
   createJWT,
   waitUntil,
+  realmServerTestMatrix,
+  realmSecretSeed,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  REALMS_LIST_UPDATED_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import type {
+  MatrixEvent,
+  RealmServerEventContent,
+} from '@cardstack/base/matrix-event';
+import { createRealmServerSession } from '../server-endpoints/helpers.ts';
+
+function isRealmServerEventContent(
+  content: MatrixEvent['content'],
+): content is RealmServerEventContent {
+  return (
+    'msgtype' in content &&
+    (content.msgtype as string) === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
+  );
+}
+
+// Poll a session room for a `realms-list-updated` push. The realm server
+// delivers it into the session DM room after a permission grant, the same
+// channel create/delete/archive use.
+async function receivedRealmsListUpdated(
+  matrixClient: MatrixClient,
+  roomId: string,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    let messages = await matrixClient.roomMessages(roomId);
+    let found = messages.some((event: MatrixEvent) => {
+      let { content } = event;
+      if (!isRealmServerEventContent(content)) {
+        return false;
+      }
+      try {
+        return (
+          (JSON.parse(content.body) as { eventType?: string }).eventType ===
+          REALMS_LIST_UPDATED_EVENT_TYPE
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (found) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return false;
+}
 
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | _permissions', function () {
@@ -33,6 +85,125 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       request = args.request;
       dbAdapter = args.dbAdapter;
     }
+
+    // A permission grant must reach a signed-in user's running session without
+    // a reload. `patchRealmPermissions` pushes `realms-list-updated` into each
+    // affected user's session DM room; the host re-runs `_realm-auth` on it.
+    // Grant a user who has an established session room and assert the push
+    // lands there.
+    module('permission grant notifies the grantee', function (hooks) {
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        permissions: {
+          mary: ['read', 'write', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      let matrixClient: MatrixClient;
+      let sessionRoom: string;
+      // The notifier is the realm's own matrix client. In production that is
+      // the single realm-server account that also owns every session room
+      // (`_server-session` / `_realm-auth` mint them), so the notifier is
+      // always a member of the grantee's room. This test harness deliberately
+      // splits those accounts — each realm gets its own bot (`test_realm`)
+      // distinct from the realm-server account (`node-test_realm-server`) that
+      // creates session rooms — so an ordinary grantee's room would not have
+      // the realm bot in it, and delivery would (correctly) fall to the
+      // stale-room self-heal. Granting the realm's own bot reproduces the
+      // production invariant that matters: the notifier is a member of the
+      // grantee's session room. The stale-room path is covered as a unit in
+      // send-event-test.ts.
+      let granteeUserId = '@test_realm:localhost';
+
+      hooks.beforeEach(async function () {
+        matrixClient = new MatrixClient({
+          matrixURL: realmServerTestMatrix.url,
+          username: 'test_realm',
+          seed: realmSecretSeed,
+        });
+        await matrixClient.login();
+        ({ sessionRoom } = await createRealmServerSession(
+          matrixClient,
+          request,
+        ));
+        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+        if (!rooms.includes(sessionRoom)) {
+          await matrixClient.joinRoom(sessionRoom);
+        }
+      });
+
+      test('PATCH /_permissions pushes realms-list-updated to the granted user', async function (assert) {
+        let response = await request
+          .patch('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'mary', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              id: testRealmHref,
+              type: 'permissions',
+              attributes: {
+                permissions: { [granteeUserId]: ['read', 'write'] },
+              },
+            },
+          });
+
+        assert.strictEqual(response.status, 200, 'the grant succeeds');
+
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
+        assert.deepEqual(
+          permissions[granteeUserId],
+          ['read', 'write'],
+          'the grant is written to realm_user_permissions',
+        );
+
+        assert.ok(
+          await receivedRealmsListUpdated(matrixClient, sessionRoom),
+          'a realms-list-updated event reached the grantee’s session room',
+        );
+      });
+
+      test('PATCH /_permissions still succeeds when the grantee has no session room', async function (assert) {
+        // A user who never established a session room (e.g. a fresh
+        // Synapse-registered account) has nowhere to deliver to. The push is a
+        // best-effort no-op and must not fail the grant.
+        let response = await request
+          .patch('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'mary', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              id: testRealmHref,
+              type: 'permissions',
+              attributes: {
+                permissions: { '@no-session-user:localhost': ['read'] },
+              },
+            },
+          });
+
+        assert.strictEqual(response.status, 200, 'the grant still succeeds');
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
+        assert.deepEqual(
+          permissions['@no-session-user:localhost'],
+          ['read'],
+          'the grant is written despite no session room to notify',
+        );
+      });
+    });
 
     module('permissions requests', function (hooks) {
       setupPermissionedRealmCached(hooks, {

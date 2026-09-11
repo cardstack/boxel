@@ -6,6 +6,7 @@ import {
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForBadRequest,
   setContextResponse,
@@ -88,6 +89,7 @@ export default function handleUpsertRealmUserPermission({
   matrixClient,
   matrixAdminUsername,
   matrixAdminPassword,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realm = ctxt.URL.searchParams.get('realm');
@@ -153,6 +155,20 @@ export default function handleUpsertRealmUserPermission({
     await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
       [user]: actions,
     });
+
+    // Push a live "your realms changed" signal so a running session re-derives
+    // its list from `_realm-auth` without a reload. This also covers the case
+    // where the account-data append below is a no-op (server already present),
+    // which on its own produces no Matrix event. Best-effort: a delivery
+    // failure must not fail the grant, and `sendEvent` is itself a no-op when
+    // the user has no session room to deliver to.
+    try {
+      await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+    } catch (e: any) {
+      log.warn(
+        `[grafana-upsert-realm-user-permission] failed to send ${REALMS_LIST_UPDATED_EVENT_TYPE} to ${user}: ${e?.message ?? String(e)}`,
+      );
+    }
 
     // The granted user only learns about the realm on their next host
     // load if it's present in their matrix `app.boxel.realms`
