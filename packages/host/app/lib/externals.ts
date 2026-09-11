@@ -65,6 +65,25 @@ import {
 
 import { shimHostTools } from '../tools';
 
+// Base modules compiled into the host bundle, keyed by their path under
+// `@cardstack/base/`. Each is served to the loader in place of a fetch of the
+// module from the base realm; the literal `import()` per entry is what lets
+// Vite give each module its own chunk. Registered after the `@cardstack/base/`
+// realm mapping, so an entry's id resolves to the realm URL a loader import of
+// it also resolves to.
+export const BUNDLED_BASE_MODULES: Record<
+  string,
+  () => Promise<Record<string, unknown>>
+> = {
+  'date/day': () => import('@cardstack/base/date/day'),
+  'date/month': () => import('@cardstack/base/date/month'),
+  'date/month-day': () => import('@cardstack/base/date/month-day'),
+  'date/month-year': () => import('@cardstack/base/date/month-year'),
+  'date/year': () => import('@cardstack/base/date/year'),
+  'date/week': () => import('@cardstack/base/date/week'),
+  'date/quarter': () => import('@cardstack/base/date/quarter'),
+};
+
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   // Always shim qunit on the virtual network. In non-test environments (code
   // mode, card rendering), this no-op stub prevents realm cards that co-locate
@@ -242,40 +261,9 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('@cardstack/runtime-common/helpers/ai'),
   });
 
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/day',
-    resolve: () => import('@cardstack/base/date/day'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/month',
-    resolve: () => import('@cardstack/base/date/month'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/month-day',
-    resolve: () => import('@cardstack/base/date/month-day'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/month-year',
-    resolve: () => import('@cardstack/base/date/month-year'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/year',
-    resolve: () => import('@cardstack/base/date/year'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/week',
-    resolve: () => import('@cardstack/base/date/week'),
-  });
-
-  virtualNetwork.shimAsyncModule({
-    id: '@cardstack/base/date/quarter',
-    resolve: () => import('@cardstack/base/date/quarter'),
-  });
+  for (let [name, resolve] of Object.entries(BUNDLED_BASE_MODULES)) {
+    virtualNetwork.shimAsyncModule({ id: `@cardstack/base/${name}`, resolve });
+  }
 
   shimModulesForLiveTests(virtualNetwork);
 
