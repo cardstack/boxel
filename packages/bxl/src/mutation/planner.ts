@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -11,20 +11,47 @@ import {
   type Item,
   isTrue,
 } from '../jqtools/evaluate/utils/utils.ts';
-import { withRuntimeDiagnostics } from '../jqtools/evaluate/runtimeState.ts';
+import {
+  withRequestContext,
+  withRuntimeDiagnostics,
+} from '../jqtools/evaluate/runtimeState.ts';
 import type {
+  DestructuringAst,
   ExpressionAst,
   NormalBinaryOperator,
+  RuntimeAnnotatedExpressionAst,
 } from '../jqtools/parser/AST.ts';
 import {
   parseBxlMutationProgram,
   printMutationAst,
+  readAssertSnapshotOption,
   type MutationAssignmentOperator,
   type ParsedMutationArgument,
   type ParsedMutationStatement,
 } from './syntax.ts';
 import {
+  addressesPrototype,
+  clone,
+  deleteAt,
+  equalJson,
+  hasAt,
+  pathKey,
+  sameJson,
+  setAt,
+  valueAt,
+} from './json-path.ts';
+import {
+  classifyOverlayRead,
+  EMPTY_OVERLAY_INDEX,
+  indexBxlMutationOverlays,
+  layerBxlMutationOverlays,
+  overlayWriteOwner,
+  settleOverlayUpdate,
+  type OverlayIndex,
+} from './overlays.ts';
+import {
   BxlMutationError,
+  type BxlMutationContext,
   type BxlMutationField,
   type BxlMutationFieldType,
   type BxlMutationIntent,
@@ -33,24 +60,77 @@ import {
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
   type BxlMutationPrepareOptions,
+  type BxlMutationReadEvent,
   type BxlMutationReturning,
   type BxlMutationSchema,
   type BxlMutationStatementPlan,
+  type BxlMutationUnavailableOverlay,
   type PreparedBxlMutation,
 } from './types.ts';
 
+/**
+ * The value a `card(…)` marker leaves behind while the value expression it
+ * sits inside is evaluated — whether it stands for the whole value or for one
+ * Field nested inside it.
+ *
+ * Identity is what makes a marker a marker, and it is the only thing that
+ * does. A program builds arbitrary JSON, so a marker recognised by its shape
+ * could be forged: a value spelled out as data would name a relationship
+ * target that the program never wrote `card(…)` for, and the vocabulary the
+ * platform reasons about — declaration lowering emits `card(…)`, the profile
+ * classifies it, a reviewer reads it — would have a second, silent spelling. A
+ * symbol key has no JSON spelling, and the planner mints one only from a
+ * `card(…)` node the program itself wrote — directly where such a node is the
+ * whole value, and by rewriting the node where it sits inside one — so a
+ * marker can be neither forged nor confused with the data around it.
+ *
+ * Keeping it also means not losing it, which is a property of the routes a
+ * value travels rather than of the symbol: a rebuilt object keeps its string
+ * keys and drops its symbol ones. So every route the walk resolves through is
+ * one that carries the brand — object and array literals build around it and
+ * `+` spreads it — and `VALUE_COMBINING_OPERATORS` says which those are.
+ * `clone` is not one, since `structuredClone` drops symbol-keyed properties,
+ * which is why the evaluated tree is searched for markers before anything
+ * copies it and a reference becomes a `cardId` at the write path rather than
+ * being stored in the working document.
+ */
+const CARD_MARKER = Symbol('bxl.mutation.card-marker');
+
 interface CardReference {
-  readonly kind: 'card-reference';
-  readonly id: string;
+  readonly [CARD_MARKER]: string;
+}
+
+function cardReference(id: string): CardReference {
+  return { [CARD_MARKER]: id };
 }
 
 function isCardReference(value: unknown): value is CardReference {
   return Boolean(
     value &&
     typeof value === 'object' &&
-    (value as Partial<CardReference>).kind === 'card-reference' &&
-    typeof (value as Partial<CardReference>).id === 'string',
+    typeof (value as Record<symbol, unknown>)[CARD_MARKER] === 'string',
   );
+}
+
+/** `card(id)` as a program writes it: the node the planner rewrites. */
+function isCardCall(
+  ast: ExpressionAst,
+): ast is Extract<ExpressionAst, { type: 'filter' }> {
+  return (
+    ast.type === 'filter' && ast.name === 'card/1' && ast.args.length === 1
+  );
+}
+
+/** One `card(…)` marker, at its path inside the value that carried it. */
+interface NestedCardReference {
+  path: BxlMutationPath;
+  id: string;
+}
+
+/** A value expression's result, and the markers found inside it. */
+interface EvaluatedValue {
+  value: BxlMutationJson | CardReference;
+  references: NestedCardReference[];
 }
 
 interface ResolvedLocation {
@@ -65,105 +145,192 @@ interface FieldResolution {
   fieldPath: BxlMutationPath;
   relationship?: { type: 'linksTo' | 'linksToMany'; path: BxlMutationPath };
   writeBehavior?: 'write' | 'skip';
+  /**
+   * The Fields of the value the path addresses, which is the Fields of a
+   * collection's item where the path selects one. Empty where the value has
+   * none of its own.
+   */
+  schema: BxlMutationSchema;
 }
 
 interface PlannerContext {
   prepare: BxlMutationPrepareOptions;
   plan: BxlMutationPlanOptions;
   registry: ResolvedBuiltinRegistry;
+  /** What the overlays answer for, against the document as it now stands. */
+  overlays: OverlayIndex;
+  /** Paths earlier statements have made their own. */
+  claimed: ReadonlySet<string>;
+  /** The layered view of the working document, and what it was built from. */
+  view?: { of: BxlMutationJson; revision: number; value: BxlMutationJson };
+  /** Bumped by every write, so a cached view is never handed back stale. */
+  revision: number;
+  onRead?: (event: BxlMutationReadEvent) => void;
+  /**
+   * The request context as the host supplied it, held by reference.
+   *
+   * Not copied here: the builtins copy each value as they hand it to a
+   * program, which is what keeps the host's object out of the plan and out of
+   * reach of a builtin that writes into its argument. A copy at this boundary
+   * would clone the whole context once per plan whether a program reads any
+   * of it or not.
+   *
+   * On the way out, a written value is isolated by `setAt`'s own copy and by
+   * the structural inserts' — not by the per-statement `clone(working)`,
+   * which runs on entry to the *next* statement and so does not cover the
+   * last one.
+   */
+  requestContext?: BxlMutationContext;
 }
 
-function clone<T>(value: T): T {
-  if (typeof structuredClone === 'function') return structuredClone(value);
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function pathKey(path: BxlMutationPath): string {
-  return JSON.stringify(path);
-}
-
-function equalJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function hasAt(root: BxlMutationJson, path: BxlMutationPath): boolean {
-  if (path.length === 0) return true;
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return false;
-    if (Array.isArray(current)) {
-      if (typeof part !== 'number' || part < 0 || part >= current.length)
-        return false;
-      current = current[part];
-    } else {
-      if (
-        typeof part !== 'string' ||
-        !Object.prototype.hasOwnProperty.call(current, part)
-      )
-        return false;
-      current = (current as Record<string, unknown>)[part];
-    }
-  }
-  return true;
-}
-
-function valueAt(
+/**
+ * The document an expression is evaluated against: the Card's own document
+ * with the overlays layered under it.
+ *
+ * The planner's working state is the Card's document alone, so a plan's output
+ * and its intents carry stored values without anything having to be undone.
+ * The view exists only for the duration of an evaluation, and shares the
+ * working document's shape — an overlay never adds or retypes a container —
+ * so a path resolved in one addresses the same element in the other.
+ */
+function readView(
   root: BxlMutationJson,
-  path: BxlMutationPath,
-): BxlMutationJson | undefined {
-  let current: unknown = root;
-  for (const part of path) {
-    if (current === null || typeof current !== 'object') return undefined;
-    current = Array.isArray(current)
-      ? current[part as number]
-      : (current as Record<string, unknown>)[part as string];
-  }
-  return current as BxlMutationJson | undefined;
-}
-
-function setAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-  value: BxlMutationJson,
+  context: PlannerContext,
 ): BxlMutationJson {
-  if (path.length === 0) return clone(value);
-  let current = root as BxlMutationJson[] | Record<string, BxlMutationJson>;
-  for (let index = 0; index < path.length - 1; index++) {
-    const part = path[index]!;
-    const nextPart = path[index + 1]!;
-    const next = Array.isArray(current)
-      ? current[part as number]
-      : current[part as string];
-    if (next === null || typeof next !== 'object') {
-      const replacement: BxlMutationJson =
-        typeof nextPart === 'number' ? [] : {};
-      if (Array.isArray(current)) current[part as number] = replacement;
-      else current[part as string] = replacement;
-      current = replacement as
-        | BxlMutationJson[]
-        | Record<string, BxlMutationJson>;
-    } else {
-      current = next as BxlMutationJson[] | Record<string, BxlMutationJson>;
-    }
+  if (context.overlays.empty) return root;
+  const cached = context.view;
+  if (cached && cached.of === root && cached.revision === context.revision) {
+    return cached.value;
   }
-  const last = path[path.length - 1]!;
-  if (Array.isArray(current)) current[last as number] = clone(value);
-  else current[last as string] = clone(value);
-  return root;
+  const value = layerBxlMutationOverlays(root, context.overlays);
+  context.view = { of: root, revision: context.revision, value };
+  return value;
 }
 
-function deleteAt(
-  root: BxlMutationJson,
-  path: BxlMutationPath,
-): BxlMutationJson {
-  if (path.length === 0) {
-    throw new Error('The planner cannot delete its root value.');
+/**
+ * Record that the working document changed, so the next read builds a fresh
+ * view. A bulk statement writes between locations and its value expression may
+ * read what an earlier location left behind.
+ */
+function documentChanged(context: PlannerContext): void {
+  context.revision++;
+}
+
+/**
+ * What a statement's reads resolved to. `strict` reads raise
+ * `snapshot-unavailable` on a path the host could not supply; a best-effort
+ * assert takes the unavailability back instead and fails with its own message.
+ */
+interface RecordedReads {
+  events: BxlMutationReadEvent[];
+  overlay: boolean;
+  unavailable?: BxlMutationUnavailableOverlay;
+}
+
+/**
+ * Where an expression's reads are anchored, and whether an unavailable one
+ * stops the statement. A value expression reads from the Card root; the value
+ * side of `|=` reads from the location it updates.
+ */
+interface ReadContext {
+  prefix?: BxlMutationPath;
+  policy?: 'strict' | 'best-effort';
+  /**
+   * Report only reads an overlay answered. A location is resolved for every
+   * statement, and saying so each time would drown the log in the paths a
+   * program is plainly writing to; what matters is when index data helped
+   * choose the write set.
+   */
+  onlyOverlay?: boolean;
+}
+
+function recordReads(
+  argument: ParsedMutationArgument,
+  input: BxlMutationJson,
+  context: PlannerContext,
+  statement: number,
+  reads: ReadContext = {},
+): RecordedReads {
+  const result: RecordedReads = { events: [], overlay: false };
+  if (context.onRead === undefined && context.overlays.empty) return result;
+  const prefix = reads.prefix ?? [];
+  for (const relative of argument.readPaths) {
+    const path = [...prefix, ...relative];
+    const resolved = classifyOverlayRead(
+      context.overlays,
+      path,
+      valueAt(input, relative),
+    );
+    if (reads.onlyOverlay && resolved.event.tier === 'source') continue;
+    result.events.push(resolved.event);
+    if (resolved.event.tier !== 'source') result.overlay = true;
+    if (resolved.unavailable && !result.unavailable) {
+      result.unavailable = resolved.unavailable;
+    }
+    context.onRead?.(resolved.event);
   }
-  const parent = valueAt(root, path.slice(0, -1));
-  const key = path[path.length - 1]!;
-  if (Array.isArray(parent)) parent.splice(key as number, 1);
-  else if (parent && typeof parent === 'object') delete parent[key as string];
-  return root;
+  if ((reads.policy ?? 'strict') === 'strict' && result.unavailable) {
+    const { path, tier, reason } = result.unavailable;
+    throw new BxlMutationError(
+      'plan',
+      'snapshot-unavailable',
+      statement,
+      `The ${tier} value at ${namePath(path)} is unavailable (${reason}).`,
+      { details: { path, tier, reason } },
+    );
+  }
+  return result;
+}
+
+/** How a path reads in a message. The root has no name of its own. */
+function namePath(path: string): string {
+  return path === '' ? 'the whole Card' : path;
+}
+
+/** Keep an update's result to what the Card can store. */
+function settleUpdate(
+  produced: BxlMutationJson,
+  layered: BxlMutationJson,
+  location: ResolvedLocation,
+  context: PlannerContext,
+  statement: number,
+): BxlMutationJson {
+  const settled = settleOverlayUpdate(
+    context.overlays,
+    location.path,
+    layered,
+    location.value,
+    produced,
+  );
+  if ('value' in settled) return settled.value;
+  throw new BxlMutationError(
+    'validate',
+    settled.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    settled.tier === 'computed'
+      ? `${settled.refused} is a computed value and cannot be written.`
+      : `${settled.refused} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: settled.refused, tier: settled.tier } },
+  );
+}
+
+/** Overlay values are read-only: a write that lands on one is refused. */
+function assertWritableOverlayPath(
+  path: BxlMutationPath,
+  context: PlannerContext,
+  statement: number,
+): void {
+  const owner = overlayWriteOwner(context.overlays, path);
+  if (!owner) return;
+  throw new BxlMutationError(
+    'validate',
+    owner.tier === 'computed' ? 'computed-read-only' : 'write-through-link',
+    statement,
+    owner.tier === 'computed'
+      ? `${owner.path} is a computed value and cannot be written.`
+      : `${owner.path} belongs to a linked Card and cannot be written through the link.`,
+    { details: { path: owner.path, tier: owner.tier } },
+  );
 }
 
 function collectionAt(
@@ -182,17 +349,460 @@ function objectId(value: BxlMutationJson | undefined): string | undefined {
   return typeof value.id === 'string' ? value.id : undefined;
 }
 
+/**
+ * Describe a value that is not JSON, or `undefined` when it is.
+ *
+ * `BxlMutationContext` declares the context as JSON, but a type is not a
+ * runtime guarantee: a `Date`, `Map`, `Set`, `RegExp` or `TypedArray` reaches
+ * a program as itself and can be written into the document, and so does a
+ * `bigint`. The `bigint` is the sharpest edge — `params("v") | tostring` on
+ * one yields `undefined`, the silent unset these builtins exist to refuse —
+ * but a live `Map` in a plan is no better, and `NaN` reaching a document as
+ * `null` is a value the host never sent.
+ */
+function nonJsonTypeName(value: unknown): string | undefined {
+  if (value === null) return undefined;
+  switch (typeof value) {
+    case 'boolean':
+      return undefined;
+    case 'number':
+      // `NaN` and the infinities have no JSON form and serialize to `null`,
+      // which is a value the host did not send appearing in the document.
+      return Number.isFinite(value) ? undefined : String(value);
+    case 'string':
+      return undefined;
+    case 'bigint':
+    case 'symbol':
+    case 'function':
+      return typeof value;
+    case 'undefined':
+      // Tolerated rather than rejected: a host spreading an object with
+      // optional fields produces these readily, and the builtins already
+      // treat a key held with `undefined` as absent when a program reads it.
+      return undefined;
+    default:
+      break;
+  }
+  if (Array.isArray(value)) return undefined;
+  // The built-in tag decides. It reports `Date`, `Map` and `URL` reliably,
+  // and says `Object` for every plain object — one from another realm and one
+  // carrying only a class's own data fields included, since both hold nothing
+  // but JSON.
+  //
+  // A `Symbol.toStringTag` can rename the tag or blank it, so an empty tag is
+  // reported rather than read as "no problem found". The reverse, an exotic
+  // object branded `Object`, is not distinguishable from a plain one in JS and
+  // is not defended against: this guard is for a host's mistake, and a
+  // symbol-keyed brand cannot come from a JSON payload.
+  const tag = Object.prototype.toString.call(value).slice(8, -1);
+  if (tag === 'Object') return undefined;
+  return tag || 'an object with no type name';
+}
+
+/**
+ * Reject a request context carrying anything the planner cannot put in a JSON
+ * document, naming the path so the host can find it.
+ *
+ * The check is the only thing standing between a host's mistake and a live
+ * `Map` or a `bigint` in a plan, so it runs before the context is reachable
+ * rather than leaving the type declaration as the sole guard.
+ */
+function assertJsonContext(context: BxlMutationContext) {
+  // Two sets, because they answer different questions. `ancestors` is the
+  // current path and finds a cycle; `cleared` is every object already walked
+  // and keeps shared structure from being walked once per route to it —
+  // without it a graph that merely shares subtrees costs exponential time.
+  const ancestors = new Set<unknown>();
+  const cleared = new Set<unknown>();
+  const walk = (value: unknown, path: string) => {
+    const typeName = nonJsonTypeName(value);
+    if (typeName) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at ${path} is not JSON — its type is ` +
+          `${typeName}. The host supplies context values already resolved ` +
+          'to JSON.',
+      );
+    }
+    if (value === null || typeof value !== 'object') return;
+    if (ancestors.has(value)) {
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context is cyclic at ${path}; a JSON document cannot ` +
+          'hold a cycle.',
+      );
+    }
+    if (cleared.has(value)) return;
+    ancestors.add(value);
+    if (Array.isArray(value)) {
+      // An index loop, not `forEach`, which skips holes — and a hole reads as
+      // `undefined`, which an array cannot carry: an absent object member
+      // serializes as absent, but an absent array entry serializes as `null`,
+      // a value the host never sent.
+      for (let index = 0; index < value.length; index += 1) {
+        const entry: unknown = value[index];
+        if (entry === undefined) {
+          throw new BxlMutationError(
+            'plan',
+            'context-not-json',
+            1,
+            `The request context at ${path}[${index}] has no value. An ` +
+              'array entry cannot be absent the way an object member can — ' +
+              'it would reach the document as `null`.',
+          );
+        }
+        walk(entry, `${path}[${index}]`);
+      }
+    } else {
+      // Own properties, enumerable or not, matching what the builtins read.
+      for (const key of Object.getOwnPropertyNames(value)) {
+        walk((value as Record<string, unknown>)[key], `${path}.${key}`);
+      }
+    }
+    ancestors.delete(value);
+    cleared.add(value);
+  };
+
+  for (const slot of ['params', 'actor', 'instance'] as const) {
+    const value = context[slot];
+    if (value === undefined) continue;
+    try {
+      walk(value, `context.${slot}`);
+    } catch (error) {
+      if (error instanceof BxlMutationError) throw error;
+      // A property accessor on the host's object threw. That is still an
+      // unusable context, reported as one instead of escaping raw.
+      throw new BxlMutationError(
+        'plan',
+        'context-not-json',
+        1,
+        `The request context at context.${slot} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
+    }
+  }
+}
+
+/** Evaluate one expression against the budget the caller already opened. */
+type EvaluateItems = (ast: ExpressionAst, input: Item[]) => Item[];
+
+/**
+ * Run `body` under one runtime budget, handing it the evaluator to use.
+ *
+ * Every limit lives on the frame `withRuntimeDiagnostics` opens — steps,
+ * milliseconds and output bytes all start again with each one — so what shares
+ * a frame shares a ceiling. A value expression and the `card(…)` arguments
+ * standing inside it are one evaluation, and spend the host's allowance
+ * between them rather than each taking the whole of it.
+ */
+function withEvaluationBudget<T>(
+  context: PlannerContext,
+  body: (evaluate: EvaluateItems) => T,
+): T {
+  const evaluate: EvaluateItems = (ast, input) =>
+    Array.from(evaluateItemsWithRegistry(ast, input, context.registry));
+  const run = () =>
+    withRuntimeDiagnostics(() => body(evaluate), context.prepare.runtimeLimits);
+  // Scoped outside the diagnostics frame, and around every statement's
+  // evaluation, so `params`/`actor`/`instance` read this plan's context
+  // wherever in the program they appear.
+  const runtime = context.requestContext
+    ? withRequestContext(context.requestContext, run)
+    : run();
+  if (runtime.error) throw runtime.error;
+  return runtime.result as T;
+}
+
 function evaluateItems(
   ast: ExpressionAst,
   input: Item[],
   context: PlannerContext,
 ): Item[] {
-  const runtime = withRuntimeDiagnostics(
-    () => Array.from(evaluateItemsWithRegistry(ast, input, context.registry)),
-    context.prepare.runtimeLimits,
-  );
-  if (runtime.error) throw runtime.error;
-  return runtime.result ?? [];
+  return withEvaluationBudget(context, (evaluate) => evaluate(ast, input));
+}
+
+/** Every expression a destructuring pattern holds, keys included. */
+function destructuringExpressions(
+  destructuring: DestructuringAst,
+): ExpressionAst[] {
+  switch (destructuring.type) {
+    case 'arrayDestructuring':
+      return destructuring.destructuring.flatMap(destructuringExpressions);
+    case 'objectDestructuring':
+      return destructuring.entries.flatMap((entry) => [
+        ...(typeof entry.key === 'string' ? [] : [entry.key]),
+        ...(entry.destructuring
+          ? destructuringExpressions(entry.destructuring)
+          : []),
+      ]);
+    default:
+      return [];
+  }
+}
+
+/** Every child expression of a node, so a whole tree can be searched. */
+function childExpressions(ast: ExpressionAst): ExpressionAst[] {
+  switch (ast.type) {
+    case 'binary':
+      return [ast.left, ast.right];
+    case 'def':
+      return ast.next ? [ast.body, ast.next] : [ast.body];
+    case 'str':
+      return ast.interpolated
+        ? ast.parts.filter(
+            (part): part is ExpressionAst => typeof part !== 'string',
+          )
+        : [];
+    case 'filter':
+      return ast.args;
+    case 'if':
+      return [
+        ast.cond,
+        ast.then,
+        ...(ast.elifs ?? []).flatMap((elif) => [elif.cond, elif.then]),
+        ...(ast.else ? [ast.else] : []),
+      ];
+    case 'try':
+      return ast.catch ? [ast.body, ast.catch] : [ast.body];
+    case 'reduce':
+      return [ast.expr, ast.init, ast.update];
+    case 'foreach':
+      return [
+        ast.expr,
+        ast.init,
+        ast.update,
+        ...(ast.extract ? [ast.extract] : []),
+      ];
+    case 'label':
+      return [ast.next];
+    case 'unary':
+    case 'iterator':
+      return [ast.expr];
+    case 'index':
+      return typeof ast.index === 'string' ? [ast.expr] : [ast.expr, ast.index];
+    case 'slice':
+      return [
+        ast.expr,
+        ...(ast.from ? [ast.from] : []),
+        ...(ast.to ? [ast.to] : []),
+      ];
+    case 'array':
+      return ast.expr ? [ast.expr] : [];
+    case 'object':
+      return ast.entries.flatMap((entry) => [
+        ...(typeof entry.key === 'string' ? [] : [entry.key]),
+        ...(entry.value === undefined ? [] : [entry.value]),
+      ]);
+    case 'varDeclaration':
+      return [
+        ast.expr,
+        ...ast.destructuring.flatMap(destructuringExpressions),
+        ast.next,
+      ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Binary operators whose operands are values the result is built from, rather
+ * than a stream re-rooted or a decision made from them.
+ *
+ * `*` is not one of them, though it combines values too. It merges objects
+ * recursively, and the merge rebuilds each object from its string keys, so a
+ * marker at a key the left operand already holds an object at is merged into
+ * and its brand dropped — which would take the relationship with it and leave
+ * the write looking like it succeeded. Refusing the position reports what a
+ * program cannot express here instead of losing an edge to it; `+` is the
+ * merge a value expression writes part of a contained value with, and it
+ * spreads its operands rather than descending into them.
+ */
+const VALUE_COMBINING_OPERATORS: ReadonlySet<string> = new Set([
+  ',',
+  '//',
+  '+',
+]);
+
+function containsCardCall(ast: ExpressionAst): boolean {
+  return isCardCall(ast) || childExpressions(ast).some(containsCardCall);
+}
+
+/** The Card a `card(…)` marker names, read from its one argument. */
+function readCardId(
+  argument: ExpressionAst,
+  input: BxlMutationJson,
+  evaluate: EvaluateItems,
+  statement: number,
+): string {
+  const items = evaluate(argument, [createItem(input)]);
+  if (items.length !== 1 || typeof items[0]!.value !== 'string') {
+    throw new BxlMutationError(
+      'plan',
+      'card-id-invalid',
+      statement,
+      'card(id) requires exactly one string Card ID.',
+    );
+  }
+  return items[0]!.value;
+}
+
+/**
+ * A node standing in for one marker, yielding it and nothing else.
+ *
+ * The Card it names is read when the node is reached, not while the tree is
+ * being rewritten, so a marker in a branch the program does not take costs
+ * nothing: no argument evaluated for a branch that never runs, no error from
+ * one that only makes sense there, and no share of the statement's steps. The
+ * budget frame is already open around the whole evaluation, so reading it here
+ * is still metered with everything else.
+ *
+ * `singleOutput` stays false, as it is for every filter node the annotator
+ * marks: the single-output evaluator has no case for a filter and throws on
+ * one. Nothing in the walk puts a marker where that evaluator runs, and saying
+ * `true` here would arm that throw for whoever widens the walk next.
+ */
+function cardMarkerNode(
+  argument: ExpressionAst,
+  input: BxlMutationJson,
+  evaluate: EvaluateItems,
+  statement: number,
+): ExpressionAst {
+  let marker: CardReference | undefined;
+  const node: RuntimeAnnotatedExpressionAst = {
+    type: 'filter',
+    name: '_card_marker/0',
+    arity: 0,
+    args: [],
+    singleOutput: false,
+    resolvedNative: function* () {
+      marker ??= cardReference(
+        readCardId(argument, input, evaluate, statement),
+      );
+      yield createItem(marker);
+    },
+  };
+  return node;
+}
+
+/**
+ * Resolve the `card(…)` markers a value expression builds into its result, so
+ * the rest of the expression can evaluate as jq wrote it.
+ *
+ * A marker reads its argument against the input the value expression itself was
+ * handed, so the walk follows the nodes that pass that input down unchanged and
+ * whose operands flow into the result: object entries, array and comma streams,
+ * the operands of `//` and `+`, and the branches of an `if`. Everywhere
+ * else the marker is left as written and `evaluateSingleJson` reports it as
+ * unresolvable — a node that re-roots the input (the body of `map`, either side
+ * of a pipe) would answer it from the wrong place, and a condition chooses a
+ * branch rather than being the value. `try` needs no thought here: the mutation
+ * profile refuses it.
+ *
+ * A subtree carrying no marker comes back as it went in, so a program without
+ * one is never rebuilt.
+ */
+function resolveValueTreeCards(
+  ast: ExpressionAst,
+  input: BxlMutationJson,
+  evaluate: EvaluateItems,
+  statement: number,
+): ExpressionAst {
+  if (isCardCall(ast)) {
+    return cardMarkerNode(ast.args[0]!, input, evaluate, statement);
+  }
+  const resolve = (child: ExpressionAst) =>
+    resolveValueTreeCards(child, input, evaluate, statement);
+  switch (ast.type) {
+    case 'object': {
+      let changed = false;
+      const entries = ast.entries.map((entry) => {
+        if (entry.value === undefined) return entry;
+        const value = resolve(entry.value);
+        if (value === entry.value) return entry;
+        changed = true;
+        return { ...entry, value };
+      });
+      return changed ? { ...ast, entries } : ast;
+    }
+    case 'array': {
+      if (!ast.expr) return ast;
+      const expr = resolve(ast.expr);
+      return expr === ast.expr ? ast : { ...ast, expr };
+    }
+    case 'binary': {
+      // `.` merged with an object literal is how a program writes part of a
+      // contained value, so the operators that combine two values into the one
+      // that results carry markers as much as the structural nodes do.
+      if (!VALUE_COMBINING_OPERATORS.has(ast.operator)) return ast;
+      const left = resolve(ast.left);
+      const right = resolve(ast.right);
+      return left === ast.left && right === ast.right
+        ? ast
+        : { ...ast, left, right };
+    }
+    case 'if': {
+      const branches = ast.elifs?.map((elif) => {
+        const then = resolve(elif.then);
+        return then === elif.then ? elif : { ...elif, then };
+      });
+      const then = resolve(ast.then);
+      const otherwise = ast.else === undefined ? undefined : resolve(ast.else);
+      const changed =
+        then !== ast.then ||
+        otherwise !== ast.else ||
+        Boolean(branches?.some((elif, index) => elif !== ast.elifs![index]));
+      return changed
+        ? {
+            ...ast,
+            then,
+            ...(branches === undefined ? {} : { elifs: branches }),
+            ...(otherwise === undefined ? {} : { else: otherwise }),
+          }
+        : ast;
+    }
+    default:
+      return ast;
+  }
+}
+
+/**
+ * Copy an evaluated value into JSON, lifting every marker out of it.
+ *
+ * A marker's slot is left holding `null` and is filled in by the caller, the
+ * only place that knows the Field the value lands in: what the Card stores
+ * drops the relationship entirely, and the planner's own view puts the loaded
+ * Card there instead.
+ */
+function liftCardMarkers(raw: unknown): {
+  value: BxlMutationJson;
+  references: NestedCardReference[];
+} {
+  const references: NestedCardReference[] = [];
+  const copy = (value: unknown, path: BxlMutationPath): BxlMutationJson => {
+    if (isCardReference(value)) {
+      references.push({ path, id: value[CARD_MARKER] });
+      return null;
+    }
+    if (Array.isArray(value)) {
+      return value.map((entry, index) => copy(entry, [...path, index]));
+    }
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [
+          key,
+          copy(entry, [...path, key]),
+        ]),
+      );
+    }
+    return value as BxlMutationJson;
+  };
+  return { value: copy(raw, []), references };
 }
 
 function evaluateSingleJson(
@@ -200,37 +810,57 @@ function evaluateSingleJson(
   input: BxlMutationJson,
   context: PlannerContext,
   statement: number,
-): BxlMutationJson | CardReference {
-  if (
-    argument.ast.type === 'filter' &&
-    argument.ast.name === 'card/1' &&
-    argument.ast.args.length === 1
-  ) {
-    const cardIdItems = evaluateItems(
-      argument.ast.args[0]!,
-      [createItem(input)],
-      context,
+  reads: ReadContext = {},
+): EvaluatedValue {
+  recordReads(argument, input, context, statement, reads);
+  return withEvaluationBudget(context, (evaluate): EvaluatedValue => {
+    if (isCardCall(argument.ast)) {
+      return {
+        value: cardReference(
+          readCardId(argument.ast.args[0]!, input, evaluate, statement),
+        ),
+        references: [],
+      };
+    }
+    const resolved = resolveValueTreeCards(
+      argument.ast,
+      input,
+      evaluate,
+      statement,
     );
-    if (cardIdItems.length !== 1 || typeof cardIdItems[0]!.value !== 'string') {
+    if (containsCardCall(resolved)) {
       throw new BxlMutationError(
-        'plan',
-        'card-id-invalid',
+        'validate',
+        'card-marker-position',
         statement,
-        'card(id) requires exactly one string Card ID.',
+        'card(id) names the Card a relationship points at, so it stands where a value is written: on its own, or inside an object or array the value expression builds.',
       );
     }
-    return { kind: 'card-reference', id: cardIdItems[0]!.value };
-  }
-  const values = evaluateItems(argument.ast, [createItem(input)], context);
-  if (values.length !== 1) {
-    throw new BxlMutationError(
-      'plan',
-      'value-cardinality',
-      statement,
-      `Mutation value expressions must produce exactly one value; received ${values.length}.`,
+    const values = evaluate(resolved, [createItem(input)]);
+    if (values.length !== 1) {
+      throw new BxlMutationError(
+        'plan',
+        'value-cardinality',
+        statement,
+        `Mutation value expressions must produce exactly one value; received ${values.length}.`,
+      );
+    }
+    if (resolved === argument.ast) {
+      return {
+        value: clone(values[0]!.value) as BxlMutationJson,
+        references: [],
+      };
+    }
+    const lifted = liftCardMarkers(values[0]!.value);
+    // A marker the whole value resolved to is the whole-value form arrived at
+    // by another route — a conditional, say — and answers the same way.
+    const whole = lifted.references.find(
+      (reference) => reference.path.length === 0,
     );
-  }
-  return clone(values[0]!.value) as BxlMutationJson;
+    return whole
+      ? { value: cardReference(whole.id), references: [] }
+      : { value: lifted.value, references: lifted.references };
+  });
 }
 
 function resolveLocations(
@@ -240,9 +870,17 @@ function resolveLocations(
   statement: number,
   cardinality: 'one' | 'bulk' = argument.bulk ? 'bulk' : 'one',
 ): ResolvedLocation[] {
+  const view = readView(root, context);
+  // A selector reads the document to decide what it matches, so an unavailable
+  // value cannot be allowed to quietly settle a write set. A location that
+  // addresses one place directly selects nothing, and whatever it reads its
+  // statement reads too.
+  if (argument.bulk) {
+    recordReads(argument, view, context, statement, { onlyOverlay: true });
+  }
   let items: Item[];
   try {
-    items = evaluateItems(argument.ast, [createItem(root)], context);
+    items = evaluateItems(argument.ast, [createItem(view)], context);
   } catch (error) {
     throw new BxlMutationError(
       'plan',
@@ -320,13 +958,22 @@ function nestedSchema(field: BxlMutationField): BxlMutationSchema | undefined {
   return undefined;
 }
 
+/**
+ * What a Field with no Fields of its own descends into: nothing.
+ *
+ * A path that keeps going past such a Field addresses something the schema
+ * does not describe, and reading the next key against the *parent* schema
+ * would answer it with a sibling — `.label.friend` on a scalar `label`
+ * resolving the `friend` beside it, and naming a Field the path never reaches.
+ */
+const NO_FIELDS: BxlMutationSchema = { fields: [] };
+
 function resolveField(
   path: BxlMutationPath,
   context: PlannerContext,
   statement: number,
 ): FieldResolution {
-  const unsafeParts = new Set(['__proto__', 'prototype', 'constructor']);
-  if (path.some((part) => typeof part === 'string' && unsafeParts.has(part))) {
+  if (addressesPrototype(path)) {
     throw new BxlMutationError(
       'validate',
       'prototype-path-forbidden',
@@ -361,6 +1008,7 @@ function resolveField(
       fieldPath: [],
       relationship,
       writeBehavior: root?.writeBehavior,
+      schema: root?.item ?? context.prepare.schema,
     };
   }
 
@@ -427,8 +1075,7 @@ function resolveField(
           `Unexpected collection index at ${pathKey(path.slice(0, index + 1))}.`,
         );
       }
-      const item = nestedSchema(field);
-      if (item) schema = item;
+      schema = nestedSchema(field) ?? NO_FIELDS;
       field = undefined;
       continue;
     }
@@ -466,8 +1113,7 @@ function resolveField(
         );
       }
     }
-    const next = nestedSchema(field);
-    if (next) schema = next;
+    schema = nestedSchema(field) ?? NO_FIELDS;
   }
   return {
     field,
@@ -475,6 +1121,7 @@ function resolveField(
     fieldPath,
     relationship,
     writeBehavior,
+    schema,
   };
 }
 
@@ -507,9 +1154,26 @@ function validateWritableLocations(
       'Numeric collection positions require a pinned base revision during streaming execution.',
     );
   }
-  return locations.map((location) =>
-    resolveField(location.path, context, statement),
-  );
+  return locations.map((location) => {
+    let field: FieldResolution;
+    try {
+      field = resolveField(location.path, context, statement);
+    } catch (error) {
+      // The overlay often has the more specific reason to refuse a path the
+      // schema rejects — a write through a link, which the schema can only
+      // report as traversal. Let it speak first.
+      assertWritableOverlayPath(location.path, context, statement);
+      throw error;
+    }
+    // The schema is the authority on the Fields a Card declares. Where it
+    // already answers a write with an intentional no-op, an overlay does not
+    // turn that into an error: the refusal is a backstop for paths the schema
+    // has no opinion about, not a second opinion about the ones it does.
+    if (field.writeBehavior !== 'skip') {
+      assertWritableOverlayPath(location.path, context, statement);
+    }
+    return field;
+  });
 }
 
 function loadedCard(
@@ -527,6 +1191,422 @@ function loadedCard(
     );
   }
   return clone(card);
+}
+
+/**
+ * One marker resolved against the Field it lands on.
+ *
+ * `strip` is the relationship's own subtree inside the value rather than the
+ * marker's slot, because a `linksToMany` holds its edges as a collection and
+ * the whole collection is the relationship — none of it is stored as a value.
+ */
+interface NestedRelationship {
+  /** Where the marker sat inside the value. */
+  path: BxlMutationPath;
+  /** What the stored value must not carry, inside the value. */
+  strip: BxlMutationPath;
+  /** Absent where the Field takes the write as an intentional no-op. */
+  intent?: BxlMutationIntent;
+  /** The loaded Card the marker named, for the planner's own view. */
+  card?: BxlMutationJson;
+}
+
+/**
+ * Resolve the markers lifted out of a value against the Fields they fill.
+ *
+ * `base` is where the value lands, so joining it to a marker's path inside the
+ * value names a Field. That Field has to be a relationship: a link is an edge
+ * in the Card's relationship map with no value of its own to hold it, which is
+ * also why the stored value sheds the relationship's subtree —
+ * `.examples[0].friend` is written as an edge at `examples.0.friend`, never as
+ * a member of the contained value. The planner's own view keeps the loaded
+ * Card there, so a later statement reads a link this program just wrote the
+ * same way it reads one the document already held.
+ */
+function nestedRelationships(
+  references: NestedCardReference[],
+  base: BxlMutationPath,
+  context: PlannerContext,
+  statement: number,
+): NestedRelationship[] {
+  return references.map((reference) => {
+    const path = [...base, ...reference.path];
+    const field = resolveField(path, context, statement);
+    if (!field.relationship) {
+      throw new BxlMutationError(
+        'validate',
+        'card-reference-destination',
+        statement,
+        'card(id) may only be assigned to a relationship Field.',
+      );
+    }
+    const edge = field.relationship.path;
+    const strip = edge.slice(base.length);
+    // An edge of a link collection is addressed by its position; the marker
+    // standing where the collection itself goes names no edge to change.
+    const last = path.at(-1);
+    const index =
+      path.length === edge.length + 1 && typeof last === 'number'
+        ? last
+        : undefined;
+    if (field.relationship.type === 'linksToMany' && index === undefined) {
+      throw new BxlMutationError(
+        'validate',
+        'collection-replacement-forbidden',
+        statement,
+        'Use relationship collection operations instead of replacing linksToMany wholesale.',
+      );
+    }
+    if (field.writeBehavior === 'skip') {
+      return { path: reference.path, strip };
+    }
+    assertWritableOverlayPath(path, context, statement);
+    return {
+      path: reference.path,
+      strip,
+      intent: {
+        op: 'relate',
+        field: [...edge],
+        cardId: reference.id,
+        ...(index === undefined ? {} : { index }),
+      },
+      card: loadedCard(reference.id, context, statement),
+    };
+  });
+}
+
+/** A relationship Field the schema reaches inside a value being written. */
+interface LinkSlot {
+  /** Where the relationship sits inside the value. */
+  path: BxlMutationPath;
+  type: 'linksTo' | 'linksToMany';
+}
+
+/**
+ * Every relationship Field the schema reaches inside a value, whether or not
+ * the value carries anything there.
+ *
+ * The schema is what makes a Field a link, so this walks the value's shape
+ * rather than the `card(…)` markers in it — a `linksTo` written as
+ * `{"id": …}` and a `linksToMany` written as a list of strings each land on a
+ * slot here and neither carries a marker to be found. Descent follows the
+ * containers the value actually holds, so a Field it never reaches has no
+ * slot, and stops at a relationship, whose subtree belongs to the Card it
+ * points at rather than to this value.
+ */
+function linkSlots(
+  value: BxlMutationJson,
+  schema: BxlMutationSchema,
+  collection: boolean,
+): LinkSlot[] {
+  const slots: LinkSlot[] = [];
+  const walk = (
+    held: BxlMutationJson,
+    at: BxlMutationSchema,
+    path: BxlMutationPath,
+  ) => {
+    if (held === null || typeof held !== 'object' || Array.isArray(held))
+      return;
+    for (const field of at.fields) {
+      // A promoted alias names a Field stored somewhere else in the value, and
+      // the walk reaches it there; reading it here as well would answer for a
+      // slot the value never carries.
+      if (field.path) continue;
+      const here = [...path, field.key];
+      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        slots.push({ path: here, type: field.fieldType });
+        continue;
+      }
+      const nested = nestedSchema(field);
+      if (!nested) continue;
+      const child = held[field.key];
+      if (child === undefined) continue;
+      if (field.fieldType === 'containsMany') {
+        if (Array.isArray(child)) {
+          child.forEach((item, index) => walk(item, nested, [...here, index]));
+        }
+        continue;
+      }
+      walk(child, nested, here);
+    }
+  };
+  if (!collection) walk(value, schema, []);
+  else if (Array.isArray(value)) {
+    value.forEach((item, index) => walk(item, schema, [index]));
+  }
+  return slots;
+}
+
+/**
+ * Whether a slot holds no link at all.
+ *
+ * `null` says so at either kind of Field — a value that names no Card names
+ * none whether the Field holds one or many, and that is how a value written
+ * from nothing spells an empty link. A collection also reads empty as `[]`,
+ * the shape the projection gives it.
+ */
+function linkIsEmpty(
+  held: BxlMutationJson | undefined,
+  slot: LinkSlot,
+): boolean {
+  if (held === null) return true;
+  return (
+    slot.type === 'linksToMany' && Array.isArray(held) && held.length === 0
+  );
+}
+
+/** Whether there is an edge at a slot for a write to leave alone. */
+function holdsLink(
+  prior: BxlMutationJson | undefined,
+  slot: LinkSlot,
+): boolean {
+  if (prior === undefined) return false;
+  const held = valueAt(prior, slot.path);
+  return held !== undefined && !linkIsEmpty(held, slot);
+}
+
+/** What the links inside a written value mean for the Card's edges. */
+interface WrittenLinks {
+  /** Relationship subtrees the stored value must not carry. */
+  shed: BxlMutationPath[];
+  /** Relationship Fields whose edges this write leaves as the Card holds them. */
+  keep: BxlMutationPath[];
+  /** Slots the value never named, which the planner's own view reads back. */
+  restore: BxlMutationPath[];
+}
+
+/**
+ * Put back the links a value left unmentioned, so the planner reads what the
+ * Card still holds.
+ *
+ * The stored value sheds them again — an edge is never a member — but the
+ * planner's view is what a later statement reads and what `plan.output`
+ * reports, and there the edge is still there. Leaving the slot standing empty
+ * would read as a link the write removed, which is the opposite of what
+ * keeping it means.
+ */
+function restoreKeptLinks(
+  model: BxlMutationJson,
+  restore: BxlMutationPath[],
+  prior: BxlMutationJson | undefined,
+): BxlMutationJson {
+  if (restore.length === 0 || prior === undefined) return model;
+  let restored = clone(model);
+  for (const path of restore) {
+    restored = setAt(restored, path, valueAt(prior, path) ?? null);
+  }
+  return restored;
+}
+
+/**
+ * Hold every relationship inside a written value to being an edge.
+ *
+ * A link is an edge in the Card's relationship map with no member of the value
+ * to live in, so `card(…)` is the only way a value writes one. What the
+ * schema calls a relationship is refused anything else — which is what stops a
+ * link-shaped object from being stored as an attribute at a `linksTo` slot,
+ * and a list of anything from sitting at a `linksToMany` one.
+ *
+ * Two spellings carry no intent to change an edge and so are not refusals.
+ * A slot holding exactly what `prior` presented there was read back and
+ * written unchanged, which is how a partial update spells "this link stays" —
+ * the projection shows a link as `{"id": …}`, so any expression rebuilding a
+ * value from what it read carries them along. And a slot the value empties
+ * (`null`, or `[]`) names no Card, so it clears rather than stores. Both leave
+ * the stored value, and the first keeps its edge.
+ *
+ * `unmentioned` is what silence means. An update leaves a slot it never named
+ * alone; a replacement's silence drops the edge, the way it drops everything
+ * else the new value no longer holds.
+ *
+ * Keeping an edge also needs the slot to still be the slot the Card's edge
+ * belongs to. The write's own path pins that only as far as the first
+ * collection index inside the value: past one, a contained value has no
+ * identity to match on, and the projection shows every link as `{"id": …}`,
+ * so two edges to the same Card read alike and a shifted item would inherit
+ * its neighbour's. An index-anchored slot therefore keeps its edge only where
+ * the value holding it is unchanged, and a write that rebuilds a collection
+ * holding edges any other way is refused.
+ */
+function assertLinksAreEdges(
+  value: BxlMutationJson,
+  nested: NestedRelationship[],
+  base: BxlMutationPath,
+  prior: BxlMutationJson | undefined,
+  unmentioned: 'keep' | 'clear',
+  context: PlannerContext,
+  statement: number,
+): WrittenLinks {
+  const resolution = resolveField(base, context, statement);
+  const slots = linkSlots(
+    value,
+    resolution.schema,
+    resolution.fieldType === 'containsMany',
+  );
+  if (slots.length === 0) return { shed: [], keep: [], restore: [] };
+  const markers = new Set(nested.map((entry) => pathKey(entry.path)));
+  const refuse = (detail: string) => {
+    throw new BxlMutationError(
+      'validate',
+      'relationship-value-required',
+      statement,
+      `${detail} card("id") is how a value names the Card a relationship points at.`,
+    );
+  };
+  const refuseMoved = (slot: LinkSlot) => {
+    throw new BxlMutationError(
+      'validate',
+      'relationship-collection-rebuilt',
+      statement,
+      `${pathKey([...base, ...slot.path])} is a relationship inside a collection this write rebuilds, and an edge cannot be told from another to the same Card. Update the items themselves ([* …]) so each edge stays with its value, or move them with the collection operations.`,
+    );
+  };
+  /**
+   * A collection item as the Card stores it: every link inside it taken out.
+   *
+   * A link is never a member of the value, so comparing two items on their
+   * links would answer on where the edges are — the very thing in question —
+   * and would read a value that carried a link back and one that never
+   * mentioned it as different items.
+   */
+  const itemContent = (
+    root: BxlMutationJson | undefined,
+    at: BxlMutationPath,
+  ): BxlMutationJson | undefined => {
+    const held = root === undefined ? undefined : valueAt(root, at);
+    if (held === undefined) return undefined;
+    let content = clone(held);
+    for (const other of slots) {
+      if (
+        other.path.length <= at.length ||
+        !at.every((part, index) => other.path[index] === part)
+      ) {
+        continue;
+      }
+      const relative = other.path.slice(at.length);
+      if (hasAt(content, relative)) content = deleteAt(content, relative);
+    }
+    return content;
+  };
+
+  /**
+   * Whether every collection item a slot sits inside is the item the Card's
+   * edge belongs to.
+   *
+   * Only an index can put a slot somewhere the write's own path does not pin,
+   * so those are the positions to account for — and each of them, not just the
+   * innermost: a link two levels down inside an item that moved sits in a
+   * subtree that may well be identical to the one that used to be there.
+   */
+  const stationary = (slot: LinkSlot) =>
+    slot.path.every((part, index) => {
+      if (typeof part !== 'number') return true;
+      const item = slot.path.slice(0, index + 1);
+      return (
+        prior !== undefined &&
+        sameJson(itemContent(value, item), itemContent(prior, item))
+      );
+    });
+  const shed: BxlMutationPath[] = [];
+  const keep: BxlMutationPath[] = [];
+  const restore: BxlMutationPath[] = [];
+  for (const slot of slots) {
+    const held = valueAt(value, slot.path);
+    const marked =
+      slot.type === 'linksTo'
+        ? markers.has(pathKey(slot.path))
+        : Array.isArray(held) &&
+          held.some((_, index) => markers.has(pathKey([...slot.path, index])));
+    if (marked) {
+      // The whole collection leaves the stored value with the edges, so a
+      // member written beside them would be dropped without a word.
+      if (
+        slot.type === 'linksToMany' &&
+        !(held as BxlMutationJson[]).every((_, index) =>
+          markers.has(pathKey([...slot.path, index])),
+        )
+      ) {
+        refuse(
+          `Every member of the linksToMany at ${pathKey([...base, ...slot.path])} must be a Card reference:`,
+        );
+      }
+      continue;
+    }
+    // Only a slot the Card actually holds an edge at is worth naming: an empty
+    // one has nothing to keep, and saying so would put a line in every plan
+    // over a value that merely has a relationship Field somewhere in it.
+    if (held === undefined) {
+      if (unmentioned === 'keep' && holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
+        keep.push(slot.path);
+        shed.push(slot.path);
+        restore.push(slot.path);
+      }
+      continue;
+    }
+    if (prior !== undefined && sameJson(held, valueAt(prior, slot.path))) {
+      shed.push(slot.path);
+      if (holdsLink(prior, slot)) {
+        if (!stationary(slot)) refuseMoved(slot);
+        keep.push(slot.path);
+      }
+      continue;
+    }
+    if (linkIsEmpty(held, slot)) {
+      shed.push(slot.path);
+      continue;
+    }
+    // An edge the Card holds here, under a value that moved, is a rebuild
+    // rather than a link written as data — say which mistake it was.
+    if (holdsLink(prior, slot) && !stationary(slot)) refuseMoved(slot);
+    refuse(
+      `${pathKey([...base, ...slot.path])} is a ${slot.type} Field, so the value written there cannot be stored as data:`,
+    );
+  }
+  return { shed, keep, restore };
+}
+
+/**
+ * The value as the planner reads it back: markers replaced by the Cards they
+ * named, and a Field that takes the write as a no-op left holding nothing.
+ */
+function modelValue(
+  value: BxlMutationJson,
+  nested: NestedRelationship[],
+): BxlMutationJson {
+  if (nested.length === 0) return value;
+  let model = clone(value);
+  for (const entry of nested) {
+    if (entry.card !== undefined) {
+      model = setAt(model, entry.path, entry.card);
+    } else if (hasAt(model, entry.strip)) {
+      model = deleteAt(model, entry.strip);
+    }
+  }
+  return model;
+}
+
+/**
+ * The value as the Card stores it, with every relationship inside it shed —
+ * the ones a marker named, and the ones `assertLinksAreEdges` let stand as an
+ * unchanged or emptied link.
+ */
+function storedValue(
+  model: BxlMutationJson,
+  nested: NestedRelationship[],
+  shed: BxlMutationPath[],
+): BxlMutationJson {
+  const paths = [...nested.map((entry) => entry.strip), ...shed];
+  if (paths.length === 0) return model;
+  let stored = clone(model);
+  for (const path of paths) {
+    if (hasAt(stored, path)) stored = deleteAt(stored, path);
+  }
+  return stored;
+}
+
+function relateIntents(nested: NestedRelationship[]): BxlMutationIntent[] {
+  return nested.flatMap((entry) => (entry.intent ? [entry.intent] : []));
 }
 
 function applyCompound(
@@ -616,29 +1696,96 @@ function planAssignment(
     const location = locations[index]!;
     const field = fields[index]!;
     if (field.writeBehavior === 'skip') continue;
+    // A marker in the relationship's own slot is the whole-value form, which
+    // the branch below answers; resolving one against the Field it fills is
+    // for a value the Card stores.
+    //
+    // `=` replaces the value at the location and `|=` updates it, which is the
+    // whole difference between them for the relationships inside: a slot a
+    // replacement never names is gone with the rest of the old value, while an
+    // update that never names one leaves its edge alone.
+    const resolveLinks = (
+      evaluated: EvaluatedValue,
+      prior: BxlMutationJson | undefined,
+      unmentioned: 'keep' | 'clear',
+    ) => {
+      if (field.relationship || isCardReference(evaluated.value)) {
+        return { nested: [], links: { shed: [], keep: [], restore: [] } };
+      }
+      const nested = nestedRelationships(
+        evaluated.references,
+        location.path,
+        context,
+        statement.statement,
+      );
+      const links = assertLinksAreEdges(
+        evaluated.value,
+        nested,
+        location.path,
+        prior,
+        unmentioned,
+        context,
+        statement.statement,
+      );
+      return { nested, links };
+    };
     let next: BxlMutationJson | CardReference;
+    let nested: NestedRelationship[] = [];
+    let links: WrittenLinks = { shed: [], keep: [], restore: [] };
     if (statement.operator === '=') {
-      next = evaluateSingleJson(
+      // A value's links can only be compared against the view its expression
+      // read them from: `location.value` is the Card's stored value, which an
+      // overlay-answered read is not, and the two differ exactly where an
+      // overlay filled something in.
+      const view = readView(output, context);
+      const evaluated = evaluateSingleJson(
         statement.value,
-        output,
+        view,
         context,
         statement.statement,
       );
+      ({ nested, links } = resolveLinks(
+        evaluated,
+        valueAt(view, location.path),
+        'clear',
+      ));
+      next = isCardReference(evaluated.value)
+        ? evaluated.value
+        : modelValue(evaluated.value, nested);
     } else if (statement.operator === '|=') {
-      next = evaluateSingleJson(
+      // An update sees the layered value, so a Field an overlay filled into
+      // a stored container is in scope; what it returns is settled back
+      // against the Card's.
+      const layered = (valueAt(readView(output, context), location.path) ??
+        null) as BxlMutationJson;
+      const evaluated = evaluateSingleJson(
         statement.value,
-        (location.value ?? null) as BxlMutationJson,
+        layered,
         context,
         statement.statement,
+        { prefix: location.path },
       );
+      ({ nested, links } = resolveLinks(evaluated, layered, 'keep'));
+      next = evaluated.value;
+      if (!isCardReference(next)) {
+        // Settled as the planner reads it, links included: a marker's slot
+        // still standing empty would read as a member the Card dropped.
+        next = settleUpdate(
+          restoreKeptLinks(modelValue(next, nested), links.restore, layered),
+          layered,
+          location,
+          context,
+          statement.statement,
+        );
+      }
     } else {
       const right = evaluateSingleJson(
         statement.value,
-        output,
+        readView(output, context),
         context,
         statement.statement,
       );
-      if (isCardReference(right)) {
+      if (isCardReference(right.value) || right.references.length > 0) {
         throw new BxlMutationError(
           'validate',
           'relationship-arithmetic',
@@ -649,8 +1796,23 @@ function planAssignment(
       next = applyCompound(
         statement.operator,
         location.value,
-        right as BxlMutationJson,
+        right.value as BxlMutationJson,
       );
+      // A merge carries the links the current value holds into its result, so
+      // the same rule applies to what it produced: unchanged links are shed
+      // and their edges kept, and anything the right-hand side put at a
+      // relationship slot is refused as data.
+      if (!field.relationship) {
+        links = assertLinksAreEdges(
+          next,
+          nested,
+          location.path,
+          location.value,
+          'clear',
+          context,
+          statement.statement,
+        );
+      }
     }
 
     if (field.relationship) {
@@ -670,16 +1832,18 @@ function planAssignment(
           'Use relationship collection operations instead of replacing linksToMany wholesale.',
         );
       }
+      const cardId = next[CARD_MARKER];
       intents.push({
         op: 'relate',
         field: field.relationship.path,
-        cardId: next.id,
+        cardId,
       });
       output = setAt(
         output,
         field.relationship.path,
-        loadedCard(next.id, context, statement.statement),
+        loadedCard(cardId, context, statement.statement),
       );
+      documentChanged(context);
       continue;
     }
     if (isCardReference(next)) {
@@ -694,10 +1858,12 @@ function planAssignment(
       op: 'set',
       path: [...location.path],
       ...(location.exists ? { before: clone(location.value!) } : {}),
-      after: clone(next as BxlMutationJson),
+      after: clone(storedValue(next, nested, links.shed)),
+      ...(links.keep.length === 0 ? {} : { keepRelationships: links.keep }),
     };
-    intents.push(intent);
-    output = setAt(output, location.path, next as BxlMutationJson);
+    intents.push(intent, ...relateIntents(nested));
+    output = setAt(output, location.path, next);
+    documentChanged(context);
   }
   return { root: output, plan: statementPlan(statement, intents) };
 }
@@ -723,8 +1889,85 @@ function jsonValue(
   root: BxlMutationJson,
   context: PlannerContext,
   statement: number,
+  reads: ReadContext = {},
+): EvaluatedValue {
+  return evaluateSingleJson(
+    argument,
+    readView(root, context),
+    context,
+    statement,
+    reads,
+  );
+}
+
+/**
+ * The value of an argument that names no Field to relate a Card to.
+ *
+ * An `assert` message, an insertion index and a reorder key are read as plain
+ * values, so a marker in one has nothing to resolve against. Reporting it is
+ * what keeps it from being quietly dropped — the lifted marker leaves `null`
+ * behind, which an index or a key would go on to refuse for the wrong reason
+ * and a message would print.
+ */
+function plainValue(
+  evaluated: EvaluatedValue,
+  statement: number,
 ): BxlMutationJson | CardReference {
-  return evaluateSingleJson(argument, root, context, statement);
+  if (evaluated.references.length > 0) {
+    throw new BxlMutationError(
+      'validate',
+      'card-marker-position',
+      statement,
+      'card(id) names the Card a relationship points at, so it stands where a value is written, not in an argument read as a plain value.',
+    );
+  }
+  return evaluated.value;
+}
+
+/**
+ * Resolve the relationships in a value the Card stores at `base`, giving back
+ * what the planner reads, what the document stores, and the edges in between.
+ *
+ * `prior` is the value this one replaces in place, and is absent for an
+ * insertion, whose value lands where the Card held nothing of its own — the
+ * item currently at that index is the one being pushed aside, so its links are
+ * not this value's to read back.
+ */
+function containedValue(
+  evaluated: EvaluatedValue,
+  base: BxlMutationPath,
+  prior: BxlMutationJson | undefined,
+  context: PlannerContext,
+  statement: number,
+): {
+  model: BxlMutationJson;
+  stored: BxlMutationJson;
+  intents: BxlMutationIntent[];
+  keep: BxlMutationPath[];
+} {
+  const value = evaluated.value as BxlMutationJson;
+  const nested = nestedRelationships(
+    evaluated.references,
+    base,
+    context,
+    statement,
+  );
+  const links = assertLinksAreEdges(
+    value,
+    nested,
+    base,
+    prior,
+    'clear',
+    context,
+    statement,
+  );
+  const model = modelValue(value, nested);
+  return {
+    model,
+    stored: storedValue(model, nested, links.shed),
+    intents: relateIntents(nested),
+    keep: links.keep,
+  };
 }
 
 function planCall(
@@ -738,18 +1981,63 @@ function planCall(
 
   switch (statement.name) {
     case 'assert': {
-      const condition = evaluateItems(
-        statement.args[0]!.ast,
-        [createItem(root)],
+      const bestEffort =
+        statement.args.length === 3 &&
+        readAssertSnapshotOption(statement.args[2]!, number);
+      const reads = recordReads(
+        statement.args[0]!,
+        readView(root, context),
         context,
+        number,
+        { policy: 'best-effort' },
       );
-      if (condition.length !== 1 || !isTrue(condition[0]!.value)) {
-        const message = jsonValue(statement.args[1]!, root, context, number);
+      if (reads.overlay && !bestEffort) {
+        const overlay = reads.events.find((event) => event.tier !== 'source')!;
+        throw new BxlMutationError(
+          'validate',
+          'assert-snapshot-required',
+          number,
+          `assert reads the ${overlay.tier} value at ${namePath(overlay.path)}, which can lag the stored document. Mark the assert best-effort with { snapshot: true }.`,
+          { details: { path: overlay.path, tier: overlay.tier } },
+        );
+      }
+      // A best-effort assert fails with its own message rather than raising
+      // `snapshot-unavailable`, so the author's wording reaches the caller.
+      const condition = reads.unavailable
+        ? []
+        : evaluateItems(
+            statement.args[0]!.ast,
+            [createItem(readView(root, context))],
+            context,
+          );
+      if (
+        reads.unavailable ||
+        condition.length !== 1 ||
+        !isTrue(condition[0]!.value)
+      ) {
+        // The whole statement is best-effort, message included: an author who
+        // marked the assert tolerant of stale values gets their wording back
+        // even when the message itself reads an unavailable path.
+        const message = plainValue(
+          jsonValue(statement.args[1]!, root, context, number, {
+            policy: bestEffort ? 'best-effort' : 'strict',
+          }),
+          number,
+        );
         throw new BxlMutationError(
           'plan',
           'assertion-failed',
           number,
           typeof message === 'string' ? message : 'Mutation assertion failed.',
+          reads.unavailable
+            ? {
+                details: {
+                  path: reads.unavailable.path,
+                  tier: reads.unavailable.tier,
+                  reason: reads.unavailable.reason,
+                },
+              }
+            : {},
         );
       }
       break;
@@ -779,7 +2067,7 @@ function planCall(
         );
       }
       const value = jsonValue(statement.args[1]!, root, context, number);
-      if (isCardReference(value)) {
+      if (isCardReference(value.value)) {
         throw new BxlMutationError(
           'validate',
           'card-reference-destination',
@@ -787,13 +2075,27 @@ function planCall(
           'card(id) may only target relationships.',
         );
       }
-      intents.push({
-        op: 'set',
-        path: location.path,
-        before: clone(location.value!),
-        after: clone(value as BxlMutationJson),
-      });
-      output = setAt(output, location.path, value as BxlMutationJson);
+      const contained = containedValue(
+        value,
+        location.path,
+        valueAt(readView(root, context), location.path),
+        context,
+        number,
+      );
+      intents.push(
+        {
+          op: 'set',
+          path: location.path,
+          before: clone(location.value!),
+          after: clone(contained.stored),
+          ...(contained.keep.length === 0
+            ? {}
+            : { keepRelationships: contained.keep }),
+        },
+        ...contained.intents,
+      );
+      output = setAt(output, location.path, contained.model);
+      documentChanged(context);
       break;
     }
     case 'copy_value_to': {
@@ -826,6 +2128,7 @@ function planCall(
         path: destination.location.path,
       });
       output = setAt(output, destination.location.path, source.location.value!);
+      documentChanged(context);
       break;
     }
     case 'del': {
@@ -887,6 +2190,7 @@ function planCall(
           });
         }
         output = deleteAt(output, location.path);
+        documentChanged(context);
       }
       break;
     }
@@ -907,7 +2211,10 @@ function planCall(
             'insert_at requires a pinned base revision.',
           );
         }
-        const requested = jsonValue(statement.args[1]!, root, context, number);
+        const requested = plainValue(
+          jsonValue(statement.args[1]!, root, context, number),
+          number,
+        );
         if (
           typeof requested !== 'number' ||
           !Number.isInteger(requested) ||
@@ -926,7 +2233,7 @@ function planCall(
       }
       const value = jsonValue(valueArg, root, context, number);
       if (target.field.relationship) {
-        if (!isCardReference(value)) {
+        if (!isCardReference(value.value)) {
           throw new BxlMutationError(
             'validate',
             'relationship-value-required',
@@ -934,15 +2241,17 @@ function planCall(
             'Relationship insertion requires card("id").',
           );
         }
+        const cardId = value.value[CARD_MARKER];
         intents.push({
           op: 'relate',
           field: target.field.relationship.path,
-          cardId: value.id,
+          cardId,
           index,
         });
-        collection.splice(index, 0, loadedCard(value.id, context, number));
+        collection.splice(index, 0, loadedCard(cardId, context, number));
+        documentChanged(context);
       } else {
-        if (isCardReference(value)) {
+        if (isCardReference(value.value)) {
           throw new BxlMutationError(
             'validate',
             'card-reference-destination',
@@ -950,13 +2259,24 @@ function planCall(
             'card(id) may only target relationships.',
           );
         }
-        intents.push({
-          op: 'insert',
-          collection: target.location.path,
-          index,
-          value: clone(value as BxlMutationJson),
-        });
-        collection.splice(index, 0, clone(value as BxlMutationJson));
+        const contained = containedValue(
+          value,
+          [...target.location.path, index],
+          undefined,
+          context,
+          number,
+        );
+        intents.push(
+          {
+            op: 'insert',
+            collection: target.location.path,
+            index,
+            value: clone(contained.stored),
+          },
+          ...contained.intents,
+        );
+        collection.splice(index, 0, clone(contained.model));
+        documentChanged(context);
       }
       break;
     }
@@ -978,7 +2298,7 @@ function planCall(
         anchorIndex + (statement.name === 'insert_item_after' ? 1 : 0);
       const value = jsonValue(statement.args[0]!, root, context, number);
       if (anchor.field.relationship) {
-        if (!isCardReference(value)) {
+        if (!isCardReference(value.value)) {
           throw new BxlMutationError(
             'validate',
             'relationship-value-required',
@@ -986,15 +2306,17 @@ function planCall(
             'Relationship insertion requires card("id").',
           );
         }
+        const cardId = value.value[CARD_MARKER];
         intents.push({
           op: 'relate',
           field: anchor.field.relationship.path,
-          cardId: value.id,
+          cardId,
           index,
         });
-        collection.splice(index, 0, loadedCard(value.id, context, number));
+        collection.splice(index, 0, loadedCard(cardId, context, number));
+        documentChanged(context);
       } else {
-        if (isCardReference(value)) {
+        if (isCardReference(value.value)) {
           throw new BxlMutationError(
             'validate',
             'card-reference-destination',
@@ -1002,13 +2324,24 @@ function planCall(
             'card(id) may only target relationships.',
           );
         }
-        intents.push({
-          op: 'insert',
-          collection: collectionPath,
-          index,
-          value: clone(value as BxlMutationJson),
-        });
-        collection.splice(index, 0, clone(value as BxlMutationJson));
+        const contained = containedValue(
+          value,
+          [...collectionPath, index],
+          undefined,
+          context,
+          number,
+        );
+        intents.push(
+          {
+            op: 'insert',
+            collection: collectionPath,
+            index,
+            value: clone(contained.stored),
+          },
+          ...contained.intents,
+        );
+        collection.splice(index, 0, clone(contained.model));
+        documentChanged(context);
       }
       break;
     }
@@ -1086,6 +2419,7 @@ function planCall(
       }
       const sourceCollection = collectionAt(output, sourceCollectionPath);
       const [moved] = sourceCollection.splice(sourceIndex, 1);
+      documentChanged(context);
       if (moved === undefined)
         throw new BxlMutationError(
           'plan',
@@ -1094,6 +2428,7 @@ function planCall(
           'Move source no longer exists.',
         );
       sourceCollection.splice(targetIndex, 0, moved);
+      documentChanged(context);
       if (item.field.relationship) {
         const id = objectId(moved);
         if (!id)
@@ -1150,7 +2485,10 @@ function planCall(
         );
       }
       const keyPath = keyPathItems[0]!.path as BxlMutationPath;
-      const order = jsonValue(statement.args[2]!, root, context, number);
+      const order = plainValue(
+        jsonValue(statement.args[2]!, root, context, number),
+        number,
+      );
       if (
         !Array.isArray(order) ||
         order.some(
@@ -1192,6 +2530,7 @@ function planCall(
       );
       const reordered = order.map((key) => byKey.get(JSON.stringify(key))!);
       collection.splice(0, collection.length, ...reordered);
+      documentChanged(context);
       intents.push({
         op: 'reorder',
         collection: target.location.path,
@@ -1243,7 +2582,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    mutationBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({
@@ -1279,6 +2618,7 @@ export function prepareBxlMutation(
           'The loaded Card revision does not match baseRevision.',
         );
       }
+      const claimed = new Set<string>();
       const context: PlannerContext = {
         prepare: preparedOptions,
         plan: {
@@ -1287,6 +2627,13 @@ export function prepareBxlMutation(
           ...planOptions,
         },
         registry,
+        overlays: EMPTY_OVERLAY_INDEX,
+        claimed,
+        revision: 0,
+        ...(planOptions.onRead ? { onRead: planOptions.onRead } : {}),
+        requestContext: planOptions.context
+          ? (assertJsonContext(planOptions.context), planOptions.context)
+          : undefined,
       };
       const before = clone(snapshot);
       let working = clone(snapshot);
@@ -1294,6 +2641,13 @@ export function prepareBxlMutation(
 
       for (const statement of parsed.statements) {
         const draft = clone(working);
+        // Rebuild the index against the document as this statement finds it,
+        // so what an overlay answers for is described in the positions the
+        // statement will address rather than the ones it started life in —
+        // minus whatever earlier statements have made their own.
+        context.overlays = planOptions.overlays
+          ? indexBxlMutationOverlays(draft, planOptions.overlays, claimed)
+          : EMPTY_OVERLAY_INDEX;
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
           result =
@@ -1326,6 +2680,7 @@ export function prepareBxlMutation(
           }
         }
         working = result.root;
+        for (const path of result.plan.paths) claimed.add(path.join('.'));
         statementPlans.push(result.plan);
       }
 
@@ -1340,6 +2695,7 @@ export function prepareBxlMutation(
           .map((path) => [pathKey(path), path]),
       );
       const paths = [...pathMap.values()];
+      const output = working;
       return {
         language: 'bxl-mutation/1',
         programId: planOptions.programId,
@@ -1354,7 +2710,7 @@ export function prepareBxlMutation(
         canonicalSource: parsed.canonicalSource,
         warnings: [...parsed.warnings],
         before,
-        output: working,
+        output,
         statements: statementPlans,
         intents,
         affected,
@@ -1362,7 +2718,7 @@ export function prepareBxlMutation(
         returning: returningProjection(
           planOptions.returning,
           before,
-          working,
+          output,
           intents,
           affected,
           paths,

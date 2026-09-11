@@ -22,6 +22,7 @@ import {
   FieldContainer,
   GridContainer,
 } from '@cardstack/boxel-ui/components';
+import type { CssVariableEntry } from '@cardstack/boxel-ui/helpers';
 import {
   buildCssGroups,
   entriesToCssRuleMap,
@@ -30,7 +31,6 @@ import {
   buildCssVariableName,
   sanitizeHtmlSafe,
   eq,
-  CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
@@ -1084,7 +1084,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   private get customCssVarsBlock() {
     let lines: string[] = [];
     if (entriesToCssRuleMap && this.args.model?.brandColorPalette?.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let paletteRules = entriesToCssRuleMap(
         this.args.model.brandColorPalette as any,
       );

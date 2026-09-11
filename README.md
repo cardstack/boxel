@@ -1,6 +1,24 @@
-# Boxel Runtime
+<div align="center">
 
-For a quickstart, see [here](./QUICKSTART.md)
+<img src="packages/host/public/boxel-webclip.png" alt="Boxel" width="96" height="96">
+
+# Boxel
+
+**Build software with AI. Then actually use it.**
+
+An open-source runtime for **cards** — small apps whose data, UI and behavior live in
+source you own, in your own storage, and can fork.
+
+[![Homepage](https://img.shields.io/badge/Homepage-boxel.ai-C2410C)](https://boxel.ai)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/boxel)
+[![Follow @boxel_ai](https://img.shields.io/badge/%40boxel__ai-follow-1878B9?logo=x&logoColor=white)](https://x.com/boxel_ai)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
+[Docs](./docs/README.md) · [Quickstart](./QUICKSTART.md) · [Development](#setup)
+
+</div>
+
+---
 
 ## Setup
 

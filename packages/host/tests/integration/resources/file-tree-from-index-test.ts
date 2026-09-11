@@ -1,3 +1,5 @@
+import { settled } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -123,5 +125,44 @@ module('Integration | file-tree-from-index resource', function (hooks) {
       ],
       'all markdown files are in the tree when unscoped',
     );
+  });
+
+  test('a burst of realm events coalesces into a single tree re-run', async function (assert) {
+    let store = getService('store');
+    let searchCount = 0;
+    let originalSearchEntries = store.searchEntries.bind(store);
+    store.searchEntries = (async () => {
+      searchCount++;
+      return { data: [{ id: `${testRealmURL}notes/plain.md` }] };
+    }) as unknown as typeof store.searchEntries;
+
+    try {
+      let tree = getTreeForTest(
+        getService('loader-service'),
+        () => markdownRef,
+        () => undefined,
+      );
+      await tree.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      for (let i = 1; i <= 5; i++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}notes/plain.md`],
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'five index events inside one window produce one tree re-run',
+      );
+    } finally {
+      store.searchEntries = originalSearchEntries;
+    }
   });
 });

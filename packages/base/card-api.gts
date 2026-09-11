@@ -1,4 +1,4 @@
-import Modifier from 'ember-modifier';
+import type Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
@@ -26,10 +26,6 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
-  CardContextName,
-  CardError,
-  CodeRef,
-  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -57,12 +53,10 @@ import {
   loadCardDocument,
   Loader,
   localId,
-  LocalPath,
   meta,
   primitive,
   realmURL,
   relativeTo,
-  SingleCardDocument,
   uuidv4,
   NumberSerializer,
   type Format,
@@ -88,9 +82,6 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  CardResource,
-  LooseLinkableResource,
-  LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
@@ -226,12 +217,23 @@ import {
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';
-import {
+import type {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
-import type { FileMetaResource } from '@cardstack/runtime-common';
+import type {
+  FileMetaResource,
+  CardContextName,
+  CardError,
+  CodeRef,
+  ToolContext,
+  LocalPath,
+  SingleCardDocument,
+  CardResource,
+  LooseLinkableResource,
+  LooseSingleResourceDocument,
+} from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
@@ -2057,7 +2059,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // through `serializeNonPresentLink` instead of collapsing to `data: null`.
     rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: null,
           },
@@ -2066,7 +2068,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (isNonPresentLink(value)) {
-        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+        relationships[`${this.name}.${i}`] = serializeNonPresentLink(
           value.reference,
           relationshipType,
           opts,
@@ -2079,7 +2081,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (visited.has(value.id)) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: makeRelativeURL(value.id, opts),
           },
@@ -2088,7 +2090,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (visited.has((value as CardDef)[localId])) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           data: { type: relationshipType, lid: (value as CardDef)[localId] },
         };
         return;
@@ -2118,7 +2120,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         doc.included.push(serialized);
       }
 
-      relationships[`${this.name}\.${i}`] = {
+      relationships[`${this.name}.${i}`] = {
         ...(value.id
           ? {
               links: {
@@ -2724,12 +2726,12 @@ export class BaseDef {
       ) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeReference: string) {
+      let makeAbsoluteURL = (maybeRelativeReference: string) => {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
         return resolveRef(maybeRelativeReference, value[relativeTo]);
-      }
+      };
       return Object.fromEntries(
         Object.entries(
           getFields(value, {
@@ -2757,10 +2759,6 @@ export class BaseDef {
               ];
             }
             if (isNonPresentLink(rawValue)) {
-              let normalizedId = rawValue.reference;
-              if (value[relativeTo]) {
-                normalizedId = resolveRef(normalizedId, value[relativeTo]);
-              }
               return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
             }
             // Reuse the value we already peeked above instead of re-reading
@@ -5979,6 +5977,7 @@ class FallbackCardStore implements CardStore {
   }
   async loaded() {
     let observedGeneration = this.#loadGeneration;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.#inFlight.size === 0) {
         await Promise.resolve();

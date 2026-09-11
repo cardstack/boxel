@@ -3844,6 +3844,32 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
+  test('patch results reported with host-style block indexes still complete the turn', async () => {
+    // The host numbers a patch result by its position among all fenced code
+    // blocks in the message, so a message with example fences before its
+    // patches reports indexes like 4 and 5 for its two patches. The bot must
+    // not wait for indexes 0 and 1 that will never come.
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-code-blocks-offset-indexes.json',
+        ),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      true,
+      'both patches have a result, so the bot should respond',
+    );
+  });
+
   test('Responds to second code patch result when two patches were proposed', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
@@ -5050,7 +5076,7 @@ new content
     let userMessages =
       messages?.filter((message) => message.role === 'user') ?? [];
     let retryMessages = userMessages.filter((message) =>
-      messageText(message).includes('Propose fixes for the above errors'),
+      messageText(message).includes('Fix the errors above'),
     );
     assert.strictEqual(
       retryMessages.length,
@@ -5070,9 +5096,7 @@ new content
     );
     let failureLimitMessage = failureLimitMessages[0];
     assert.notOk(
-      messageText(failureLimitMessage).includes(
-        'Propose fixes for the above errors',
-      ),
+      messageText(failureLimitMessage).includes('Fix the errors above'),
       'The failure limit prompt should not ask for another round of fixes',
     );
   });

@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
   ScreenshotFormat,
   ScreenshotImageType,
@@ -78,6 +79,20 @@ export interface SearchablePathDiagnostic {
   fieldName: string;
   // The dotted `searchable` path that failed to resolve.
   path: string;
+}
+
+// A problem found while lowering an `@operation` declaration into the data
+// the realm executes — a clause naming a field the type does not have, a
+// write into a computed field, a raw program that does not parse. Recorded on
+// the module render's `meta.diagnostics` and persisted to
+// `modules.diagnostics`, the same channel `searchablePathIssues` travels, so
+// an author sees a bad declaration where they see a bad `searchable` path.
+// The operation is still stored (flagged `invalid` in the definition entry),
+// so invoking it reports the problem rather than reading as unknown.
+export interface OperationLoweringDiagnostic extends OperationLoweringIssue {
+  // The card/field def carrying the declaration, as the `internalKeyFor`
+  // CodeRef string.
+  codeRef: string;
 }
 
 // A failure to parse a markdown file's leading YAML frontmatter block,
@@ -276,6 +291,11 @@ export interface PrerenderMetaDiagnostics {
   // module-prerender route's definition-build validation, not a card render.
   // Omitted entirely when every annotation in the module resolves.
   searchablePathIssues?: SearchablePathDiagnostic[];
+  // Problems found while lowering the module's `@operation` declarations,
+  // persisted to `modules.diagnostics` alongside `searchablePathIssues`.
+  // Omitted entirely when every declaration in the module lowers cleanly, and
+  // absent for a module that declares no operations.
+  operationIssues?: OperationLoweringDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -723,30 +743,82 @@ export interface IndexVisitClientTimings {
 // url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
-// write-side stamps applied at `IndexWriter.updateEntry` time:
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
+// write-side stamps. Every live row either channel WRITES carries all three,
+// stamped as the row enters the IndexWriter's write path — so a row is
+// always attributable to the pass that wrote it, whether or not its render
+// reported anything. The exception is a row a realm COPY produced
+// (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
+// rows rather than rendering them): those keep whatever the source row
+// carried, so they name the source realm's pass, or nothing at all if that
+// row predates these stamps. The three stamps are:
 //
-//   - `invalidationId` — one UUID per `Batch`; every row touched by
-//     the same indexing pass (incremental fan-out or fromScratch)
-//     shares it, so operators can `SELECT ... WHERE
-//     diagnostics->>'invalidationId' = '<id>'` and see the
-//     whole batch.
+//   - `invalidationId` — one UUID per invalidation fan-out: minted when the
+//     `Batch` is created, so a from-scratch pass (which never calls
+//     `invalidate()`) still has one, and refreshed at the top of each
+//     `invalidate()` call so the id names one triggering change rather than
+//     the batch's whole lifetime. An index pass invalidates once, so in
+//     practice the id covers the batch too, and operators can `SELECT ...
+//     WHERE diagnostics->>'invalidationId' = '<id>'` to read back the whole
+//     fan-out. The `prerender_html` job an index pass spawns is its own
+//     batch with its own id: each groups its own channel's fan-out, so join
+//     the two channels on `url` (plus `generation`), never on this.
 //   - `indexedAt` — wall-clock the write happened.
+//   - `writeSeq` — the row's position within that fan-out's write order.
 //
-// All fields are optional because writers populate incrementally:
-// render-side fields come from the Prerenderer's response meta, the
-// write-side stamps come from the IndexWriter. Any stage may skip
-// pieces that aren't applicable (e.g. non-timeout renders have no
+// A tombstone takes no position in the write order, so `writeSeq` is absent
+// on one. The index channel's tombstones do carry the other two: they are
+// written by `invalidate()` under the id it just minted, and a visited URL's
+// row then overwrites its tombstone. The render channel's tombstones clear
+// `diagnostics` outright and so carry none of the three.
+//
+// Every other field is optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta. Any stage
+// may skip pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
 // Extends both render-side diagnostic shapes so the persisted blob types
 // every field that actually lands in it: server-observed timings from
 // `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
 // `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
-// The two write-side stamps below are added at `IndexWriter.updateEntry`.
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // 0-based position of this row among the batch's row writes, stamped when
+  // the row enters the write path. `indexedAt` only resolves to the
+  // millisecond, and a batch's rows drain through buffered multi-row upserts
+  // that share one timestamp, so this is the only field that orders two rows
+  // written by the same batch. Grouped with `invalidationId`, it
+  // reconstructs the visit order of either channel. A card instance
+  // contributes two rows written back to back — its `file` row and its
+  // `instance` row — so reduce to one position per URL rather than selecting
+  // rows (a module, which has only a `file` row, is unaffected by the
+  // reduction):
+  //
+  //   SELECT url, min((diagnostics->>'writeSeq')::int) AS seq
+  //     FROM boxel_index
+  //    WHERE diagnostics->>'invalidationId' = '<id>'
+  //    GROUP BY url
+  //    ORDER BY seq
+  //
+  // An incremental index pass writes the URLs its triggering write named
+  // ahead of the dependents its fan-out discovered, so the targets hold the
+  // lowest sequences — with two qualifications, both from
+  // `prioritizeWrittenURLs`: a recorded dependency still puts a dependency
+  // ahead of the URL that depends on it, and modules are written before
+  // instances whether or not the write named them.
+  //
+  // Sequences are per batch, and a fused visit's two rows share one — its
+  // `boxel_index` half and its `prerendered_html` half describe one position,
+  // not two. A split pipeline's channels number independently, so a
+  // sequence is only comparable within one `invalidationId`.
+  //
+  // A row written more than once in a pass keeps the position of its first
+  // write, so a sequence marks where the pass's work on that row began and a
+  // fan-out's positions stay gapless.
+  //
+  // Absent on a tombstoned row and on rows written before the stamp existed.
+  writeSeq?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved
@@ -759,6 +831,29 @@ export interface Diagnostics
   // row and drops every other meta key.
   hostShellHash?: string;
   hostShellHashAtCompletion?: string;
+  // The token the prerender pool had actually been re-warmed against, sampled
+  // at the same two moments. It trails the reported token for as long as a
+  // recycle takes, and indefinitely if that recycle fails — so the gap between
+  // the two is what says a page may still have been running the outgoing
+  // bundle. The reported token alone cannot: it can sit unchanged across a
+  // whole render while the pool never catches up to it, which is precisely the
+  // shape that poisons rows.
+  //
+  // Recorded so a decision made from these values is checkable afterwards
+  // rather than only asserted. `hostShellHash*` says what the server was told;
+  // these say what its pages were actually running.
+  //
+  // `null` and absent mean different things, and the difference decides
+  // whether a reader may act. `null` is a sampled answer — the pool has never
+  // been re-warmed against a token this server has heard, which is a genuinely
+  // stale pool. Absent means nothing sampled it, so there is no verdict to
+  // read: a server that predates these fields stamps nothing, and because the
+  // prerender server and the worker reading these deploy separately, a worker
+  // sees such responses throughout a rolling deploy. Treating absence as
+  // `null` would read "no information" as "stale" and suppress a row for a
+  // card that is genuinely broken, so a reader must require presence.
+  warmedHostShellHash?: string | null;
+  warmedHostShellHashAtCompletion?: string | null;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1298,6 +1393,13 @@ export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
+// Only the lowered *shapes*, not the pass that produces them: lowering reaches
+// `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
+// pull bxl's sources into the typecheck program of every package that imports
+// anything from runtime-common. A caller that runs the pass imports
+// `@cardstack/runtime-common/card-operations` directly and takes that cost on
+// purpose.
+export type * from './card-operations/types.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
@@ -1315,6 +1417,7 @@ export * from './matrix-constants.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './queue.ts';
+export * from './host-shell-generation.ts';
 export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
@@ -1326,7 +1429,6 @@ export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
-export * from './definitions.ts';
 export * from './index-structure.ts';
 export * from './db.ts';
 export * from './tasks/index.ts';

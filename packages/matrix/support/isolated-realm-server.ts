@@ -482,6 +482,26 @@ export async function startServer({
     `--userIndexCount=1`,
     `--highPriorityCount=2`,
 
+    // The skills realm's boot index would otherwise spawn a prerender_html job
+    // covering ~900 files, which takes longer than the test run it is meant to
+    // precede. Nothing waits for it: the readiness gate below asks whether the
+    // `indexing:<realm>` queue lane is clear, and this work lives in
+    // `prerender-html:<realm>`, so the gate releases while the render is still
+    // going. It then holds an all-priority worker for the length of the suite,
+    // competing with the realms the specs themselves create — which is felt as
+    // timeouts in specs that wait on a publish or an index.
+    //
+    // Skipping it is what makes the absence legible. A render that overruns the
+    // suite leaves the HTML partly written, by an amount that depends on how
+    // the run was scheduled, so a spec needing a rendered skill card passes or
+    // fails on timing. With no render at all it fails every time, which is a
+    // result worth acting on. The realm is still fully indexed before any spec
+    // runs; only its prerendered HTML is absent.
+    //
+    // Not applied to base: base's boot render is far smaller, and its cards are
+    // what most rendered surfaces here are built from.
+    `--skipPrerenderHtmlRealm=https://localhost:4205/skills/`,
+
     `--fromUrl='https://localhost:4205/test/'`,
     `--toUrl='https://localhost:4205/test/'`,
   ];
@@ -751,7 +771,12 @@ export async function startServer({
 
   // `ready` above only means the realm server is listening with its realms
   // mounted — the boot-time from-scratch index of those realms (test + skills +
-  // base, ~600 files) is still running on the single indexing worker. Any realm
+  // base, ~600 files) is still running on the single indexing worker.
+  //
+  // Scope, because the log line below reads as a stronger claim than it is:
+  // `_readiness-check` gates on the realm's `indexing:<realm>` queue lane. The
+  // separate `prerender-html:<realm>` lane is invisible to it, so this waits
+  // for a realm to be indexed, never for its HTML to be rendered. Any realm
   // a test creates while that boot index is in flight queues behind it, so its
   // `_create-realm` can take 30-100s to return and blows the per-test
   // create-workspace waits (and cascades into publish/registration test
@@ -780,7 +805,8 @@ export async function startServer({
   }
   console.log(
     `realm server: boot index settled ${Date.now() - bootIndexStart}ms after ` +
-      `ready (gated on _readiness-check before starting tests)`,
+      `ready (gated on _readiness-check before starting tests; ` +
+      `covers indexing, not prerender-html)`,
   );
 
   let server = new IsolatedRealmServer(

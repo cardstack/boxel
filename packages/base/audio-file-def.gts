@@ -1,11 +1,6 @@
 import MusicIcon from '@cardstack/boxel-icons/music';
-import {
-  BaseDefComponent,
-  Component,
-  NumberField,
-  contains,
-  field,
-} from './card-api';
+import type { BaseDefComponent } from './card-api';
+import { Component, NumberField, contains, field } from './card-api';
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { FileDef } from './file-api';
 import {
@@ -138,9 +133,7 @@ export function audioAttributes(
       ...(sampleRateHz === undefined
         ? {}
         : { sampleRate: kilo(sampleRateHz, 'Hz') }),
-      ...(bitrateBps === undefined
-        ? {}
-        : { bitrate: kilo(bitrateBps, 'bps') }),
+      ...(bitrateBps === undefined ? {} : { bitrate: kilo(bitrateBps, 'bps') }),
       ...(channelMode === undefined
         ? {}
         : { channelMode: { code: channelMode, scheme: 'channel-mode' } }),

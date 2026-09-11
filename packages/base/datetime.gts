@@ -63,9 +63,7 @@ interface ViewSignature {
 }
 
 class View extends GlimmerComponent<ViewSignature> {
-  <template>
-    {{this.formatted}}
-  </template>
+  <template>{{this.formatted}}</template>
   get formatted() {
     if (this.args.model == null) {
       return '[no date-time]';

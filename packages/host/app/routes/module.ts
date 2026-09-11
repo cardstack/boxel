@@ -12,14 +12,18 @@ import { isEqual } from 'lodash-es';
 
 import {
   baseCardRef,
+  baseFileRef,
   CardError,
   Deferred,
+  definitionDisplayName,
+  definitionKind,
   getFieldDefinitions,
   identifyCard,
   internalKeyFor,
   isBaseDef,
   isCardDef,
   isCardError,
+  isFileDef,
   loadCardDef,
   parseRenderRouteOptions,
   rri,
@@ -29,6 +33,8 @@ import {
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
+  type OperationLoweringDiagnostic,
+  type OperationLoweringIssue,
   type PrerenderResponseMeta,
   type RealmResourceIdentifier,
   type RenderRouteOptions,
@@ -37,6 +43,10 @@ import {
   unixTime,
   validateSearchablePaths,
 } from '@cardstack/runtime-common';
+// Imported from its own entry rather than the barrel: the pass reaches
+// `@cardstack/bxl`, and the barrel deliberately carries only the lowered
+// shapes so no other package type-checks bxl's sources.
+import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 import {
   serializableError,
   isCardErrorJSONAPI,
@@ -56,7 +66,8 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
 import type * as CardAPI from '@cardstack/base/card-api';
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
+import type * as OperationsAPI from '@cardstack/base/operations';
 
 export type Model = {
   id: string;
@@ -369,15 +380,18 @@ export async function buildModuleModel(
       let definitions: {
         [name: string]: ModuleDefinitionResult | ErrorEntry;
       } = {};
+      let operationIssues: OperationLoweringDiagnostic[] = [];
       for (let [name, maybeBaseDef] of Object.entries(module)) {
         if (isBaseDef(maybeBaseDef)) {
+          let found: OperationLoweringIssue[] = [];
           let definition = await makeDefinition(
             {
               name,
               url: moduleURL,
-              cardOrFieldDef: maybeBaseDef,
+              def: maybeBaseDef,
             },
             context,
+            found,
           );
           let codeRef = internalKeyFor(
             { module: id as RealmResourceIdentifier, name },
@@ -385,6 +399,9 @@ export async function buildModuleModel(
             context.network.virtualNetwork,
           );
           definitions[codeRef] = definition;
+          for (let issue of found) {
+            operationIssues.push({ codeRef, ...issue });
+          }
         }
       }
 
@@ -392,6 +409,13 @@ export async function buildModuleModel(
         definitions,
         context,
       );
+      // Both definition-build passes report through the same channel, and
+      // each contributes its key only when it found something — a module with
+      // nothing to report carries no `meta` at all.
+      let diagnostics = {
+        ...(searchablePathIssues.length > 0 ? { searchablePathIssues } : {}),
+        ...(operationIssues.length > 0 ? { operationIssues } : {}),
+      };
 
       return {
         id,
@@ -403,8 +427,8 @@ export async function buildModuleModel(
         isShimmed,
         definitions,
         exports: Object.keys(module),
-        ...(searchablePathIssues.length > 0
-          ? { meta: { diagnostics: { searchablePathIssues } } }
+        ...(Object.keys(diagnostics).length > 0
+          ? { meta: { diagnostics } }
           : {}),
       };
     });
@@ -448,28 +472,11 @@ async function validateModuleSearchablePaths(
   try {
     let loader = context.loaderService.loader;
     let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
-    let lookupDefinition = async (
-      codeRef: CodeRef,
-    ): Promise<Definition | undefined> => {
-      try {
-        let card = await loadCardDef(codeRef, { loader });
-        let { fields, fieldDefs } = getFieldDefinitions(api, card);
-        return {
-          codeRef,
-          fields,
-          fieldDefs,
-          type: isCardDef(card) ? 'card-def' : 'field-def',
-          displayName: isCardDef(card) ? card.displayName : null,
-        };
-      } catch (err: any) {
-        console.warn(
-          `searchable validation: could not resolve definition ${JSON.stringify(
-            codeRef,
-          )}: ${err.message}`,
-        );
-        return undefined;
-      }
-    };
+    let lookupDefinition = makeDefinitionLookup(
+      api,
+      loader,
+      'searchable validation',
+    );
     for (let [codeRef, entry] of Object.entries(definitions)) {
       if (entry.type !== 'definition') {
         continue;
@@ -491,37 +498,138 @@ async function validateModuleSearchablePaths(
   return issues;
 }
 
+// Resolve a CodeRef to its `Definition` through the loader — what
+// `CachingDefinitionLookup` does loaderlessly on the realm server, in the one
+// process that has the classes in hand. Definition build reaches for this
+// whenever a check has to look past the definition it is holding: a dotted
+// field path's next segment, or the type a `create` declares it mints. An
+// unloadable ref resolves to undefined, which makes every path under it
+// unresolvable — recorded by the caller, never raised, since a definition
+// build that fails over one unreachable dependency reports nothing at all.
+function makeDefinitionLookup(
+  api: typeof CardAPI,
+  loader: ModuleModelContext['loaderService']['loader'],
+  label: string,
+): (codeRef: CodeRef) => Promise<Definition | undefined> {
+  return async (codeRef: CodeRef) => {
+    try {
+      let card = await loadCardDef(codeRef, { loader });
+      let { fields, fieldDefs } = getFieldDefinitions(api, card);
+      return {
+        codeRef,
+        fields,
+        fieldDefs,
+        type: definitionKind(card),
+        displayName: definitionDisplayName(card),
+      };
+    } catch (err: any) {
+      console.warn(
+        `${label}: could not resolve definition ${JSON.stringify(codeRef)}: ${
+          err.message
+        }`,
+      );
+      return undefined;
+    }
+  };
+}
+
+// Capture a def's `@operation` declarations into its definition entry,
+// lowered to the base-operation data plus BXL the realm executes. This is
+// what makes an operation reachable from a card's `adoptsFrom`: the type's
+// entry carries the whole operation, so the realm runs it without loading the
+// card's module.
+//
+// A def that declares nothing yields undefined and its entry is unchanged, so
+// the definition JSON for every existing card is byte-identical. Lowering
+// records its findings rather than throwing, and they land on the module's
+// diagnostics next to the `searchable`-path findings; an operation with
+// findings is still stored, flagged `invalid`, so invoking it says what is
+// wrong with the declaration. The whole pass is best-effort in the same way
+// the `searchable` pass is — a failure is logged and captures no operations
+// rather than failing the definition.
+async function captureOperations(
+  def: typeof BaseDef,
+  definition: Definition,
+  api: typeof CardAPI,
+  context: ModuleModelContext,
+  issues: OperationLoweringIssue[],
+): Promise<Definition['operations'] | undefined> {
+  try {
+    let loader = context.loaderService.loader;
+    let operationsApi = await loader.import<typeof OperationsAPI>(
+      '@cardstack/base/operations',
+    );
+    // The authored view, not `getOperations`: a base operation reached with no
+    // declaration has nothing to lower, and the clause a base requires is
+    // only guaranteed present on an entry that went through the decorator.
+    let declared = operationsApi.getDeclaredOperations(def);
+    if (Object.keys(declared).length === 0) {
+      return undefined;
+    }
+    let lowered = await lowerOperationDeclarations(declared, {
+      definition,
+      lookupDefinition: makeDefinitionLookup(api, loader, 'operation lowering'),
+      identifyCard: (card) => identifyCard(card),
+    });
+    for (let issue of lowered.issues) {
+      console.warn(
+        `operation lowering: ${issue.operation} (${issue.code} at ${issue.path}): ${issue.message}`,
+      );
+    }
+    issues.push(...lowered.issues);
+    return lowered.operations;
+  } catch (err: any) {
+    console.warn(`operation lowering: unexpected failure: ${err.message}`);
+    return undefined;
+  }
+}
+
 async function makeDefinition(
   {
     url,
     name,
-    cardOrFieldDef,
+    def,
   }: {
     url: RealmResourceIdentifier | URL;
     name: string;
-    cardOrFieldDef: typeof BaseDef;
+    def: typeof BaseDef;
   },
   context: ModuleModelContext,
+  // Collects the operation-lowering findings for this def. The caller tags
+  // each with the def it came from, which is the only place the def's
+  // internal key is already computed.
+  operationIssues: OperationLoweringIssue[],
 ): Promise<ModuleDefinitionResult | ErrorEntry> {
   let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       '@cardstack/base/card-api',
     );
-    let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
-    let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
+    let { fields, fieldDefs } = getFieldDefinitions(api, def);
+    let codeRef = identifyCard(def) as ResolvedCodeRef;
     let definition: Definition = {
       codeRef,
       fields,
       fieldDefs,
-      type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
-      displayName: isCardDef(cardOrFieldDef)
-        ? cardOrFieldDef.displayName
-        : null,
+      type: definitionKind(def),
+      displayName: definitionDisplayName(def),
     };
-    let typesMaybeError = isCardDef(cardOrFieldDef)
-      ? await getTypes(cardOrFieldDef, context)
-      : { type: 'types' as const, types: [] };
+    let operations = await captureOperations(
+      def,
+      definition,
+      api,
+      context,
+      operationIssues,
+    );
+    if (operations) {
+      definition.operations = operations;
+    }
+    // A card and a file each have a URL and an ancestry a consumer can filter
+    // on, so both record theirs. A field def has neither and records none.
+    let typesMaybeError =
+      isCardDef(def) || isFileDef(def)
+        ? await getTypes(def, context)
+        : { type: 'types' as const, types: [] };
     if (typesMaybeError.type === 'error') {
       console.warn(
         `encountered error indexing definition  "${urlString}/${name}": ${typesMaybeError.error.message}`,
@@ -554,38 +662,45 @@ async function makeDefinition(
   }
 }
 
+// Walk a def's ancestry, from the def itself up to and including the root of
+// its own family — `CardDef` for a card, `FileDef` for a file. The two families
+// are disjoint, so the walk stays within the one it started in and the root it
+// stops at is what says which that was.
 async function getTypes(
-  card: typeof CardDef,
+  def: typeof BaseDef,
   context: ModuleModelContext,
 ): Promise<TypesWithErrors> {
   let cache = context.state.getTypesCache();
-  let cached = cache.get(card);
+  let cached = cache.get(def);
   if (cached) {
     return await cached;
   }
-  let ref = identifyCard(card);
+  let ref = identifyCard(def);
   if (!ref) {
-    throw new Error(`could not identify card ${card.name}`);
+    throw new Error(`could not identify type ${def.name}`);
   }
+  let isFile = isFileDef(def);
+  let familyRootRef = isFile ? baseFileRef : baseCardRef;
+  let inFamily = isFile ? isFileDef : isCardDef;
   let deferred = new Deferred<TypesWithErrors>();
-  cache.set(card, deferred.promise);
+  cache.set(def, deferred.promise);
   let types: CardType[] = [];
   let fullRef: CodeRef = ref;
   let result: TypesWithErrors | undefined;
   try {
     for (;;) {
-      let loadedCard: typeof CardAPI.CardDef,
+      let loadedCard: typeof CardAPI.BaseDef,
         loadedCardRef: CodeRef | undefined;
       try {
         let maybeCard = await loadCardDef(fullRef, {
           loader: context.loaderService.loader,
         });
-        if (!isCardDef(maybeCard)) {
+        if (!inFamily(maybeCard)) {
           result = {
             type: 'error' as const,
             error: toSerializedError(
               undefined,
-              `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+              `The definition at ${JSON.stringify(fullRef)} is not a ${familyRootRef.name}`,
             ),
           };
           return result;
@@ -624,7 +739,7 @@ async function getTypes(
         codeRef: loadedCardRef,
         displayName: getDisplayName(loadedCard),
       });
-      if (!isEqual(loadedCardRef, baseCardRef)) {
+      if (!isEqual(loadedCardRef, familyRootRef)) {
         fullRef = {
           type: 'ancestorOf',
           card: loadedCardRef,
@@ -642,7 +757,7 @@ async function getTypes(
       deferred.fulfill({
         type: 'error',
         error: serializableError(
-          new Error(`unable to determine result for card type ${card.name}`),
+          new Error(`unable to determine result for type ${def.name}`),
         ),
       });
     }
@@ -788,10 +903,13 @@ function parseRfc7321Time(time: string) {
   );
 }
 
-function getDisplayName(card: typeof CardDef) {
-  if (card.displayName === 'Card') {
-    return card.name;
+// A def that declares no display name of its own inherits its family's
+// placeholder — 'Card' or 'File' — which names the family rather than the type.
+// The class name is the more useful answer in that case.
+function getDisplayName(def: typeof BaseDef) {
+  if (def.displayName === 'Card' || def.displayName === 'File') {
+    return def.name;
   } else {
-    return card.displayName;
+    return def.displayName;
   }
 }

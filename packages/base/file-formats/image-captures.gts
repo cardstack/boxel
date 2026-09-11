@@ -67,8 +67,8 @@ class ImageThumbCapture extends GlimmerComponent<CaptureSignature> {
         /* Fixed hex on purpose, not the --fd-paper token: capture pixels
            bake whatever the token resolves to, and content-keyed
            carry-forward would leave old and new mattes side by side across
-           a grid after a theme-default change. The value is what --fd-paper
-           resolves to today. */
+           a grid after a theme-default change. The value matches --fd-paper's
+           default. */
         background: #f7f7f5;
       }
     </style>

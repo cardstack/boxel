@@ -87,6 +87,15 @@ export type ReadableFunctionDialect = 'excel' | 'jq' | 'bxl-helper' | 'unknown';
 export interface ReadableFunctionDispatch {
   name: string;
   dialect: ReadableFunctionDialect;
+  /**
+   * This call's single argument names a key rather than describing a value,
+   * so a quoted argument stays a literal instead of resolving against the
+   * schema's field labels — which is how a multi-word label like
+   * `"Packing Notes"` is written, and would otherwise turn `params("Image")`
+   * on a card with an `Image` field into a read of that field. A bare label
+   * still compiles as an expression, so a computed key stays available.
+   */
+  keyNameArgument?: true;
 }
 
 export interface ReadableFunctionCallAnalysis {
@@ -464,6 +473,14 @@ const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
   ['TEXTJOIN', 2],
 ]);
 
+/**
+ * The calls whose single argument is a key name, which
+ * {@link dispatchReadableFunctionCall} stamps onto the dispatch record as
+ * `keyNameArgument`. Matched case-insensitively so the decision tracks the
+ * name however dispatch spells it.
+ */
+const KEY_NAME_ARGUMENT_CALLS = new Set(['actor', 'instance', 'params']);
+
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',
   'all',
@@ -658,6 +675,14 @@ export function dispatchReadableFunctionCall({
 
   if (CASE_INSENSITIVE_JQ_FUNCTIONS.has(lower)) {
     return { name: lower, dialect: 'jq' };
+  }
+
+  // The request-context builtins. The name is left exactly as written, like
+  // the mutation dialect's other calls — `Append` no more resolves than
+  // `Params` does — so this adds the key-name decision without folding case
+  // or changing which implementation the name reaches.
+  if (KEY_NAME_ARGUMENT_CALLS.has(lower)) {
+    return { name, dialect: 'unknown', keyNameArgument: true };
   }
 
   return { name, dialect: 'unknown' };
@@ -2303,6 +2328,23 @@ class Compiler {
       );
       this.index = close + 1;
       return compiledLet;
+    }
+
+    // A literal key name is emitted as-is rather than compiled as an
+    // expression, so it cannot be resolved into a field path. `tokenSource`
+    // re-quotes it the same way every other string literal is re-quoted,
+    // which is what keeps an escape or an interpolation valid jq.
+    if (analysis.dispatch.keyNameArgument && ranges.length === 1) {
+      const [keyStart, keyEnd] = ranges[0];
+      const keyToken = this.tokens[keyStart];
+      if (keyEnd - keyStart === 1 && keyToken?.type === 'string') {
+        this.index = close + 1;
+        return {
+          source: `${name}(${tokenSource(keyToken)})`,
+          changed: originalName !== name,
+          warnings: [],
+        };
+      }
     }
 
     // Thread the caller's `.` scope through into each argument's compile.
