@@ -28,6 +28,12 @@ Success has two independent parts:
 2. A relevant source change reliably refreshes that view, while unrelated writes
    and additional readers do not repeatedly execute its query and computation.
 
+Correctness and freshness are non-negotiable validity gates. Performance is the
+question the POC must measure and report once those gates pass. Lower latency,
+less memory or higher throughput cannot compensate for wrong, incomplete or
+stale results. A negative performance result is still useful evidence; a
+correctness or freshness violation is a failed case, not an accepted tradeoff.
+
 ## Current checkpoint
 
 - Main was updated to `e9a4b0a54a` on September 10, 2026.
@@ -312,18 +318,47 @@ fixtures and generic runtime changes to the monorepo.
 
 | Milestone | Deliverable | Exit evidence |
 | --- | --- | --- |
-| M0: baseline and contract | Revalidate main; small deterministic fixture/generator; define opt-in, metadata, modes and revisions | Baseline request/compute trace and known expected results |
+| M0: baseline and contract | Revalidate main; small deterministic fixture/generator; define opt-in, metadata, modes, revisions and mandatory freshness guarantees | Baseline request/compute trace, independent expected results and fixed validity gates |
 | M1: snapshot consumption | Base/host/server read path from step 1 | Zero recomputation/input requests for supplied outputs, with legacy/editing regression checks |
 | M2: reverse matcher | Registry schema and conservative routing/verification primitives | Predicate parity and no-missed-candidate cases, including empty, boolean and pagination cases |
 | M3: index lifecycle | Register watches, retain dependencies, coalesce dirty owners and publish consistently | End-to-end change propagation plus race, restart and feeder convergence tests |
 | M4: Tessar display views | Synthetic realm summaries, compact rows and dashboard consumption | Matching UI output; successful source edits/drill-down and local overlays |
-| M5: scaling evidence | Controlled base/candidate runs across sizes and concurrency | Sanitized results with measured limits and remaining bottlenecks |
+| M5: performance report | Controlled base/candidate runs across sizes and concurrency, enforcing correctness/freshness gates throughout | Reproducible Tessar performance report with measured gains, regressions, resource costs and limits |
 
 Keep these as distinct commits or small reviewable groups on the draft POC. M1
 alone does not establish freshness. M2 alone does not establish durable view
 maintenance. Do not present a primitive-only proof as the completed use case.
 
 ## Validation and measurements
+
+### Non-negotiable validity gates
+
+Establish and freeze the freshness contract in M0 before comparing performance.
+Specify when a write is acknowledged, which source revision a view incorporates,
+when that revision must be visible to existing and newly connected clients, and
+the maximum permitted propagation delay. These requirements must not be relaxed
+to make larger datasets or higher concurrency appear to pass.
+
+- Compare membership, order, displayed rows and statistics against independently
+  derived expected results from the synthetic inputs, including after changes.
+- Check correctness and freshness during concurrent reads/writes and write bursts,
+  not only after the queue is empty. Include the writer's own client, another
+  client, newly connected clients, and a reconnect after missed notifications.
+- Track every acknowledged relevant write through its materialized owner revision
+  to client visibility. Require no lost changes, backward revisions or mismatched
+  membership/statistics. Verify convergence after retries and worker restarts.
+- If refresh is asynchronous, represent pending/failed freshness honestly; a
+  previous successful value cannot be labeled current while required writes are
+  missing. A source-write acknowledgement and a completed materialization are
+  distinct events unless the implemented contract explicitly makes them one.
+- Count every wrong result, stale response, deadline breach, dropped operation
+  and error. A violated gate disqualifies the case from successful throughput or
+  speedup claims; retain the failed case in the report.
+
+Apply equivalent result semantics and freshness requirements to the baseline and
+candidate. If an existing baseline truncates results or is stale, mark that case
+invalid and use a correct reference path for the comparison. Never obtain an
+apparent speedup by returning fewer results or by excluding failed requests.
 
 Extend the nearest existing tests, with small synthetic GTS fixtures and explicit
 expected results rather than tests that repeat the implementation:
@@ -357,11 +392,47 @@ label a single run p95. Hold displayed output size fixed in the unrelated-growth
 case. Measure membership-ID serialization separately from source-graph expansion;
 do not claim constant payload size when the returned list itself grows.
 
-Hard correctness/performance-shape criteria are zero redundant computation and
-input fetching on a snapshot read, no lost invalidations, and no reindex of an
-unrelated scoped summary. Numerical latency, memory and throughput targets will
-be set from M0 on the chosen runtime rather than invented now. Large matching
-sets and broad watches can still require substantial indexing work; quantify it.
+Structural performance criteria are zero redundant computation and input fetching
+on a snapshot read, and no reindex of an unrelated scoped summary. Numerical read
+latency, memory and throughput targets will be set from M0 on the chosen runtime
+rather than invented now. The correctness/freshness gates above apply regardless
+of those performance targets. Large matching sets and broad watches can still
+require substantial indexing work; quantify it.
+
+### Required performance benchmark report
+
+Deliver `docs/tessar-performance-report.md` and a compact, sanitized results file
+such as `docs/tessar-benchmark-results.json`. Keep large raw traces and generated
+datasets outside Git, with reproducible commands, seeds and manifest hashes.
+The report is required to complete the POC; passing correctness tests alone does
+not complete the work.
+
+Include:
+
+1. **Validity:** the fixed correctness/freshness contract, evidence that each
+   qualifying case passed, and all excluded/failed cases with their reasons.
+2. **Controlled comparison:** base and candidate commits, runtime/database
+   configuration, warmup, repetitions, dataset/query shapes, cache conditions,
+   reader counts and write rates. Report latency distributions and error rates.
+3. **Scaling:** production-sized, 10x and 100x synthetic results, separating
+   unrelated realm growth from query cardinality and graph cost. Plot read
+   latency, resource use and refresh delay against these axes and concurrency.
+4. **Cost placement:** initial materialization cost, incremental indexing and
+   reverse-matching work, write amplification, queue depth, client work, server
+   CPU/memory, database time and network bytes. Quantify the additional work on
+   writes alongside the work removed from reads.
+5. **Capacity:** sustained readers and writes supported while the validity gates
+   hold. Report source-record capture latency and backlog under load, rather than
+   measuring fast reads in isolation from the ingestion/indexing workload.
+6. **Conclusion:** measured improvements or regressions, the workload where the
+   approach pays off, limiting resources, and the next smallest justified change.
+   Do not promise that performance will improve before the measurements exist.
+
+Present base/candidate tables and standalone exportable charts. Compute totals
+over declared read/write workloads so shifting work into indexing is visible in
+the report. Do not infer spare AI-generation capacity from read latency alone;
+support any such claim with measured resource headroom or a separate mixed-load
+experiment.
 
 ## Scope estimate and completion
 
@@ -371,8 +442,10 @@ changed GTS lines, including moving existing logic. Synthetic generation and
 benchmark tooling are a separate, not-yet-sized work item. These are estimates,
 not a promised diff size or elapsed-time commitment.
 
-Finish with a sanitized Tessar benchmark report, the tested contract, and a list
-of remaining limitations. The PR remains draft and DO NOT MERGE even after its
+Finish with the required Tessar performance report, the tested contract, and a
+list of remaining limitations. Only cases satisfying the non-negotiable
+correctness/freshness gates qualify as successful benchmark results. The PR
+remains draft and DO NOT MERGE even after its
 tests pass. Production promotion and any shared-runtime deployment require a
 separate decision. Until the user resumes implementation, this plan is the
 stopping point.
