@@ -188,6 +188,9 @@ import {
   getFields,
   getRelationshipMembershipState,
   getter,
+  hasTessarQueryMembership,
+  leaveTessarSnapshot,
+  setTessarSnapshot,
   registerRelationshipProbe,
   relationshipStateForEntry,
   readFieldLoadingSignal,
@@ -1400,7 +1403,10 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
 
-    if (this.queryDefinition) {
+    if (
+      this.queryDefinition &&
+      !hasTessarQueryMembership(instance, this.name)
+    ) {
       let dependencyTrackingContext = runtimeQueryDependencyContext({
         queryField: this.name,
         consumer: instance.id,
@@ -1876,7 +1882,10 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
 
     let deserialized = getDataBucket(instance);
 
-    if (this.queryDefinition) {
+    if (
+      this.queryDefinition &&
+      !hasTessarQueryMembership(instance, this.name)
+    ) {
       let dependencyTrackingContext = runtimeQueryDependencyContext({
         queryField: this.name,
         consumer: instance.id,
@@ -4612,6 +4621,24 @@ registerRelationshipProbe((instance, field) => {
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
+    if (hasTessarQueryMembership(instance, field.name)) {
+      let value = getDataBucket(instance).get(field.name);
+      let entries = Array.isArray(value)
+        ? rawArrayValues(value)
+        : value == null
+          ? []
+          : [value];
+      return {
+        isLoading: false,
+        isQueryField: true,
+        queryMembership: entries.map((entry) =>
+          relationshipStateForEntry(entry),
+        ),
+        queryTotalMatchCount: entries.length,
+        queryIsPartial: false,
+        queryHasUnreachableRealms: false,
+      };
+    }
     let resource = peekQueryFieldSearchResource(instance, field.name);
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
@@ -4918,6 +4945,29 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
+  if (opts?.tessarSnapshot) {
+    let snapshot = opts.tessarSnapshot;
+    if (field.fieldType === 'contains' || field.fieldType === 'containsMany') {
+      let prefix = `${fieldName}.${field.fieldType === 'containsMany' ? '*.' : ''}`;
+      opts = {
+        ...opts,
+        tessarSnapshot: {
+          ...snapshot,
+          computedFields: snapshot.computedFields
+            .filter((path) => path.startsWith(prefix))
+            .map((path) => path.slice(prefix.length)),
+          queryFields: snapshot.queryFields
+            .filter((path) => path.startsWith(prefix))
+            .map((path) => path.slice(prefix.length)),
+        },
+      };
+    } else {
+      // Carry membership IDs without inflating the included input graph. An
+      // explicit later link read uses the ordinary lazy/identity-map path.
+      if (snapshot.queryFields.includes(fieldName)) doc = { data: resource };
+      opts = { ...opts, tessarSnapshot: undefined };
+    }
+  }
   let result = await field.deserialize(
     value,
     doc,
@@ -5102,6 +5152,49 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
+  if (opts?.tessarSnapshot) {
+    for (let path of opts.tessarSnapshot.computedFields) {
+      let name = path.split('.')[0];
+      if (
+        !Object.prototype.hasOwnProperty.call(resource.attributes ?? {}, name)
+      ) {
+        throw new Error(`Tessar snapshot is missing computed output '${path}'`);
+      }
+    }
+    for (let name of opts.tessarSnapshot.queryFields) {
+      if (name.includes('.')) continue; // checked by contained deserialization
+      let relationship = resource.relationships?.[name];
+      if (Array.isArray(relationship)) {
+        throw new Error(
+          `Tessar snapshot query '${name}' needs complete umbrella membership`,
+        );
+      }
+      let membership = relationship?.data;
+      let count = Array.isArray(membership)
+        ? membership.length
+        : membership === null
+          ? 0
+          : membership
+            ? 1
+            : undefined;
+      if (
+        count === undefined ||
+        relationship?.meta?.total !== count ||
+        relationship?.meta?.errors?.length
+      ) {
+        throw new Error(
+          `Tessar snapshot query '${name}' is missing, partial or errored`,
+        );
+      }
+    }
+    opts = {
+      ...opts,
+      tessarSnapshot: {
+        ...opts.tessarSnapshot,
+        scope: opts.tessarSnapshot.scope ?? { active: true },
+      },
+    };
+  }
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
@@ -5380,6 +5473,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let deserialized = getDataBucket(instance);
 
+    let snapshotOptions = opts?.tessarSnapshot;
+    let snapshotValues = new Map<string, unknown>();
+
     for (let [field, value] of values) {
       if (!field) {
         continue;
@@ -5404,8 +5500,25 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
       deserialized.set(field.name as string, value);
+      if (
+        snapshotOptions?.computedFields.includes(field.name) &&
+        field.computeVia
+      ) {
+        snapshotValues.set(field.name, value);
+      }
       field.captureQueryFieldSeedData?.(instance, value, resource);
     }
+
+    setTessarSnapshot(
+      instance,
+      snapshotOptions
+        ? {
+            scope: snapshotOptions.scope!,
+            values: snapshotValues,
+            queryFields: new Set(snapshotOptions.queryFields),
+          }
+        : undefined,
+    );
 
     // assign the realm meta before we compute as computeds may be relying on this
     if (!isFieldInstance(instance) && resource.id != null) {
@@ -5439,7 +5552,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
-        if (field?.queryDefinition) {
+        if (
+          field?.queryDefinition &&
+          !hasTessarQueryMembership(instance, field.name)
+        ) {
           resolveQueryFieldEagerly(store, instance, field);
         }
       }
@@ -5515,6 +5631,7 @@ function setField(instance: BaseDef, field: Field, value: any) {
   propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
+  leaveTessarSnapshot(instance);
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   notifySubscribers(instance, field.name, value);
@@ -5527,6 +5644,7 @@ function notifySubscribers(
   value: any,
   visited = new WeakSet<BaseDef>(),
 ) {
+  leaveTessarSnapshot(instance);
   if (visited.has(instance)) {
     return;
   }

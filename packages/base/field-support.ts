@@ -57,6 +57,53 @@ const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+
+// Tessar's reader overlay is separate from authored/default values. The caller
+// must validate the indexed revision before requesting snapshot deserialization.
+// A contained edit leaves snapshot mode for the entire owner graph.
+export interface TessarSnapshotScope {
+  active: boolean;
+}
+const tessarSnapshots = initSharedState(
+  'tessarSnapshots',
+  () =>
+    new WeakMap<
+      BaseDef,
+      {
+        scope: TessarSnapshotScope;
+        values: Map<string, unknown>;
+        queryFields: Set<string>;
+      }
+    >(),
+);
+
+export function setTessarSnapshot(
+  instance: BaseDef,
+  snapshot?: {
+    scope: TessarSnapshotScope;
+    values: Map<string, unknown>;
+    queryFields: Set<string>;
+  },
+): void {
+  let previous = tessarSnapshots.get(instance);
+  if (previous && previous.scope !== snapshot?.scope)
+    previous.scope.active = false;
+  if (snapshot) tessarSnapshots.set(instance, snapshot);
+  else tessarSnapshots.delete(instance);
+}
+
+export function leaveTessarSnapshot(instance: BaseDef): void {
+  let snapshot = tessarSnapshots.get(instance);
+  if (snapshot) snapshot.scope.active = false;
+}
+
+export function hasTessarQueryMembership(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let snapshot = tessarSnapshots.get(instance);
+  return Boolean(snapshot?.scope.active && snapshot.queryFields.has(fieldName));
+}
 // Cache for resolved field configurations per instance/field
 const fieldConfigurationCache = initSharedState(
   'fieldConfigurationCache',
@@ -162,6 +209,10 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
+    let snapshot = tessarSnapshots.get(instance);
+    if (snapshot?.scope.active && snapshot.values.has(field.name)) {
+      return snapshot.values.get(field.name) as BaseInstanceType<CardT>;
+    }
     // Fast path when no pass is open: skip the counter + memo entirely
     // so production reads pay only one branch on the module-local null
     // check. JIT branch-predicts this and the original behaviour is
