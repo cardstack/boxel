@@ -50,12 +50,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
+interface TestNamedArgs {
+  query: SearchEntryWireQuery | undefined;
+  cardInitiated?: boolean;
+  getDefaultRealm?: () => string | undefined;
+}
+
 function getResourceForTest(
   parent: object,
   args: () => {
-    named: {
-      query: SearchEntryWireQuery | undefined;
-    };
+    named: TestNamedArgs;
   },
 ) {
   return SearchEntriesResource.from(parent, args) as unknown as Omit<
@@ -64,12 +68,7 @@ function getResourceForTest(
   > & {
     // we expose the private loaded promise just for our tests
     loaded: Promise<void>;
-    modify: (
-      positional: never[],
-      named: {
-        query: SearchEntryWireQuery | undefined;
-      },
-    ) => void;
+    modify: (positional: never[], named: TestNamedArgs) => void;
   };
 }
 
@@ -276,6 +275,75 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  test('a card-initiated no-realm search scopes to the default realm instead of fanning out', async function (assert) {
+    // The footgun this guards against: a card whose realms array resolves to
+    // empty (e.g. its model has no id yet) would otherwise turn a single-realm
+    // render into a federated scan across every readable realm. Card-initiated,
+    // it targets the default realm (the realm the `@context` was provided with)
+    // and never sees realm2's matching book.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => testRealmURL,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      2,
+      'only the two books in the default realm are returned',
+    );
+    assert.true(
+      search.entries.every((entry) => entry.realmUrl === testRealmURL),
+      'every result is from the default realm',
+    );
+    assert.false(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 was never searched — no fan-out',
+    );
+  });
+
+  test('a card-initiated no-realm search with no resolvable default realm yields no results', async function (assert) {
+    // When the default realm cannot be determined (the model has no id yet), a
+    // card search returns nothing rather than falling back to every realm.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => undefined,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      0,
+      'no results, rather than a fan-out across all realms',
+    );
+  });
+
+  test('a host-owned no-realm search keeps the all-realms fallback', async function (assert) {
+    // Host-owned surfaces (the search sheet, choosers, playground) legitimately
+    // want every readable realm — leaving `cardInitiated` unset preserves that.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+      },
+    }));
+    await search.loaded;
+
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealmURL),
+      'the default realm is searched',
+    );
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 is searched too — the all-realms fallback still fans out',
+    );
+  });
+
   test('registers file result URLs so clicks/overlay classify them as files', async function (assert) {
     // A file row's `file-meta` serialization is HTML-only / never stored, so
     // the operator-mode click + overlay path consults `knownFileMetaUrls` to
@@ -456,6 +524,121 @@ module('Integration | search-entries resource', function (hooks) {
       search.entries.find((entry) => entry.id === `${testRealmURL}books/3`),
       'the new book appears after the incremental index event',
     );
+  });
+
+  test('a burst of realm events coalesces into a single re-run', async function (assert) {
+    let searchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => {
+      searchCount++;
+      return entryCollectionDoc([
+        {
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 1,
+          html: '<div>Mango</div>',
+        },
+      ]);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      for (let i = 1; i <= 5; i++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/${i}.json`],
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'five index events inside one window produce one re-run',
+      );
+
+      // The scheduler re-arms after a flush: a later event is not starved by
+      // the earlier burst.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 2,
+        'an event after the flush schedules its own re-run',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
+  });
+
+  test('a query change inside the window cancels the armed re-run', async function (assert) {
+    let searchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => {
+      searchCount++;
+      return entryCollectionDoc([
+        {
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 1,
+          html: '<div>Mango</div>',
+        },
+      ]);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      // Arm the scheduler with an event, then change the query before the
+      // window flushes. The query change owns the whole result set again and
+      // must cancel the armed flush — the events it accumulated describe a
+      // result set that no longer exists. Without the cancel a redundant
+      // second search fires a window later.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        realmURL: testRealmURL,
+      });
+      search.modify([], {
+        query: {
+          filter: { 'item.on': bookRef, eq: { 'item.status': 'ready' } },
+          realms: [testRealmURL],
+        },
+      });
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'the query change cancels the armed flush; only its own search runs',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
   });
 
   // A prerender_html event can't change a structured query's membership, so a

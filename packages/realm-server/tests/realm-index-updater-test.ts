@@ -199,6 +199,74 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('incrementalIndexingInitiatedBy scopes the gate to the tagged user', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}doomed.txt`)],
+      { initiatedBy: '@test-writer:localhost' },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingInitiatedBy('@test-writer:localhost'),
+      undefined,
+      "the writer's own gate reflects their in-flight job",
+    );
+    assert.strictEqual(
+      updater.incrementalIndexingInitiatedBy('@test-bystander:localhost'),
+      undefined,
+      "another user's gate does not see the job",
+    );
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the unscoped gate still covers every pending job',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+
+    assert.strictEqual(
+      updater.incrementalIndexingInitiatedBy('@test-writer:localhost'),
+      undefined,
+      "the writer's gate is drained once the job settles",
+    );
+  });
+
+  test('an untagged job is invisible to every user-scoped gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}doomed.txt`),
+    ]);
+    settled.catch(() => {});
+
+    assert.strictEqual(
+      updater.incrementalIndexingInitiatedBy('@test-writer:localhost'),
+      undefined,
+      'a system-originated job never blocks a user-scoped gate',
+    );
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the unscoped gate covers the untagged job',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
   test('a failing copy job throws from copy() and resolves the gate', async function (assert) {
     let { queue, waiters } = makeStubQueue();
     let updater = new RealmIndexUpdater({

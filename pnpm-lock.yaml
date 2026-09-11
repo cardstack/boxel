@@ -910,6 +910,9 @@ importers:
       '@babel/core':
         specifier: 'catalog:'
         version: 7.29.7
+      '@babel/plugin-proposal-decorators':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7)
       '@cardstack/boxel-icons':
         specifier: workspace:*
         version: link:../boxel-icons
@@ -979,12 +982,27 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
+      eslint-config-prettier:
+        specifier: 'catalog:'
+        version: 9.1.2(eslint@8.57.1)
+      eslint-plugin-ember:
+        specifier: 'catalog:'
+        version: 13.5.0(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      eslint-plugin-prettier:
+        specifier: 'catalog:'
+        version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.4
+      prettier-plugin-ember-template-tag:
+        specifier: 'catalog:'
+        version: 2.1.6(prettier@3.8.4)
       super-fast-md5:
         specifier: 'catalog:'
         version: 1.0.3
@@ -19136,19 +19154,13 @@ snapshots:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
       '@percy/cli-exec': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-build@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-command@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19165,10 +19177,7 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-doctor@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19194,20 +19203,14 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-upload@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19215,10 +19218,7 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli@1.31.14(typescript@5.9.3)':
     dependencies:

@@ -78,9 +78,14 @@ module(basename(import.meta.filename), function () {
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
+        // Read-only module: every test either reads fixture files that no
+        // test mutates or writes to a path unique to that test, so the boot
+        // is safe to share across tests. `mode: 'before'` boots the realm
+        // once for the module instead of once per test.
         setupPermissionedRealmCached(hooks, {
           fixture: 'realistic',
           realmURL,
+          mode: 'before',
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -498,9 +503,12 @@ module(basename(import.meta.filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
+        // Read-only module (auth checks on GET /person.gts): shared boot is
+        // safe since no test mutates realm state.
         setupPermissionedRealmCached(hooks, {
           fixture: 'simple',
           realmURL,
+          mode: 'before',
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -550,9 +558,12 @@ module(basename(import.meta.filename), function () {
 
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
+        // Read-only module: HEAD requests plus one write to a unique path
+        // (notes.md), so the boot is safe to share across tests.
         setupPermissionedRealmCached(hooks, {
           fixture: 'simple',
           realmURL,
+          mode: 'before',
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -935,11 +946,20 @@ module(basename(import.meta.filename), function () {
           }
           let id = maybeId;
 
-          // modify field
+          // modify field. The +source POST indexes deferred, and only an
+          // identified reader waits on their own pending indexing (a
+          // credential-less read never waits — anonymous writes are
+          // unsupported), so this write and the read that depends on it
+          // authenticate as the same user; authorization still comes from
+          // the realm's public write permission.
           {
             let response = await request
               .post('/test-card.gts')
-              .set('Accept', 'application/vnd.card+source').send(`
+              .set('Accept', 'application/vnd.card+source')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+              ).send(`
                 import { contains, field, CardDef } from '@cardstack/base/card-api';
                 import StringField from '@cardstack/base/string';
 
@@ -956,7 +976,11 @@ module(basename(import.meta.filename), function () {
           {
             let response = await request
               .get(new URL(id).pathname)
-              .set('Accept', 'application/vnd.card+json');
+              .set('Accept', 'application/vnd.card+json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+              );
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let json = response.body;
@@ -1149,6 +1173,10 @@ module(basename(import.meta.filename), function () {
       });
 
       module('public writable realm with size limit', function (hooks) {
+        // Carry the same file/audio/video limits as the binary size-limit
+        // module below so both share one cached template (the template cache
+        // key includes the limits). The audio/video limits are inert for this
+        // module's single .gts test but let it dedupe the template build.
         setupPermissionedRealmCached(hooks, {
           fixture: 'simple',
           realmURL,
@@ -1157,6 +1185,8 @@ module(basename(import.meta.filename), function () {
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSizeLimitBytes: 512,
+          audioSizeLimitBytes: 2048,
+          videoSizeLimitBytes: 8192,
           onRealmSetup,
         });
 

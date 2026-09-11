@@ -16,6 +16,7 @@ import window from 'ember-window-mock';
 
 import {
   type CardErrorJSONAPI,
+  CardSearchDefaultRealmContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -28,7 +29,7 @@ import {
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
-import SearchResults from '@cardstack/host/components/search/search-results';
+import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
 
 import config from '@cardstack/host/config/environment';
 
@@ -97,6 +98,15 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         cardInitiated: true,
         getDefaultRealm,
       });
+  }
+
+  // The realm the card-facing `searchResultsComponent` scopes a no-realm search
+  // to — the same current realm `getCards` defaults to, so both card-search
+  // surfaces target one realm rather than fanning out across the whole server.
+  @provide(CardSearchDefaultRealmContextName)
+  // @ts-ignore "cardSearchDefaultRealm" is declared but not used
+  private get cardSearchDefaultRealm(): () => string | undefined {
+    return () => this.currentRealm;
   }
 
   @provide(GetCardCollectionContextName)
@@ -169,7 +179,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       store: this.cardStore,
       toolContext: this.toolContext,
       commandContext: this.toolContext,
-      searchResultsComponent: SearchResults,
+      searchResultsComponent: CardContextSearchResults,
       mode: this.hostModeService.isActive ? 'host' : 'operator',
       submode: this.hostModeService.isActive
         ? 'host'

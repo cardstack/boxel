@@ -317,9 +317,16 @@ export function getRenderableSearchEntries(
   getQuery: () => SearchEntryWireQuery | undefined,
   getMode: () => HydrationMode,
   getOverlays: () => boolean = () => true,
+  opts?: {
+    // Forwarded to the underlying resource: scope a no-realm card search to the
+    // current realm instead of fanning out. Set only by the card-facing
+    // `searchResultsComponent` surface.
+    cardInitiated?: boolean;
+    getDefaultRealm?: () => string | undefined;
+  },
 ): RenderableSearchEntries {
   return new RenderableSearchEntries(
-    getSearchEntriesResource(owner, getQuery),
+    getSearchEntriesResource(owner, getQuery, opts),
     getMode,
     getOverlays,
   );

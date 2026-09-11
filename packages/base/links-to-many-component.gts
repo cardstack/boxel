@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn, get } from '@ember/helper';
+import type { BaseDef, CreateCardFn, CardCrudFunctions } from './card-api';
 import {
-  BaseDef,
   type CardContext,
   type Box,
   type BoxComponent,
@@ -11,8 +11,6 @@ import {
   type FieldDef,
   type Format,
   type LinkableDefConstructor,
-  CreateCardFn,
-  CardCrudFunctions,
   isFileDef,
   brokenLinkDisplayName,
   brokenLinkFormat,
@@ -23,8 +21,8 @@ import {
   type RelationshipState,
 } from './field-support';
 import { rawArrayValues } from './watched-array';
+import type { BoxComponentSignature } from './field-component';
 import {
-  BoxComponentSignature,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
@@ -37,6 +35,7 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
+import type { Loader, CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -47,12 +46,10 @@ import {
   RealmURLContextName,
   getNarrowestType,
   loadCardDef,
-  Loader,
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,

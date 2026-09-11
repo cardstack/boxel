@@ -301,8 +301,9 @@ export function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
-  let { id: removedIdField, ...fields } = getFields(model, {
+  let { includeUnrenderedFields: _includeUnrenderedFields, ...fieldOpts } =
+    opts ?? {};
+  let { id: _id, ...fields } = getFields(model, {
     ...fieldOpts,
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });

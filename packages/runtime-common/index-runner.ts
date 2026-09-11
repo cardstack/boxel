@@ -488,6 +488,11 @@ export class IndexRunner {
           current.batch.invalidations.map((href) => new URL(href)),
           current.realmURL,
         );
+        invalidations = prioritizeWrittenURLs(
+          invalidations,
+          urls,
+          current.realmURL,
+        );
         invalidations =
           await current.#dependencyResolver.orderInvalidationsByDependencies(
             invalidations,
@@ -1185,34 +1190,112 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
+// Order the pass's visit list so the URLs the triggering write named — the
+// pass's targets — come first, in the order they were written, ahead of the
+// dependents the invalidation fan-out discovered.
+//
+// Visit class outranks being a target (see `visitClassRank`), for targets and
+// dependents alike: a module is visited before any instance whether or not
+// the write named it, because an instance rendering before the module it
+// adopts from has no file entry to render against — a failure, not a stale
+// read. Ranking class first is also what carries the target-first guarantee
+// through `orderInvalidationsByDependencies`, which treats this order as a
+// tie-break priority rather than a fixed sequence: inside a dependency cycle
+// it has no satisfiable order to offer and ranks the members by priority
+// alone, so a module that arrived behind an instance would stay behind it.
+//
+// Within one class the targets lead, in the order they were written, then the
+// dependents in the order they arrived in. Every URL in a class is either a
+// target with its own write position or a dependent with its own arrival
+// position, so the comparison is total and the result does not depend on the
+// sort being stable.
+//
+// A recorded dependency edge still overrules all of this downstream. What the
+// priority decides is the cases the dependency graph leaves open — a
+// dependent no persisted `deps` row connects to its target, and a target
+// stranded in a dependency cycle — where the ordering falls back to the
+// incoming order and would otherwise be free to leave the target last.
+//
+// This is a guarantee about the order in which a pass writes its rows, not
+// about what a concurrent reader can observe: the pass promotes its whole
+// working table in one transaction (`batch.done()`), so no reader ever sees
+// one row of a pass ahead of another.
+export function prioritizeWrittenURLs(
+  invalidations: URL[],
+  written: URL[],
+  realmURL: URL,
+): URL[] {
+  if (invalidations.length < 2) {
+    return invalidations;
+  }
+  let inFanOut = new Set(invalidations.map((url) => url.href));
+  // A written URL missing from the fan-out is one the invalidation walk
+  // recorded under its node-resolved alias instead. Nothing to rank: the
+  // dependency graph and the incoming order decide, as they always have.
+  let writePositions = new Map<string, number>();
+  for (let url of written) {
+    if (inFanOut.has(url.href) && !writePositions.has(url.href)) {
+      writePositions.set(url.href, writePositions.size);
+    }
+  }
+  let realmConfigHref = realmConfigHrefFor(realmURL);
+  let ranked = invalidations.map((url, arrival) => {
+    let writePosition = writePositions.get(url.href);
+    return {
+      url,
+      visitClass: visitClassRank(url, realmConfigHref),
+      isDependent: writePosition === undefined ? 1 : 0,
+      position: writePosition ?? arrival,
+    };
+  });
+  ranked.sort(
+    (a, b) =>
+      a.visitClass - b.visitClass ||
+      a.isDependent - b.isDependent ||
+      a.position - b.position,
+  );
+  return ranked.map(({ url }) => url);
+}
+
+// Visit-class priority, in the order a pass must write the classes:
+//
+//   0. The realm's RealmConfig card at <realmURL>realm.json — write its
+//      working-index row first so any /_info query that lands AFTER the
+//      pass commits (`batch.done()` swaps boxel_index_working into
+//      boxel_index) sees the RealmConfig overlay and resolves the realm's
+//      display name. parseRealmInfo's overlay path queries the live
+//      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+//      see realm.json mid-pass; this ordering only guarantees a correct
+//      answer at and after the pass-end commit (and on subsequent
+//      passes). Host-side prerender caching of stale realmInfo (see
+//      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+//      concern not addressed here.
+//   1. Non-.json files (modules, source) — file entries must exist before
+//      the cards that depend on them are rendered.
+//   2. Other .json files.
+//
+// Class 1 before class 2 is a correctness requirement, not a preference,
+// and it holds for a class-2 URL whose dependency on a class-1 URL the index
+// has not recorded yet — a brand-new instance and the module it adopts from,
+// written by one job. Both orderers below therefore rank by class before
+// applying their own tie-break.
+function visitClassRank(url: URL, realmConfigHref: string): number {
+  if (url.href === realmConfigHref) {
+    return 0;
+  }
+  return url.href.endsWith('.json') ? 2 : 1;
+}
+
+function realmConfigHrefFor(realmURL: URL): string {
+  return new RealmPaths(realmURL).fileURL('realm.json').href;
+}
+
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
-  // Visit order priority:
-  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
-  //      working-index row first so any /_info query that lands AFTER the
-  //      pass commits (`batch.done()` swaps boxel_index_working into
-  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
-  //      display name. parseRealmInfo's overlay path queries the live
-  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
-  //      see realm.json mid-pass; this ordering only guarantees a correct
-  //      answer at and after the pass-end commit (and on subsequent
-  //      passes). Host-side prerender caching of stale realmInfo (see
-  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
-  //      concern not addressed here.
-  //   2. Non-.json files (modules, source) — file entries must exist before
-  //      the cards that depend on them are rendered.
-  //   3. Other .json files, sorted lexically for determinism.
-  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
+  // Class order (see visitClassRank), then lexical by href for determinism.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
   return urls.sort((a, b) => {
-    let aRealmConfig = a.href === realmConfigHref;
-    let bRealmConfig = b.href === realmConfigHref;
-    if (aRealmConfig !== bRealmConfig) {
-      return aRealmConfig ? -1 : 1;
-    }
-    let aJson = a.href.endsWith('.json');
-    let bJson = b.href.endsWith('.json');
-    if (aJson === bJson) {
-      return a.href.localeCompare(b.href);
-    }
-    return aJson ? 1 : -1;
+    let rank =
+      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref);
+    return rank !== 0 ? rank : a.href.localeCompare(b.href);
   });
 }
