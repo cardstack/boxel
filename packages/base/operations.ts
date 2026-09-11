@@ -97,17 +97,6 @@ export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
 // refuses the name too, so no stored definition can carry one either.
 const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
 
-// A base-operation list with the reserved names dropped, for the messages that
-// tell an author which bases are open to them. The checks below still run over
-// the unfiltered lists — what a def type carries and what a reserved name
-// refuses are separate questions — but guidance that named a reserved base
-// would point somewhere the very next check rejects.
-function declarable(
-  names: readonly BaseOperationName[],
-): readonly BaseOperationName[] {
-  return names.filter((name) => !isNotDeclarable(name));
-}
-
 function isNotDeclarable(name: string): boolean {
   return NOT_DECLARABLE.includes(name as BaseOperationName);
 }
@@ -746,7 +735,7 @@ function assertValidDeclaration(
   let base = declaration.base;
   if (!isBaseOperationName(base)) {
     throw new Error(
-      `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(declarable(BASE_OPERATIONS))}`,
+      `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
     );
   }
   if (isNotDeclarable(base)) {
@@ -762,7 +751,7 @@ function assertValidDeclaration(
   if (!implied.includes(base)) {
     throw new Error(
       `${label}: this def type carries only ${quoteList(
-        declarable(implied),
+        implied,
       )}, so it cannot declare a "${base}" operation`,
     );
   }
