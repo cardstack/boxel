@@ -519,6 +519,21 @@ export class PackageShimHandler {
     }
   }
 
+  // Module lookup for the Loader's module-fetch path. That path sees the URL
+  // an identifier resolves to — for a realm-mapped prefix such as
+  // `@cardstack/base/`, the realm URL — which is also the key a shim for such
+  // an identifier is registered under. `handle` only answers on the fake
+  // packages origin because, in the general fetch pipeline, a realm URL may
+  // name a card instance as well as a module; the Loader knows it is asking
+  // for a module, so it may be served a shim registered under any URL.
+  async lookupModule(url: string): Promise<ModuleLike | undefined> {
+    let module =
+      (await this.getModule(url)) ?? (await this.getModuleByPrefix(url));
+    return module
+      ? wrapWithStrictNamespace(url, module, this.findExportSources)
+      : undefined;
+  }
+
   private async getModule(url: string): Promise<ModuleLike | undefined> {
     let key = trimModuleIdentifier(url);
     let resolver = this.moduleIds.get(key);
