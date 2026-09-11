@@ -1265,6 +1265,7 @@ export async function createRealm({
   fullIndexOnStartup,
   mediaCacheAdapter,
   screenshotSyncWaitMs,
+  readIndexDrainBudgetMs,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1304,6 +1305,9 @@ export async function createRealm({
   // Shrinks the `_screenshot/` route's on-demand sync-wait budget so tests
   // can exercise the 503 + Retry-After path without holding real time.
   screenshotSyncWaitMs?: number;
+  // Shrinks the card read endpoints' read-your-writes indexing-drain budget
+  // so tests can exercise the bounded-wait path without holding real time.
+  readIndexDrainBudgetMs?: number;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1386,6 +1390,9 @@ export async function createRealm({
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
+      ...(readIndexDrainBudgetMs !== undefined
+        ? { readIndexDrainBudgetMs }
+        : {}),
     },
   );
   if (worker) {
@@ -1435,6 +1442,7 @@ export async function runTestRealmServer({
   },
   prerenderer: providedPrerenderer,
   mediaCacheAdapter,
+  readIndexDrainBudgetMs,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1458,6 +1466,7 @@ export async function runTestRealmServer({
   };
   prerenderer?: Prerenderer;
   mediaCacheAdapter?: MediaCacheAdapter;
+  readIndexDrainBudgetMs?: number;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1499,6 +1508,7 @@ export async function runTestRealmServer({
     audioSizeLimitBytes,
     videoSizeLimitBytes,
     mediaCacheAdapter,
+    readIndexDrainBudgetMs,
   });
 
   await testRealm.logInToMatrix();
@@ -2165,6 +2175,7 @@ type InternalPermissionedRealmSetupOptions = {
   audioSizeLimitBytes?: number;
   videoSizeLimitBytes?: number;
   mediaCacheAdapter?: MediaCacheAdapter;
+  readIndexDrainBudgetMs?: number;
 };
 
 async function startPermissionedRealmFixture(
@@ -2184,6 +2195,7 @@ async function startPermissionedRealmFixture(
     audioSizeLimitBytes,
     videoSizeLimitBytes,
     mediaCacheAdapter,
+    readIndexDrainBudgetMs,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2254,6 +2266,7 @@ async function startPermissionedRealmFixture(
     videoSizeLimitBytes,
     prerenderer,
     mediaCacheAdapter,
+    readIndexDrainBudgetMs,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2323,6 +2336,7 @@ export function setupPermissionedRealm(
     audioSizeLimitBytes,
     videoSizeLimitBytes,
     mediaCacheAdapter,
+    readIndexDrainBudgetMs,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2352,6 +2366,7 @@ export function setupPermissionedRealm(
     audioSizeLimitBytes?: number;
     videoSizeLimitBytes?: number;
     mediaCacheAdapter?: MediaCacheAdapter;
+    readIndexDrainBudgetMs?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2382,6 +2397,7 @@ export function setupPermissionedRealm(
         audioSizeLimitBytes,
         videoSizeLimitBytes,
         mediaCacheAdapter,
+        readIndexDrainBudgetMs,
       });
       testRealmServer = server;
 
@@ -2436,6 +2452,9 @@ function permissionedRealmTemplateCacheKey(
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
     audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
     videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
+    // `readIndexDrainBudgetMs` is deliberately absent: it tunes request-time
+    // wait behavior on the live realm and leaves no trace in the template
+    // database, so keying on it would only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }

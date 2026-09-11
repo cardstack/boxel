@@ -935,11 +935,20 @@ module(basename(import.meta.filename), function () {
           }
           let id = maybeId;
 
-          // modify field
+          // modify field. The +source POST indexes deferred, and only an
+          // identified reader waits on their own pending indexing (a
+          // credential-less read never waits — anonymous writes are
+          // unsupported), so this write and the read that depends on it
+          // authenticate as the same user; authorization still comes from
+          // the realm's public write permission.
           {
             let response = await request
               .post('/test-card.gts')
-              .set('Accept', 'application/vnd.card+source').send(`
+              .set('Accept', 'application/vnd.card+source')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+              ).send(`
                 import { contains, field, CardDef } from '@cardstack/base/card-api';
                 import StringField from '@cardstack/base/string';
 
@@ -956,7 +965,11 @@ module(basename(import.meta.filename), function () {
           {
             let response = await request
               .get(new URL(id).pathname)
-              .set('Accept', 'application/vnd.card+json');
+              .set('Accept', 'application/vnd.card+json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+              );
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let json = response.body;
