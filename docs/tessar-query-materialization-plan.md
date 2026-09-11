@@ -104,9 +104,12 @@ templates. Keep credentials and runtime deployment addresses out of output.
 | Preset | Instance count, excluding realm/index configuration | Purpose |
 | --- | ---: | --- |
 | Smoke | Small explicit fixture | Human-auditable counts, membership and graph behavior |
-| 1x | 1,255 | Approximate the current production-sized workload |
-| 10x | 12,550 | Expose scaling costs |
-| 100x | 125,500 | Stress the design on an isolated runtime |
+| 1x | 1,255 | Reference workload approximating the current production size |
+| 10x | 12,550 | Primary performance benchmark target |
+
+The benchmark target is 10x the recorded current instance count. Retain the 1x
+reference and smoke fixtures for comparison and validation; do not generate or
+run a 100x dataset.
 
 Retain a representative mix of reference, schedule, roster, observation, report
 and summary records. Match the intended topology and approximate payload sizes,
@@ -126,7 +129,7 @@ Vary these axes separately:
   predicates. Broad dependencies are expected to cause broader invalidation.
 
 Implement a deterministic generator and run manifests, not a checked-in tree of
-125,500 JSON files. Materialize large datasets on demand, with bounded generator
+12,550 JSON files. Materialize datasets on demand, with bounded generator
 memory and resumable seeding. Keep generated data and raw benchmark output out of
 Git. Confirm referential integrity and expected summary values before measuring.
 
@@ -414,8 +417,8 @@ Include:
 2. **Controlled comparison:** base and candidate commits, runtime/database
    configuration, warmup, repetitions, dataset/query shapes, cache conditions,
    reader counts and write rates. Report latency distributions and error rates.
-3. **Scaling:** production-sized, 10x and 100x synthetic results, separating
-   unrelated realm growth from query cardinality and graph cost. Plot read
+3. **Scaling:** the 10x synthetic benchmark with a production-sized reference,
+   separating unrelated realm growth from query cardinality and graph cost. Plot read
    latency, resource use and refresh delay against these axes and concurrency.
 4. **Cost placement:** initial materialization cost, incremental indexing and
    reverse-matching work, write amplification, queue depth, client work, server
