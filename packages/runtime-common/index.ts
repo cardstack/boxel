@@ -1453,6 +1453,7 @@ export * from './db-queries/realm-metadata-queries.ts';
 export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/user-queries.ts';
+export * from './send-event.ts';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =

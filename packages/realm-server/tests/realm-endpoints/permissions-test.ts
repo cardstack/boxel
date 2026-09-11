@@ -102,9 +102,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       let matrixClient: MatrixClient;
       let sessionRoom: string;
-      // The grantee is the realm-server matrix user, whose session room the
-      // realm bot is already a member of. The mechanism under test — grant →
-      // session-room push — is identical for any grantee.
+      // The notifier is the realm's own matrix client. In production that is
+      // the single realm-server account that also owns every session room
+      // (`_server-session` / `_realm-auth` mint them), so the notifier is
+      // always a member of the grantee's room. This test harness deliberately
+      // splits those accounts — each realm gets its own bot (`test_realm`)
+      // distinct from the realm-server account (`node-test_realm-server`) that
+      // creates session rooms — so an ordinary grantee's room would not have
+      // the realm bot in it, and delivery would (correctly) fall to the
+      // stale-room self-heal. Granting the realm's own bot reproduces the
+      // production invariant that matters: the notifier is a member of the
+      // grantee's session room. The stale-room path is covered as a unit in
+      // send-event-test.ts.
       let granteeUserId = '@test_realm:localhost';
 
       hooks.beforeEach(async function () {

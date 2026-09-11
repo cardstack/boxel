@@ -955,14 +955,14 @@ export default class MatrixService extends Service {
   }
 
   // Whether login auto-provisions a personal workspace for a user who has none.
-  // Defaults on only in a real deployment: `hostedEnvironment` is the
+  // On for any real deployment, off only in tests: `hostedEnvironment` is the
   // realm-server's serve-time environment and is `local` in both the QUnit
-  // suite and the matrix e2e host, so provisioning never fires in tests. A
-  // settable field (not a getter) so a test can flip it on and exercise the
-  // real start()->provision path.
-  autoProvisionPersonalRealm =
-    ENV.hostedEnvironment === 'staging' ||
-    ENV.hostedEnvironment === 'production';
+  // suite and the matrix e2e host (the realm server only overwrites it when it
+  // has a REALM_SENTRY_ENVIRONMENT), so provisioning never fires in tests but
+  // does on staging, production, and any self-hosted deployment. A settable
+  // field (not a getter) so a test can flip it on and exercise the real
+  // start()->provision path.
+  autoProvisionPersonalRealm = ENV.hostedEnvironment !== 'local';
 
   // Fire-and-forget wrapper so boot doesn't block on realm creation and so a
   // re-entrant start() never launches a second one. `dropTask` also lets a test
@@ -976,8 +976,23 @@ export default class MatrixService extends Service {
   // on Synapse). Idempotent: `_create-realm` rejects a duplicate with "already
   // exists", which we treat as success.
   async ensurePersonalRealmForUserIfMissing(): Promise<void> {
-    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some((id) =>
-      String(id).endsWith(`/${PERSONAL_REALM_ENDPOINT}/`),
+    // Without a username we can't derive which `/personal/` realm is this
+    // user's own, and the server derives ownership from the JWT anyway — skip.
+    let username = this.userName;
+    if (!username) {
+      return;
+    }
+    // Match the user's *own* personal realm, not anyone's. A `/personal/` realm
+    // shared with this user (a grant into someone else's workspace — exactly
+    // what this PR's grant machinery enables) must not suppress provisioning.
+    // Mirror the server's URL derivation (create-realm.ts): a relative path
+    // resolved against the realm server's own (trailing-slash) origin.
+    let ownPersonalRealmURL = new URL(
+      `${username}/${PERSONAL_REALM_ENDPOINT}/`,
+      this.realmServer.url,
+    ).href;
+    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some(
+      (id) => String(id) === ownPersonalRealmURL,
     );
     if (hasPersonalRealm) {
       return;
@@ -1000,6 +1015,13 @@ export default class MatrixService extends Service {
         backgroundURL: getRandomBackgroundURL(),
       });
     } catch (e: any) {
+      // Idempotency backstop for a race against a concurrent tab or a prior
+      // login: `_create-realm` rejects a duplicate endpoint with the phrase
+      // "already exists" (realm-server create-realm.ts), which host
+      // `createRealm` wraps into the thrown message. The own-URL check above
+      // already prevents this in the common case, so this branch is a rarely-
+      // hit backstop; treat that one phrase as success and surface anything
+      // else.
       if (!String(e?.message ?? '').includes('already exists')) {
         console.error('Failed to provision personal realm on login', e);
       }
@@ -1427,11 +1449,16 @@ export default class MatrixService extends Service {
         this.scheduleUnreachableRealmServerRetry();
 
         // Ensure a personal workspace exists for an account provisioned outside
-        // host sign-up (e.g. registered straight on Synapse). Non-blocking:
-        // `_create-realm` emits `realms-list-updated` to this user on
-        // completion, which surfaces it live. Off by default in the test suites
-        // (see autoProvisionPersonalRealm), and skipped for the new-user flow,
-        // which already creates one.
+        // host sign-up (e.g. registered straight on Synapse). Non-blocking, and
+        // the new realm surfaces live without a reload by whichever channel this
+        // session listens on: a session on the authoritative trusted path picks
+        // up the `realms-list-updated` event `_create-realm` emits (via
+        // `refreshRealmsList` -> re-run `_realm-auth`); a session on the legacy
+        // path (the keyless account with no realms of its own, this feature's
+        // primary target) picks up the `app.boxel.realms` write that
+        // `createPersonalRealmForUser` appends, via the AccountData listener.
+        // Off by default in the test suites (see autoProvisionPersonalRealm),
+        // and skipped for the new-user flow, which already creates one.
         if (this.autoProvisionPersonalRealm && !this._isInitializingNewUser) {
           this.ensurePersonalRealmTask.perform();
         }

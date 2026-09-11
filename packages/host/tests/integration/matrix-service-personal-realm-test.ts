@@ -29,6 +29,11 @@ const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
 const personalRealmURL = ensureTrailingSlash(
   `${new URL(testRealmURL).origin}/testuser/${PERSONAL_REALM_ENDPOINT}/`,
 );
+// Another user's personal workspace, shared with @testuser. Same `/personal/`
+// suffix, different owner — must not be mistaken for @testuser's own.
+const otherUsersPersonalRealmURL = ensureTrailingSlash(
+  `${new URL(testRealmURL).origin}/otheruser/${PERSONAL_REALM_ENDPOINT}/`,
+);
 
 // The host sign-up flow creates a personal workspace, but an account
 // provisioned another way (e.g. registered straight on Synapse) never gets one.
@@ -145,6 +150,64 @@ module(
         createRealmCalls.length,
         0,
         'no personal realm is provisioned when one is already present',
+      );
+    });
+  },
+);
+
+// Someone else's `/personal/` realm shared with the user must NOT suppress
+// provisioning of the user's own — the exact case a naive `endsWith('/personal/')`
+// check got wrong. The user holds only `otheruser/personal/`, so their own
+// `testuser/personal/` still gets created.
+module(
+  'Integration | matrix-service | personal realm provisioned despite a shared foreign one',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, otherUsersPersonalRealmURL],
+      activeRealmServers: [testRealmServerURL],
+    });
+
+    let createRealmCalls: Parameters<RealmServerService['createRealm']>[0][];
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      // `_realm-auth` advertises only the *other* user's personal realm.
+      setupAuthEndpoints({
+        [otherUsersPersonalRealmURL]: ['read'],
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      createRealmCalls = [];
+      realmServer.createRealm = async (args) => {
+        createRealmCalls.push(args);
+        return new URL(personalRealmURL);
+      };
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.autoProvisionPersonalRealm = true;
+      await matrixService.ready;
+      await matrixService.start();
+      await settled();
+    });
+
+    test('createRealm is called even though a foreign personal realm is present', async function (assert) {
+      assert.strictEqual(
+        createRealmCalls.length,
+        1,
+        'the user’s own personal realm is provisioned despite the shared one',
+      );
+      assert.strictEqual(
+        createRealmCalls[0]?.endpoint,
+        PERSONAL_REALM_ENDPOINT,
+        'with the personal endpoint',
       );
     });
   },
