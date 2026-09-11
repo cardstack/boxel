@@ -1122,16 +1122,21 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let request = this.asRequest(urlOrRequest, init);
+      // A module shimmed on the virtual network is keyed by the URL its
+      // identifier resolves to, and the network's fetch pipeline only answers
+      // shims on the fake packages origin. This is the one path that knows a
+      // request is for a module (not a card instance that may live at the same
+      // realm URL), so the lookup belongs here, ahead of any fetch.
+      let shimmedModule =
+        this.moduleShims.get(request.url) ??
+        (await this.virtualNetwork?.getShimmedModule(request.url));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
         return response;
       }
 
-      let request = this.asRequest(urlOrRequest, init);
       return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =
