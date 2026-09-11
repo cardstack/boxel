@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { ANONYMOUS_REQUESTER, type Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   closeServer,
@@ -223,10 +223,10 @@ module(basename(import.meta.filename), function () {
 
     // End-to-end (no stubs): the authenticated write handlers must tag their
     // deferred indexing jobs with the writer, or this same-user
-    // write-then-read sees the pre-write schema. The public-writable variant
-    // of this flow cannot cover the tagging — an unauthenticated write
-    // produces an untagged job and an unidentified read takes the
-    // conservative all-jobs hold, so it passes with the tags removed.
+    // write-then-read sees the pre-write schema. Only an authenticated flow
+    // can exercise the tagging — a credential-less write produces an
+    // untagged job and a credential-less read skips the gate entirely
+    // (anonymous writes are unsupported).
     test("an authenticated writer's follow-up read sees their own deferred write indexed", async function (assert) {
       let auth = () =>
         `Bearer ${createJWT(testRealm, 'hassan', ['read', 'write'])}`;
@@ -503,17 +503,18 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    test("an anonymous reader skips identified users' pending indexing", async function (assert) {
+    test('an anonymous reader never waits on pending indexing', async function (assert) {
       let warm = await request
         .get('/person-1')
         .set('Accept', 'application/vnd.card+json');
       assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
 
-      // A credential-less caller acts as the shared anonymous principal, so
-      // an identified user's in-flight job holds nothing for them.
+      // A provably credential-less caller can have no write in flight
+      // (anonymous writes are unsupported), so the gate skips them without
+      // consulting any scope — every gate is held open here, and the read
+      // must still return immediately.
       let restore = stubUpdaterGates(testRealm, {
-        initiatedBy: (user) =>
-          user === ANONYMOUS_REQUESTER ? undefined : NEVER,
+        initiatedBy: () => NEVER,
         all: () => NEVER,
       });
       try {
@@ -525,45 +526,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
         assert.true(
           elapsed < NO_WAIT_CEILING_MS,
-          `anonymous read skipped the identified user's hold (took ${elapsed}ms)`,
-        );
-      } finally {
-        restore();
-      }
-    });
-
-    test('an anonymous reader waits on anonymous-initiated indexing', async function (assert) {
-      let warm = await request
-        .get('/person-1')
-        .set('Accept', 'application/vnd.card+json');
-      assert.strictEqual(warm.status, 200, `warm-up GET: ${warm.text}`);
-
-      // Anonymous write-then-read stays consistent: a credential-less write
-      // tags its job with the anonymous principal, and a credential-less
-      // read waits on jobs so tagged.
-      let gateResolved = false;
-      let gate = resolveAfter(GATE_RESOLVE_MS).then(() => {
-        gateResolved = true;
-      });
-      let restore = stubUpdaterGates(testRealm, {
-        initiatedBy: (user) =>
-          user === ANONYMOUS_REQUESTER ? gate : undefined,
-        all: () => gate,
-      });
-      try {
-        let startedAt = Date.now();
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        let elapsed = Date.now() - startedAt;
-        assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
-        assert.true(
-          gateResolved,
-          'the anonymous read did not return before the gate settled',
-        );
-        assert.true(
-          elapsed >= GATE_RESOLVE_MS - 20,
-          `anonymous read held for anonymous-initiated indexing (took ${elapsed}ms)`,
+          `anonymous read skipped every pending-indexing hold (took ${elapsed}ms)`,
         );
       } finally {
         restore();

@@ -859,13 +859,13 @@ export interface WriteOptions {
   // the JSON-API card handlers do not, writing a single file and instances
   // respectively.
   waitForIndex?: boolean | null;
-  // The read-your-writes principal whose request produced this write — the
-  // effective matrix user (post assume-user), or ANONYMOUS_REQUESTER for a
-  // credential-less write on a public-writable realm; the HTTP handlers
-  // derive it via `requesterPrincipal(requestContext)`. Tags the resulting
-  // incremental index job so read endpoints can scope their read-your-writes
-  // drain to this principal's own reads. Absent for system-originated
-  // writes.
+  // The matrix user whose request produced this write — the effective user
+  // (post assume-user) that `checkPermission` records on the request context
+  // as `authenticatedUser`. Tags the resulting incremental index job so read
+  // endpoints can scope their read-your-writes drain to this user's own
+  // reads. Absent for system-originated writes and for credential-less
+  // writes, whose jobs no reader waits on (anonymous writes are unsupported;
+  // see `drainRequestersOwnIndexing`).
   initiatingUser?: string | null;
 }
 
@@ -986,23 +986,16 @@ export type RequestContext = {
   // read it.
   authenticatedUser?: string;
   // Set by `checkPermission` when the request presented no Authorization
-  // header at all. Distinguishes a provably credential-less caller — who
-  // acts as the shared ANONYMOUS_REQUESTER principal for read-your-writes
-  // purposes — from a caller whose identity is merely unknown: a token that
-  // failed verification, an assume-user indirection the public path cannot
-  // validate, or a realm-internal dispatch that never ran `checkPermission`.
-  // Identity, not authority, like `authenticatedUser`.
+  // header at all. Anonymous writes are unsupported (no realm grants `*`
+  // write in practice), so a provably credential-less caller has no
+  // read-your-writes claim and the read gate skips them outright — unlike a
+  // caller whose identity is merely unknown: a token that failed
+  // verification, an assume-user indirection the public path cannot
+  // validate, or a realm-internal dispatch that never ran `checkPermission`,
+  // all of which take the conservative bounded hold. Identity, not
+  // authority, like `authenticatedUser`.
   anonymous?: true;
 };
-
-// The read-your-writes principal shared by every credential-less caller.
-// A write authorized without credentials (a public-writable realm) tags its
-// indexing job with this value, and a credential-less read waits only on
-// jobs so tagged — anonymous write-then-read stays consistent, while
-// anonymous reads never park behind an identified user's reindex. Angle
-// brackets keep it outside the space of real user identifiers (a matrix id
-// cannot contain them), so no token-bearing user can collide with it.
-export const ANONYMOUS_REQUESTER = '<anonymous>';
 
 export class Realm {
   #startedUp = new Deferred<void>();
@@ -1945,7 +1938,7 @@ export class Realm {
 
     let { invalidations, generation } =
       await this.updateIndexAndCollectInvalidations(urls, {
-        initiatedBy: this.requesterPrincipal(requestContext) ?? null,
+        initiatedBy: requestContext.authenticatedUser ?? null,
       });
     this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
 
@@ -2999,7 +2992,7 @@ export class Realm {
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             serializeFile: true,
             waitForIndex,
-            initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+            initiatingUser: requestContext.authenticatedUser ?? null,
           });
         } catch (e: any) {
           if (e instanceof CardError) {
@@ -5218,7 +5211,7 @@ export class Realm {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
         waitForIndex: false,
-        initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+        initiatingUser: requestContext.authenticatedUser ?? null,
       },
     );
     return createResponse({
@@ -5249,7 +5242,7 @@ export class Realm {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
         waitForIndex: false,
-        initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+        initiatingUser: requestContext.authenticatedUser ?? null,
       },
     );
     return createResponse({
@@ -5506,7 +5499,7 @@ export class Realm {
     }
     await this.delete(handle.path, {
       waitForIndex: false,
-      initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+      initiatingUser: requestContext.authenticatedUser ?? null,
     });
     return createResponse({
       body: null,
@@ -6050,7 +6043,7 @@ export class Realm {
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+      initiatingUser: requestContext.authenticatedUser ?? null,
       ...(duringPrerender ? { waitForIndex: false } : {}),
     });
 
@@ -6382,7 +6375,7 @@ export class Realm {
       // connection).
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+        initiatingUser: requestContext.authenticatedUser ?? null,
         ...(duringPrerender ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
@@ -6599,11 +6592,11 @@ export class Realm {
   //     flight has a read-your-writes expectation; every other reader takes
   //     the current generation immediately. A write-heavy user (or a module
   //     edit whose invalidation set spans the realm's module graph) must not
-  //     park every reader of the realm behind their job. Credential-less
-  //     callers share the ANONYMOUS_REQUESTER principal: an anonymous read
-  //     waits only on anonymous writes (so anonymous write-then-read on a
-  //     public-writable realm stays consistent) and never on an identified
-  //     user's reindex. System-originated jobs (file watcher, realm copy)
+  //     park every reader of the realm behind their job. A provably
+  //     credential-less caller has no read-your-writes claim at all —
+  //     anonymous writes are unsupported — so an anonymous read skips the
+  //     gate outright and never parks behind an identified user's reindex.
+  //     System-originated jobs (file watcher, realm copy)
   //     are untagged and hold no scoped reader — no one has a
   //     read-your-writes claim on them. Only when the requester is genuinely
   //     unknown — a token that failed verification, an assume-user
@@ -6626,23 +6619,6 @@ export class Realm {
   // reads an unscoped gate would have parked, the waited ones measure what
   // the requester-scoped hold actually costs. Steady-state reads (nothing
   // pending) emit nothing. budget-expired logs at warn; the rest at info.
-  // The read-your-writes principal this request acts as: the effective user,
-  // or the shared anonymous principal for a credential-less request on a
-  // public-permission realm. Undefined when the requester is genuinely
-  // unknown — a token that failed verification, an assume-user indirection
-  // the public path cannot validate, or a realm-internal dispatch that never
-  // ran checkPermission. Write handlers tag their indexing jobs with this
-  // (see WriteOptions.initiatingUser) and the read gate waits on jobs so
-  // tagged, so the two sides must derive it identically.
-  private requesterPrincipal(
-    requestContext: RequestContext,
-  ): string | undefined {
-    return (
-      requestContext.authenticatedUser ??
-      (requestContext.anonymous ? ANONYMOUS_REQUESTER : undefined)
-    );
-  }
-
   private async drainRequestersOwnIndexing(
     request: Request,
     requestContext: RequestContext,
@@ -6663,7 +6639,13 @@ export class Realm {
       emit('info', 'skipped-prerender');
       return;
     }
-    let requester = this.requesterPrincipal(requestContext);
+    if (requestContext.anonymous) {
+      // A provably credential-less caller has no write in flight to wait on
+      // (anonymous writes are unsupported), so they are never the writer.
+      emit('info', 'skipped-not-writer');
+      return;
+    }
+    let requester = requestContext.authenticatedUser;
     let pending: Promise<void> | undefined;
     let scope: 'own' | 'all';
     if (requester !== undefined) {
@@ -7152,7 +7134,7 @@ export class Realm {
     }
     let path = this.paths.local(url) + '.json';
     await this.delete(path, {
-      initiatingUser: this.requesterPrincipal(requestContext) ?? null,
+      initiatingUser: requestContext.authenticatedUser ?? null,
     });
     return createResponse({
       body: null,
