@@ -968,11 +968,52 @@ export class CreateWorkspaceInput extends CardDef {
 }
 
 export class CreateWorkspaceResult extends CardDef {
+  static displayName = 'Workspace Created';
+
   @field realmURL = contains(StringField);
   @field name = contains(StringField);
   @field endpoint = contains(StringField);
+
+  static embedded = class Embedded extends Component<
+    typeof CreateWorkspaceResult
+  > {
+    <template>
+      <div class='workspace-result'>
+        <strong>{{@model.name}}</strong>
+        <a href={{@model.realmURL}}>{{@model.realmURL}}</a>
+      </div>
+      <style scoped>
+        .workspace-result {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+          padding: var(--boxel-sp-sm);
+          overflow-wrap: anywhere;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class DeleteWorkspaceResult extends CardDef {
+  static displayName = 'Workspace Deleted';
+
   @field realmURL = contains(StringField);
+
+  static embedded = class Embedded extends Component<
+    typeof DeleteWorkspaceResult
+  > {
+    <template>
+      <div class='workspace-result'>
+        Deleted
+        <span>{{@model.realmURL}}</span>
+      </div>
+      <style scoped>
+        .workspace-result {
+          padding: var(--boxel-sp-sm);
+          overflow-wrap: anywhere;
+        }
+      </style>
+    </template>
+  };
 }
