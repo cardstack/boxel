@@ -21,6 +21,7 @@ import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { FileDef } from '@cardstack/base/file-api';
 
+export { now, nowDate } from './clock.ts';
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
   included?: LooseLinkableResource<LinkableResource>[];
