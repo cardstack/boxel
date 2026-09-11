@@ -743,30 +743,82 @@ export interface IndexVisitClientTimings {
 // url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
-// write-side stamps applied at `IndexWriter.updateEntry` time:
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
+// write-side stamps. Every live row either channel WRITES carries all three,
+// stamped as the row enters the IndexWriter's write path — so a row is
+// always attributable to the pass that wrote it, whether or not its render
+// reported anything. The exception is a row a realm COPY produced
+// (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
+// rows rather than rendering them): those keep whatever the source row
+// carried, so they name the source realm's pass, or nothing at all if that
+// row predates these stamps. The three stamps are:
 //
-//   - `invalidationId` — one UUID per `Batch`; every row touched by
-//     the same indexing pass (incremental fan-out or fromScratch)
-//     shares it, so operators can `SELECT ... WHERE
-//     diagnostics->>'invalidationId' = '<id>'` and see the
-//     whole batch.
+//   - `invalidationId` — one UUID per invalidation fan-out: minted when the
+//     `Batch` is created, so a from-scratch pass (which never calls
+//     `invalidate()`) still has one, and refreshed at the top of each
+//     `invalidate()` call so the id names one triggering change rather than
+//     the batch's whole lifetime. An index pass invalidates once, so in
+//     practice the id covers the batch too, and operators can `SELECT ...
+//     WHERE diagnostics->>'invalidationId' = '<id>'` to read back the whole
+//     fan-out. The `prerender_html` job an index pass spawns is its own
+//     batch with its own id: each groups its own channel's fan-out, so join
+//     the two channels on `url` (plus `generation`), never on this.
 //   - `indexedAt` — wall-clock the write happened.
+//   - `writeSeq` — the row's position within that fan-out's write order.
 //
-// All fields are optional because writers populate incrementally:
-// render-side fields come from the Prerenderer's response meta, the
-// write-side stamps come from the IndexWriter. Any stage may skip
-// pieces that aren't applicable (e.g. non-timeout renders have no
+// A tombstone takes no position in the write order, so `writeSeq` is absent
+// on one. The index channel's tombstones do carry the other two: they are
+// written by `invalidate()` under the id it just minted, and a visited URL's
+// row then overwrites its tombstone. The render channel's tombstones clear
+// `diagnostics` outright and so carry none of the three.
+//
+// Every other field is optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta. Any stage
+// may skip pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
 // Extends both render-side diagnostic shapes so the persisted blob types
 // every field that actually lands in it: server-observed timings from
 // `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
 // `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
-// The two write-side stamps below are added at `IndexWriter.updateEntry`.
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // 0-based position of this row among the batch's row writes, stamped when
+  // the row enters the write path. `indexedAt` only resolves to the
+  // millisecond, and a batch's rows drain through buffered multi-row upserts
+  // that share one timestamp, so this is the only field that orders two rows
+  // written by the same batch. Grouped with `invalidationId`, it
+  // reconstructs the visit order of either channel. A card instance
+  // contributes two rows written back to back — its `file` row and its
+  // `instance` row — so reduce to one position per URL rather than selecting
+  // rows (a module, which has only a `file` row, is unaffected by the
+  // reduction):
+  //
+  //   SELECT url, min((diagnostics->>'writeSeq')::int) AS seq
+  //     FROM boxel_index
+  //    WHERE diagnostics->>'invalidationId' = '<id>'
+  //    GROUP BY url
+  //    ORDER BY seq
+  //
+  // An incremental index pass writes the URLs its triggering write named
+  // ahead of the dependents its fan-out discovered, so the targets hold the
+  // lowest sequences — with two qualifications, both from
+  // `prioritizeWrittenURLs`: a recorded dependency still puts a dependency
+  // ahead of the URL that depends on it, and modules are written before
+  // instances whether or not the write named them.
+  //
+  // Sequences are per batch, and a fused visit's two rows share one — its
+  // `boxel_index` half and its `prerendered_html` half describe one position,
+  // not two. A split pipeline's channels number independently, so a
+  // sequence is only comparable within one `invalidationId`.
+  //
+  // A row written more than once in a pass keeps the position of its first
+  // write, so a sequence marks where the pass's work on that row began and a
+  // fan-out's positions stay gapless.
+  //
+  // Absent on a tombstoned row and on rows written before the stamp existed.
+  writeSeq?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved
