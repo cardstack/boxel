@@ -87,6 +87,24 @@
   ```
   This is a red herring. Just ignore this error.
 
+#### Running tests from a fresh worktree or after switching branches
+
+The instructions above assume a fully bootstrapped checkout. A fresh `git worktree`, or the shared checkout after switching to a branch based on newer `main`, is NOT bootstrapped, and the failure looks nothing like "missing dependency" — the dev server / `vite build` reports a cryptic unresolved-import error and the QUnit page hangs forever without ever booting (`window.QUnit` stays undefined). Bootstrap in this order before building or serving:
+
+```
+mise trust                    # a fresh worktree's .mise.toml is untrusted; mise silently no-ops until you do this
+mise exec -- pnpm install     # links workspace packages added since the last install (e.g. @cardstack/bxl) into packages/*/node_modules
+mise exec -- pnpm build-common-deps   # builds @cardstack/boxel-icons `dist` (consumed via its exports map, so needed even though boxel-ui is read from source)
+```
+
+Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow build):
+- The blocker is almost always a single unresolved import breaking the whole test module graph. Read the Vite error overlay directly instead of polling for QUnit — it names the exact import in seconds:
+  `document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.message')?.textContent`
+- `Failed to resolve import "@cardstack/bxl"` (or any `@cardstack/*` workspace package) ⇒ run `pnpm install`.
+- `Failed to resolve import "@cardstack/boxel-icons/<icon>"` ⇒ run `pnpm build-common-deps` (its `dist` isn't built by install).
+
+Prefer the headless `vite build --mode development && pnpm exec ember test --path dist --filter "…"` path over a second live dev server: the shared `pnpm start` server is env-mode/Traefik-locked (one slug at a time) and switching the shared tree under it triggers a long Vite dep re-optimize + full reloads. The realm-server stack the tests talk to (`../realm-server && pnpm start:all`) is backend-only and can be shared across checkouts on the usual localhost ports.
+
 #### CSS Guidance
 
 - Use scalable units such as rem
