@@ -76,6 +76,12 @@ export interface IndexPhaseTimings {
   // The final atomic swap: `batch.done()` (realm-meta update, working → main
   // promotion, obsolete-row prune) in one transaction.
   swapMs?: number;
+  // Tessar follow-up waves are separate from the source visit/swap timings.
+  tessarMaterializationMs?: number;
+  tessarWriteMs?: number;
+  tessarSwapMs?: number;
+  tessarWaves?: number;
+  tessarOwnersRendered?: number;
 }
 
 export interface StreamFileRef {

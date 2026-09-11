@@ -8,12 +8,17 @@ import {
 } from './index.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import {
+  TESSAR_INPUT_GENERATION_HEADER,
+  type TessarInputSnapshot,
+} from './tessar-materialization.ts';
 
 async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,
   url: string,
   requestURL: URL,
   accept: SupportedMimeType,
+  extraHeaders?: Record<string, string>,
 ) {
   let response: Response;
   requestURL.searchParams.set('noCache', 'true');
@@ -28,6 +33,7 @@ async function loadDocumentWithRequest(
       // documents being indexed and not finding the document yet in the index.
       headers: {
         Accept: accept,
+        ...extraHeaders,
       },
     });
   } catch (err: any) {
@@ -74,14 +80,27 @@ export async function loadCardDocument(
   fetch: typeof globalThis.fetch,
   url: string,
   virtualNetwork: VirtualNetwork,
+  tessar?: TessarInputSnapshot,
 ) {
-  let target = !url.endsWith('.json') ? `${url}.json` : url;
+  let target = tessar
+    ? url.replace(/\.json$/, '')
+    : !url.endsWith('.json')
+      ? `${url}.json`
+      : url;
   let requestURL = virtualNetwork.toURL(target);
+  if (tessar && !requestURL.href.startsWith(tessar.realmURL)) {
+    return new CardError('Tessar indexed inputs must be in the owner realm', {
+      status: 400,
+    });
+  }
   let json = await loadDocumentWithRequest(
     fetch,
     url,
     requestURL,
-    SupportedMimeType.CardSource,
+    tessar ? SupportedMimeType.CardJson : SupportedMimeType.CardSource,
+    tessar
+      ? { [TESSAR_INPUT_GENERATION_HEADER]: String(tessar.generation) }
+      : undefined,
   );
   if (isCardError(json)) {
     return json;
@@ -93,6 +112,16 @@ export async function loadCardDocument(
         null,
         2,
       )}`,
+    );
+  }
+  if (
+    tessar &&
+    json.data.meta.tessar &&
+    json.data.meta.tessar.state !== 'ready'
+  ) {
+    return new CardError(
+      'Tessar feeder is pending; defer its dependent owner',
+      { status: 409 },
     );
   }
   if (!json.data.id) {

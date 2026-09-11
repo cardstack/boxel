@@ -3,6 +3,11 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
 import {
+  currentTessarInputSnapshot,
+  tessarSnapshotFields,
+  type TessarMaterialization,
+} from '@cardstack/runtime-common';
+import {
   BoxelInput,
   BrokenLinkTemplate,
   CopyButton,
@@ -119,6 +124,7 @@ import {
   peekQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
+  tessarQueryWatch,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -189,8 +195,10 @@ import {
   getRelationshipMembershipState,
   getter,
   hasTessarQueryMembership,
+  hasTessarSnapshot,
   leaveTessarSnapshot,
   setTessarSnapshot,
+  tessarSnapshotState,
   registerRelationshipProbe,
   relationshipStateForEntry,
   readFieldLoadingSignal,
@@ -239,6 +247,7 @@ import type {
 } from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
+export { hasTessarSnapshot, markTessarPending } from './field-support';
 
 interface CardOrFieldTypeIconSignature {
   Element: SVGSVGElement;
@@ -3924,6 +3933,12 @@ export class CardInfoField extends FieldDef {
 }
 
 export class CardDef extends BaseDef {
+  // Tessar POC: explicit, inherited opt-in for an indexed summary definition.
+  // Normal views stay on their existing live-computation path.
+  static tessarMaterialized = false;
+  get tessarState() {
+    return tessarSnapshotState(this);
+  }
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
@@ -5139,7 +5154,47 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   });
 }
 
-async function _updateFromSerialized<T extends BaseDefConstructor>({
+const tessarDeserializations = initSharedState(
+  'tessarDeserializations',
+  () => new WeakMap<BaseDef, Promise<unknown>>(),
+);
+
+async function _updateFromSerialized<T extends BaseDefConstructor>(args: {
+  instance: BaseInstanceType<T>;
+  resource: LooseCardResource;
+  doc: LooseSingleCardDocument | CardDocument;
+  store: CardStore;
+  opts?: DeserializeOpts;
+}): Promise<BaseInstanceType<T>> {
+  let { instance, resource } = args;
+  if (!resource.meta.tessar) return _applySerialized(args);
+  // Serialize a snapshot's contained-field assembly too: rejecting an old
+  // root only after await is too late if it already mutated contained values.
+  let previous = tessarDeserializations.get(instance);
+  let update = (previous ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(async () => {
+      let accepted = (instance as any)[meta]?.tessar?.publishedGeneration;
+      let incoming = resource.meta.tessar?.publishedGeneration;
+      if (
+        hasTessarSnapshot(instance) &&
+        Number.isSafeInteger(accepted) &&
+        Number.isSafeInteger(incoming) &&
+        incoming! < accepted
+      )
+        return instance;
+      return _applySerialized(args);
+    });
+  tessarDeserializations.set(instance, update);
+  try {
+    return await update;
+  } finally {
+    if (tessarDeserializations.get(instance) === update)
+      tessarDeserializations.delete(instance);
+  }
+}
+
+async function _applySerialized<T extends BaseDefConstructor>({
   instance,
   resource,
   doc,
@@ -5152,6 +5207,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
+  let inPrerender = (globalThis as any).__boxelRenderContext === true;
+  if (
+    !opts?.tessarSnapshot &&
+    resource.meta.tessar &&
+    (!inPrerender || currentTessarInputSnapshot())
+  ) {
+    opts = { ...opts, tessarSnapshot: tessarSnapshotFields(resource) };
+  }
   if (opts?.tessarSnapshot) {
     for (let path of opts.tessarSnapshot.computedFields) {
       let name = path.split('.')[0];
@@ -5919,6 +5982,122 @@ declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
   }
+}
+
+// Pull a materialized owner's declared query inputs before collecting its
+// computed output. Kept explicit so ordinary cards retain their lazy policy.
+export async function prepareTessarQueries(instance: CardDef): Promise<void> {
+  if (!(instance.constructor as typeof CardDef).tessarMaterialized) return;
+  for (let field of Object.values(
+    getFields(instance, { includeComputeds: true }),
+  )) {
+    if (field.queryDefinition) {
+      if (field.fieldType !== 'linksToMany') {
+        throw new Error(
+          'Tessar currently materializes complete linksToMany queries',
+        );
+      }
+      tessarQueryWatch(getStore(instance), instance, field);
+      ensureQueryFieldSearchResource(getStore(instance), instance, field);
+    }
+  }
+  await getStore(instance).loaded();
+}
+
+// serializeCard continues to omit query fields, so it never recursively
+// serializes the input graph. Add complete membership umbrellas directly.
+export function tessarIndexManifest(
+  instance: CardDef,
+  doc: LooseSingleCardDocument,
+  inputGeneration?: number,
+): TessarMaterialization | undefined {
+  if (!(instance.constructor as typeof CardDef).tessarMaterialized) return;
+  let computedFields: string[] = [];
+  let watches: TessarMaterialization['watches'] = [];
+  let collect = (
+    value: BaseDef,
+    prefix = '',
+    ancestors = new Set<BaseDef>(),
+  ) => {
+    if (ancestors.has(value))
+      throw new Error('Tessar does not support cyclic contained outputs');
+    let nextAncestors = new Set(ancestors).add(value);
+    for (let [name, field] of Object.entries(
+      getFields(value, { includeComputeds: true }),
+    )) {
+      if (name === 'id') continue;
+      let path = `${prefix}${name}`;
+      if (field.queryDefinition) {
+        if (prefix || field.fieldType !== 'linksToMany') {
+          throw new Error(
+            'Tessar currently requires top-level linksToMany queries',
+          );
+        }
+        let watch = tessarQueryWatch(getStore(instance), instance, field);
+        watches.push({ fieldPath: path, query: watch.query });
+        if (inputGeneration === undefined) continue;
+        let resource = peekQueryFieldSearchResource(instance, name);
+        let membership = getRelationshipMembershipState(instance, name);
+        if (
+          !resource ||
+          resource.isLoading ||
+          resource.errors?.length ||
+          !membership.isLoaded ||
+          membership.isPartial ||
+          membership.totalMatchCount !== membership.membership?.length ||
+          membership.membership?.some((member) => member.kind !== 'present')
+        ) {
+          throw new Error(
+            `Tessar query '${name}' is unresolved, partial or errored`,
+          );
+        }
+        doc.data.relationships ??= {};
+        doc.data.relationships[name] = {
+          links: { self: null, search: watch.searchURL },
+          data: membership.membership!.map((member) => ({
+            type: 'card',
+            id: member.reference!,
+          })),
+          meta: { total: membership.totalMatchCount },
+        };
+        continue;
+      }
+      if (field.computeVia) {
+        if (
+          field.fieldType !== 'contains' &&
+          field.fieldType !== 'containsMany'
+        ) {
+          // Computed links (including CardDef.cardTheme) retain their ordinary
+          // lazy behavior. Only contained outputs are covered by this stamp.
+          continue;
+        }
+        computedFields.push(path);
+      }
+      if (
+        primitive in field.card ||
+        (field.fieldType !== 'contains' && field.fieldType !== 'containsMany')
+      )
+        continue;
+      let child = (value as any)[name];
+      if (field.fieldType === 'containsMany') {
+        for (let item of child ?? []) {
+          if (item) collect(item, `${path}.*.`, nextAncestors);
+        }
+      } else if (child) collect(child, `${path}.`, nextAncestors);
+    }
+  };
+  collect(instance);
+  return {
+    version: 1,
+    state: 'pending',
+    computedFields: [...new Set(computedFields)],
+    queryFields: watches.map((watch) => watch.fieldPath),
+    watches,
+    // A discovery pass registers watches but cannot publish an authoritative
+    // result. Only the writer, after checking the pinned input revision, may
+    // change this marker to ready.
+    inputGeneration: inputGeneration ?? 0,
+  };
 }
 
 function getStore(instance: BaseDef): CardStore {

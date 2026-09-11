@@ -10,6 +10,7 @@ import type {
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { Query } from './query.ts';
 import type { ScreenshotsMeta } from './capture-spec.ts';
+import type { TessarMaterialization } from './tessar-materialization.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -113,6 +114,7 @@ export type CardResourceMeta = Meta & {
   // data from stale. Additive — absent when the serialization did not come off
   // the index (e.g. a freshly-built resource that has not been persisted).
   generation?: number;
+  tessar?: TessarMaterialization;
   // The instance's declared-screenshot captures, joined at serve time from
   // the prerendered manifest (`prerendered_html.screenshots`) — never
   // persisted into the index or the source file, and stripped from incoming

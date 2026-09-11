@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common';
+import { rri, meta, isSingleCardDocument } from '@cardstack/runtime-common';
 
 import {
   setupIntegrationTestRealm,
@@ -123,12 +123,189 @@ module('Integration | Tessar snapshot', function (hooks) {
       7,
       'new owner snapshot replaces old output',
     );
+    Object.assign(doc.data.meta, {
+      generation: 2,
+      tessar: {
+        version: 1,
+        state: 'ready',
+        inputGeneration: 1,
+        publishedGeneration: 2,
+        definitionRevision: 'tessar-test',
+        computedFields: ['count', 'empty'],
+        queryFields: ['inputs'],
+        watches: [],
+      },
+    });
+    await api.updateFromSerialized(summary, doc, store);
+    assert.strictEqual(
+      summary.count,
+      7,
+      'an indexed response activates snapshot consumption',
+    );
+    assert.strictEqual(calls, 0);
+    assert.strictEqual(searches, 0);
+    assert.strictEqual(summary.tessarState, 'ready');
+    api.markTessarPending(summary);
+    assert.strictEqual(
+      summary.tessarState,
+      'pending',
+      'source changes expose pending state without expanding inputs',
+    );
+    assert.strictEqual(searches, 0);
+    await api.updateFromSerialized(summary, doc, store);
+    assert.strictEqual(
+      summary.tessarState,
+      'ready',
+      'revalidation clears pending state',
+    );
+    let older = structuredClone(doc);
+    let newer = structuredClone(doc);
+    newer.data.attributes.count = 11;
+    Object.assign(newer.data.meta, {
+      generation: 3,
+      tessar: {
+        ...(newer.data.meta as any).tessar,
+        inputGeneration: 2,
+        publishedGeneration: 3,
+      },
+    });
+    await Promise.all([
+      api.updateFromSerialized(summary, newer, store),
+      api.updateFromSerialized(summary, older, store),
+    ]);
+    assert.strictEqual(
+      summary.count,
+      11,
+      'overlapping refreshes cannot move output backwards',
+    );
+    assert.strictEqual((summary as any)[meta].tessar.publishedGeneration, 3);
+    await api.updateFromSerialized(summary, older, store);
+    assert.strictEqual(
+      summary.count,
+      11,
+      'a delayed older response is ignored',
+    );
+    Object.assign(doc.data.meta, structuredClone(newer.data.meta));
+    (doc.data.meta as any).tessar.state = 'pending';
+    await assert.rejects(
+      api.updateFromSerialized(summary, doc, store),
+      /pending or has invalid provenance/,
+    );
+    delete (doc.data.meta as any).tessar;
+    delete (doc.data.meta as any).generation;
     assert.strictEqual(calls, 0);
     doc.data.relationships.inputs.meta.total = 2;
     await assert.rejects(
       api.updateFromSerialized(summary, doc, store, opts),
       /missing, partial or errored/,
       'partial membership cannot be accepted as a complete materialization',
+    );
+  });
+
+  test('publication registers empty queries and refuses incomplete membership', async function (assert) {
+    class TessarInput extends CardDef {
+      @field name = contains(StringField);
+    }
+    class TessarSummary extends CardDef {
+      static tessarMaterialized = true;
+      @field name = contains(StringField);
+      @field inputs = linksToMany(TessarInput, {
+        query: { filter: { eq: { name: '$this.name' } } },
+      });
+      @field count = contains(NumberField, {
+        computeVia: function (this: TessarSummary) {
+          return this.inputs.length;
+        },
+      });
+    }
+    await setupIntegrationTestRealm({
+      skipBootIndex: true,
+      mockMatrixUtils,
+      contents: { 'tessar.gts': { TessarInput, TessarSummary } },
+    });
+    let api: typeof import('@cardstack/base/card-api') = await getService(
+      'loader-service',
+    ).loader.import('@cardstack/base/card-api');
+    let summary = new TessarSummary({ name: 'Tessar' });
+    summary.id = rri(`${testRealmURL}summary`);
+    (summary as any)[meta] = {
+      adoptsFrom: {
+        module: rri(`${testRealmURL}tessar`),
+        name: 'TessarSummary',
+      },
+      realmURL: testRealmURL,
+    };
+    let store = api.getStore(summary);
+    let result = {
+      instances: [],
+      instancesByRealm: [],
+      isLoading: false,
+      meta: { page: { total: 0 } },
+      totalMatchCount: 0,
+      isPartial: false,
+    };
+    store.getSearchResource = () => result;
+    await api.updateFromSerialized(
+      summary,
+      {
+        data: {
+          id: summary.id,
+          type: 'card',
+          attributes: { name: 'Tessar' },
+          meta: {
+            adoptsFrom: {
+              module: rri(`${testRealmURL}tessar`),
+              name: 'TessarSummary',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+      },
+      store,
+    );
+    await api.prepareTessarQueries(summary);
+    let doc = api.serializeCard(summary, {
+      includeComputeds: true,
+      omitQueryFields: true,
+    });
+    let discovery = api.tessarIndexManifest(summary, doc);
+    assert.strictEqual(
+      discovery?.state,
+      'pending',
+      'a discovery render cannot claim readiness',
+    );
+    assert.strictEqual(
+      discovery?.watches.length,
+      1,
+      'the empty query is registered',
+    );
+    assert.false(
+      JSON.stringify(discovery?.watches).includes('$this'),
+      'watch parameters are resolved',
+    );
+    assert.true(JSON.stringify(discovery?.watches).includes('Tessar'));
+    let snapshot = api.tessarIndexManifest(summary, doc, 7);
+    assert.true(
+      isSingleCardDocument(doc),
+      'the published wire shape passes the same validator used by the host store',
+    );
+    let membership = doc.data.relationships?.inputs;
+    if (Array.isArray(membership))
+      throw new Error('Expected a Tessar membership umbrella');
+    assert.deepEqual(
+      membership?.data,
+      [],
+      'known empty membership is serialized explicitly',
+    );
+    assert.strictEqual(membership?.meta?.total, 0);
+    assert.strictEqual(snapshot?.inputGeneration, 7);
+    assert.true(snapshot?.computedFields.includes('count'));
+    assert.notOk(doc.included, 'the input graph is never serialized');
+    result.totalMatchCount = 2;
+    result.isPartial = true;
+    assert.throws(
+      () => api.tessarIndexManifest(summary, doc, 7),
+      /unresolved, partial or errored/,
     );
   });
 

@@ -1411,6 +1411,7 @@ export default class MatrixService extends Service {
     let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
     switch (state) {
       case SlidingSyncState.Complete:
+        this.messageService.tessarConnectionChanged(true);
         if (!this.initialSyncCompleted) {
           Promise.allSettled([
             this.drainRoomState(),
@@ -1428,6 +1429,7 @@ export default class MatrixService extends Service {
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
       case SlidingSyncState.RequestFinished:
+        if (!resp) this.messageService.tessarConnectionChanged(false);
         roomIds.forEach((id) => this.aiRoomIds.add(id));
         break;
     }

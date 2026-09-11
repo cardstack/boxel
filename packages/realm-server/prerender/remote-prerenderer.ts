@@ -286,6 +286,7 @@ export function createRemotePrerenderer(
       jobId,
       screenshots,
       renderScope,
+      tessarInputSnapshot,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -306,6 +307,7 @@ export function createRemotePrerenderer(
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
           ...(renderScope ? { renderScope } : {}),
+          ...(tessarInputSnapshot ? { tessarInputSnapshot } : {}),
         },
       );
     },

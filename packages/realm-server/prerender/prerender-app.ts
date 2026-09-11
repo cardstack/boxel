@@ -1182,6 +1182,24 @@ export function buildPrerenderApp(options: {
           ? rawRenderScope
           : undefined;
 
+      let tessarInputSnapshot = attrs.tessarInputSnapshot;
+      if (
+        tessarInputSnapshot !== undefined &&
+        (!tessarInputSnapshot ||
+          typeof tessarInputSnapshot !== 'object' ||
+          tessarInputSnapshot.realmURL !== realm ||
+          !Number.isSafeInteger(tessarInputSnapshot.generation) ||
+          tessarInputSnapshot.generation < 0)
+      ) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            { status: 400, message: 'Invalid Tessar indexed input snapshot' },
+          ],
+        };
+        return;
+      }
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1201,6 +1219,7 @@ export function buildPrerenderApp(options: {
         ...(jobId ? { jobId } : {}),
         ...(screenshots ? { screenshots } : {}),
         ...(renderScope ? { renderScope } : {}),
+        ...(tessarInputSnapshot ? { tessarInputSnapshot } : {}),
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();

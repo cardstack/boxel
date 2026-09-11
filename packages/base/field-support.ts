@@ -63,6 +63,7 @@ const deserializedData = initSharedState(
 // A contained edit leaves snapshot mode for the entire owner graph.
 export interface TessarSnapshotScope {
   active: boolean;
+  pending?: boolean;
 }
 const tessarSnapshots = initSharedState(
   'tessarSnapshots',
@@ -95,6 +96,26 @@ export function setTessarSnapshot(
 export function leaveTessarSnapshot(instance: BaseDef): void {
   let snapshot = tessarSnapshots.get(instance);
   if (snapshot) snapshot.scope.active = false;
+}
+
+export function hasTessarSnapshot(instance: BaseDef): boolean {
+  return Boolean(tessarSnapshots.get(instance)?.scope.active);
+}
+
+export function tessarSnapshotState(
+  instance: BaseDef,
+): 'live' | 'ready' | 'pending' {
+  entangleWithCardTracking(instance);
+  let scope = tessarSnapshots.get(instance)?.scope;
+  return scope?.active ? (scope.pending ? 'pending' : 'ready') : 'live';
+}
+
+export function markTessarPending(instance: BaseDef): void {
+  let scope = tessarSnapshots.get(instance)?.scope;
+  if (scope?.active && !scope.pending) {
+    scope.pending = true;
+    notifyCardTracking(instance);
+  }
 }
 
 export function hasTessarQueryMembership(

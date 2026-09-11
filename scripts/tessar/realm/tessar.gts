@@ -11,6 +11,8 @@ import {
   NumberField,
 } from '@cardstack/base/card-api';
 
+const tessarPending = (state: string) => state === 'pending';
+
 export class TessarRecord extends CardDef {
   @field label = contains(StringField);
   @field classroomKey = contains(StringField);
@@ -43,6 +45,7 @@ export class TessarRow extends FieldDef {
 }
 
 export class DaySummary extends TessarRecord {
+  static tessarMaterialized = true;
   @field students = linksToMany(Student, {
     query: {
       filter: { eq: { classroomKey: '$this.classroomKey' } },
@@ -120,41 +123,48 @@ export class DaySummary extends TessarRecord {
 
   static isolated = class extends Component<typeof DaySummary> {
     <template>
-      <article class='tessar-dashboard'>
+      <article
+        class='tessar-dashboard'
+        data-tessar-state={{@model.tessarState}}
+      >
         <h1>Tessar Classroom Board</h1>
         <p>{{@model.classroomKey}} · {{@model.day}}</p>
-        <dl>
-          <dt>Students</dt><dd
-            data-tessar-stat='studentCount'
-          >{{@model.studentCount}}</dd>
-          <dt>Sessions</dt><dd
-            data-tessar-stat='slotCount'
-          >{{@model.slotCount}}</dd>
-          <dt>Observations</dt><dd
-            data-tessar-stat='observationCount'
-          >{{@model.observationCount}}</dd>
-          <dt>Reports</dt><dd
-            data-tessar-stat='reportCount'
-          >{{@model.reportCount}}</dd>
-          <dt>Ready reports</dt><dd
-            data-tessar-stat='readyReportCount'
-          >{{@model.readyReportCount}}</dd>
-          <dt>Score total</dt><dd
-            data-tessar-stat='scoreTotal'
-          >{{@model.scoreTotal}}</dd>
-        </dl>
-        <table>
-          <thead><tr><th>Session</th><th>Student</th><th>Resource</th><th
-              >Status</th></tr></thead>
-          <tbody>
-            {{#each @model.rows as |row|}}
-              <tr data-tessar-source={{row.sourceId}}>
-                <td>{{row.label}}</td><td>{{row.studentLabel}}</td><td
-                >{{row.referenceLabel}}</td><td>{{row.status}}</td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
+        {{#if (tessarPending @model.tessarState)}}
+          <p role='status'>Updating classroom results…</p>
+        {{else}}
+          <dl>
+            <dt>Students</dt><dd
+              data-tessar-stat='studentCount'
+            >{{@model.studentCount}}</dd>
+            <dt>Sessions</dt><dd
+              data-tessar-stat='slotCount'
+            >{{@model.slotCount}}</dd>
+            <dt>Observations</dt><dd
+              data-tessar-stat='observationCount'
+            >{{@model.observationCount}}</dd>
+            <dt>Reports</dt><dd
+              data-tessar-stat='reportCount'
+            >{{@model.reportCount}}</dd>
+            <dt>Ready reports</dt><dd
+              data-tessar-stat='readyReportCount'
+            >{{@model.readyReportCount}}</dd>
+            <dt>Score total</dt><dd
+              data-tessar-stat='scoreTotal'
+            >{{@model.scoreTotal}}</dd>
+          </dl>
+          <table>
+            <thead><tr><th>Session</th><th>Student</th><th>Resource</th><th
+                >Status</th></tr></thead>
+            <tbody>
+              {{#each @model.rows as |row|}}
+                <tr data-tessar-source={{row.sourceId}}>
+                  <td>{{row.label}}</td><td>{{row.studentLabel}}</td><td
+                  >{{row.referenceLabel}}</td><td>{{row.status}}</td>
+                </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        {{/if}}
       </article>
       <style scoped>
         .tessar-dashboard {

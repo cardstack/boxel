@@ -1,4 +1,9 @@
 import { Deferred } from './deferred.ts';
+import {
+  assertTessarGeneration,
+  tessarRequestedGeneration,
+  TESSAR_INPUT_GENERATION_HEADER,
+} from './tessar-materialization.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
@@ -3480,11 +3485,43 @@ export class Realm {
         });
       }
       if (this.#router.handles(request)) {
+        let tessarGeneration = tessarRequestedGeneration(request);
+        if (tessarGeneration !== undefined) {
+          if (!['GET', 'QUERY'].includes(request.method)) {
+            return badRequest({
+              requestContext,
+              message: 'Tessar input revisions apply only to reads',
+            });
+          }
+          await assertTessarGeneration(
+            this.#dbAdapter,
+            this.url,
+            tessarGeneration,
+          );
+          let response = await this.#router.handle(request, requestContext);
+          await assertTessarGeneration(
+            this.#dbAdapter,
+            this.url,
+            tessarGeneration,
+          );
+          response.headers.set('cache-control', 'no-store');
+          return response;
+        }
         return this.#router.handle(request, requestContext);
       } else {
         return this.fallbackHandle(request, requestContext);
       }
     } catch (e) {
+      if (
+        request.headers.has(TESSAR_INPUT_GENERATION_HEADER) &&
+        e instanceof CardError
+      ) {
+        return systemError({
+          requestContext,
+          status: e.status,
+          message: e.message,
+        });
+      }
       if (e instanceof AuthenticationError) {
         return createResponse({
           body: e.message,
@@ -6489,7 +6526,10 @@ export class Realm {
     // under the old schema. Read endpoints serve the realm's canonical
     // indexed view; the small wait when indexing is genuinely pending is
     // the right tradeoff vs returning stale state.
-    let pending = this.incrementalIndexing();
+    let tessarInput = request.headers.has(TESSAR_INPUT_GENERATION_HEADER);
+    // An indexer's revision-pinned input read must not wait on the job that
+    // issued it. Its before/after generation checks reject concurrent swaps.
+    let pending = tessarInput ? undefined : this.incrementalIndexing();
     if (pending) {
       await pending;
     }
@@ -6535,7 +6575,7 @@ export class Realm {
       // peek when the client sent a validator — otherwise we'd be
       // paying an extra DB round-trip on cache misses since
       // `cardDocument()` below does its own `instance()` lookup.
-      if (ifNoneMatch) {
+      if (ifNoneMatch && !tessarInput) {
         await this.getRealmInfo();
         let realmInfoHash = this.getCachedRealmInfoHash();
         let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
@@ -6565,6 +6605,7 @@ export class Realm {
         if (
           !this.hasForeignRealmDeps(instanceEntry.deps) &&
           instanceEntry.type === 'instance' &&
+          !instanceEntry.instance.meta.tessar &&
           instanceEntry.indexedAt != null
         ) {
           let etag = buildCardJsonEtag(
@@ -6601,8 +6642,10 @@ export class Realm {
       // read for the response ETag below reflects the post-assembly
       // realm info.
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-        loadLinks: true,
-        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        tessarInput,
+        ...(tessarInput ? {} : { loadLinks: true as const }),
+        skipQueryBackedExpansion:
+          tessarInput || isDuringPrerenderRequest(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
@@ -6712,19 +6755,20 @@ export class Realm {
       // could 304 a follow-up request whose `included[]` should have
       // been re-fetched from the foreign realm.
       let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
-      let responseEtag = foreignDeps
-        ? undefined
-        : buildCardJsonEtag(
-            maybeError.indexedAt,
-            this.getCachedRealmInfoHash(),
-            screenshotsEtagFingerprint(maybeError.screenshots),
-          );
+      let responseEtag =
+        foreignDeps || card.data.meta.tessar
+          ? undefined
+          : buildCardJsonEtag(
+              maybeError.indexedAt,
+              this.getCachedRealmInfoHash(),
+              screenshotsEtagFingerprint(maybeError.screenshots),
+            );
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
-            'cache-control': cacheControl,
+            'cache-control': card.data.meta.tessar ? 'no-store' : cacheControl,
             ...(responseEtag ? { etag: responseEtag } : {}),
             ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(card),
@@ -7075,6 +7119,7 @@ export class Realm {
   ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
+      ...(opts?.tessarInput ? { tessarInput: true } : {}),
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
@@ -7142,6 +7187,7 @@ export class Realm {
       }
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
+          tessarInput: request.headers.has(TESSAR_INPUT_GENERATION_HEADER),
           cacheOnlyDefinitions: duringPrerender,
           // Inside a prerender the search skips the `loadLinks`
           // relationship-assembly pass entirely: the host re-resolves every

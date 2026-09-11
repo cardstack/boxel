@@ -1,4 +1,9 @@
 import { flatten } from 'lodash-es';
+import { TessarIndexPublication } from './tessar-index-publication.ts';
+import { TessarQueryRegistry } from './tessar-query-registry.ts';
+import { IndexQueryEngine } from './index-query-engine.ts';
+import type { DefinitionLookup } from './definition-lookup.ts';
+import type { Querier } from './expression.ts';
 import { flattenDeep } from 'lodash-es';
 import {
   type CardResource,
@@ -61,6 +66,16 @@ export class IndexWriter {
   #dbAdapter: DBAdapter;
   constructor(dbAdapter: DBAdapter) {
     this.#dbAdapter = dbAdapter;
+  }
+
+  tessarPublication(definitions: DefinitionLookup, network: VirtualNetwork) {
+    return new TessarIndexPublication(
+      this.#dbAdapter,
+      new TessarQueryRegistry(
+        this.#dbAdapter,
+        new IndexQueryEngine(this.#dbAdapter, definitions, network),
+      ),
+    );
   }
 
   async createBatch(
@@ -276,6 +291,7 @@ function prerenderedHtmlEntryFrom(
 const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 
 export class Batch {
+  #tessarTransaction: Querier | undefined;
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
   #nodeResolvedInvalidations: string[] | undefined;
@@ -1684,6 +1700,8 @@ export class Batch {
   }
 
   async done(opts?: {
+    tessar?: TessarIndexPublication;
+    tessarInputGeneration?: number;
     // Write the previous generation's realm_meta value at this batch's
     // generation instead of recomputing it from `boxel_index_working`. The
     // setup-phase failure recovery finalizes while the working table still
@@ -1709,15 +1727,45 @@ export class Batch {
       await this.#query(['COMMIT']);
       return { totalIndexEntries: this.#invalidations.size };
     }
-    await this.#query(['BEGIN']);
-    if (opts?.carryForwardRealmMeta) {
-      await this.carryForwardRealmMeta();
-    } else {
-      await this.updateRealmMeta();
-    }
-    await this.applyBatchUpdates();
-    await this.pruneObsoleteEntries();
-    await this.#query(['COMMIT']);
+    let tessarPrepared = await opts?.tessar?.prepare(
+      this.realmURL.href,
+      this.generation,
+    );
+    // Source writes hold the realm's write lock while awaiting indexing.
+    // Publication needs its own namespace or that wait deadlocks the worker.
+    await this.#dbAdapter.withWriteLock(
+      `tessar:index:${this.realmURL.href}`,
+      async (tx) => {
+        // Pg pins this connection and owns BEGIN/COMMIT/ROLLBACK. SQLite's
+        // adapter has one connection, so explicitly bracket that fallback.
+        this.#tessarTransaction = tx;
+        if (!tx) await this.#query(['BEGIN']);
+        try {
+          if (opts?.tessar && tessarPrepared) {
+            await opts.tessar.commit(tx ?? ((expr) => this.#query(expr)), {
+              realmURL: this.realmURL.href,
+              generation: this.generation,
+              definitionRevision: this.loaderEpoch,
+              prepared: tessarPrepared,
+              inputGeneration: opts.tessarInputGeneration,
+            });
+          }
+          if (opts?.carryForwardRealmMeta) {
+            await this.carryForwardRealmMeta();
+          } else {
+            await this.updateRealmMeta();
+          }
+          await this.applyBatchUpdates();
+          await this.pruneObsoleteEntries();
+          if (!tx) await this.#query(['COMMIT']);
+        } catch (error) {
+          if (!tx) await this.#query(['ROLLBACK']);
+          throw error;
+        } finally {
+          this.#tessarTransaction = undefined;
+        }
+      },
+    );
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
@@ -1767,7 +1815,9 @@ export class Batch {
   }
 
   #query(expression: Expression) {
-    return query(this.#dbAdapter, expression, coerceTypes);
+    return this.#tessarTransaction
+      ? this.#tessarTransaction(expression)
+      : query(this.#dbAdapter, expression, coerceTypes);
   }
 
   private async getProductionVersion(

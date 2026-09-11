@@ -51,3 +51,21 @@ test('Tessar raw-data oracle reflects membership, content, transitive edits and 
     /mismatch/,
   );
 });
+
+test('Tessar getCards and materialized variants have identical source inputs and expected outputs', () => {
+  let candidate = generate({ preset: '10x' }).records;
+  let baseline = generate({ preset: '10x', variant: 'get-cards' }).records;
+  assert.equal(baseline.size, 12550);
+  for (let [id, document] of candidate) {
+    if (id.startsWith('DaySummary/')) {
+      assert.deepEqual(
+        expectedSummary(baseline, id),
+        expectedSummary(candidate, id),
+      );
+      assert.equal(
+        baseline.get(id).data.meta.adoptsFrom.name,
+        'TessarGetCardsPage',
+      );
+    } else assert.deepEqual(baseline.get(id), document);
+  }
+});

@@ -4,6 +4,10 @@ import {
   X_BOXEL_JOB_ID_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
+import {
+  currentTessarInputSnapshot,
+  TESSAR_INPUT_GENERATION_HEADER,
+} from '@cardstack/runtime-common/tessar-materialization';
 
 // Set by the prerender server's `evaluateOnNewDocument` before the
 // SPA boots, and also by the host's prerender-shaped routes
@@ -16,7 +20,15 @@ import {
 export function duringPrerenderHeaders(): Record<string, string> {
   let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
     .__boxelRenderContext;
-  return flag === true ? { [DURING_PRERENDER_HEADER]: '1' } : {};
+  let tessar = currentTessarInputSnapshot();
+  return flag === true
+    ? {
+        [DURING_PRERENDER_HEADER]: '1',
+        ...(tessar
+          ? { [TESSAR_INPUT_GENERATION_HEADER]: String(tessar.generation) }
+          : {}),
+      }
+    : {};
 }
 
 // The same marker, for a card write rather than a search. Gated on the

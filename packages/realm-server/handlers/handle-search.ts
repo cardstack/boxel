@@ -1,6 +1,12 @@
 import type Koa from 'koa';
 import {
+  assertTessarGeneration,
+  tessarRequestedGeneration,
+  tessarHasMaterializations,
+} from '@cardstack/runtime-common/tessar-materialization';
+import {
   applyServerSearchPageBound,
+  CardError,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
@@ -185,6 +191,7 @@ export default function handleSearch(opts: {
     // ride the run-time opts instead.
     let runSearchOpts = {
       ...searchOpts,
+      tessarInput: request.headers.has('x-boxel-tessar-input-generation'),
       ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
       ...(timings ? { timings } : {}),
     };
@@ -236,6 +243,43 @@ export default function handleSearch(opts: {
 
     let jobId = searchCache ? prerenderJobId : null;
     try {
+      let tessarGeneration = tessarRequestedGeneration(request);
+      if (tessarGeneration !== undefined) {
+        if (realmList.length !== 1) {
+          throw new CardError('Tessar inputs require exactly one realm', {
+            status: 400,
+          });
+        }
+        await assertTessarGeneration(dbAdapter, realmList[0], tessarGeneration);
+        let body = await runSearch();
+        await assertTessarGeneration(dbAdapter, realmList[0], tessarGeneration);
+        await setContextResponse(
+          ctxt,
+          new Response(body, {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          }),
+        );
+        emitTimeline();
+        return;
+      }
+      // Generation-keyed caches cannot see a queued source write until its
+      // first index swap. Tessar responses must revalidate pending state.
+      if (await tessarHasMaterializations(dbAdapter, realmList)) {
+        setContextResponse(
+          ctxt,
+          new Response(await runSearch(), {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          }),
+        );
+        emitTimeline();
+        return;
+      }
       await respondWithJobScopedSearchCache(ctxt, {
         searchCache,
         jobId,
@@ -251,7 +295,7 @@ export default function handleSearch(opts: {
       // The per-request time budget fired inside `runSearch`. A bounded search
       // is never cacheable (cacheable ⟹ during-prerender ⟹ not bounded), so
       // this only surfaces on the fresh-compute path and leaves no cache entry.
-      if (e instanceof SearchBoundError) {
+      if (e instanceof SearchBoundError || e instanceof CardError) {
         await setContextResponse(
           ctxt,
           buildSearchErrorResponse(e.message, e.status),

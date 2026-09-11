@@ -1246,7 +1246,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   registerRealm(realm: LocalRealm): void {
-    this.#realms.push(realm);
+    // Tessar workers scope lookups for each indexing job. Replace a previous
+    // registration for that URL so jobs do not retain retired realm contexts.
+    let existing = this.#realms.findIndex((item) => item.url === realm.url);
+    if (existing === -1) this.#realms.push(realm);
+    else this.#realms[existing] = realm;
   }
 
   forRealm(realm: LocalRealm): DefinitionLookup {

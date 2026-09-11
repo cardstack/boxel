@@ -902,6 +902,36 @@ function resolveInstancePathValue(instance: BaseDef, path: string): any {
   return current;
 }
 
+export function tessarQueryWatch(
+  store: CardStore,
+  instance: BaseDef,
+  field: Field,
+) {
+  let definition = buildFieldDefinition(field);
+  if (!definition)
+    throw new Error(`Tessar cannot resolve query field '${field.name}'`);
+  let normalized = resolveQueryAndRealm(store, instance, field, definition);
+  if (!normalized)
+    throw new Error(
+      `Tessar cannot resolve query parameters for '${field.name}'`,
+    );
+  let realm = (instance as any)[realmURLSymbol] as URL | undefined;
+  if (
+    !realm ||
+    normalized.realmHrefs.length !== 1 ||
+    normalized.realmHrefs[0] !== realm.href
+  ) {
+    throw new Error(
+      'Tessar materialization currently requires same-realm queries',
+    );
+  }
+  return {
+    fieldPath: field.name,
+    query: normalized.query,
+    searchURL: normalized.searchURL,
+  };
+}
+
 function buildFieldDefinition(field: Field): FieldDefinition | undefined {
   let ref = identifyCard(field.card);
   if (!ref) {

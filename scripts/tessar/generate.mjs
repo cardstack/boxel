@@ -25,6 +25,7 @@ export function generate({
   preset = 'smoke',
   seed = 1729,
   shape = 'distributed',
+  variant = 'materialized',
 } = {}) {
   if (!Object.hasOwn(presets, preset))
     throw new Error('Preset must be smoke, 1x or 10x');
@@ -32,6 +33,8 @@ export function generate({
     throw new Error('Seed must be a nonnegative safe integer');
   if (!['distributed', 'focused'].includes(shape))
     throw new Error('Unknown workload shape');
+  if (!['materialized', 'get-cards'].includes(variant))
+    throw new Error('Variant must be materialized or get-cards');
   let scale = presets[preset];
   let sizes = Object.fromEntries(
     Object.entries(counts).map(([type, count]) => [
@@ -76,12 +79,17 @@ export function generate({
           type: 'card',
           attributes,
           ...(relationships ? { relationships } : {}),
-          meta: { adoptsFrom: { module: moduleRef, name: type } },
+          meta: {
+            adoptsFrom:
+              variant === 'get-cards' && type === 'DaySummary'
+                ? { module: '../get-cards', name: 'TessarGetCardsPage' }
+                : { module: moduleRef, name: type },
+          },
         },
       });
     }
   }
-  return { records, sizes, seed, preset, shape };
+  return { records, sizes, seed, preset, shape, variant };
 }
 
 // Reference implementation deliberately operates on raw fixture documents,
@@ -148,6 +156,11 @@ export async function writeDataset(output, options) {
     new URL('./realm/tessar.gts', import.meta.url),
     join(realmDir, 'tessar.gts'),
   );
+  if (dataset.variant === 'get-cards')
+    await copyFile(
+      new URL('./realm/get-cards.gts', import.meta.url),
+      join(realmDir, 'get-cards.gts'),
+    );
   let hash = createHash('sha256');
   for (let [id, document] of dataset.records) {
     let bytes = JSON.stringify(document) + '\n';
@@ -166,6 +179,7 @@ export async function writeDataset(output, options) {
     seed: dataset.seed,
     preset: dataset.preset,
     shape: dataset.shape,
+    variant: dataset.variant,
     instanceCount: dataset.records.size,
     counts: dataset.sizes,
     recordsSha256: hash.digest('hex'),
@@ -191,6 +205,7 @@ if (
       preset: { type: 'string', default: 'smoke' },
       seed: { type: 'string', default: '1729' },
       shape: { type: 'string', default: 'distributed' },
+      variant: { type: 'string', default: 'materialized' },
     },
   });
   if (!values.output) throw new Error('--output must name a new directory');
@@ -200,6 +215,7 @@ if (
         preset: values.preset,
         seed: Number(values.seed),
         shape: values.shape,
+        variant: values.variant,
       }),
     ),
   );

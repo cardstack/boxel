@@ -25,6 +25,7 @@ import {
   type SingleFileMetaDocument,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { currentTessarInputSnapshot } from '@cardstack/runtime-common/tessar-materialization';
 
 import type {
   BaseDef,
@@ -131,9 +132,14 @@ function currentRenderScope(): string | undefined {
   if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
     return undefined;
   }
-  return typeof g.__boxelRenderScope === 'string'
-    ? g.__boxelRenderScope
-    : g.__boxelJobId;
+  let scope =
+    typeof g.__boxelRenderScope === 'string'
+      ? g.__boxelRenderScope
+      : g.__boxelJobId;
+  let tessar = currentTessarInputSnapshot();
+  return tessar
+    ? `${scope}:tessar:${tessar.realmURL}:${tessar.generation}`
+    : scope;
 }
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
@@ -570,7 +576,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return await promise;
     }
-    promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
+    promise = loadCardDocument(
+      this.#fetch,
+      url,
+      this.#virtualNetwork,
+      currentTessarInputSnapshot(),
+    );
     // Held locally as well as in the map: a scope boundary clears the map
     // mid-flight, so reading it back in the `finally` would time this load
     // against a newer load's start — or find nothing and drop the entry.

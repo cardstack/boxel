@@ -887,6 +887,7 @@ export class RenderRunner {
     jobId,
     screenshots,
     renderScope,
+    tessarInputSnapshot,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -1030,6 +1031,7 @@ export class RenderRunner {
             id: string | undefined,
             jobPriority: number | undefined,
             scope: string | undefined,
+            tessar: PrerenderVisitArgs['tessarInputSnapshot'],
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
             (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
@@ -1044,6 +1046,11 @@ export class RenderRunner {
             (
               globalThis as unknown as { __boxelRenderScope?: string }
             ).__boxelRenderScope = scope;
+            (
+              globalThis as unknown as {
+                __tessarInputSnapshot?: PrerenderVisitArgs['tessarInputSnapshot'];
+              }
+            ).__tessarInputSnapshot = tessar;
             return (
               (
                 globalThis as unknown as {
@@ -1056,6 +1063,7 @@ export class RenderRunner {
           jobId,
           priority,
           renderScope,
+          tessarInputSnapshot,
         ),
       );
       // A card-instance index visit fuses the file extract into the

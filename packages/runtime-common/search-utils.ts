@@ -106,6 +106,7 @@ export function resolveSearchRequestMethod(request: Request): string {
 // dropping a field here (e.g. priority) silently breaks the threading from
 // the realm-server handler down to searchCards.
 export type SearchOpts = {
+  tessarInput?: boolean;
   cacheOnlyDefinitions?: boolean;
   // Prerender searches set this so `searchCardsUncoalesced` skips the
   // `loadLinks` relationship-assembly pass entirely (the host re-resolves

@@ -1,4 +1,5 @@
 import { isScopedCSSRequest } from './scoped-css.ts';
+import { tessarReadState } from './tessar-materialization.ts';
 import { cloneDeep } from 'lodash-es';
 import {
   SupportedMimeType,
@@ -107,6 +108,7 @@ import {
 const RECURSING_DEPTH = 3;
 
 type Options = {
+  tessarInput?: boolean;
   loadLinks?: true;
   linkFields?: string[];
   // When true, populateQueryFields will only use cached definitions from the
@@ -257,12 +259,39 @@ export class RealmIndexQueryEngine {
       realm.virtualNetwork,
     );
     this.#definitionLookup = definitionLookup;
+    this.#tessarDB = dbAdapter;
     this.#realm = realm;
     this.#fetch = fetch;
   }
 
   private get realmURL() {
     return (this.#realmURL ??= new URL(this.#realm.url));
+  }
+  #tessarDB: DBAdapter;
+
+  private async tessarReadResource(
+    resource: LooseCardResource,
+    realmURL: URL,
+    opts?: Options,
+  ) {
+    if (!resource.meta.tessar || !resource.id) return;
+    let url =
+      this.#realm.virtualNetwork
+        .toURL(resource.id)
+        .href.replace(/\.json$/, '') + '.json';
+    resource.meta = {
+      ...resource.meta,
+      tessar: {
+        ...resource.meta.tessar,
+        state: await tessarReadState(
+          this.#tessarDB,
+          realmURL.href,
+          url,
+          resource.meta.tessar,
+          opts,
+        ),
+      },
+    };
   }
 
   // The entry engine. Runs the parsed entry query — the
@@ -572,6 +601,9 @@ export class RealmIndexQueryEngine {
           id: cardUrl as RealmResourceIdentifier,
           links: { self: cardUrl },
         };
+        // This check also applies when assembly is omitted or fields are
+        // sparse; neither path may advertise a dirty snapshot as ready.
+        await this.tessarReadResource(item, this.realmURL, opts);
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
         } else {
@@ -768,7 +800,8 @@ export class RealmIndexQueryEngine {
         `bug: should never get here--search index doc is undefined`,
       );
     }
-    if (opts?.loadLinks) {
+    await this.tessarReadResource(doc.data, this.realmURL, opts);
+    if (opts?.loadLinks && !doc.data.meta.tessar) {
       let included = await this.loadLinks(
         {
           realmURL: this.realmURL,
@@ -1685,6 +1718,14 @@ export class RealmIndexQueryEngine {
       try {
         await Promise.all(
           layer.map(async ({ resource, applyLinkFields }) => {
+            if ((resource as LooseCardResource).meta.tessar) {
+              await this.tessarReadResource(
+                resource as LooseCardResource,
+                realmURL,
+                opts,
+              );
+              return;
+            }
             let popOpts = applyLinkFields
               ? opts
               : opts?.linkFields
@@ -1796,6 +1837,12 @@ export class RealmIndexQueryEngine {
 
         for (let entry of relationshipEntries(resource.relationships)) {
           let { relationship, key, fieldName } = entry;
+          if (
+            (resource as LooseCardResource).meta.tessar?.queryFields.includes(
+              fieldName,
+            )
+          )
+            continue;
           if (processed.has(key)) {
             continue;
           }

@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -11,10 +12,40 @@ export default class MessageService extends Service {
     new Map();
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
+  private tessarConnected = true;
+  private tessarConnectionListeners = new Set<(connected: boolean) => void>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
     this.session.register(this);
+    let offline = () => this.tessarConnectionChanged(false);
+    let online = () => this.tessarConnectionChanged(true);
+    let visible = () => {
+      if (document.visibilityState === 'visible') {
+        this.tessarConnectionChanged(false);
+        this.tessarConnectionChanged(navigator.onLine);
+      }
+    };
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    document.addEventListener('visibilitychange', visible);
+    registerDestructor(this, () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+      document.removeEventListener('visibilitychange', visible);
+      this.tessarConnectionListeners.clear();
+    });
+  }
+
+  subscribeTessarConnection(callback: (connected: boolean) => void) {
+    this.tessarConnectionListeners.add(callback);
+    return () => this.tessarConnectionListeners.delete(callback);
+  }
+
+  tessarConnectionChanged(connected: boolean) {
+    if (this.tessarConnected === connected) return;
+    this.tessarConnected = connected;
+    for (let callback of this.tessarConnectionListeners) callback(connected);
   }
 
   register() {

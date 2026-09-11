@@ -1,4 +1,5 @@
 import type Controller from '@ember/controller';
+
 import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
@@ -38,6 +39,10 @@ import {
   coerceErrorMessage,
   serializableError,
 } from '@cardstack/runtime-common/error';
+import {
+  currentTessarInputSnapshot,
+  TESSAR_INPUT_GENERATION_HEADER,
+} from '@cardstack/runtime-common/tessar-materialization';
 
 import {
   windowErrorHandler,
@@ -559,13 +564,23 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = undefined;
 
     (globalThis as any).__boxelSetRenderStage?.('buildModel:fetching-source');
+    let tessarInput = currentTessarInputSnapshot();
     let response: Response;
     try {
       response = await this.#authGuard.race(() =>
-        this.network.authedFetch(id, {
+        this.network.authedFetch(tessarInput ? id.replace(/\.json$/, '') : id, {
           method: 'GET',
           headers: {
-            Accept: SupportedMimeType.CardSource,
+            Accept: tessarInput
+              ? SupportedMimeType.CardJson
+              : SupportedMimeType.CardSource,
+            ...(tessarInput
+              ? {
+                  [TESSAR_INPUT_GENERATION_HEADER]: String(
+                    tessarInput.generation,
+                  ),
+                }
+              : {}),
           },
         }),
       );
@@ -581,6 +596,17 @@ export default class RenderRoute extends Route<Model> {
     let lastModified = new Date(response.headers.get('last-modified')!);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
       await response.json();
+    if (tessarInput && 'data' in doc && doc.data.meta.tessar) {
+      // This is the owner being recomputed. Its previous membership is an
+      // output, never an input seed for the new generation's query.
+      for (let field of doc.data.meta.tessar.queryFields) {
+        for (let key of Object.keys(doc.data.relationships ?? {})) {
+          if (key === field || key.startsWith(`${field}.`))
+            delete doc.data.relationships![key];
+        }
+      }
+      delete doc.data.meta.tessar;
+    }
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();

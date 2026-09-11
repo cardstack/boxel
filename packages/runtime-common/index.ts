@@ -932,6 +932,7 @@ export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
 export type PrerenderVisitType = 'index' | 'prerender-html';
 
 export type PrerenderVisitArgs = {
+  tessarInputSnapshot?: import('./tessar-materialization.ts').TessarInputSnapshot;
   affinityType: AffinityType;
   affinityValue: string;
   realm: string;
@@ -1996,3 +1997,8 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command.ts';
+export {
+  currentTessarInputSnapshot,
+  tessarSnapshotFields,
+  type TessarMaterialization,
+} from './tessar-materialization.ts';

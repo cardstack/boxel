@@ -24,6 +24,7 @@ import {
   type PrerenderMetaDiagnostics,
   type RenderError,
 } from '@cardstack/runtime-common';
+import { currentTessarInputSnapshot } from '@cardstack/runtime-common/tessar-materialization';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -168,6 +169,9 @@ export default class RenderMetaRoute extends Route<Model> {
     // The search doc comes from the searchable-driven generator in its own base
     // module. It derives link depth from the explicit `searchable` annotations
     // rather than from what the render happened to load.
+    let tessar = (instance.constructor as typeof CardDef).tessarMaterialized;
+    let tessarInput = currentTessarInputSnapshot();
+    if (tessar && tessarInput) await api.prepareTessarQueries(instance);
     let searchable = await this.cardService.getSearchable();
 
     // Produce the search doc by walking until the store's load state is
@@ -238,7 +242,7 @@ export default class RenderMetaRoute extends Route<Model> {
       ...new Set([
         SEARCHABLE_MODULE_URL,
         ...(renderModel?.capturedDeps ?? []),
-        ...snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+        ...snapshotRuntimeDependencies({ excludeQueryOnly: !tessar }).deps,
         ...searchableDeps,
       ]),
     ];
@@ -301,6 +305,11 @@ export default class RenderMetaRoute extends Route<Model> {
         delete relationship.data;
       }
       delete serialized.included;
+      let tessarManifest = tessar
+        ? api.tessarIndexManifest(instance, serialized, tessarInput?.generation)
+        : undefined;
+      delete serialized.data.meta.tessar;
+      if (tessarManifest) serialized.data.meta.tessar = tessarManifest;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
@@ -361,6 +370,11 @@ export default class RenderMetaRoute extends Route<Model> {
     if (typeof api.getBrokenLinks === 'function') {
       let brokenLinks = api.getBrokenLinks(instance);
       if (brokenLinks.length > 0) {
+        if (tessar && tessarInput) {
+          throw new Error(
+            'Tessar cannot publish with broken input dependencies',
+          );
+        }
         diagnostics.brokenLinks = brokenLinks.map(
           ({ fieldName, reference, kind }) => ({ fieldName, reference, kind }),
         );
@@ -512,6 +526,11 @@ export default class RenderMetaRoute extends Route<Model> {
         continue;
       }
       if (!stable) {
+        if ((instance.constructor as typeof CardDef).tessarMaterialized) {
+          throw new Error(
+            'Tessar materialization did not reach a stable input graph',
+          );
+        }
         computePerfLog.warn(
           `render.meta searchable walk for ${instance.id} did not reach a stable load generation within ${SEARCHABLE_SETTLE_MAX_PASSES} passes; using the current store state`,
         );

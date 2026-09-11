@@ -36,48 +36,37 @@ correctness or freshness violation is a failed case, not an accepted tradeoff.
 
 ## Current checkpoint
 
-Implementation has started. The deterministic generator produces 1,255 / 12,550
-synthetic instances and a raw-document oracle. Its first two tests pass. The
-initial 34-instance real-stack baseline returned correct live query membership
-but stale zero-valued indexed statistics on all five GETs. Those reads fail the
-correctness gate and are not valid speedup baselines. The internal snapshot
-consumer and reverse-query registry have focused browser and Postgres tests.
-Four browser tests pass 49 assertions; two Postgres tests cover SQL predicates,
-transaction rollback, persistent dirty state and rejection of stale publication.
-The existing computed-field regression suite passes 15 tests / 41 assertions.
-The registry is not yet connected to index publication or worker scheduling, and
-normal server/client reads do not yet opt into Tessar. These primitive tests do
-not establish end-to-end freshness or a performance improvement.
+Implementation is underway in the isolated local runtime. The deterministic
+synthetic generator covers smoke (34), 1× (1,255), and 10× (12,550) records;
+its three oracle/integrity tests pass. The first ordinary-query baseline
+returned membership with stale zero-valued indexed statistics and failed.
 
-The initial freshness contract is a maximum 10,000 ms from an acknowledged
-relevant write to its complete owner revision being visible in existing and new
-clients, at every dataset size and concurrency. Reads during that interval must
-explicitly identify pending work; they must never present older results as
-current. Source acknowledgement, source index revision, owner publication and
-client observation are separate measured events. Missing, mixed or regressing
-revisions fail the gate regardless of elapsed time.
+The registry is connected to atomic index publication, durable dirty owners,
+and follow-up worker waves. Indexed responses automatically activate snapshot
+consumption. The latest smoke check passed five Chromium reads and nine writes,
+including entry/exit, transitive edits, insertion/deletion and offline reconnect,
+with zero input-card/search requests. Five focused browser tests pass 71
+assertions; four Postgres tests cover SQL predicate parity, transaction rollback,
+source/publication locking, queued and failed writes, stale publication and module
+epoch changes. Existing computed tests pass 15 tests / 41 assertions, and the
+sliding-sync regression passes one test / four assertions.
 
-- Main was updated to `e9a4b0a54a` on September 10, 2026.
-- Work uses the isolated branch `codex/do-not-merge-query-materialization-poc`.
-- The draft POC is [PR #6085](https://github.com/cardstack/boxel/pull/6085).
-- A private staging fork contains 154 copied definition/support files, verified
-  against their prepared hashes. All 29 card types used by the source dataset
-  passed schema generation there.
-- No production records were uploaded. The temporary source-data archive,
-  prepared JSON copies, import inventory and temporary source authentication
-  cache were removed. Only aggregate counts were retained for sizing.
-- Runtime primitives, an additive registry migration and a synthetic generator
-  are in progress. No production or shared staging backend is changed.
+A real five-stage feeder chain converged in 3.9 seconds after an asynchronous
+source acknowledgement. Synthetic concurrency correctness checks passed at
+1, 10 and 50 HTTP readers plus one already-open browser. These are smoke gates,
+not a controlled throughput comparison or evidence for 50 browser CPUs.
+The 1× exploratory candidate run passed 20 HTTP and browser samples and eight
+mutations. Two 10× setup attempts failed (tmpfs capacity, then the harness's
+600-second startup limit); the report retains both failures. The disk-backed
+benchmark now allows a longer initial build while preserving the 10-second
+write-freshness deadline.
 
-The staging fork runs the staging deployment's runtime. It does **not** run this
-monorepo branch merely because its GTS files are copied there. Develop and measure
-the runtime changes on an isolated local stack from the worktree, including its
-own database and indexing workers. A branch-specific hosted environment is a
-later option; changing a shared staging backend is outside this plan.
-
-Keep source-deployment writes out of the experiment. Before a synthetic UI trial,
-replace any copied definition's deployment-specific defaults or external data
-references with synthetic equivalents in the development environment.
+Three draft realm definitions in the private fork project schedule, observation
+coverage and classroom-day rows using existing schedule composition. They have
+no Glint errors in the new files; the pre-existing fork files report 830 errors.
+They have not been deployed or validated in a full Classroom Central browser
+flow. Worker restart/race coverage, the complete realm adaptation, controlled
+base/candidate benchmarks and the final performance report remain outstanding.
 
 ## Scope and constraints
 
@@ -471,5 +460,4 @@ list of remaining limitations. Only cases satisfying the non-negotiable
 correctness/freshness gates qualify as successful benchmark results. The PR
 remains draft and DO NOT MERGE even after its
 tests pass. Production promotion and any shared-runtime deployment require a
-separate decision. This plan is the
-stopping point.
+separate decision. Implementation resumed on explicit user instruction.

@@ -63,6 +63,7 @@ export class TessarQueryRegistry {
       definitionRevision: string;
       watches: TessarPreparedWatch[];
       retired?: boolean;
+      pending?: boolean;
     },
   ): Promise<boolean> {
     let { realmURL, ownerURL, generation, inputGeneration } = owner;
@@ -91,7 +92,9 @@ export class TessarQueryRegistry {
     ]);
     if (
       (previous && Number(previous.published_generation) > generation) ||
-      (previous?.dirty_generation != null &&
+      (!owner.pending &&
+        !owner.retired &&
+        previous?.dirty_generation != null &&
         Number(previous.dirty_generation) > inputGeneration)
     ) {
       return false;
@@ -107,13 +110,15 @@ export class TessarQueryRegistry {
       param(generation),
       ',',
       param(inputGeneration),
-      ', NULL,',
+      ',',
+      param(owner.pending ? generation : null),
+      ',',
       param(owner.definitionRevision),
       ',',
       param(owner.retired ?? false),
       `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET
        published_generation = EXCLUDED.published_generation,
-       input_generation = EXCLUDED.input_generation, dirty_generation = NULL,
+       input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
        definition_revision = EXCLUDED.definition_revision,
        retired = EXCLUDED.retired`,
     ]);
@@ -161,7 +166,7 @@ export class TessarQueryRegistry {
     return true;
   }
 
-  async candidates(realmURL: string, document: TessarDocument) {
+  async candidates(realmURL: string, document: TessarDocument, tx?: Querier) {
     let routes = [
       every([
         ['t.path =', param('')],
@@ -177,25 +182,26 @@ export class TessarQueryRegistry {
         ]),
       );
     }
-    let rows = await query(
-      this.db,
-      [
-        `SELECT DISTINCT w.owner_url, w.field_path, w.query
+    let expression: Expression = [
+      `SELECT DISTINCT w.owner_url, w.field_path, w.query
        FROM tessar_query_terms t JOIN tessar_query_watches w
          ON w.realm_url = t.realm_url AND w.owner_url = t.owner_url
         AND w.field_path = t.field_path
        WHERE`,
-        ...(every([
-          ['t.realm_url =', param(realmURL)],
-          any(routes),
-        ]) as Expression),
-      ],
-      { query: 'JSON' },
-    );
+      ...(every([
+        ['t.realm_url =', param(realmURL)],
+        any(routes),
+      ]) as Expression),
+    ];
+    let rows = tx
+      ? await tx(expression)
+      : await query(this.db, expression, { query: 'JSON' });
     return rows.map((row) => ({
       ownerURL: row.owner_url as string,
       fieldPath: row.field_path as string,
-      query: row.query as unknown as Query,
+      query: (typeof row.query === 'string'
+        ? JSON.parse(row.query)
+        : row.query) as Query,
     }));
   }
 
@@ -203,11 +209,12 @@ export class TessarQueryRegistry {
     realmURL: string,
     oldDocument: TessarDocument | undefined,
     newDocument: TessarDocument | undefined,
+    tx?: Querier,
   ): Promise<string[]> {
     let owners = new Set<string>();
     for (let document of [oldDocument, newDocument]) {
       if (!document) continue;
-      for (let watch of await this.candidates(realmURL, document)) {
+      for (let watch of await this.candidates(realmURL, document, tx)) {
         if (owners.has(watch.ownerURL)) continue;
         if (
           await this.engine.tessarMatchesDocument(watch.query.filter, document)
@@ -240,6 +247,15 @@ export class TessarQueryRegistry {
         ]) as Expression),
       ]);
     }
+  }
+
+  async activeOwnerCount(realmURL: string): Promise<number> {
+    let [row] = await query(this.db, [
+      'SELECT COUNT(*) AS total FROM tessar_owners WHERE realm_url =',
+      param(realmURL),
+      'AND retired = FALSE',
+    ]);
+    return Number(row.total);
   }
 
   async pending(

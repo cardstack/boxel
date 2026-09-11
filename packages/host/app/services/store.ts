@@ -96,6 +96,8 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
+import { currentTessarInputSnapshot } from '@cardstack/runtime-common/tessar-materialization';
+
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import {
@@ -339,8 +341,21 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
     this.session.register(this);
     this.ready = this.setup();
+    let unsubscribeTessar = this.messageService.subscribeTessarConnection(
+      (connected) => {
+        if (this.isRenderStore || (globalThis as any).__boxelPrerenderApp)
+          return;
+        for (let instance of this.store.allCardInstances()) {
+          if (instance.id && this.cardApiCache?.hasTessarSnapshot?.(instance)) {
+            this.cardApiCache.markTessarPending(instance);
+            if (connected) this.reloadTask.perform(instance);
+          }
+        }
+      },
+    );
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
+      unsubscribeTessar();
     });
   }
 
@@ -1518,6 +1533,11 @@ export default class StoreService extends Service implements StoreInterface {
     // the undefined wire default — and so must share one key; keying on the raw
     // `scope` would split them and defeat the dedup.
     let wireScope = this.resolveWireScope(query, scope);
+    // Tessar reads are pinned to a committed generation. Never reuse a raw
+    // source pass's job cache or an in-flight request from an earlier wave.
+    if (currentTessarInputSnapshot()) {
+      return this.fetchSearchDocUncoalesced(query, realms, wireScope);
+    }
 
     // Resolved-doc cache eligibility: prerender + jobId + same-realm.
     // Cross-realm reads bypass — see field comment.
@@ -2148,6 +2168,20 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
+    if (event.eventName === 'update') {
+      // Before indexing has classified a source change, conservatively mark
+      // this realm's loaded snapshots pending. Keep their inputs unhydrated.
+      for (let instance of this.store.allCardInstances()) {
+        if (
+          instance.id &&
+          asURL(instance.id, this.network.virtualNetwork).startsWith(
+            event.realmURL,
+          )
+        )
+          this.cardApiCache?.markTessarPending?.(instance);
+      }
+      return;
+    }
     if (event.eventName !== 'index') {
       return;
     }
@@ -2172,6 +2206,18 @@ export default class StoreService extends Service implements StoreInterface {
       // can be the only word a card being held as awaiting-index ever gets
       // that the row it is waiting for now exists.
       let reloadsTriggered = this.reloadAwaitingIndexInstances(event.realmURL);
+      for (let instance of this.store.allCardInstances()) {
+        if (
+          instance.id &&
+          asURL(instance.id, this.network.virtualNetwork).startsWith(
+            event.realmURL,
+          ) &&
+          this.cardApiCache?.hasTessarSnapshot?.(instance)
+        ) {
+          this.reloadTask.perform(instance);
+          reloadsTriggered++;
+        }
+      }
       // Report the pass as a thin realm-event so the dashboard still sees it.
       telemetry?.recordEvent({
         event_type: 'realm-event',
@@ -2190,7 +2236,21 @@ export default class StoreService extends Service implements StoreInterface {
     if (event.indexType !== 'incremental') {
       return;
     }
-    let invalidations = event.invalidations as string[];
+    let invalidations = [...(event.invalidations as string[])];
+    // An unrelated write can leave the owner revision unchanged. Revalidate
+    // the pending snapshot after the lane settles to clear its pending state.
+    for (let instance of this.store.allCardInstances()) {
+      if (
+        instance.id &&
+        asURL(instance.id, this.network.virtualNetwork).startsWith(
+          event.realmURL,
+        ) &&
+        instance.tessarState === 'pending'
+      ) {
+        let url = asURL(instance.id, this.network.virtualNetwork);
+        if (!invalidations.includes(url)) invalidations.push(url);
+      }
+    }
     let ownWrite = event.clientRequestId
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
@@ -2340,6 +2400,11 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
+          // A clean materialized owner may depend on the card this client
+          // edited. Local edits leave snapshot mode, so this exception cannot
+          // overwrite a draft owner while suppressing self-originated events.
+          if (this.cardApiCache?.hasTessarSnapshot?.(instance))
+            reloadFile = true;
           if (reloadFile) {
             this.reloadTask.perform(instance);
             reloadsTriggered++;

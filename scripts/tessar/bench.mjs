@@ -30,6 +30,7 @@ let { values } = parseArgs({
     output: { type: 'string' },
     iterations: { type: 'string', default: '5' },
     serve: { type: 'boolean', default: false },
+    'realm-server-url': { type: 'string' },
   },
 });
 if (!values.dataset || !values.output)
@@ -73,7 +74,6 @@ let sourcePaths = execFileSync(
     'packages/host',
     'packages/postgres',
     'packages/realm-server',
-    'scripts/tessar',
   ],
   { cwd: repository, encoding: 'utf8' },
 )
@@ -92,11 +92,23 @@ for (let path of [...new Set(sourcePaths)].sort()) {
   }
 }
 let runtimeHash = sourceHash.digest('hex');
-process.env.TEST_HARNESS_CACHE_SALT = `tessar:${commit}:${hostHash}:${runtimeHash}`;
+// A tooling-only edit or commit must not force a fresh 12,550-record index.
+// Runtime source and built-host contents still invalidate the template; the
+// harness separately hashes every fixture module and synthetic source record.
+process.env.TEST_HARNESS_CACHE_SALT = `tessar:${hostHash}:${runtimeHash}`;
 let started = performance.now();
 let realm;
+let realmServerURL = values['realm-server-url']
+  ? new URL(values['realm-server-url'])
+  : undefined;
+if (
+  realmServerURL &&
+  !['localhost', '127.0.0.1'].includes(realmServerURL.hostname)
+)
+  throw new Error('Tessar benchmarks require a local realm server');
 try {
   realm = await startFactoryRealmServer({
+    realmServerURL,
     realms: [{ dir: join(dataset, 'realm'), path: 'tessar/' }],
   });
   let startupMs = performance.now() - started;

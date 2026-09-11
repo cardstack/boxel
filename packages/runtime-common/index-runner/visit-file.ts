@@ -27,6 +27,7 @@ import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface RenderFileForIndexingOptions {
+  tessarInputSnapshot?: import('../tessar-materialization.ts').TessarInputSnapshot;
   url: URL;
   realmURL: URL;
   ignoreMap: Map<string, Ignore>;
@@ -127,6 +128,7 @@ interface RouteIndexVisitCallbacks {
 // render before this one's row writes land. Returns `undefined` when the
 // file is ignored or belongs to a different realm.
 export async function renderFileForIndexing({
+  tessarInputSnapshot,
   url,
   realmURL,
   ignoreMap,
@@ -235,6 +237,7 @@ export async function renderFileForIndexing({
   }
 
   let visitArgs = {
+    ...(tessarInputSnapshot ? { tessarInputSnapshot } : {}),
     affinityType: 'realm' as const,
     affinityValue: realmURL.href,
     realm: realmURL.href,

@@ -1,4 +1,6 @@
 import { ignore, type Ignore } from './ignore.ts';
+import type { TessarIndexPublication } from './tessar-index-publication.ts';
+import type { TessarInputSnapshot } from './tessar-materialization.ts';
 // Isomorphic UUID — works in both Node and the browser (host tests
 // instantiate IndexRunner inside a Chrome tab, so Node's built-in
 // `crypto.randomUUID` is not available).
@@ -64,6 +66,16 @@ type VisitRenderOutcome =
   | { status: 'error'; error: unknown };
 
 export class IndexRunner {
+  #tessar: TessarIndexPublication;
+  #tessarInputSnapshot: TessarInputSnapshot | undefined;
+  #tessarTimings = {
+    tessarMaterializationMs: 0,
+    tessarWriteMs: 0,
+    tessarSwapMs: 0,
+    tessarWaves: 0,
+    tessarOwnersRendered: 0,
+  };
+  #tessarSourceWriteMs: number | undefined;
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #indexWriter: IndexWriter;
@@ -169,6 +181,17 @@ export class IndexRunner {
     }): void;
   }) {
     this.#indexWriter = indexWriter;
+    this.#tessar = indexWriter.tessarPublication(
+      definitionLookup.forRealm({
+        url: realmURL.href,
+        getRealmOwnerUserId: async () => realmOwnerUserId,
+        visibility: async () =>
+          (await this.getModuleCacheContext()).cacheScope === 'public'
+            ? 'public'
+            : 'private',
+      }),
+      virtualNetwork,
+    );
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -342,8 +365,12 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries } = await current.batch.done({
+        tessar: current.#tessar,
+      });
       swapMs = Date.now() - finalizeStart;
+      current.#tessarSourceWriteMs = current.batch.writeMs;
+      invalidations.push(...(await current.#drainTessar()));
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -390,7 +417,8 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.batch.writeMs,
+        writeMs: current.#tessarSourceWriteMs ?? current.batch.writeMs,
+        ...(current.#tessarTimings.tessarWaves ? current.#tessarTimings : {}),
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
@@ -563,8 +591,12 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries } = await current.batch.done({
+        tessar: current.#tessar,
+      });
       swapMs = Date.now() - finalizeStart;
+      current.#tessarSourceWriteMs = current.batch.writeMs;
+      invalidations.push(...(await current.#drainTessar()));
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -605,10 +637,79 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.batch.writeMs,
+        writeMs: current.#tessarSourceWriteMs ?? current.batch.writeMs,
+        ...(current.#tessarTimings.tessarWaves ? current.#tessarTimings : {}),
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
+  }
+
+  // Drain the durable registry inside the existing per-realm indexing job.
+  // A crash retries that queue job and discovers pending work again. Failed
+  // waves remain pending and fail the job; they never publish partial output.
+  async #drainTessar(): Promise<URL[]> {
+    let startedAt = Date.now();
+    let published = new Set<string>();
+    let pending = await this.#tessar.registry.pending(this.realmURL.href);
+    // A leaf write can activate one new downstream owner per wave. Bound an
+    // acyclic chain by all owners, not only the initially dirty subset.
+    let maxWaves = pending.length
+      ? (await this.#tessar.registry.activeOwnerCount(this.realmURL.href)) + 1
+      : 0;
+    try {
+      for (let wave = 0; pending.length && wave < maxWaves; wave++) {
+        this.#tessarTimings.tessarWaves++;
+        // No job resume seed: previous source-pass working rows have the same
+        // job id, but must never be re-promoted by a materialization wave.
+        this.#batch = await this.#indexWriter.createBatch(
+          this.realmURL,
+          this.#virtualNetwork,
+        );
+        this.#tessarInputSnapshot = {
+          realmURL: this.realmURL.href,
+          generation: this.batch.currentGeneration - 1,
+        };
+        this.#dependencyResolver.reset();
+        this.#indexingInstances.clear();
+        let succeeded = 0;
+        let failures: string[] = [];
+        for (let { ownerURL } of pending) {
+          let outcome = await this.#renderVisit(new URL(ownerURL));
+          if (
+            outcome.status !== 'rendered' ||
+            outcome.result.card?.error ||
+            !outcome.result.card?.serialized?.data.meta.tessar
+          ) {
+            failures.push(ownerURL);
+            continue;
+          }
+          await this.#finishVisit(outcome.result);
+          published.add(ownerURL);
+          succeeded++;
+          this.#tessarTimings.tessarOwnersRendered++;
+        }
+        if (!succeeded)
+          throw new Error(
+            `Tessar could not materialize pending owners: ${failures.join(', ')}`,
+          );
+        let swapStartedAt = Date.now();
+        await this.batch.done({
+          tessar: this.#tessar,
+          tessarInputGeneration: this.#tessarInputSnapshot.generation,
+        });
+        this.#tessarTimings.tessarSwapMs += Date.now() - swapStartedAt;
+        this.#tessarTimings.tessarWriteMs += this.batch.writeMs;
+        pending = await this.#tessar.registry.pending(this.realmURL.href);
+      }
+      if (pending.length)
+        throw new Error(
+          'Tessar feeder graph did not converge; owners remain pending',
+        );
+      return [...published].map((url) => new URL(url));
+    } finally {
+      this.#tessarInputSnapshot = undefined;
+      this.#tessarTimings.tessarMaterializationMs += Date.now() - startedAt;
+    }
   }
 
   // Announce this pass's now-fixed invalidation set, tagged per URL:
@@ -659,6 +760,7 @@ export class IndexRunner {
   async #renderVisit(url: URL): Promise<VisitRenderOutcome> {
     try {
       let result = await renderFileForIndexing({
+        tessarInputSnapshot: this.#tessarInputSnapshot,
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,

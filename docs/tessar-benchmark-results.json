@@ -1,0 +1,1359 @@
+{
+  "version": 1,
+  "status": "in-progress",
+  "candidate": {
+    "commit": "fead7a13ab02154a79e743877798166765959fbe",
+    "runtimeHash": "cacabe30049993e6a84d2f25b33bf5e130d27d3f3752dac760efdb8573de56cd",
+    "hostHash": "78492c253fcf49c641cd1022de72fa503796d1d23f7ab383116e7c161bfce09f"
+  },
+  "manifest": {
+    "version": 1,
+    "synthetic": true,
+    "seed": 1729,
+    "preset": "smoke",
+    "shape": "distributed",
+    "instanceCount": 34,
+    "counts": {
+      "Classroom": 2,
+      "Student": 4,
+      "Staff": 4,
+      "Slot": 4,
+      "Observation": 4,
+      "Report": 4,
+      "Activity": 4,
+      "Reference": 4,
+      "DaySummary": 4
+    },
+    "recordsSha256": "cbbee835e1b22fc96222fc1019fdba48380433ec8cf8c3eec1d44f2a811cc8d2"
+  },
+  "startupMs": 83182.196375,
+  "httpReads": [
+    {
+      "iteration": 0,
+      "elapsedMs": 24.365875000003143,
+      "responseBytes": 7164,
+      "status": 200,
+      "valid": true
+    },
+    {
+      "iteration": 1,
+      "elapsedMs": 8.401167000003625,
+      "responseBytes": 7164,
+      "status": 200,
+      "valid": true
+    },
+    {
+      "iteration": 2,
+      "elapsedMs": 10.184207999991486,
+      "responseBytes": 7164,
+      "status": 200,
+      "valid": true
+    },
+    {
+      "iteration": 3,
+      "elapsedMs": 8.670916999995825,
+      "responseBytes": 7164,
+      "status": 200,
+      "valid": true
+    },
+    {
+      "iteration": 4,
+      "elapsedMs": 8.254000000000815,
+      "responseBytes": 7164,
+      "status": 200,
+      "valid": true
+    }
+  ],
+  "browserReads": [
+    {
+      "iteration": 0,
+      "cache": "new-browser-context",
+      "valid": true,
+      "displayMs": 538.87025,
+      "inputRequests": [],
+      "fetchRequests": 101,
+      "metrics": {
+        "Nodes": 1469,
+        "ScriptDuration": 0.08405,
+        "TaskDuration": 0.378386,
+        "JSHeapUsedSize": 75435092
+      }
+    },
+    {
+      "iteration": 1,
+      "cache": "warm-reload",
+      "valid": true,
+      "displayMs": 428.66262500000016,
+      "inputRequests": [],
+      "fetchRequests": 99,
+      "metrics": {
+        "Nodes": 2752,
+        "ScriptDuration": 0.119587,
+        "TaskDuration": 0.629178,
+        "JSHeapUsedSize": 97491200
+      }
+    },
+    {
+      "iteration": 2,
+      "cache": "warm-reload",
+      "valid": true,
+      "displayMs": 467.7433329999999,
+      "inputRequests": [],
+      "fetchRequests": 99,
+      "metrics": {
+        "Nodes": 2582,
+        "ScriptDuration": 0.157086,
+        "TaskDuration": 0.926614,
+        "JSHeapUsedSize": 61492352
+      }
+    },
+    {
+      "iteration": 3,
+      "cache": "warm-reload",
+      "valid": true,
+      "displayMs": 443.6385829999999,
+      "inputRequests": [],
+      "fetchRequests": 99,
+      "metrics": {
+        "Nodes": 4043,
+        "ScriptDuration": 0.190751,
+        "TaskDuration": 1.172988,
+        "JSHeapUsedSize": 118185404
+      }
+    },
+    {
+      "iteration": 4,
+      "cache": "warm-reload",
+      "valid": true,
+      "displayMs": 494.621083,
+      "inputRequests": [],
+      "fetchRequests": 99,
+      "metrics": {
+        "Nodes": 2582,
+        "ScriptDuration": 0.226318,
+        "TaskDuration": 1.4741,
+        "JSHeapUsedSize": 61486640
+      }
+    }
+  ],
+  "mutations": [
+    {
+      "name": "matching content edit",
+      "valid": true,
+      "ackMs": 826,
+      "status": 200,
+      "ownerRevision": 4,
+      "ackToDisplayMs": 16,
+      "inputRequests": [],
+      "pendingNotificationMs": -662,
+      "transitions": [
+        {
+          "sinceWriteMs": 118,
+          "state": "ready",
+          "visibleStats": 6
+        },
+        {
+          "sinceWriteMs": 164,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 813,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "transitive row label edit",
+      "valid": true,
+      "ackMs": 1247,
+      "status": 200,
+      "ownerRevision": 6,
+      "ackToDisplayMs": 121,
+      "inputRequests": [],
+      "pendingNotificationMs": -1107,
+      "transitions": [
+        {
+          "sinceWriteMs": 140,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 1363,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "query exit",
+      "valid": true,
+      "ackMs": 1553,
+      "status": 200,
+      "ownerRevision": 8,
+      "ackToDisplayMs": 119,
+      "inputRequests": [],
+      "pendingNotificationMs": -1412,
+      "transitions": [
+        {
+          "sinceWriteMs": 141,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 1668,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "query entry",
+      "valid": true,
+      "ackMs": 893,
+      "status": 200,
+      "ownerRevision": 10,
+      "ackToDisplayMs": 115,
+      "inputRequests": [],
+      "pendingNotificationMs": -747,
+      "transitions": [
+        {
+          "sinceWriteMs": 146,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 1003,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "asynchronous source write",
+      "valid": true,
+      "ackMs": 15,
+      "status": 204,
+      "ownerRevision": 12,
+      "ackToDisplayMs": 887,
+      "inputRequests": [],
+      "pendingNotificationMs": 124,
+      "transitions": [
+        {
+          "sinceWriteMs": 139,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 894,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "unrelated write",
+      "valid": true,
+      "ackMs": 950,
+      "status": 200,
+      "ownerRevision": 12,
+      "ackToDisplayMs": 123,
+      "inputRequests": [],
+      "pendingNotificationMs": -807,
+      "transitions": [
+        {
+          "sinceWriteMs": 143,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 1066,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "matching insertion",
+      "valid": true,
+      "ackMs": 15,
+      "status": 204,
+      "ownerRevision": 16,
+      "ackToDisplayMs": 1289,
+      "inputRequests": [],
+      "pendingNotificationMs": 125,
+      "transitions": [
+        {
+          "sinceWriteMs": 140,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 1301,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    },
+    {
+      "name": "matching deletion",
+      "valid": true,
+      "ackMs": 471,
+      "status": 204,
+      "ownerRevision": 18,
+      "ackToDisplayMs": 137,
+      "inputRequests": [],
+      "pendingNotificationMs": -309,
+      "transitions": [
+        {
+          "sinceWriteMs": 162,
+          "state": "pending",
+          "visibleStats": 0
+        },
+        {
+          "sinceWriteMs": 595,
+          "state": "ready",
+          "visibleStats": 6
+        }
+      ]
+    }
+  ],
+  "browserErrors": [],
+  "trace": {
+    "lcpMs": 1878,
+    "ttfbMs": 31,
+    "cls": 0,
+    "cpuThrottling": 1,
+    "networkThrottling": "none",
+    "note": "One DevTools trace; separate from headless readiness measurements. No base/candidate speedup established."
+  },
+  "exploratory1x": {
+    "storage": "PostgreSQL 16.3 on 3.9 GiB tmpfs; excluded from disk-backed comparisons",
+    "candidate": {
+      "commit": "fead7a13ab02154a79e743877798166765959fbe",
+      "runtimeHash": "cacabe30049993e6a84d2f25b33bf5e130d27d3f3752dac760efdb8573de56cd",
+      "hostHash": "78492c253fcf49c641cd1022de72fa503796d1d23f7ab383116e7c161bfce09f"
+    },
+    "manifest": {
+      "version": 1,
+      "synthetic": true,
+      "seed": 1729,
+      "preset": "1x",
+      "shape": "distributed",
+      "instanceCount": 1255,
+      "counts": {
+        "Classroom": 2,
+        "Student": 13,
+        "Staff": 26,
+        "Slot": 173,
+        "Observation": 164,
+        "Report": 44,
+        "Activity": 63,
+        "Reference": 766,
+        "DaySummary": 4
+      },
+      "recordsSha256": "60ecddc1bd7b8203f1cd0ffda583325cd0b33ed8552734bc79bed99f9e671b14"
+    },
+    "startupMs": 334014.01620799996,
+    "httpReads": [
+      {
+        "iteration": 0,
+        "elapsedMs": 28.61095900001237,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 1,
+        "elapsedMs": 11.054750000010245,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 2,
+        "elapsedMs": 9.332875000021886,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 3,
+        "elapsedMs": 10.277624999987893,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 4,
+        "elapsedMs": 9.901791999989655,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 5,
+        "elapsedMs": 9.857124999980442,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 6,
+        "elapsedMs": 11.62100000004284,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 7,
+        "elapsedMs": 9.131791999971028,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 8,
+        "elapsedMs": 8.908166000037454,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 9,
+        "elapsedMs": 11.87562499998603,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 10,
+        "elapsedMs": 8.843791999970563,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 11,
+        "elapsedMs": 8.613874999980908,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 12,
+        "elapsedMs": 8.231292000040412,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 13,
+        "elapsedMs": 10.982457999954931,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 14,
+        "elapsedMs": 8.227375000016764,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 15,
+        "elapsedMs": 6.772209000017028,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 16,
+        "elapsedMs": 8.223916999995708,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 17,
+        "elapsedMs": 8.872124999994412,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 18,
+        "elapsedMs": 9.011999999987893,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 19,
+        "elapsedMs": 9.746916999982204,
+        "responseBytes": 29698,
+        "status": 200,
+        "valid": true
+      }
+    ],
+    "browserReads": [
+      {
+        "iteration": 0,
+        "cache": "new-browser-context",
+        "valid": true,
+        "displayMs": 582.6893750000002,
+        "fetchRequests": 98,
+        "metrics": {
+          "Nodes": 1471,
+          "ScriptDuration": 0.087699,
+          "TaskDuration": 0.384828,
+          "JSHeapUsedSize": 74252456
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 1,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 464.07220900000016,
+        "fetchRequests": 103,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.127607,
+          "TaskDuration": 0.699661,
+          "JSHeapUsedSize": 60268616
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 2,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 434.560833,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.16159,
+          "TaskDuration": 0.951681,
+          "JSHeapUsedSize": 118875236
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 3,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 538.8636660000002,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.198748,
+          "TaskDuration": 1.274711,
+          "JSHeapUsedSize": 62192904
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 4,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 450.24112499999956,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.232656,
+          "TaskDuration": 1.526551,
+          "JSHeapUsedSize": 120423820
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 5,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 493.1064580000002,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.26902,
+          "TaskDuration": 1.842421,
+          "JSHeapUsedSize": 62418356
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 6,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 453.88287500000024,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.305986,
+          "TaskDuration": 2.096136,
+          "JSHeapUsedSize": 120947520
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 7,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 490.76133299999947,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 8772,
+          "ScriptDuration": 0.341787,
+          "TaskDuration": 2.381155,
+          "JSHeapUsedSize": 158195248
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 8,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 531.8857500000004,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 11308,
+          "ScriptDuration": 0.380472,
+          "TaskDuration": 2.704089,
+          "JSHeapUsedSize": 196422944
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 9,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 537.3765000000003,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 7464,
+          "ScriptDuration": 0.417063,
+          "TaskDuration": 3.08325,
+          "JSHeapUsedSize": 96883632
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 10,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 482.1635839999999,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 1850,
+          "ScriptDuration": 0.452137,
+          "TaskDuration": 3.392069,
+          "JSHeapUsedSize": 44846444
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 11,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 442.59000000000015,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 4386,
+          "ScriptDuration": 0.489469,
+          "TaskDuration": 3.639918,
+          "JSHeapUsedSize": 101884296
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 12,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 482.96099999999933,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.526201,
+          "TaskDuration": 3.938568,
+          "JSHeapUsedSize": 61734792
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 13,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 464.44058399999994,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.560771,
+          "TaskDuration": 4.203367,
+          "JSHeapUsedSize": 120747992
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 14,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 493.4795830000003,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.600257,
+          "TaskDuration": 4.524254,
+          "JSHeapUsedSize": 61717764
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 15,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 462.02329199999986,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.635034,
+          "TaskDuration": 4.788153,
+          "JSHeapUsedSize": 120212712
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 16,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 502.05570799999987,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.672395,
+          "TaskDuration": 5.111127,
+          "JSHeapUsedSize": 61703224
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 17,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 467.5910410000015,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.707947,
+          "TaskDuration": 5.372618,
+          "JSHeapUsedSize": 120490356
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 18,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 514.6342499999992,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 3700,
+          "ScriptDuration": 0.746014,
+          "TaskDuration": 5.698184,
+          "JSHeapUsedSize": 61710756
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 19,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 476.0184999999983,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 6236,
+          "ScriptDuration": 0.782276,
+          "TaskDuration": 5.970163,
+          "JSHeapUsedSize": 120202736
+        },
+        "inputRequestCount": 0
+      }
+    ],
+    "writes": [
+      {
+        "name": "matching content edit",
+        "valid": true,
+        "ackMs": 5401,
+        "status": 200,
+        "ownerRevision": 4,
+        "ackToDisplayMs": 38,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "transitive row label edit",
+        "valid": true,
+        "ackMs": 2771,
+        "status": 200,
+        "ownerRevision": 6,
+        "ackToDisplayMs": 150,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "query exit",
+        "valid": true,
+        "ackMs": 3016,
+        "status": 200,
+        "ownerRevision": 8,
+        "ackToDisplayMs": 120,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "query entry",
+        "valid": true,
+        "ackMs": 2423,
+        "status": 200,
+        "ownerRevision": 10,
+        "ackToDisplayMs": 119,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "asynchronous source write",
+        "valid": true,
+        "ackMs": 16,
+        "status": 204,
+        "ownerRevision": 12,
+        "ackToDisplayMs": 2002,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "unrelated write",
+        "valid": true,
+        "ackMs": 907,
+        "status": 200,
+        "ownerRevision": 12,
+        "ackToDisplayMs": 131,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "matching insertion",
+        "valid": true,
+        "ackMs": 15,
+        "status": 204,
+        "ownerRevision": 15,
+        "ackToDisplayMs": 1092,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "matching deletion",
+        "valid": true,
+        "ackMs": 1521,
+        "status": 204,
+        "ownerRevision": 17,
+        "ackToDisplayMs": 147,
+        "inputRequestCount": 0
+      }
+    ],
+    "pageErrorCount": 0
+  },
+  "failedSetupRuns": [
+    {
+      "preset": "10x",
+      "instanceCount": 12550,
+      "storage": "3.9 GiB tmpfs",
+      "valid": false,
+      "reason": "PostgreSQL SQLSTATE 53100: no space left on device",
+      "sourceFilesVisitedApproximately": 10037
+    },
+    {
+      "preset": "10x",
+      "instanceCount": 12550,
+      "storage": "disk-backed Docker volume",
+      "valid": false,
+      "reason": "Harness 600000 ms full-index startup timeout",
+      "sourceFilesVisitedApproximately": 11278
+    }
+  ],
+  "smokeV5": {
+    "candidate": {
+      "commit": "fead7a13ab02154a79e743877798166765959fbe",
+      "runtimeHash": "23dd3be3f52df4414a9e29cc71fad5d2a5ce249800fd8eb83614cbce37404895",
+      "hostHash": "da5c453fe08e2bdfdf11cd201677aac8eeb2b8bf09f20cf5a8d273e0f2bfc26e"
+    },
+    "storage": "disk-backed PostgreSQL 16.3 Docker volume",
+    "manifest": {
+      "version": 1,
+      "synthetic": true,
+      "seed": 1729,
+      "preset": "smoke",
+      "shape": "distributed",
+      "variant": "materialized",
+      "instanceCount": 34,
+      "counts": {
+        "Classroom": 2,
+        "Student": 4,
+        "Staff": 4,
+        "Slot": 4,
+        "Observation": 4,
+        "Report": 4,
+        "Activity": 4,
+        "Reference": 4,
+        "DaySummary": 4
+      },
+      "recordsSha256": "cbbee835e1b22fc96222fc1019fdba48380433ec8cf8c3eec1d44f2a811cc8d2"
+    },
+    "httpReads": [
+      {
+        "iteration": 0,
+        "elapsedMs": 23.093459000010625,
+        "responseBytes": 7164,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 1,
+        "elapsedMs": 10.064541999992798,
+        "responseBytes": 7164,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 2,
+        "elapsedMs": 11.75020900000527,
+        "responseBytes": 7164,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 3,
+        "elapsedMs": 8.958333000002312,
+        "responseBytes": 7164,
+        "status": 200,
+        "valid": true
+      },
+      {
+        "iteration": 4,
+        "elapsedMs": 8.91874999999709,
+        "responseBytes": 7164,
+        "status": 200,
+        "valid": true
+      }
+    ],
+    "browserReads": [
+      {
+        "iteration": 0,
+        "cache": "new-browser-context",
+        "valid": true,
+        "displayMs": 550.5600419999998,
+        "fetchRequests": 98,
+        "metrics": {
+          "Nodes": 1204,
+          "ScriptDuration": 0.08798,
+          "TaskDuration": 0.38672700000000004,
+          "JSHeapUsedSize": 73473880
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 1,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 446.2209999999998,
+        "fetchRequests": 103,
+        "metrics": {
+          "Nodes": 2582,
+          "ScriptDuration": 0.03707700000000001,
+          "TaskDuration": 0.28576199999999996,
+          "JSHeapUsedSize": 59505292
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 2,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 445.364834,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 4043,
+          "ScriptDuration": 0.033658999999999994,
+          "TaskDuration": 0.2414559999999999,
+          "JSHeapUsedSize": 116162848
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 3,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 476.3268330000001,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 2582,
+          "ScriptDuration": 0.03739200000000001,
+          "TaskDuration": 0.31247899999999995,
+          "JSHeapUsedSize": 61460216
+        },
+        "inputRequestCount": 0
+      },
+      {
+        "iteration": 4,
+        "cache": "warm-reload",
+        "valid": true,
+        "displayMs": 440.77620799999977,
+        "fetchRequests": 99,
+        "metrics": {
+          "Nodes": 4043,
+          "ScriptDuration": 0.033944,
+          "TaskDuration": 0.247892,
+          "JSHeapUsedSize": 118292476
+        },
+        "inputRequestCount": 0
+      }
+    ],
+    "writes": [
+      {
+        "name": "matching content edit",
+        "valid": true,
+        "ackMs": 851,
+        "status": 200,
+        "ownerRevision": 4,
+        "ackToDisplayMs": 14,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "transitive row label edit",
+        "valid": true,
+        "ackMs": 1262,
+        "status": 200,
+        "ownerRevision": 6,
+        "ackToDisplayMs": 128,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "query exit",
+        "valid": true,
+        "ackMs": 1566,
+        "status": 200,
+        "ownerRevision": 8,
+        "ackToDisplayMs": 121,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "query entry",
+        "valid": true,
+        "ackMs": 887,
+        "status": 200,
+        "ownerRevision": 10,
+        "ackToDisplayMs": 121,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "asynchronous source write",
+        "valid": true,
+        "ackMs": 21,
+        "status": 204,
+        "ownerRevision": 12,
+        "ackToDisplayMs": 852,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "unrelated write",
+        "valid": true,
+        "ackMs": 952,
+        "status": 200,
+        "ownerRevision": 12,
+        "ackToDisplayMs": 120,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "matching insertion",
+        "valid": true,
+        "ackMs": 13,
+        "status": 204,
+        "ownerRevision": 16,
+        "ackToDisplayMs": 1309,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "matching deletion",
+        "valid": true,
+        "ackMs": 483,
+        "status": 204,
+        "ownerRevision": 18,
+        "ackToDisplayMs": 142,
+        "inputRequestCount": 0
+      },
+      {
+        "name": "reconnect after missed notification",
+        "valid": true,
+        "ackMs": 32,
+        "status": 204,
+        "ownerRevision": 20,
+        "ackToDisplayMs": 5159,
+        "inputRequestCount": 0
+      }
+    ],
+    "correctedReference": {
+      "note": "Single read and nine mutation validity checks; not a controlled performance comparison",
+      "reads": [
+        {
+          "iteration": 0,
+          "cache": "new-browser-context",
+          "valid": true,
+          "displayMs": 1333.212375,
+          "fetchRequests": 105,
+          "metrics": {
+            "Nodes": 1357,
+            "ScriptDuration": 0.078716,
+            "TaskDuration": 0.392484,
+            "JSHeapUsedSize": 46309572
+          },
+          "inputRequestCount": 5
+        }
+      ],
+      "writes": [
+        {
+          "name": "matching content edit",
+          "valid": true,
+          "ackMs": 341,
+          "status": 200,
+          "ackToDisplayMs": 254,
+          "inputRequestCount": 9
+        },
+        {
+          "name": "transitive row label edit",
+          "valid": true,
+          "ackMs": 492,
+          "status": 200,
+          "ackToDisplayMs": 264,
+          "inputRequestCount": 12
+        },
+        {
+          "name": "query exit",
+          "valid": true,
+          "ackMs": 878,
+          "status": 200,
+          "ackToDisplayMs": 258,
+          "inputRequestCount": 9
+        },
+        {
+          "name": "query entry",
+          "valid": true,
+          "ackMs": 243,
+          "status": 200,
+          "ackToDisplayMs": 296,
+          "inputRequestCount": 9
+        },
+        {
+          "name": "asynchronous source write",
+          "valid": true,
+          "ackMs": 10,
+          "status": 204,
+          "ackToDisplayMs": 496,
+          "inputRequestCount": 9
+        },
+        {
+          "name": "unrelated write",
+          "valid": true,
+          "ackMs": 428,
+          "status": 200,
+          "ackToDisplayMs": 1,
+          "inputRequestCount": 4
+        },
+        {
+          "name": "matching insertion",
+          "valid": true,
+          "ackMs": 13,
+          "status": 204,
+          "ackToDisplayMs": 1262,
+          "inputRequestCount": 12
+        },
+        {
+          "name": "matching deletion",
+          "valid": true,
+          "ackMs": 77,
+          "status": 204,
+          "ackToDisplayMs": 282,
+          "inputRequestCount": 6
+        },
+        {
+          "name": "reconnect after missed notification",
+          "valid": true,
+          "ackMs": 12,
+          "status": 204,
+          "ackToDisplayMs": 5309,
+          "inputRequestCount": 10
+        }
+      ],
+      "pageErrorCount": 0
+    },
+    "feederChecks": [
+      {
+        "name": "unrelated module epoch",
+        "valid": true,
+        "ackToReadyMs": 868
+      },
+      {
+        "name": "five downstream feeder stages",
+        "valid": true,
+        "ackMs": 14,
+        "ackToReadyMs": 3908,
+        "snapshots": [
+          {
+            "id": "DaySummary/00000",
+            "revision": 70,
+            "scoreTotal": 88
+          },
+          {
+            "id": "TessarStage0/00000",
+            "revision": 71,
+            "scoreTotal": 88
+          },
+          {
+            "id": "TessarStage1/00000",
+            "revision": 72,
+            "scoreTotal": 88
+          },
+          {
+            "id": "TessarStage2/00000",
+            "revision": 73,
+            "scoreTotal": 88
+          },
+          {
+            "id": "TessarStage3/00000",
+            "revision": 74,
+            "scoreTotal": 88
+          },
+          {
+            "id": "TessarStage4/00000",
+            "revision": 75,
+            "scoreTotal": 88
+          }
+        ]
+      }
+    ],
+    "concurrencyChecks": {
+      "note": "Correctness smoke only. Other regression checks overlapped part of the run. HTTP readers plus one browser, not 50 browser CPUs.",
+      "cases": [
+        {
+          "readers": 1,
+          "valid": true,
+          "readyReads": 874,
+          "pendingReads": 0,
+          "failures": [],
+          "writes": [
+            {
+              "valid": true,
+              "ackMs": 22,
+              "ackToDisplayMs": 1145,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 12,
+              "ackToDisplayMs": 638,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 20,
+              "ackToDisplayMs": 664,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 13,
+              "ackToDisplayMs": 654,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 12,
+              "ackToDisplayMs": 652,
+              "inputRequestCount": 0
+            }
+          ]
+        },
+        {
+          "readers": 10,
+          "valid": true,
+          "readyReads": 3886,
+          "pendingReads": 0,
+          "failures": [],
+          "writes": [
+            {
+              "valid": true,
+              "ackMs": 33,
+              "ackToDisplayMs": 714,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 22,
+              "ackToDisplayMs": 712,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 20,
+              "ackToDisplayMs": 732,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 27,
+              "ackToDisplayMs": 788,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 23,
+              "ackToDisplayMs": 761,
+              "inputRequestCount": 0
+            }
+          ]
+        },
+        {
+          "readers": 50,
+          "valid": true,
+          "readyReads": 4192,
+          "pendingReads": 0,
+          "failures": [],
+          "writes": [
+            {
+              "valid": true,
+              "ackMs": 87,
+              "ackToDisplayMs": 863,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 119,
+              "ackToDisplayMs": 864,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 103,
+              "ackToDisplayMs": 816,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 113,
+              "ackToDisplayMs": 819,
+              "inputRequestCount": 0
+            },
+            {
+              "valid": true,
+              "ackMs": 100,
+              "ackToDisplayMs": 782,
+              "inputRequestCount": 0
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
