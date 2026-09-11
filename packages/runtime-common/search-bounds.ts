@@ -39,11 +39,14 @@ const log = logger('search-bounds');
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
 //     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
 //     bound on the process rather than on a request: how many searches it runs
-//     at once, across every caller. Each in-flight search holds tens of MB of
-//     heap while its result set is assembled, so this is the number that
-//     decides whether a burst exhausts the heap. Enforced at admission in the
-//     realm-server's request middleware; arrivals above the ceiling wait
-//     briefly for a slot and are then shed with 429 + Retry-After.
+//     at once, across every caller. Each distinct in-flight search holds tens
+//     of MB of heap while its result set is assembled, so this is the number
+//     that decides whether a burst of distinct searches exhausts the heap
+//     (identical live `/_federated-search` requests can share one document via
+//     the live-search cache, which is wired into that handler only; per-realm
+//     `/_search` calls, also gated here, assemble independently). Enforced at
+//     admission in the realm-server's request middleware; arrivals above the
+//     ceiling wait briefly for a slot and are then shed with 429 + Retry-After.
 //
 // All bounds are exported consts, overridable via env for ops tuning.
 // ---------------------------------------------------------------------------
@@ -154,9 +157,29 @@ export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
 
 // Max searches the realm-server process runs at once, across every caller.
 // Enforced server-side at admission (see the realm-server's
-// `search-inflight.ts`). Sized against the per-search heap cost: a few dozen
-// concurrent federated searches exhaust a 2 GB heap, so the default keeps a
-// process on the default heap alive and leaves headroom on a larger one.
+// `search-inflight.ts`).
+//
+// This ceiling plays two roles at once, and the second is why it can't simply
+// be raised. It bounds request concurrency; and because the gate admits before
+// the body is parsed — so a shed costs nothing — it cannot tell a cheap request
+// from an expensive one, so it is also the heap bound for *distinct* searches:
+// the worst case is this many concurrent multi-MB result documents, which is
+// what exhausts a 2 GB heap. The default holds a process on the default heap
+// alive and leaves headroom on a larger one.
+//
+// The live-search cache (coalescing + short-TTL body cache, on the
+// `/_federated-search` handler only) makes a burst of byte-identical federated
+// searches cost ~one document rather than one per request, but it does nothing
+// for distinct concurrent queries — nor for per-realm `/_search`, which the
+// gate admits too — and the gate can't tell any of these apart at admission
+// time. So raising this to be friendlier to identical bursts would also raise
+// the distinct-query worst case and re-expose the heap exhaustion this bound
+// exists to prevent — identical-burst overflow is instead shed and retried,
+// which lands as a cache hit only while the first response is still retained
+// (a non-zero LIVE_SEARCH_CACHE_TTL_MS, body within LIVE_SEARCH_CACHE_MAX_BYTES);
+// otherwise the retry re-assembles the document. Tune per environment against
+// the distinct-query heap cost, never against identical-burst volume.
+//
 // Indexing traffic is admitted regardless of this ceiling (it is bounded
 // upstream by the prerender pool), so the effective room for interactive
 // searches is whatever indexing isn't using.
