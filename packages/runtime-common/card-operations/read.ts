@@ -309,7 +309,7 @@ async function missingTarget(
   if (await core.isIgnored(pathsFor(core).fileURL(sourcePath))) {
     return notFound;
   }
-  let source = await core.readSource(sourcePath);
+  let source = await core.readFileAsText(sourcePath);
   if (source === undefined) {
     return notFound;
   }

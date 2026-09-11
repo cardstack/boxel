@@ -1,15 +1,24 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { rmSync, writeFileSync } from 'fs';
+import { basename, join } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType, baseRealm, rri } from '@cardstack/runtime-common';
+import type { CodeRef, Realm } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  baseRealm,
+  computeContentHash,
+  isSampledContentHash,
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
+  rri,
+} from '@cardstack/runtime-common';
 import {
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
+  isSourceResult,
   lowerQueryOperation,
   runOperation,
   type OperationCore,
@@ -17,6 +26,8 @@ import {
   type OperationHeadResult,
   type OperationRequest,
   type OperationResult,
+  type OperationSourceBody,
+  type OperationSourceResult,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -31,6 +42,12 @@ import type { PgAdapter } from '@cardstack/postgres';
 // The operation core, exercised the way the HTTP surfaces will once they route
 // to it: obtain the core from a realm and call `runOperation` directly. Nothing
 // is routed here yet, so these are the only callers.
+//
+// A `read` is held against what the card+json GET serves and a `readSource`
+// against what the `card+source` GET serves, because those are the surfaces
+// each will delegate to. Where a result is checked against a handler's
+// response rather than against a literal, that is deliberate: the parity is
+// the requirement, and a literal would let the two drift together.
 
 function request(
   target: OperationTarget,
@@ -64,6 +81,49 @@ function headersOf(result: OperationResult): OperationHeadResult {
   return result;
 }
 
+function sourceOf(result: OperationResult): OperationSourceResult {
+  if (!isSourceResult(result)) {
+    throw new Error(`expected a source result, got ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
+// A stored-bytes read hands back whatever form the realm's file adapter
+// produced — under Node that is an unread stream — so a test comparing content
+// has to materialize it. Doing so here rather than in the executor is the
+// point: a facade puts the body on a response without ever reading it.
+async function bytesOf(
+  body: OperationSourceBody | undefined,
+): Promise<Uint8Array> {
+  if (body === undefined) {
+    throw new Error('expected a body');
+  }
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body);
+  }
+  if (body instanceof Uint8Array) {
+    return body;
+  }
+  let chunks: Uint8Array[] = [];
+  for await (let chunk of body as AsyncIterable<Uint8Array | string>) {
+    chunks.push(
+      typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk,
+    );
+  }
+  let total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function textOf(body: OperationSourceBody | undefined): Promise<string> {
+  return new TextDecoder().decode(await bytesOf(body));
+}
+
 // The failure a call is expected to produce. Rethrows anything that is not an
 // operation failure so a genuine bug reports itself rather than being read as
 // the refusal under test.
@@ -87,15 +147,22 @@ module(basename(import.meta.filename), function () {
     let testRealmHttpServer: Server;
     let realmRequest: RealmRequest;
 
+    // The realm's directory on disk, for the one case that has to reach past
+    // the realm to set itself up: a file changed without the realm's write
+    // path seeing it.
+    let testRealmPath: string;
+
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
+      testRealmPath: string;
       request: SuperTest<Test>;
       dir: DirResult;
       dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
+      testRealmPath = args.testRealmPath;
       realmRequest = withRealmPath(args.request, realmURL);
     }
 
@@ -286,6 +353,360 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.code, 'target-not-found');
       assert.strictEqual(error.status, 404);
+    });
+
+    test('a stored-bytes read serves a card instance source verbatim', async function (assert) {
+      // The `.json` spelling names the card's stored bytes, which is why
+      // dispatch leaves it as written rather than resolving it to the card.
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}person-1.json` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(
+        source.contentType,
+        'application/json',
+        'the content type is inferred from the path, as both byte routes infer it',
+      );
+
+      // Against the `card+source` GET rather than the card+json one: that is
+      // the surface this read will serve, so it is the one it has to
+      // reproduce.
+      let response = await realmRequest
+        .get('/person-1.json')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+      assert.strictEqual(
+        await textOf(source.body),
+        response.text,
+        'the bytes are the ones the source route serves',
+      );
+      assert.true(
+        response.headers['etag'].startsWith(source.version!),
+        `the source ETag is built from the version the read reports: ${response.headers['etag']} / ${source.version}`,
+      );
+    });
+
+    test('a stored-bytes read of a module serves its text', async function (assert) {
+      // A module has no `adoptsFrom` and no definition-cache entry, so this is
+      // the target the definition-free dispatch exists for. Its extension is
+      // a registered one, which is what would otherwise send it through a
+      // file def's type and a cache lookup on it.
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}person.gts` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'text/typescript+glimmer');
+
+      let response = await realmRequest
+        .get('/person.gts')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+      assert.strictEqual(await textOf(source.body), response.text);
+    });
+
+    test('a stored-bytes read of an image serves its bytes and its content type', async function (assert) {
+      // Written through the realm rather than taken from the fixture, for two
+      // reasons: the fixture holds no binary file, and a realm write is what
+      // persists the content-meta row, so this is also the case where
+      // `version` is the hash the realm recorded rather than one computed from
+      // the bytes on read.
+      let bytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff,
+      ]);
+      await testRealm.write('logo.png', bytes);
+
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}logo.png` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'image/png');
+      assert.deepEqual(
+        Array.from(await bytesOf(source.body)),
+        Array.from(bytes),
+        'the bytes come back undecoded',
+      );
+      assert.strictEqual(
+        source.version,
+        computeContentHash(bytes),
+        'and `version` is the content hash of the bytes the realm stored',
+      );
+      assert.strictEqual(
+        typeof source.created,
+        'number',
+        'a realm write records when the realm first saw the path',
+      );
+    });
+
+    test('a stored-bytes read of an underscore-prefixed file reaches it', async function (assert) {
+      // Only the specific registered `_` endpoints are realm endpoints. A file
+      // stored under such a name is one `upsertCardSource` writes and the byte
+      // routes serve, so a read of its bytes must not report it missing.
+      await testRealm.write('_notes.md', '# notes');
+
+      let result = await runOperation(
+        testRealm.operationCore,
+        request(
+          { kind: 'instance', url: `${testRealmHref}_notes.md` },
+          'readSource',
+        ),
+      );
+      let source = sourceOf(result);
+      assert.strictEqual(source.contentType, 'text/markdown');
+      // Read once and hold it. The body is whatever the adapter produced — a
+      // single-use stream under Node — so reading it twice yields the bytes
+      // and then nothing, which is what a facade putting it on a response
+      // gets too: one pass.
+      let bytes = await textOf(source.body);
+      assert.strictEqual(bytes, '# notes');
+
+      let response = await realmRequest
+        .get('/_notes.md')
+        .set('Accept', SupportedMimeType.CardSource);
+      assert.strictEqual(
+        response.status,
+        200,
+        `the source route serves it too: ${response.text}`,
+      );
+      assert.strictEqual(bytes, response.text);
+    });
+
+    test('a stored-bytes read never reports a version that describes other bytes', async function (assert) {
+      // `version` identifies the body it comes back with, and the realm's
+      // file-meta row is refreshed only by the realm's own write path. A file
+      // overwritten out of band therefore has a row describing bytes that are
+      // gone, and reporting that hash would let a conditional GET answer 304
+      // for content that changed.
+      //
+      // Run against a module and against a `.md`, the two sides of the line
+      // the byte routes draw for their own validators, since a stored-bytes
+      // read draws none: what a stale row means does not depend on the
+      // extension it sits under.
+      let read = async (localPath: string) =>
+        sourceOf(
+          await runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'instance', url: `${testRealmHref}${localPath}` },
+              'readSource',
+            ),
+          ),
+        );
+
+      await testRealm.write('notes.gts', 'export const first = 1;');
+      assert.strictEqual(
+        (await read('notes.gts')).version,
+        computeContentHash('export const first = 1;'),
+        'a realm write records the hash of what it wrote',
+      );
+
+      // Straight to disk, so nothing refreshes the row. The new bytes are a
+      // different length, which is what the recorded hash is checked against.
+      writeFileSync(
+        join(testRealmPath, 'notes.gts'),
+        'export const second = 2; // and longer',
+      );
+      let overwritten = await read('notes.gts');
+      assert.strictEqual(
+        await textOf(overwritten.body),
+        'export const second = 2; // and longer',
+        'the read serves the bytes that are on disk',
+      );
+      assert.strictEqual(
+        overwritten.version,
+        computeContentHash('export const second = 2; // and longer'),
+        'and `version` identifies those bytes rather than the recorded ones',
+      );
+      let overwrittenHeaders = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}notes.gts` },
+            'readSource',
+          ),
+          { headersOnly: true },
+        ),
+      );
+      assert.strictEqual(
+        overwrittenHeaders.version,
+        overwritten.version,
+        'and the mode that returns no body reports the same one — a ' +
+          'fingerprint is read in bounded ranges of the file rather than out ' +
+          'of the body, so declining the body costs no part of it',
+      );
+
+      // The same overwrite on a path the source route would validate on
+      // `lastModified` rather than on a hash. The recorded hash is equally
+      // untrustworthy here, and the read that replaces it is equally bounded,
+      // so this answers with the new bytes' fingerprint too — which route asks
+      // for one is the facade's business, not this read's.
+      await testRealm.write('notes.md', '# first');
+      writeFileSync(join(testRealmPath, 'notes.md'), '# second, and longer');
+      let unhashed = await read('notes.md');
+      assert.strictEqual(
+        await textOf(unhashed.body),
+        '# second, and longer',
+        'the bytes on disk are still what is served',
+      );
+      assert.strictEqual(
+        unhashed.version,
+        computeContentHash('# second, and longer'),
+        'and `version` identifies them rather than the recorded bytes',
+      );
+    });
+
+    test('a stored-bytes read fingerprints a file larger than it reads', async function (assert) {
+      // Above `CONTENT_HASH_WHOLE_LIMIT_BYTES` the fingerprint is the byte
+      // length plus a hash of the head and one of the tail, so the realm
+      // assembles it from two bounded reads and the stat — the same value
+      // hashing the whole file yields, for a read that does not grow with the
+      // file. Written straight to disk so there is no row to recall it from,
+      // and under an extension the source route would validate on
+      // `lastModified`: the bounded read is what makes fingerprinting every
+      // path affordable, so this is the case that would be tempting to skip
+      // and is exactly the one a large media serve wants a strong validator
+      // for.
+      let content = new Uint8Array(CONTENT_HASH_WHOLE_LIMIT_BYTES + 4096);
+      for (let i = 0; i < content.length; i++) {
+        content[i] = (i * 31 + 7) & 0xff;
+      }
+      writeFileSync(join(testRealmPath, 'large.bin'), content);
+      let large = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(
+            { kind: 'instance', url: `${testRealmHref}large.bin` },
+            'readSource',
+          ),
+          { headersOnly: true },
+        ),
+      );
+      // Off the realm's directory before anything can fail, so nothing that
+      // runs after this reads a fixture this case invented.
+      rmSync(join(testRealmPath, 'large.bin'));
+      assert.strictEqual(
+        large.size,
+        content.length,
+        'the size comes from the stat',
+      );
+      assert.true(
+        isSampledContentHash(large.version!),
+        'the fingerprint samples rather than covering the whole file',
+      );
+      assert.strictEqual(
+        large.version,
+        computeContentHash(content),
+        'and it is the same value hashing the whole content produces, so one ' +
+          'compares equal to the other wherever they meet',
+      );
+    });
+
+    test('a headers-only stored-bytes read reports the same metadata with no body', async function (assert) {
+      let target: OperationTarget = {
+        kind: 'instance',
+        url: `${testRealmHref}sample.md`,
+      };
+      let headers = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(target, 'readSource'),
+          { headersOnly: true },
+        ),
+      );
+      assert.strictEqual(headers.body, undefined, 'no bytes in this mode');
+      assert.strictEqual(headers.contentType, 'text/markdown');
+
+      let withBody = sourceOf(
+        await runOperation(
+          testRealm.operationCore,
+          request(target, 'readSource'),
+        ),
+      );
+      let { body: _body, ...metadata } = withBody;
+      assert.deepEqual(
+        metadata,
+        headers,
+        'the two modes agree on every value a response header is computed ' +
+          'from — `version` included, which is why neither mode may reach ' +
+          'for the body to produce one',
+      );
+    });
+
+    test('a stored-bytes read of a path with no bytes is not found', async function (assert) {
+      // A name nothing is stored under, and a name that is a directory. Both
+      // are "no bytes here" and answer alike; `_search` is deliberately not
+      // among them, since what makes a path unreadable is having no file, not
+      // its name.
+      for (let path of ['does-not-exist', 'dir']) {
+        let error = await refusalFrom(() =>
+          runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'instance', url: `${testRealmHref}${path}` },
+              'readSource',
+            ),
+          ),
+        );
+        assert.strictEqual(
+          error.code,
+          'target-not-found',
+          `${path} has no bytes to read: ${error.detail}`,
+        );
+        assert.strictEqual(error.status, 404);
+      }
+    });
+
+    test('a type target carries no stored-bytes read', async function (assert) {
+      // A type has no stored bytes, and the refusal does not depend on which
+      // kind of def the type turns out to be: a `FieldDef` refuses for the
+      // same reason a `CardDef` does, rather than because a field def carries
+      // nothing.
+      let types: { label: string; codeRef: CodeRef }[] = [
+        {
+          label: 'a card def',
+          codeRef: { module: rri(`${testRealmHref}person`), name: 'Person' },
+        },
+        {
+          label: 'a field def',
+          codeRef: { module: rri(`${baseRealm.url}string`), name: 'default' },
+        },
+      ];
+      for (let { label, codeRef } of types) {
+        let error = await refusalFrom(() =>
+          runOperation(
+            testRealm.operationCore,
+            request(
+              { kind: 'type', codeRef, realm: testRealmHref },
+              'readSource',
+            ),
+          ),
+        );
+        assert.strictEqual(
+          error.code,
+          'operation-not-allowed',
+          `${label} type target is refused: ${error.detail}`,
+        );
+        assert.strictEqual(error.status, 405);
+      }
     });
 
     test('a target outside the realm is not this core to serve', async function (assert) {
