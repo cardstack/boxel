@@ -11,7 +11,7 @@ import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
-  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -117,7 +117,7 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
     });
   });
 
-  test('a create-workspace tool request creates the workspace and reports its URL', async function (assert) {
+  test('a create-workspace tool request creates and opens the workspace', async function (assert) {
     let realmServer = getService('realm-server') as RealmServerService;
     let createRealmCalls: Parameters<RealmServerService['createRealm']>[0][] =
       [];
@@ -178,7 +178,8 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       () =>
         getRoomEvents(roomId).find(
           (m) =>
-            m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE &&
+            m.content.msgtype ===
+              APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE &&
             m.content.commandRequestId === 'create-ws-1',
         ),
       {
@@ -188,7 +189,7 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
     );
     let resultEvent = getRoomEvents(roomId).find(
       (m) =>
-        m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE &&
+        m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE &&
         m.content.commandRequestId === 'create-ws-1',
     )!;
     assert.strictEqual(
@@ -196,18 +197,16 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(resultEvent.content['m.relates_to']?.key, 'applied');
-    let resultCard = resultEvent.content.data.card;
-    assert.ok(resultCard, 'the result carries the result card');
-    let resultDoc =
-      await getService('matrix-service').downloadCardFileDef(resultCard);
-    let resultAttributes = resultDoc.data.attributes!;
     assert.strictEqual(
-      resultAttributes.realmURL,
+      resultEvent.content.data?.context?.realmUrl,
       newRealmURL,
-      'the assistant is told the new workspace URL',
+      'the context sent with the result names the new workspace, so the assistant can report its URL',
     );
-    assert.strictEqual(resultAttributes.name, 'Team Space');
-    assert.strictEqual(resultAttributes.endpoint, 'team-space');
+    assert.strictEqual(
+      getService('operator-mode-state-service').state?.stacks[0]?.[0]?.id,
+      `${newRealmURL}index`,
+      'the new workspace is opened',
+    );
 
     // The chooser lists the new workspace without a reload.
     await click('[data-test-workspace-chooser-toggle]');

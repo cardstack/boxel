@@ -59,12 +59,11 @@ module('Integration | tools | delete-workspace', function (hooks) {
     assert.true(realmServer.userRealmIdentifiers.includes(ri(testRealmURL)));
 
     let tool = new DeleteWorkspaceTool(toolService.toolContext);
-    let result = await tool.execute({
+    await tool.execute({
       realmIdentifier: testRealmURL.replace(/\/$/, ''),
     });
 
     assert.deepEqual(deleteRealmCalls, [testRealmURL]);
-    assert.strictEqual(result.realmURL, testRealmURL);
     assert.false(
       realmServer.userRealmIdentifiers.includes(ri(testRealmURL)),
       'the deleted workspace leaves the realm list the chooser renders',

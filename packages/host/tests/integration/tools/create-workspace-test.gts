@@ -57,7 +57,14 @@ module('Integration | tools | create-workspace', function (hooks) {
     let realmServer = getService('realm-server') as RealmServerService;
     let tool = new CreateWorkspaceTool(toolService.toolContext);
 
-    let result = await tool.execute({
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [],
+      submode: 'interact',
+      workspaceChooserOpened: true,
+    });
+
+    await tool.execute({
       name: 'Sales Pipeline',
       endpoint: 'sales',
     });
@@ -71,9 +78,11 @@ module('Integration | tools | create-workspace', function (hooks) {
       'a background is chosen for the realm',
     );
 
-    assert.strictEqual(result.realmURL, `${realmServerURL}testuser/sales/`);
-    assert.strictEqual(result.name, 'Sales Pipeline');
-    assert.strictEqual(result.endpoint, 'sales');
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      `${realmServerURL}testuser/sales/index`,
+      'the new workspace is opened, so its URL reaches the assistant as the current workspace',
+    );
 
     assert.true(
       realmServer.userRealmIdentifiers.includes(
@@ -92,39 +101,36 @@ module('Integration | tools | create-workspace', function (hooks) {
     let toolService = getService('tool-service');
     let tool = new CreateWorkspaceTool(toolService.toolContext);
 
-    let result = await tool.execute({ name: "Zoë's Q3 Plan" });
+    await tool.execute({ name: "Zoë's Q3 Plan" });
 
     assert.strictEqual(createRealmCalls[0].endpoint, 'zoes-q3-plan');
-    assert.strictEqual(result.endpoint, 'zoes-q3-plan');
-    assert.strictEqual(result.name, "Zoë's Q3 Plan");
+    assert.strictEqual(createRealmCalls[0].name, "Zoë's Q3 Plan");
   });
 
   test('normalizes an endpoint into the characters the server accepts', async function (assert) {
     let toolService = getService('tool-service');
     let tool = new CreateWorkspaceTool(toolService.toolContext);
 
-    let result = await tool.execute({
+    await tool.execute({
       name: 'Team',
       endpoint: ' My_Team  Space! ',
     });
 
     assert.strictEqual(createRealmCalls[0].endpoint, 'my-team-space');
-    assert.strictEqual(result.endpoint, 'my-team-space');
   });
 
   test('generates a name and endpoint when neither is given', async function (assert) {
     let toolService = getService('tool-service');
     let tool = new CreateWorkspaceTool(toolService.toolContext);
 
-    let result = await tool.execute({});
+    await tool.execute({});
 
-    assert.ok(result.name, 'a display name is generated');
+    let [call] = createRealmCalls;
+    assert.ok(call.name, 'a display name is generated');
     assert.ok(
-      /^[a-z0-9-]+$/.test(result.endpoint),
-      `the endpoint '${result.endpoint}' is in the server's accepted shape`,
+      /^[a-z0-9-]+$/.test(call.endpoint),
+      `the endpoint '${call.endpoint}' is in the server's accepted shape`,
     );
-    assert.strictEqual(createRealmCalls[0].name, result.name);
-    assert.strictEqual(createRealmCalls[0].endpoint, result.endpoint);
   });
 
   test('rejects an endpoint that leaves no usable characters', async function (assert) {

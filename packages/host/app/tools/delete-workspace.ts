@@ -18,7 +18,7 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // workspace was the one being viewed.
 export default class DeleteWorkspaceTool extends HostBaseTool<
   typeof BaseToolModule.RealmIdentifierCard,
-  typeof BaseToolModule.DeleteWorkspaceResult
+  undefined
 > {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -40,10 +40,7 @@ export default class DeleteWorkspaceTool extends HostBaseTool<
 
   protected async run(
     input: BaseToolModule.RealmIdentifierCard,
-  ): Promise<BaseToolModule.DeleteWorkspaceResult> {
-    let commandModule = await this.loadToolModule();
-    let { DeleteWorkspaceResult } = commandModule;
-
+  ): Promise<undefined> {
     if (!input.realmIdentifier) {
       throw new Error('Realm identifier is required to delete a workspace.');
     }
@@ -75,6 +72,6 @@ export default class DeleteWorkspaceTool extends HostBaseTool<
       this.operatorModeStateService.openWorkspaceChooser();
     }
 
-    return new DeleteWorkspaceResult({ realmURL });
+    return undefined;
   }
 }
