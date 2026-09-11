@@ -52,6 +52,17 @@ function extraAttributesFor(
   return attrs;
 }
 
+// Prerendered HTML always captures its root container with the chrome on
+// (`--boundaries` ring, `display-container-true` layout). A row rendered with
+// `displayContainer: false` swaps those for exactly the classes the live card
+// renders with under `@displayContainer={{false}}`, so the inert and hydrated
+// states share one layout — for an atom that is `display: contents` versus an
+// inline-block with padding, not just a missing ring.
+function removeContainerChrome(root: Element): void {
+  root.classList.remove('boxel-card-container--boundaries');
+  root.classList.replace('display-container-true', 'display-container-false');
+}
+
 // The query's requested render type, echoed once at the document level. Used
 // to render an item-only (live) fallback as the same ancestor its HTML
 // siblings would have rendered as. Only a single `eq` leaf names one type; a
@@ -94,6 +105,7 @@ export class RenderableSearchEntry {
     private fallbackFormat: PrerenderedHtmlFormat,
     private mode: HydrationMode,
     private overlays: boolean,
+    private displayContainer: boolean,
   ) {}
 
   get id(): string {
@@ -201,7 +213,11 @@ export class RenderableSearchEntry {
       let { html } = this;
       let inert =
         html && html.html != null
-          ? htmlComponent(html.html, extraAttributesFor(html, this.iconHtml))
+          ? htmlComponent(
+              html.html,
+              extraAttributesFor(html, this.iconHtml),
+              this.displayContainer ? undefined : removeContainerChrome,
+            )
           : undefined;
       this.#component = hydratableEntryComponent({
         cardId: this.id,
@@ -214,6 +230,7 @@ export class RenderableSearchEntry {
         errorDoc: this.errorDoc,
         mode: this.mode,
         overlays: this.overlays,
+        displayContainer: this.displayContainer,
       });
     }
     return this.#component;
@@ -242,6 +259,7 @@ export class RenderableSearchEntries {
     private resource: ReturnType<typeof getSearchEntriesResource>,
     private getMode: () => HydrationMode,
     private getOverlays: () => boolean,
+    private getDisplayContainer: () => boolean,
   ) {}
 
   private get fallbackRenderType(): ResolvedCodeRef | undefined {
@@ -257,9 +275,11 @@ export class RenderableSearchEntries {
     let fallbackFormat = this.fallbackFormat;
     let mode = this.getMode();
     let overlays = this.getOverlays();
+    let displayContainer = this.getDisplayContainer();
     let inputsKey = JSON.stringify([
       mode,
       overlays,
+      displayContainer,
       fallbackRenderType,
       fallbackFormat,
     ]);
@@ -282,6 +302,7 @@ export class RenderableSearchEntries {
         fallbackFormat,
         mode,
         overlays,
+        displayContainer,
       );
       // Pure memoization keyed on the resource's stable entry identity — it
       // dirties no tracked state, and keeping unchanged rows' view-models (and
@@ -317,6 +338,7 @@ export function getRenderableSearchEntries(
   getQuery: () => SearchEntryWireQuery | undefined,
   getMode: () => HydrationMode,
   getOverlays: () => boolean = () => true,
+  getDisplayContainer: () => boolean = () => true,
   opts?: {
     // Forwarded to the underlying resource: scope a no-realm card search to the
     // current realm instead of fanning out. Set only by the card-facing
@@ -329,5 +351,6 @@ export function getRenderableSearchEntries(
     getSearchEntriesResource(owner, getQuery, opts),
     getMode,
     getOverlays,
+    getDisplayContainer,
   );
 }
