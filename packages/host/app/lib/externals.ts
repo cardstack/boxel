@@ -82,6 +82,10 @@ export const BUNDLED_BASE_MODULES: Record<
   'date/year': () => import('@cardstack/base/date/year'),
   'date/week': () => import('@cardstack/base/date/week'),
   'date/quarter': () => import('@cardstack/base/date/quarter'),
+  time: () => import('@cardstack/base/time'),
+  'time/time-range': () => import('@cardstack/base/time/time-range'),
+  'time/duration': () => import('@cardstack/base/time/duration'),
+  'time/relative-time': () => import('@cardstack/base/time/relative-time'),
 };
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
