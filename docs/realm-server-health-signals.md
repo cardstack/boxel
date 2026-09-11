@@ -95,11 +95,21 @@ no per-request timeout of their own.
 
 Blocking is therefore the correct behavior, not a symptom. The endpoint holds the
 request open while work is outstanding and answers 503 with `Retry-After` plus an
-`X-Boxel-Not-Ready: index | prerender-html` header naming the stage. Every caller
-retries on a non-ok status, so a 503 costs a poll rather than an error — which is
-also why the hold is short by design: a hold that outlives a caller's own deadline
-converts its poll loop into a single failed attempt, so the budget stays under the
-shortest deadline any caller brings.
+`X-Boxel-Not-Ready: startup | index | prerender-html` header naming the stage.
+Every caller retries on a non-ok status, so a 503 costs a poll rather than an
+error — which is also why the hold is short by design: a hold that outlives a
+caller's own deadline converts its poll loop into a single failed attempt, so the
+budget stays under the shortest deadline any caller brings.
+
+One stage is terminal. A brand-new realm whose first from-scratch index failed —
+the worker gave up, or the job hit its wall-clock limit — is mounted over an empty
+index. Readiness answers 503 with `X-Boxel-Not-Ready: index-failed`, the failure
+in the body, and no `Retry-After`: a false ready would hand the caller a realm that
+serves nothing, and `index` would keep it polling for work that is not coming.
+The publish flow's poll and the CI realm wait both stop on it. The state is read
+from the same rows every replica reads — the realm has no index, and the newest
+from-scratch job for it was rejected — so a reindex from any path clears it the
+moment it lands.
 
 The gating has to read shared state, because in a multi-replica deployment the poll
 need not reach the replica that did the work. In-process indexing state is

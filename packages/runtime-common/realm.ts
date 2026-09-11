@@ -3,6 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
+  unbuiltIndexFailure,
 } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import { settledBy } from './settled-by.ts';
@@ -1475,13 +1476,18 @@ export class Realm {
     // names which stage is outstanding — each has a different cause and a
     // different remedy, and the poll loops that consume this discard the
     // body, so the header is the only place an operator can read it from.
-    let notReady = (stage: 'startup' | 'index' | 'prerender-html') =>
+    let notReady = (
+      stage: 'startup' | 'index' | 'index-failed' | 'prerender-html',
+      detail?: string,
+    ) =>
       createResponse({
-        body: null,
+        body: detail ?? null,
         init: {
           headers: {
-            'content-type': 'text/html',
-            'Retry-After': '1',
+            'content-type': detail ? 'text/plain' : 'text/html',
+            // `index-failed` is terminal — the realm cannot become ready
+            // without a reindex or a restart — so it carries no retry hint.
+            ...(stage === 'index-failed' ? {} : { 'Retry-After': '1' }),
             'X-Boxel-Not-Ready': stage,
           },
           status: 503,
@@ -1559,6 +1565,23 @@ export class Realm {
       // caller polling instead of reporting a realm ready whose index is
       // knowably behind its source.
       return notReady('index');
+    }
+
+    // The lane is clear, so every from-scratch job for this realm has run. A
+    // realm that has never had an index built, whose newest such job was
+    // rejected, is mounted over nothing: reporting ready would hand the caller
+    // a realm that serves nothing, and `index` would keep it polling for work
+    // that is not coming. Both facts are read from shared state (see
+    // unbuiltIndexFailure), so every replica answers alike, and a pass that
+    // completes from any path — this realm's own endpoints, a publish, the
+    // system-wide reindex — clears it as soon as it lands. The body carries
+    // the failure, since that is where the cause is.
+    let unbuilt = await unbuiltIndexFailure(this.#dbAdapter, this.url);
+    if (unbuilt) {
+      return notReady(
+        'index-failed',
+        `The boot index of ${this.url} failed: ${unbuilt}`,
+      );
     }
 
     // Opt-in: also await the published HTML being live for the current

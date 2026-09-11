@@ -157,6 +157,48 @@ export function prerenderSpawnedPriority({
 // deadline only between requests, so an attempt started just under the wire
 // overshoots by up to the length of the hold. A shorter budget bounds that
 // overshoot; no budget removes it.
+// Why a realm that has never had an index built has none: the failure of the
+// newest from-scratch job in its index lane, when that job was rejected.
+// Undefined when the realm has an index, when no from-scratch job has run, or
+// when the newest one completed.
+//
+// "Never had an index built" is read from `realm_generations`: a pass inserts
+// the realm's row at generation 0 before it visits anything and advances the
+// generation only when it completes, so a row at 0 — or none — means no pass
+// has ever promoted rows. A rejected job over an index that a later pass built
+// is history and does not count. Both facts come from the rows every replica
+// reads, so the answer holds whichever replica ran the job and whichever path
+// enqueued it — a realm's own reindex endpoints, a publish, a system-wide
+// reindex — and a pass that completes from any of them clears it as it lands.
+export async function unbuiltIndexFailure(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  if (dbAdapter.kind !== 'pg') {
+    return undefined;
+  }
+  let [generation] = (await query(dbAdapter, [
+    'SELECT current_generation FROM realm_generations WHERE realm_url =',
+    param(realmURL),
+  ])) as { current_generation: number | string }[];
+  if (generation && Number(generation.current_generation) > 0) {
+    return undefined;
+  }
+  let [job] = (await query(dbAdapter, [
+    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND concurrency_group =`,
+    param(indexingConcurrencyGroup(realmURL)),
+    'ORDER BY id DESC LIMIT 1',
+  ])) as { status: string; result: unknown }[];
+  if (!job || job.status !== 'rejected') {
+    return undefined;
+  }
+  let { result } = job;
+  if (isObjectLike(result) && typeof (result as any).message === 'string') {
+    return (result as any).message;
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result);
+}
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
