@@ -88,7 +88,10 @@ module('Integration | brand-guide | edit view', function (hooks) {
       .exists('brand color palette entries are editable');
     assert
       .dom('[data-test-brand-guide-section="custom-css"] input')
-      .exists('custom CSS variables are editable');
+      .exists(
+        { count: 3 },
+        'custom CSS variables expose name, light value and dark value inputs',
+      );
     assert
       .dom('[data-test-brand-guide-css-var]')
       .doesNotExist('read-only custom CSS listing is not rendered in edit');
