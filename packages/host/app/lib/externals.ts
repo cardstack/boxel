@@ -242,6 +242,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('@cardstack/runtime-common/helpers/ai'),
   });
 
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/base/date/day',
+    resolve: () => import('@cardstack/base/date/day'),
+  });
+
   shimModulesForLiveTests(virtualNetwork);
 
   // Some realm modules use host-only types or helpers. Provide a safe shim so

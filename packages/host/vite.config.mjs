@@ -298,6 +298,16 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: [
+      // Base-realm modules served from the host bundle (see shimExternals in
+      // app/lib/externals.ts) import host tools as
+      // `@cardstack/boxel-host/tools/*` or `@cardstack/boxel-host/commands/*`.
+      // At runtime the virtual network shims those specifiers to app/tools
+      // modules (see app/tools/index.ts); this alias gives the bundler the
+      // same 1:1 mapping.
+      {
+        find: /^@cardstack\/boxel-host\/(?:tools|commands)\//,
+        replacement: `${__dirname}/app/tools/`,
+      },
       { find: 'path', replacement: require.resolve('path-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },
