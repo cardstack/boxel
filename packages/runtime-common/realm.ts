@@ -262,6 +262,10 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
+import {
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  REALMS_LIST_UPDATED_EVENT_TYPE,
+} from './matrix-constants.ts';
 import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
@@ -8043,7 +8047,41 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
+    // Tell each affected user their accessible-realm set changed so a running
+    // session re-derives it from `_realm-auth` (which reads the permissions
+    // written just above) without a reload. Nothing else notifies a grantee:
+    // the index_updated broadcast above is server-to-server only.
+    await this.notifyRealmsListUpdated(Object.keys(patch));
     return await this.getRealmPermissions(request, requestContext);
+  }
+
+  // Notify each affected user that their set of accessible realms changed, so
+  // a running session re-derives it from `_realm-auth` without a reload.
+  // Delivered into the user's session DM room, mirroring the realm-server
+  // `sendEvent` helper. Best-effort per user: no session room means no live
+  // session to notify (their next login assembles correctly), and a delivery
+  // failure must never roll back the grant that already committed.
+  private async notifyRealmsListUpdated(users: string[]): Promise<void> {
+    for (let user of users) {
+      try {
+        let roomId = await fetchSessionRoom(this.#dbAdapter, user);
+        if (!roomId) {
+          continue;
+        }
+        if (!this.#matrixClient.isLoggedIn()) {
+          await this.#matrixClient.login();
+        }
+        await this.#matrixClient.sendEvent(roomId, 'm.room.message', {
+          body: JSON.stringify({ eventType: REALMS_LIST_UPDATED_EVENT_TYPE }),
+          msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+        });
+      } catch (e) {
+        this.#log.error(
+          `failed to notify ${user} that their realms list changed`,
+          e,
+        );
+      }
+    }
   }
 
   private async getLastPublishedAt(): Promise<

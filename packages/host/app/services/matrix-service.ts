@@ -954,6 +954,42 @@ export default class MatrixService extends Service {
     await this.appendRealmToAccountData(personalRealmURL.href);
   }
 
+  // Create the caller's personal workspace if they have none. Fire-and-forget
+  // from boot; `dropTask` so a re-entrant start() never launches a second
+  // creation. Idempotent against a concurrent tab or a prior login:
+  // `_create-realm` rejects a duplicate with "already exists", which we treat
+  // as success.
+  private ensurePersonalRealmTask = dropTask(async () => {
+    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some((id) =>
+      String(id).endsWith(`/${PERSONAL_REALM_ENDPOINT}/`),
+    );
+    if (hasPersonalRealm) {
+      return;
+    }
+    let displayName: string | undefined;
+    try {
+      displayName = this.userId
+        ? (await this.getProfileInfo(this.userId))?.displayname
+        : undefined;
+    } catch {
+      // A profile fetch hiccup must not block provisioning; fall back below.
+    }
+    let name = displayName ? `${displayName}'s Workspace` : 'My Workspace';
+    let iconSeed = displayName ?? 'workspace';
+    try {
+      await this.createPersonalRealmForUser({
+        endpoint: PERSONAL_REALM_ENDPOINT,
+        name,
+        iconURL: iconURLFor(iconSeed),
+        backgroundURL: getRandomBackgroundURL(),
+      });
+    } catch (e: any) {
+      if (!String(e?.message ?? '').includes('already exists')) {
+        console.error('Failed to provision personal realm on login', e);
+      }
+    }
+  });
+
   public async appendRealmToAccountData(realmURLString: string) {
     let { realms = [] } =
       ((await this.client.getAccountDataFromServer(
@@ -1152,6 +1188,32 @@ export default class MatrixService extends Service {
         // the lazy migration that populates `app.boxel.realm-servers` has
         // run on all active accounts.
         let trustedServers = realmServersData?.realmServers ?? [];
+        // An account registered straight on Synapse (shared-secret batch
+        // creation) never goes through host sign-up, so it has neither
+        // account-data key — yet it may already hold realm permissions. With
+        // no trusted server to ask, boot would assemble an empty chooser and
+        // ignore those permissions. Seed the trusted-servers key with this
+        // host's own realm server so the permissions-driven assembly runs on
+        // the very first login. Scoped to accounts with no realm list at all:
+        // one that already has a legacy `app.boxel.realms` list keeps its
+        // existing assembly + lazy-migration path untouched. Persist the seed
+        // (best-effort) so the key becomes the durable source of truth.
+        if (trustedServers.length === 0) {
+          let seedRealmsData = (await this.client.getAccountDataFromServer(
+            APP_BOXEL_REALMS_EVENT_TYPE,
+          )) as { realms: string[] } | null;
+          if ((seedRealmsData?.realms ?? []).length === 0) {
+            trustedServers = [this.realmServer.url.href];
+            try {
+              await this.setRealmServersInAccountData(trustedServers);
+            } catch (err) {
+              console.error(
+                'Failed to seed app.boxel.realm-servers with own realm server',
+                err,
+              );
+            }
+          }
+        }
         // A session that first assembled from the legacy `app.boxel.realms`
         // list stays on the legacy path for the lifetime of this
         // MatrixService instance. The lazy migration below persists
@@ -1311,6 +1373,17 @@ export default class MatrixService extends Service {
         // the reachable realms and retry the unreachable ones in the
         // background so they load (and the notice clears) once they recover.
         this.scheduleUnreachableRealmServerRetry();
+
+        // Ensure a personal workspace exists. The host sign-up flow creates
+        // one, but an account provisioned another way (e.g. registered
+        // straight on Synapse) never gets one and would boot with no personal
+        // realm however its permissions assemble. Provision it lazily and
+        // non-blocking: `_create-realm` emits `realms-list-updated` to this
+        // user on completion, which surfaces it live. Skipped for the new-user
+        // flow, which already creates it.
+        if (!this._isInitializingNewUser) {
+          this.ensurePersonalRealmTask.perform();
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         // Only tear the session down for a failure that happened before this
@@ -1501,7 +1574,10 @@ export default class MatrixService extends Service {
     try {
       let realmServers = await this.getRealmServersFromAccountData();
       if (realmServers.length === 0) {
-        return;
+        // No persisted trusted-servers entry (e.g. the login-time seed write
+        // was lost): fall back to this host's own realm server so a live grant
+        // still re-assembles from permissions rather than being dropped.
+        realmServers = [this.realmServer.url.href];
       }
       await this.applyTrustedRealmServersAccountData(realmServers);
       if (this.realmServer.isArchivedRealmsFetched) {
