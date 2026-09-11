@@ -439,7 +439,14 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                   {{/if}}
                 {{else if (eq section.id 'custom-css')}}
                   {{#if this.editMode}}
-                    <@fields.customCssVariables />
+                    {{! the toggle picks which value column is shown, like the
+                    color system's light/dark variables }}
+                    <div
+                      class='custom-css-edit
+                        {{if this.isDarkMode "is-dark-mode" "is-light-mode"}}'
+                    >
+                      <@fields.customCssVariables />
+                    </div>
                   {{else}}
                     <p class='brand-guide-vars-description'>These variables are
                       all of the custom CSS properties for usage by this theme
@@ -807,6 +814,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
 
       /* Custom CSS / color variables section */
+      .custom-css-edit.is-light-mode :deep(.custom-css-variable-dark-value),
+      .custom-css-edit.is-dark-mode :deep(.custom-css-variable-light-value) {
+        display: none;
+      }
       .brand-guide-custom-css-block {
         position: relative;
       }
@@ -1100,11 +1111,17 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     return lines.join('\n');
   }
 
+  // shows the value for the previewed color scheme
   private get customCssVarEntries() {
     if (!entriesToCssRuleMap || !this.args.model?.customCssVariables?.length) {
       return [];
     }
-    let rules = entriesToCssRuleMap(this.args.model?.customCssVariables);
+    let rules = entriesToCssRuleMap(
+      customCssEntriesFor(
+        this.args.model.customCssVariables,
+        this.isDarkMode ? { darkMode: true } : undefined,
+      ),
+    );
     return [...rules.entries()].map(([name, value]) => ({
       name: buildCssVariableName(name),
       value,
@@ -1204,6 +1221,8 @@ export class CustomCssVariable extends FieldDef {
   static displayName = 'Custom CSS Variable';
   @field name = contains(StringField);
   @field value = contains(StringField);
+  // optional; dark mode falls back to `value` when unset
+  @field darkValue = contains(StringField);
 
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -1211,20 +1230,48 @@ export class CustomCssVariable extends FieldDef {
         <FieldContainer @label='Variable Name' @vertical={{true}}>
           <@fields.name />
         </FieldContainer>
-        <FieldContainer @label='Value' @vertical={{true}}>
+        <FieldContainer
+          class='custom-css-variable-light-value'
+          @label='Value'
+          @vertical={{true}}
+          data-test-custom-css-variable-value='light'
+        >
           <@fields.value />
+        </FieldContainer>
+        <FieldContainer
+          class='custom-css-variable-dark-value'
+          @label='Dark Value (optional)'
+          @vertical={{true}}
+          data-test-custom-css-variable-value='dark'
+        >
+          <@fields.darkValue />
         </FieldContainer>
       </div>
       <style scoped>
         .custom-css-variable-edit {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          /* a hidden value column leaves no empty track behind */
+          grid-auto-flow: column;
+          grid-auto-columns: 1fr;
           gap: var(--boxel-sp-sm);
         }
       </style>
     </template>
   };
 }
+
+// resolves each custom variable to the value for one color scheme, so the
+// normalizing helpers can treat the result like any other entry list
+export const customCssEntriesFor = (
+  entries: CustomCssVariable[] | undefined,
+  opts?: { darkMode: true },
+): CssVariableEntry[] =>
+  (entries ?? []).map((entry) => ({
+    name: entry.name,
+    value: opts?.darkMode
+      ? entry.darkValue?.trim() || entry.value
+      : entry.value,
+  }));
 
 export class CompoundImageField extends FieldDef {
   static displayName = 'Named Image';
@@ -1327,7 +1374,9 @@ export default class BrandGuide extends DetailedStyleRef {
     }
   }
 
-  private calculateBrandRuleMap(): Map<string, string> | undefined {
+  private calculateBrandRuleMap(opts?: {
+    darkMode: true;
+  }): Map<string, string> | undefined {
     let brandRules = new Map<string, string>();
 
     // add brand functional palette variables
@@ -1367,8 +1416,8 @@ export default class BrandGuide extends DetailedStyleRef {
       if (!brandRules.has(varName)) brandRules.set(varName, `url(${url})`);
     }
 
-    // add custom CSS variables
-    for (let cssVar of this.customCssVariables ?? []) {
+    // add custom CSS variables, resolved for the requested color scheme
+    for (let cssVar of customCssEntriesFor(this.customCssVariables, opts)) {
       let name = cssVar.name?.trim();
       let value = cssVar.value?.trim();
       if (!name || !value) continue;
@@ -1460,6 +1509,7 @@ export default class BrandGuide extends DetailedStyleRef {
         return;
       }
       let brandRules = this.calculateBrandRuleMap();
+      let darkBrandRules = this.calculateBrandRuleMap({ darkMode: true });
       let markMap = this.markUsage?.cssRuleMap;
       const toUrlValue = (url?: string) => (url ? `url(${url})` : undefined);
       let rootMarkAliases = new Map(
@@ -1529,7 +1579,7 @@ export default class BrandGuide extends DetailedStyleRef {
       );
       let darkRules = mergeRuleMaps(
         this.calculatedRules({ darkMode: true }),
-        brandRules,
+        darkBrandRules,
         darkMarkAliases,
       );
       return generateCssVariables(

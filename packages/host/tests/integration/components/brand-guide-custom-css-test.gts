@@ -1,4 +1,4 @@
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { click, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -188,6 +188,90 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     assert.notOk(
       css.includes('should-be-excluded'),
       'entry with empty name is excluded from cssVariables',
+    );
+  });
+
+  test('custom CSS variables with a dark value emit it under .dark and fall back to the light value otherwise', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      customCssVariables: [
+        new CustomCssVariable({
+          name: 'surfaceTint',
+          value: '#ffffff',
+          darkValue: '#111111',
+        }),
+        new CustomCssVariable({ name: 'spacing', value: '1.5rem' }),
+        new CustomCssVariable({
+          name: 'blankDark',
+          value: 'solid',
+          darkValue: '   ',
+        }),
+      ],
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let css = card.cssVariables ?? '';
+    let darkStart = css.indexOf('.dark');
+    assert.ok(darkStart > 0, 'a .dark block is emitted');
+    let rootBlock = css.slice(0, darkStart);
+    let darkBlock = css.slice(darkStart);
+
+    assert.ok(
+      rootBlock.includes('--surface-tint: #ffffff;'),
+      'light value is emitted under :root',
+    );
+    assert.ok(
+      darkBlock.includes('--surface-tint: #111111;'),
+      'dark value is emitted under .dark',
+    );
+    assert.notOk(
+      darkBlock.includes('#ffffff'),
+      'light value does not leak into .dark when a dark value is set',
+    );
+    assert.ok(
+      darkBlock.includes('--spacing: 1.5rem;'),
+      'a variable without a dark value keeps the light value in .dark',
+    );
+    assert.ok(
+      darkBlock.includes('--blank-dark: solid;'),
+      'a whitespace-only dark value falls back to the light value',
+    );
+  });
+
+  test('custom-css listing and copy block follow the dark-mode toggle', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      customCssVariables: [
+        new CustomCssVariable({
+          name: 'surfaceTint',
+          value: '#ffffff',
+          darkValue: '#111111',
+        }),
+        new CustomCssVariable({ name: 'spacing', value: '1.5rem' }),
+      ],
+    });
+    await renderCard(loader, card, 'isolated');
+
+    let values = () =>
+      [
+        ...document.querySelectorAll('[data-test-brand-guide-css-var-value]'),
+      ].map((el) => el.textContent);
+    assert.deepEqual(
+      values(),
+      ['#ffffff', '1.5rem'],
+      'light values are listed by default',
+    );
+
+    await click('[data-test-mode="toggle-dark"]');
+    assert.deepEqual(
+      values(),
+      ['#111111', '1.5rem'],
+      'dark value replaces the light value; unset dark values keep the light value',
+    );
+
+    await click('[data-test-mode="toggle-light"]');
+    assert.deepEqual(
+      values(),
+      ['#ffffff', '1.5rem'],
+      'toggling back restores light values',
     );
   });
 
