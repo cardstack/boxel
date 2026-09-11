@@ -373,6 +373,122 @@ export class IndexQueryEngine {
       : this.#query(expression);
   }
 
+  // Tessar reverse-query verification uses the forward query compiler against
+  // one effective indexed document. No second JavaScript predicate evaluator:
+  // type ancestry, nulls, plural paths and reference normalization are shared.
+  // Sort/page never restrict invalidation membership.
+  async tessarMatchesDocument(
+    filter: Filter | undefined,
+    document: Pick<BoxelIndexTable, 'url' | 'search_doc' | 'types'> &
+      Partial<
+        Pick<
+          BoxelIndexTable,
+          'file_alias' | 'type' | 'last_modified' | 'resource_created_at'
+        >
+      >,
+  ): Promise<boolean> {
+    assertTessarFilter(filter);
+    let json = (value: unknown): Expression => [
+      dbExpression({
+        pg: ['CAST(', param(value as any), 'AS JSONB)'],
+        sqlite: [param(value as any)],
+      }),
+    ];
+    let expression: CardExpression = [
+      'SELECT 1 AS matched FROM (SELECT',
+      ...json(document.search_doc),
+      'AS search_doc,',
+      ...json(document.types),
+      'AS types,',
+      param(document.url),
+      'AS url,',
+      param(document.file_alias ?? null),
+      'AS file_alias,',
+      param(document.type ?? 'instance'),
+      'AS type,',
+      param(document.last_modified ?? null),
+      'AS last_modified,',
+      param(document.resource_created_at ?? null),
+      'AS resource_created_at',
+      ') AS i',
+      tableValuedFunctionsPlaceholder,
+      'WHERE',
+      ...(filter
+        ? this.filterCondition(filter, baseCardRef, 'positive')
+        : ['TRUE']),
+      'LIMIT 1',
+    ];
+    return (await this.#queryCards(expression)).length > 0;
+  }
+
+  // A deliberately narrow routing optimization: direct string fields have an
+  // identical query/index encoding. Everything else remains in the broad
+  // bucket until an extractor can prove it will not miss a forward match.
+  async tessarRoutingTerms(
+    filter: Filter | undefined,
+  ): Promise<Array<{ path: string; value: string }> | undefined> {
+    assertTessarFilter(filter);
+    let extract = async (
+      part: Filter | undefined,
+      inheritedOn: CodeRef,
+    ): Promise<Array<{ path: string; value: string }> | undefined> => {
+      if (!part) return undefined;
+      let on = 'on' in part && part.on ? part.on : inheritedOn;
+      if ('every' in part) {
+        for (let child of part.every) {
+          let terms = await extract(child, on);
+          if (terms) return terms;
+        }
+      } else if ('any' in part) {
+        let branches = await Promise.all(
+          part.any.map((child) => extract(child, on)),
+        );
+        if (branches.every((branch) => branch !== undefined))
+          return branches.flat() as Array<{ path: string; value: string }>;
+      } else if ('eq' in part || 'in' in part) {
+        let entries =
+          'eq' in part
+            ? Object.entries(part.eq).map(
+                ([path, value]) => [path, [value]] as const,
+              )
+            : Object.entries(part.in);
+        for (let [path, values] of entries) {
+          if (
+            path.includes('.') ||
+            isReferenceFilterField(path) ||
+            !Array.isArray(values) ||
+            values.length === 0 ||
+            values.length > 64 ||
+            path.length > 128 ||
+            !values.every(
+              (value) => typeof value === 'string' && value.length <= 256,
+            )
+          )
+            continue;
+          let definition = await this.getDefinition(on);
+          let field = await getField(definition, path, this.#definitionLookup);
+          let key = internalKeyFor(
+            field.fieldOrCard,
+            undefined,
+            this.#virtualNetwork,
+          );
+          if (
+            field.type === 'contains' &&
+            field.isPrimitive &&
+            !field.serializerName &&
+            [
+              `${baseRealmRRI}string/default`,
+              `${baseRealmRRI}card-api/StringField`,
+            ].includes(key)
+          )
+            return values.map((value) => ({ path, value: value as string }));
+        }
+      }
+      return undefined;
+    };
+    return extract(filter, baseCardRef);
+  }
+
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
@@ -2466,6 +2582,17 @@ function escapeSqliteLikePattern(value: string): string {
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
+}
+
+function assertTessarFilter(filter: Filter | undefined): void {
+  if (!filter) return;
+  if ('matches' in filter)
+    throw new InvalidQueryError(
+      'Tessar materialization does not support full-text predicates',
+    );
+  if ('every' in filter) filter.every.forEach(assertTessarFilter);
+  if ('any' in filter) filter.any.forEach(assertTessarFilter);
+  if ('not' in filter) assertTessarFilter(filter.not);
 }
 
 type FilterFieldHandler<T> = (

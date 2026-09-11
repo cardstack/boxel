@@ -222,6 +222,34 @@
    PRIMARY KEY ( realm_url, username ) 
 );
 
+ CREATE TABLE IF NOT EXISTS tessar_owners (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   published_generation NOT NULL,
+   input_generation NOT NULL,
+   dirty_generation,
+   definition_revision TEXT NOT NULL,
+   retired BOOLEAN DEFAULT false NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url ) 
+);
+
+ CREATE TABLE IF NOT EXISTS tessar_query_terms (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   field_path TEXT NOT NULL,
+   path TEXT NOT NULL,
+   value TEXT NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url, field_path, path, value ) 
+);
+
+ CREATE TABLE IF NOT EXISTS tessar_query_watches (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   field_path TEXT NOT NULL,
+   query BLOB NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url, field_path ) 
+);
+
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    source_realm_url TEXT NOT NULL,
