@@ -113,14 +113,22 @@ export async function fulfillReadRealmFileCalls(
     deps.uploadText ??
     ((content: string, contentType: string) =>
       uploadTextToMatrix(deps.client, content, contentType));
-  return Promise.all(
-    botToolCalls
-      .filter(
-        (call): call is ChatCompletionMessageToolCall & { type: 'function' } =>
-          call.type === 'function',
-      )
-      .map((call) => fulfillOne(call, deps, upload)),
-  );
+  // One call at a time, on purpose. Every published result re-triggers the
+  // bot, and that handler decides whether the turn is complete by fetching
+  // the room history from the server and splicing in the one result it was
+  // triggered by. When several results are published at once, a handler can
+  // run while a sibling's send is still in flight: the sibling is missing
+  // from the fetch, the turn looks unfinished, and no handler ever starts
+  // the next turn. Publishing in sequence means that by the time result N
+  // triggers its handler, results 1..N-1 are on the server.
+  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
+  for (let call of botToolCalls) {
+    if (call.type !== 'function') {
+      continue;
+    }
+    outcomes.push(await fulfillOne(call, deps, upload));
+  }
+  return outcomes;
 }
 
 type FileRead =

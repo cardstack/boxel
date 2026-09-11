@@ -16,9 +16,7 @@ import { fieldSerializer } from '@cardstack/runtime-common';
 let groupNumber = 0;
 
 class View extends Component<typeof BooleanField> {
-  <template>
-    {{@model}}
-  </template>
+  <template>{{@model}}</template>
 
   get fieldName() {
     if (typeof this.args.fieldName === 'string') {

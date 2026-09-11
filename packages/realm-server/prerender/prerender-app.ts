@@ -153,8 +153,10 @@ export function shouldRerenderForStaleShell({
   reportedAtCompletion,
 }: {
   response: RenderVisitResponse;
-  warmedAtStart: string | undefined;
-  warmedAtCompletion: string | undefined;
+  // `null` (sampled, never warmed) compares unequal to any reported token, so
+  // it falls out as stale exactly as `undefined` does — no separate branch.
+  warmedAtStart: string | null | undefined;
+  warmedAtCompletion: string | null | undefined;
   reportedAtCompletion: string | undefined;
 }): boolean {
   if (!hasMissingExportError(response)) {
@@ -225,11 +227,27 @@ function hasMissingExportError(response: RenderVisitResponse): boolean {
 // bundle without matching timestamps against deploy logs.
 export function stampHostShellTokens(
   response: RenderVisitResponse,
-  tokens: { atStart: string | undefined; atCompletion: string | undefined },
+  tokens: {
+    atStart: string | undefined;
+    atCompletion: string | undefined;
+    // `null` = sampled, pool never warmed against a known token. `undefined`
+    // = not sampled, so nothing is stamped and a reader gets no verdict.
+    warmedAtStart?: string | null | undefined;
+    warmedAtCompletion?: string | null | undefined;
+  },
 ): void {
-  if (tokens.atStart === undefined && tokens.atCompletion === undefined) {
+  if (
+    tokens.atStart === undefined &&
+    tokens.atCompletion === undefined &&
+    tokens.warmedAtStart === undefined &&
+    tokens.warmedAtCompletion === undefined
+  ) {
     return;
   }
+  // `!== undefined` rather than a truthiness check throughout: `null` is a
+  // sampled answer and has to reach the row, while `undefined` must leave the
+  // key absent so a reader can tell "no verdict" from "stale".
+
   // Under `diagnostics` rather than beside it: `flattenPrerenderMeta` carries
   // that key onto `boxel_index.diagnostics` (and its prerender-html twin onto
   // `prerendered_html.diagnostics`) and drops every other meta key, so a
@@ -243,6 +261,16 @@ export function stampHostShellTokens(
         : {}),
       ...(tokens.atCompletion !== undefined
         ? { hostShellHashAtCompletion: tokens.atCompletion }
+        : {}),
+      // The pool's own token, so `shouldRerenderForStaleShell`'s inputs are
+      // all on the row. Without these the verdict is unreconstructible: a
+      // reader sees one steady reported token and cannot tell a render that
+      // was current from one whose pool never caught up.
+      ...(tokens.warmedAtStart !== undefined
+        ? { warmedHostShellHash: tokens.warmedAtStart }
+        : {}),
+      ...(tokens.warmedAtCompletion !== undefined
+        ? { warmedHostShellHashAtCompletion: tokens.warmedAtCompletion }
         : {}),
     },
   };
@@ -1176,7 +1204,13 @@ export function buildPrerenderApp(options: {
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();
-      let warmedAtStart = options.getWarmedHostShellHash?.();
+      // Distinguishes a sampler that ran and found nothing (`null`) from no
+      // sampler at all (`undefined`), which the row has to keep apart.
+      let sampleWarmed = () =>
+        options.getWarmedHostShellHash
+          ? (options.getWarmedHostShellHash() ?? null)
+          : undefined;
+      let warmedAtStart = sampleWarmed();
       let execPromise = prerenderer
         .prerenderVisit(visitArgs)
         .then((result) => ({ result }));
@@ -1193,7 +1227,7 @@ export function buildPrerenderApp(options: {
       }
       let { response, timings, pool } = raceResult.result;
       let shellAtCompletion = options.getHostShellHash?.();
-      let warmedAtCompletion = options.getWarmedHostShellHash?.();
+      let warmedAtCompletion = sampleWarmed();
       if (
         !options.isDraining?.() &&
         shouldRerenderForStaleShell({
@@ -1244,8 +1278,14 @@ export function buildPrerenderApp(options: {
         // server distrusts. A recycle is exactly when a visit is most likely
         // to reject, so this is the expected path rather than a corner.
         let discardedMs = Date.now() - start;
+        // Sampled inside the retry, after the recycle and immediately before
+        // the render it describes. Carrying the discarded attempt's sample
+        // forward would stamp the response as having rendered on the outgoing
+        // pool even when the retry ran entirely on the current shell.
+        let retryWarmedAtStart: string | null | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
+          retryWarmedAtStart = sampleWarmed();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1269,6 +1309,11 @@ export function buildPrerenderApp(options: {
         start = Date.now();
         shellAtStart = shellAtCompletion;
         shellAtCompletion = options.getHostShellHash?.();
+        // The warmed pair has to move with the reported pair, or the four
+        // stamped values describe two different renders — the retry's reported
+        // tokens beside the discarded attempt's pool.
+        warmedAtStart = retryWarmedAtStart;
+        warmedAtCompletion = sampleWarmed();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
           url,
@@ -1308,6 +1353,8 @@ export function buildPrerenderApp(options: {
       stampHostShellTokens(response, {
         atStart: shellAtStart,
         atCompletion: shellAtCompletion,
+        warmedAtStart,
+        warmedAtCompletion,
       });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that

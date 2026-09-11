@@ -2,8 +2,8 @@ import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GlimmerComponent from '@glimmer/component';
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   Component,
   NumberField,
   StringField,
@@ -80,7 +80,8 @@ class CodePreview extends GlimmerComponent<FilePreviewSignature> {
 
   get truncated(): boolean {
     return (
-      this.args.format === 'fitted' && Boolean(this.args.model?.previewTruncated)
+      this.args.format === 'fitted' &&
+      Boolean(this.args.model?.previewTruncated)
     );
   }
 
@@ -295,10 +296,7 @@ export class TsFileDef extends FileDef {
       // styles (and matches the fitted projection); a trailing newline
       // shouldn't inflate the count, and empty content is zero lines.
       lineCount: source
-        ? source
-            .replace(/\r\n?/g, '\n')
-            .replace(/\n$/, '')
-            .split('\n').length
+        ? source.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').length
         : 0,
     };
   }

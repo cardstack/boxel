@@ -615,6 +615,29 @@ module(basename(import.meta.filename), function () {
       return rows[0];
     }
 
+    // Every live row on either channel carries the three write-side stamps
+    // in its `diagnostics` column (see `Diagnostics`). Assert they are there,
+    // then return the rest of the blob so a render-side assertion can compare
+    // exactly what the render produced. Not for `error_doc.diagnostics`: that
+    // mirror carries the render's own diagnostics only.
+    function withoutWriteSideStamps(
+      diagnostics: Record<string, unknown> | null | undefined,
+      label: string,
+      assert: Assert,
+    ): Record<string, unknown> {
+      assert.ok(diagnostics, `${label} carries a diagnostics blob`);
+      let rest: Record<string, unknown> = { ...(diagnostics ?? {}) };
+      for (let key of ['invalidationId', 'indexedAt', 'writeSeq']) {
+        assert.notStrictEqual(
+          rest[key],
+          undefined,
+          `${label} is stamped with ${key}`,
+        );
+        delete rest[key];
+      }
+      return rest;
+    }
+
     function stubReader(contents: Map<string, string>): Reader {
       return {
         async readFile(url: URL) {
@@ -821,7 +844,7 @@ module(basename(import.meta.filename), function () {
 
       let row = await productionRow(url);
       assert.deepEqual(
-        row.diagnostics,
+        withoutWriteSideStamps(row.diagnostics, 'the rendered row', assert),
         diagnostics as Record<string, unknown>,
         'the render diagnostics ride the row through the swap',
       );
@@ -860,14 +883,14 @@ module(basename(import.meta.filename), function () {
         'the last-known-good HTML is preserved through the error cycle',
       );
       assert.deepEqual(
-        row.diagnostics,
+        withoutWriteSideStamps(row.diagnostics, 'the error row', assert),
         failing as Record<string, unknown>,
         "the failing render's diagnostics land on the row — not the last-known-good render's",
       );
       assert.deepEqual(
         row.error_doc?.diagnostics,
         failing as Record<string, unknown>,
-        'the same payload is mirrored onto the error doc',
+        'the same payload is mirrored onto the error doc, without the stamps',
       );
     });
 
@@ -971,9 +994,152 @@ module(basename(import.meta.filename), function () {
         prerenderHtmlRequestId: 'render-req-9',
       };
       let instanceRow = await productionRow(cardURL, 'instance');
-      assert.deepEqual(instanceRow.diagnostics, expected);
+      assert.deepEqual(
+        withoutWriteSideStamps(
+          instanceRow.diagnostics,
+          'the instance row',
+          assert,
+        ),
+        expected,
+      );
       let fileRow = await productionRow(cardURL, 'file');
-      assert.deepEqual(fileRow.diagnostics, expected);
+      assert.deepEqual(
+        withoutWriteSideStamps(fileRow.diagnostics, 'the file row', assert),
+        expected,
+      );
+      assert.strictEqual(
+        instanceRow.diagnostics?.invalidationId,
+        fileRow.diagnostics?.invalidationId,
+        "both of the URL's rows are attributed to the pass that wrote them",
+      );
+    });
+
+    test('the pass stamps every rendering with its own grouping id and write order', async function (assert) {
+      // The render channel is its own fan-out: an operator asking "what did
+      // this prerender_html job render, and in what order?" reads the two
+      // stamps below off the rows, the same way they read an index pass's
+      // fan-out. The grouping id is per batch, so it is the render channel's
+      // own key and does not equal the spawning index pass's — the two
+      // channels join on url.
+      let urls = [
+        `${testRealm}zzz.json`,
+        `${testRealm}aaa.json`,
+        `${testRealm}bbb.json`,
+      ];
+      let batch = await makeBatch(4);
+      await batch.seedPrerenderedHtmlInvalidations(
+        urls.map((url) => ({ url, operation: 'update' as const })),
+      );
+      for (let [i, url] of urls.entries()) {
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance',
+          isolatedHtml: `<h1>${i}</h1>`,
+          deps: [],
+          // Only the middle rendering reports any diagnostics of its own, so
+          // this also pins that a rendering with none is still attributable.
+          ...(i === 1 ? { diagnostics: { renderElapsedMs: 7 } } : {}),
+        });
+      }
+      await batch.done();
+
+      let rows = (await adapter.execute(
+        `SELECT url, diagnostics FROM prerendered_html
+          WHERE realm_url = $1 AND type = 'instance'
+          ORDER BY (diagnostics->>'writeSeq')::int`,
+        { bind: [testRealm] },
+      )) as { url: string; diagnostics: Record<string, unknown> | null }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.url),
+        urls,
+        'writeSeq orders the renderings the way the pass wrote them, not lexically',
+      );
+      assert.deepEqual(
+        rows.map((row) => row.diagnostics?.writeSeq),
+        [0, 1, 2],
+        'the sequence is 0-based and gapless across the pass',
+      );
+      assert.strictEqual(
+        new Set(rows.map((row) => row.diagnostics?.invalidationId)).size,
+        1,
+        'one grouping id covers the whole pass',
+      );
+      assert.strictEqual(
+        rows[1]?.diagnostics?.renderElapsedMs,
+        7,
+        "the stamps merge around a rendering's own diagnostics rather than replacing them",
+      );
+    });
+
+    test('the index channel stamps each write with its position, and a rewrite keeps the first', async function (assert) {
+      // The visit loop hands its rows to a write-behind buffer that drains
+      // them in one multi-row upsert, so a row's position has to be taken
+      // where it entered the buffer: `indexedAt` alone cannot separate rows
+      // one drain wrote, and the drain itself collapses two writes of the
+      // same row into one. A row written again keeps the position its first
+      // write took — on either side of a flush, since a rewrite can land on
+      // either side of one — while its contents are the last write's. The
+      // positions stay gapless: the rewrites below consume none of their own.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      let file = (lastModified: number) => ({
+        type: 'file' as const,
+        lastModified,
+        resourceCreatedAt: lastModified,
+        deps: new Set<string>(),
+      });
+      let url = (path: string) => new URL(`${testRealm}${path}`);
+      await batch.invalidate([url('zzz.gts'), url('aaa.gts'), url('bbb.gts')]);
+      await batch.bufferEntry(url('zzz.gts'), file(1));
+      await batch.bufferEntry(url('aaa.gts'), file(2));
+      // Rewritten before the buffer drains — the same visit, correcting the
+      // row it already wrote.
+      await batch.bufferEntry(url('zzz.gts'), file(3));
+      await batch.flushWriteBuffer();
+      // Rewritten again after the drain, so the position has to outlive the
+      // buffer that carried it.
+      await batch.bufferEntry(url('zzz.gts'), file(4));
+      await batch.bufferEntry(url('bbb.gts'), file(5));
+      await batch.done();
+
+      let rows = (await adapter.execute(
+        `SELECT url, last_modified,
+                diagnostics->>'writeSeq' AS seq,
+                diagnostics->>'invalidationId' AS invalidation_id
+           FROM boxel_index
+          WHERE realm_url = $1 AND type = 'file'
+          ORDER BY (diagnostics->>'writeSeq')::int`,
+        { bind: [testRealm] },
+      )) as {
+        url: string;
+        last_modified: string | number | null;
+        seq: string | null;
+        invalidation_id: string | null;
+      }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.url),
+        [url('zzz.gts').href, url('aaa.gts').href, url('bbb.gts').href],
+        'writeSeq replays the order the pass wrote its rows, not the lexical order',
+      );
+      assert.deepEqual(
+        rows.map((row) => row.seq),
+        ['0', '1', '2'],
+        'the rewrites kept zzz.gts at position 0 and consumed no position of their own',
+      );
+      assert.strictEqual(
+        Number(rows[0]?.last_modified),
+        4,
+        "the row's contents are the last write's, even though its position is the first write's",
+      );
+      assert.strictEqual(
+        new Set(rows.map((row) => row.invalidation_id)).size,
+        1,
+        'one grouping id covers the whole pass',
+      );
     });
 
     test('a retry resumes rows the prior attempt rendered instead of tombstoning them', async function (assert) {

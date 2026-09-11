@@ -365,11 +365,12 @@ const REFUSED_DECLARATIONS: {
     wouldBe: '.owner=null;',
   },
   {
-    // The executor neither rejects this nor drops it: it writes the number
-    // into a relationship field and reports success. Nothing downstream will
-    // catch it, which is the whole reason lowering has to.
+    // The executor refuses this too: a relationship Field inside a written
+    // value can hold an edge or nothing, never data. Lowering still carries
+    // its own finding, which names the declaration rather than the program it
+    // would have emitted.
     name: 'a non-list written to a nested link collection',
-    executor: 'writes-wrong',
+    executor: 'rejects',
     code: 'link-requires-identity',
     emitsProgram: true,
     declaration: {

@@ -97,7 +97,11 @@ export interface BatchCore {
       writes?: Map<LocalPath, string | Uint8Array>;
       deletes?: LocalPath[];
     },
-    options?: { clientRequestId?: string | null; waitForIndex?: boolean },
+    options?: {
+      clientRequestId?: string | null;
+      waitForIndex?: boolean;
+      initiatingUser?: string | null;
+    },
   ): Promise<{
     writes: { path: string; lastModified: number; contentHash: string }[];
     generation: number | null;
@@ -632,6 +636,10 @@ async function commitStaged(
     {
       clientRequestId: opts.clientRequestId ?? null,
       waitForIndex: opts.waitForIndex ?? true,
+      // The batch's index job is tagged with the user whose request produced
+      // it, the same as every other write path, so a reader draining its own
+      // writes waits for this job rather than returning ahead of it.
+      initiatingUser: opts.actor ?? null,
     },
   );
   let byPath = new Map(committed.writes.map((write) => [write.path, write]));

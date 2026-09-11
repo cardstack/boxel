@@ -28,9 +28,9 @@ import {
 } from './card-api';
 import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
 import { markdownLink } from './markdown-helpers';
-import {
-  type CssVariableField,
-  type CssVariableFieldEntry,
+import type {
+  CssVariableField,
+  CssVariableFieldEntry,
 } from './structured-theme-variables';
 import URLField, { isValidUrl } from './url';
 

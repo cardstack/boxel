@@ -60,6 +60,10 @@ export interface IncrementalIndexOptions {
   // job's own rejection still propagates through `settled`.
   onFailed?: (error: unknown) => Promise<void> | void;
   clientRequestId?: string | null;
+  // Matrix user whose HTTP write produced this job, when known. Scopes
+  // the read endpoints' read-your-writes drain — see
+  // #incrementalIndexingDeferreds.
+  initiatedBy?: string | null;
 }
 
 export class RealmIndexUpdater {
@@ -100,7 +104,16 @@ export class RealmIndexUpdater {
   // unrelated request happens to be awaiting the write-path gate, and
   // (b) become an unhandled promise rejection whenever a deferred-indexing
   // job fails while nothing is draining the gate.
-  #incrementalIndexingDeferreds = new Set<Deferred<void>>();
+  // Each incremental/copy deferred is tagged with the matrix user whose HTTP
+  // write produced the job, when known. Read endpoints use the tag to scope
+  // their read-your-writes drain to the requesting user's own writes
+  // (`incrementalIndexingInitiatedBy`) instead of parking every reader behind
+  // whatever indexing happens to be in flight. System-originated jobs (file
+  // watcher, realm copy) carry no tag.
+  #incrementalIndexingDeferreds = new Map<
+    Deferred<void>,
+    { initiatedBy?: string }
+  >();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
   constructor({
@@ -151,7 +164,7 @@ export class RealmIndexUpdater {
   // hundreds of jobs and stall every PATCH for hours).
   indexing() {
     let pending = [
-      ...this.#incrementalIndexingDeferreds,
+      ...this.#incrementalIndexingDeferreds.keys(),
       ...this.#fullIndexingDeferreds,
     ];
     if (pending.length === 0) {
@@ -172,10 +185,26 @@ export class RealmIndexUpdater {
       return undefined;
     }
     return Promise.all(
-      [...this.#incrementalIndexingDeferreds].map(
+      [...this.#incrementalIndexingDeferreds.keys()].map(
         (deferred) => deferred.promise,
       ),
     ).then(() => undefined);
+  }
+
+  // Awaits only the incremental jobs whose write was initiated by `user` —
+  // the read-your-writes slice of `incrementalIndexing()`. Returns undefined
+  // when this user has nothing in flight, even while other users' or
+  // system-originated jobs are pending: those jobs can only make the caller's
+  // read fresher-than-requested, never wrong, because the production index
+  // rows stay live (and consistent) until the working-table swap lands.
+  incrementalIndexingInitiatedBy(user: string): Promise<void> | undefined {
+    let pending = [...this.#incrementalIndexingDeferreds.entries()]
+      .filter(([, { initiatedBy }]) => initiatedBy === user)
+      .map(([deferred]) => deferred.promise);
+    if (pending.length === 0) {
+      return undefined;
+    }
+    return Promise.all(pending).then(() => undefined);
   }
 
   publishFullIndex(
@@ -279,7 +308,9 @@ export class RealmIndexUpdater {
     opts?: IncrementalIndexOptions,
   ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.add(indexingDeferred);
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
+      initiatedBy: opts?.initiatedBy ?? undefined,
+    });
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {
@@ -352,7 +383,7 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: Pick<
       IncrementalIndexOptions,
-      'onInvalidation' | 'clientRequestId'
+      'onInvalidation' | 'clientRequestId' | 'initiatedBy'
     > & { delete?: true },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
@@ -363,7 +394,10 @@ export class RealmIndexUpdater {
   // state once the job has landed.
   async updateChanges(
     changes: IndexChange[],
-    opts?: Pick<IncrementalIndexOptions, 'onInvalidation' | 'clientRequestId'>,
+    opts?: Pick<
+      IncrementalIndexOptions,
+      'onInvalidation' | 'clientRequestId' | 'initiatedBy'
+    >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);
     await settled;
@@ -374,7 +408,7 @@ export class RealmIndexUpdater {
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.add(indexingDeferred);
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, {});
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,

@@ -10,6 +10,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCard as GetCardType,
+  CardSearchDefaultRealmContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -18,7 +19,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import SearchResults from '@cardstack/host/components/search/search-results';
+import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type RenderStoreService from '@cardstack/host/services/render-store';
@@ -68,6 +69,15 @@ class RenderHtmlTemplate extends Component<Signature> {
       });
   }
 
+  // The realm the card-facing `searchResultsComponent` scopes a no-realm search
+  // to — the same current realm `getCards` defaults to, so both card-search
+  // surfaces target one realm rather than fanning out across the whole server.
+  @provide(CardSearchDefaultRealmContextName)
+  // @ts-ignore "cardSearchDefaultRealm" is declared but not used
+  private get cardSearchDefaultRealm(): () => string | undefined {
+    return () => this.currentRealm;
+  }
+
   @provide(GetCardCollectionContextName)
   private get getCardCollection() {
     return getCardCollection;
@@ -81,7 +91,7 @@ class RenderHtmlTemplate extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.cardStore,
-      searchResultsComponent: SearchResults,
+      searchResultsComponent: CardContextSearchResults,
       mode: 'host',
       submode: 'host',
     };

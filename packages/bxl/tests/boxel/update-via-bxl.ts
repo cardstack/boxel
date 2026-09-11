@@ -470,6 +470,79 @@ check('commit setter failures roll back earlier writes', () => {
   strictEqual(card.locked, 'safe');
 });
 
+check('a partial update keeps the links it does not mention', () => {
+  const card = invoiceFixture();
+  const original = card.cardInfo.theme;
+  ok(original, 'the fixture starts with a theme');
+  const plan = updateViaBxl('.cardInfo |= {"name":.name};', {
+    getFields,
+    syntax: 'solidified',
+  }).call(card);
+  // A link is an edge, so the value the write stores holds no `theme` member;
+  // the model still points at the very Card it pointed at before.
+  const written = plan.intents.find((intent) => intent.op === 'set');
+  deepStrictEqual(written?.op === 'set' ? written.after : undefined, {
+    name: 'Coastal Maine',
+  });
+  deepStrictEqual(
+    written?.op === 'set' ? written.keepRelationships : undefined,
+    [['theme']],
+  );
+  strictEqual(card.cardInfo.theme, original);
+  strictEqual(card.cardInfo.name, 'Coastal Maine');
+});
+
+check('a kept link collection carries every Card across, in order', () => {
+  // A `linksToMany` inside the contained value being rewritten, which is what
+  // makes the kept value a collection rather than a single Card.
+  class Crew {
+    static displayName = 'Crew';
+    static fields: Record<string, BxlBoxelField> = {
+      name: { fieldType: 'contains', card: StringValue },
+      members: { fieldType: 'linksToMany', card: Collaborator },
+    };
+    name = '';
+    members: Collaborator[] = [];
+  }
+  class Voyage {
+    static displayName = 'Voyage';
+    static fields: Record<string, BxlBoxelField> = {
+      id: { fieldType: 'contains', card: StringValue },
+      crew: { fieldType: 'contains', card: Crew },
+    };
+    id = 'card:voyage';
+    crew = new Crew();
+  }
+  const card = new Voyage();
+  card.crew.name = 'Alpha';
+  card.crew.members = [
+    collaborator('card:ada', 'Ada'),
+    collaborator('card:grace', 'Grace'),
+  ];
+  const members = card.crew.members;
+  const plan = updateViaBxl('.crew |= {"name":"Beta"};', {
+    getFields,
+    syntax: 'solidified',
+  }).call(card);
+  const written = plan.intents.find((intent) => intent.op === 'set');
+  deepStrictEqual(written?.op === 'set' ? written.after : undefined, {
+    name: 'Beta',
+  });
+  deepStrictEqual(
+    written?.op === 'set' ? written.keepRelationships : undefined,
+    [['members']],
+  );
+  strictEqual(card.crew.name, 'Beta');
+  // Every Card comes across, in order, and the rebuilt value holds a
+  // collection of its own rather than sharing the outgoing value's.
+  deepStrictEqual(
+    card.crew.members.map((member) => member.id),
+    ['card:ada', 'card:grace'],
+  );
+  strictEqual(card.crew.members[0], members[0]);
+  ok(card.crew.members !== members, 'the kept collection is not shared');
+});
+
 check('query-backed relationship fields remain read-only', () => {
   const card = invoiceFixture();
   throws(
