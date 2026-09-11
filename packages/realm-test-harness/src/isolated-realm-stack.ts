@@ -632,6 +632,21 @@ export async function startIsolatedRealmStack({
   if (realms.length === 0) {
     throw new Error('startIsolatedRealmStack requires at least one realm');
   }
+  // Tessar benchmarks exercise foreground writes during long HTML sweeps.
+  // Opt into the existing worker-manager index lane; preserve the harness
+  // default and record this resource choice in the benchmark manifest.
+  let userIndexWorkers = Number(
+    process.env.TEST_HARNESS_USER_INDEX_WORKERS ?? 0,
+  );
+  if (
+    !Number.isSafeInteger(userIndexWorkers) ||
+    userIndexWorkers < 0 ||
+    userIndexWorkers > 4
+  ) {
+    throw new Error(
+      'TEST_HARNESS_USER_INDEX_WORKERS must be an integer from 0 to 4',
+    );
+  }
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
@@ -841,6 +856,7 @@ export async function startIsolatedRealmStack({
 
     let workerArgs = [
       'worker-manager.ts',
+      `--userIndexCount=${userIndexWorkers}`,
       `--port=${actualWorkerManagerPort}`,
       `--matrixURL=${context.matrixURL}`,
       `--prerendererUrl=${prerenderURL}`,

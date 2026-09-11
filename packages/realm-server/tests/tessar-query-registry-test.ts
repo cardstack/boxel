@@ -6,16 +6,24 @@ import {
   VirtualNetwork,
   baseRealmRRI,
   rri,
+  logger,
+  param,
   type Definition,
   type DefinitionLookup,
   type Filter,
   type InstanceEntry,
+  type Reader,
 } from '@cardstack/runtime-common';
+import { preWarmModulesTable } from '@cardstack/runtime-common/index-runner/prewarm-modules';
 import {
   TessarQueryRegistry,
   type TessarDocument,
 } from '@cardstack/runtime-common/tessar-query-registry';
 import { setupDB } from './helpers/index.ts';
+import {
+  retrieveHeadHTML,
+  retrieveIsolatedHTML,
+} from '../lib/index-html-injection.ts';
 import {
   assertTessarGeneration,
   tessarRequestedGeneration,
@@ -25,6 +33,106 @@ import {
 
 const { module, test } = QUnit;
 const realmURL = 'https://tessar.example/';
+module('Tessar | bounded module prewarm', function () {
+  test('a large invalidation set keeps complete module coverage with bounded dependency reads', async function (assert) {
+    let invalidations = Array.from(
+      { length: 751 },
+      (_, i) => new URL(`${realmURL}${i}.json`),
+    );
+    invalidations.push(new URL(`${realmURL}helper.ts`));
+    let reads: string[][] = [];
+    let warmed = new Set<string>();
+    let sourceReads: string[] = [];
+    let log = logger('tessar-prewarm-test');
+    let count = await preWarmModulesTable({
+      realmURL: new URL(realmURL),
+      invalidations,
+      allRealmCardModules: [`${realmURL}sibling.gts`],
+      virtualNetwork: new VirtualNetwork(),
+      getDependencyRows: async (urls) => {
+        reads.push(urls);
+        return urls.flatMap((url) =>
+          url.endsWith('/750.json')
+            ? []
+            : [
+                {
+                  url,
+                  type: 'file' as const,
+                  deps: null,
+                  hasError: false,
+                  isDeleted: false,
+                  errorDoc: null,
+                },
+                {
+                  url,
+                  type: 'instance' as const,
+                  deps: [
+                    `${realmURL}record`,
+                    `${realmURL}input.json`,
+                    `${realmURL}styles.glimmer-scoped.css`,
+                    'https://other.example/external',
+                  ],
+                  hasError: false,
+                  isDeleted: false,
+                  errorDoc: null,
+                },
+              ],
+        );
+      },
+      reader: {
+        readFile: async (url: URL) => {
+          sourceReads.push(url.href);
+          return {
+            content: JSON.stringify({
+              data: { meta: { adoptsFrom: { module: './novel' } } },
+            }),
+          };
+        },
+      } as Reader,
+      definitionLookup: {
+        populateDefinitionCacheEntry: async ({
+          moduleURL,
+        }: {
+          moduleURL: string;
+        }) => {
+          warmed.add(moduleURL);
+        },
+      } as unknown as DefinitionLookup,
+      getModuleCacheContext: async () => ({
+        resolvedRealmURL: realmURL,
+        cacheScope: 'public',
+        authUserId: '',
+      }),
+      prerenderUserId: 'tessar',
+      jobPriority: 0,
+      jobInfo: { jobId: 1, reservationId: 1, priority: 0, queueWaitMs: null },
+      log,
+      perfLog: log,
+    });
+    assert.true(
+      reads.every((urls) => urls.length <= 250),
+      'dependency payloads are bounded instead of retained for the whole realm',
+    );
+    assert.deepEqual(
+      reads.flat(),
+      invalidations.map((url) => url.href),
+      'every invalidated URL is inspected',
+    );
+    assert.deepEqual(
+      sourceReads,
+      [`${realmURL}750.json`],
+      'only the missing dependency row reads source',
+    );
+    assert.deepEqual(
+      [...warmed].sort(),
+      ['helper.ts', 'novel', 'record', 'sibling.gts']
+        .map((path) => realmURL + path)
+        .sort(),
+      'module coverage, best-row selection and cross-realm exclusion are preserved',
+    );
+    assert.strictEqual(count, 4);
+  });
+});
 const on = { module: rri(`${realmURL}record`), name: 'TessarRecord' };
 const definition: Definition = {
   type: 'card-def',
@@ -184,6 +292,35 @@ module('Tessar | Postgres query registry', function (hooks) {
       await tessarReadState(db, realmURL, ownerURL, stamp),
       'ready',
     );
+    await db.execute(
+      'INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation, isolated_html, head_html) VALUES ($1, $1, $2, $3, 2, $4, $5)',
+      {
+        bind: [ownerURL, realmURL, 'instance', '<p>1</p>', '<title>1</title>'],
+      },
+    );
+    let initialHTML = () =>
+      Promise.all([
+        retrieveIsolatedHTML({ cardURL: new URL(ownerURL), dbAdapter: db }),
+        retrieveHeadHTML({ cardURL: new URL(ownerURL), dbAdapter: db }),
+      ]);
+    assert.deepEqual(
+      await initialHTML(),
+      ['<p>1</p>', '<title>1</title>'],
+      'current HTML may be injected',
+    );
+    await db.execute(
+      'UPDATE prerendered_html SET generation = 1 WHERE url = $1',
+      { bind: [ownerURL] },
+    );
+    assert.deepEqual(
+      await initialHTML(),
+      [null, null],
+      'old HTML cannot stand in for a newer materialization',
+    );
+    await db.execute(
+      'UPDATE prerendered_html SET generation = 2 WHERE url = $1',
+      { bind: [ownerURL] },
+    );
     let [queued] = await db.execute(
       "INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args) VALUES ('incremental-index', $1, 60, 10, '{}') RETURNING id",
       { bind: [`indexing:${realmURL}`] },
@@ -192,6 +329,11 @@ module('Tessar | Postgres query registry', function (hooks) {
       await tessarReadState(db, realmURL, ownerURL, stamp),
       'pending',
       'an acknowledged queued write is pending before the first source swap',
+    );
+    assert.deepEqual(
+      await initialHTML(),
+      [null, null],
+      'a new client cannot receive ready-looking HTML while its source write is queued',
     );
     assert.strictEqual(
       await tessarReadState(db, realmURL, ownerURL, stamp, {
@@ -210,6 +352,11 @@ module('Tessar | Postgres query registry', function (hooks) {
       tessarReadState(db, realmURL, ownerURL, stamp),
       /indexing failed/,
       'a failed source pass cannot expose the previous snapshot as current',
+    );
+    assert.deepEqual(
+      await initialHTML(),
+      [null, null],
+      'a failed source pass cannot expose old HTML as current either',
     );
     await db.execute("UPDATE jobs SET status = 'resolved' WHERE id = $1", {
       bind: [queued.id],
@@ -287,6 +434,59 @@ module('Tessar | Postgres query registry', function (hooks) {
       'ready',
       'the restamped owner is readable under the new definition epoch',
     );
+  });
+
+  test('a source prepared before the first watch cannot publish after that registration', async function (assert) {
+    // Deterministic interleaving across separate pinned transactions: a source
+    // worker observed no watches, then another publisher registered the first
+    // owner. The stale no-watch fast path must still reject its old revision.
+    await writer.createBatch(new URL(realmURL), network);
+    let prepared = await publication.prepare(realmURL, 1);
+    assert.deepEqual(prepared.rows, []);
+    assert.false(prepared.hadOwners);
+    let ownerURL = `${realmURL}first-summary.json`;
+    let watches = await registry.prepare([
+      { fieldPath: 'inputs', query: { filter: { on, eq: { name: 'A' } } } },
+    ]);
+    await db.withWriteLock(`tessar:index:${realmURL}`, async (tx) => {
+      if (!tx)
+        throw new Error(
+          'This regression requires a pinned Postgres transaction',
+        );
+      await registry.publish(tx, {
+        realmURL,
+        ownerURL,
+        generation: 1,
+        inputGeneration: 0,
+        definitionRevision: '0',
+        watches,
+        pending: true,
+      });
+      await tx([
+        'UPDATE realm_generations SET current_generation = 1 WHERE realm_url =',
+        param(realmURL),
+      ]);
+    });
+    await assert.rejects(
+      db.withWriteLock(`tessar:index:${realmURL}`, async (tx) => {
+        if (!tx)
+          throw new Error(
+            'This regression requires a pinned Postgres transaction',
+          );
+        await publication.commit(tx, {
+          realmURL,
+          generation: 1,
+          definitionRevision: '0',
+          prepared,
+        });
+      }),
+      /input revision changed/,
+      'the source must retry against the newly registered watch',
+    );
+    assert.deepEqual(await registry.pending(realmURL), [
+      { ownerURL, generation: 1 },
+    ]);
+    await assertTessarGeneration(db, realmURL, 1);
   });
 
   test('Tessar input reads reject changed generations and malformed revision headers', async function (assert) {

@@ -680,7 +680,21 @@ export class IndexRunner {
             outcome.result.card?.error ||
             !outcome.result.card?.serialized?.data.meta.tessar
           ) {
-            failures.push(ownerURL);
+            let error =
+              outcome.status === 'error'
+                ? outcome.error
+                : outcome.status === 'rendered'
+                  ? (outcome.result.card?.error ??
+                    outcome.result.pageUnusableError)
+                  : undefined;
+            failures.push(
+              `${ownerURL}: ${coerceErrorMessage(
+                error,
+                outcome.status === 'rendered'
+                  ? `incomplete Tessar materialization (card fields: ${Object.keys(outcome.result.card ?? {}).join(', ')}; metadata: ${Object.keys(outcome.result.card?.serialized?.data.meta ?? {}).join(', ')})`
+                  : `Tessar visit ${outcome.status}`,
+              )}`,
+            );
             continue;
           }
           await this.#finishVisit(outcome.result);

@@ -25,6 +25,11 @@ import { canonicalURL } from './dependency-url.ts';
 // the requests just queue at the server's per-affinity admission.
 const DEFAULT_PREWARM_CONCURRENCY = 1;
 
+// Tessar's 10x fixture has millions of repeated dependency strings. Consume
+// bounded slices here: SQL parameter chunking alone still retains every row
+// in getDependencyRows's result until the entire realm has been read.
+const TESSAR_PREWARM_DEPENDENCY_BATCH_SIZE = 250;
+
 // Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
 // falling back to the default. Reads `process.env` defensively — pre-warm
 // runs only in the worker, but the bundle is shared, so guard against a
@@ -219,41 +224,49 @@ export async function preWarmModulesTable({
   // Base layer: the realm-wide `.gts` / `.gjs` sweep.
   let toWarm = new Set<string>(allRealmCardModules);
 
-  let hrefs = invalidations.map((u) => u.href);
-  let existingRows = await getDependencyRows(hrefs);
-  let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
-  for (let row of existingRows) {
-    // Prefer rows that actually carry deps so the lookup below returns the
-    // strongest signal available for each URL.
-    let existing = bestByUrl.get(row.url);
-    if (!existing || (!existing.deps?.length && row.deps?.length)) {
-      bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
-    }
-  }
-
   let novelJsonUrls: URL[] = [];
-  for (let url of invalidations) {
-    // Module files in the invalidation set are deps that instances in the
-    // same pass will consume — pre-warm them directly. This includes
-    // `.ts` / `.js` helpers, but only the ones the pass is actually touching,
-    // so cost is bounded by invalidation size rather than realm size.
-    if (hasExecutableExtension(url.href)) {
-      toWarm.add(url.href);
-    }
-    let row = bestByUrl.get(url.href);
-    if (row?.deps?.length) {
-      for (let dep of row.deps) {
-        let resolved = canonicalURL(dep, url.href, virtualNetwork);
-        // `.json` marks an instance dep and `.glimmer-scoped.css` marks an
-        // inline-styles artifact; everything else in the deps array is a
-        // module URL (stored extensionless after normalizeModuleURL /
-        // normalizeDependency).
-        if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
-          toWarm.add(resolved);
-        }
+  for (
+    let offset = 0;
+    offset < invalidations.length;
+    offset += TESSAR_PREWARM_DEPENDENCY_BATCH_SIZE
+  ) {
+    let urls = invalidations.slice(
+      offset,
+      offset + TESSAR_PREWARM_DEPENDENCY_BATCH_SIZE,
+    );
+    let existingRows = await getDependencyRows(urls.map((url) => url.href));
+    let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
+    for (let row of existingRows) {
+      // Prefer the strongest signal for this URL; every version of a URL
+      // is returned in the same slice, preserving the whole-realm choice.
+      let existing = bestByUrl.get(row.url);
+      if (!existing || (!existing.deps?.length && row.deps?.length)) {
+        bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
       }
-    } else if (url.href.endsWith('.json')) {
-      novelJsonUrls.push(url);
+    }
+    for (let url of urls) {
+      // Module files in the invalidation set are deps that instances in the
+      // same pass will consume — pre-warm them directly. This includes
+      // `.ts` / `.js` helpers, but only the ones the pass is actually touching,
+      // so cost is bounded by invalidation size rather than realm size.
+      if (hasExecutableExtension(url.href)) {
+        toWarm.add(url.href);
+      }
+      let row = bestByUrl.get(url.href);
+      if (row?.deps?.length) {
+        for (let dep of row.deps) {
+          let resolved = canonicalURL(dep, url.href, virtualNetwork);
+          // `.json` marks an instance dep and `.glimmer-scoped.css` marks an
+          // inline-styles artifact; everything else in the deps array is a
+          // module URL (stored extensionless after normalizeModuleURL /
+          // normalizeDependency).
+          if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
+            toWarm.add(resolved);
+          }
+        }
+      } else if (url.href.endsWith('.json')) {
+        novelJsonUrls.push(url);
+      }
     }
   }
   for (let url of novelJsonUrls) {

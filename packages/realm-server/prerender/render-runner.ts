@@ -1107,6 +1107,10 @@ export class RenderRunner {
       ) => {
         let optionsForThisPass: RenderRouteOptions = {
           ...baseOptions,
+          tessarUseSnapshot:
+            visitType === 'prerender-html' && pass === 'cardRender'
+              ? true
+              : undefined,
           // Set only the flag(s) for the current pass so the host route
           // picks the right branch in #buildModel regardless of what other
           // passes are part of this visit. The fused index pass carries both

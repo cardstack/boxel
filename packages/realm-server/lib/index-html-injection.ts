@@ -1,9 +1,40 @@
-import type { DBAdapter } from '@cardstack/runtime-common';
-import { query } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  TessarMaterialization,
+} from '@cardstack/runtime-common';
+import { CardError, query } from '@cardstack/runtime-common';
+import { tessarReadState } from '@cardstack/runtime-common/tessar-materialization';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
 } from './index-url-utils.ts';
+
+type TessarHTMLRow = {
+  url: string;
+  realm_url: string;
+  generation: string | number;
+  html_generation: string | number;
+  html_error: unknown;
+  tessar: TessarMaterialization | string | null;
+};
+
+async function tessarHTMLIsCurrent(db: DBAdapter, row?: TessarHTMLRow) {
+  if (!row?.tessar) return true;
+  if (row.html_error || Number(row.html_generation) !== Number(row.generation))
+    return false;
+  let stamp =
+    typeof row.tessar === 'string' ? JSON.parse(row.tessar) : row.tessar;
+  try {
+    return (
+      (await tessarReadState(db, row.realm_url, row.url, stamp)) === 'ready'
+    );
+  } catch (error) {
+    // Leave the shell to show the explicit JSON failure after boot, rather
+    // than injecting a previous successful dashboard into a failed page.
+    if (error instanceof CardError && error.status === 503) return false;
+    throw error;
+  }
+}
 
 export async function retrieveHeadHTML({
   cardURL,
@@ -31,7 +62,9 @@ export async function retrieveHeadHTML({
   // lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.head_html AS head_html, i.generation
+      SELECT ph.head_html AS head_html, i.generation, i.url, i.realm_url,
+        ph.generation AS html_generation, ph.error_doc AS html_error,
+        i.pristine_doc->'meta'->'tessar' AS tessar
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -48,6 +81,14 @@ export async function retrieveHeadHTML({
   ]);
 
   log?.debug('Head query result for %s', cardURL.href, rows);
+
+  if (
+    !(await tessarHTMLIsCurrent(
+      dbAdapter,
+      rows[0] as TessarHTMLRow | undefined,
+    ))
+  )
+    return null;
 
   let headRow = rows[0] as
     | { head_html?: string | null; generation?: string | number }
@@ -89,7 +130,9 @@ export async function retrieveIsolatedHTML({
   // the lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.isolated_html AS isolated_html, i.generation
+      SELECT ph.isolated_html AS isolated_html, i.generation, i.url, i.realm_url,
+        ph.generation AS html_generation, ph.error_doc AS html_error,
+        i.pristine_doc->'meta'->'tessar' AS tessar
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -106,6 +149,14 @@ export async function retrieveIsolatedHTML({
   ]);
 
   log?.debug('Isolated query result for %s', cardURL.href, rows);
+
+  if (
+    !(await tessarHTMLIsCurrent(
+      dbAdapter,
+      rows[0] as TessarHTMLRow | undefined,
+    ))
+  )
+    return null;
 
   let isolatedRow = rows[0] as
     | { isolated_html?: string | null; generation?: string | number }

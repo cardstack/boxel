@@ -12,7 +12,9 @@ export default class MessageService extends Service {
     new Map();
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
-  private tessarConnected = true;
+  // The first completed sync must reconcile views fetched before realm-event
+  // subscriptions were ready. Treating startup as connected drops that edge.
+  private tessarConnected = false;
   private tessarConnectionListeners = new Set<(connected: boolean) => void>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
@@ -35,6 +37,10 @@ export default class MessageService extends Service {
       document.removeEventListener('visibilitychange', visible);
       this.tessarConnectionListeners.clear();
     });
+  }
+
+  get isTessarConnected() {
+    return this.tessarConnected;
   }
 
   subscribeTessarConnection(callback: (connected: boolean) => void) {
@@ -62,6 +68,7 @@ export default class MessageService extends Service {
     // Re-login re-subscribes fresh (RealmResource.subscribe(), etc.), so a clear
     // here can't strand a live session's wiring.
     this.listenerCallbacks = new Map();
+    this.tessarConnected = false;
     if ((globalThis as any)._CARDSTACK_REALM_SUBSCRIBE === this) {
       delete (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE;
     }

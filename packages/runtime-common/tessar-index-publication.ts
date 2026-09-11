@@ -70,8 +70,11 @@ export class TessarIndexPublication {
       prepared,
       inputGeneration,
     } = args;
-    if (!prepared.rows.length && !prepared.hadOwners) return;
+    // Even the no-watch fast path was prepared outside the lock. Another
+    // publisher may have registered the realm's first owner since then; a
+    // stale source must retry so that new watch participates in invalidation.
     await assertTessarGeneration(this.db, realmURL, generation - 1, tx);
+    if (!prepared.rows.length && !prepared.hadOwners) return;
     if (inputGeneration !== undefined && inputGeneration !== generation - 1) {
       throw new Error('Tessar publication does not follow its input revision');
     }

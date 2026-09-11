@@ -18,6 +18,7 @@ import {
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { tessarHasMaterializations } from '@cardstack/runtime-common/tessar-materialization';
 import {
   ensureSingleTitle,
   injectHeadHTML,
@@ -395,8 +396,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    // A deployment timestamp cannot validate mutable materialized output.
+    // Keep a cached ready page from bypassing the queued-write/HTML checks.
+    let tessarRealm =
+      routedRealm &&
+      (await tessarHasMaterializations(dbAdapter, [routedRealm.url]));
+    if (tessarRealm) ctxt.set('Cache-Control', 'no-store');
     let etag =
-      lastPublishedAt && indexHTMLHash
+      !tessarRealm && lastPublishedAt && indexHTMLHash
         ? `"${lastPublishedAt}-${indexHTMLHash}"`
         : null;
 

@@ -1,12 +1,19 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { rri, meta, isSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  rri,
+  meta,
+  isSingleCardDocument,
+  parseRenderRouteOptions,
+  serializeRenderRouteOptions,
+} from '@cardstack/runtime-common';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  testRRI,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -27,6 +34,38 @@ module('Integration | Tessar snapshot', function (hooks) {
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
+
+  test('first sync after session reset reconciles Tessar readers exactly once', function (assert) {
+    let messages = getService('message-service');
+    messages.resetState();
+    let transitions: boolean[] = [];
+    let unsubscribe = messages.subscribeTessarConnection((connected) =>
+      transitions.push(connected),
+    );
+    try {
+      messages.tessarConnectionChanged(true);
+      assert.deepEqual(
+        transitions,
+        [true],
+        'initial sync closes the subscription gap',
+      );
+      messages.tessarConnectionChanged(true);
+      assert.deepEqual(
+        transitions,
+        [true],
+        'routine sync does not repeatedly reload clean views',
+      );
+      messages.tessarConnectionChanged(false);
+      messages.tessarConnectionChanged(true);
+      assert.deepEqual(
+        transitions,
+        [true, false, true],
+        'a later reconnect reconciles again',
+      );
+    } finally {
+      unsubscribe();
+    }
+  });
 
   test('supplied outputs and membership do not compute, search or inflate included inputs', async function (assert) {
     let calls = 0;
@@ -307,6 +346,100 @@ module('Integration | Tessar snapshot', function (hooks) {
       () => api.tessarIndexManifest(summary, doc, 7),
       /unresolved, partial or errored/,
     );
+  });
+
+  test('Tessar HTML explicitly consumes a published snapshot while index discovery computes', async function (assert) {
+    let calls = 0;
+    class TessarSummary extends CardDef {
+      static tessarMaterialized = true;
+      @field total = contains(NumberField, {
+        computeVia: function () {
+          calls++;
+          return 999;
+        },
+      });
+    }
+    await setupIntegrationTestRealm({
+      skipBootIndex: true,
+      mockMatrixUtils,
+      contents: { 'tessar.gts': { TessarSummary } },
+    });
+    let doc = {
+      data: {
+        id: `${testRealmURL}TessarSummary/html`,
+        type: 'card' as const,
+        attributes: { total: 3 },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmURL}tessar`),
+            name: 'TessarSummary',
+          },
+          tessar: {
+            version: 1 as const,
+            state: 'ready' as const,
+            inputGeneration: 1,
+            publishedGeneration: 2,
+            definitionRevision: 'tessar-html-test',
+            computedFields: ['total'],
+            queryFields: [],
+            watches: [],
+          },
+        },
+      },
+    };
+    let globals = globalThis as any;
+    let previous = globals.__boxelRenderContext;
+    globals.__boxelRenderContext = true;
+    try {
+      let options = parseRenderRouteOptions(
+        serializeRenderRouteOptions({
+          cardRender: true,
+          tessarUseSnapshot: true,
+        }),
+      );
+      assert.true(options.tessarUseSnapshot);
+      let rendered = await getService('render-store').add<TessarSummary>(doc, {
+        doNotPersist: true,
+        relativeTo: testRRI(''),
+        tessarUseSnapshot: options.tessarUseSnapshot,
+      });
+      assert.strictEqual(rendered.total, 3, 'HTML uses the supplied output');
+      assert.strictEqual(calls, 0, 'HTML never ran the computed getter');
+      doc.data.id = `${testRealmURL}TessarSummary/index`;
+      let indexed = await getService('render-store').add<TessarSummary>(doc, {
+        doNotPersist: true,
+        relativeTo: testRRI(''),
+      });
+      assert.strictEqual(
+        indexed.total,
+        999,
+        'discovery keeps its computation path',
+      );
+      assert.ok(calls > 0);
+      doc.data.id = `${testRealmURL}TessarSummary/pending`;
+      await assert.rejects(
+        getService('render-store').add<TessarSummary>(
+          {
+            data: {
+              ...doc.data,
+              meta: {
+                ...doc.data.meta,
+                tessar: { ...doc.data.meta.tessar, state: 'pending' },
+              },
+            },
+          },
+          {
+            doNotPersist: true,
+            relativeTo: testRRI(''),
+            tessarUseSnapshot: true,
+          },
+        ),
+        /pending or has invalid provenance/,
+        'HTML cannot accept pending output',
+      );
+    } finally {
+      globals.__boxelRenderContext = previous;
+    }
   });
 
   test('nested values share edit invalidation and legacy documents keep computing', async function (assert) {

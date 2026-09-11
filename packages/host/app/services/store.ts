@@ -96,7 +96,10 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
-import { currentTessarInputSnapshot } from '@cardstack/runtime-common/tessar-materialization';
+import {
+  currentTessarInputSnapshot,
+  tessarSnapshotFields,
+} from '@cardstack/runtime-common/tessar-materialization';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
@@ -225,6 +228,7 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
+  tessarUseSnapshot?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
 type TrackedCreateOptions = CreateOptions & DependencyTrackingOptions;
@@ -840,6 +844,7 @@ export default class StoreService extends Service implements StoreInterface {
         instanceOrDoc,
         opts?.relativeTo,
         opts?.dependencyTrackingContext,
+        opts?.tessarUseSnapshot,
       );
     } else {
       instance = instanceOrDoc;
@@ -2042,14 +2047,23 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    tessarUseSnapshot?: true,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
+    let needsTessarConnection =
+      !!resource.meta.tessar &&
+      !this.isRenderStore &&
+      !(globalThis as any).__boxelPrerenderApp &&
+      !this.messageService.isTessarConnected;
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
     let performCreate = async () =>
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
         dependencyTrackingContext,
+        ...(tessarUseSnapshot
+          ? { tessarSnapshot: tessarSnapshotFields(resource) }
+          : {}),
       })) as T;
     // Time the deserialize and report it (no-op when telemetry is disabled).
     let telemetry = this.#clientTelemetry();
@@ -2057,6 +2071,12 @@ export default class StoreService extends Service implements StoreInterface {
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
       : await performCreate();
+    if (needsTessarConnection && api.hasTessarSnapshot(card)) {
+      // A snapshot fetched before subscriptions are ready has a read/sync
+      // gap. Keep it explicitly pending until one connected revalidation.
+      api.markTessarPending(card);
+      if (this.messageService.isTessarConnected) this.reloadTask.perform(card);
+    }
     if (telemetry?.isEnabled && deserializeStart !== undefined) {
       telemetry.recordDeserialize({
         durationMs: performance.now() - deserializeStart,

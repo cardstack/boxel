@@ -649,29 +649,58 @@ export default class RenderRoute extends Route<Model> {
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
       (globalThis as any).__boxelSetRenderStage?.('buildModel:deriving-type');
+      let sourceDoc = doc;
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
+          let renderDoc: LooseSingleCardDocument = sourceDoc;
+          let tessarUseSnapshot: true | undefined;
           let derivedCardType = await deriveCardTypeFromDoc(
-            doc,
+            renderDoc,
             id,
             this.loaderService.loader,
           );
 
+          if (parsedOptions.tessarUseSnapshot && !tessarInput) {
+            let Klass = await loadCardDef(renderDoc.data.meta.adoptsFrom, {
+              loader: this.loaderService.loader,
+              relativeTo: this.network.virtualNetwork.toURL(canonicalId),
+            });
+            if ((Klass as typeof CardDef).tessarMaterialized) {
+              let indexedResponse = await this.network.authedFetch(
+                canonicalId,
+                {
+                  headers: { Accept: SupportedMimeType.CardJson },
+                },
+              );
+              let indexed = await indexedResponse.json();
+              if (
+                !indexedResponse.ok ||
+                indexed.data?.meta?.tessar?.state !== 'ready'
+              ) {
+                throw new Error(
+                  'Tessar HTML requires a ready published materialization',
+                );
+              }
+              renderDoc = indexed as LooseSingleCardDocument;
+              tessarUseSnapshot = true;
+            }
+          }
+
           await this.realm.ensureRealmMeta(realmURL);
           let screenshotsMeta = await this.declarationScreenshotsMeta(
-            doc,
+            renderDoc,
             canonicalId,
             realmURL,
           );
 
           let enhancedDoc: LooseSingleCardDocument = {
-            ...doc,
+            ...renderDoc,
             data: {
-              ...doc.data,
+              ...renderDoc.data,
               id: canonicalId,
               type: 'card',
               meta: {
-                ...doc.data.meta,
+                ...renderDoc.data.meta,
                 lastModified: lastModified.getTime(),
                 realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
@@ -685,6 +714,7 @@ export default class RenderRoute extends Route<Model> {
             relativeTo: rri(id),
             realm: realmURL,
             doNotPersist: true,
+            tessarUseSnapshot,
           });
           (globalThis as any).__boxelSetRenderStage?.(
             'buildModel:store-settle',

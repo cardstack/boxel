@@ -1287,6 +1287,8 @@ export default class MatrixService extends Service {
 
         let wasAuthenticated = this.session.isAuthenticated;
         this.setPostLoginCompleted(true, 'start-success');
+        if (this.initialSyncCompleted)
+          this.messageService.tessarConnectionChanged(true);
         loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
         // Symmetric to logout()'s notifySessionEnded(): tell every session
@@ -1411,7 +1413,8 @@ export default class MatrixService extends Service {
     let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
     switch (state) {
       case SlidingSyncState.Complete:
-        this.messageService.tessarConnectionChanged(true);
+        if (this.session.isAuthenticated && this.initialSyncCompleted)
+          this.messageService.tessarConnectionChanged(true);
         if (!this.initialSyncCompleted) {
           Promise.allSettled([
             this.drainRoomState(),
@@ -1419,6 +1422,8 @@ export default class MatrixService extends Service {
             this.drainTimeline(),
           ]).then(() => {
             this.initialSyncCompleted = true;
+            if (this.session.isAuthenticated)
+              this.messageService.tessarConnectionChanged(true);
             this.initialSyncCompletedDeferred.fulfill();
             this.slidingSync?.setList(
               SLIDING_SYNC_AI_ROOM_LIST_NAME,

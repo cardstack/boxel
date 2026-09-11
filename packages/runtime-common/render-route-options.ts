@@ -10,6 +10,8 @@ export interface RenderRouteOptions {
   // for, then records it — one reset per tab per module change.
   loaderEpoch?: string;
   cardRender?: true;
+  // HTML-only Tessar visits consume the published output, never recompute it.
+  tessarUseSnapshot?: true;
   fileExtract?: true;
   fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
@@ -39,6 +41,9 @@ export function parseRenderRouteOptions(
     }
     if (typeof parsed.loaderEpoch === 'string') {
       options.loaderEpoch = parsed.loaderEpoch;
+    }
+    if (parsed.tessarUseSnapshot === true) {
+      options.tessarUseSnapshot = true;
     }
     if (parsed.cardRender) {
       options.cardRender = true;
@@ -82,6 +87,9 @@ export function serializeRenderRouteOptions(
   }
   if (options.loaderEpoch !== undefined) {
     serialized.loaderEpoch = options.loaderEpoch;
+  }
+  if (options.tessarUseSnapshot) {
+    serialized.tessarUseSnapshot = true;
   }
   if (options.cardRender) {
     serialized.cardRender = true;
