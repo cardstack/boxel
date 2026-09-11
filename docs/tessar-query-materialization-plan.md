@@ -1,7 +1,7 @@
 # Tessar query materialization: DO NOT MERGE POC plan
 
-Status: planning and environment preparation only. Implementation, synthetic-data
-generation and benchmarks remain paused until the user asks to resume.
+Status: implementation resumed September 10, 2026. Run focused correctness and
+freshness tests and browser/network performance checks at each working increment.
 
 This is a draft experiment. Do not merge it, enable auto-merge or deploy its
 runtime changes to production. Use **Tessar** as the codename in every new
@@ -36,6 +36,27 @@ correctness or freshness violation is a failed case, not an accepted tradeoff.
 
 ## Current checkpoint
 
+Implementation has started. The deterministic generator produces 1,255 / 12,550
+synthetic instances and a raw-document oracle. Its first two tests pass. The
+initial 34-instance real-stack baseline returned correct live query membership
+but stale zero-valued indexed statistics on all five GETs. Those reads fail the
+correctness gate and are not valid speedup baselines. The internal snapshot
+consumer and reverse-query registry have focused browser and Postgres tests.
+Four browser tests pass 49 assertions; two Postgres tests cover SQL predicates,
+transaction rollback, persistent dirty state and rejection of stale publication.
+The existing computed-field regression suite passes 15 tests / 41 assertions.
+The registry is not yet connected to index publication or worker scheduling, and
+normal server/client reads do not yet opt into Tessar. These primitive tests do
+not establish end-to-end freshness or a performance improvement.
+
+The initial freshness contract is a maximum 10,000 ms from an acknowledged
+relevant write to its complete owner revision being visible in existing and new
+clients, at every dataset size and concurrency. Reads during that interval must
+explicitly identify pending work; they must never present older results as
+current. Source acknowledgement, source index revision, owner publication and
+client observation are separate measured events. Missing, mixed or regressing
+revisions fail the gate regardless of elapsed time.
+
 - Main was updated to `e9a4b0a54a` on September 10, 2026.
 - Work uses the isolated branch `codex/do-not-merge-query-materialization-poc`.
 - The draft POC is [PR #6085](https://github.com/cardstack/boxel/pull/6085).
@@ -45,8 +66,8 @@ correctness or freshness violation is a failed case, not an accepted tradeoff.
 - No production records were uploaded. The temporary source-data archive,
   prepared JSON copies, import inventory and temporary source authentication
   cache were removed. Only aggregate counts were retained for sizing.
-- No runtime implementation, database migration, synthetic generator or measured
-  performance result is included in this checkpoint.
+- Runtime primitives, an additive registry migration and a synthetic generator
+  are in progress. No production or shared staging backend is changed.
 
 The staging fork runs the staging deployment's runtime. It does **not** run this
 monorepo branch merely because its GTS files are copied there. Develop and measure
@@ -82,15 +103,15 @@ they must not silently lose invalidations.
 The earlier investigation used `730081f8b4`. The updated base has client behavior
 that the implementation must preserve:
 
-| Area | Confirmed behavior and consequence |
-| --- | --- |
-| `packages/base/field-support.ts` | Computed getters still invoke `computeVia` even when deserialization supplied a value. A pass-scoped compute memo is not a persisted snapshot. |
-| `packages/host/app/routes/render/meta.ts` | Index serialization still uses `omitQueryFields: true` and excludes query-only runtime dependencies. |
-| `packages/base/query-field-support.ts` | Eager query resolution, `eager: false`, newer-document seed handover and generation ordering already exist. Integrate with these paths. |
-| `packages/host/app/resources/search.ts` | Seed ordering uses realm-specific generation floors. Ordinary live resources still refresh on realm events. Existing floors are not an exact materialization revision contract. |
-| `packages/host/app/services/store.ts` | Selective search-entry inflation and scoped card searches exist. `addResourceFromSearchData` still adds a single-resource document; inspect compound-resource reuse before adding a cache. |
-| `packages/runtime-common/realm-index-query-engine.ts` | GET/search assembly can populate query fields and expand links. Client snapshot support alone does not remove this server work. |
-| `packages/runtime-common/index-writer.ts` | Working-index buffers, batch promotion and generation guards already exist. Integrate watch publication and invalidation with these mechanisms. |
+| Area                                                  | Confirmed behavior and consequence                                                                                                                                                         |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/base/field-support.ts`                      | Computed getters still invoke `computeVia` even when deserialization supplied a value. A pass-scoped compute memo is not a persisted snapshot.                                             |
+| `packages/host/app/routes/render/meta.ts`             | Index serialization still uses `omitQueryFields: true` and excludes query-only runtime dependencies.                                                                                       |
+| `packages/base/query-field-support.ts`                | Eager query resolution, `eager: false`, newer-document seed handover and generation ordering already exist. Integrate with these paths.                                                    |
+| `packages/host/app/resources/search.ts`               | Seed ordering uses realm-specific generation floors. Ordinary live resources still refresh on realm events. Existing floors are not an exact materialization revision contract.            |
+| `packages/host/app/services/store.ts`                 | Selective search-entry inflation and scoped card searches exist. `addResourceFromSearchData` still adds a single-resource document; inspect compound-resource reuse before adding a cache. |
+| `packages/runtime-common/realm-index-query-engine.ts` | GET/search assembly can populate query fields and expand links. Client snapshot support alone does not remove this server work.                                                            |
+| `packages/runtime-common/index-writer.ts`             | Working-index buffers, batch promotion and generation guards already exist. Integrate watch publication and invalidation with these mechanisms.                                            |
 
 Record the exact base commit, existing behavior and relevant feature flags in
 each benchmark run. Recheck these paths if main is updated again.
@@ -101,11 +122,11 @@ Generate new records from a fixed seed. Use fabricated names, narratives, IDs,
 scores, statuses and dates. Do not anonymize production records or use them as
 templates. Keep credentials and runtime deployment addresses out of output.
 
-| Preset | Instance count, excluding realm/index configuration | Purpose |
-| --- | ---: | --- |
-| Smoke | Small explicit fixture | Human-auditable counts, membership and graph behavior |
-| 1x | 1,255 | Reference workload approximating the current production size |
-| 10x | 12,550 | Primary performance benchmark target |
+| Preset | Instance count, excluding realm/index configuration | Purpose                                                      |
+| ------ | --------------------------------------------------: | ------------------------------------------------------------ |
+| Smoke  |                              Small explicit fixture | Human-auditable counts, membership and graph behavior        |
+| 1x     |                                               1,255 | Reference workload approximating the current production size |
+| 10x    |                                              12,550 | Primary performance benchmark target                         |
 
 The benchmark target is 10x the recorded current instance count. Retain the 1x
 reference and smoke fixtures for comparison and validation; do not generate or
@@ -319,14 +340,14 @@ fixtures and generic runtime changes to the monorepo.
 
 ## Milestones and reviewable increments
 
-| Milestone | Deliverable | Exit evidence |
-| --- | --- | --- |
-| M0: baseline and contract | Revalidate main; small deterministic fixture/generator; define opt-in, metadata, modes, revisions and mandatory freshness guarantees | Baseline request/compute trace, independent expected results and fixed validity gates |
-| M1: snapshot consumption | Base/host/server read path from step 1 | Zero recomputation/input requests for supplied outputs, with legacy/editing regression checks |
-| M2: reverse matcher | Registry schema and conservative routing/verification primitives | Predicate parity and no-missed-candidate cases, including empty, boolean and pagination cases |
-| M3: index lifecycle | Register watches, retain dependencies, coalesce dirty owners and publish consistently | End-to-end change propagation plus race, restart and feeder convergence tests |
-| M4: Tessar display views | Synthetic realm summaries, compact rows and dashboard consumption | Matching UI output; successful source edits/drill-down and local overlays |
-| M5: performance report | Controlled base/candidate runs across sizes and concurrency, enforcing correctness/freshness gates throughout | Reproducible Tessar performance report with measured gains, regressions, resource costs and limits |
+| Milestone                 | Deliverable                                                                                                                          | Exit evidence                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| M0: baseline and contract | Revalidate main; small deterministic fixture/generator; define opt-in, metadata, modes, revisions and mandatory freshness guarantees | Baseline request/compute trace, independent expected results and fixed validity gates              |
+| M1: snapshot consumption  | Base/host/server read path from step 1                                                                                               | Zero recomputation/input requests for supplied outputs, with legacy/editing regression checks      |
+| M2: reverse matcher       | Registry schema and conservative routing/verification primitives                                                                     | Predicate parity and no-missed-candidate cases, including empty, boolean and pagination cases      |
+| M3: index lifecycle       | Register watches, retain dependencies, coalesce dirty owners and publish consistently                                                | End-to-end change propagation plus race, restart and feeder convergence tests                      |
+| M4: Tessar display views  | Synthetic realm summaries, compact rows and dashboard consumption                                                                    | Matching UI output; successful source edits/drill-down and local overlays                          |
+| M5: performance report    | Controlled base/candidate runs across sizes and concurrency, enforcing correctness/freshness gates throughout                        | Reproducible Tessar performance report with measured gains, regressions, resource costs and limits |
 
 Keep these as distinct commits or small reviewable groups on the draft POC. M1
 alone does not establish freshness. M2 alone does not establish durable view
@@ -450,5 +471,5 @@ list of remaining limitations. Only cases satisfying the non-negotiable
 correctness/freshness gates qualify as successful benchmark results. The PR
 remains draft and DO NOT MERGE even after its
 tests pass. Production promotion and any shared-runtime deployment require a
-separate decision. Until the user resumes implementation, this plan is the
+separate decision. This plan is the
 stopping point.
