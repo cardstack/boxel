@@ -954,6 +954,54 @@ export default class MatrixService extends Service {
     await this.appendRealmToAccountData(personalRealmURL.href);
   }
 
+  // Auto-provisioning fires only in a real deployment. `hostedEnvironment` is
+  // the realm-server's serve-time environment (`staging` / `production`), and
+  // is `local` in both the QUnit suite and the matrix e2e host — so tests never
+  // trip realm creation. Local dev is excluded too; a dev who signs up goes
+  // through the new-user flow, which already creates a personal realm.
+  private get shouldAutoProvisionPersonalRealm(): boolean {
+    return (
+      ENV.hostedEnvironment === 'staging' ||
+      ENV.hostedEnvironment === 'production'
+    );
+  }
+
+  // Give the signed-in user a personal workspace when they have none — the case
+  // for an account provisioned outside host sign-up (e.g. registered straight
+  // on Synapse). Public so the auto-provision gate can be bypassed in a test
+  // that drives it directly. Idempotent: `_create-realm` rejects a duplicate
+  // with "already exists", which we treat as success.
+  async ensurePersonalRealmForUserIfMissing(): Promise<void> {
+    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some((id) =>
+      String(id).endsWith(`/${PERSONAL_REALM_ENDPOINT}/`),
+    );
+    if (hasPersonalRealm) {
+      return;
+    }
+    let displayName: string | undefined;
+    try {
+      displayName = this.userId
+        ? (await this.getProfileInfo(this.userId))?.displayname
+        : undefined;
+    } catch {
+      // A profile fetch hiccup must not block provisioning; fall back below.
+    }
+    let name = displayName ? `${displayName}'s Workspace` : 'My Workspace';
+    let iconSeed = displayName ?? 'workspace';
+    try {
+      await this.createPersonalRealmForUser({
+        endpoint: PERSONAL_REALM_ENDPOINT,
+        name,
+        iconURL: iconURLFor(iconSeed),
+        backgroundURL: getRandomBackgroundURL(),
+      });
+    } catch (e: any) {
+      if (!String(e?.message ?? '').includes('already exists')) {
+        console.error('Failed to provision personal realm on login', e);
+      }
+    }
+  }
+
   public async appendRealmToAccountData(realmURLString: string) {
     let { realms = [] } =
       ((await this.client.getAccountDataFromServer(
@@ -1357,6 +1405,21 @@ export default class MatrixService extends Service {
         // the reachable realms and retry the unreachable ones in the
         // background so they load (and the notice clears) once they recover.
         this.scheduleUnreachableRealmServerRetry();
+
+        // Ensure a personal workspace exists for an account provisioned outside
+        // host sign-up (e.g. registered straight on Synapse). Non-blocking:
+        // `_create-realm` emits `realms-list-updated` to this user on
+        // completion, which surfaces it live. Gated to real deployments so it
+        // never fires in the test suites (see shouldAutoProvisionPersonalRealm),
+        // and skipped for the new-user flow, which already creates one.
+        if (
+          this.shouldAutoProvisionPersonalRealm &&
+          !this._isInitializingNewUser
+        ) {
+          this.ensurePersonalRealmForUserIfMissing().catch((e) =>
+            console.error('Failed to provision personal realm on login', e),
+          );
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         // Only tear the session down for a failure that happened before this
