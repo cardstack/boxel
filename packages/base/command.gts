@@ -972,3 +972,7 @@ export class CreateWorkspaceResult extends CardDef {
   @field name = contains(StringField);
   @field endpoint = contains(StringField);
 }
+
+export class DeleteWorkspaceResult extends CardDef {
+  @field realmURL = contains(StringField);
+}
