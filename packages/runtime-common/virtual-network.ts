@@ -196,6 +196,15 @@ export class VirtualNetwork {
     this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
+  // Lets a Loader serve a module shimmed on this network from its module-fetch
+  // path, whatever URL the shim is registered under. The lookup folds every
+  // spelling of the identifier (realm-prefix form, virtual alias, url-mapped
+  // alias) onto the real URL, which is the form shims for realm-mapped
+  // identifiers are keyed by, so all spellings converge on one module.
+  getShimmedModule(url: string): Promise<ModuleLike | undefined> {
+    return this.packageShimHandler.lookupModule(this.toRealURLHref(url));
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL and toRealURLHref chase through urlMappings (the latter via
