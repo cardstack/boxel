@@ -26,6 +26,7 @@ import {
   internalKeyFor,
   visitInstanceURLs,
   maybeRelativeReference,
+  isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
 import type { Realm } from './realm.ts';
@@ -2192,19 +2193,6 @@ export function relativizeDocument(
       );
     }
   }
-}
-
-// A reference in scoped RRI form (e.g. `@cardstack/base/card-api`) is an
-// absolute cross-realm identifier and must never be treated as realm-relative.
-// Registered prefixes are a subset, but a scoped reference to a realm this
-// VirtualNetwork does not know is still scoped — the leading `@` is the signal.
-function isScopedReference(
-  reference: string,
-  virtualNetwork: VirtualNetwork,
-): boolean {
-  return (
-    reference.startsWith('@') || virtualNetwork.isRegisteredPrefix(reference)
-  );
 }
 
 function relativizeResource(

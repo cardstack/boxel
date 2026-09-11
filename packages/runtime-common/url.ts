@@ -148,6 +148,25 @@ const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
 //     resolving the realm root requires realm mappings — `resolveRRI` likewise
 //     has no realm root to resolve against there.)
 // Falls back to the reference unchanged when there is no usable base.
+// A reference in scoped RRI form (e.g. `@cardstack/base/card-api`) is an
+// absolute cross-realm identifier and must never be treated as realm-relative.
+// Registered prefixes are a subset, but a scoped reference to a realm this
+// VirtualNetwork does not know is still scoped — the leading `@` is the signal.
+//
+// Read and write share this one definition on purpose. Serving a document and
+// storing one have to agree on which references are already canonical: when
+// only the read path skipped them, a link the client sent as `@scope/name/x`
+// was stored as whatever URL that realm happened to resolve to in the writing
+// environment.
+export function isScopedReference(
+  reference: string,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return (
+    reference.startsWith('@') || virtualNetwork.isRegisteredPrefix(reference)
+  );
+}
+
 export function resolveRRIReference(
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
