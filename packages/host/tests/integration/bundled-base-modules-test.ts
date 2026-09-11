@@ -2,7 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { BUNDLED_BASE_MODULES } from '@cardstack/host/lib/externals';
+import { BUNDLED_BASE_MODULES } from '@cardstack/host/lib/bundled-base';
 
 import { setupRenderingTest } from '../helpers/setup';
 

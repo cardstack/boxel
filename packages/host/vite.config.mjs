@@ -298,8 +298,8 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: [
-      // Base-realm modules served from the host bundle (see shimExternals in
-      // app/lib/externals.ts) import host tools as
+      // Base-realm modules served from the host bundle (see shimBundledBase in
+      // app/lib/bundled-base.ts) import host tools as
       // `@cardstack/boxel-host/tools/*` or `@cardstack/boxel-host/commands/*`.
       // At runtime the virtual network shims those specifiers to app/tools
       // modules (see app/tools/index.ts); this alias gives the bundler the
