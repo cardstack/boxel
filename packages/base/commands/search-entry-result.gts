@@ -8,6 +8,7 @@ import {
   containsMany,
   field,
 } from '../card-api';
+import BooleanField from '../boolean';
 import CodeRefField from '../code-ref';
 import NumberField from '../number';
 import { QueryField } from './search-card-result';
@@ -35,6 +36,9 @@ export class SearchEntrySummaryField extends FieldDef {
   @field specType = contains(StringField);
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
+  // The file name — the display handle for file rows, which carry no
+  // cardTitle.
+  @field name = contains(StringField);
   // Present only when the search sorted by full-text relevance.
   @field matchRelevance = contains(NumberField);
   // Full, untruncated readMe when the row carries one (e.g. a Spec).
@@ -47,16 +51,22 @@ export class SearchEntriesResult extends CardDef {
   @field results = containsMany(SearchEntrySummaryField);
   // Total matches across the searched realms; `results` is one page of them.
   @field total = contains(NumberField);
+  // True when a searched realm failed to answer: `results`/`total` then cover
+  // only the realms that responded.
+  @field incomplete = contains(BooleanField);
   @field cardDescription = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div data-test-search-entries-result>
-        <p>{{@model.results.length}} of {{@model.total}} results</p>
+        <p>{{@model.results.length}}
+          of
+          {{@model.total}}
+          results{{if @model.incomplete ' (incomplete: a realm failed)' ''}}</p>
         <ol>
           {{#each @model.results as |result|}}
             <li data-test-search-entry={{result.url}}>
-              {{result.cardTitle}}
+              {{if result.cardTitle result.cardTitle result.name}}
               ({{result.url}})
             </li>
           {{/each}}

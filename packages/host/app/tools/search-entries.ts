@@ -37,6 +37,10 @@ const PROJECTION_FIELDS = [
   'item.specType',
   'item.readMe',
   'item.ref',
+  // `name` is the file-meta display handle — without it a file row's summary
+  // carries nothing but its URL. Card rows have no `name` attribute, so the
+  // sparse fieldset simply omits it there.
+  'item.name',
 ];
 
 interface EntrySummary {
@@ -46,6 +50,7 @@ interface EntrySummary {
   specType?: string;
   cardTitle?: string;
   cardDescription?: string;
+  name?: string;
   readMe?: string;
   matchRelevance?: number;
 }
@@ -69,10 +74,13 @@ function resolveScope(scope: string | undefined): SearchEntryScope {
 // only one of the two. A filter with a positive full-text `matches` term and
 // no explicit sort gains the relevance sort (the server rejects that sort
 // without such a term, so it is never added unconditionally).
+// `addedRelevanceSort` reports the sort addition: the tool re-sorts merged
+// rows client-side only for an ordering it imposed itself, never over one the
+// caller chose (a caller's own sort may legally include `_matchRelevance`).
 export function composeSearchEntriesQuery(
   query: Query,
   scope: SearchEntryScope,
-): Query {
+): { query: Query; addedRelevanceSort: boolean } {
   let filter = query.filter;
   if (scope === 'all' && !hasNarrowingPositiveTypeRef(filter)) {
     filter = filter
@@ -80,13 +88,18 @@ export function composeSearchEntriesQuery(
       : excludeCardInstanceFileRows();
   }
   let sort = query.sort;
+  let addedRelevanceSort = false;
   if (!sort && collectPositiveMatchTerms(query.filter).length > 0) {
     sort = [{ by: MATCH_RELEVANCE_SORT_KEY, direction: 'desc' }];
+    addedRelevanceSort = true;
   }
   return {
-    ...query,
-    ...(filter ? { filter } : {}),
-    ...(sort ? { sort } : {}),
+    query: {
+      ...query,
+      ...(filter ? { filter } : {}),
+      ...(sort ? { sort } : {}),
+    },
+    addedRelevanceSort,
   };
 }
 
@@ -121,6 +134,7 @@ function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
       specType: attributes.specType as string | undefined,
       cardTitle: attributes.cardTitle as string | undefined,
       cardDescription: attributes.cardDescription as string | undefined,
+      name: attributes.name as string | undefined,
       readMe: attributes.readMe as string | undefined,
       matchRelevance: entry.meta?._matchRelevance,
     });
@@ -144,9 +158,11 @@ export default class SearchEntriesTool extends HostBaseTool<
     '`realms` (realm URLs; defaults to every realm you can read), optional `scope` ' +
     "('cards' | 'files' | 'all', default 'all'), and optional `limit` (default " +
     `${DEFAULT_LIMIT}, max ${MAX_LIMIT}). Returns lightweight entry summaries — url, ` +
-    'ref, specType, title, description, full readMe, and full-text match relevance — ' +
-    'not live card instances. When you need instances to attach, open, or patch, use ' +
-    'the card-instance search tools instead.';
+    'ref, specType, title, description, file name, full readMe, and full-text match ' +
+    'relevance — not live card instances. A result with `incomplete: true` is ' +
+    'partial: at least one searched realm failed to answer, so matches may be ' +
+    'missing and `total` undercounts. When you need instances to attach, open, or ' +
+    'patch, use the card-instance search tools instead.';
 
   requireInputFields = ['query'];
 
@@ -165,19 +181,25 @@ export default class SearchEntriesTool extends HostBaseTool<
       MAX_LIMIT,
     );
 
-    let wireQuery = searchEntryWireQueryFromQuery(
-      composeSearchEntriesQuery(input.query, scope),
-      { fields: PROJECTION_FIELDS, scope },
+    let { query, addedRelevanceSort } = composeSearchEntriesQuery(
+      input.query,
+      scope,
     );
+    let wireQuery = searchEntryWireQueryFromQuery(query, {
+      fields: PROJECTION_FIELDS,
+      scope,
+    });
     wireQuery.page = { ...wireQuery.page, size: limit };
 
     let realms = input.realms?.length ? [...input.realms] : undefined;
     let doc = await this.store.searchEntries(wireQuery, realms);
 
     let rows = summarizeEntries(doc);
-    if (rows.some((row) => row.matchRelevance !== undefined)) {
+    if (addedRelevanceSort) {
       // The federated merge concatenates per-realm results without re-ranking
       // across realms; relevance rides each entry so the merged page can be.
+      // Only the tool's own default ordering is re-imposed here — a caller's
+      // explicit sort (which may itself include `_matchRelevance`) stands.
       rows = [...rows].sort(
         (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
       );
@@ -188,6 +210,10 @@ export default class SearchEntriesTool extends HostBaseTool<
     return new SearchEntriesResult({
       results: rows.map((row) => new SearchEntrySummaryField(row)),
       total: doc.meta.page.total,
+      // A realm that fails (or never resolves) during the federated fan-out is
+      // reported through this flag rather than a thrown error — the realms
+      // that answered still return; the flag keeps their partiality visible.
+      incomplete: doc.meta.incomplete === true,
       cardDescription: `Query: ${JSON.stringify(input.query.filter ?? {})}`,
     });
   }

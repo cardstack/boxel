@@ -12,7 +12,6 @@ import {
   baseRef,
   codeRefFromInternalKey,
   excludeCardInstanceFileRows,
-  getTypeRefsFromFilter,
   isAnyFilter,
   isCardTypeFilter,
   isEveryFilter,
@@ -166,17 +165,44 @@ function isRootTypeRef(ref: CodeRef): boolean {
   );
 }
 
+// Whether every row the filter can match is pinned to one kind by a positive,
+// non-root type ref. Structure matters: one narrowing branch of an `every`
+// narrows the whole conjunction, but an `any` narrows only when every branch
+// does — a disjunction with one unanchored branch still matches both kinds.
+// Negation flips the combinators (De Morgan) and a negated type ref never
+// narrows (excluding a type doesn't pin the row kind).
+function filterNarrowsKind(filter: Filter, negated: boolean): boolean {
+  if ('on' in filter && filter.on) {
+    return !negated && !isRootTypeRef(filter.on);
+  }
+  if (isCardTypeFilter(filter)) {
+    return !negated && !isRootTypeRef(filter.type);
+  }
+  if (isNotFilter(filter)) {
+    return filterNarrowsKind(filter.not, !negated);
+  }
+  if (isEveryFilter(filter)) {
+    return negated
+      ? filter.every.length > 0 &&
+          filter.every.every((f) => filterNarrowsKind(f, true))
+      : filter.every.some((f) => filterNarrowsKind(f, false));
+  }
+  if (isAnyFilter(filter)) {
+    return negated
+      ? filter.any.some((f) => filterNarrowsKind(f, true))
+      : filter.any.length > 0 &&
+          filter.any.every((f) => filterNarrowsKind(f, false));
+  }
+  return false;
+}
+
 export function hasNarrowingPositiveTypeRef(
   filter: Filter | undefined,
 ): boolean {
   if (!filter) {
     return false;
   }
-  return (
-    getTypeRefsFromFilter(filter)?.some(
-      (r) => !r.negated && !isRootTypeRef(r.ref),
-    ) ?? false
-  );
+  return filterNarrowsKind(filter, false);
 }
 
 function scopeFilters(

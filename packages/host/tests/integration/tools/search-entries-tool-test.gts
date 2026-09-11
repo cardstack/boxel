@@ -139,6 +139,10 @@ module('Integration | tools | search-entries', function (hooks) {
     assert.strictEqual(row.kind, 'card');
     assert.strictEqual(row.cardTitle, 'Mark Jackson');
     assert.strictEqual(result.total, 1);
+    assert.false(
+      result.incomplete,
+      'every searched realm answered, so the result is complete',
+    );
   });
 
   test('spec rows carry ref, specType, and the full readMe', async function (assert) {
@@ -185,6 +189,14 @@ module('Integration | tools | search-entries', function (hooks) {
     assert.ok(
       filesResult.results.every((r: { kind: string }) => r.kind === 'file'),
       'files scope returns only file rows',
+    );
+    let notesRow = filesResult.results.find(
+      (r: { url: string }) => r.url === `${testRealmURL}notes.md`,
+    );
+    assert.strictEqual(
+      notesRow?.name,
+      'notes.md',
+      'a file row carries its name as the display handle',
     );
 
     let cardsResult = await runSearch({
@@ -292,7 +304,7 @@ module('Integration | tools | search-entries', function (hooks) {
 
   module('query composition', function () {
     test('mixed-scope dedup wraps a non-narrowing filter', function (assert) {
-      let composed = composeSearchEntriesQuery(
+      let { query: composed } = composeSearchEntriesQuery(
         { filter: { matches: 'xylophone' } },
         'all',
       );
@@ -307,12 +319,45 @@ module('Integration | tools | search-entries', function (hooks) {
         on: { module: rri(`${testRealmURL}author`), name: 'Author' },
         eq: { firstName: 'Mark' },
       };
-      let composed = composeSearchEntriesQuery({ filter }, 'all');
+      let { query: composed } = composeSearchEntriesQuery({ filter }, 'all');
       assert.deepEqual(composed.filter, filter, 'filter passes through as-is');
     });
 
+    test('an any-filter narrows only when every branch does', function (assert) {
+      let authorAnchor = {
+        on: { module: rri(`${testRealmURL}author`), name: 'Author' },
+        eq: { firstName: 'Mark' },
+      };
+      // One unanchored branch: the disjunction can still match both a card's
+      // instance row and its `.json` file row, so the dedup wrap applies.
+      let { query: mixed } = composeSearchEntriesQuery(
+        { filter: { any: [authorAnchor, { matches: 'xylophone' }] } },
+        'all',
+      );
+      assert.ok(
+        'every' in (mixed.filter ?? {}),
+        'a partially-anchored any gains the dedup wrap',
+      );
+
+      let allNarrowing: Query['filter'] = {
+        any: [
+          authorAnchor,
+          { type: { module: rri(`${testRealmURL}author`), name: 'Author' } },
+        ],
+      };
+      let { query: narrowed } = composeSearchEntriesQuery(
+        { filter: allNarrowing },
+        'all',
+      );
+      assert.deepEqual(
+        narrowed.filter,
+        allNarrowing,
+        'an any whose every branch narrows passes through as-is',
+      );
+    });
+
     test('explicit cards scope skips the dedup wrap', function (assert) {
-      let composed = composeSearchEntriesQuery(
+      let { query: composed } = composeSearchEntriesQuery(
         { filter: { matches: 'xylophone' } },
         'cards',
       );
@@ -320,17 +365,21 @@ module('Integration | tools | search-entries', function (hooks) {
     });
 
     test('a matches filter with no sort gains the relevance sort', function (assert) {
-      let composed = composeSearchEntriesQuery(
+      let { query: composed, addedRelevanceSort } = composeSearchEntriesQuery(
         { filter: { matches: 'xylophone' } },
         'cards',
       );
       assert.deepEqual(composed.sort, [
         { by: '_matchRelevance', direction: 'desc' },
       ]);
+      assert.true(
+        addedRelevanceSort,
+        'the addition is reported so the tool re-sorts the merged rows',
+      );
     });
 
     test('an explicit sort and a matches-free filter stay untouched', function (assert) {
-      let sorted = composeSearchEntriesQuery(
+      let { query: sorted, addedRelevanceSort } = composeSearchEntriesQuery(
         {
           filter: { matches: 'xylophone' },
           sort: [{ by: 'cardTitle', direction: 'asc' }],
@@ -338,8 +387,12 @@ module('Integration | tools | search-entries', function (hooks) {
         'cards',
       );
       assert.deepEqual(sorted.sort, [{ by: 'cardTitle', direction: 'asc' }]);
+      assert.false(
+        addedRelevanceSort,
+        'a caller-chosen sort is never re-imposed client-side',
+      );
 
-      let noMatches = composeSearchEntriesQuery(
+      let { query: noMatches } = composeSearchEntriesQuery(
         { filter: { eq: { firstName: 'Mark' } } },
         'cards',
       );
@@ -350,8 +403,29 @@ module('Integration | tools | search-entries', function (hooks) {
       );
     });
 
+    test('a caller sort naming _matchRelevance is not re-imposed by the tool', function (assert) {
+      let { query: composed, addedRelevanceSort } = composeSearchEntriesQuery(
+        {
+          filter: { matches: 'xylophone' },
+          sort: [
+            { by: 'cardTitle', direction: 'asc' },
+            { by: '_matchRelevance', direction: 'asc' },
+          ],
+        },
+        'cards',
+      );
+      assert.deepEqual(composed.sort, [
+        { by: 'cardTitle', direction: 'asc' },
+        { by: '_matchRelevance', direction: 'asc' },
+      ]);
+      assert.false(
+        addedRelevanceSort,
+        'relevance riding the rows must not trigger the client re-sort',
+      );
+    });
+
     test('a negated matches term does not trigger the relevance sort', function (assert) {
-      let composed = composeSearchEntriesQuery(
+      let { query: composed } = composeSearchEntriesQuery(
         {
           filter: {
             every: [
