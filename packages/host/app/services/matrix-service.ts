@@ -1235,7 +1235,7 @@ export default class MatrixService extends Service {
         // test that re-boots to pick up a newly-added realm) would re-derive
         // the realm list from `_realm-auth` for no benefit and drop realms
         // that the trusted servers don't advertise.
-        let useTrustedServers =
+        const useTrustedServers =
           trustedServers.length > 0 && !this.bootedFromLegacyRealmsList;
         // The legacy `app.boxel.realms` AccountData event is re-emitted by
         // the matrix sync that runs inside `startClient()` below. Setting
@@ -1250,28 +1250,6 @@ export default class MatrixService extends Service {
             await this.realmServer.fetchUserRealmsFromTrustedServers(
               trustedServers,
             );
-          if (seededOwnRealmServer && userRealmURLs.length === 0) {
-            // The keyless account has no permissioned realms after all. Don't
-            // hijack it onto the authoritative trusted path or persist the
-            // seed — fall through to the legacy `app.boxel.realms` assembly
-            // below so account-data updates (including foreign realm URLs the
-            // trusted path can't serve) keep driving its list.
-            this.trustedRealmServersAuthoritative = false;
-            useTrustedServers = false;
-          } else if (seededOwnRealmServer) {
-            // Permissioned realms found: persist the seed so subsequent boots
-            // take the trusted path directly. Best-effort — assembly this boot
-            // already used the in-memory list, and the next login re-seeds if
-            // this write is lost.
-            try {
-              await this.setRealmServersInAccountData(trustedServers);
-            } catch (err) {
-              console.error(
-                'Failed to seed app.boxel.realm-servers with own realm server',
-                err,
-              );
-            }
-          }
         }
         if (!useTrustedServers) {
           this.bootedFromLegacyRealmsList = true;
@@ -1334,6 +1312,44 @@ export default class MatrixService extends Service {
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(userRealmURLs.map(ri)),
         ]);
+
+        // Commit or undo the keyless-account seed now that the list is
+        // assembled. `_realm-auth` returns the public base/catalog realms for
+        // every authenticated user, so a non-empty trusted result does NOT mean
+        // the account has a workspace of its own — those realms dedup into the
+        // base/catalog entries and leave `userRealmIdentifiers` empty. Only keep
+        // the account on the authoritative trusted path (and persist the seed)
+        // when it actually has a user realm; otherwise leave it on the legacy
+        // `app.boxel.realms` path so account-data updates (including foreign
+        // realm URLs the trusted path can't serve) keep driving its list.
+        if (seededOwnRealmServer) {
+          if (this.realmServer.userRealmIdentifiers.length === 0) {
+            this.trustedRealmServersAuthoritative = false;
+            this.bootedFromLegacyRealmsList = true;
+            if (isTesting())
+              console.warn('[start-phase] seed-revert getAccountData(realms)');
+            let legacyRealmsData = (await this.client.getAccountDataFromServer(
+              APP_BOXEL_REALMS_EVENT_TYPE,
+            )) as { realms: string[] } | null;
+            userRealmURLs = legacyRealmsData?.realms ?? [];
+            await this.realmServer.setAvailableRealmIdentifiers(
+              userRealmURLs.map(ri),
+            );
+          } else {
+            // Real user realms found: persist the seed so subsequent boots take
+            // the trusted path directly. Best-effort — assembly this boot
+            // already used the in-memory list, and the next login re-seeds if
+            // this write is lost.
+            try {
+              await this.setRealmServersInAccountData(trustedServers);
+            } catch (err) {
+              console.error(
+                'Failed to seed app.boxel.realm-servers with own realm server',
+                err,
+              );
+            }
+          }
+        }
 
         if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
         await this.realm.prefetchRealmInfos(
