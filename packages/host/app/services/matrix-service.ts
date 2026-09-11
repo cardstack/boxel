@@ -954,42 +954,6 @@ export default class MatrixService extends Service {
     await this.appendRealmToAccountData(personalRealmURL.href);
   }
 
-  // Create the caller's personal workspace if they have none. Fire-and-forget
-  // from boot; `dropTask` so a re-entrant start() never launches a second
-  // creation. Idempotent against a concurrent tab or a prior login:
-  // `_create-realm` rejects a duplicate with "already exists", which we treat
-  // as success.
-  private ensurePersonalRealmTask = dropTask(async () => {
-    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some((id) =>
-      String(id).endsWith(`/${PERSONAL_REALM_ENDPOINT}/`),
-    );
-    if (hasPersonalRealm) {
-      return;
-    }
-    let displayName: string | undefined;
-    try {
-      displayName = this.userId
-        ? (await this.getProfileInfo(this.userId))?.displayname
-        : undefined;
-    } catch {
-      // A profile fetch hiccup must not block provisioning; fall back below.
-    }
-    let name = displayName ? `${displayName}'s Workspace` : 'My Workspace';
-    let iconSeed = displayName ?? 'workspace';
-    try {
-      await this.createPersonalRealmForUser({
-        endpoint: PERSONAL_REALM_ENDPOINT,
-        name,
-        iconURL: iconURLFor(iconSeed),
-        backgroundURL: getRandomBackgroundURL(),
-      });
-    } catch (e: any) {
-      if (!String(e?.message ?? '').includes('already exists')) {
-        console.error('Failed to provision personal realm on login', e);
-      }
-    }
-  });
-
   public async appendRealmToAccountData(realmURLString: string) {
     let { realms = [] } =
       ((await this.client.getAccountDataFromServer(
@@ -1373,17 +1337,6 @@ export default class MatrixService extends Service {
         // the reachable realms and retry the unreachable ones in the
         // background so they load (and the notice clears) once they recover.
         this.scheduleUnreachableRealmServerRetry();
-
-        // Ensure a personal workspace exists. The host sign-up flow creates
-        // one, but an account provisioned another way (e.g. registered
-        // straight on Synapse) never gets one and would boot with no personal
-        // realm however its permissions assemble. Provision it lazily and
-        // non-blocking: `_create-realm` emits `realms-list-updated` to this
-        // user on completion, which surfaces it live. Skipped for the new-user
-        // flow, which already creates it.
-        if (!this._isInitializingNewUser) {
-          this.ensurePersonalRealmTask.perform();
-        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         // Only tear the session down for a failure that happened before this
