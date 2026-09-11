@@ -8,6 +8,7 @@ import {
   readDisplay,
   validateDisplay,
   waitForDisplay,
+  waitForTessarInteractive,
 } from './browser-oracle.mjs';
 
 const { values } = parseArgs({
@@ -75,6 +76,11 @@ page.on('request', (request) => {
 });
 const cdp = await context.newCDPSession(page);
 await cdp.send('Performance.enable');
+await cdp.send('Network.enable');
+let transferredBytes = 0;
+cdp.on('Network.loadingFinished', ({ encodedDataLength }) => {
+  transferredBytes += encodedDataLength;
+});
 
 function inputRequests() {
   return requests.filter(
@@ -91,6 +97,7 @@ function inputRequests() {
 try {
   for (let iteration = 0; iteration < iterations; iteration++) {
     requests = [];
+    transferredBytes = 0;
     const beforeMetrics = Object.fromEntries(
       (await cdp.send('Performance.getMetrics')).metrics.map((m) => [
         m.name,
@@ -107,14 +114,16 @@ try {
       if (iteration === 0)
         await page.goto(url.href, { waitUntil: 'domcontentloaded' });
       else await page.reload({ waitUntil: 'domcontentloaded' });
-      await page
-        .locator('[data-tessar-stat="scoreTotal"]')
-        .waitFor({ timeout: 30_000 });
+      await waitForDisplay(page, expectedSummary(records, ownerId), 30_000);
+      result.firstContentMs = performance.now() - started;
+      await waitForTessarInteractive(page, realm.href);
+      await waitForDisplay(page, expectedSummary(records, ownerId), 30_000);
       validateDisplay(
         await readDisplay(page),
         expectedSummary(records, ownerId),
       );
       result.displayMs = performance.now() - started;
+      result.interactiveMs = result.displayMs;
       // Keep the readiness timestamp separate from the observation window;
       // delayed eager work after the first render still counts as input work.
       await page.waitForTimeout(250);
@@ -150,6 +159,30 @@ try {
         3000,
       );
     }
+    // Failed/unfinished reads still consumed resources. Retain their work
+    // rather than reporting only the cheap successful observations.
+    result.observationMs = performance.now() - started;
+    result.transferredBytes = transferredBytes;
+    result.inputRequests = inputRequests();
+    result.fetchRequests = requests.length;
+    if (!result.metrics)
+      result.metrics = Object.fromEntries(
+        (await cdp.send('Performance.getMetrics')).metrics
+          .filter((m) =>
+            [
+              'JSHeapUsedSize',
+              'Nodes',
+              'TaskDuration',
+              'ScriptDuration',
+            ].includes(m.name),
+          )
+          .map((m) => [
+            m.name,
+            ['TaskDuration', 'ScriptDuration'].includes(m.name)
+              ? m.value - (beforeMetrics[m.name] ?? 0)
+              : m.value,
+          ]),
+      );
     reads.push(result);
     console.log(
       JSON.stringify({
@@ -343,6 +376,17 @@ try {
       } catch (error) {
         result.failure = error.message;
       }
+      result.inputRequests = inputRequests();
+      result.transitions = await page.evaluate(
+        () => window.__tessarTransitions,
+      );
+      if (!result.valid) {
+        result.observationMs = Date.now() - startedAt;
+        result.visibleFailure = (await page.locator('body').innerText()).slice(
+          0,
+          3000,
+        );
+      }
       writes.push(result);
       if (!result.valid) break;
     }
@@ -351,7 +395,15 @@ try {
   await writeFile(
     values.output,
     JSON.stringify(
-      { version: 1, manifest, runtime, reads, writes, browserErrors },
+      {
+        version: 2,
+        readiness: 'subscribed-client-with-server-markup-removed',
+        manifest,
+        runtime,
+        reads,
+        writes,
+        browserErrors,
+      },
       null,
       2,
     ) + '\n',

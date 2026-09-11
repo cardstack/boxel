@@ -1,5 +1,30 @@
 import { validateSummary } from './generate.mjs';
 
+// The server can supply the entire dashboard as HTML before Ember starts.
+// A DOM-only oracle therefore cannot establish client readiness or prove that
+// hydration avoids input-graph requests. Require live realm subscriptions and
+// removal of the server markup before starting a mutation or timing a read.
+export async function waitForTessarInteractive(
+  page,
+  realmURL,
+  timeout = 30000,
+) {
+  await page.waitForFunction(
+    (realmURL) => {
+      const messages = window._CARDSTACK_REALM_SUBSCRIBE;
+      const start = document.getElementById('boxel-isolated-start');
+      const end = document.getElementById('boxel-isolated-end');
+      return (
+        messages?.isTessarConnected === true &&
+        messages.listenerCallbacks.get(realmURL)?.length > 0 &&
+        (!start || !end || start.nextElementSibling === end)
+      );
+    },
+    realmURL,
+    { timeout },
+  );
+}
+
 export async function readDisplay(page) {
   return page.evaluate(() => ({
     stats: Object.fromEntries(

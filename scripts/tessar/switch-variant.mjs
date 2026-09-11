@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -96,10 +97,22 @@ for (const id of owners) {
 }
 // This metadata describes only the changed dashboard definition. Input count,
 // distribution and seed remain the same. The browser check is still required.
+const recordHash = createHash('sha256');
+for (const [id, document] of records)
+  recordHash
+    .update(id)
+    .update('\0')
+    .update(JSON.stringify(document) + '\n');
 await writeFile(
   values['manifest-output'],
   JSON.stringify(
-    { ...manifest, variant: values.variant, variantSwitchedInPlace: true },
+    {
+      ...manifest,
+      sourceDatasetRecordsSha256: manifest.recordsSha256,
+      recordsSha256: recordHash.digest('hex'),
+      variant: values.variant,
+      variantSwitchedInPlace: true,
+    },
     null,
     2,
   ) + '\n',

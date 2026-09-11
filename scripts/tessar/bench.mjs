@@ -21,7 +21,7 @@ for (let name of [
   'REALM_SERVER_TLS_KEY_FILE',
 ])
   delete process.env[name];
-const { startFactoryRealmServer } =
+const { startFactoryRealmServer, startFactorySupportServices } =
   await import('../../packages/realm-test-harness/src/index.ts');
 
 let { values } = parseArgs({
@@ -31,8 +31,14 @@ let { values } = parseArgs({
     iterations: { type: 'string', default: '5' },
     serve: { type: 'boolean', default: false },
     'realm-server-url': { type: 'string' },
+    'resume-index': { type: 'string' },
+    'skip-html-replay': { type: 'boolean', default: false },
   },
 });
+if (values['skip-html-replay'] && !values['resume-index'])
+  throw new Error(
+    '--skip-html-replay requires an explicit committed index clone',
+  );
 if (!values.dataset || !values.output)
   throw new Error('--dataset and --output are required');
 let dataset = resolve(values.dataset);
@@ -51,7 +57,9 @@ if (
 let expected = JSON.parse(
   await readFile(join(dataset, 'expected.json'), 'utf8'),
 );
-let hostDir = resolve(import.meta.dirname, '../../packages/host');
+let hostDir = process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR
+  ? resolve(process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR)
+  : resolve(import.meta.dirname, '../../packages/host');
 process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR = hostDir;
 let hostHash = createHash('sha256')
   .update(await readFile(join(hostDir, 'dist/index.html')))
@@ -74,6 +82,7 @@ let sourcePaths = execFileSync(
     'packages/host',
     'packages/postgres',
     'packages/realm-server',
+    'packages/realm-test-harness',
   ],
   { cwd: repository, encoding: 'utf8' },
 )
@@ -98,6 +107,15 @@ let runtimeHash = sourceHash.digest('hex');
 process.env.TEST_HARNESS_CACHE_SALT = `tessar:${hostHash}:${runtimeHash}`;
 let started = performance.now();
 let realm;
+let support;
+let resumedHtml;
+if (
+  values['resume-index'] &&
+  !/^sf_bld_[a-z0-9_]+$/.test(values['resume-index'])
+)
+  throw new Error(
+    '--resume-index must name an isolated synthetic builder database',
+  );
 let realmServerURL = values['realm-server-url']
   ? new URL(values['realm-server-url'])
   : undefined;
@@ -107,11 +125,18 @@ if (
 )
   throw new Error('Tessar benchmarks require a local realm server');
 try {
+  if (values['resume-index']) support = await startFactorySupportServices();
   realm = await startFactoryRealmServer({
     realmServerURL,
     realms: [{ dir: join(dataset, 'realm'), path: 'tessar/' }],
+    ...(support
+      ? {
+          context: support.context,
+          templateDatabaseName: values['resume-index'],
+          templateRealmServerURL: realmServerURL,
+        }
+      : {}),
   });
-  let startupMs = performance.now() - started;
   await writeFile(
     `${output}.runtime.json`,
     JSON.stringify({
@@ -119,9 +144,21 @@ try {
       realmServerURL: realm.realmServerURL.href,
       databaseName: realm.databaseName,
       childPids: realm.childPids,
+      matrixURL: support?.context.matrixURL,
     }),
     { mode: 0o600 },
   );
+  if (support && !values['skip-html-replay']) {
+    // Preserve the failed builder; repair only this disposable clone. Reuse
+    // the committed JSON index explicitly, never report this as a cold build.
+    const { resumeTessarHtml } = await import('./resume-html.mjs');
+    resumedHtml = await resumeTessarHtml({
+      sourceDatabase: values['resume-index'],
+      runtimeDatabase: realm.databaseName,
+      realmURL: realm.realmURL.href,
+    });
+  }
+  let startupMs = performance.now() - started;
   console.log(`Tessar ready: ${realm.realmURL.href}`);
   let results = [];
   for (let iteration = 0; iteration < iterations; iteration++) {
@@ -137,6 +174,11 @@ try {
     let failure;
     try {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (
+        manifest.variant !== 'get-cards' &&
+        body.data.meta.tessar?.state !== 'ready'
+      )
+        throw new Error('Tessar view is not ready');
       validateSummary(body.data.attributes, expected['DaySummary/00000']);
     } catch (error) {
       valid = false;
@@ -162,7 +204,17 @@ try {
         hostHash,
         runtimeHash,
         manifest,
+        workers: {
+          allPriority: 1,
+          userIndex: Number(process.env.TEST_HARNESS_USER_INDEX_WORKERS ?? 0),
+        },
         startupMs,
+        setupMode: values['skip-html-replay']
+          ? 'committed-json-index-only'
+          : support
+            ? 'resumed-html-from-committed-index'
+            : 'cold-or-template-cache',
+        resumedHtml,
         results,
       },
       null,
@@ -184,6 +236,25 @@ try {
       process.once('SIGTERM', done);
     });
   else if (results.some((r) => !r.valid)) process.exitCode = 1;
+} catch (error) {
+  await writeFile(
+    `${output}.failure.json`,
+    JSON.stringify(
+      {
+        commit,
+        hostHash,
+        runtimeHash,
+        manifest,
+        elapsedMs: performance.now() - started,
+        error: error.message,
+        details: error.tessarDetails,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  throw error;
 } finally {
   await realm?.stop();
+  await support?.stop();
 }

@@ -36,37 +36,51 @@ correctness or freshness violation is a failed case, not an accepted tradeoff.
 
 ## Current checkpoint
 
-Implementation is underway in the isolated local runtime. The deterministic
-synthetic generator covers smoke (34), 1× (1,255), and 10× (12,550) records;
-its three oracle/integrity tests pass. The first ordinary-query baseline
-returned membership with stale zero-valued indexed statistics and failed.
+September 11: the opt-in snapshot path, Postgres watch registry and index lifecycle
+are implemented. The client and HTML renderer consume published computed values
+and compact rows. Watches, outputs and durable dirty state publish together;
+worker recovery and first-sync reconciliation reuse the existing runtime.
+Initial HTML now shares the pending/failed and revision gates, and materialized
+realm pages bypass deployment-ETag caching. A newly authenticated browser opened
+during a pending write/crash reaches the complete result within 6.25 seconds.
+The final guarded build passes another 20 connected reads and nine mutations:
+800 ms median / 831 ms p95 interactive readiness, zero input/search requests,
+and at most 5,222 ms acknowledgement-to-display delay across the nine mutations.
 
-The registry is connected to atomic index publication, durable dirty owners,
-and follow-up worker waves. Indexed responses automatically activate snapshot
-consumption. The latest smoke check passed five Chromium reads and nine writes,
-including entry/exit, transitive edits, insertion/deletion and offline reconnect,
-with zero input-card/search requests. Five focused browser tests pass 71
-assertions; four Postgres tests cover SQL predicate parity, transaction rollback,
-source/publication locking, queued and failed writes, stale publication and module
-epoch changes. Existing computed tests pass 15 tests / 41 assertions, and the
-sliding-sync regression passes one test / four assertions.
+The corrected browser harness requires live realm subscriptions and removal of
+server HTML. Earlier DOM-only browser samples are provisional. On the synthetic
+12,550-instance JSON path, 20/20 connected reads and nine mutations pass with
+zero input/search requests. All 40 owner oracles pass. Two worker crash points
+recover within the fixed 10-second deadline, and 1/10/50 HTTP-reader checks with
+one connected browser pass their full output/revision gates. The corrected
+getCards reference passes 20 stable-data reads but fails write freshness; it
+cannot establish a qualified overall speedup.
 
-A real five-stage feeder chain converged in 3.9 seconds after an asynchronous
-source acknowledgement. Synthetic concurrency correctness checks passed at
-1, 10 and 50 HTTP readers plus one already-open browser. These are smoke gates,
-not a controlled throughput comparison or evidence for 50 browser CPUs.
-The 1× exploratory candidate run passed 20 HTTP and browser samples and eight
-mutations. Two 10× setup attempts failed (tmpfs capacity, then the harness's
-600-second startup limit); the report retains both failures. The disk-backed
-benchmark now allows a longer initial build while preserving the 10-second
-write-freshness deadline.
+The complete 10× HTML pipeline remains failed. Bounded prewarming fixes the
+initial dependency-collection heap exhaustion, but a subsequent full replay has
+one unresponsive-Chrome render timeout. JSON-path diagnostic results are labeled
+explicitly and do not count as a successful full build. The report records both
+costs and failures rather than relaxing correctness or freshness.
 
-Three draft realm definitions in the private fork project schedule, observation
-coverage and classroom-day rows using existing schedule composition. They have
-no Glint errors in the new files; the pre-existing fork files report 830 errors.
-They have not been deployed or validated in a full Classroom Central browser
-flow. Worker restart/race coverage, the complete realm adaptation, controlled
-base/candidate benchmarks and the final performance report remain outstanding.
+Three private application definitions use the existing schedule and coverage
+models. A fresh build of 153 definitions and 34 fabricated records has zero JSON
+or HTML errors. All three connected displays pass complete row/statistic checks;
+three feeder-to-dashboard mutations, reloads and explicit drill-down pass.
+Private generator and browser tests are saved with the staging fork mirror.
+Full capture/report-generation UI flows and personal overlays remain to integrate.
+
+Seven focused browser tests / 80 assertions, six Postgres cases, four generator/
+browser-oracle tests and the four-assertion sliding-sync regression pass. The
+first-watch registration race has a failing-before/passing-after transaction
+regression. Modified package lint/type checks pass; private definitions retain
+830 pre-existing errors, with zero in the three new views.
+
+M3 has tested lifecycle coverage, M4 proves the projected application display,
+and M5 has a qualified checkpoint report and exportable chart. None is declared
+fully complete: controlled 1× and increased matching-cardinality measurements,
+write bursts and multiple writing clients, broader replica/lifecycle coverage,
+the full application workflows and the failed 10× HTML path remain. See
+[tessar-performance-report.md](tessar-performance-report.md) for evidence and limits.
 
 ## Scope and constraints
 

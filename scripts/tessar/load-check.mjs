@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
 import { buildRealmToken } from '../../packages/realm-test-harness/src/index.ts';
 import { generate, expectedSummary, validateSummary } from './generate.mjs';
-import { waitForDisplay } from './browser-oracle.mjs';
+import { waitForDisplay, waitForTessarInteractive } from './browser-oracle.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -134,6 +134,7 @@ try {
       originalScore = records.get('Observation/00000').data.attributes.score;
     const otherScores = expected.scoreTotal - originalScore;
     await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+    await waitForTessarInteractive(page, realm.href);
     await waitForDisplay(page, expected, 30000);
     const startedAt = Date.now(),
       until = startedAt + durationMs;
@@ -274,7 +275,8 @@ try {
     values.output,
     JSON.stringify(
       {
-        version: 1,
+        version: 2,
+        readiness: 'subscribed-client-with-server-markup-removed',
         manifest,
         note: 'Concurrent HTTP readers plus one already-open Chromium dashboard; this does not simulate the client CPU of 50 browsers.',
         cases,
