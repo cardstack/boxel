@@ -1156,26 +1156,23 @@ export default class MatrixService extends Service {
         // creation) never goes through host sign-up, so it has neither
         // account-data key — yet it may already hold realm permissions. With
         // no trusted server to ask, boot would assemble an empty chooser and
-        // ignore those permissions. Seed the trusted-servers key with this
-        // host's own realm server so the permissions-driven assembly runs on
-        // the very first login. Scoped to accounts with no realm list at all:
-        // one that already has a legacy `app.boxel.realms` list keeps its
-        // existing assembly + lazy-migration path untouched. Persist the seed
-        // (best-effort) so the key becomes the durable source of truth.
+        // ignore those permissions. Tentatively assemble from this host's own
+        // realm server via `_realm-auth`. Scoped to accounts with no realm list
+        // at all: one that already has a legacy `app.boxel.realms` list keeps
+        // its existing assembly + lazy-migration path untouched. The seed is
+        // only persisted (and the session only flipped to the authoritative
+        // trusted path) once `_realm-auth` confirms the account actually holds
+        // permissioned realms — see the revert below — so an account with none
+        // stays on the legacy path where account-data updates (including
+        // foreign realm URLs the trusted path can't serve) still drive its list.
+        let seededOwnRealmServer = false;
         if (trustedServers.length === 0) {
           let seedRealmsData = (await this.client.getAccountDataFromServer(
             APP_BOXEL_REALMS_EVENT_TYPE,
           )) as { realms: string[] } | null;
           if ((seedRealmsData?.realms ?? []).length === 0) {
             trustedServers = [this.realmServer.url.href];
-            try {
-              await this.setRealmServersInAccountData(trustedServers);
-            } catch (err) {
-              console.error(
-                'Failed to seed app.boxel.realm-servers with own realm server',
-                err,
-              );
-            }
+            seededOwnRealmServer = true;
           }
         }
         // A session that first assembled from the legacy `app.boxel.realms`
@@ -1193,7 +1190,7 @@ export default class MatrixService extends Service {
         // this flag here makes that re-emission a no-op for the available-
         // realms list — the realm-servers path is the authoritative source.
         this.trustedRealmServersAuthoritative = useTrustedServers;
-        let userRealmURLs: string[];
+        let userRealmURLs: string[] = [];
         if (useTrustedServers) {
           if (isTesting())
             console.warn('[start-phase] fetchUserRealmsFromTrustedServers');
@@ -1201,7 +1198,30 @@ export default class MatrixService extends Service {
             await this.realmServer.fetchUserRealmsFromTrustedServers(
               trustedServers,
             );
-        } else {
+          if (seededOwnRealmServer && userRealmURLs.length === 0) {
+            // The keyless account has no permissioned realms after all. Don't
+            // hijack it onto the authoritative trusted path or persist the
+            // seed — fall through to the legacy `app.boxel.realms` assembly
+            // below so account-data updates (including foreign realm URLs the
+            // trusted path can't serve) keep driving its list.
+            this.trustedRealmServersAuthoritative = false;
+            useTrustedServers = false;
+          } else if (seededOwnRealmServer) {
+            // Permissioned realms found: persist the seed so subsequent boots
+            // take the trusted path directly. Best-effort — assembly this boot
+            // already used the in-memory list, and the next login re-seeds if
+            // this write is lost.
+            try {
+              await this.setRealmServersInAccountData(trustedServers);
+            } catch (err) {
+              console.error(
+                'Failed to seed app.boxel.realm-servers with own realm server',
+                err,
+              );
+            }
+          }
+        }
+        if (!useTrustedServers) {
           this.bootedFromLegacyRealmsList = true;
           if (isTesting())
             console.warn('[start-phase] getAccountData(realms-legacy)');
