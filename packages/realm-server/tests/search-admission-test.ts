@@ -12,7 +12,11 @@ import {
   resetSearchAdmissionForTests,
   setSearchAdmissionForTests,
 } from '../search-inflight.ts';
-import { httpLogging, searchAdmission } from '../middleware/index.ts';
+import {
+  httpLogging,
+  releaseSearchAdmission,
+  searchAdmission,
+} from '../middleware/index.ts';
 
 // The admission gate is what stands between a burst of searches and a heap
 // exhausted by their concurrent result sets. These tests pin the contract the
@@ -177,6 +181,9 @@ module(basename(import.meta.filename), function () {
       let app = new Koa();
       let router = new Router();
       let search = async (ctxt: Koa.Context) => {
+        if (ctxt.query.releaseEarly) {
+          releaseSearchAdmission(ctxt);
+        }
         if (ctxt.query.hold) {
           await new Promise<void>((resolve) => {
             holds.push(resolve);
@@ -225,7 +232,8 @@ module(basename(import.meta.filename), function () {
       headers: Record<string, string> = {},
     ) {
       let held = new Promise<void>((resolve) => (onHeld = resolve));
-      let response = send(app, `${path}?hold=1`, headers);
+      let separator = path.includes('?') ? '&' : '?';
+      let response = send(app, `${path}${separator}hold=1`, headers);
       return { response, held };
     }
 
@@ -252,12 +260,11 @@ module(basename(import.meta.filename), function () {
       return [first.response, second.response];
     }
 
-    function assert_inFlight(expected: number) {
-      QUnit.assert.strictEqual(
-        getSearchInFlight(),
-        expected,
-        `inFlight=${expected}`,
-      );
+    function assert_inFlight(
+      expected: number,
+      message = `inFlight=${expected}`,
+    ) {
+      QUnit.assert.strictEqual(getSearchInFlight(), expected, message);
     }
 
     test('a search arriving above the ceiling is shed with 429 and Retry-After', async function (assert) {
@@ -351,6 +358,41 @@ module(basename(import.meta.filename), function () {
         release();
       }
       await Promise.all(held);
+    });
+
+    test('a handler can hand its slot back before its response ends', async function (assert) {
+      setSearchAdmissionForTests({ limit: 2, waitMs: 2000 });
+      let app = buildApp();
+      let releasing = holdSearch(app, '/_federated-search?releaseEarly=1');
+      await releasing.held;
+      assert_inFlight(0, 'released while the response is still open');
+
+      // The freed slot is real: with the gate full again, a waiter is blocked
+      // by the two computing searches, not by the early-released one.
+      let held = await fillGate(app);
+      let waiting = send(app, '/_federated-search');
+      await wait(50);
+      let blocked = await settledWithin(waiting, 20);
+      assert.false(blocked.settled, 'the gate is full');
+
+      // Ending the early-released response hands back nothing more.
+      holds.shift()!();
+      await releasing.response;
+      let stillBlocked = await settledWithin(waiting, 20);
+      assert.false(stillBlocked.settled, 'no second release on finish');
+      assert_inFlight(2);
+
+      holds.shift()!();
+      assert.strictEqual(
+        (await waiting).status,
+        200,
+        'a computing search ending admits the waiter',
+      );
+      for (let release of holds) {
+        release();
+      }
+      await Promise.all(held);
+      assert_inFlight(0);
     });
 
     test('a non-search request is not counted', async function (assert) {

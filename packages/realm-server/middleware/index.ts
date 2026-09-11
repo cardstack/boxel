@@ -222,12 +222,34 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-// Puts a search through the admission gate (`search-inflight.ts`) and holds
-// its slot for the request's full lifecycle (parse → SQL → serialize → send),
-// which is the window in which it holds heap and in which a saturated event
-// loop would leave it unserviced. Mounted after CORS so that a shed response
-// carries the headers a cross-origin client needs to read its status and
-// Retry-After; before the body is parsed so that a shed costs nothing.
+// Where `searchAdmission` leaves the release for the slot it granted, so a
+// handler can hand the slot back before the response ends.
+const SEARCH_ADMISSION_RELEASE = 'searchAdmissionRelease';
+
+// Hand back the admission slot a search request holds, if it holds one. A
+// request that the live-search cache satisfies from another request's
+// computation — a `join` or a `hit` — builds no result document of its own, so
+// it calls this the moment the cache says so and stops counting toward the
+// ceiling; only the request doing the computing keeps its slot until its
+// response ends. That holds for an indexing-lane admission too: an in-render
+// search served from another request's computation holds no document either,
+// and the count is of computations, whichever lane admitted them. Idempotent,
+// and a no-op for requests the gate never saw.
+export function releaseSearchAdmission(ctxt: Koa.Context): void {
+  let release = ctxt.state[SEARCH_ADMISSION_RELEASE];
+  if (typeof release === 'function') {
+    release();
+  }
+}
+
+// Puts a search through the admission gate (`search-inflight.ts`). A search
+// that computes its own result holds its slot for the request's full lifecycle
+// (parse → SQL → serialize → send), which is the window in which it holds heap
+// and in which a saturated event loop would leave it unserviced; one that the
+// live-search cache serves from another's computation hands the slot back
+// early via `releaseSearchAdmission`. Mounted after CORS so that a shed
+// response carries the headers a cross-origin client needs to read its status
+// and Retry-After; before the body is parsed so that a shed costs nothing.
 export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   if (
     !SEARCH_PATH_PATTERN.test(ctxt.path) ||
@@ -249,6 +271,7 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
     release?.();
     release = undefined;
   };
+  ctxt.state[SEARCH_ADMISSION_RELEASE] = releaseSlot;
   // `finish` fires on a fully-sent response; `close` covers a connection
   // torn down before that, so a slot can't leak on an abort.
   ctxt.res.on('finish', releaseSlot);

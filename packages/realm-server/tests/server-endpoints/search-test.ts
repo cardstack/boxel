@@ -24,6 +24,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import { LiveSearchCache } from '../../live-search-cache.ts';
+import { getSearchInFlight } from '../../search-inflight.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -211,6 +212,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
     function postSearch(body: Record<string, unknown>) {
       return postSearchAs(ownerToken(), body);
+    }
+
+    // Poll for a condition that a request in flight will bring about, failing
+    // rather than hanging if it never does.
+    async function waitUntil(condition: () => boolean, what: string) {
+      let deadline = Date.now() + 5_000;
+      while (!condition()) {
+        if (Date.now() > deadline) {
+          throw new Error(`timed out waiting for ${what}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
     }
 
     test('QUERY /_federated-search federates entry results across realms', async function (assert) {
@@ -699,6 +712,90 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         owner.text,
         'two independent computes produce a byte-identical body',
       );
+    });
+
+    test('a coalesced live search releases its admission slot while the compute is still running', async function (assert) {
+      // A cache whose next compute waits on the test, so a second identical
+      // request is guaranteed to arrive while the first is still computing.
+      class HoldableLiveSearchCache extends LiveSearchCache {
+        hold: Promise<void> | undefined;
+        onComputeStarted: (() => void) | undefined;
+        override getOrPopulate(
+          args: Parameters<LiveSearchCache['getOrPopulate']>[0],
+        ) {
+          let { hold, onComputeStarted } = this;
+          return super.getOrPopulate({
+            ...args,
+            populate: async () => {
+              onComputeStarted?.();
+              if (hold) {
+                await hold;
+              }
+              return args.populate();
+            },
+          });
+        }
+      }
+      let cache = new HoldableLiveSearchCache({
+        ttlMs: 60_000,
+        telemetryIntervalMs: 0,
+      });
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        liveSearchCache: cache,
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let releaseCompute!: () => void;
+      cache.hold = new Promise<void>((resolve) => (releaseCompute = resolve));
+      let computeStarted = new Promise<void>(
+        (resolve) => (cache.onComputeStarted = resolve),
+      );
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+
+      // supertest sends lazily; `.then` starts each request now.
+      let first = postSearch(searchBody).then((response) => response);
+      await computeStarted;
+      assert.strictEqual(
+        getSearchInFlight(),
+        1,
+        'the computing request holds a slot',
+      );
+
+      let second = postSearch(searchBody).then((response) => response);
+      await waitUntil(
+        () => cache.stats.joins === 1,
+        'the second request joins',
+      );
+      assert.strictEqual(
+        getSearchInFlight(),
+        1,
+        'the joiner handed its slot back while the compute is still running',
+      );
+
+      releaseCompute();
+      let [a, b] = await Promise.all([first, second]);
+      assert.strictEqual(a.status, 200);
+      assert.strictEqual(b.status, 200);
+      assert.strictEqual(a.headers[LIVE_SEARCH_CACHE_HEADER], 'miss');
+      assert.strictEqual(b.headers[LIVE_SEARCH_CACHE_HEADER], 'join');
+      assert.strictEqual(b.text, a.text, 'the joiner got the shared body');
+      assert.strictEqual(
+        getSearchInFlight(),
+        0,
+        'the computing request released on completion, and only once',
+      );
+
+      let third = await postSearch(searchBody);
+      assert.strictEqual(third.headers[LIVE_SEARCH_CACHE_HEADER], 'hit');
+      assert.strictEqual(getSearchInFlight(), 0, 'a hit holds no slot after');
     });
 
     test('a write to a searched realm invalidates the live search cache', async function (assert) {
