@@ -1,4 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -30,12 +31,12 @@ const personalRealmURL = ensureTrailingSlash(
 );
 
 // The host sign-up flow creates a personal workspace, but an account
-// provisioned another way (e.g. registered straight on Synapse) never gets
-// one. `ensurePersonalRealmForUserIfMissing` provisions it when absent. Auto-
-// provisioning at boot is gated to real deployments (`hostedEnvironment` is
-// `local` in the test suite), so we drive the method directly here.
+// provisioned another way (e.g. registered straight on Synapse) never gets one.
+// On login, `autoProvisionPersonalRealm` provisions it when absent. The flag
+// defaults off in the test environment, so these tests flip it on to exercise
+// the real boot path.
 module(
-  'Integration | matrix-service | ensurePersonalRealmForUserIfMissing',
+  'Integration | matrix-service | personal realm auto-provisioning',
   function (hooks) {
     setupRenderingTest(hooks);
     setupBaseRealm(hooks);
@@ -49,7 +50,9 @@ module(
 
     let createRealmCalls: Parameters<RealmServerService['createRealm']>[0][];
 
-    hooks.beforeEach(async function (this: RenderingTestContext) {
+    // Set up the realm + a createRealm capture, optionally enable
+    // auto-provisioning, then boot and let the fire-and-forget task settle.
+    async function boot(opts: { autoProvision: boolean }) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
@@ -64,27 +67,27 @@ module(
         return new URL(personalRealmURL);
       };
       let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.autoProvisionPersonalRealm = opts.autoProvision;
       await matrixService.ready;
       await matrixService.start();
-    });
+      await settled();
+    }
 
-    test('boot does not auto-provision in the test environment', async function (assert) {
-      // The gate keeps auto-provisioning out of the test suite; boot must not
-      // create a realm on its own.
+    test('login does not provision when the flag is off (the test default)', async function (this: RenderingTestContext, assert) {
+      await boot({ autoProvision: false });
       assert.strictEqual(
         createRealmCalls.length,
         0,
-        'no realm is auto-created at boot when hostedEnvironment is local',
+        'no realm is auto-created at boot when auto-provisioning is off',
       );
     });
 
-    test('a user with no personal realm gets one created with the personal endpoint', async function (assert) {
-      let matrixService = getService('matrix-service') as MatrixService;
-      await matrixService.ensurePersonalRealmForUserIfMissing();
+    test('login provisions a personal realm with the personal endpoint when enabled', async function (this: RenderingTestContext, assert) {
+      await boot({ autoProvision: true });
       assert.strictEqual(
         createRealmCalls.length,
         1,
-        'createRealm was called exactly once',
+        'createRealm was called exactly once at boot',
       );
       assert.strictEqual(
         createRealmCalls[0]?.endpoint,
@@ -96,9 +99,9 @@ module(
 );
 
 // The inverse: a user who already has a personal workspace must not have a
-// second one provisioned.
+// second one provisioned, even with the flag on.
 module(
-  'Integration | matrix-service | ensurePersonalRealm skips an existing one',
+  'Integration | matrix-service | personal realm not duplicated',
   function (hooks) {
     setupRenderingTest(hooks);
     setupBaseRealm(hooks);
@@ -131,13 +134,13 @@ module(
         return new URL(personalRealmURL);
       };
       let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.autoProvisionPersonalRealm = true;
       await matrixService.ready;
       await matrixService.start();
+      await settled();
     });
 
     test('createRealm is not called when a personal realm already exists', async function (assert) {
-      let matrixService = getService('matrix-service') as MatrixService;
-      await matrixService.ensurePersonalRealmForUserIfMissing();
       assert.strictEqual(
         createRealmCalls.length,
         0,

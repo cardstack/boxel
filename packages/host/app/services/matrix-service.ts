@@ -954,23 +954,27 @@ export default class MatrixService extends Service {
     await this.appendRealmToAccountData(personalRealmURL.href);
   }
 
-  // Auto-provisioning fires only in a real deployment. `hostedEnvironment` is
-  // the realm-server's serve-time environment (`staging` / `production`), and
-  // is `local` in both the QUnit suite and the matrix e2e host — so tests never
-  // trip realm creation. Local dev is excluded too; a dev who signs up goes
-  // through the new-user flow, which already creates a personal realm.
-  private get shouldAutoProvisionPersonalRealm(): boolean {
-    return (
-      ENV.hostedEnvironment === 'staging' ||
-      ENV.hostedEnvironment === 'production'
-    );
-  }
+  // Whether login auto-provisions a personal workspace for a user who has none.
+  // Defaults on only in a real deployment: `hostedEnvironment` is the
+  // realm-server's serve-time environment and is `local` in both the QUnit
+  // suite and the matrix e2e host, so provisioning never fires in tests. A
+  // settable field (not a getter) so a test can flip it on and exercise the
+  // real start()->provision path.
+  autoProvisionPersonalRealm =
+    ENV.hostedEnvironment === 'staging' ||
+    ENV.hostedEnvironment === 'production';
+
+  // Fire-and-forget wrapper so boot doesn't block on realm creation and so a
+  // re-entrant start() never launches a second one. `dropTask` also lets a test
+  // await settled() for the provisioning to finish.
+  private ensurePersonalRealmTask = dropTask(async () => {
+    await this.ensurePersonalRealmForUserIfMissing();
+  });
 
   // Give the signed-in user a personal workspace when they have none — the case
   // for an account provisioned outside host sign-up (e.g. registered straight
-  // on Synapse). Public so the auto-provision gate can be bypassed in a test
-  // that drives it directly. Idempotent: `_create-realm` rejects a duplicate
-  // with "already exists", which we treat as success.
+  // on Synapse). Idempotent: `_create-realm` rejects a duplicate with "already
+  // exists", which we treat as success.
   async ensurePersonalRealmForUserIfMissing(): Promise<void> {
     let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some((id) =>
       String(id).endsWith(`/${PERSONAL_REALM_ENDPOINT}/`),
@@ -1409,16 +1413,11 @@ export default class MatrixService extends Service {
         // Ensure a personal workspace exists for an account provisioned outside
         // host sign-up (e.g. registered straight on Synapse). Non-blocking:
         // `_create-realm` emits `realms-list-updated` to this user on
-        // completion, which surfaces it live. Gated to real deployments so it
-        // never fires in the test suites (see shouldAutoProvisionPersonalRealm),
-        // and skipped for the new-user flow, which already creates one.
-        if (
-          this.shouldAutoProvisionPersonalRealm &&
-          !this._isInitializingNewUser
-        ) {
-          this.ensurePersonalRealmForUserIfMissing().catch((e) =>
-            console.error('Failed to provision personal realm on login', e),
-          );
+        // completion, which surfaces it live. Off by default in the test suites
+        // (see autoProvisionPersonalRealm), and skipped for the new-user flow,
+        // which already creates one.
+        if (this.autoProvisionPersonalRealm && !this._isInitializingNewUser) {
+          this.ensurePersonalRealmTask.perform();
         }
       } catch (e) {
         console.log('Error starting Matrix client', e);
