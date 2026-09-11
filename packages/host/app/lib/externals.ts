@@ -86,6 +86,29 @@ export const BUNDLED_BASE_MODULES: Record<
   'time/time-range': () => import('@cardstack/base/time/time-range'),
   'time/duration': () => import('@cardstack/base/time/duration'),
   'time/relative-time': () => import('@cardstack/base/time/relative-time'),
+  // string.ts is `export default StringField` from card-api, so it is
+  // resolved there. Importing string.ts itself would have TypeScript classify
+  // that `.ts` module as CommonJS (this package declares no `type`) and
+  // retype its default export as a namespace for every host importer.
+  string: () =>
+    import('@cardstack/base/card-api').then(({ StringField }) => ({
+      default: StringField,
+    })),
+  number: () => import('@cardstack/base/number'),
+  boolean: () => import('@cardstack/base/boolean'),
+  'big-integer': () => import('@cardstack/base/big-integer'),
+  email: () => import('@cardstack/base/email'),
+  'ethereum-address': () => import('@cardstack/base/ethereum-address'),
+  'phone-number': () => import('@cardstack/base/phone-number'),
+  'text-area': () => import('@cardstack/base/text-area'),
+  markdown: () => import('@cardstack/base/markdown'),
+  'rich-markdown': () => import('@cardstack/base/rich-markdown'),
+  color: () => import('@cardstack/base/color'),
+  'code-ref': () => import('@cardstack/base/code-ref'),
+  realm: () => import('@cardstack/base/realm'),
+  enum: () => import('@cardstack/base/enum'),
+  searchable: () => import('@cardstack/base/searchable'),
+  'base64-image': () => import('@cardstack/base/base64-image'),
 };
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
