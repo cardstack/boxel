@@ -14,6 +14,8 @@ import {
   identifyCard,
   getFieldDefinitions,
   rri,
+  coerceTypes,
+  type Filter,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Definition,
@@ -22,7 +24,11 @@ import {
   isFilterRefersToNonsearchableFieldError,
 } from '@cardstack/runtime-common';
 
+import { query } from '@cardstack/runtime-common/expression';
+import { TessarQueryRegistry } from '@cardstack/runtime-common/tessar-query-registry';
+
 import ENV from '@cardstack/host/config/environment';
+
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
@@ -293,6 +299,212 @@ module('Unit | query', function (hooks) {
       dbAdapter,
       mockDefinitionLookup,
       virtualNetwork,
+    );
+  });
+
+  test('Tessar reverse verification agrees with forward predicates for indexed documents', async function (assert) {
+    let { mango, vangogh, ringo, paper } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            age: 5,
+            isHairy: true,
+            friends: [{ name: 'Ringo' }],
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: { name: 'Van Gogh', age: 8, isHairy: false, friends: [] },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            age: null,
+            isHairy: true,
+            friends: [{ name: 'Mango' }],
+          },
+        },
+      },
+      { card: paper, data: { search_doc: { name: 'Mango' } } },
+    ]);
+    let documents = (await dbAdapter.execute(
+      'SELECT url, search_doc, types FROM boxel_index WHERE type = $1',
+      { bind: ['instance'], coerceTypes },
+    )) as unknown as Array<
+      Parameters<IndexQueryEngine['tessarMatchesDocument']>[1]
+    >;
+    let on = { module: rri(`${testRealmURL}person`), name: 'Person' };
+    let predicates: Filter[] = [
+      { on, eq: { name: 'Mango' } },
+      { on, in: { name: ['Mango', 'Ringo'] } },
+      { on, eq: { age: null } },
+      { on, eq: { 'friends.name': 'Ringo' } },
+      { on, any: [{ eq: { name: 'Mango' } }, { eq: { name: 'Van Gogh' } }] },
+      { on, not: { eq: { name: 'Mango' } } },
+      { on, range: { age: { gte: 5, lt: 8 } } },
+      { on, eq: { isHairy: true } },
+    ];
+    let expectedCounts = [1, 2, 1, 1, 2, 2, 1, 2];
+    for (let [index, filter] of predicates.entries()) {
+      let forward = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter,
+      });
+      let matched: string[] = [];
+      assert.strictEqual(
+        forward.cards.length,
+        expectedCounts[index],
+        'forward fixture has the expected real matches',
+      );
+      for (let document of documents) {
+        if (await indexQueryEngine.tessarMatchesDocument(filter, document))
+          matched.push(document.url.replace(/\.json$/, ''));
+      }
+      assert.deepEqual(
+        matched.sort(),
+        forward.cards.map((card) => String(card.id)).sort(),
+        stringify(filter),
+      );
+    }
+    assert.deepEqual(
+      await indexQueryEngine.tessarRoutingTerms({ on, eq: { name: 'Mango' } }),
+      [{ path: 'name', value: 'Mango' }],
+    );
+    assert.strictEqual(
+      await indexQueryEngine.tessarRoutingTerms({
+        on,
+        any: [{ eq: { name: 'Mango' } }, { not: { eq: { name: 'Ringo' } } }],
+      }),
+      undefined,
+      'an unanchored OR branch requires the broad bucket',
+    );
+    assert.strictEqual(
+      await indexQueryEngine.tessarRoutingTerms({ on, eq: { age: null } }),
+      undefined,
+      'null routes broadly, including absent values',
+    );
+  });
+
+  test('Tessar watches route conservatively and preserve durable invalidation', async function (assert) {
+    let registry = new TessarQueryRegistry(dbAdapter, indexQueryEngine);
+    let tx = (expression: Parameters<typeof query>[1]) =>
+      query(dbAdapter, expression);
+    let on = { module: rri(`${testRealmURL}person`), name: 'Person' };
+    let owner = (name: string, generation = 1) => ({
+      realmURL: testRealmURL,
+      ownerURL: `${testRealmURL}${name}`,
+      generation,
+      inputGeneration: generation,
+      definitionRevision: 'tessar-v1',
+    });
+    let publish = async (name: string, filter: Filter) =>
+      registry.publish(tx, {
+        ...owner(name),
+        watches: await registry.prepare([
+          {
+            fieldPath: 'people',
+            query: { filter, page: { size: 1, number: 0 } },
+          },
+        ]),
+      });
+    await publish('mango-summary', { on, eq: { name: 'Mango' } });
+    await publish('ringo-summary', { on, eq: { name: 'Ringo' } });
+    await publish('empty-summary', { on, eq: { name: 'Future' } });
+    await publish('broad-summary', { on, not: { eq: { name: 'Excluded' } } });
+    await setupIndex(dbAdapter, [
+      { card: testCards.mango, data: { search_doc: { name: 'Mango' } } },
+      { card: testCards.ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+    let rows = await dbAdapter.execute(
+      "SELECT url, search_doc, types FROM boxel_index WHERE type = 'instance'",
+      { coerceTypes },
+    );
+    let mango = rows.find(
+      (row) => (row.search_doc as any).name === 'Mango',
+    ) as unknown as Parameters<IndexQueryEngine['tessarMatchesDocument']>[1];
+    let moved = {
+      ...mango,
+      search_doc: { ...mango.search_doc, name: 'Ringo' },
+    };
+    let affected = await registry.affected(testRealmURL, mango, moved);
+    assert.deepEqual(
+      affected,
+      ['broad-summary', 'mango-summary', 'ringo-summary']
+        .map((name) => `${testRealmURL}${name}`)
+        .sort(),
+      'old and new scopes both invalidate',
+    );
+    assert.deepEqual(
+      await registry.affected(testRealmURL, undefined, {
+        ...mango,
+        search_doc: { ...mango.search_doc, name: 'Future' },
+      }),
+      ['broad-summary', 'empty-summary']
+        .map((name) => `${testRealmURL}${name}`)
+        .sort(),
+      'an initially empty watch sees an insertion',
+    );
+    assert.deepEqual(
+      await registry.affected(testRealmURL, mango, undefined),
+      ['broad-summary', 'mango-summary']
+        .map((name) => `${testRealmURL}${name}`)
+        .sort(),
+      'deletions use the old document',
+    );
+    assert.deepEqual(
+      await registry.affected('http://elsewhere/', mango, moved),
+      [],
+      'realm isolation',
+    );
+    await registry.markDirty(tx, testRealmURL, affected, 3);
+    await registry.markDirty(tx, testRealmURL, affected, 2);
+    assert.true(
+      (
+        await new TessarQueryRegistry(dbAdapter, indexQueryEngine).pending(
+          testRealmURL,
+        )
+      ).every((row) => row.generation === 3),
+      'dirty watermark survives reconstruction and never regresses',
+    );
+    let watches = await registry.prepare([
+      { fieldPath: 'people', query: { filter: { on, eq: { name: 'Mango' } } } },
+    ]);
+    assert.false(
+      await registry.publish(tx, { ...owner('mango-summary', 2), watches }),
+      'a result that missed a newer change cannot publish',
+    );
+    assert.true(
+      await registry.publish(tx, { ...owner('mango-summary', 3), watches }),
+      'observing the required revision permits publication',
+    );
+    assert.false(
+      (await registry.pending(testRealmURL)).some(
+        (row) => row.ownerURL === owner('mango-summary').ownerURL,
+      ),
+      'successful publication clears dirty state',
+    );
+    assert.true(
+      await registry.publish(tx, {
+        ...owner('mango-summary', 4),
+        watches: [],
+        retired: true,
+      }),
+    );
+    assert.false(
+      await registry.publish(tx, { ...owner('mango-summary', 3), watches }),
+      'a delayed worker cannot resurrect retired watches',
+    );
+    assert.false(
+      (await registry.affected(testRealmURL, mango, undefined)).includes(
+        owner('mango-summary').ownerURL,
+      ),
     );
   });
 

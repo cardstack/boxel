@@ -82,6 +82,14 @@ export interface SerializeOpts {
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  // Internal Tessar read mode, supplied only after the caller verifies server
+  // provenance/completeness. Never inferred from authored attributes. Contained
+  // paths use dots and '*' for containsMany entries; links remain lazy.
+  tessarSnapshot?: {
+    computedFields: string[];
+    queryFields: string[];
+    scope?: { active: boolean };
+  };
 }
 
 // --- Serialization Symbols ---
