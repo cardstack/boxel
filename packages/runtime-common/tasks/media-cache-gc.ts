@@ -53,7 +53,9 @@ registerQueueJobDefinition({
 
 // Reconcile-style GC for the MediaCache: reclaims ledger rows whose capture
 // is superseded by a newer generation, whose source instance is tombstoned,
-// or (on-demand lane) idle past the TTL — then deletes each object whose
+// whose declared slot no current manifest references (renamed, deleted, or
+// re-specced), or (on-demand lane) idle past the TTL — then deletes each
+// object whose
 // last ledger reference those rows held. Objects are deleted before their
 // rows so a sweep that dies mid-way leaves rows behind for the next sweep to
 // re-find, never bytes the ledger no longer knows about (the ledger is the
