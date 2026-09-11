@@ -276,7 +276,9 @@ export class ScreenshotCardOutput extends CardDef {
           <figure class='capture'>
             {{#if capture.url}}
               <img src={{capture.url}} alt={{capture.name}} />
-              <figcaption><a href={{capture.url}}>{{capture.url}}</a></figcaption>
+              <figcaption><a
+                  href={{capture.url}}
+                >{{capture.url}}</a></figcaption>
             {{/if}}
           </figure>
         {{/each}}

@@ -51,9 +51,7 @@ interface ViewSignature {
 }
 
 class View extends GlimmerComponent<ViewSignature> {
-  <template>
-    {{this.formatted}}
-  </template>
+  <template>{{this.formatted}}</template>
   get formatted() {
     if (this.args.model == null) {
       return '[no date]';
@@ -126,7 +124,9 @@ class AtomView extends GlimmerComponent<ViewSignature> {
     if (!this.args.model) return 'No date';
     try {
       const date = new Date(String(this.args.model));
-      const config = this.args.configuration as DateFieldConfiguration | undefined;
+      const config = this.args.configuration as
+        | DateFieldConfiguration
+        | undefined;
       return formatDateTime(date, {
         preset: config?.preset || 'medium',
         fallback: 'Invalid date',

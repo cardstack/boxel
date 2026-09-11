@@ -15,6 +15,10 @@ SCRIPTS_DIR="./scripts"
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.
 LOG_TEE="../observability/scripts/dev-log-tee.sh"
 
+# Started here so that dev-all, which does not list services:icons, still has
+# an icons server. The stacks that do list it start one as well; start-icons.sh
+# steps aside when icons already answer for this environment, so either order
+# leaves one server registered.
 sh "$SCRIPTS_DIR/start-icons.sh" &
 ICONS_PID=$!
 cleanup_icons_server() {

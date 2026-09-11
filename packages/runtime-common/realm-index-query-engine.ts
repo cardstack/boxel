@@ -161,9 +161,9 @@ type Options = {
   signal?: AbortSignal;
 } & QueryOptions;
 
-type SearchResult = SearchResultDoc | SearchResultError;
+export type SearchResult = SearchResultDoc | SearchResultError;
 
-interface SearchResultDoc {
+export interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
   // The primary card's index-data generation (`boxel_index.generation`). The

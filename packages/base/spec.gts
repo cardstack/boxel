@@ -1,3 +1,4 @@
+import type { BaseDef } from './card-api';
 import {
   contains,
   field,
@@ -10,7 +11,6 @@ import {
   getCardMeta,
   resolveInstanceURL,
   type CardOrFieldTypeIcon,
-  BaseDef,
   type CardContext,
   type PartialBaseInstanceType,
 } from './card-api';
@@ -26,6 +26,7 @@ import {
   BoxelButton,
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
+import type { Loader } from '@cardstack/runtime-common';
 import {
   getMenuItems,
   codeRefWithAbsoluteIdentifier,
@@ -34,7 +35,6 @@ import {
   isResolvedCodeRef,
   isSpec,
   loadCardDef,
-  Loader,
   realmURL,
   type ToolContext,
   type ResolvedCodeRef,
@@ -60,7 +60,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecTool from '@cardstack/boxel-host/commands/generate-readme-spec';
 import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';
-import { type GetMenuItemParams } from './menu-items';
+import type { GetMenuItemParams } from './menu-items';
 import { provide } from 'ember-provide-consume-context';
 import {
   PermissionsContextName,
@@ -294,9 +294,7 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
     }
 
     try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
-        toolContext,
-      );
+      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(toolContext);
       await generateReadmeSpecCommand.execute({
         spec: this.args.model as Spec,
       });
