@@ -12,7 +12,7 @@ import type { ChatCompletionMessageToolCall } from 'openai/resources';
 import {
   executeReadRealmFile,
   fileLabelFromUrl,
-  type ReadRealmFileArgs,
+  urlsFromReadRealmFileArguments,
   type ReadRealmFileTool,
 } from './read-realm-file.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
@@ -223,21 +223,10 @@ async function fulfillOne(
   deps: ReadRealmFileFulfillmentDeps,
   upload: (content: string, contentType: string) => Promise<string>,
 ): Promise<ReadRealmFileFulfillmentOutcome> {
-  let args: ReadRealmFileArgs | undefined;
-  try {
-    args = JSON.parse(call.function.arguments) as ReadRealmFileArgs;
-  } catch {
-    args = undefined;
-  }
-  // Dedupe within the call so a repeated URL doesn't attach (and inline into
-  // every later prompt) twice.
-  let urls = [
-    ...new Set(
-      (Array.isArray(args?.urls) ? args.urls : []).filter(
-        (url): url is string => typeof url === 'string' && url.length > 0,
-      ),
-    ),
-  ];
+  // Deduplicated within the call so a repeated URL doesn't attach (and inline
+  // into every later prompt) twice; recovered from the raw text when the
+  // arguments were cut off before the JSON closed.
+  let urls = urlsFromReadRealmFileArguments(call.function.arguments);
   if (urls.length === 0) {
     return await publishFailure(
       call.id,

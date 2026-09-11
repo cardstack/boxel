@@ -12,10 +12,24 @@ export default class ResponseState {
   isCanceled = false;
   // The provider's finish_reason for this turn. Only the chunk that ends the
   // generation carries one; keep the last non-null value so trailing chunks
-  // (e.g. the usage report) cannot clear it.
+  // (e.g. the usage report) cannot clear it. OpenRouter normalizes the
+  // upstream reason: a generation that hit the output-token limit while
+  // emitting a tool call arrives as 'tool_calls', with the cut visible only
+  // in `native_finish_reason` ('max_output_tokens' / 'length'). Record that
+  // here as 'length' so the cut is reported to the user either way.
   finishReason: string | undefined;
 
-  updateFinishReason(finishReason: string | null | undefined) {
+  updateFinishReason(
+    finishReason: string | null | undefined,
+    nativeFinishReason?: string | null,
+  ) {
+    if (
+      nativeFinishReason === 'max_output_tokens' ||
+      nativeFinishReason === 'length'
+    ) {
+      this.finishReason = 'length';
+      return;
+    }
     if (finishReason) {
       this.finishReason = finishReason;
     }
