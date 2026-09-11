@@ -517,11 +517,21 @@ module('Integration | operations', function (hooks) {
       DEFINITION_FREE_BASE_OPERATIONS.length > 0,
       'the list is non-empty, so the loop below asserts something',
     );
+    // `operation` is exported as `PropertyDecorator` — TypeScript's two-arg
+    // shape — while the Babel legacy decorator it actually is takes a third
+    // descriptor argument, which is where the declaration object arrives. The
+    // cast asks for the real runtime signature, the same mismatch the export's
+    // own `as unknown as PropertyDecorator` exists for.
+    let applyOperation = operation as unknown as (
+      target: unknown,
+      key: string,
+      descriptor: { initializer: () => unknown },
+    ) => void;
     for (let name of DEFINITION_FREE_BASE_OPERATIONS) {
       assert.throws(
         () => {
           class Shadow extends CardDef {}
-          operation(Shadow, name, {
+          applyOperation(Shadow, name, {
             initializer: () => ({ base: 'read' }),
           });
           return Shadow;
