@@ -231,6 +231,42 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  // The case the no-throw comment names, and the one the zero-row guard cannot
+  // reach: a database with no such table at all. Reachable two ways — a
+  // database predating the migration, and the browser's SQLite, which the
+  // schema dump deliberately excludes this table from. Both must yield the
+  // sentinel rather than propagate, because the intent stated at these
+  // functions is that a boot sequence never fails for a diagnostic.
+  test('a database without the table reports nothing observed', async function (assert) {
+    await dbAdapter.execute('DROP TABLE host_shell_generation');
+
+    assert.deepEqual(
+      await currentHostShellGeneration(dbAdapter),
+      { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' },
+      'the read reports no ordering rather than throwing',
+    );
+    assert.deepEqual(
+      await claimHostShellGeneration(dbAdapter, 'aaaaaaaa', 1000),
+      { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' },
+      'and so does the claim',
+    );
+  });
+
+  // Narrow on purpose: only the missing table is absorbed. A fault a caller
+  // should hear about still propagates.
+  test('any other failure still propagates', async function (assert) {
+    let broken: Querier = async () => {
+      throw Object.assign(new Error('permission denied for table'), {
+        code: '42501',
+      });
+    };
+    await assert.rejects(
+      claimHostShellGeneration(dbAdapter, 'aaaaaaaa', 1000, broken),
+      /permission denied/,
+      'a permissions failure is not mistaken for an absent table',
+    );
+  });
+
   test('the singleton constraint keeps a second row out', async function (assert) {
     await assert.rejects(
       dbAdapter.execute(

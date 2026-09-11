@@ -19,6 +19,33 @@ import { dbAdapterQuerier, param, type Querier } from './expression.ts';
 // shell has been observed yet. No real hash can collide with it.
 export const NO_HOST_SHELL_OBSERVED = 0;
 
+const NOT_OBSERVED: HostShellGeneration = {
+  generation: NO_HOST_SHELL_OBSERVED,
+  shellHash: '',
+};
+
+// Whether a query failed because the table is not there.
+//
+// Two ways to reach it, and neither is a fault worth failing a boot over. A
+// database that predates the migration has no such table — the zero-row guard
+// below cannot cover that case, because the statement throws before returning
+// rows. And the table is deliberately absent from the browser's SQLite schema
+// (`schema-dump.sh` excludes it, being realm-server operational state), so any
+// host-side caller meets this by design rather than by accident.
+//
+// Narrow on purpose: only the missing table yields the sentinel. A syntax
+// error, a permissions failure or a dead connection still propagates, because
+// those are faults a caller should hear about.
+function isMissingTableError(err: unknown): boolean {
+  // Postgres raises SQLSTATE 42P01 (undefined_table); SQLite has no codes, so
+  // its message is the only signal.
+  if ((err as { code?: unknown })?.code === '42P01') {
+    return true;
+  }
+  let message = (err as Error)?.message ?? '';
+  return /no such table/i.test(message);
+}
+
 export interface HostShellGeneration {
   generation: number;
   shellHash: string;
@@ -58,25 +85,34 @@ export async function claimHostShellGeneration(
   querier?: Querier,
 ): Promise<HostShellGeneration> {
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  let claimed = await q([
-    `UPDATE host_shell_generation SET shell_hash = `,
-    param(shellHash),
-    `, generation = CASE WHEN shell_hash <> `,
-    param(shellHash),
-    ` THEN generation + 1 ELSE generation END`,
-    `, observed_at = CASE WHEN shell_hash <> `,
-    param(shellHash),
-    ` THEN `,
-    param(observedAt),
-    ` ELSE observed_at END`,
-    ` WHERE id = 1 RETURNING generation, shell_hash`,
-  ]);
+  let claimed: Awaited<ReturnType<Querier>>;
+  try {
+    claimed = await q([
+      `UPDATE host_shell_generation SET shell_hash = `,
+      param(shellHash),
+      `, generation = CASE WHEN shell_hash <> `,
+      param(shellHash),
+      ` THEN generation + 1 ELSE generation END`,
+      `, observed_at = CASE WHEN shell_hash <> `,
+      param(shellHash),
+      ` THEN `,
+      param(observedAt),
+      ` ELSE observed_at END`,
+      ` WHERE id = 1 RETURNING generation, shell_hash`,
+    ]);
+  } catch (err: unknown) {
+    if (isMissingTableError(err)) {
+      return NOT_OBSERVED;
+    }
+    throw err;
+  }
   if (claimed.length === 0) {
-    // The migration seeds the row, so its absence means this database predates
-    // that migration or something removed it. Reporting "nothing observed"
-    // keeps callers on their no-ordering-available path instead of throwing
-    // into a boot sequence that must not fail for a diagnostic.
-    return { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' };
+    // The migration seeds the row, so its absence here means something removed
+    // it from a table that does exist. Reporting "nothing observed" keeps
+    // callers on their no-ordering-available path instead of throwing into a
+    // boot sequence that must not fail for a diagnostic. A database with no
+    // such table at all is handled above, where the statement itself throws.
+    return NOT_OBSERVED;
   }
   return rowToGeneration(claimed[0]);
 }
@@ -88,15 +124,22 @@ export async function currentHostShellGeneration(
   querier?: Querier,
 ): Promise<HostShellGeneration> {
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  let rows = await q([
-    `SELECT generation, shell_hash FROM host_shell_generation WHERE id = 1`,
-  ]);
+  let rows: Awaited<ReturnType<Querier>>;
+  try {
+    rows = await q([
+      `SELECT generation, shell_hash FROM host_shell_generation WHERE id = 1`,
+    ]);
+  } catch (err: unknown) {
+    if (isMissingTableError(err)) {
+      return NOT_OBSERVED;
+    }
+    throw err;
+  }
   if (rows.length === 0) {
-    // The migration seeds the row, so its absence means this database predates
-    // that migration or something removed it. Reporting "nothing observed"
-    // keeps callers on their no-ordering-available path instead of throwing
-    // into a boot sequence that must not fail for a diagnostic.
-    return { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' };
+    // As in `claimHostShellGeneration`: a seeded row that has gone missing from
+    // a table that does exist. The absent-table case throws and is caught
+    // above.
+    return NOT_OBSERVED;
   }
   return rowToGeneration(rows[0]);
 }
