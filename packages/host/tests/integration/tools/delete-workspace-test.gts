@@ -11,6 +11,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupRealmCacheTeardown,
+  setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -21,6 +22,7 @@ module('Integration | tools | delete-workspace', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
+  setupRealmServerEndpoints(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -33,10 +35,6 @@ module('Integration | tools | delete-workspace', function (hooks) {
   let deleteRealmCalls: string[];
   hooks.beforeEach(async function () {
     deleteRealmCalls = [];
-    let realmServer = getService('realm-server') as RealmServerService;
-    realmServer.deleteRealm = async (realmURL) => {
-      deleteRealmCalls.push(realmURL);
-    };
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -46,6 +44,10 @@ module('Integration | tools | delete-workspace', function (hooks) {
         },
       }),
     );
+    let realmServer = getService('realm-server') as RealmServerService;
+    realmServer.deleteRealm = async (realmURL) => {
+      deleteRealmCalls.push(realmURL);
+    };
   });
 
   test('deletes an owned workspace and drops it from the realm list', async function (assert) {

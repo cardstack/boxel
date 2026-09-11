@@ -10,6 +10,7 @@ import {
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // Creates a workspace (realm) owned by the current user, the same way the
@@ -25,6 +26,7 @@ export default class CreateWorkspaceTool extends HostBaseTool<
 > {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   static actionVerb = 'Create';
 
@@ -57,6 +59,12 @@ export default class CreateWorkspaceTool extends HostBaseTool<
       backgroundURL: getRandomBackgroundURL(),
     });
 
+    // Register the new realm with the realm service before opening it. The
+    // context sent with the tool result names the current workspace by
+    // looking the open card's realm up there; a realm it has not met yet
+    // resolves to the previous workspace, and the assistant would report the
+    // wrong URL.
+    await this.realm.ensureRealmMeta(realmURL.href);
     await this.operatorModeStateService.openWorkspace(realmURL.href);
     return undefined;
   }

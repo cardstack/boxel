@@ -11,6 +11,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupRealmCacheTeardown,
+  setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -23,6 +24,7 @@ module('Integration | tools | create-workspace', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
+  setupRealmServerEndpoints(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -39,17 +41,17 @@ module('Integration | tools | create-workspace', function (hooks) {
   let createRealmCalls: Parameters<RealmServerService['createRealm']>[0][];
   hooks.beforeEach(async function () {
     createRealmCalls = [];
-    let realmServer = getService('realm-server') as RealmServerService;
-    realmServer.createRealm = async (args) => {
-      createRealmCalls.push(args);
-      return new URL(`${realmServerURL}testuser/${args.endpoint}/`);
-    };
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
       }),
     );
+    let realmServer = getService('realm-server') as RealmServerService;
+    realmServer.createRealm = async (args) => {
+      createRealmCalls.push(args);
+      return new URL(`${realmServerURL}testuser/${args.endpoint}/`);
+    };
   });
 
   test('creates a workspace with the given name and endpoint', async function (assert) {
