@@ -439,7 +439,14 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                   {{/if}}
                 {{else if (eq section.id 'custom-css')}}
                   {{#if this.editMode}}
-                    <@fields.customCssVariables />
+                    {{! the toggle picks which value column is shown, like the
+                    color system's light/dark variables }}
+                    <div
+                      class='custom-css-edit
+                        {{if this.isDarkMode "is-dark-mode" "is-light-mode"}}'
+                    >
+                      <@fields.customCssVariables />
+                    </div>
                   {{else}}
                     <p class='brand-guide-vars-description'>These variables are
                       all of the custom CSS properties for usage by this theme
@@ -807,6 +814,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
 
       /* Custom CSS / color variables section */
+      .custom-css-edit.is-light-mode :deep(.custom-css-variable-dark-value),
+      .custom-css-edit.is-dark-mode :deep(.custom-css-variable-light-value) {
+        display: none;
+      }
       .brand-guide-custom-css-block {
         position: relative;
       }
@@ -1219,17 +1230,29 @@ export class CustomCssVariable extends FieldDef {
         <FieldContainer @label='Variable Name' @vertical={{true}}>
           <@fields.name />
         </FieldContainer>
-        <FieldContainer @label='Light Value' @vertical={{true}}>
+        <FieldContainer
+          class='custom-css-variable-light-value'
+          @label='Value'
+          @vertical={{true}}
+          data-test-custom-css-variable-value='light'
+        >
           <@fields.value />
         </FieldContainer>
-        <FieldContainer @label='Dark Value (optional)' @vertical={{true}}>
+        <FieldContainer
+          class='custom-css-variable-dark-value'
+          @label='Dark Value (optional)'
+          @vertical={{true}}
+          data-test-custom-css-variable-value='dark'
+        >
           <@fields.darkValue />
         </FieldContainer>
       </div>
       <style scoped>
         .custom-css-variable-edit {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
+          /* a hidden value column leaves no empty track behind */
+          grid-auto-flow: column;
+          grid-auto-columns: 1fr;
           gap: var(--boxel-sp-sm);
         }
       </style>
