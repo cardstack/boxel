@@ -7,6 +7,7 @@ import {
   logger,
   mintRealmLoaderEpoch,
   trimExecutableExtension,
+  type DefinitionLookup,
   type ErrorEntry,
   type JobInfo,
   type ModuleDefinitionResult,
@@ -2864,6 +2865,438 @@ module(basename(import.meta.filename), function () {
   // setupPermissionedRealmsCached fixture — pre-warm runs in the worker,
   // which has no realm-server / prerender / Chromium, so we only need a pg
   // adapter, a fake registered realm for the reader, and a mock prerenderer.
+  module('remote realm visibility probe', function (hooks) {
+    let adapter: PgAdapter;
+    let localRealmURL = 'http://127.0.0.1:4453/';
+    let testUserId = '@user1:localhost';
+
+    // A module in a realm this lookup does not host is placed by probing the
+    // realm that holds it, and every case below is one the probe cannot place:
+    // buildLookupContext returns null and the lookup throws before it reads or
+    // writes the definition cache. What is under test is therefore what the
+    // probe costs, not what gets cached.
+    let localRealm = {
+      url: localRealmURL,
+      async getRealmOwnerUserId() {
+        return testUserId;
+      },
+      async visibility(): Promise<'private'> {
+        return 'private';
+      },
+    };
+
+    let unusedPrerenderer: Prerenderer = {
+      async prerenderModule(): Promise<ModuleRenderResponse> {
+        throw new Error(
+          'a probe that cannot place its module must never reach the prerenderer',
+        );
+      },
+      async prerenderVisit() {
+        throw new Error('Not implemented in mock');
+      },
+      async runCommand() {
+        throw new Error('Not implemented in mock');
+      },
+    };
+
+    let virtualNetwork: VirtualNetwork;
+    let sharedLookup: CachingDefinitionLookup;
+    let lookup: DefinitionLookup;
+
+    // A realm like the one above but owned by someone else, so a lookup
+    // scoped to it probes as a different user.
+    function realmOwnedBy(url: string, userId: string) {
+      return {
+        url,
+        async getRealmOwnerUserId() {
+          return userId;
+        },
+        async visibility(): Promise<'private'> {
+          return 'private';
+        },
+      };
+    }
+
+    hooks.before(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+    });
+
+    hooks.after(async function () {
+      await adapter.close();
+    });
+
+    hooks.beforeEach(function () {
+      virtualNetwork = createVirtualNetwork();
+      // One instance per test, so the probe maps a test observes are its own.
+      sharedLookup = new CachingDefinitionLookup(
+        adapter,
+        unusedPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup = sharedLookup.forRealm(localRealm);
+    });
+
+    test('a probe whose remote never answers is abandoned at its own deadline', async function (assert) {
+      let remoteModuleURL = 'http://silent-remote-realm/person.gts';
+      let probed = false;
+
+      // A remote that accepts the request and then goes quiet, and that
+      // ignores the abort signal entirely — which is the shape that matters,
+      // because the signal is rebuilt by every layer between here and the
+      // socket (URL remapping, the retry wrapper, the undici dispatcher) and
+      // a probe must be bounded even where none of them honors it. A handler
+      // that resolved on abort instead would pass on the strength of the
+      // signal alone and say nothing about the caller's own bound.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probed = true;
+        return await new Promise<Response>(() => {});
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let startedAt = Date.now();
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(remoteModuleURL),
+            name: 'Person',
+          }),
+          'a realm that never answers the probe reads as one that cannot place the module',
+        );
+        let elapsed = Date.now() - startedAt;
+
+        assert.true(probed, 'the remote was probed');
+        assert.ok(
+          elapsed < 9_000,
+          `the probe is abandoned on the caller's own deadline rather than on the network's (took ${elapsed}ms)`,
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('concurrent probes of one module by one caller share a single request', async function (assert) {
+      let remoteModuleURL = 'http://slow-remote-realm/person.gts';
+      let probes = 0;
+      let releaseProbe: (() => void) | undefined;
+      let probeGate = new Promise<void>((resolve) => {
+        releaseProbe = resolve;
+      });
+
+      // A 404 answer: enough to establish that the probe was made, while
+      // leaving no unreachable-origin record behind — so the count below
+      // measures concurrent probes sharing one request and nothing else.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probes++;
+        await probeGate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let lookups = [1, 2, 3].map(() =>
+          assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            'no module to place under a path the realm does not serve',
+          ),
+        );
+        // Let all three lookups reach the probe before any probe answers, so
+        // a first probe that happened to settle early cannot be mistaken for
+        // three probes having been shared.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        releaseProbe!();
+        await Promise.all(lookups);
+
+        assert.strictEqual(
+          probes,
+          1,
+          'three concurrent lookups of one module probe the remote realm once',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('an origin whose probe failed at the transport is not probed again while the record stands', async function (assert) {
+      let remoteRealmURL = 'http://unreachable-remote-realm/';
+      let probes = 0;
+
+      // A transport failure — the connection never opens — as opposed to a
+      // server that answers with a status. It is a property of the origin, so
+      // the one record covers every module under it.
+      let handler = async (request: Request) => {
+        if (
+          request.method !== 'HEAD' ||
+          !request.url.startsWith(remoteRealmURL)
+        ) {
+          return null;
+        }
+        probes++;
+        throw new TypeError('fetch failed');
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        for (let moduleName of ['person.gts', 'pet.gts', 'person.gts']) {
+          await assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(`${remoteRealmURL}${moduleName}`),
+              name: 'Person',
+            }),
+            `${moduleName} cannot be placed while the realm holding it is unreachable`,
+          );
+        }
+
+        assert.strictEqual(
+          probes,
+          1,
+          'the origin is probed once; later lookups under it read the record instead of the network',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('a deadline is not mistaken for a retryable failure on a retryable origin', async function (assert) {
+      // `localhost` is a retryable host in the test suite, so this probe goes
+      // through the retry loop rather than past it. The retry layer classifies
+      // by error name and treats only a caller's abort as final; a deadline
+      // that raised anything else would be retried, leaving attempts running
+      // in the background after the deadline had been reported.
+      let remoteModuleURL = 'http://localhost:9/person.gts';
+      let attempts = 0;
+
+      // Rejects with the abort reason the way a real fetch does, which is what
+      // puts the reason's name in front of the retry layer's classifier. A
+      // handler that ignored the signal would leave the request pending
+      // instead, and the retry loop — which only ever sees rejections — would
+      // never be reached at all, so the test would pass whatever the name.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        attempts++;
+        return await new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            'abort',
+            () => reject(request.signal.reason),
+            { once: true },
+          );
+        });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let startedAt = Date.now();
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(remoteModuleURL),
+            name: 'Person',
+          }),
+          'a retryable origin that never answers still cannot place the module',
+        );
+        let elapsed = Date.now() - startedAt;
+
+        assert.strictEqual(attempts, 1, 'the probe was attempted once');
+        assert.ok(
+          elapsed < 9_000,
+          `the deadline ended the probe rather than the retry ladder (took ${elapsed}ms)`,
+        );
+
+        // Longer than the first retry's backoff, so a retried attempt would
+        // have landed by now.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        assert.strictEqual(
+          attempts,
+          1,
+          'no further attempt is issued after the deadline is reported',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('an origin answering one probe clears a record another probe left', async function (assert) {
+      // The record is written by a probe that fails at the transport, and read
+      // before any probe is made — so the only way a probe reaches an origin
+      // that is already recorded is by having been in flight when the record
+      // was written. That overlap is what this covers: leaving the record
+      // standing would hide a realm that is demonstrably answering.
+      let remoteRealmURL = 'http://recovering-remote-realm/';
+      let attempted: string[] = [];
+      let releaseFailing: (() => void) | undefined;
+      let releaseAnswering: (() => void) | undefined;
+      let failingGate = new Promise<void>((resolve) => {
+        releaseFailing = resolve;
+      });
+      let answeringGate = new Promise<void>((resolve) => {
+        releaseAnswering = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (
+          request.method !== 'HEAD' ||
+          !request.url.startsWith(remoteRealmURL)
+        ) {
+          return null;
+        }
+        attempted.push(request.url);
+        if (request.url.endsWith('/fails.gts')) {
+          await failingGate;
+          throw new TypeError('fetch failed');
+        }
+        await answeringGate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let failing = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}fails.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe fails at the transport cannot be placed',
+        );
+        let answering = assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}answers.gts`),
+            name: 'Person',
+          }),
+          'the entry whose probe is answered 404 has no module to place',
+        );
+
+        // Both probes are past the record check before either settles; the
+        // failing one then records the origin, and the answered one has to
+        // clear it.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        releaseFailing!();
+        await failing;
+        releaseAnswering!();
+        await answering;
+
+        attempted.length = 0;
+        await assert.rejects(
+          lookup.lookupDefinition({
+            module: rri(`${remoteRealmURL}later.gts`),
+            name: 'Person',
+          }),
+          'a later entry under the same origin still cannot be placed',
+        );
+        assert.deepEqual(
+          attempted,
+          [`${remoteRealmURL}later.gts`],
+          'the origin is probed again rather than read as unreachable',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('two owners probing one module do not share a visibility result', async function (assert) {
+      // The probe's answer decides `cacheScope` and `cacheUserId`, so sharing
+      // one across callers would hand one user's view of a private realm to
+      // another. Each caller must get its own request, carrying its own
+      // assumed user.
+      let remoteRealmURL = 'http://per-user-remote-realm/';
+      let remoteModuleURL = `${remoteRealmURL}person.gts`;
+      let firstOwner = '@owner-one:localhost';
+      let secondOwner = '@owner-two:localhost';
+      let assumedUsers: string[] = [];
+      let release: (() => void) | undefined;
+      let gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        assumedUsers.push(request.headers.get('X-Boxel-Assume-User') ?? '');
+        await gate;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let asFirst = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4454/', firstOwner),
+        );
+        let asSecond = sharedLookup.forRealm(
+          realmOwnedBy('http://127.0.0.1:4455/', secondOwner),
+        );
+
+        let lookups = [asFirst, asSecond].map((scoped) =>
+          assert.rejects(
+            scoped.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            'neither caller finds a module to place',
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        release!();
+        await Promise.all(lookups);
+
+        assert.deepEqual(
+          assumedUsers.slice().sort(),
+          [firstOwner, secondOwner].slice().sort(),
+          'each owner gets its own probe, carrying its own assumed user',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('a probe answered with a status is repeated rather than recorded', async function (assert) {
+      let remoteModuleURL = 'http://answering-remote-realm/person.gts';
+      let probes = 0;
+
+      // A 404 says the path is absent, not that the origin is unreachable, so
+      // it must not suppress the next probe: the module may appear a moment
+      // later, and a realm that answers is already cheap to ask.
+      let handler = async (request: Request) => {
+        if (request.method !== 'HEAD' || request.url !== remoteModuleURL) {
+          return null;
+        }
+        probes++;
+        return new Response(null, { status: 404 });
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        for (let attempt of [1, 2]) {
+          await assert.rejects(
+            lookup.lookupDefinition({
+              module: rri(remoteModuleURL),
+              name: 'Person',
+            }),
+            `attempt ${attempt} finds no module to place`,
+          );
+        }
+
+        assert.strictEqual(
+          probes,
+          2,
+          'an origin that answers is probed again on the next lookup',
+        );
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+  });
+
   module('module pre-warm (worker bare lookup)', function (hooks) {
     let adapter: PgAdapter;
     let realmURL = 'http://127.0.0.1:4452/';
