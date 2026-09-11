@@ -39,14 +39,24 @@ type TopElement = ComponentLike<{
 export function htmlComponent(
   html: string,
   extraAttributes: Record<string, string> = {},
+  // Runs on the parsed root before its attributes are read into the template,
+  // so a caller can adjust the root's classes without reserializing the HTML.
+  transformRoot?: (root: Element) => void,
 ): HTMLComponent {
   let testContainer = document.createElement('div');
   testContainer.innerHTML = html;
+  // Prerendered atom / isolated / head HTML is captured as the render root's
+  // innerHTML and so arrives wrapped in the route template's whitespace; only
+  // non-blank text counts against the single-root shape.
+  let significantNodes = [...testContainer.childNodes].filter(
+    (node) => node.nodeType !== Node.TEXT_NODE || node.textContent?.trim(),
+  );
   if (
-    testContainer.childNodes.length === 1 &&
-    testContainer.children.length === 1
+    significantNodes.length === 1 &&
+    significantNodes[0].nodeType === Node.ELEMENT_NODE
   ) {
-    let cardElement = testContainer.children[0];
+    let cardElement = significantNodes[0] as Element;
+    transformRoot?.(cardElement);
     let tagName = cardElement.tagName.toLowerCase();
 
     let sourceParts: string[] = [];

@@ -201,8 +201,9 @@ module(
     });
 
     test('@displayContainer=false reaches the rows through the card-facing wrapper', async function (assert) {
-      // The wrapper forwards the arg explicitly; a row must lose its container
-      // boundaries both while inert and once hydrated.
+      // The wrapper forwards the arg explicitly; a row must carry the same
+      // container-off classes while inert as the live card renders with, so
+      // the swap causes no layout shift.
       let query: SearchEntryWireQuery = {
         filter: { 'item.on': bookRef },
         realms: [testRealmURL],
@@ -224,7 +225,15 @@ module(
 
       assert
         .dom(`[data-test-hydratable-card="${BOOK_1}"]`)
-        .hasClass('hide-boundaries', 'the inert row suppresses its ring');
+        .doesNotHaveClass(
+          'boxel-card-container--boundaries',
+          'the inert row has no ring',
+        )
+        .hasClass(
+          'display-container-false',
+          'the inert row carries the container-off layout class',
+        )
+        .doesNotHaveClass('display-container-true');
 
       await triggerEvent(
         `[data-test-hydratable-card="${BOOK_1}"]`,

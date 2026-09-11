@@ -100,11 +100,11 @@ interface Signature {
     // and no overlay (chip / options menu / selection toggle) ever anchors to
     // it — for a consumer that lays results out in its own UI.
     overlays?: boolean;
-    // Whether the row renders its card container chrome — the boundary ring
-    // (defaults to `true`). `false` hides it on both the inert HTML (via the
-    // container's `hide-boundaries` class) and the hydrated live card (via
-    // `@displayContainer={{false}}`), matching the `@fields` switch, so a row
-    // looks the same before and after hydration either way.
+    // Whether the hydrated live card renders its card container chrome
+    // (defaults to `true`), matching the `@fields` switch. The inert HTML is
+    // not touched here — a caller passing `false` hands in `@component` with
+    // its container classes already rewritten (see `RenderableSearchEntry`),
+    // so a row looks the same before and after hydration.
     displayContainer?: boolean;
     // The format the live/hydrated card renders as, so it matches the
     // prerendered HTML the query selected (defaults to `fitted`).
@@ -301,7 +301,6 @@ export default class HydratableCard extends Component<Signature> {
       />
     {{else if @component}}
       <@component
-        class={{unless this.displayContainer 'hide-boundaries'}}
         {{hydrationTrigger this.mode this.hydrate}}
         {{this.trackElement
           cardId=@cardId

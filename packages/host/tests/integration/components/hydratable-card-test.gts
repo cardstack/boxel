@@ -298,8 +298,8 @@ module('Integration | Component | hydratable-card', function (hooks) {
   });
 
   // The boundary ring is on by default and survives hydration: the inert HTML
-  // keeps whatever boundary class it was prerendered with, and the live card
-  // renders inside its own bounded container.
+  // is rendered as handed in, and the live card renders inside its own bounded
+  // container.
   test('displayContainer defaults to true — the hydrated card keeps its container boundaries', async function (assert) {
     let inert = htmlComponent(BOUNDED_INERT_HTML);
     await render(
@@ -316,8 +316,7 @@ module('Integration | Component | hydratable-card', function (hooks) {
 
     assert
       .dom('[data-test-inert-card]')
-      .hasClass('boxel-card-container--boundaries', 'inert ring is kept')
-      .doesNotHaveClass('hide-boundaries', 'nothing hides the inert ring');
+      .hasClass('boxel-card-container--boundaries', 'inert ring is kept');
 
     await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
 
@@ -329,10 +328,12 @@ module('Integration | Component | hydratable-card', function (hooks) {
       );
   });
 
-  // `@displayContainer={{false}}` hides the ring on both sides of the swap, the
-  // way `<@fields.x @displayContainer={{false}} />` does for a field render.
-  test('displayContainer=false — hides the boundaries on the inert HTML and the live card alike', async function (assert) {
-    let inert = htmlComponent(BOUNDED_INERT_HTML);
+  // `@displayContainer={{false}}` reaches the live card the way
+  // `<@fields.x @displayContainer={{false}} />` does for a field render. The
+  // inert HTML is the caller's to shape (RenderableSearchEntry rewrites its
+  // container classes), so it renders exactly as handed in.
+  test('displayContainer=false — the hydrated card renders without container boundaries', async function (assert) {
+    let inert = htmlComponent(INERT_HTML);
     await render(
       <template>
         <TestContext>
@@ -348,7 +349,7 @@ module('Integration | Component | hydratable-card', function (hooks) {
 
     assert
       .dom('[data-test-inert-card]')
-      .hasClass('hide-boundaries', 'the inert ring is suppressed');
+      .exists('the inert HTML renders as handed in');
 
     await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
 

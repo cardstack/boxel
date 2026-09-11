@@ -52,6 +52,17 @@ function extraAttributesFor(
   return attrs;
 }
 
+// Prerendered HTML always captures its root container with the chrome on
+// (`--boundaries` ring, `display-container-true` layout). A row rendered with
+// `displayContainer: false` swaps those for exactly the classes the live card
+// renders with under `@displayContainer={{false}}`, so the inert and hydrated
+// states share one layout — for an atom that is `display: contents` versus an
+// inline-block with padding, not just a missing ring.
+function removeContainerChrome(root: Element): void {
+  root.classList.remove('boxel-card-container--boundaries');
+  root.classList.replace('display-container-true', 'display-container-false');
+}
+
 // The query's requested render type, echoed once at the document level. Used
 // to render an item-only (live) fallback as the same ancestor its HTML
 // siblings would have rendered as. Only a single `eq` leaf names one type; a
@@ -202,7 +213,11 @@ export class RenderableSearchEntry {
       let { html } = this;
       let inert =
         html && html.html != null
-          ? htmlComponent(html.html, extraAttributesFor(html, this.iconHtml))
+          ? htmlComponent(
+              html.html,
+              extraAttributesFor(html, this.iconHtml),
+              this.displayContainer ? undefined : removeContainerChrome,
+            )
           : undefined;
       this.#component = hydratableEntryComponent({
         cardId: this.id,
