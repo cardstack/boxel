@@ -952,6 +952,7 @@ export default class MatrixService extends Service {
     });
 
     await this.appendRealmToAccountData(personalRealmURL.href);
+    return personalRealmURL;
   }
 
   public async appendRealmToAccountData(realmURLString: string) {

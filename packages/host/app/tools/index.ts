@@ -21,6 +21,7 @@ import * as CreateAIAssistantRoomToolModule from './create-ai-assistant-room';
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecToolModule from './create-specs';
 import * as CreateSubmissionWorkflowToolModule from './create-submission-workflow';
+import * as CreateWorkspaceToolModule from './create-workspace';
 import * as DownloadFileToRealmToolModule from './download-file-to-realm';
 import * as EvaluateModuleToolModule from './evaluate-module';
 import * as ExecuteAtomicOperationsToolModule from './execute-atomic-operations';
@@ -307,6 +308,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'retry-submission-workflow',
     RetrySubmissionWorkflowToolModule,
   );
+  shimHostToolModule(
+    virtualNetwork,
+    'create-workspace',
+    CreateWorkspaceToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -506,6 +512,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowToolModule.default,
   RetrySubmissionWorkflowToolModule.default,
+  CreateWorkspaceToolModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,

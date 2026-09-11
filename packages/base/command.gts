@@ -961,3 +961,14 @@ export class SyncOpenRouterModelsResult extends CardDef {
   @field status = contains(StringField);
   @field errors = contains(StringField);
 }
+
+export class CreateWorkspaceInput extends CardDef {
+  @field name = contains(StringField); // display name; a random name is generated when omitted
+  @field endpoint = contains(StringField); // URL path segment (letters, digits, hyphens); derived from the name when omitted
+}
+
+export class CreateWorkspaceResult extends CardDef {
+  @field realmURL = contains(StringField);
+  @field name = contains(StringField);
+  @field endpoint = contains(StringField);
+}
