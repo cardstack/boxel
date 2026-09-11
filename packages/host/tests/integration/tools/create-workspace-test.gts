@@ -39,8 +39,10 @@ module('Integration | tools | create-workspace', function (hooks) {
   // mint for the given endpoint. Everything around that call — name and
   // endpoint choice, the realm list update, the reported URL — runs for real.
   let createRealmCalls: Parameters<RealmServerService['createRealm']>[0][];
+  let realmMetaRequests: string[];
   hooks.beforeEach(async function () {
     createRealmCalls = [];
+    realmMetaRequests = [];
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -51,6 +53,12 @@ module('Integration | tools | create-workspace', function (hooks) {
     realmServer.createRealm = async (args) => {
       createRealmCalls.push(args);
       return new URL(`${realmServerURL}testuser/${args.endpoint}/`);
+    };
+    // The created realm is not mounted in this test, so the realm-info fetch
+    // the tool makes for it is recorded instead of performed.
+    let realmService = getService('realm');
+    realmService.ensureRealmMeta = async (realmURL: string) => {
+      realmMetaRequests.push(realmURL);
     };
   });
 
@@ -80,6 +88,11 @@ module('Integration | tools | create-workspace', function (hooks) {
       'a background is chosen for the realm',
     );
 
+    assert.deepEqual(
+      realmMetaRequests,
+      [`${realmServerURL}testuser/sales/`],
+      'the realm service is told about the new realm before it is opened',
+    );
     assert.strictEqual(
       operatorModeStateService.state?.stacks[0]?.[0]?.id,
       `${realmServerURL}testuser/sales/index`,

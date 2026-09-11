@@ -197,8 +197,10 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(resultEvent.content['m.relates_to']?.key, 'applied');
+    // `data` is a JSON string on the wire.
+    let resultData = JSON.parse(resultEvent.content.data as string);
     assert.strictEqual(
-      resultEvent.content.data?.context?.realmUrl,
+      resultData.context?.realmUrl,
       newRealmURL,
       'the context sent with the result names the new workspace, so the assistant can report its URL',
     );

@@ -63,8 +63,16 @@ export default class CreateWorkspaceTool extends HostBaseTool<
     // context sent with the tool result names the current workspace by
     // looking the open card's realm up there; a realm it has not met yet
     // resolves to the previous workspace, and the assistant would report the
-    // wrong URL.
-    await this.realm.ensureRealmMeta(realmURL.href);
+    // wrong URL. The realm exists by now, so a failure here is a transient
+    // info fetch problem and must not fail a creation that succeeded.
+    try {
+      await this.realm.ensureRealmMeta(realmURL.href);
+    } catch (error) {
+      console.warn(
+        `Could not load realm info for new workspace ${realmURL.href}`,
+        error,
+      );
+    }
     await this.operatorModeStateService.openWorkspace(realmURL.href);
     return undefined;
   }
