@@ -39,6 +39,7 @@ import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleEnsurePersonalRealm from './handlers/handle-ensure-personal-realm.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
@@ -362,6 +363,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-ensure-personal-realm',
+    handleEnsurePersonalRealm(createRealmDeps, args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(

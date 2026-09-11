@@ -1882,6 +1882,58 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'realm-server origin appears in the user account_data',
         );
       });
+
+      test('provisions a personal realm via the grafana ensure-personal-realm endpoint', async function (assert) {
+        let user = '@op-personal:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-ensure-personal-realm?user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let body = response.body as { url: string; alreadyExisted: boolean };
+        assert.false(body.alreadyExisted, 'a new realm was provisioned');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          new URL(body.url),
+        );
+        assert.deepEqual(
+          perms[user]?.sort(),
+          ['read', 'realm-owner', 'write'],
+          'the user owns their new personal realm',
+        );
+      });
+
+      test('grafana ensure-personal-realm is idempotent', async function (assert) {
+        let user = '@op-personal-idem:localhost';
+        let path = `/_grafana-ensure-personal-realm?user=${encodeURIComponent(user)}`;
+        let first = await context.request
+          .post(path)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(first.status, 200, 'first call succeeds');
+        assert.false(
+          (first.body as { alreadyExisted: boolean }).alreadyExisted,
+          'first call provisions the realm',
+        );
+        let second = await context.request
+          .post(path)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(second.status, 200, 'second call succeeds');
+        assert.true(
+          (second.body as { alreadyExisted: boolean }).alreadyExisted,
+          'second call is a no-op reporting the realm already exists',
+        );
+      });
+
+      test('grafana ensure-personal-realm requires a grafana secret', async function (assert) {
+        let response = await context.request.post(
+          `/_grafana-ensure-personal-realm?user=${encodeURIComponent('@op-x:localhost')}`,
+        );
+        assert.strictEqual(response.status, 401, 'unauthorized without secret');
+      });
     },
   );
 });
