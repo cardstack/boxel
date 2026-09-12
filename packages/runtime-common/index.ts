@@ -1334,6 +1334,7 @@ export {
 } from './write-size-validation.ts';
 export {
   computeContentHash,
+  computeContentHashFromRanges,
   isSampledContentHash,
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
   CONTENT_HASH_HEAD_BYTES,
