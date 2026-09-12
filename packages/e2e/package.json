@@ -1,0 +1,22 @@
+{
+  "name": "@cardstack/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Drives the real local Boxel stack through Playwright and asks each model to build and show a hello-world card. See README.md.",
+  "scripts": {
+    "smoke": "playwright test -c playwright.config.ts",
+    "smoke:headed": "SMOKE_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "smoke:tabs": "SMOKE_TABS=1 SMOKE_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}
