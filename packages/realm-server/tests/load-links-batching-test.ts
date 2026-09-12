@@ -140,7 +140,28 @@ module(basename(import.meta.filename), function () {
               perLinkLookupCount++;
             }
           }
-          return originalExecute(sql, opts);
+          let rows = await originalExecute(sql, opts);
+          if (isLinkTargetInstanceLookup) {
+            assert.ok(rows.length > 0, 'linked rows were read from the index');
+            for (let row of rows) {
+              assert.strictEqual(
+                row.head_html,
+                null,
+                'JSON expansion omits head HTML',
+              );
+              assert.strictEqual(
+                row.embedded_html,
+                null,
+                'JSON expansion omits embedded HTML',
+              );
+              assert.strictEqual(
+                row.search_doc,
+                null,
+                'JSON expansion omits the search document',
+              );
+            }
+          }
+          return rows;
         };
 
         let result = await searchCardsForTest(

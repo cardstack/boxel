@@ -251,7 +251,12 @@ interface InstanceError extends Partial<
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 
-type GetEntryOptions = WIPOptions;
+type GetEntryOptions = WIPOptions & {
+  // JSON assembly needs neither rendered output nor healthy cards' search
+  // documents. Omitted fields are null; error presentation and file metadata
+  // retain the columns they need. Full reads remain the default.
+  dataOnly?: true;
+};
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
@@ -378,7 +383,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+      `SELECT ${entryColumns(opts)}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -415,7 +420,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        `SELECT ${entryColumns(opts)}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -644,7 +649,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedFile | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+      `SELECT ${entryColumns(opts)}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -679,7 +684,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        `SELECT ${entryColumns(opts)}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -2456,6 +2461,25 @@ const PRERENDERED_HTML_SELECTS = [
 ]
   .map((col) => `ph.${col} AS ${col}`)
   .join(', ');
+
+function entryColumns(opts?: GetEntryOptions): string {
+  if (!opts?.dataOnly) {
+    return `i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`;
+  }
+  // Project in SQL: discarding these values after the driver parses JSONB
+  // would still pay the transfer and allocation costs. Keep the HTML join
+  // for effective errors and screenshots, even on successful JSON reads.
+  return `i.url, i.file_alias, i.type, i.is_deleted, i.pristine_doc,
+    i.types, i.display_names, i.deps, i.generation, i.realm_url, i.indexed_at,
+    i.last_modified, i.resource_created_at,
+    CASE WHEN i.type = 'file' OR ${effectiveHasError()}
+      THEN i.search_doc ELSE NULL END AS search_doc,
+    CASE WHEN ${effectiveHasError()}
+      THEN ph.isolated_html ELSE NULL END AS isolated_html,
+    NULL AS head_html, NULL AS atom_html, NULL AS embedded_html,
+    NULL AS fitted_html, NULL AS markdown, NULL AS icon_html,
+    ph.screenshots AS screenshots, ${EFFECTIVE_ERROR_SELECTS}`;
+}
 
 // SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
 // neutralize user-supplied wildcards by prefixing them (and the escape
