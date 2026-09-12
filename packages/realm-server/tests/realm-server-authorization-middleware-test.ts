@@ -33,5 +33,17 @@ module(basename(import.meta.filename), function () {
     test('leaves a caller-supplied authorization header alone', async function (assert) {
       await runSharedTest(realmServerAuthorizationMiddlewareTests, assert, {});
     });
+
+    test('hands the refused token to the reauthentication', async function (assert) {
+      await runSharedTest(realmServerAuthorizationMiddlewareTests, assert, {});
+    });
+
+    test('replays with a session another caller already minted, without minting again', async function (assert) {
+      await runSharedTest(realmServerAuthorizationMiddlewareTests, assert, {});
+    });
+
+    test('the replayed request still carries its body', async function (assert) {
+      await runSharedTest(realmServerAuthorizationMiddlewareTests, assert, {});
+    });
   });
 });

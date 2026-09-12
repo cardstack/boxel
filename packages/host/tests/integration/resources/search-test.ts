@@ -498,11 +498,21 @@ module(`Integration | search resource`, function (hooks) {
     network.virtualNetwork.mount(gate, { prepend: true });
 
     let reauthCalls = 0;
+    let reauthedFor: (string | undefined)[] = [];
+    let sessionDuringMint: (string | undefined)[] = [];
     let originalReauthenticate =
       realmServer.reauthenticateRealmServer.bind(realmServer);
-    realmServer.reauthenticateRealmServer = async () => {
+    realmServer.reauthenticateRealmServer = async (
+      rejectedToken?: string,
+    ): Promise<string | undefined> => {
       reauthCalls++;
-      return await originalReauthenticate();
+      reauthedFor.push(rejectedToken);
+      let pending = originalReauthenticate(rejectedToken);
+      // Read before awaiting: a mint that discards the session to force one
+      // does so in its synchronous prologue, so this is where an anonymous
+      // window would be visible to every other consumer of the service.
+      sessionDuringMint.push(realmServer.token);
+      return await pending;
     };
 
     try {
@@ -548,6 +558,17 @@ module(`Integration | search resource`, function (hooks) {
         attempts[1],
         `Bearer ${realmServer.token}`,
         'and the replay carried the session the service now holds',
+      );
+      assert.deepEqual(
+        reauthedFor,
+        [rejectedToken],
+        'the mint was told which session the server refused',
+      );
+      assert.deepEqual(
+        sessionDuringMint,
+        [rejectedToken],
+        'and the service stayed logged in for the length of the mint, so a ' +
+          'concurrent caller never sees an anonymous session',
       );
       assert.strictEqual(
         search.instances[0].id,
