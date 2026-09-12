@@ -640,6 +640,44 @@ module('Responding', (hooks) => {
     assert.true(last.isStreamingFinished, 'the answer is marked finished');
   });
 
+  test('a tool call cut off at the output-token limit surfaces the error even though the router reports tool_calls', async () => {
+    await responder.ensureThinkingMessageSent();
+    let toolRequest = {
+      id: 'c1',
+      name: 'readRealmFile',
+      arguments: { urls: ['https://localhost:4201/user/jane/a.md'] },
+    };
+    await responder.onChunk({} as any, snapshotWithToolCall(toolRequest));
+    await clock.tickAsync(300);
+    // OpenRouter normalizes the upstream stop reason: a generation that hit
+    // its output limit mid tool call arrives as finish_reason 'tool_calls',
+    // and only native_finish_reason tells that it was cut.
+    await responder.onChunk(
+      {
+        choices: [
+          {
+            delta: {},
+            finish_reason: 'tool_calls',
+            native_finish_reason: 'max_output_tokens',
+            index: 0,
+          },
+        ],
+      } as any,
+      snapshotWithToolCall(toolRequest),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      last.errorMessage,
+      maxOutputTokensErrorMessage,
+      'the final event carries the output-limit error',
+    );
+    assert.true(last.isStreamingFinished, 'the answer is marked finished');
+  });
+
   test('an answer split across continuation events carries the output-limit error only on its final part', async () => {
     responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
     let longContent = 'a'.repeat(512) + 'b'.repeat(1024) + 'c'.repeat(1024);

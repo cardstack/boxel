@@ -413,6 +413,44 @@ module('fulfillReadRealmFileCalls', () => {
     assert.strictEqual(sent[0].content['m.relates_to'].key, 'invalid');
   });
 
+  test('arguments cut off mid-list still read the urls that arrived, once each', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('# Trip Planner', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    // A generation stopped at the output-token limit while repeating urls:
+    // the list never closes and the last entry is partial. A non-markdown
+    // file, so each url costs exactly one fetch.
+    let rawUrl =
+      'https://localhost:4201/user/jane/skills/trip-planner/cities.txt';
+    let truncated = `{"urls":["${rawUrl}","${rawUrl}","${rawUrl}","https://localhost:4201/user/jane/skills/trip-pl`;
+    let outcomes = await fulfillReadRealmFileCalls(
+      [
+        {
+          id: 'c1',
+          type: 'function',
+          function: { name: READ_REALM_FILE_TOOL_NAME, arguments: truncated },
+        } as any,
+      ],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.strictEqual(
+      fetched.filter((url) => url === rawUrl).length,
+      1,
+      'a url repeated in the cut-off list is fetched once',
+    );
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
+    assert.strictEqual(dataOf(sent[0]).attachedFiles.length, 1);
+  });
+
   test('an empty urls list fails without fetching', async () => {
     let { client, sent } = fakeClient();
     let fetched = false;

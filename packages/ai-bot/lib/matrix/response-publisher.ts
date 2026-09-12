@@ -4,6 +4,7 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   READ_REALM_FILE_TOOL_NAME,
   readFilesLabel,
+  urlsFromReadRealmFileArguments,
 } from '../read-realm-file.ts';
 import {
   maxOutputTokensErrorMessage,
@@ -54,7 +55,9 @@ export function toCommandRequest(
     result.executedBy = AI_BOT_EXECUTOR;
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: readFilesLabel(result.arguments?.urls),
+      description: readFilesLabel(
+        f.arguments ? urlsFromReadRealmFileArguments(f.arguments) : undefined,
+      ),
     };
   }
   return result;

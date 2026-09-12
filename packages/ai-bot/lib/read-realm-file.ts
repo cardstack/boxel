@@ -18,38 +18,50 @@ export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
 // On-demand file reading. The model calls `readRealmFile` to pull files'
 // contents only when it needs them — most often a skill's SKILL.md or the
 // references it lists, but it works for any file in the realm. One call reads
-// any number of files: each model turn that requests reads costs a full
-// round-trip (fulfillment + a fresh generation), so the tool takes a list and
-// the description pushes the model to batch everything it already knows it
-// needs. ai-bot executes it in-process: it mints a delegated, user-scoped
+// several files: each model turn that requests reads costs a full round-trip
+// (fulfillment + a fresh generation), so the tool takes a list. The list is
+// capped, and the description says so: asked to "read everything in one
+// call", a small model given a skill index with thirty-odd reference links
+// can fall into repeating the same URLs until it hits its output limit,
+// which wastes minutes and money and yields a call that cannot be parsed.
+// ai-bot executes it in-process: it mints a delegated, user-scoped
 // realm token and fetches each file over HTTP, so the bot can only read what
 // the requesting human can already read, and the content is always live (no
 // Matrix snapshots, no host round-trip).
+// How many files one call may name. Ten covers a skill plus its most relevant
+// references in one round-trip while staying far below the list lengths at
+// which models start repeating entries.
+export const READ_REALM_FILE_MAX_URLS = 10;
+
 export const readRealmFileTool: Tool = {
   type: 'function',
   function: {
     name: READ_REALM_FILE_TOOL_NAME,
     description:
       "Read files from a realm on demand — e.g. a skill's SKILL.md, or the " +
-      'reference files it lists. Reads all the given URLs at once, so when ' +
-      'you already know several files you need (a skill’s reference ' +
-      'list usually tells you), request them all in a single call rather ' +
-      'than a few at a time — every extra round of reads delays your answer. ' +
-      "Reading a skill's markdown file also unlocks the tools that skill " +
-      'declares: they become callable on your next turn, so read the skill ' +
-      'file first when you intend to use its tools.',
+      `reference files it lists. Reads up to ${READ_REALM_FILE_MAX_URLS} ` +
+      'files in one call, so batch the files you already know you need ' +
+      'rather than reading one at a time — every extra round of reads ' +
+      'delays your answer. Pick the most relevant files first and read ' +
+      "more on a later turn if you still need them. Reading a skill's " +
+      'markdown file also unlocks the tools that skill declares: they ' +
+      'become callable on your next turn, so read the skill file first ' +
+      'when you intend to use its tools.',
     parameters: {
       type: 'object',
       properties: {
         urls: {
           type: 'array',
           minItems: 1,
+          maxItems: READ_REALM_FILE_MAX_URLS,
+          uniqueItems: true,
           items: { type: 'string' },
           description:
             'Full URLs of the files to read, each exactly as it appears in ' +
             "the skill (a link there is already absolute — don't shorten " +
-            'or rewrite it). The realm each file lives in is worked out ' +
-            'for you.',
+            'or rewrite it). List each URL once, at most ' +
+            `${READ_REALM_FILE_MAX_URLS} per call. The realm each file ` +
+            'lives in is worked out for you.',
         },
       },
       required: ['urls'],
@@ -61,6 +73,37 @@ export interface ReadRealmFileArgs {
   // Full URLs of the files to read. The realm each belongs to is discovered
   // from the realm server's response, so the caller supplies only URLs.
   urls: string[];
+}
+
+// The urls a readRealmFile call names, deduplicated and in order. When the
+// arguments are not valid JSON — a generation cut off at the provider's output
+// limit leaves the list unterminated — every complete quoted URL is still
+// recovered from the text, so the files the model asked for get read instead
+// of the call failing and the model re-requesting them on the next turn.
+export function urlsFromReadRealmFileArguments(
+  argumentsJson: string,
+): string[] {
+  let urls: unknown[] = [];
+  try {
+    let parsed = JSON.parse(argumentsJson) as Partial<ReadRealmFileArgs>;
+    urls = Array.isArray(parsed?.urls) ? parsed.urls : [];
+  } catch {
+    let listStart = argumentsJson.indexOf('"urls"');
+    if (listStart !== -1) {
+      for (let match of argumentsJson
+        .slice(listStart)
+        .matchAll(/"(https?:\/\/[^"\s]+)"/g)) {
+        urls.push(match[1]);
+      }
+    }
+  }
+  return [
+    ...new Set(
+      urls.filter(
+        (url): url is string => typeof url === 'string' && url.length > 0,
+      ),
+    ),
+  ];
 }
 
 // Realm servers echo the owning realm's root on every response — success or
