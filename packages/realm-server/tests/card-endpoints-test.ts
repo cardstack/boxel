@@ -5174,6 +5174,7 @@ boxel:
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: RealmRequest;
+    let providerRequest: RealmRequest;
 
     setupPermissionedRealmsCached(hooks, {
       realms: [
@@ -5275,6 +5276,10 @@ boxel:
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
+        providerRequest = withRealmPath(
+          supertest(latestRealms[0].realmHttpServer),
+          new URL(providerRealmURL),
+        );
         consumerRequest = withRealmPath(
           supertest(latestRealms[1].realmHttpServer),
           new URL(consumerRealmURL),
@@ -5284,6 +5289,62 @@ boxel:
 
     hooks.afterEach(() => {
       resetCatalogRealms();
+    });
+
+    // A query-backed field finds its targets by running a query when the card
+    // is read, and a write to a card that enters or leaves that query
+    // deliberately leaves the owner's `deps` and `indexed_at` alone. The
+    // response cache keys on a validator built from `indexed_at`, so such a
+    // document must never be retained — otherwise the owner would keep
+    // serving the pre-write answer until the entry aged out.
+    test('a query-backed document is re-resolved on every read rather than served from the cache', async function (assert) {
+      let first = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      let second = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(first.status, 200, `HTTP 200: ${first.text}`);
+      assert.strictEqual(second.status, 200, `HTTP 200: ${second.text}`);
+      assert.strictEqual(
+        second.get('x-boxel-card-cache'),
+        'miss',
+        'the repeat read runs the query again instead of reading a retained answer',
+      );
+      assert.strictEqual(
+        second.body.data.relationships.matches?.data?.[0]?.id,
+        `${providerRealmURL}person-remote`,
+        'and resolves the current top match',
+      );
+
+      // `matches` sorts by name descending and takes one, so a new provider
+      // card sorting after 'Zed' becomes the answer.
+      let write = await providerRequest
+        .post('/')
+        .send({
+          data: {
+            type: 'card',
+            attributes: { name: 'Zoe' },
+            meta: {
+              adoptsFrom: {
+                module: rri(`${providerRealmURL}person`),
+                name: 'Person',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+
+      let afterWrite = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(
+        afterWrite.body.data.relationships.matches?.data?.[0]?.id,
+        write.body.data.id,
+        'the read after the write sees the new top match immediately, with no wait for an entry to expire',
+      );
     });
 
     test('linksTo query resolves the first aggregated result and includes it', async function (assert) {

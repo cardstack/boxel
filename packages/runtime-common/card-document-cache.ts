@@ -49,6 +49,9 @@ export type CardJsonAssembly =
       // Whether the missing validator is the deliberate foreign-realm
       // suppression, which the response advertises as a header.
       etagSuppressed: boolean;
+      // Whether the document resolved a query-backed relationship, which
+      // makes it unretainable — see `hasQueryBackedRelationships`.
+      queryBacked: boolean;
       lastModified: number | null | undefined;
       created: number | undefined;
     }
@@ -56,6 +59,52 @@ export type CardJsonAssembly =
 
 export type CardDocumentCacheOutcome = ResponseCacheOutcome;
 export type CardDocumentCacheSummary = ResponseCacheSummary;
+
+// Whether any resource in the document carries a query-backed relationship —
+// a field whose targets are found by running a query at read time rather than
+// by following a stored link. `applyQueryResults` is the only writer of an
+// umbrella relationship's `links.search`, so its presence is the marker (the
+// same test `relationship-dependency-extractor` uses).
+//
+// Such a document is not a function of its own index row, and so cannot be
+// retained: a write to some *other* card that enters or leaves the query
+// changes what this card serves, and deliberately does not touch this card's
+// deps or `indexed_at` (the extractor excludes query-backed targets on
+// purpose), so the validator this cache keys on would not move. Both read
+// modes are affected — `skipQueryBackedExpansion` suppresses only the
+// `included[]` expansion, while the umbrella keeps the ids the query just
+// returned — so neither can be kept.
+//
+// In-flight coalescing still applies, and is still correct: requests that
+// share one assembly share a single evaluation of the query, which is what
+// each of them would have computed at that moment anyway.
+export function hasQueryBackedRelationships(doc: {
+  data: { relationships?: Record<string, unknown> | undefined };
+  included?: { relationships?: Record<string, unknown> | undefined }[];
+}): boolean {
+  let isQueryBacked = (resource: {
+    relationships?: Record<string, unknown> | undefined;
+  }) => {
+    let relationships = resource?.relationships;
+    if (!relationships) {
+      return false;
+    }
+    return Object.entries(relationships).some(([key, value]) => {
+      // Per-item `fieldName.N` entries and array-valued fields are not the
+      // umbrella; only the umbrella carries `links.search`.
+      if (Array.isArray(value) || /\.\d+$/.test(key)) {
+        return false;
+      }
+      let search = (value as { links?: { search?: unknown } } | null)?.links
+        ?.search;
+      return typeof search === 'string' && search.length > 0;
+    });
+  };
+  return (
+    isQueryBacked(doc.data) ||
+    (doc.included ?? []).some((r) => isQueryBacked(r))
+  );
+}
 
 // Coalescing + TTL cache for assembled `application/vnd.card+json` GET
 // bodies. A card GET reads one index row and then runs `loadLinks` to build
@@ -121,12 +170,16 @@ export class CardDocumentCache {
       },
       sizeOf: (assembly) =>
         assembly.kind === 'document' ? assembly.body.length : 0,
-      // Retain only a body whose validator survived assembly. A `respond`
-      // thunk is shared with whoever joined the computation and then dropped:
-      // it stands for a race or an error, and the next request should look at
-      // the index again rather than at a remembered failure.
+      // Retain only a body that is a function of its own index row and whose
+      // validator survived assembly. A `respond` thunk is shared with whoever
+      // joined the computation and then dropped: it stands for a race or an
+      // error, and the next request should look at the index again rather
+      // than at a remembered failure. A query-backed document is dropped for
+      // the reason `hasQueryBackedRelationships` gives.
       retain: (assembly) =>
-        assembly.kind === 'document' && assembly.etag !== undefined,
+        assembly.kind === 'document' &&
+        assembly.etag !== undefined &&
+        !assembly.queryBacked,
       ...opts,
     });
   }

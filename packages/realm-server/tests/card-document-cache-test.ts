@@ -16,6 +16,7 @@ function documentAssembly(
     body,
     etag,
     etagSuppressed: false,
+    queryBacked: false,
     lastModified: 1,
     created: 1,
   };
@@ -217,6 +218,7 @@ module(basename(import.meta.filename), function () {
           body: 'body',
           etag: undefined,
           etagSuppressed: true,
+          queryBacked: false,
           lastModified: 1,
           created: 1,
         }),
@@ -231,6 +233,67 @@ module(basename(import.meta.filename), function () {
         'the second request recomputes',
       );
       assert.strictEqual(cache.stats.entryCount, 0, 'nothing was retained');
+    });
+
+    // A query-backed relationship resolves its targets by running a query at
+    // read time, and a write to a card that enters or leaves that query
+    // deliberately does not touch the owner's deps or `indexed_at`. The
+    // validator this cache keys on therefore would not move, so the document
+    // is shared with joiners and then dropped.
+    test('a query-backed document is never retained', async function (assert) {
+      let cache = new CardDocumentCache({ telemetryIntervalMs: 0 });
+      let assembled = 0;
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: async (): Promise<CardJsonAssembly> => {
+          assembled++;
+          return {
+            ...documentAssembly('body'),
+            queryBacked: true,
+          } as CardJsonAssembly;
+        },
+      };
+
+      await cache.getOrPopulate(args);
+      let second = await cache.getOrPopulate(args);
+
+      assert.strictEqual(
+        second.outcome,
+        'miss',
+        'the second read re-runs the query rather than reading a remembered answer',
+      );
+      assert.strictEqual(assembled, 2, 'both reads assembled');
+      assert.strictEqual(cache.stats.entryCount, 0, 'nothing was retained');
+    });
+
+    test('concurrent reads of a query-backed card still share one assembly', async function (assert) {
+      let cache = new CardDocumentCache({ telemetryIntervalMs: 0 });
+      let deferred = deferredPopulate({
+        ...documentAssembly('shared'),
+        queryBacked: true,
+      } as CardJsonAssembly);
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: deferred.populate,
+      };
+
+      let first = cache.getOrPopulate(args);
+      let second = cache.getOrPopulate(args);
+      await sleep(0);
+      deferred.resolve();
+      let results = await Promise.all([first, second]);
+
+      assert.strictEqual(deferred.calls, 1, 'one evaluation of the query');
+      assert.deepEqual(
+        results.map((r) => r.outcome),
+        ['miss', 'join'],
+        'coalescing still applies — both see the same moment in time',
+      );
+      assert.strictEqual(cache.stats.entryCount, 0, 'but nothing is retained');
     });
 
     test('the byte cap displaces the least recently used entry', async function (assert) {

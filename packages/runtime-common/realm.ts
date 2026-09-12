@@ -18,6 +18,7 @@ import {
 } from './search-bounds.ts';
 import {
   CARD_DOCUMENT_CACHE_HEADER,
+  hasQueryBackedRelationships,
   type CardDocumentCache,
   type CardDocumentCacheOutcome,
   type CardJsonAssembly,
@@ -7057,6 +7058,7 @@ export class Realm {
       body: JSON.stringify(card, null, 2),
       etag: responseEtag,
       etagSuppressed: foreignDeps,
+      queryBacked: hasQueryBackedRelationships(card),
       lastModified: card.data.meta.lastModified,
       created: createdAt,
     };
