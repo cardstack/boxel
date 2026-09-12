@@ -59,6 +59,21 @@ let nextFetchId = 0;
 // cleared the buffer would repopulate it and misattribute URLs to N+1.
 const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
+
+// Fetches that took a long time but SUCCEEDED, per test. The in-flight
+// snapshot names only what was still outstanding when the diagnostic ran, and
+// `recentFailedFetches` only what rejected, so a request that answered
+// eventually leaves no trace in either — yet a handful of them in sequence is
+// how a test that does nothing wrong exhausts QUnit's 60s budget. A round trip
+// whose far end has to reach a third service (a realm searching a type it has
+// to place in another realm, say) is the shape that shows up here: correct,
+// answered, and expensive enough that a few of them are the whole budget.
+// Recorded with the duration so the timeout dump separates a suite that was
+// stuck from one that was merely slow, and names the endpoint that cost the
+// time.
+const slowFetches: { desc: string; durationMs: number }[] = [];
+const SLOW_FETCH_THRESHOLD_MS = 1_000;
+const SLOW_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
 
 // Module/name of the test currently running, captured from QUnit.testStart so a
@@ -254,6 +269,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
+    slowFetches.length = 0;
     currentTestEpoch++;
     installTimeoutDiagnosticsOnce();
     if (!globalThis.fetch) {
@@ -265,9 +281,11 @@ function setupFetchDebugging(hooks: NestedHooks) {
       let { method, url } = describeFetchRequest(input, init);
       let id = nextFetchId++;
       let epoch = currentTestEpoch;
+      let startedAt = Date.now();
+      let rejected = false;
       inFlightFetches.set(id, {
         desc: `${method} ${url}`,
-        startedAt: Date.now(),
+        startedAt,
       });
       try {
         // Requests to a registered test realm are answered in-page rather
@@ -291,12 +309,20 @@ function setupFetchDebugging(hooks: NestedHooks) {
         }
         return await boundFetch(input, init);
       } catch (error) {
+        rejected = true;
         let reason = formatErrorForLog(error);
         console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
         rememberFailedFetch(epoch, method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
+        // Only requests that answered: one that rejected is already named in
+        // `recentFailedFetches`, and counting it here as well would both
+        // double-report it and inflate a total the dump presents as the cost
+        // of work that succeeded.
+        if (!rejected) {
+          rememberSlowFetch(epoch, method, url, Date.now() - startedAt);
+        }
       }
     };
     globalThis.fetch = wrappedFetch;
@@ -333,6 +359,40 @@ function rememberFailedFetch(
       recentFailedFetches.length - RECENT_FAILED_FETCHES_LIMIT,
     );
   }
+}
+
+function rememberSlowFetch(
+  epoch: number,
+  method: string,
+  url: string,
+  durationMs: number,
+) {
+  // Same per-test gate as the failed-fetch buffer: a slow request that
+  // finishes after the next test has started belongs to neither test's
+  // diagnostic, so it is dropped rather than misattributed.
+  if (epoch !== currentTestEpoch || durationMs < SLOW_FETCH_THRESHOLD_MS) {
+    return;
+  }
+  slowFetches.push({ desc: `${method} ${url}`, durationMs });
+  if (slowFetches.length > SLOW_FETCHES_LIMIT) {
+    // Keep the most expensive, not the most recent: the budget is spent by
+    // the slowest requests, and a test can make hundreds.
+    slowFetches.sort((a, b) => b.durationMs - a.durationMs);
+    slowFetches.length = SLOW_FETCHES_LIMIT;
+  }
+}
+
+function summarizeSlowFetches(): string {
+  if (!slowFetches.length) {
+    return `completed fetches over ${SLOW_FETCH_THRESHOLD_MS}ms this test: <none>`;
+  }
+  let ranked = [...slowFetches].sort((a, b) => b.durationMs - a.durationMs);
+  let total = ranked.reduce((sum, f) => sum + f.durationMs, 0);
+  return (
+    `completed fetches over ${SLOW_FETCH_THRESHOLD_MS}ms this test ` +
+    `(${ranked.length}, ${total}ms in total):\n  ` +
+    ranked.map((f) => `${f.desc} (took ${f.durationMs}ms)`).join('\n  ')
+  );
 }
 
 // Resolve the qunit runtime object (the one the qunit package installs on the
@@ -453,6 +513,7 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
       recent.length
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
+      summarizeSlowFetches(),
       summarizeSettledState(),
       summarizePendingRunloopTimers(),
       summarizeRealmAuth(),

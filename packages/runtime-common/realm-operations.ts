@@ -409,6 +409,7 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   let readinessUrl = readinessUrlObj.href;
   let startedAt = Date.now();
   let lastError: string | undefined;
+  let terminalFailure: string | undefined;
 
   let stopSamplingProgress = input.onProgress
     ? sampleProgress(
@@ -431,6 +432,15 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
         // `X-Boxel-Not-Ready` names the outstanding stage (index vs
         // prerender-html); it's a header because pollers discard the body.
         let stage = response.headers.get('X-Boxel-Not-Ready');
+        if (stage === 'index-failed') {
+          // Terminal: the realm's boot index failed, so no amount of polling
+          // makes it ready. This response carries the reason in its body.
+          let detail = await response.text().catch(() => '');
+          terminalFailure = `${publishedRealmURL} cannot become ready: its boot index failed${
+            detail ? ` — ${detail}` : ''
+          }`;
+          break;
+        }
         lastError = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}`;
       } catch (error) {
         // Node's fetch reports transport failures as a bare "fetch failed" and
@@ -458,6 +468,9 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
     stopSamplingProgress?.();
   }
 
+  if (terminalFailure) {
+    throw new Error(terminalFailure);
+  }
   throw new Error(
     `Timed out after ${timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${
       lastError ? `: ${lastError}` : ''

@@ -102,6 +102,54 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('a stored-bytes read serves the bytes and infers their content type', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a stored-bytes read consults neither a definition nor the index', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('the headers-only mode reports the metadata without touching the bytes', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a stored-bytes read reports a version the realm never recorded as absent', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a path with no stored bytes is not found, never not-indexed', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a version read from the file costs the body nothing', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('both modes report the same version, neither paying for the other', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('an adapter with no bounded read reports no version', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('an adapter that reports no size still reads', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('the realm root is a directory, not a stored file', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a type has no stored bytes to read', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a declaration may not build on a stored-bytes read', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });

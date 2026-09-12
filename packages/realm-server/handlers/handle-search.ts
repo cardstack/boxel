@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
+  releaseSearchAdmission,
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -381,16 +382,25 @@ async function respondWithJobScopedSearchCache(
       query,
       opts: { ...(args.opts as Record<string, unknown>), generations },
       populate: runSearch,
+      // A joiner or a hit holds no result document of its own, so it stops
+      // counting toward the search admission ceiling here rather than when
+      // its response ends; the ceiling is then a bound on concurrent
+      // computations, which is what holds the heap.
+      onOutcome: (decided) => {
+        if (decided !== 'miss') {
+          releaseSearchAdmission(ctxt);
+        }
+      },
     });
-    await setContextResponse(
-      ctxt,
-      new Response(body, {
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          [LIVE_SEARCH_CACHE_HEADER]: outcome,
-        },
-      }),
-    );
+    // The body is a string the cache may be handing to many requests at once,
+    // so it goes to Koa as-is. Wrapping it in a `Response` would encode it into
+    // a stream that `setContextResponse` decodes back into a per-request copy;
+    // this way a joiner's or a hit's cost on the way out is Koa's own write of
+    // the shared string and nothing more.
+    ctxt.status = 200;
+    ctxt.set('content-type', SupportedMimeType.CardJson);
+    ctxt.set(LIVE_SEARCH_CACHE_HEADER, outcome);
+    ctxt.body = body;
     emitTimeline();
     return;
   }
