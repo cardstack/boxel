@@ -22,6 +22,7 @@ import type { Args as SearchResourceArgs } from '@cardstack/host/resources/searc
 import { SearchResource } from '@cardstack/host/resources/search';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
@@ -459,6 +460,163 @@ module(`Integration | search resource`, function (hooks) {
       );
     } finally {
       realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
+    }
+  });
+
+  test(`a search the realm server answers with 401 is reauthenticated and replayed once`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let network = getService('network') as NetworkService;
+
+    // The search has to start holding a session, or there is nothing for the
+    // server to reject and nothing for the replay to replace.
+    await realmServer.login();
+    let rejectedToken = realmServer.token;
+    assert.ok(rejectedToken, 'the search starts with a realm-server session');
+
+    let attempts: (string | null)[] = [];
+    let gate = async (request: Request) => {
+      if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+        return null;
+      }
+      attempts.push(request.headers.get('Authorization'));
+      if (attempts.length === 1) {
+        // What `multiRealmAuthorization` answers for a session token it
+        // rejects. It names no realm, which is why the per-realm authorization
+        // middleware cannot recover from it: there is nothing for that
+        // middleware to reauthenticate against.
+        return new Response(
+          JSON.stringify({ errors: ['Unauthorized Request'] }),
+          {
+            status: 401,
+            headers: { 'content-type': 'application/vnd.card+json' },
+          },
+        );
+      }
+      // Fall through to the realm-server mock, which answers the search.
+      return null;
+    };
+    network.virtualNetwork.mount(gate, { prepend: true });
+
+    let reauthCalls = 0;
+    let originalReauthenticate =
+      realmServer.reauthenticateRealmServer.bind(realmServer);
+    realmServer.reauthenticateRealmServer = async () => {
+      reauthCalls++;
+      return await originalReauthenticate();
+    };
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+
+      assert.strictEqual(
+        attempts.length,
+        2,
+        'the rejected search was sent again',
+      );
+      assert.strictEqual(
+        reauthCalls,
+        1,
+        'and exactly one session was minted to send it with',
+      );
+      assert.strictEqual(
+        attempts[0],
+        `Bearer ${rejectedToken}`,
+        'the first attempt carried the token the server rejected',
+      );
+      assert.strictEqual(
+        attempts[1],
+        `Bearer ${realmServer.token}`,
+        'and the replay carried the session the service now holds',
+      );
+      assert.strictEqual(
+        search.instances[0].id,
+        `${testRealmURL}card-2`,
+        'and the replay produced the result',
+      );
+    } finally {
+      realmServer.reauthenticateRealmServer = originalReauthenticate;
+      network.virtualNetwork.unmount(gate);
+    }
+  });
+
+  test(`a 401 the realm server repeats is surfaced rather than replayed forever`, async function (assert) {
+    let realmServer = getService('realm-server') as RealmServerService;
+    let network = getService('network') as NetworkService;
+    await realmServer.login();
+
+    let attempts = 0;
+    let gate = async (request: Request) => {
+      if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+        return null;
+      }
+      attempts++;
+      return new Response(
+        JSON.stringify({ errors: ['Unauthorized Request'] }),
+        {
+          status: 401,
+          headers: { 'content-type': 'application/vnd.card+json' },
+        },
+      );
+    };
+    network.virtualNetwork.mount(gate, { prepend: true });
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+
+      assert.strictEqual(
+        attempts,
+        2,
+        'the search was replayed once and then left alone',
+      );
+      assert.strictEqual(
+        search.instances.length,
+        0,
+        'and the still-refused search yields no results',
+      );
+    } finally {
+      network.virtualNetwork.unmount(gate);
     }
   });
 

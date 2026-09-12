@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -18,6 +19,8 @@ import {
   publishRealm as publishRealmOperation,
   SupportedMimeType,
   Deferred,
+  fetcher,
+  realmServerAuthorizationMiddleware,
   ri,
   testRealmURL,
   unpublishRealm as unpublishRealmOperation,
@@ -28,6 +31,7 @@ import {
   type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
+  type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -40,6 +44,8 @@ import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
+
+import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -104,7 +110,10 @@ export interface ArchivedRealmInfo {
 
 type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
-export default class RealmServerService extends Service {
+export default class RealmServerService
+  extends Service
+  implements RealmServerTokenSource
+{
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private realm: RealmService;
@@ -1126,27 +1135,91 @@ export default class RealmServerService extends Service {
     });
   }
 
+  // A realm-server request that names a set of realms — the federated
+  // endpoints, of which `_federated-search` is the high-volume one. It is
+  // issued through a middleware stack rather than bare, so a 401 is
+  // reauthenticated and replayed once, and the request carries a correlation id
+  // joining the client's `server-request` telemetry to the server's
+  // `realm:search-timing` and `realm:requests` lines for the same request.
   maybeAuthedFetchForRealms(
     url: string,
     realms: string[],
     options: RequestInit = {},
   ) {
-    const headers = new Headers(options.headers);
-    if (!headers.has('Authorization')) {
-      if (this.token) {
-        headers.set('Authorization', `Bearer ${this.token}`);
-      } else {
-        let realmToken = this.getRealmTokenForRealms(realms);
-        if (realmToken) {
-          headers.set('Authorization', `Bearer ${realmToken}`);
-        }
-      }
-    }
-    return this.network.fetch(url, {
-      ...options,
-      headers,
-    });
+    return this.fetcherForRealms(realms)(url, options);
   }
+
+  // The stack is built per call because the authorization middleware needs this
+  // request's realm list to choose its fallback token. That is a handful of
+  // closures against an HTTP round trip; the timing middleware is a stateless
+  // factory.
+  //
+  // `authErrorEventMiddleware` — which the per-realm `authedFetch` stack
+  // carries — is deliberately absent. Its `boxel-auth-error` event is listened
+  // for only by the prerender render routes, which race it against the render
+  // to fail fast; a federated search answers 401 for the whole request when any
+  // one of its realms is unreadable, so routing that through the event would
+  // abort a whole render over a single query field the card can render without.
+  private fetcherForRealms(realms: string[]): typeof globalThis.fetch {
+    return fetcher(
+      this.network.fetch,
+      [
+        realmServerAuthorizationMiddleware(this, realms),
+        // Innermost, so it wraps each real network attempt: an auth-retry is
+        // recorded as its own retried-flagged attempt rather than folded into
+        // the first attempt's duration.
+        createServerRequestTimingMiddleware(getOwner(this)!),
+      ],
+      this.network.virtualNetwork,
+    );
+  }
+
+  // `RealmServerTokenSource`. The realm-server session token is what the
+  // federated endpoints validate. The per-realm token is the fallback for a
+  // caller holding realm sessions but no realm-server session yet — at app
+  // boot, before the matrix client lands — and authenticates because the
+  // endpoint reads only the `user` claim, which both token families carry.
+  tokenForRealms(realms: string[]): string | undefined {
+    return this.token ?? this.getRealmTokenForRealms(realms);
+  }
+
+  // `RealmServerTokenSource`. A burst of searches failing against the same
+  // rejected session shares one mint rather than each driving its own login.
+  async reauthenticateRealmServer(): Promise<string | undefined> {
+    if (this.reauthenticating) {
+      return this.reauthenticating;
+    }
+    // No matrix client means no session can be minted, and `login()` throws
+    // that precondition rather than returning — so the 401 stands.
+    if (!this.hasClient) {
+      return undefined;
+    }
+    let rejectedToken = this.token;
+    this.reauthenticating = (async () => {
+      try {
+        // Dropping the rejected token is what makes `login()` mint a session
+        // instead of short-circuiting on the logged-in state. Skipped when
+        // another caller has already replaced it, so a session that is already
+        // fresh is never discarded.
+        if (rejectedToken && this.token === rejectedToken) {
+          this.token = undefined;
+        }
+        await this.login();
+        return this.token;
+      } catch (e: any) {
+        console.error(
+          `RealmServerService - failed to reauthenticate to realm server: ${e.message}`,
+          e,
+        );
+        return undefined;
+      } finally {
+        this.reauthenticating = undefined;
+      }
+    })();
+    return this.reauthenticating;
+  }
+
+  private reauthenticating: Promise<string | undefined> | undefined;
 
   // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
   async requestForward(args: {
@@ -1592,7 +1665,11 @@ export default class RealmServerService extends Service {
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
-      if (token) {
+      // An expired token buys nothing: the server rejects it, so sending it
+      // spends a round trip to learn what its own `exp` claim already says.
+      // Skipping it lets a publicly-readable realm answer the unauthenticated
+      // request, and leaves the 401 path to mint a realm-server session.
+      if (token && !isTokenExpired(token)) {
         return token;
       }
     }
@@ -1606,6 +1683,13 @@ const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
+}
+
+// `exp` is unix seconds. A token whose claims will not parse is treated as
+// expired, since nothing usable can be said about it.
+function isTokenExpired(rawToken: string): boolean {
+  let claims = realmClaimsFromRawToken(rawToken);
+  return claims?.exp == null || claims.exp * 1000 <= Date.now();
 }
 
 function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
