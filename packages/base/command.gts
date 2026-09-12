@@ -25,6 +25,11 @@ import {
   SearchCardsResult,
   SearchCardSummaryField,
 } from './commands/search-card-result';
+import {
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
+} from './commands/search-entry-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 export type ToolCallStatus = 'applied' | 'ready' | 'applying';
@@ -661,6 +666,9 @@ export {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
   SearchCardSummaryField,
+  SearchEntriesInput,
+  SearchEntriesResult,
+  SearchEntrySummaryField,
 };
 
 export class RealmInfoField extends FieldDef {
