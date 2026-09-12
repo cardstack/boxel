@@ -744,7 +744,10 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<SearchResult | undefined> {
     let doc: SingleCardDocument | undefined;
-    let instance = await this.instance(url, opts);
+    let instance = await this.#indexQueryEngine.getInstance(url, {
+      ...opts,
+      dataOnly: true,
+    });
     if (!instance) {
       return undefined;
     }
@@ -1923,13 +1926,13 @@ export class RealmIndexQueryEngine {
           inRealmCardURLs.size > 0
             ? this.#indexQueryEngine.getInstances(
                 [...inRealmCardURLs].map((u) => new URL(u)),
-                opts,
+                { ...opts, dataOnly: true },
               )
             : Promise.resolve(new Map<string, InstanceOrError>()),
           inRealmFileURLs.size > 0
             ? this.#indexQueryEngine.getFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
-                opts,
+                { ...opts, dataOnly: true },
               )
             : Promise.resolve(new Map<string, IndexedFile>()),
           crossRealmURLs.size > 0
