@@ -7,9 +7,11 @@ import {
   type CardJsonAssembly,
 } from '@cardstack/runtime-common';
 
+// `keyEtag` mirrors `etag` by default: the common case is an assembly whose
+// validator agrees with the one the lookup was keyed on.
 function documentAssembly(
   body: string,
-  etag = '"1:card-rri"',
+  etag = '"100:card-rri"',
 ): CardJsonAssembly {
   return {
     kind: 'document',
@@ -17,6 +19,7 @@ function documentAssembly(
     etag,
     etagSuppressed: false,
     queryBacked: false,
+    keyEtag: etag,
     lastModified: 1,
     created: 1,
   };
@@ -182,10 +185,7 @@ module(basename(import.meta.filename), function () {
       let assembled = 0;
       let populate = async (): Promise<CardJsonAssembly> => {
         assembled++;
-        return {
-          kind: 'respond',
-          respond: async () => new Response('nope', { status: 404 }),
-        };
+        return { kind: 'missing' };
       };
       let args = {
         url: card,
@@ -219,6 +219,7 @@ module(basename(import.meta.filename), function () {
           etag: undefined,
           etagSuppressed: true,
           queryBacked: false,
+          keyEtag: '"100:card-rri"',
           lastModified: 1,
           created: 1,
         }),
@@ -331,6 +332,191 @@ module(basename(import.meta.filename), function () {
         (await put('b')).outcome,
         'miss',
         'the displaced entry recomputes',
+      );
+    });
+
+    // The key is a validator read before the assembly ran. If a write lands
+    // in between, the assembly's own validator is the newer one, and filing
+    // the bytes under the older key would put them behind a validator that
+    // doesn't describe them — and would stop the card answering 304s until
+    // the entry aged out.
+    test('an assembly whose validator disagrees with its key is not retained', async function (assert) {
+      let cache = new CardDocumentCache({ telemetryIntervalMs: 0 });
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: async (): Promise<CardJsonAssembly> => ({
+          ...(documentAssembly('body', '"200:card-rri"') as Extract<
+            CardJsonAssembly,
+            { kind: 'document' }
+          >),
+          keyEtag: '"100:card-rri"',
+        }),
+      };
+
+      let first = await cache.getOrPopulate(args);
+      let second = await cache.getOrPopulate(args);
+
+      assert.strictEqual(first.outcome, 'miss');
+      assert.strictEqual(
+        second.outcome,
+        'miss',
+        'the mismatched assembly was not kept',
+      );
+      assert.strictEqual(cache.stats.entryCount, 0, 'nothing was retained');
+    });
+
+    test('two realms served by one cache hold separate entries', async function (assert) {
+      let cache = new CardDocumentCache({ telemetryIntervalMs: 0 });
+      let base = {
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: async () => documentAssembly('body'),
+      };
+
+      let a = await cache.getOrPopulate({
+        ...base,
+        url: 'http://localhost:4202/realm-a/person-1',
+      });
+      let b = await cache.getOrPopulate({
+        ...base,
+        url: 'http://localhost:4202/realm-b/person-1',
+      });
+
+      assert.strictEqual(a.outcome, 'miss');
+      assert.strictEqual(
+        b.outcome,
+        'miss',
+        'the same local path in another realm is a different entry',
+      );
+      assert.strictEqual(cache.stats.entryCount, 2);
+    });
+
+    test('an entry past its TTL is recomputed and counted as expired', async function (assert) {
+      let cache = new CardDocumentCache({ ttlMs: 20, telemetryIntervalMs: 0 });
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: async () => documentAssembly('body'),
+      };
+
+      await cache.getOrPopulate(args);
+      assert.strictEqual((await cache.getOrPopulate(args)).outcome, 'hit');
+      await sleep(40);
+      assert.strictEqual(
+        (await cache.getOrPopulate(args)).outcome,
+        'miss',
+        'the entry aged out',
+      );
+      assert.strictEqual(cache.stats.expired, 1, 'and was counted as expired');
+    });
+
+    test('ttl 0 keeps coalescing but retains nothing', async function (assert) {
+      let cache = new CardDocumentCache({ ttlMs: 0, telemetryIntervalMs: 0 });
+      let deferred = deferredPopulate(documentAssembly('shared'));
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: deferred.populate,
+      };
+
+      let first = cache.getOrPopulate(args);
+      let second = cache.getOrPopulate(args);
+      await sleep(0);
+      deferred.resolve();
+      let results = await Promise.all([first, second]);
+
+      assert.deepEqual(
+        results.map((r) => r.outcome),
+        ['miss', 'join'],
+        'concurrent requests still share one assembly',
+      );
+      assert.strictEqual(deferred.calls, 1, 'which ran once');
+      assert.strictEqual(cache.stats.entryCount, 0, 'but nothing is retained');
+      assert.strictEqual(
+        (await cache.getOrPopulate(args)).outcome,
+        'miss',
+        'and a later request recomputes',
+      );
+    });
+
+    test('a body larger than the whole cap is served but never retained', async function (assert) {
+      let cache = new CardDocumentCache({
+        maxBytes: 10,
+        telemetryIntervalMs: 0,
+      });
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: async () => documentAssembly('x'.repeat(100)),
+      };
+
+      let first = await cache.getOrPopulate(args);
+
+      assert.strictEqual(
+        (first.assembly as { body: string }).body.length,
+        100,
+        'the caller still gets its document',
+      );
+      assert.strictEqual(cache.stats.oversized, 1, 'counted as oversized');
+      assert.strictEqual(cache.stats.entryCount, 0, 'and not retained');
+    });
+
+    test('a failed assembly reaches every waiter and pins nothing', async function (assert) {
+      let cache = new CardDocumentCache({ telemetryIntervalMs: 0 });
+      let calls = 0;
+      let reject!: (reason: unknown) => void;
+      let promise = new Promise<CardJsonAssembly>((_res, rej) => {
+        reject = rej;
+      });
+      let args = {
+        url: card,
+        etag: '"100:card-rri"',
+        skipQueryBackedExpansion: false,
+        populate: () => {
+          calls++;
+          return promise;
+        },
+      };
+
+      let first = cache.getOrPopulate(args);
+      let second = cache.getOrPopulate(args);
+      await sleep(0);
+      reject(new Error('assembly blew up'));
+      await Promise.all(
+        [first, second].map((p) =>
+          p.then(
+            () => assert.ok(false, 'should have rejected'),
+            (e: Error) =>
+              assert.strictEqual(e.message, 'assembly blew up', 'both reject'),
+          ),
+        ),
+      );
+
+      assert.strictEqual(calls, 1, 'the joiner shared the failing computation');
+      assert.strictEqual(
+        cache.stats.errors,
+        1,
+        'the failure is counted once, against the computation',
+      );
+      // A failed populate must not pin the key, or every retry would join a
+      // promise that is already dead.
+      let retry = await cache.getOrPopulate({
+        ...args,
+        populate: async () => documentAssembly('recovered'),
+      });
+      assert.strictEqual(
+        retry.outcome,
+        'miss',
+        'a retry runs a fresh assembly',
+      );
+      assert.strictEqual(
+        (retry.assembly as { body: string }).body,
+        'recovered',
       );
     });
 

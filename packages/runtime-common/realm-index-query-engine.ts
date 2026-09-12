@@ -159,6 +159,16 @@ type Options = {
   // promptly instead of running every layer to completion. Threaded like
   // `timings`; absent for everything except a bounded live search.
   signal?: AbortSignal;
+  // Fires once per query-backed field this pass applies, whatever the
+  // outcome. The caller cannot read this off the assembled document:
+  // `applyQueryResults` writes the `links.search` marker only when the query
+  // normalized to a searchable form, so a field whose query aborted (an
+  // interpolated `$this.<path>` resolved to undefined) or whose realms could
+  // not be placed is written as a bare `links.self` — indistinguishable on
+  // the wire from a static `linksTo`, yet still a value that depends on
+  // cards other than this one. Reporting from the one choke point every
+  // application passes through is exact where sniffing the output is not.
+  onQueryFieldApplied?: () => void;
 } & QueryOptions;
 
 export type SearchResult = SearchResultDoc | SearchResultError;
@@ -188,6 +198,15 @@ export interface SearchResultDoc {
   // assembled `doc` and joined into per-instance `meta.screenshots` only by
   // the realm's card+json GET handler.
   screenshots: ScreenshotManifest | null;
+  // Whether assembling this document applied any query-backed field — a
+  // field whose targets are found by running a query now rather than by
+  // following a stored link. Such a document is not a function of this
+  // card's own index row: a write to some other card that enters or leaves
+  // the query changes it, and deliberately does not move this card's `deps`
+  // or `indexed_at`. The realm's card+json GET uses this to decide the
+  // document cannot be retained in its response cache. False when
+  // `loadLinks` did not run, since nothing was resolved.
+  queryBacked: boolean;
 }
 
 export interface SearchResultError {
@@ -768,6 +787,7 @@ export class RealmIndexQueryEngine {
         `bug: should never get here--search index doc is undefined`,
       );
     }
+    let queryBacked = false;
     if (opts?.loadLinks) {
       let included = await this.loadLinks(
         {
@@ -775,7 +795,13 @@ export class RealmIndexQueryEngine {
           rootResources: [doc.data],
           omit: [...(doc.data.id ? [doc.data.id] : [])],
         },
-        opts,
+        {
+          ...opts,
+          onQueryFieldApplied: () => {
+            queryBacked = true;
+            opts.onQueryFieldApplied?.();
+          },
+        },
       );
       if (included.length > 0) {
         doc.included = included;
@@ -790,6 +816,7 @@ export class RealmIndexQueryEngine {
       indexedAt: instance.indexedAt,
       deps: instance.deps,
       screenshots: instance.screenshots,
+      queryBacked,
     };
   }
 
@@ -931,6 +958,7 @@ export class RealmIndexQueryEngine {
           errors,
           searchURL,
           total,
+          opts,
         });
         continue;
       }
@@ -1020,6 +1048,7 @@ export class RealmIndexQueryEngine {
         errors,
         searchURL,
         total,
+        opts,
       });
     }
   }
@@ -1243,6 +1272,7 @@ export class RealmIndexQueryEngine {
     errors,
     searchURL,
     total,
+    opts,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
@@ -1251,7 +1281,11 @@ export class RealmIndexQueryEngine {
     errors: QueryFieldErrorDetail[];
     searchURL: string;
     total: number | undefined;
+    opts?: Options;
   }): void {
+    // Every query-backed field application lands here, including the ones
+    // that leave no `links.search` marker behind — see `onQueryFieldApplied`.
+    opts?.onQueryFieldApplied?.();
     resource.relationships = resource.relationships ?? {};
     for (let key of Object.keys(resource.relationships)) {
       if (key === fieldName || key.startsWith(`${fieldName}.`)) {

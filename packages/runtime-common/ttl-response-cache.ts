@@ -273,6 +273,17 @@ export class TtlResponseCache<T> {
       this.#counters.oversized += 1;
       return;
     }
+    // Subtract any entry already filed under this key before overwriting it.
+    // No current path reaches `#store` on a live key — a miss only runs when
+    // the key was absent or expired-and-deleted, and `#inFlight` is
+    // registered in the same synchronous turn as `populate()` is called — but
+    // the failure mode if one ever did would be silent and permanent:
+    // `#totalBytes` would ratchet up, eviction would fire on every store, and
+    // the cache would decay to a zero hit rate with no counter saying why.
+    let prior = this.#entries.get(key);
+    if (prior) {
+      this.#totalBytes -= prior.bytes;
+    }
     this.#entries.set(key, {
       value,
       bytes,

@@ -7,7 +7,11 @@ import {
 
 export const CARD_DOCUMENT_CACHE_CHANNEL = 'boxel:card-document-cache';
 // Mirrors `x-boxel-live-search-cache`: the outcome the cache reached for this
-// request, so a hit rate is readable from the response rather than inferred.
+// request, so a single response can be attributed without inferring it.
+// Like that one, it is deliberately NOT in `createResponse`'s
+// `Access-Control-Expose-Headers`, so a cross-origin browser cannot read it —
+// it is for server-side callers and hand debugging. The hit rate proper comes
+// from the telemetry summaries on the channel below.
 export const CARD_DOCUMENT_CACHE_HEADER = 'x-boxel-card-cache';
 
 // The TTL bounds retention, not staleness — the key already does staleness
@@ -32,12 +36,15 @@ const DEFAULT_TELEMETRY_INTERVAL_MS = 30_000;
 
 // What one assembly of a card+json GET produced. `document` is the cacheable
 // shape: the serialized body plus the header values that are functions of the
-// same index row. Everything else — a redirect, a 404, an error document, a
-// race that invalidated the fingerprint the lookup was keyed on — comes back
-// as `respond`, a thunk each caller invokes to build its own `Response`.
-// A thunk rather than a `Response` because a joiner and the request that
-// started the computation each need their own: a `Response` body can only be
-// consumed once.
+// same index row.
+//
+// Everything else — a redirect, a vanished row, an error document — comes
+// back as one of the `outcome` variants, which carry only data. Two requests
+// can share an assembly, so nothing here may close over the request that
+// happened to run it: the responses differ (a `Response` body is consumable
+// once) and so can their inputs, since `paths.local()` ignores the query
+// string and two requests that differ only there share a cache key. Each
+// caller renders these against its own request and request context.
 export type CardJsonAssembly =
   | {
       kind: 'document';
@@ -49,62 +56,47 @@ export type CardJsonAssembly =
       // Whether the missing validator is the deliberate foreign-realm
       // suppression, which the response advertises as a header.
       etagSuppressed: boolean;
-      // Whether the document resolved a query-backed relationship, which
-      // makes it unretainable — see `hasQueryBackedRelationships`.
+      // Whether assembling the document applied a query-backed field, as
+      // reported by the index query engine. Such a document is not a
+      // function of its own index row — a write to some other card that
+      // enters or leaves the query changes it, and deliberately does not
+      // move this card's `deps` or `indexed_at` — so the validator this
+      // cache keys on would not move, and it cannot be retained. Taken from
+      // the engine rather than sniffed off the assembled document: a query
+      // that aborted or whose realms could not be placed leaves no
+      // `links.search` marker behind, yet still depends on other cards.
       queryBacked: boolean;
+      // The validator the lookup was keyed on, so retention can check that
+      // the assembly agrees with it.
+      keyEtag: string;
       lastModified: number | null | undefined;
       created: number | undefined;
     }
-  | { kind: 'respond'; respond: () => Promise<Response> };
+  // The card's index row was gone by the time the assembly read it — the
+  // caller re-checks for a non-JSON file at the path and otherwise renders
+  // its own not-found.
+  | { kind: 'missing' }
+  // `paths.fileURL(localPath)` normalized to a different local path.
+  | { kind: 'redirect'; foundPath: string }
+  // The index has a row but it can't be served cleanly; the caller renders
+  // the JSON:API error against its own request.
+  | { kind: 'error'; error: CardJsonAssemblyError };
+
+// The parts of an errored index row a response is built from — data only, so
+// the request-specific fields (`id`, the message's URL) come from whichever
+// request is rendering it rather than from whichever one assembled it.
+export interface CardJsonAssemblyError {
+  status: number;
+  title: string | undefined;
+  message: string;
+  stack: string | undefined;
+  lastKnownGoodHtml: string | null;
+  cardTitle: string | null;
+  scopedCssUrls: string[];
+}
 
 export type CardDocumentCacheOutcome = ResponseCacheOutcome;
 export type CardDocumentCacheSummary = ResponseCacheSummary;
-
-// Whether any resource in the document carries a query-backed relationship —
-// a field whose targets are found by running a query at read time rather than
-// by following a stored link. `applyQueryResults` is the only writer of an
-// umbrella relationship's `links.search`, so its presence is the marker (the
-// same test `relationship-dependency-extractor` uses).
-//
-// Such a document is not a function of its own index row, and so cannot be
-// retained: a write to some *other* card that enters or leaves the query
-// changes what this card serves, and deliberately does not touch this card's
-// deps or `indexed_at` (the extractor excludes query-backed targets on
-// purpose), so the validator this cache keys on would not move. Both read
-// modes are affected — `skipQueryBackedExpansion` suppresses only the
-// `included[]` expansion, while the umbrella keeps the ids the query just
-// returned — so neither can be kept.
-//
-// In-flight coalescing still applies, and is still correct: requests that
-// share one assembly share a single evaluation of the query, which is what
-// each of them would have computed at that moment anyway.
-export function hasQueryBackedRelationships(doc: {
-  data: { relationships?: Record<string, unknown> | undefined };
-  included?: { relationships?: Record<string, unknown> | undefined }[];
-}): boolean {
-  let isQueryBacked = (resource: {
-    relationships?: Record<string, unknown> | undefined;
-  }) => {
-    let relationships = resource?.relationships;
-    if (!relationships) {
-      return false;
-    }
-    return Object.entries(relationships).some(([key, value]) => {
-      // Per-item `fieldName.N` entries and array-valued fields are not the
-      // umbrella; only the umbrella carries `links.search`.
-      if (Array.isArray(value) || /\.\d+$/.test(key)) {
-        return false;
-      }
-      let search = (value as { links?: { search?: unknown } } | null)?.links
-        ?.search;
-      return typeof search === 'string' && search.length > 0;
-    });
-  };
-  return (
-    isQueryBacked(doc.data) ||
-    (doc.included ?? []).some((r) => isQueryBacked(r))
-  );
-}
 
 // Coalescing + TTL cache for assembled `application/vnd.card+json` GET
 // bodies. A card GET reads one index row and then runs `loadLinks` to build
@@ -151,6 +143,12 @@ export function hasQueryBackedRelationships(doc: {
 // caller who reaches the cache would have assembled byte-identical bytes.
 // Per-request headers that *do* vary by caller (`cache-control`'s
 // public/private visibility) are computed per request, outside the entry.
+//
+// One consequence of coalescing worth stating: a request that joins an
+// assembly inherits that assembly's failure if it rejects, rather than
+// getting its own attempt. Nothing is retained in that case, so the next
+// request in retries from scratch — the shared fate is bounded to the
+// requests that were already in flight together.
 export class CardDocumentCache {
   readonly #cache: TtlResponseCache<CardJsonAssembly>;
 
@@ -179,7 +177,16 @@ export class CardDocumentCache {
       retain: (assembly) =>
         assembly.kind === 'document' &&
         assembly.etag !== undefined &&
-        !assembly.queryBacked,
+        !assembly.queryBacked &&
+        // The key came from a read taken before the assembly; if the
+        // assembly's own validator disagrees, a write landed in between and
+        // this entry would be filed under a validator that does not describe
+        // its bytes. Retaining it would also stop the card answering 304s
+        // (a conditional request compares against the newer validator and
+        // never matches) until it aged out. Dropping it costs one
+        // reassembly and keeps "a retained entry's key describes its bytes"
+        // a checked property rather than an argument about read ordering.
+        assembly.etag === assembly.keyEtag,
       ...opts,
     });
   }

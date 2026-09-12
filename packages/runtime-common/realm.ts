@@ -18,7 +18,6 @@ import {
 } from './search-bounds.ts';
 import {
   CARD_DOCUMENT_CACHE_HEADER,
-  hasQueryBackedRelationships,
   type CardDocumentCache,
   type CardDocumentCacheOutcome,
   type CardJsonAssembly,
@@ -1134,6 +1133,10 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // The in-flight `parseRealmInfo()` promise, so concurrent callers on a cold
+  // cache share one read instead of each running their own. Nulled once it
+  // settles (see getRealmInfo).
+  #realmInfoPromise: Promise<RealmInfo> | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
   // plain info. Cached separately from `#cachedRealmInfo` rather than folded
   // into it, because that object is hashed into the card+json ETag and
@@ -6852,11 +6855,10 @@ export class Realm {
       // entry unreachable.
       let assemble = () =>
         this.#assembleCardJson(
-          request,
-          requestContext,
           url,
           localPath,
           skipQueryBackedExpansion,
+          peekEtag,
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -6871,8 +6873,24 @@ export class Realm {
       } else {
         assembly = await assemble();
       }
-      if (assembly.kind === 'respond') {
-        return await assembly.respond();
+      // Every outcome reports how the cache served it, not just the ones
+      // that produced a body: a joined 404 still says the request shared
+      // someone else's computation, which is what the hit rate is measuring.
+      let cacheOutcomeHeader: Record<string, string> = cacheOutcome
+        ? { [CARD_DOCUMENT_CACHE_HEADER]: cacheOutcome }
+        : {};
+      if (assembly.kind !== 'document') {
+        let response = await this.#respondToCardJsonOutcome(
+          assembly,
+          request,
+          requestContext,
+          url,
+          localPath,
+        );
+        for (let [name, value] of Object.entries(cacheOutcomeHeader)) {
+          response.headers.set(name, value);
+        }
+        return response;
       }
       return createResponse({
         body: assembly.body,
@@ -6890,9 +6908,7 @@ export class Realm {
             ...(assembly.created != null
               ? { 'x-created': formatRFC7231(assembly.created * 1000) }
               : {}),
-            ...(cacheOutcome
-              ? { [CARD_DOCUMENT_CACHE_HEADER]: cacheOutcome }
-              : {}),
+            ...cacheOutcomeHeader,
           },
         },
         requestContext,
@@ -6905,17 +6921,15 @@ export class Realm {
   // One assembly of a card+json GET body, and the unit the response cache
   // coalesces on. The servable-body case comes back as the cacheable
   // `document` shape — the serialized bytes plus the header values that are
-  // functions of the same index row. Every other outcome (a redirect, a
-  // vanished row, an error document) comes back as a `respond` thunk, which
-  // each caller invokes to build its own `Response`: one `Response` can't be
-  // handed to both the request that ran this and the requests that joined it,
-  // because its body is consumable only once.
+  // functions of the same index row. Every other outcome comes back as data
+  // describing what happened, never as a `Response` or a closure over this
+  // request: two requests can share one assembly, so each renders the
+  // outcome against its own request and request context.
   async #assembleCardJson(
-    request: Request,
-    requestContext: RequestContext,
     url: URL,
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
+    keyEtag: string | undefined,
   ): Promise<CardJsonAssembly> {
     // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
     // realm-info cache, so the hash read for the response ETag below
@@ -6925,67 +6939,21 @@ export class Realm {
       skipQueryBackedExpansion,
     });
     if (maybeError === undefined) {
-      if (await this.nonJsonFileExists(localPath)) {
-        return {
-          kind: 'respond',
-          respond: async () =>
-            (await this.fileMetaDocument(
-              requestContext,
-              localPath,
-              SupportedMimeType.CardJson,
-            )) ?? notFound(request, requestContext),
-        };
-      }
-      return {
-        kind: 'respond',
-        respond: () =>
-          this.missingInstanceResponse(request, requestContext, localPath),
-      };
+      return { kind: 'missing' };
     }
     if (maybeError.type === 'error') {
-      // The index has a row for this card, it just can't be served
-      // cleanly — so mirror the underlying error's HTTP status when it
-      // is a real HTTP error status (auth 401/403, validation 422,
-      // upstream 5xx, …) instead of flattening everything to 500.
-      //
-      // 404 is the one status we never mirror: an existing-but-errored
-      // card is not "not found". 404 is reserved for a missing index
-      // row (see `notFound` above) so that a 404 on a card GET is an
-      // unambiguous "this card no longer exists" signal. A recorded
-      // 404 (e.g. an error whose underlying cause was a missing linked
-      // instance) therefore falls back to 500, as do non-HTTP failures
-      // (fetch failures recorded as status 0) and any out-of-range
-      // value.
       let { error } = maybeError;
-      let errorStatus = error.errorDetail.status;
       return {
-        kind: 'respond',
-        respond: async () =>
-          systemError({
-            requestContext,
-            status:
-              errorStatus >= 400 && errorStatus <= 599 && errorStatus !== 404
-                ? errorStatus
-                : 500,
-            message: `cannot return card, ${request.url}, from index: ${error.errorDetail.title} - ${error.errorDetail.message}`,
-            id: request.url,
-            additionalError: CardError.fromSerializableError(error),
-            // This is based on https://jsonapi.org/format/#errors
-            body: {
-              id: url.href,
-              status: error.errorDetail.status,
-              title: error.errorDetail.title,
-              message: error.errorDetail.message,
-              // note that this is actually available as part of the response
-              // header too--it's just easier for clients when it is here
-              meta: {
-                lastKnownGoodHtml: error.lastKnownGoodHtml,
-                cardTitle: error.cardTitle,
-                scopedCssUrls: error.scopedCssUrls,
-                stack: error.errorDetail.stack,
-              },
-            },
-          }),
+        kind: 'error',
+        error: {
+          status: error.errorDetail.status,
+          title: error.errorDetail.title,
+          message: error.errorDetail.message,
+          stack: error.errorDetail.stack,
+          lastKnownGoodHtml: error.lastKnownGoodHtml,
+          cardTitle: error.cardTitle,
+          scopedCssUrls: error.scopedCssUrls,
+        },
       };
     }
     let { doc: card } = maybeError;
@@ -7018,18 +6986,7 @@ export class Realm {
     // with — same as the prior implementation's behavior.
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
-      return {
-        kind: 'respond',
-        respond: async () =>
-          createResponse({
-            requestContext,
-            body: null,
-            init: {
-              status: 302,
-              headers: { Location: this.redirectTarget(foundPath) },
-            },
-          }),
-      };
+      return { kind: 'redirect', foundPath };
     }
 
     // Prefer created_at from DB for instance JSON
@@ -7058,10 +7015,98 @@ export class Realm {
       body: JSON.stringify(card, null, 2),
       etag: responseEtag,
       etagSuppressed: foreignDeps,
-      queryBacked: hasQueryBackedRelationships(card),
+      queryBacked: maybeError.queryBacked,
+      keyEtag: keyEtag ?? '',
       lastModified: card.data.meta.lastModified,
       created: createdAt,
     };
+  }
+
+  // Render a non-document assembly outcome against THIS request. Kept apart
+  // from the assembly itself so a request that joined someone else's
+  // computation builds its own response from its own context.
+  async #respondToCardJsonOutcome(
+    assembly: Exclude<CardJsonAssembly, { kind: 'document' }>,
+    request: Request,
+    requestContext: RequestContext,
+    url: URL,
+    localPath: LocalPath,
+  ): Promise<Response> {
+    if (assembly.kind === 'missing') {
+      if (await this.nonJsonFileExists(localPath)) {
+        // A path that points to a non-JSON file (e.g. an uploaded binary)
+        // was asked for as card+json. Return a file-meta JSON document so
+        // the caller receives valid JSON it can discriminate via
+        // `data.type === 'file-meta'` — instead of raw binary bytes that
+        // crash a downstream `response.json()`.
+        let fileMeta = await this.fileMetaDocument(
+          requestContext,
+          localPath,
+          SupportedMimeType.CardJson,
+        );
+        return fileMeta ?? notFound(request, requestContext);
+      }
+      return await this.missingInstanceResponse(
+        request,
+        requestContext,
+        localPath,
+      );
+    }
+    if (assembly.kind === 'redirect') {
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: { Location: this.redirectTarget(assembly.foundPath) },
+        },
+      });
+    }
+    // The index has a row for this card, it just can't be served
+    // cleanly — so mirror the underlying error's HTTP status when it
+    // is a real HTTP error status (auth 401/403, validation 422,
+    // upstream 5xx, …) instead of flattening everything to 500.
+    //
+    // 404 is the one status we never mirror: an existing-but-errored
+    // card is not "not found". 404 is reserved for a missing index
+    // row (see `notFound` above) so that a 404 on a card GET is an
+    // unambiguous "this card no longer exists" signal. A recorded
+    // 404 (e.g. an error whose underlying cause was a missing linked
+    // instance) therefore falls back to 500, as do non-HTTP failures
+    // (fetch failures recorded as status 0) and any out-of-range
+    // value.
+    let { error } = assembly;
+    return systemError({
+      requestContext,
+      status:
+        error.status >= 400 && error.status <= 599 && error.status !== 404
+          ? error.status
+          : 500,
+      message: `cannot return card, ${request.url}, from index: ${error.title} - ${error.message}`,
+      id: request.url,
+      additionalError: CardError.fromSerializableError({
+        status: error.status,
+        title: error.title,
+        message: error.message,
+        ...(error.stack !== undefined ? { stack: error.stack } : {}),
+        additionalErrors: null,
+      }),
+      // This is based on https://jsonapi.org/format/#errors
+      body: {
+        id: url.href,
+        status: error.status,
+        title: error.title,
+        message: error.message,
+        // note that this is actually available as part of the response
+        // header too--it's just easier for clients when it is here
+        meta: {
+          lastKnownGoodHtml: error.lastKnownGoodHtml,
+          cardTitle: error.cardTitle,
+          scopedCssUrls: error.scopedCssUrls,
+          stack: error.stack,
+        },
+      },
+    });
   }
 
   // The single-instance card+html GET: one `entry` sourced by URL, carrying
@@ -8728,14 +8773,28 @@ export class Realm {
     }
   }
 
+  // Memoized, and coalesced while cold. The assignment lands after the
+  // await, so without an in-flight promise every concurrent caller on a cold
+  // cache runs `parseRealmInfo()` in full — three DB reads each. That matters
+  // because `clearRealmIndexCaches()` nulls the cache on every
+  // `realm_index_updated` NOTIFY, so on a busy realm the herd re-forms after
+  // each index swap, and the card+json read path consults this on every
+  // request. Cleared on rejection so a transient failure isn't pinned.
   async getRealmInfo(): Promise<RealmInfo> {
-    if (!this.#cachedRealmInfo) {
-      this.#cachedRealmInfo = await this.parseRealmInfo();
-      this.#cachedRealmInfoHash = computeContentHash(
-        JSON.stringify(this.#cachedRealmInfo),
-      );
+    if (this.#cachedRealmInfo) {
+      return this.#cachedRealmInfo;
     }
-    return this.#cachedRealmInfo;
+    if (!this.#realmInfoPromise) {
+      this.#realmInfoPromise = (async () => {
+        let info = await this.parseRealmInfo();
+        this.#cachedRealmInfo = info;
+        this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
+        return info;
+      })().finally(() => {
+        this.#realmInfoPromise = undefined;
+      });
+    }
+    return await this.#realmInfoPromise;
   }
 
   // Snapshot of the realm-info hash used as part of the card+json ETag.
