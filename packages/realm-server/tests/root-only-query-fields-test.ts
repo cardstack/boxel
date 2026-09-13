@@ -179,12 +179,12 @@ module(basename(import.meta.filename), function () {
         relationships.childMatches?.links?.search,
         'no links.search, so the field is not presented as resolved',
       );
+      // Absence, not an empty array: an umbrella naming an empty set is an
+      // authoritative answer of none, which is the state this has to avoid.
       assert.strictEqual(
-        Array.isArray(relationships.childMatches?.data)
-          ? (relationships.childMatches!.data as Array<{ id: string }>).length
-          : 0,
-        0,
-        'and it names no targets',
+        relationships.childMatches,
+        undefined,
+        'the field carries no relationship entry at all',
       );
       assert.deepEqual(
         Object.keys(relationships).filter((key) =>
@@ -251,8 +251,9 @@ module(basename(import.meta.filename), function () {
       );
 
       let child = (doc?.included ?? []).find((r) => r.id?.endsWith('/child-1'));
-      assert.notOk(
-        relationshipsOf(child).childMatches?.links?.search,
+      assert.strictEqual(
+        relationshipsOf(child).childMatches,
+        undefined,
         "the side-loaded card's field is unresolved here too",
       );
     });
