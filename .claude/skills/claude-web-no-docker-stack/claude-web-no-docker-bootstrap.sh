@@ -63,6 +63,7 @@ NODE_PREFIX="/opt/node${NODE_VERSION%%.*}"
 PG_BIN=/usr/lib/postgresql/16/bin
 PGDATA_DIR=/var/lib/boxel-pgdata
 CERT_DIR="$HOME/.local/share/boxel/dev-certs"
+SHIM_BIN="$HOME/.local/share/boxel/no-docker-bin"
 
 echo "[bootstrap] node=$NODE_VERSION pnpm=$PNPM_VERSION"
 
@@ -83,21 +84,20 @@ if [ "$(pnpm --version 2>/dev/null)" != "$PNPM_VERSION" ]; then
   npm i -g "pnpm@$PNPM_VERSION" >/dev/null
 fi
 
-# 2. The mise shim, so the repo's own mise-tasks/ scripts run as written. A
-#    real mise always wins — the shim is a substitute, not an upgrade — and an
-#    existing binary that is neither is left alone rather than overwritten.
-if command -v mise >/dev/null 2>&1 && ! mise --version 2>/dev/null | grep -q mise-shim; then
-  echo "[bootstrap] A real mise is installed; leaving it in place."
-elif [ ! -e /usr/local/bin/mise ]; then
-  echo "[bootstrap] Installing the mise shim…"
-  cp "$SKILL_DIR/claude-web-no-docker-mise-shim.sh" /usr/local/bin/mise
-  chmod +x /usr/local/bin/mise
-elif mise --version 2>/dev/null | grep -q mise-shim; then
-  cp "$SKILL_DIR/claude-web-no-docker-mise-shim.sh" /usr/local/bin/mise
-  chmod +x /usr/local/bin/mise
-else
-  echo "[bootstrap] /usr/local/bin/mise exists and is not the shim; leaving it alone." >&2
-fi
+# 2. The mise shim, so the repo's own mise-tasks/ scripts run as written. It is
+#    deliberately NOT installed system-wide: it goes in its own directory, and
+#    only the env file written in step 6 puts that directory on PATH. Nothing
+#    outside a shell that sourced that file — including a real mise, if this
+#    session has one — is shadowed.
+#
+#    Within those shells the shim does take precedence over a real mise, and
+#    has to: `MISE_SHIM_SKIP` is the only way to no-op `infra:ensure-pg`, and a
+#    real mise would run that dependency and try to start the container that
+#    cannot be pulled here.
+echo "[bootstrap] Installing the mise shim in $SHIM_BIN…"
+mkdir -p "$SHIM_BIN"
+cp "$SKILL_DIR/claude-web-no-docker-mise-shim.sh" "$SHIM_BIN/mise"
+chmod +x "$SHIM_BIN/mise"
 
 # 3. Chrome. The image ships Playwright's chromium but no `google-chrome`, and
 #    both env-vars.sh (PUPPETEER_EXECUTABLE_PATH, for the prerender) and testem
@@ -175,7 +175,7 @@ done
 # 6. The env every later shell needs. Sourced rather than exported so a fresh
 #    Bash tool call can pick it up.
 cat > /tmp/boxel-env.sh <<EOF
-export PATH="$NODE_PREFIX/bin:/usr/local/bin:\$PATH"
+export PATH="$SHIM_BIN:$NODE_PREFIX/bin:\$PATH"
 cd "$REPO_ROOT"
 . "$REPO_ROOT/mise-tasks/lib/env-vars.sh"
 export NODE_EXTRA_CA_CERTS="$CERT_DIR/combined-ca.pem"

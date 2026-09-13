@@ -50,10 +50,17 @@ ready() { # ready <url> <label> <timeout-seconds>
 }
 
 # The host bundle the prerender renders against and the test suite runs from.
-# `ember test --path dist` reads the same build, so it has to exist before
-# either can start.
-if [ ! -f packages/host/dist/tests/index.html ]; then
-  echo "[stack] Building the host dist (a few minutes)…"
+# Built every time rather than only when missing: `ember test --path dist`
+# reads whatever is in that directory, so a dist left over from another branch
+# or from before an edit reports a pass or failure for code that is not the
+# code under test. Two minutes is cheap next to that.
+#
+# BOXEL_SKIP_HOST_BUILD=1 skips it, for a restart where nothing under
+# packages/host has changed since the last build.
+if [ "${BOXEL_SKIP_HOST_BUILD:-}" = "1" ] && [ -f packages/host/dist/tests/index.html ]; then
+  echo "[stack] Reusing the existing host dist (BOXEL_SKIP_HOST_BUILD=1)."
+else
+  echo "[stack] Building the host dist (~2 minutes)…"
   pnpm --dir packages/host build
 fi
 
@@ -85,10 +92,37 @@ if [ "$REALMS" != "dev" ]; then
 fi
 
 # skills indexes after base in the same realm-server process. The AI-assistant
-# host tests fetch Skill/boxel-environment, so they 404 until this is ready.
-ready "https://localhost:4201/skills/_readiness-check" "skills realm" 1200 || true
+# host tests fetch Skill/boxel-environment, so they 404 until this is ready —
+# a 404 that reads as a test failure rather than as a stack that is not
+# finished. So when it does not come up, say so in the terms a reader needs
+# and exit non-zero: the rest of the stack is usable, but "up" would be a lie.
+skills_ready=1
+ready "https://localhost:4201/skills/_readiness-check" "skills realm" 1200 || skills_ready=0
 
 echo
-echo "[stack] up. Run host tests with:"
+echo "[stack] Run host tests with (rebuild first — the suite runs from dist):"
 echo "  . /tmp/boxel-env.sh && cd packages/host && \\"
-echo "    CI=true ./node_modules/.bin/ember test --path dist --filter 'Integration | search resource'"
+echo "    pnpm build && CI=true ./node_modules/.bin/ember test --path dist \\"
+echo "      --filter 'Integration | search resource'"
+echo
+
+if [ "$skills_ready" = "0" ]; then
+  cat >&2 <<EOF
+[stack] INCOMPLETE: every realm is up except skills, which did not finish
+[stack] indexing in time (see $LOG_DIR/realm-server.log).
+
+[stack] Tests that read from the skills realm — anything fetching
+[stack] Skill/boxel-environment, which is most of the AI-assistant suite —
+[stack] will 404 and fail for that reason, not because of the code under test.
+[stack] Re-run the readiness probe before trusting such a failure:
+[stack]   curl -sk -o /dev/null -w '%{http_code}\\n' -H 'Accept: application/vnd.api+json' \\
+[stack]     https://localhost:4201/skills/_readiness-check
+EOF
+  exit 2
+fi
+
+if [ "$REALMS" = "dev" ]; then
+  echo "[stack] up — base and skills realms ready."
+else
+  echo "[stack] up — base, skills, test and node-test realms ready."
+fi

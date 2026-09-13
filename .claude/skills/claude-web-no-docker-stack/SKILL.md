@@ -53,7 +53,9 @@ cluster in `/var/lib`, a CA in the system trust store, a symlink in `/usr/bin`)
 suit a disposable session container and nowhere else, so `claude-web-no-docker-bootstrap.sh`
 refuses to run unless it is root in a Claude Code session container where
 `docker pull` is broken — override with `BOXEL_NO_DOCKER_BOOTSTRAP=1` only if
-you are certain. A real `mise` on the path always wins over the shim.
+you are certain. The `mise` shim is never installed system-wide: it lives in
+its own directory, and only the env file the bootstrap writes puts that
+directory on `PATH`.
 
 ## Use it
 
@@ -67,8 +69,17 @@ Then, in any later shell:
 ```sh
 . /tmp/boxel-env.sh
 cd packages/host
+pnpm build   # ~2 min; the suite runs from dist, not from source
 CI=true ./node_modules/.bin/ember test --path dist --filter 'Integration | search resource'
 ```
+
+**Rebuild before every run after an edit.** `ember test --path dist` reads
+whatever is in `packages/host/dist`, so testing after a source change without
+rebuilding reports a result for the previous build — a false pass or a false
+failure, with nothing to indicate which. This is the `vite build --mode
+development && ember test --path dist` pairing AGENTS.md prescribes, and it
+applies to changes anywhere the bundle pulls from (`packages/runtime-common`
+and `packages/base` included), not just to `packages/host`.
 
 `CI=true` is not cosmetic: `testem.js` only passes `--no-sandbox` to Chrome
 under it, and the session runs as root, where Chrome refuses to start without
@@ -87,8 +98,13 @@ CI=true ./node_modules/.bin/ember test --path ./dist --query 'shard=9&shardCount
 pinned in `.mise.toml` straight from nodejs.org into `/opt/node<major>` and
 lets that node's npm install the pinned pnpm.
 
-**`mise` itself** — [`claude-web-no-docker-mise-shim.sh`](./claude-web-no-docker-mise-shim.sh) goes to
-`/usr/local/bin/mise`. Everything under `mise-tasks/` is a plain shell script;
+**`mise` itself** — [`claude-web-no-docker-mise-shim.sh`](./claude-web-no-docker-mise-shim.sh) is
+copied to `~/.local/share/boxel/no-docker-bin/mise`, which the generated
+`/tmp/boxel-env.sh` puts first on `PATH`. Nothing outside a shell that sourced
+that file is shadowed — but inside one the shim does take precedence over a
+real `mise`, and has to: `MISE_SHIM_SKIP` is the only way to no-op
+`infra:ensure-pg`, and a real `mise` would run that dependency and try to start
+the container that cannot be pulled here. Everything under `mise-tasks/` is a plain shell script;
 the only mise-specific parts are the `#MISE dir=` / `#MISE depends=` headers
 and `.mise.toml`'s `[env] _.source` hook, so the shim reads those three and
 passes the rest through. `mise run services:realm-server`, `mise run build:ui`
@@ -133,7 +149,10 @@ trust the proxy outbound and the leaf on loopback at the same time.
 
 ## Service start order
 
-`claude-web-no-docker-start-stack.sh` does this; it is here for when you start pieces by hand.
+`claude-web-no-docker-start-stack.sh` does this; it is here for when you start
+pieces by hand. It exits 2, rather than reporting the stack up, when every
+realm but skills is ready — skills-dependent tests would otherwise fail with
+404s that look like the code under test.
 
 1. `icons` (4206) and the host dist (4200) — `packages/host/dist` must be
    built first; `pnpm --dir packages/host build` takes ~2 minutes.
