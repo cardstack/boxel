@@ -119,9 +119,10 @@ export type SearchOpts = {
   // whole closure as before.
   resolveLinksOnly?: boolean;
   priority?: number;
-  // Correlation id minted by the client (the prerendered host stamps
-  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch) and read back
-  // out by the request handler into opts. When present, `searchRealms`
+  // Correlation id minted by the client — a prerendering host stamps
+  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so
+  // does a live browser whose client-telemetry instrument is armed — and read
+  // back out by the request handler into opts. When present, `searchRealms`
   // instruments the server-side search pipeline and emits one
   // `realm:search-timing` line keyed by this id, so a client-observed
   // slow search can be joined to where the realm-server spent the time.
