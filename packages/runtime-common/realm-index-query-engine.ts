@@ -124,11 +124,7 @@ type Options = {
   // When true, `loadLinks` populates `relationships.{field}.data` for
   // query-backed `linksTo` / `linksToMany` fields but does NOT push
   // the linked resources into `included[]`. Static linksTo / linksToMany
-  // still expand transitively. It also resolves query-backed fields on the
-  // resources the walk side-loads, which every other caller confines to the
-  // roots it was handed: a prerender renders those cards and reads the
-  // relationship data it is given, so a field left unresolved there costs it
-  // a live search. Set by the realm-server card-document
+  // still expand transitively. Set by the realm-server card-document
   // handlers (GET / POST / PATCH) when the request originates inside a
   // prerender — the caller can resolve the listed IDs via per-URL fetches,
   // and the eager closure is a wasted round-trip in that context. The
@@ -1731,13 +1727,15 @@ export class RealmIndexQueryEngine {
       // cards a caller named, that is nearly all of the work, and it lands on
       // cards present only as context for rendering a link.
       //
-      // A live consumer re-runs the query for itself whatever the document
-      // says — `ensureQueryFieldSearchResource` makes a query field's search
+      // No consumer is short of anything it needs. A live one re-runs the
+      // query for itself whatever the document says —
+      // `ensureQueryFieldSearchResource` makes a query field's search
       // resource live outside a render context — so a field resolved on a
-      // side-loaded card is work it discards. The consumer that does read
-      // one is a prerender, which renders those cards and treats the
-      // document it was handed as authoritative; it asks for the full walk
-      // by name with `skipQueryBackedExpansion`.
+      // side-loaded card is work it discards. A render resolves a query
+      // field only when a template reads it (`resolveQueryFieldEagerly`
+      // defers to the field getter inside a render context) and loads
+      // whatever that resolution names, so it pays for the fields it
+      // displays rather than for every field in the closure.
       //
       // A skipped field is left the way the pristine index row carries it:
       // no umbrella, so no `links.search` and no `data` — the shape an
@@ -1748,16 +1746,15 @@ export class RealmIndexQueryEngine {
       // that query instead.
       try {
         await Promise.all(
-          layer.map(async ({ resource, applyLinkFields, isRoot }) => {
-            if (!isRoot && !opts?.skipQueryBackedExpansion) {
+          layer.map(async ({ resource, isRoot }) => {
+            if (!isRoot) {
               return;
             }
-            let popOpts = applyLinkFields
-              ? opts
-              : opts?.linkFields
-                ? { ...opts, linkFields: undefined }
-                : opts;
-            let timings = popOpts?.timings;
+            // A root carries `linkFields` as the caller passed it — the
+            // narrowing this pass reads directly, and the one step 2 strips
+            // below the root layer so a side-loaded card's stored links still
+            // expand.
+            let timings = opts?.timings;
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
@@ -1769,14 +1766,14 @@ export class RealmIndexQueryEngine {
             // concurrently across the layer); the wall-clock of the whole pass
             // is the outer `loadLinks` stage.
             let runPopulate = () =>
-              popOpts?.cacheOnlyDefinitions && storedDefs
+              opts?.cacheOnlyDefinitions && storedDefs
                 ? this.populateQueryFieldsFromMeta(
                     resource,
                     realmURL,
                     storedDefs,
-                    popOpts,
+                    opts,
                   )
-                : this.populateQueryFields(resource, realmURL, popOpts);
+                : this.populateQueryFields(resource, realmURL, opts);
             if (timings) {
               await timings.busyTime('populate', runPopulate);
             } else {

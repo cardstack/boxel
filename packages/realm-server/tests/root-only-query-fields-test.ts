@@ -113,7 +113,8 @@ function relationshipsOf(
 // than a read. `loadLinks` resolves those fields for the roots it was handed
 // and not for the closure it side-loads, where the same pass would run a card's
 // whole field tree and a search per query field it found, for a card present
-// only as context for rendering a link.
+// only as context for rendering a link. It holds for every caller, including
+// the ones that narrow what a resolved field expands.
 module(basename(import.meta.filename), function () {
   module('query fields are resolved for the walk roots only', function (hooks) {
     let realm: Realm;
@@ -209,7 +210,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('skipQueryBackedExpansion keeps resolving side-loaded query fields', async function (assert) {
+    test('skipQueryBackedExpansion narrows what a resolved field expands, not which cards resolve one', async function (assert) {
       let applied = 0;
       let result = await realm.realmIndexQueryEngine.cardDocument(
         new URL(`${testRealm}parent-1`),
@@ -223,22 +224,36 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(
         applied,
+        1,
+        'the requested card resolves its query field and the side-loaded one does not',
+      );
+
+      // What this flag governs: the requested card's field is resolved and
+      // names its matches, but those matches are left out of `included[]` for
+      // the caller to fetch per URL.
+      let parentMatches = relationshipsOf(doc?.data).parentMatches;
+      assert.ok(
+        parentMatches?.links?.search,
+        "the requested card's field is resolved",
+      );
+      assert.strictEqual(
+        Array.isArray(parentMatches?.data)
+          ? (parentMatches!.data as Array<{ id: string }>).length
+          : 0,
         2,
-        'both the requested and the side-loaded query field were resolved',
+        'and names both of its matches',
+      );
+      let includedIds = (doc?.included ?? []).map((r) => r.id);
+      assert.strictEqual(
+        includedIds.filter((id) => id?.includes('/parent-target-')).length,
+        0,
+        'while none of them are expanded into the document',
       );
 
       let child = (doc?.included ?? []).find((r) => r.id?.endsWith('/child-1'));
-      let childMatches = relationshipsOf(child).childMatches;
-      assert.ok(
-        childMatches?.links?.search,
-        "the side-loaded card's field carries its search URL",
-      );
-      assert.strictEqual(
-        Array.isArray(childMatches?.data)
-          ? (childMatches!.data as Array<{ id: string }>).length
-          : 0,
-        2,
-        'and names both matches for the caller to resolve itself',
+      assert.notOk(
+        relationshipsOf(child).childMatches?.links?.search,
+        "the side-loaded card's field is unresolved here too",
       );
     });
 
