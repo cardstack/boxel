@@ -142,6 +142,9 @@ module(basename(import.meta.filename), function () {
           filter: {
             'item.on': { module: `${realmHref}consumer`, name: 'Consumer' },
           },
+          // The item leg: the branch that serializes each matched card, and so
+          // the only one whose links there is anything to side-load.
+          fields: { entry: ['item'] },
         });
       assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
       let { staticTargets, queryTargets } = sideLoaded(response.body.included);
@@ -215,6 +218,9 @@ module(basename(import.meta.filename), function () {
           filter: {
             'item.on': { module: `${realmHref}consumer`, name: 'Consumer' },
           },
+          // The item leg: the branch that serializes each matched card, and so
+          // the only one whose links there is anything to side-load.
+          fields: { entry: ['item'] },
         });
       assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
       let { staticTargets, queryTargets } = sideLoaded(response.body.included);

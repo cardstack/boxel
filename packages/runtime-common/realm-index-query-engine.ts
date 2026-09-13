@@ -1852,6 +1852,13 @@ export class RealmIndexQueryEngine {
       // layer they would have seeded never run. Taking the exit at the top of
       // the loop rather than skipping the walk per-resource is what makes that
       // true of the whole closure and not just of one layer.
+      //
+      // The query-backed signal still reports everything it has to. The two
+      // things that raise it are a field this realm resolved, reported by
+      // `applyQueryResults` in step 1, and a peer's already-resolved answer
+      // arriving on a cross-realm resource, reported below. Leaving here
+      // fetches no cross-realm resource, so the document embeds no answer this
+      // realm did not run, and there is none to miss.
       if (opts?.resolveLinksOnly) {
         break;
       }
