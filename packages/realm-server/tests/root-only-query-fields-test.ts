@@ -110,10 +110,10 @@ function relationshipsOf(
 }
 
 // A query-backed field stores no target, so serving one costs a search rather
-// than a read. `loadLinks` runs that pass over the roots it was handed and not
-// over the closure it side-loads, which is where nearly all of the work used to
-// land: a card reached only as context for rendering a link resolves its own
-// query fields, whose results the next layer then follows and expands.
+// than a read. `loadLinks` resolves those fields for the roots it was handed
+// and not for the closure it side-loads, where the same pass would run a card's
+// whole field tree and a search per query field it found, for a card present
+// only as context for rendering a link.
 module(basename(import.meta.filename), function () {
   module('query fields are resolved for the walk roots only', function (hooks) {
     let realm: Realm;

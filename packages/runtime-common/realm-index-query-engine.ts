@@ -1728,8 +1728,8 @@ export class RealmIndexQueryEngine {
       // finds, and the relationships it writes back carry a `links.self` the
       // next layer follows and expands, whose targets resolve their own
       // query fields in turn. Applied across a closure rather than to the
-      // cards a caller named, that is nearly the whole pass, spent on cards
-      // present only as context for rendering a link.
+      // cards a caller named, that is nearly all of the work, and it lands on
+      // cards present only as context for rendering a link.
       //
       // A live consumer re-runs the query for itself whatever the document
       // says — `ensureQueryFieldSearchResource` makes a query field's search
@@ -1744,7 +1744,7 @@ export class RealmIndexQueryEngine {
       // `omitIncluded` search already ships. `captureQueryFieldSeedData`
       // reads that as an unanswered field rather than as an answer of none,
       // which is what sends a consumer to its own query. A card reachable
-      // only over such an edge leaves `included[]` with it, and arrives by
+      // only over such an edge is absent from `included[]`; it arrives by
       // that query instead.
       try {
         await Promise.all(
