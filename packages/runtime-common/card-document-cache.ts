@@ -110,7 +110,8 @@ export type CardDocumentCacheSummary = ResponseCacheSummary;
 // **The key is the response's own ETag.** `buildCardJsonEtag` already folds
 // in everything the served representation varies on — the row's `indexed_at`
 // (which moves on a direct write *and* on a dependency-cascaded one), the
-// realm-info hash, and the screenshot-manifest fingerprint — and the realm
+// realm-info hash, the screenshot-manifest fingerprint, and whether the
+// assembly side-loaded the card's links or only answered them — and the realm
 // already hands that value to browsers as the validator it will honour a
 // `304` against. Keying on it means a superseded body becomes *unreachable*
 // rather than stale, and the server-side cache is never fresher or staler

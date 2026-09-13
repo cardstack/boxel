@@ -146,6 +146,22 @@ type Options = {
   // external `_federated-search` callers still receive fully-assembled
   // compound documents.
   omitIncluded?: boolean;
+  // When true, `loadLinks` resolves the roots' relationships and then stops:
+  // the query-field pass runs, so every field a caller asked for names its
+  // targets, but no linked resource is fetched, cloned, or pushed into
+  // `included[]` — and no further layer is walked, so the transitive closure
+  // behind those targets is never assembled at all. A relationship is left
+  // naming a target the document does not carry, which is the shape the host
+  // reads as "not loaded yet" and resolves for itself, one card at a time,
+  // for the links a template actually displays.
+  //
+  // This is the middle of three positions on how much of a card's link graph
+  // a response carries. `omitIncluded` skips the pass outright, which leaves
+  // a query-backed field with no umbrella and sends the consumer to its own
+  // search; the default assembles the whole closure. This one keeps the
+  // answer to "which cards does this field name?" — the part a consumer
+  // cannot cheaply recompute — and drops the cards themselves, which it can.
+  resolveLinksOnly?: boolean;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
   // query and the `loadLinks` relationship assembly — stamp their elapsed
@@ -1801,9 +1817,11 @@ export class RealmIndexQueryEngine {
       // targets are not expanded into `included[]` produces orphan-link
       // errors. The umbrella entry (`fieldName`) stays — it carries
       // `links.search` and `data: [array of IDs]` for the host's per-URL
-      // hydration path. Set by the card-document prerender path
-      // (`skipQueryBackedExpansion`).
-      if (opts?.skipQueryBackedExpansion) {
+      // hydration path. Both callers that leave a query-backed field's
+      // targets out of `included[]` need this: the one that expands static
+      // links but not query-backed ones (`skipQueryBackedExpansion`), and the
+      // one that expands nothing (`resolveLinksOnly`).
+      if (opts?.skipQueryBackedExpansion || opts?.resolveLinksOnly) {
         for (let { resource } of layer) {
           if (!resource.relationships) {
             continue;
@@ -1824,6 +1842,25 @@ export class RealmIndexQueryEngine {
             }
           }
         }
+      }
+
+      // A caller that wants the links resolved but not side-loaded stops
+      // here, before the first link is classified. The roots leave with their
+      // relationships answered by step 1 and their query-backed sub-entries
+      // stripped by step 1b, and `included` stays as it arrived — so the
+      // batched instance/file reads below, the cross-realm fetches, and every
+      // layer they would have seeded never run. Taking the exit at the top of
+      // the loop rather than skipping the walk per-resource is what makes that
+      // true of the whole closure and not just of one layer.
+      //
+      // The query-backed signal still reports everything it has to. The two
+      // things that raise it are a field this realm resolved, reported by
+      // `applyQueryResults` in step 1, and a peer's already-resolved answer
+      // arriving on a cross-realm resource, reported below. Leaving here
+      // fetches no cross-realm resource, so the document embeds no answer this
+      // realm did not run, and there is none to miss.
+      if (opts?.resolveLinksOnly) {
+        break;
       }
 
       // Step 2: walk every resource's relationships, classify each link,

@@ -112,6 +112,12 @@ export type SearchOpts = {
   // every result from card+source and reads only `data[].id`). Live /
   // external callers leave it unset and receive fully-assembled documents.
   omitIncluded?: boolean;
+  // Answer each result's relationships but side-load none of their targets,
+  // leaving `included[]` empty and the consumer to fetch the cards it
+  // displays. Set for live traffic when the realm-server is configured to
+  // stop side-loading the link closure; unset, a live search assembles the
+  // whole closure as before.
+  resolveLinksOnly?: boolean;
   priority?: number;
   // Correlation id minted by the client — a prerendering host stamps
   // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so

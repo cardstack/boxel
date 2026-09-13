@@ -1267,6 +1267,7 @@ export async function createRealm({
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
+  liveReadsResolveLinksOnly,
   cardDocumentCache = new CardDocumentCache(),
 }: {
   dir: string;
@@ -1310,6 +1311,10 @@ export async function createRealm({
   // Shrinks the card read endpoints' read-your-writes indexing-drain budget
   // so tests can exercise the bounded-wait path without holding real time.
   readIndexDrainBudgetMs?: number;
+  // Makes this realm answer a live card read or search with each card's
+  // relationships resolved and nothing side-loaded, so a test can exercise
+  // the shape a consumer gets when it has to fetch the linked cards itself.
+  liveReadsResolveLinksOnly?: true;
   // The card+json response cache. Defaults to one per created realm, so the
   // suite exercises the same read path production runs; pass a configured
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
@@ -1398,6 +1403,9 @@ export async function createRealm({
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
+      ...(liveReadsResolveLinksOnly
+        ? { liveReadsResolveLinksOnly: true as const }
+        : {}),
       ...(readIndexDrainBudgetMs !== undefined
         ? { readIndexDrainBudgetMs }
         : {}),
@@ -1451,6 +1459,7 @@ export async function runTestRealmServer({
   prerenderer: providedPrerenderer,
   mediaCacheAdapter,
   readIndexDrainBudgetMs,
+  liveReadsResolveLinksOnly,
   cardDocumentCache,
 }: {
   testRealmDir: string;
@@ -1476,6 +1485,10 @@ export async function runTestRealmServer({
   prerenderer?: Prerenderer;
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
+  // Threaded to both the realm and the server this helper builds: the card
+  // read path reads it off the realm, and the search fan-out reads it off the
+  // server, so a test that sets it gets the setting on both legs.
+  liveReadsResolveLinksOnly?: true;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
 }) {
@@ -1520,6 +1533,7 @@ export async function runTestRealmServer({
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
   });
 
@@ -1561,6 +1575,7 @@ export async function runTestRealmServer({
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
+    ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -2188,6 +2203,7 @@ type InternalPermissionedRealmSetupOptions = {
   videoSizeLimitBytes?: number;
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
+  liveReadsResolveLinksOnly?: true;
   cardDocumentCache?: CardDocumentCache;
 };
 
@@ -2209,6 +2225,7 @@ async function startPermissionedRealmFixture(
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    liveReadsResolveLinksOnly,
     cardDocumentCache,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
@@ -2281,6 +2298,7 @@ async function startPermissionedRealmFixture(
     prerenderer,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    liveReadsResolveLinksOnly,
     cardDocumentCache,
   });
 
@@ -2352,6 +2370,7 @@ export function setupPermissionedRealm(
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    liveReadsResolveLinksOnly,
     cardDocumentCache,
   }: {
     permissions: RealmPermissions;
@@ -2383,6 +2402,9 @@ export function setupPermissionedRealm(
     videoSizeLimitBytes?: number;
     mediaCacheAdapter?: MediaCacheAdapter;
     readIndexDrainBudgetMs?: number;
+    // Makes the realm and server this setup builds answer a live card read or
+    // search with each card's relationships resolved and nothing side-loaded.
+    liveReadsResolveLinksOnly?: true;
     // Inject a cache configured for the test (e.g. one that holds its
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
@@ -2418,6 +2440,7 @@ export function setupPermissionedRealm(
         videoSizeLimitBytes,
         mediaCacheAdapter,
         readIndexDrainBudgetMs,
+        liveReadsResolveLinksOnly,
         cardDocumentCache,
       });
       testRealmServer = server;
@@ -2473,9 +2496,10 @@ function permissionedRealmTemplateCacheKey(
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
     audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
     videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
-    // `readIndexDrainBudgetMs` is deliberately absent: it tunes request-time
-    // wait behavior on the live realm and leaves no trace in the template
-    // database, so keying on it would only fragment the template cache.
+    // `readIndexDrainBudgetMs` and `liveReadsResolveLinksOnly` are
+    // deliberately absent: both tune request-time behavior on the live realm
+    // and leave no trace in the template database, so keying on either would
+    // only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }

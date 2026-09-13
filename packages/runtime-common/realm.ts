@@ -682,6 +682,7 @@ function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
+  resolveLinksOnly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -689,7 +690,18 @@ function buildCardJsonEtag(
   let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
     .filter(Boolean)
     .join('-');
-  return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+  // A read that answers relationships without side-loading their targets
+  // serves a different representation of the same card at the same
+  // `indexed_at`, so it takes its own variant — the same job the constant
+  // does for a serialization change, on a value that varies per server
+  // rather than per revision. Without it, turning the setting on or off
+  // would leave every client that holds a validator being 304'd to the
+  // shape it cached, and the two shapes reachable under one key in the
+  // response cache.
+  let variant = resolveLinksOnly
+    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
+    : CARD_JSON_ETAG_VARIANT;
+  return `"${base}:${variant}"`;
 }
 
 // The joined `meta.screenshots` travels on the prerendered_html channel,
@@ -728,9 +740,15 @@ function screenshotsEtagFingerprint(
 // does, or a validator would pin the stale realmInfo across such a change. A
 // pure-html response carries no realmInfo, so its validator stays the clean
 // index:html composite.
+// An item whose links were answered but not side-loaded is a different
+// serialization at the same two generations, so it takes its own validator for
+// the same reason the card+json variant does: without one, turning the setting
+// on or off would 304 every client holding a validator back to the shape it
+// cached. A pure-html response carries no item, so its validator is unaffected.
 function buildEntryHtmlEtag(
   doc: EntrySingleDocument,
   realmInfoHash: string | undefined,
+  resolveLinksOnly = false,
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -746,6 +764,9 @@ function buildEntryHtmlEtag(
   let base = `${indexGeneration}:${htmlGeneration ?? 'none'}`;
   if (doc.data.relationships.item && realmInfoHash) {
     base = `${base}:${realmInfoHash}`;
+  }
+  if (doc.data.relationships.item && resolveLinksOnly) {
+    base = `${base}:links-only`;
   }
   return `"${base}"`;
 }
@@ -1005,6 +1026,13 @@ export interface RealmAdapter {
 }
 
 interface Options {
+  // When set, a live card read or search answers each returned card's
+  // relationships without side-loading their targets: `included[]` comes back
+  // empty and the consumer fetches the linked cards it displays. Unset, a
+  // live read assembles the card's whole transitive link closure into the
+  // response. Either way a prerender keeps the shape it asks for, which is
+  // already narrower than both.
+  liveReadsResolveLinksOnly?: true;
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
@@ -1085,6 +1113,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #liveReadsResolveLinksOnly = false;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
@@ -1326,6 +1355,7 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#liveReadsResolveLinksOnly = Boolean(opts?.liveReadsResolveLinksOnly);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
@@ -6916,6 +6946,14 @@ export class Realm {
       let ifNoneMatch = request.headers.get('if-none-match');
       let documentCache = this.#cardDocumentCache;
       let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
+      // A prerender is already asking for less than a live read, and asks for
+      // it by the flag above, so the live-read setting reaches only the
+      // requests it is about. Computed here rather than at the assembly
+      // because the validator below has to describe the shape the assembly
+      // will produce, and the validator is what the conditional request and
+      // the response cache are both keyed on.
+      let resolveLinksOnly =
+        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -6969,6 +7007,7 @@ export class Realm {
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
+            resolveLinksOnly,
           );
         }
         if (
@@ -7007,6 +7046,7 @@ export class Realm {
           url,
           localPath,
           skipQueryBackedExpansion,
+          resolveLinksOnly,
           peekEtag,
         );
       let assembly: CardJsonAssembly;
@@ -7078,6 +7118,7 @@ export class Realm {
     url: URL,
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
+    resolveLinksOnly: boolean,
     keyEtag: string | undefined,
   ): Promise<CardJsonAssembly> {
     // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
@@ -7086,6 +7127,7 @@ export class Realm {
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
       skipQueryBackedExpansion,
+      resolveLinksOnly,
     });
     if (maybeError === undefined) {
       return { kind: 'missing' };
@@ -7158,6 +7200,7 @@ export class Realm {
           maybeError.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(maybeError.screenshots),
+          resolveLinksOnly,
         );
     return {
       kind: 'document',
@@ -7333,14 +7376,20 @@ export class Realm {
             `${localPath.replace(/\.json$/, '') || 'index'}.json`,
           );
 
+    // The third live read that assembles a closure. A fieldset that names no
+    // rendering falls back to an item, and the host's selective refresh asks
+    // for `item` directly, so this route serializes cards with their links as
+    // often as the other two — and a refresh here would put back exactly the
+    // closure a search left out.
+    let duringPrerender = isDuringPrerenderRequest(request);
+    let resolveLinksOnly = !duringPrerender && this.#liveReadsResolveLinksOnly;
     let doc = await this.#realmIndexQueryEngine.searchEntry(
       dbUrl,
       { htmlQuery, fieldset, kind },
       {
         loadLinks: true,
-        ...(isDuringPrerenderRequest(request)
-          ? { cacheOnlyDefinitions: true }
-          : {}),
+        ...(duringPrerender ? { cacheOnlyDefinitions: true } : {}),
+        ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       },
     );
     if (!doc) {
@@ -7350,7 +7399,11 @@ export class Realm {
     // `searchEntry` ran `attachRealmInfo`, which (re)populated the realm-info
     // cache, so the hash we fold into an item-bearing response's ETag reflects
     // the realm info the item was just serialized with.
-    let etag = buildEntryHtmlEtag(doc, this.getCachedRealmInfoHash());
+    let etag = buildEntryHtmlEtag(
+      doc,
+      this.getCachedRealmInfoHash(),
+      resolveLinksOnly,
+    );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
       return createResponse({
@@ -7595,6 +7648,7 @@ export class Realm {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -7666,6 +7720,11 @@ export class Realm {
           // result from its raw card+source file, so the transitive
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
+          // Live traffic's side of the same question: a prerender takes the
+          // line above and skips the pass, while a live search configured to
+          // stop side-loading keeps the pass and drops only the closure it
+          // would have assembled.
+          resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
