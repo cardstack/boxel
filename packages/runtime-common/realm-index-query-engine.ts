@@ -124,7 +124,11 @@ type Options = {
   // When true, `loadLinks` populates `relationships.{field}.data` for
   // query-backed `linksTo` / `linksToMany` fields but does NOT push
   // the linked resources into `included[]`. Static linksTo / linksToMany
-  // still expand transitively. Set by the realm-server card-document
+  // still expand transitively. It also resolves query-backed fields on the
+  // resources the walk side-loads, which every other caller confines to the
+  // roots it was handed: a prerender renders those cards and reads the
+  // relationship data it is given, so a field left unresolved there costs it
+  // a live search. Set by the realm-server card-document
   // handlers (GET / POST / PATCH) when the request originates inside a
   // prerender — the caller can resolve the listed IDs via per-URL fetches,
   // and the eager closure is a wasted round-trip in that context. The
@@ -1712,13 +1716,42 @@ export class RealmIndexQueryEngine {
       // handler's time-budget race is what actually returns the 408.
       opts?.signal?.throwIfAborted();
       let currentLayerIndex = layerIndex++;
-      // Step 1: run populateQueryFields for every resource in this layer in
-      // parallel. Each runs an independent searchCards query for its
-      // computed query-fields; collapsing those across the layer is a
-      // separate optimization.
+      // Step 1: run populateQueryFields for the layer's roots in parallel.
+      // Each runs an independent searchCards query for its computed
+      // query-fields; collapsing those across a layer is a separate
+      // optimization.
+      //
+      // Side-loaded resources are skipped, the way `linkFields` already is.
+      // A query-backed field stores no target — its value is whatever a
+      // query returns at the moment it is asked — so resolving one costs a
+      // walk of the card's whole field tree plus a search per query field it
+      // finds, and the relationships it writes back carry a `links.self` the
+      // next layer follows and expands, whose targets resolve their own
+      // query fields in turn. Applied across a closure rather than to the
+      // cards a caller named, that is nearly the whole pass, spent on cards
+      // present only as context for rendering a link.
+      //
+      // A live consumer re-runs the query for itself whatever the document
+      // says — `ensureQueryFieldSearchResource` makes a query field's search
+      // resource live outside a render context — so a field resolved on a
+      // side-loaded card is work it discards. The consumer that does read
+      // one is a prerender, which renders those cards and treats the
+      // document it was handed as authoritative; it asks for the full walk
+      // by name with `skipQueryBackedExpansion`.
+      //
+      // A skipped field is left the way the pristine index row carries it:
+      // no umbrella, so no `links.search` and no `data` — the shape an
+      // `omitIncluded` search already ships. `captureQueryFieldSeedData`
+      // reads that as an unanswered field rather than as an answer of none,
+      // which is what sends a consumer to its own query. A card reachable
+      // only over such an edge leaves `included[]` with it, and arrives by
+      // that query instead.
       try {
         await Promise.all(
-          layer.map(async ({ resource, applyLinkFields }) => {
+          layer.map(async ({ resource, applyLinkFields, isRoot }) => {
+            if (!isRoot && !opts?.skipQueryBackedExpansion) {
+              return;
+            }
             let popOpts = applyLinkFields
               ? opts
               : opts?.linkFields
