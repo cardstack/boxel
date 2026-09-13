@@ -944,6 +944,13 @@ export interface RealmAdapter {
 }
 
 interface Options {
+  // When set, a live card read or search answers each returned card's
+  // relationships without side-loading their targets: `included[]` comes back
+  // empty and the consumer fetches the linked cards it displays. Unset, a
+  // live read assembles the card's whole transitive link closure into the
+  // response. Either way a prerender keeps the shape it asks for, which is
+  // already narrower than both.
+  liveReadsResolveLinksOnly?: true;
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
@@ -1024,6 +1031,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #liveReadsResolveLinksOnly = false;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
@@ -1265,6 +1273,7 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#liveReadsResolveLinksOnly = Boolean(opts?.liveReadsResolveLinksOnly);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
@@ -6934,9 +6943,17 @@ export class Realm {
     // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
     // realm-info cache, so the hash read for the response ETag below
     // reflects the post-assembly realm info.
+    // A prerender is already asking for less than a live read, and asks for
+    // it by the flag above, so the live-read setting reaches only the requests
+    // it is about. That also keeps it out of the response cache's key:
+    // `skipQueryBackedExpansion` is in the key and this is that value plus a
+    // constant, so two requests that agree on the key agree on this too.
+    let resolveLinksOnly =
+      !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
       skipQueryBackedExpansion,
+      resolveLinksOnly,
     });
     if (maybeError === undefined) {
       return { kind: 'missing' };
@@ -7446,6 +7463,7 @@ export class Realm {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
+      ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -7517,6 +7535,11 @@ export class Realm {
           // result from its raw card+source file, so the transitive
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
+          // Live traffic's side of the same question: a prerender takes the
+          // line above and skips the pass, while a live search configured to
+          // stop side-loading keeps the pass and drops only the closure it
+          // would have assembled.
+          resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to

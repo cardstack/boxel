@@ -69,8 +69,14 @@ export default function handleSearch(opts: {
   // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
   // off) to make two sequential callers each compute.
   liveSearchCache?: LiveSearchCache;
+  // When true, a live search answers each result's relationships but
+  // side-loads none of their targets, leaving the caller to fetch the cards it
+  // displays. Carries the same setting the realms are constructed with, since
+  // the fan-out builds its own opts rather than reading them off a realm.
+  liveReadsResolveLinksOnly?: boolean;
 }): (ctxt: Koa.Context) => Promise<void> {
   let { reconciler, searchCache, dbAdapter } = opts;
+  let liveReadsResolveLinksOnly = opts.liveReadsResolveLinksOnly ?? false;
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
@@ -122,13 +128,19 @@ export default function handleSearch(opts: {
     let prerenderJobId = sanitizePrerenderJobId(
       ctxt.get(PRERENDER_JOB_ID_HEADER),
     );
+    // Live traffic's side of the same question: a prerender skips the pass
+    // outright, while a live search configured to stop side-loading keeps it
+    // and drops only the closure it would have assembled.
+    let resolveLinksOnly = !cacheOnlyDefinitions && liveReadsResolveLinksOnly;
     let searchOpts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
+      resolveLinksOnly?: true;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
+    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // Two bounds are enforced server-side on the live item leg (never during
