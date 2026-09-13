@@ -296,8 +296,9 @@ module(basename(import.meta.filename), function () {
       // so: that is what keeps it out of a response cache under a validator a
       // write to the matching cards would not move. The signal survives only
       // because the relationships are answered before the walk is left.
+      let queryBacked = result?.type === 'doc' ? result.queryBacked : undefined;
       assert.true(
-        result?.type === 'doc' && result.queryBacked,
+        queryBacked,
         'the document reports that a query resolved a field',
       );
 
