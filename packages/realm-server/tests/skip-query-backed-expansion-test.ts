@@ -292,6 +292,15 @@ module(basename(import.meta.filename), function () {
         'nothing is side-loaded',
       );
 
+      // The document is a function of a query this realm ran, so it must say
+      // so: that is what keeps it out of a response cache under a validator a
+      // write to the matching cards would not move. The signal survives only
+      // because the relationships are answered before the walk is left.
+      assert.true(
+        result?.type === 'doc' && result.queryBacked,
+        'the document reports that a query resolved a field',
+      );
+
       let relationships = doc?.data.relationships as
         | Record<
             string,

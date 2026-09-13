@@ -86,6 +86,15 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
+// A card+html body is not served as JSON, so supertest leaves it unparsed —
+// read it off the raw text rather than `response.body`, which would otherwise
+// present as a response that side-loaded nothing.
+function entryBody(response: { text: string }): {
+  included?: { id?: string }[];
+} {
+  return JSON.parse(response.text);
+}
+
 // The ids a response side-loaded, split into the two link kinds the consumer
 // card reaches: its static `linksTo` target and its query-backed matches.
 function sideLoaded(included: { id?: string }[] | undefined) {
@@ -125,6 +134,22 @@ module(basename(import.meta.filename), function () {
         .set('Accept', SupportedMimeType.CardJson);
       assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
       let { staticTargets, queryTargets } = sideLoaded(response.body.included);
+      assert.strictEqual(staticTargets, 1, 'the static link target is carried');
+      assert.strictEqual(
+        queryTargets,
+        3,
+        'the query-backed matches are carried',
+      );
+    });
+
+    test('a card+html item carries both link kinds', async function (assert) {
+      let response = await request
+        .get(`${new URL(realmHref).pathname}consumer-1?fields=item`)
+        .set('Accept', SupportedMimeType.CardHtml);
+      assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+      let { staticTargets, queryTargets } = sideLoaded(
+        entryBody(response).included,
+      );
       assert.strictEqual(staticTargets, 1, 'the static link target is carried');
       assert.strictEqual(
         queryTargets,
@@ -207,6 +232,20 @@ module(basename(import.meta.filename), function () {
         3,
         'the query-backed field still names all three matches',
       );
+    });
+
+    test('a card+html item arrives without its linked cards', async function (assert) {
+      // The leg a selective refresh takes. Left out, it would put back the
+      // closure the search below just declined to send.
+      let response = await request
+        .get(`${new URL(realmHref).pathname}consumer-1?fields=item`)
+        .set('Accept', SupportedMimeType.CardHtml);
+      assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+      let { staticTargets, queryTargets } = sideLoaded(
+        entryBody(response).included,
+      );
+      assert.strictEqual(staticTargets, 0, 'no static link target carried');
+      assert.strictEqual(queryTargets, 0, 'no query-backed matches carried');
     });
 
     test('a search returns its results without their linked cards', async function (assert) {
