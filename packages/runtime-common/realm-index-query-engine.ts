@@ -1743,15 +1743,16 @@ export class RealmIndexQueryEngine {
       // cards a caller named, that is nearly all of the work, and it lands on
       // cards present only as context for rendering a link.
       //
-      // No consumer is short of anything it needs. A live one re-runs the
-      // query for itself whatever the document says —
+      // No consumer is left without a way to get the value. A live one
+      // re-runs the query for itself whatever the document says —
       // `ensureQueryFieldSearchResource` makes a query field's search
       // resource live outside a render context — so a field resolved on a
-      // side-loaded card is work it discards. A render resolves a query
-      // field only when a template reads it (`resolveQueryFieldEagerly`
-      // defers to the field getter inside a render context) and loads
-      // whatever that resolution names, so it pays for the fields it
-      // displays rather than for every field in the closure.
+      // side-loaded card is work it discards, beyond seeding the first paint
+      // before its own query lands. A render resolves a query field only
+      // when a template reads it (`resolveQueryFieldEagerly` defers to the
+      // field getter inside a render context), so it reaches only the fields
+      // it displays; for those it runs the query itself rather than reading
+      // an answer off the document.
       //
       // A skipped field is left the way the pristine index row carries it:
       // no umbrella, so no `links.search` and no `data` — the shape an
@@ -2048,6 +2049,35 @@ export class RealmIndexQueryEngine {
       this.#log.debug(
         `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
       );
+
+      // A cross-realm link is served by its own realm, where it is that
+      // request's root — so it arrives with its query-backed fields already
+      // resolved, carrying the `links.search` marker this pass would
+      // otherwise have written. The document is then a function of a query
+      // this realm never ran, which is exactly what the query-backed signal
+      // exists to report: a write to some other card that enters or leaves
+      // that query changes this document and moves neither this card's
+      // `deps` nor its `indexed_at`. Report it from here, since
+      // `applyQueryResults` — the only other place that fires this — does
+      // not run for a resource this realm did not resolve.
+      if (opts?.onQueryFieldApplied) {
+        for (let resource of crossRealmMap.values()) {
+          let relationships = resource.relationships;
+          if (!relationships) {
+            continue;
+          }
+          for (let relationship of Object.values(relationships)) {
+            if (
+              relationship &&
+              !Array.isArray(relationship) &&
+              relationship.links?.search
+            ) {
+              opts.onQueryFieldApplied();
+              break;
+            }
+          }
+        }
+      }
 
       // Step 4: per-entry — resolve linkResource from the prefetched
       // maps (in-realm or cross-realm), build the next layer, and

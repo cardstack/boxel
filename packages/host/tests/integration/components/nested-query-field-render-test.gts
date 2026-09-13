@@ -169,6 +169,33 @@ module('Integration | nested query-field rendering', function (hooks) {
     );
   });
 
+  test('a link target resolves its query-backed field inside a render context too', async function (this: RenderingTestContext, assert) {
+    // The case the document's answer used to decide. Inside a render context
+    // a query field resolves lazily, through the getter, and the seed logic
+    // treats an unresolved field as unanswered rather than as an answer of
+    // none — so the field reaches its own query instead of rendering empty.
+    let globals = globalThis as unknown as { __boxelRenderContext?: boolean };
+    globals.__boxelRenderContext = true;
+    try {
+      let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
+      await settled();
+
+      let element = await renderCard(loader, parent, 'isolated');
+      await settled();
+
+      let rendered = [
+        ...element.querySelectorAll('[data-test-child] [data-test-match]'),
+      ].map((node) => node.textContent?.trim());
+      assert.deepEqual(
+        rendered,
+        ['Anchor', 'Anchor'],
+        'the nested query-backed field resolves without a seed to read',
+      );
+    } finally {
+      delete globals.__boxelRenderContext;
+    }
+  });
+
   test('the field the document does resolve is the one that was asked for', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
     let child = (await getService('store').get(CHILD_URL)) as CardDefType;
