@@ -51,6 +51,7 @@ import {
   type Prerenderer,
   type PopulateCoordinator,
   CachingDefinitionLookup,
+  CardDocumentCache,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -1266,6 +1267,7 @@ export async function createRealm({
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
+  cardDocumentCache = new CardDocumentCache(),
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1308,6 +1310,11 @@ export async function createRealm({
   // Shrinks the card read endpoints' read-your-writes indexing-drain budget
   // so tests can exercise the bounded-wait path without holding real time.
   readIndexDrainBudgetMs?: number;
+  // The card+json response cache. Defaults to one per created realm, so the
+  // suite exercises the same read path production runs; pass a configured
+  // instance to read its stats, or `ttlMs: 0` to keep coalescing while
+  // disabling retention.
+  cardDocumentCache?: CardDocumentCache;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1386,6 +1393,7 @@ export async function createRealm({
         ),
       transpileCoordinator,
       mediaCacheAdapter,
+      cardDocumentCache,
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1443,6 +1451,7 @@ export async function runTestRealmServer({
   prerenderer: providedPrerenderer,
   mediaCacheAdapter,
   readIndexDrainBudgetMs,
+  cardDocumentCache,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1467,6 +1476,8 @@ export async function runTestRealmServer({
   prerenderer?: Prerenderer;
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
+  // Inject a cache configured for the test; omit for the production default.
+  cardDocumentCache?: CardDocumentCache;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1509,6 +1520,7 @@ export async function runTestRealmServer({
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    ...(cardDocumentCache ? { cardDocumentCache } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2176,6 +2188,7 @@ type InternalPermissionedRealmSetupOptions = {
   videoSizeLimitBytes?: number;
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
+  cardDocumentCache?: CardDocumentCache;
 };
 
 async function startPermissionedRealmFixture(
@@ -2196,6 +2209,7 @@ async function startPermissionedRealmFixture(
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    cardDocumentCache,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2267,6 +2281,7 @@ async function startPermissionedRealmFixture(
     prerenderer,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    cardDocumentCache,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2337,6 +2352,7 @@ export function setupPermissionedRealm(
     videoSizeLimitBytes,
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
+    cardDocumentCache,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2367,6 +2383,10 @@ export function setupPermissionedRealm(
     videoSizeLimitBytes?: number;
     mediaCacheAdapter?: MediaCacheAdapter;
     readIndexDrainBudgetMs?: number;
+    // Inject a cache configured for the test (e.g. one that holds its
+    // computation open, so a second request is guaranteed to join rather than
+    // race). Omit for the production default.
+    cardDocumentCache?: CardDocumentCache;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2398,6 +2418,7 @@ export function setupPermissionedRealm(
         videoSizeLimitBytes,
         mediaCacheAdapter,
         readIndexDrainBudgetMs,
+        cardDocumentCache,
       });
       testRealmServer = server;
 

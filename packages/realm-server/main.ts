@@ -3,6 +3,7 @@ import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
+  CardDocumentCache,
   Realm,
   VirtualNetwork,
   isUrlLike,
@@ -524,6 +525,12 @@ const reportHostShellToManager = async () => {
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
 
+  // One card+json response cache for the whole process, shared across every
+  // realm it mounts: entries are keyed on absolute card URLs, and the byte
+  // cap is meant to bound this process's heap rather than each realm's share
+  // of it.
+  let cardDocumentCache = new CardDocumentCache();
+
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -636,6 +643,7 @@ const reportHostShellToManager = async () => {
               DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
           mediaCacheAdapter,
+          cardDocumentCache,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
