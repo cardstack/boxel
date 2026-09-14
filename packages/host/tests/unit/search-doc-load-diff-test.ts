@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
 
+// Kept at this path rather than renamed to follow `render-diagnostics.ts`:
+// CI packs test files into shards by their recorded duration, and a path
+// absent from `test-module-timings.json` is weighted at the median instead
+// of its measured cost — so renaming a file silently repacks every shard.
+// A cosmetic rename is not worth redistributing the suite.
+
 import {
   DIAGNOSTIC_TIMING_FLOOR_MS,
   DIAGNOSTIC_TIMING_MAX_ENTRIES,
