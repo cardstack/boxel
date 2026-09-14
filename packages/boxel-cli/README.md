@@ -1,6 +1,46 @@
 # Boxel CLI
 
-CLI tools for Boxel workspace management.
+**Unlock the power of Boxel with your own agent harness.**
+
+`boxel` puts a Boxel workspace on your local filesystem, so the agent you
+already use — Claude Code, Cursor, your own script — can read and write the
+cards in it directly. Pull a realm down, let your agent edit it, push it back.
+
+```bash
+npx @cardstack/boxel-cli --help
+```
+
+## Why you would want this
+
+A Boxel realm is a live workspace of cards: typed, composable, schema-declared
+software you normally edit in the browser. That is great for people and awkward
+for agents, which want files.
+
+This CLI is the bridge.
+
+- **Bring your own agent.** `realm pull` gives you the realm as files, `push`
+  and `sync` carry your changes back. Whatever edits files can now edit cards —
+  no plugin, no integration, no Boxel-specific agent.
+- **Your realm's skills become your agent's skills.** `pull`, `sync` and
+  `watch` mirror each `skills/<name>/SKILL.md` into
+  `.claude/skills/<realm>-<name>/`, so the same skill Boxel's assistant loads is
+  available in a Claude Code session as `/<realm>-<name>`. One definition, both
+  harnesses.
+- **Scriptable and CI-friendly.** Profiles, non-interactive auth via
+  `BOXEL_PASSWORD`, and `--staging` / `--local` switches mean the same commands
+  run on your laptop and in a pipeline.
+- **Nothing to stand up.** It talks to a hosted realm. No Docker, no Matrix
+  server, no local stack — that is only needed if you are developing Boxel
+  itself.
+
+New to Boxel? Start at [boxel.ai](https://boxel.ai) — then come back here when
+you want an agent working on your cards.
+
+## Community
+
+- [Discord](https://discord.gg/boxel) — questions, help, and what people are building
+- [@boxel_ai](https://x.com/boxel_ai) on X — releases and demos
+- [cardstack/boxel](https://github.com/cardstack/boxel) — issues and source
 
 ## Installation
 
