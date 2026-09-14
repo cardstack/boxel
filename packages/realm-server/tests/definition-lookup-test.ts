@@ -2766,6 +2766,35 @@ module(basename(import.meta.filename), function () {
           },
           deterministic: true,
         },
+        // The source-level writes carry no program at all: what reaches the
+        // realm for one is the item template it substitutes into the stored
+        // file, markers and all.
+        logEvent: {
+          base: 'appendContainsMany',
+          params: {
+            body: {
+              kind: 'field',
+              codeRef: { module: `${realmURL}string`, name: 'default' },
+            },
+          },
+          items: {
+            events: {
+              body: { $ref: 'params', key: 'body' },
+              at: { $ref: 'realmConfig', key: 'clock' },
+            },
+          },
+          deterministic: true,
+        },
+        record: {
+          base: 'appendLine',
+          params: {
+            line: {
+              kind: 'field',
+              codeRef: { module: `${realmURL}string`, name: 'default' },
+            },
+          },
+          deterministic: true,
+        },
       };
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
