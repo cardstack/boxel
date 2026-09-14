@@ -36,10 +36,12 @@
  *                          explicitly only when that heuristic is wrong for
  *                          your data.
  *   --target YYYY-MM-DD    Defaults to today (local time).
- *   --preserve-weekday     Round the shift down to a multiple of 7 days so
- *                          every date keeps its weekday. The anchor then maps
- *                          to the most recent same-weekday on or before the
- *                          target (up to 6 days earlier).
+ *   --preserve-weekday     Round the shift to the nearest multiple of 7 days
+ *                          so every date keeps its weekday. The anchor then
+ *                          maps to the same-weekday date nearest the target
+ *                          (up to 3 days off, either side). Use this for
+ *                          realms with weekly structure — e.g. weekStart
+ *                          fields that must stay Mondays.
  *   --rename-files         Also rename instance files whose basename embeds
  *                          an ISO date (e.g. DailyPlan/2a-2026-08-05-x.json).
  *                          Off by default; only safe when nothing links to
@@ -395,7 +397,7 @@ function apply(root, opts) {
 
   let deltaDays = Math.round((target.getTime() - anchor.getTime()) / MS_PER_DAY);
   if (opts.preserveWeekday) {
-    deltaDays = Math.floor(deltaDays / 7) * 7;
+    deltaDays = Math.round(deltaDays / 7) * 7;
   }
   const anchorLandsOn = shiftISODate(opts.anchor, deltaDays);
   console.log(
