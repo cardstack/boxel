@@ -476,10 +476,12 @@ module(basename(import.meta.filename), function (hooks) {
   // it back would produce. An append never does this; the cases below use it to
   // say what the file should end up holding.
   //
-  // Written back with the file's own indentation rather than a chosen one. How
-  // the realm stored a card is the realm's to decide — these fixtures land
-  // minified — and re-formatting it here would make the expectation a file
-  // nothing would ever write.
+  // Written back the way the file itself is written — its indentation, and
+  // whatever trails its last brace. How the realm stored a card is the realm's
+  // to decide (these fixtures land minified, with a trailing newline), and
+  // reformatting it here would make the expectation a file nothing would ever
+  // write. An append edits the document in place and leaves everything around
+  // it alone, so the expectation has to do the same.
   function loadModifyWrite(
     localPath: string,
     change: (resource: any) => void,
@@ -488,7 +490,11 @@ module(basename(import.meta.filename), function (hooks) {
     let doc = JSON.parse(stored);
     change(doc.data);
     let indented = /\n([ \t]+)/.exec(stored);
-    return JSON.stringify(doc, null, indented ? indented[1] : '');
+    let trailing = /\}(\s*)$/.exec(stored);
+    return (
+      JSON.stringify(doc, null, indented ? indented[1] : '') +
+      (trailing ? trailing[1] : '')
+    );
   }
 
   test("an append writes an item's values, its links and its type into the stored file", async function (assert) {
