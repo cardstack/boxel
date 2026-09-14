@@ -89,7 +89,7 @@ module('Integration | operations', function (hooks) {
         params: { body: StringField },
         append: {
           to: 'comments',
-          value: { body: params('body'), author: actor() },
+          value: { body: params('body'), postedBy: actor() },
         },
       };
       // Annotated rather than inferred: a subclass's static has to stay
@@ -114,7 +114,7 @@ module('Integration | operations', function (hooks) {
         // The thunk form: this class's binding is still uninitialized while
         // its own statics are being built.
         query: {
-          filter: { on: () => ExternalReport, eq: { author: actor('id') } },
+          filter: { on: () => ExternalReport, eq: { author: actor() } },
         },
       };
     }
@@ -276,7 +276,7 @@ module('Integration | operations', function (hooks) {
         fill: {
           title: params('title'),
           dueOn: params('dueOn'),
-          author: actor(),
+          postedBy: actor(),
           classroom: instance('id'),
         },
       };
@@ -289,8 +289,8 @@ module('Integration | operations', function (hooks) {
         base: 'transform',
         assert: {
           unique: 'owners',
-          by: actor('id'),
-          message: 'This person already owns the classroom',
+          by: instance('id'),
+          message: 'This classroom already owns itself',
         },
         append: { to: 'owners', value: card('https://example.test/people/1') },
       };
@@ -309,7 +309,7 @@ module('Integration | operations', function (hooks) {
       {
         title: { $ref: 'params', key: 'title' },
         dueOn: { $ref: 'params', key: 'dueOn' },
-        author: { $ref: 'actor' },
+        postedBy: { $ref: 'actor' },
         classroom: { $ref: 'instance', key: 'id' },
       },
       'params, actor and instance references survive JSON round-tripping',
@@ -331,8 +331,8 @@ module('Integration | operations', function (hooks) {
       JSON.parse(JSON.stringify(addOwner.assert)),
       {
         unique: 'owners',
-        by: { $ref: 'actor', key: 'id' },
-        message: 'This person already owns the classroom',
+        by: { $ref: 'instance', key: 'id' },
+        message: 'This classroom already owns itself',
       },
       'an assertion keys its uniqueness check on a reference',
     );
@@ -1439,9 +1439,22 @@ module('Integration | operations', function (hooks) {
         /must name a param/,
       ],
       [
-        'an actor reference with an empty key',
-        { base: 'transform', set: { x: { $ref: 'actor', key: '' } } },
+        'an actor reference carrying a key',
+        { base: 'transform', set: { x: { $ref: 'actor', key: 'id' } } },
+        /"key" is not a valid key for `set.x`/,
+      ],
+      [
+        'an instance reference with an empty key',
+        { base: 'transform', set: { x: { $ref: 'instance', key: '' } } },
         /must name a member, or none at all/,
+      ],
+      [
+        'a card reference wrapping the caller',
+        {
+          base: 'transform',
+          set: { x: { $ref: 'card', value: { $ref: 'actor' } } },
+        },
+        /`actor\(\)` is the caller's user id rather than a card/,
       ],
       [
         'a card reference with a non-reference value',
@@ -1461,6 +1474,25 @@ module('Integration | operations', function (hooks) {
         `a declaration is refused for ${name}`,
       );
     }
+  });
+
+  test('the caller is typed as a user id, not as a card', function (assert) {
+    // Compile-time assertions: each `@ts-expect-error` fails the type check if
+    // the line it precedes starts compiling. They are what keeps the two
+    // refusals below from being run-time-only — an author sees them in the
+    // editor, before a declaration is ever stored.
+    //
+    // @ts-expect-error actor() takes no argument
+    let keyed = () => actor('id');
+    // @ts-expect-error the caller is not a card identity
+    let wrapped = () => card(actor());
+    assert.throws(keyed, /takes no argument/);
+    assert.throws(wrapped, /rather than a card/);
+    assert.deepEqual(
+      actor(),
+      { $ref: 'actor' },
+      'the one form it does have carries nothing but its kind',
+    );
   });
 
   test('every reference constructor reports what it wanted', function (assert) {
@@ -1491,9 +1523,14 @@ module('Integration | operations', function (hooks) {
         /takes a card class/,
       ],
       [
-        'actor with an empty key',
-        () => actor(''),
-        /takes the name of a member to read, or no argument at all/,
+        'actor with an argument',
+        () => actor('id' as never),
+        /actor\(\) takes no argument; it is the caller's user id/,
+      ],
+      [
+        'card wrapping the caller',
+        () => card(actor() as never),
+        /`actor\(\)` is the caller's user id rather than a card/,
       ],
       [
         'instance with a non-string key',
