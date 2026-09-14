@@ -582,6 +582,78 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 
+  test("the meta payload carries the parent route's model-build breakdown", async function (assert) {
+    // The model build runs in the parent `render` route, inside the same
+    // transition the prerender runner times as this visit's `meta` route
+    // step — so without these stages on the payload, the dominant part of
+    // that step's wall-clock has no breakdown at all. `clearCache` forces a
+    // cold build so `deriveType` covers a real module-graph load rather
+    // than a warm-tab no-op.
+    let url = `${testRealmURL}Person/hassan.json`;
+    await visit(customRenderPath(url, { clearCache: true }, 1) + '/meta');
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    let buildModelMs = meta.diagnostics?.buildModelMs;
+    assert.ok(buildModelMs, 'the model build breakdown rides the payload');
+    for (let stage of [
+      'fetchSource',
+      'deriveType',
+      'hydrate',
+      'storeSettle',
+    ] as const) {
+      let ms = buildModelMs?.[stage];
+      assert.strictEqual(
+        typeof ms,
+        'number',
+        `buildModelMs.${stage} is measured, got: ${JSON.stringify(ms)}`,
+      );
+      assert.ok(
+        (ms as number) >= 0,
+        `buildModelMs.${stage} is a non-negative span`,
+      );
+    }
+
+    // The two waits the meta route itself performs before any of its own
+    // work: the parent's ready settle and the searchable module load. Both
+    // are serial phases of the `meta` route step, so leaving them out would
+    // put the gap back in the bucket this breakdown exists to close.
+    for (let phase of ['readySettleMs', 'searchableLoadMs'] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[phase],
+        'number',
+        `${phase} is measured, got: ${JSON.stringify(meta.diagnostics?.[phase])}`,
+      );
+    }
+
+    // The per-stage detail blocks are bounded to the slowest entries at or
+    // over a floor, so a small fixture card legitimately records none of
+    // them. What must hold is that anything recorded is well-formed —
+    // a malformed entry would only surface in production otherwise.
+    for (let evaluation of meta.diagnostics?.moduleEvaluationsMs ?? []) {
+      assert.strictEqual(
+        typeof evaluation.url,
+        'string',
+        'a module evaluation entry names its module',
+      );
+      assert.strictEqual(typeof evaluation.ms, 'number');
+    }
+    for (let wait of meta.diagnostics?.storeSettleWaits ?? []) {
+      assert.ok(
+        ['card', 'file', 'query'].includes(wait.kind),
+        `a settle wait carries a known kind, got: ${wait.kind}`,
+      );
+      assert.strictEqual(typeof wait.target, 'string');
+      assert.strictEqual(typeof wait.ms, 'number');
+    }
+    for (let [path, ms] of Object.entries(
+      meta.diagnostics?.hydrateFieldsMs ?? {},
+    )) {
+      assert.ok(path.length > 0, 'a hydration entry is keyed by field path');
+      assert.strictEqual(typeof ms, 'number');
+    }
+  });
+
   test('a render carrying both cardRender and fileExtract returns the file extract alongside the meta payload', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
 

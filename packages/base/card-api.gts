@@ -5307,6 +5307,23 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
+      // Inclusive per-field hydration timing, opt-in via the collector on
+      // `opts` (see DeserializeOpts.hydrateFieldsMs). The span opens before
+      // the field-override resolution — a `loadCardDef` for an override is
+      // part of what hydrating this field costs — and closes after the
+      // deserialized value is in hand, covering the nested recursion and any
+      // link load it awaited. Sibling fields deserialize concurrently under
+      // the `Promise.all` below, so spans overlap; each value is that
+      // field's own wall-clock, not a summable slice.
+      let hydrateFieldsMs = opts?.hydrateFieldsMs;
+      let hydrateFieldPath = hydrateFieldsMs
+        ? opts!.hydrateFieldPath
+          ? `${opts!.hydrateFieldPath}.${fieldName}`
+          : fieldName
+        : undefined;
+      let hydrateStart = hydrateFieldsMs ? performance.now() : 0;
+      let fieldOpts =
+        hydrateFieldPath !== undefined ? { ...opts, hydrateFieldPath } : opts;
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
@@ -5376,7 +5393,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         doc,
         store,
         relativeTo: relativeToVal,
-        opts,
+        opts: fieldOpts,
       });
 
       field = applyLinkOverrideFromValue(
@@ -5384,6 +5401,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         field,
         deserializedValue,
       ) as Field<T>;
+      if (hydrateFieldsMs && hydrateFieldPath !== undefined) {
+        // Accumulate rather than assign: a plural field's items all land
+        // under the owning field's path, and a card re-entered on another
+        // branch adds to the same key.
+        hydrateFieldsMs[hydrateFieldPath] =
+          (hydrateFieldsMs[hydrateFieldPath] ?? 0) +
+          (performance.now() - hydrateStart);
+      }
       return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];

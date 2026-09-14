@@ -578,7 +578,16 @@ function mergeVisitDiagnostics(
   let sum = (a?: number, b?: number) =>
     a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
   let merged: Diagnostics = { ...html, ...index };
-  for (let key of ['launchMs', 'renderElapsedMs', 'totalElapsedMs'] as const) {
+  for (let key of [
+    'launchMs',
+    'renderElapsedMs',
+    'totalElapsedMs',
+    // Each visit's own unclaimed render time. Summed alongside
+    // `renderElapsedMs` so the row's buckets still reconcile against it;
+    // taking one visit's value would leave the other visit's plumbing
+    // looking like measured step time.
+    'unattributedMs',
+  ] as const) {
     let total = sum(index[key], html[key]);
     if (total !== undefined) {
       merged[key] = total;

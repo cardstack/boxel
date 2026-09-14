@@ -892,6 +892,60 @@ module(basename(import.meta.filename), function () {
           `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
         );
       }
+
+      // The model build's four stages ride the same channel. They are the
+      // dominant part of a card-instance visit's `indexRoutesMs.card.meta`
+      // bucket — the parent `render` route's model() runs inside the
+      // transition the runner times — so without them that bucket has no
+      // breakdown at all.
+      let buildModelMs = (
+        diagRow?.diagnostics as {
+          buildModelMs?: {
+            fetchSource?: unknown;
+            deriveType?: unknown;
+            hydrate?: unknown;
+            storeSettle?: unknown;
+          };
+        } | null
+      )?.buildModelMs;
+      for (let stage of [
+        'fetchSource',
+        'deriveType',
+        'hydrate',
+        'storeSettle',
+      ] as const) {
+        assert.strictEqual(
+          typeof buildModelMs?.[stage],
+          'number',
+          `diagnostics.buildModelMs.${stage} persists on boxel_index, got: ${JSON.stringify(buildModelMs?.[stage])}`,
+        );
+      }
+
+      // The meta route's own two waits, which sit inside the same route
+      // bucket as the model build and are not part of it.
+      for (let phase of ['readySettleMs', 'searchableLoadMs'] as const) {
+        let ms = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          phase
+        ];
+        assert.strictEqual(
+          typeof ms,
+          'number',
+          `diagnostics.${phase} persists on boxel_index, got: ${JSON.stringify(ms)}`,
+        );
+      }
+
+      // The residual: what the visit's wall-clock has left after every
+      // recorded step bucket. Emitted as a field so a reader accounting for
+      // a visit sees a complete set rather than doing the subtraction.
+      assert.strictEqual(
+        typeof (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+          ?.unattributedMs,
+        'number',
+        `diagnostics.unattributedMs persists on boxel_index, got: ${JSON.stringify(
+          (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+            ?.unattributedMs,
+        )}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
