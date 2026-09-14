@@ -1112,6 +1112,42 @@ function getCodePatchResults(
   return codePatchResultEvents;
 }
 
+// The host records a patch outcome on a codePatchResult event, and those
+// events are not rendered into the history. For an applied block that is
+// fine: the correctness check reports on the result. A failed block left the
+// model with no signal at all, so it would re-read the file and resend the
+// same block. This message tells it which blocks of its message failed and
+// why, and what to do instead.
+//
+// Only a block whose latest result is a failure is reported: a block that
+// failed once and then applied on a retry is an applied block.
+function buildFailedCodePatchMessage(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): string | undefined {
+  let latestResultByBlock = new Map<number, CodePatchResultEvent>();
+  for (let result of getCodePatchResults(cardMessageEvent, history)) {
+    latestResultByBlock.set(result.content.codeBlockIndex, result);
+  }
+  let failures = [...latestResultByBlock.values()]
+    .filter((result) => result.content['m.relates_to']?.key === 'failed')
+    .sort((a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex);
+  if (failures.length === 0) {
+    return undefined;
+  }
+  let lines = failures.map((result) => {
+    let fileUrl = result.content.data?.attachedFiles?.[0]?.sourceUrl;
+    let reason = result.content.failureReason ?? 'unknown error';
+    return `Code block ${result.content.codeBlockIndex + 1}${
+      fileUrl ? ` (${fileUrl})` : ''
+    } was not applied: ${reason}`;
+  });
+  lines.push(
+    'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.',
+  );
+  return lines.join('\n');
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
@@ -1617,6 +1653,16 @@ export async function buildPromptForModel(
           history,
         )
       ).forEach((message) => historicalMessages.push(message));
+      let failedCodePatchMessage = buildFailedCodePatchMessage(
+        event as CardMessageEvent,
+        history,
+      );
+      if (failedCodePatchMessage) {
+        historicalMessages.push({
+          role: 'user',
+          content: failedCodePatchMessage,
+        });
+      }
     }
     if (event.sender !== aiBotUserId) {
       let attachmentText = await buildAttachmentsMessagePart(

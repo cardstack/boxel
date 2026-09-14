@@ -16,6 +16,37 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE: `${standardErrorMessage} (empty search pattern for non-empty file)`,
 } as const;
 
+// Search lines are compared to file lines under these normalizations, tried
+// in order. Indentation never has to match. The second pass also ignores a
+// trailing comma: a model writing a JSON or object-literal search block from
+// memory routinely ends the last line with `}` where the file has `},`, and
+// that single character is the most common reason an otherwise correct block
+// fails to apply. Only the comparison is relaxed; the replacement is written
+// exactly as the model wrote it.
+const LINE_NORMALIZERS: ((line: string) => string)[] = [
+  (line) => line.trim(),
+  (line) => line.trim().replace(/,$/, ''),
+];
+
+// The bare "not found" message gives the model nothing to correct, so it
+// tends to resend the same block. Naming the first search line that occurs
+// nowhere in the file points at the line to fix; when every line occurs
+// somewhere, the lines exist but not in this order or adjacency.
+export function describeSearchPatternNotFound(
+  fileContent: string,
+  searchPattern: string,
+): string {
+  let fileLines = new Set(fileContent.split('\n').map((line) => line.trim()));
+  let missingLine = searchPattern
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line !== '' && !fileLines.has(line));
+  if (missingLine !== undefined) {
+    return `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: ${missingLine}`;
+  }
+  return `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`;
+}
+
 export default class ApplySearchReplaceBlockTool extends HostBaseTool<
   typeof BaseToolModule.ApplySearchReplaceBlockInput,
   typeof BaseToolModule.ApplySearchReplaceBlockResult
@@ -68,9 +99,9 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
       searchPattern,
       replacePattern,
     );
-    if (resultContent === input.fileContent && searchPattern !== '') {
+    if (resultContent === undefined) {
       throw new Error(
-        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND,
+        describeSearchPatternNotFound(input.fileContent, searchPattern),
       );
     }
 
@@ -123,21 +154,41 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
   }
 
   /**
-   * Apply search and replace operation, handling whitespace variations
+   * Apply search and replace operation, handling whitespace variations.
+   * Returns undefined when the search pattern is not found.
    */
   private applySearchReplace(
     content: string,
     searchPattern: string,
     replacePattern: string,
-  ): string {
+  ): string | undefined {
     if (searchPattern === '') {
       return replacePattern;
     }
-    // Create a normalized search pattern for matching
-    // This helps with whitespace differences
-    const normalizedSearchLines = searchPattern
-      .split('\n')
-      .map((line) => line.trim());
+    // Each pass compares lines under a looser normalization than the one
+    // before it, and the first pass that matches wins, so a block that
+    // matches exactly is never redirected to a looser match elsewhere.
+    for (const normalize of LINE_NORMALIZERS) {
+      const result = this.applySearchReplaceWith(
+        content,
+        searchPattern,
+        replacePattern,
+        normalize,
+      );
+      if (result !== undefined) {
+        return result;
+      }
+    }
+    return undefined;
+  }
+
+  private applySearchReplaceWith(
+    content: string,
+    searchPattern: string,
+    replacePattern: string,
+    normalize: (line: string) => string,
+  ): string | undefined {
+    const normalizedSearchLines = searchPattern.split('\n').map(normalize);
 
     // Split content into lines for line-by-line processing
     const contentLines = content.split('\n');
@@ -151,6 +202,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
         contentLines,
         i,
         normalizedSearchLines,
+        normalize,
       );
 
       if (matchResult.matched) {
@@ -180,7 +232,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
       }
     }
 
-    return resultLines.join('\n');
+    return undefined;
   }
 
   /**
@@ -190,6 +242,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     contentLines: string[],
     startIndex: number,
     normalizedSearchLines: string[],
+    normalize: (line: string) => string,
   ): { matched: boolean; matchLength: number } {
     // Make sure we have enough lines to match
     if (startIndex + normalizedSearchLines.length > contentLines.length) {
@@ -200,7 +253,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     let searchLineIndex = 0;
     let contentLineIndex = startIndex;
     while (searchLineIndex < normalizedSearchLines.length) {
-      const contentLine = contentLines[contentLineIndex].trim();
+      const contentLine = normalize(contentLines[contentLineIndex]);
       const searchLine = normalizedSearchLines[searchLineIndex];
 
       // Skip empty lines in the search pattern

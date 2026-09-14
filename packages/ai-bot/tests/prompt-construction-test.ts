@@ -3660,7 +3660,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'user'],
+      ['system', 'user', 'assistant', 'user', 'user'],
+      'the failed second block is reported in its own user message before the trailing context',
     );
     assert.equal(
       messageText(messages![2]),
@@ -3893,7 +3894,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
       userMessages.some((message) =>
         messageText(message).includes('(The user has successfully'),
       ),
-      'Code patch result messages should be omitted',
+      'Applied code patches produce no message',
+    );
+    assert.strictEqual(
+      messageText(userMessages[1]),
+      'Code block 2 was not applied: The patch did not apply cleanly.\n' +
+        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.',
+      'the failed block is reported with its reason; the applied block is not mentioned',
     );
   });
 
@@ -4078,12 +4085,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes('The user tried to apply code patch'),
-      ),
-      'Code patch result messages should be omitted',
+    assert.ok(userMessages.length >= 2, 'Should have user messages');
+    assert.strictEqual(
+      messageText(userMessages[1]),
+      'Code block 1 was not applied: The patch did not apply cleanly.\n' +
+        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.',
+      'the model is told that the block failed and why',
     );
   });
 
