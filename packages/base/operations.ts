@@ -231,14 +231,19 @@ export function instance(key?: string): InstanceReference {
   return key === undefined ? { $ref: 'instance' } : { $ref: 'instance', key };
 }
 
-// A setting of the realm the operation runs in — a named entry of the
-// `config` map in that realm's `.realm.json`, or the whole map when no name
-// is given. It is what lets one card type read a value that differs per realm
-// — an approver, a threshold, a default — without the type hard-coding it.
+// A setting of the realm the operation runs in, or the whole map of them when
+// no name is given. It is what lets one card type read a value that differs
+// per realm — an approver, a threshold, a default — without the type
+// hard-coding it.
 //
 // The name is not checked against anything here, and cannot be: a type is
 // declared once and its cards live in whatever realms hold them, so which
 // settings exist is only known where the operation runs.
+//
+// Where the realm keeps those settings, and the builtin that reads them, are
+// being added separately — this is the declaration spelling ahead of them, so
+// a marker written today lowers and stores but is refused when an invocation
+// tries to resolve it.
 export function realmConfig<Key extends string>(
   key?: Key,
 ): RealmConfigReference<Key> {
@@ -807,9 +812,11 @@ function isSubclassOf(target: typeof BaseDef, def: typeof BaseDef): boolean {
 //
 // The two appends edit the stored file — a line onto the end of a text file,
 // an item into a card's JSON — and never build the document a program would
-// run against. A file def has no such document at all: an `update` replaces
-// its content wholesale, and its metadata is derived from those bytes rather
-// than written.
+// run against. A file's `update` joins them, because it replaces the content
+// wholesale rather than transforming a document; the same base on a card is
+// the declarative merge, which does run one. This keys on the base rather than
+// on the def family, so a file def's `read` keeps the `output` projection it
+// lowers to a program of its own.
 function noProgramReason(
   owner: typeof BaseDef,
   base: BaseOperationName,
@@ -817,8 +824,8 @@ function noProgramReason(
   if (base === 'appendLine' || base === 'appendContainsMany') {
     return `an "${base}" operation appends to the stored file rather than running a program over a document`;
   }
-  if (isSubclassOf(owner, FileDef)) {
-    return `a file's content is replaced wholesale rather than transformed, so nothing declared on a file def runs a program`;
+  if (base === 'update' && isSubclassOf(owner, FileDef)) {
+    return `an "update" on a file def replaces the file's content wholesale rather than transforming a document`;
   }
   return undefined;
 }

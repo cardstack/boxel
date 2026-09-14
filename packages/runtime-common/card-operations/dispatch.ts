@@ -250,22 +250,39 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   appendLine: true,
 };
 
+// Keyed by kind for the lookup dispatch actually does, but built from a table
+// keyed by base operation so the compiler asks where a tenth behavior belongs
+// rather than letting it default to "carried by nothing" — which reads as a
+// 405 at invocation with nothing red anywhere.
+const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
+  read: ['card-def', 'file-def'],
+  readSource: ['card-def', 'file-def'],
+  create: ['card-def'],
+  update: ['card-def', 'file-def'],
+  delete: ['card-def'],
+  query: ['card-def'],
+  transform: ['card-def'],
+  appendContainsMany: ['card-def'],
+  appendLine: ['file-def'],
+};
+
+function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
+  let carried: Partial<Record<BaseOperation, true>> = {};
+  for (let base of Object.keys(CARRIED_BY) as BaseOperation[]) {
+    if (CARRIED_BY[base].includes(kind)) {
+      carried[base] = true;
+    }
+  }
+  return carried;
+}
+
 const ALLOWED_BASE_OPERATIONS: Readonly<
   Record<DefKind, Partial<Record<BaseOperation, true>>>
 > = {
   // Everything but the one behavior that appends a line of text: a card's
   // stored bytes are a JSON:API document, and a line appended to one leaves
   // behind a file that is no longer a card.
-  'card-def': {
-    read: true,
-    readSource: true,
-    create: true,
-    update: true,
-    delete: true,
-    query: true,
-    transform: true,
-    appendContainsMany: true,
-  },
+  'card-def': carriedBy('card-def'),
   // A file's metadata is derived from its bytes and read-only, so there is no
   // JSON:API mutation surface for anything to reach — and no field schema, so
   // no `containsMany` to append to. Its bytes are the representation a file is
@@ -283,10 +300,10 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
   // such overlap to fall back through, so the discrimination has to move to
   // where it can be made: the executor, which knows whether the path holds a
   // card's `.json` or plain bytes and already has to judge the content type.
-  'file-def': { read: true, readSource: true, update: true, appendLine: true },
+  'file-def': carriedBy('file-def'),
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
-  'field-def': {},
+  'field-def': carriedBy('field-def'),
 };
 
 // The base operations that resolve without consulting a definition.

@@ -198,7 +198,13 @@ export type OperationLoweringIssueCode =
   // A raw program declared on a base that runs none. The two appends edit the
   // stored file and a file's content is replaced wholesale, so a program
   // stored for one of them would never be reached.
-  | 'unrunnable-program';
+  | 'unrunnable-program'
+  // An `appendContainsMany` that does not say what to append where: no field,
+  // no item for a field it names, or both spellings at once with no rule for
+  // which wins. The decorator refuses each, so one only reaches a stored
+  // entry — where appending nothing, or a literal `null`, is worse than
+  // refusing.
+  | 'incomplete-append';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
