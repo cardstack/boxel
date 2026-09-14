@@ -27,6 +27,8 @@ import {
   asExpressions,
   Deferred,
   Job,
+  registerJobHeartbeat,
+  unregisterJobHeartbeat,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
@@ -691,27 +693,78 @@ export class PgQueueRunner implements QueueRunner {
           let result: PgPrimitive;
           try {
             log.debug(`%s: running %s`, this.#workerId, jobToRun.id);
+            // The deadline is re-armed by every heartbeat, so it measures
+            // time *without progress* rather than total runtime. A handler
+            // that never heartbeats sees one deadline from the start, exactly
+            // as before.
+            let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+            let onDeadline: (() => void) | undefined;
+            let armDeadline = () => {
+              if (deadlineTimer) {
+                clearTimeout(deadlineTimer);
+              }
+              deadlineTimer = setTimeout(() => {
+                onDeadline?.();
+              }, effectiveTimeoutSec * 1000);
+              deadlineTimer.unref();
+            };
+            // Pushing `locked_until` out is a write, and progress arrives per
+            // file — thousands of times on a large pass. Extend at most once
+            // per grace window: often enough that the lease never lapses under
+            // a progressing job, rare enough to cost nothing.
+            let lastLeaseExtension = Date.now();
+            let extendLease = () => {
+              if (Date.now() - lastLeaseExtension < LEASE_GRACE_SEC * 1000) {
+                return;
+              }
+              lastLeaseExtension = Date.now();
+              // Fire-and-forget on the pool rather than this loop's
+              // connection, which is mid-transaction for the next claim. A
+              // failed extension only costs the job its lease, which is the
+              // pre-existing behaviour.
+              void this.#pgClient
+                .execute(
+                  `UPDATE job_reservations
+                     SET locked_until = (($1 || ' seconds')::interval + NOW())
+                     WHERE id = $2 AND completed_at IS NULL`,
+                  { bind: [String(leaseSec), jobReservationId] },
+                )
+                .catch((e: unknown) => {
+                  log.warn(
+                    `%s: could not extend lease for job %s: %s`,
+                    this.#workerId,
+                    jobToRun.id,
+                    (e as Error)?.message ?? e,
+                  );
+                });
+            };
+            registerJobHeartbeat(jobReservationId, () => {
+              armDeadline();
+              extendLease();
+            });
+            armDeadline();
+
             result = await Promise.race([
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
                 priority: jobToRun.priority,
                 queueWaitMs: Number.isFinite(queueWaitMs) ? queueWaitMs : null,
+              }).finally(() => {
+                unregisterJobHeartbeat(jobReservationId);
+                clearTimeout(deadlineTimer);
               }),
-              // we race the job so that it doesn't hold this worker hostage if
-              // the job's promise never resolves. The deadline is the lease,
-              // clamped by the worker's own ceiling — never the ceiling alone.
-              // A handler allowed to run past its own reservation leaves the
-              // job claimable while it is still working, so a peer can run it
-              // concurrently, and it puts a healthy worker in front of the
-              // stuck-job watchdog. Nothing renews a lease, so sharing one
-              // deadline is what makes "reservation open past its lease" mean
-              // the worker died rather than the worker is slow.
-              new Promise<'timeout'>((r) =>
-                setTimeout(() => {
-                  r('timeout');
-                }, effectiveTimeoutSec * 1000).unref(),
-              ),
+              // We race the job so a promise that never resolves cannot hold
+              // this worker hostage. What counts as "never resolves" is now
+              // "made no progress for a whole deadline" — a job that keeps
+              // heartbeating re-arms the timer and extends its lease, so a
+              // long pass is bounded by going quiet rather than by taking
+              // time. A job that goes quiet still loses the worker, which is
+              // what puts a genuinely wedged handler in front of the
+              // stuck-job watchdog.
+              new Promise<'timeout'>((r) => {
+                onDeadline = () => r('timeout');
+              }),
             ]);
             if (result === 'timeout') {
               throw new Error(

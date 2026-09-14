@@ -49,6 +49,46 @@ import type { Deferred } from './deferred.ts';
 // nothing else.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+// ── Job heartbeats ─────────────────────────────────────────────────────────
+//
+// A job's `timeout` bounds how long it may go *without progress*, not how long
+// it may run in total. A pass over a large realm is not stuck because it is
+// taking a while; it is stuck when it stops getting anywhere. Bounding total
+// runtime instead makes a big realm structurally impossible to finish — its
+// deadline expires mid-pass however many times it is retried.
+//
+// A handler that knows it is progressing calls `heartbeatJob` with the
+// `reservationId` it was given. The queue registers the callback while the job
+// runs and drops it afterwards, so a heartbeat for a job that has already
+// finished is a no-op rather than an error. A handler that never heartbeats —
+// which is most of them — keeps exactly the old behaviour: one deadline,
+// measured from the start.
+//
+// The registry lives here rather than in the queue implementation because the
+// queue package imports this one, and a handler must be able to reach it
+// without depending on which queue backend is in play.
+let jobHeartbeats = new Map<number, () => void>();
+
+export function registerJobHeartbeat(
+  reservationId: number,
+  onHeartbeat: () => void,
+): void {
+  jobHeartbeats.set(reservationId, onHeartbeat);
+}
+
+export function unregisterJobHeartbeat(reservationId: number): void {
+  jobHeartbeats.delete(reservationId);
+}
+
+// Report that the job holding `reservationId` is still getting somewhere.
+// Safe to call often and safe to call late: an unknown reservation is ignored.
+export function heartbeatJob(reservationId: number | undefined): void {
+  if (reservationId == null) {
+    return;
+  }
+  jobHeartbeats.get(reservationId)?.();
+}
+
 export const systemInitiatedPriority = 1;
 export const systemInitiatedPrerenderHtmlPriority = 0;
 

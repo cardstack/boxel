@@ -20,6 +20,7 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
+import { heartbeatJob } from '@cardstack/runtime-common/queue';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
@@ -196,6 +197,90 @@ module(basename(import.meta.filename), function () {
 
       releaseHandler();
       assert.strictEqual(await job.done, 1, 'the handler still completes');
+    });
+
+    test('a job that keeps reporting progress outlives its deadline', async function (assert) {
+      // `timeout` bounds time without progress, not total runtime. A pass over
+      // a large realm is not stuck because it is taking a while — and bounding
+      // total runtime made such a realm impossible to finish, because the
+      // deadline expired mid-pass however many times it was retried.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'heartbeat-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            resolveStarted();
+            // Beat faster than the 2s deadline for longer than the deadline,
+            // so an unheartbeated job would certainly have been cut off.
+            let beating = setInterval(
+              () => heartbeatJob(args.jobInfo?.reservationId),
+              200,
+            );
+            try {
+              await new Promise<void>((res) => (releaseHandler = res));
+            } finally {
+              clearInterval(beating);
+            }
+            return { survived: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ survived: boolean }>({
+        jobType: 'heartbeat-job',
+        concurrencyGroup: 'heartbeat-group',
+        timeout: 600, // clamped to the runner's maxTimeoutSec: 2
+        // An object: the queue attaches `jobInfo` to object args only, and
+        // the reservation id it carries is what a heartbeat is keyed by.
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await new Promise((res) => setTimeout(res, 5000));
+
+      let [row] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        row.status,
+        'unfulfilled',
+        'still running 5s into a 2s deadline, because it kept reporting progress',
+      );
+
+      releaseHandler();
+      assert.deepEqual(
+        await job.done,
+        { survived: true },
+        'and it completes normally',
+      );
+    });
+
+    test('a job that goes quiet still loses its worker at the deadline', async function (assert) {
+      // The other half of the contract: a deadline that only ever extends
+      // would let a wedged handler hold a worker forever.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register('silent-job', async () => {
+          resolveStarted();
+          await new Promise<void>((res) => (releaseHandler = res));
+          return { late: true };
+        });
+      });
+
+      let job = await publisher.publish<{ late: boolean }>({
+        jobType: 'silent-job',
+        concurrencyGroup: 'silent-group',
+        timeout: 600, // clamped to 2s
+        args: 1,
+      });
+      await handlerStarted;
+
+      await assert.rejects(
+        job.done,
+        /Timed-out after 2s/,
+        'a job reporting nothing is cut off at its deadline',
+      );
+      releaseHandler();
     });
 
     test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {

@@ -121,10 +121,17 @@ export interface StatusArgs {
   deps?: string[];
 }
 
+import { heartbeatJob } from './queue.ts';
+
 export interface IndexingProgressEvent {
   type: 'indexing-started' | 'file-visited' | 'indexing-finished';
   realmURL: string;
   jobId: number;
+  // The reservation the reporting job holds. Carried so a progress report can
+  // double as the job's heartbeat: the queue keys heartbeats by reservation,
+  // because a job id can have more than one over its life. Optional for
+  // callers that mint a synthetic event without a reservation behind it.
+  reservationId?: number;
   jobType?: string;
   totalFiles?: number;
   filesCompleted?: number;
@@ -370,6 +377,11 @@ export class Worker {
   }
 
   private reportProgress(event: IndexingProgressEvent) {
+    // Progress is also the job's proof of life. Telling the queue here — at
+    // the one place every progress report already passes through — is what
+    // lets a long pass keep its worker: its deadline measures silence, and
+    // this is the job breaking it.
+    heartbeatJob(event.reservationId);
     this.#reportProgress?.(event);
   }
 
