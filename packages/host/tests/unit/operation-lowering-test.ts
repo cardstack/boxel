@@ -257,25 +257,14 @@ module('Unit | operation lowering', function (hooks) {
         of: () => fixtures.Activity,
         fill: { owner: actor() },
       } satisfies OperationsModule.OperationDeclaration;
-      @operation static addWrapped = {
-        base: 'create',
-        of: () => fixtures.Activity,
-        // `card()` refuses this at declaration time, so the marker it would
-        // have built is written out to reach the lowering the way a
-        // definition assembled outside TypeScript would.
-        fill: { label: { $ref: 'card', value: { $ref: 'actor' } } as never },
-      } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Classroom });
 
     let result = await lower(Classroom);
     assert.deepEqual(
       result.issues.map((issue) => [issue.code, issue.path]),
-      [
-        ['actor-not-a-card', 'fill.owner'],
-        ['actor-not-a-card', 'fill.label.value'],
-      ],
-      'a link field and the inside of a card() wrapper are both card identities',
+      [['actor-not-a-card', 'fill.owner']],
+      'a template filling a link field is a card identity like any other',
     );
   });
 

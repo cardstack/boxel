@@ -138,7 +138,12 @@ const SNAPSHOT = {
   featured: null,
 };
 
-const ACTOR_ID = 'http://example.com/cards/author/1';
+const LINKED_CARD_ID = 'http://example.com/cards/author/1';
+
+// A Matrix user id, which is what the realm authenticates a caller as — and
+// deliberately not a card URL, so a program that treats the caller as a card
+// fails here the way it would in a realm rather than resolving by accident.
+const ACTOR_ID = '@tester:localhost';
 
 const PLAN_CONTEXT = {
   programId: 'operation-lowering-test',
@@ -146,12 +151,12 @@ const PLAN_CONTEXT = {
   context: {
     params: {
       value: 'a value',
-      who: ACTOR_ID,
+      who: LINKED_CARD_ID,
     },
     actor: ACTOR_ID,
   },
   cards: {
-    [ACTOR_ID]: { id: ACTOR_ID },
+    [LINKED_CARD_ID]: { id: LINKED_CARD_ID },
   },
 };
 
@@ -364,6 +369,18 @@ const REFUSED_DECLARATIONS: {
     emitsProgram: true,
     declaration: { base: 'transform', set: { owner: actor() } },
     wouldBe: '.owner=actor();',
+  },
+  {
+    // The same thing said explicitly. The declaration API refuses
+    // `card(actor())` outright, so this shape only reaches lowering from a
+    // caller that assembled the declaration itself — which is the case this
+    // pass stays exported to guard.
+    name: 'set on a link from the caller, wrapped in card()',
+    executor: 'rejects',
+    code: 'actor-not-a-card',
+    emitsProgram: true,
+    declaration: { base: 'transform', set: { owner: card(actor()) } },
+    wouldBe: '.owner=card(actor());',
   },
   {
     name: 'set on a computed field',
@@ -580,7 +597,7 @@ const tests = Object.freeze({
 
       let onDuplicate = await planOutcome(source, {
         ...SNAPSHOT,
-        reviewers: [{ id: ACTOR_ID }],
+        reviewers: [{ id: LINKED_CARD_ID }],
       });
       assert.ok(
         'rejected' in onDuplicate &&
