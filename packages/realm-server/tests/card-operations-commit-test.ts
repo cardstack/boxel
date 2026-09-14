@@ -139,6 +139,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
       [
         // A card per test that mutates one, so the file's tests do not have to
         // be ordered against each other.
+        'append-sibling',
         'commit-write',
         'commit-delete',
         'version-target',
@@ -484,17 +485,32 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test("an append writes an item's values, its links and its type into the stored file", async function (assert) {
+    // Assignment rather than mutation throughout, because what the realm
+    // serialized the card with on its way to disk is the realm's to decide: a
+    // member it left out is added here where an append would add it — at the
+    // end of its container — and one it wrote keeps the place it wrote it in.
     let expected = loadModifyWrite('append-legs.json', (resource) => {
-      resource.attributes.events.push(
+      resource.attributes ??= {};
+      resource.attributes.events = [
+        ...(resource.attributes.events ?? []),
         { label: 'shipped' },
         { label: 'hotfix', severity: 'high' },
-      );
-      resource.attributes.notes.push('rolled forward');
+      ];
+      resource.attributes.notes = [
+        ...(resource.attributes.notes ?? []),
+        'rolled forward',
+      ];
       resource.relationships = {
+        ...resource.relationships,
         'events.1.author': { links: { self: `${testRealmHref}Person/mango` } },
       };
       resource.meta.fields = {
-        events: [{}, { adoptsFrom: HOTFIX_EVENT }],
+        ...resource.meta.fields,
+        events: [
+          ...(resource.meta.fields?.events ?? []),
+          {},
+          { adoptsFrom: HOTFIX_EVENT },
+        ],
       };
     });
 
@@ -552,11 +568,15 @@ module(basename(import.meta.filename), function (hooks) {
       .get('/append-visible')
       .set('Accept', 'application/vnd.card+json');
     assert.strictEqual(response.status, 200, 'the card is served');
+    // The labels rather than the items: what a serialized item carries
+    // alongside them is the serializer's, and what this pins is that the
+    // spliced file re-indexed as the card it is.
     assert.deepEqual(
-      response.body.data.attributes.events,
-      [{ label: 'indexed' }],
-      'the appended item is in the document the realm assembles, so the ' +
-        'spliced file re-indexed as the card it is',
+      (response.body.data.attributes.events ?? []).map(
+        (event: { label?: string }) => event.label,
+      ),
+      ['indexed'],
+      'the appended item is in the document the realm assembles',
     );
   });
 
@@ -574,7 +594,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           op: 'update',
-          href: `${testRealmHref}commit-write`,
+          href: `${testRealmHref}append-sibling`,
           document: {
             data: {
               type: 'card',
@@ -603,7 +623,7 @@ module(basename(import.meta.filename), function (hooks) {
     let indexEvents = (await incrementalIndexEventsSince(since)).filter(
       (event) =>
         event.invalidations.includes(`${testRealmHref}append-mixed`) ||
-        event.invalidations.includes(`${testRealmHref}commit-write`),
+        event.invalidations.includes(`${testRealmHref}append-sibling`),
     );
     assert.strictEqual(
       indexEvents.length,
