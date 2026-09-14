@@ -15,6 +15,7 @@ import { formatDateForMarkdown } from './markdown-helpers';
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
 import { Age } from './components/age';
+import { nowDate } from './helpers/clock';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -217,7 +218,7 @@ export default class DateField extends FieldDef {
       if (!date?.length) {
         return set(null);
       }
-      let parsed = parse(date, dateFormat, new Date());
+      let parsed = parse(date, dateFormat, nowDate());
       if (!isValid(parsed)) {
         return;
       }
