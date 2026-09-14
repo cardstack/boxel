@@ -12,6 +12,7 @@ import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
   handleStreamingRequest,
+  isClientDisconnectError,
 } from '../lib/proxy-forward.ts';
 import * as Sentry from '@sentry/node';
 
@@ -359,7 +360,7 @@ export default function handleRequestForward({
         await setContextResponse(ctxt, response);
       });
     } catch (error) {
-      if (clientGone.aborted) {
+      if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing an on-call engineer could act on, so this stays
         // out of the error channel. Returning here is what lets the cost lock

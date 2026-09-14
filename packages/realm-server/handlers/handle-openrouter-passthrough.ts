@@ -7,6 +7,7 @@ import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
   handleStreamingRequest,
+  isClientDisconnectError,
 } from '../lib/proxy-forward.ts';
 import {
   fetchRequestFromContext,
@@ -170,7 +171,7 @@ export default function handleOpenRouterPassthrough({
         await setContextResponse(ctxt, response);
       });
     } catch (error) {
-      if (clientGone.aborted) {
+      if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing to page anyone about.
         log.info(

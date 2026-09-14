@@ -34,6 +34,46 @@ export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
   return controller.signal;
 }
 
+// A `cause` chain is walked rather than inspected one level deep because
+// `fetch` surfaces an abort reason wrapped rather than rethrown. The bound
+// stops a malformed or self-referential chain from spinning.
+const MAX_CAUSE_DEPTH = 8;
+
+/**
+ * Whether `error` is the cancellation `signal` asked for, as opposed to a
+ * failure that merely happened while the signal was aborted.
+ *
+ * `signal.aborted` alone cannot answer this. Work that runs *after* the
+ * upstream call — saving the usage cost — never receives the signal, so it
+ * runs to completion or failure regardless of whether the client is still
+ * there. A caller that treats every post-abort exception as a cancellation
+ * therefore swallows a genuine billing failure whenever the client happens to
+ * leave during that write, which is precisely when nobody is watching.
+ *
+ * Identity against `signal.reason` is exact: `clientDisconnectSignal` aborts
+ * with a specific `Error` instance. The `AbortError` name is accepted too, for
+ * an abort that a lower layer reports in its own terms.
+ */
+export function isClientDisconnectError(
+  error: unknown,
+  signal: AbortSignal,
+): boolean {
+  if (!signal.aborted) {
+    return false;
+  }
+  let cursor: unknown = error;
+  for (let depth = 0; cursor != null && depth < MAX_CAUSE_DEPTH; depth++) {
+    if (cursor === signal.reason) {
+      return true;
+    }
+    if ((cursor as { name?: unknown }).name === 'AbortError') {
+      return true;
+    }
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /**
  * Stream the upstream `text/event-stream` response back to the client, parsing
  * each `data:` line so we can capture the OpenRouter generation id / inline
@@ -143,10 +183,11 @@ export async function handleStreamingRequest(
       },
     );
   } catch (error) {
-    if (signal.aborted) {
+    if (isClientDisconnectError(error, signal)) {
       // The read failed because the client hung up and we cancelled the
       // upstream call ourselves. There is no socket left to write the error
-      // frames to and no fault to page anyone about.
+      // frames to and no fault to page anyone about. A cost-save that fails
+      // on its own after the client left is not this, and falls through.
       log.info(
         `Client disconnected during streaming request for user ${matrixUserId}; upstream call cancelled`,
       );
