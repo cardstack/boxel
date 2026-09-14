@@ -1712,6 +1712,42 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('an invalidation pass records the adoption chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+
+        // `ringo` is a Pet, and `hassan` is the PetPerson that links to it —
+        // so the fan-out reaches a second type, whose search doc genuinely can
+        // move. Nothing here is a Person or a Post.
+        await batch.invalidate([new URL(`${testRealm}ringo.json`)]);
+
+        let touched = batch.touchedTypes;
+        assert.true(
+          touched.includes(keyFor('pet', 'Pet')),
+          `the invalidated card's own type is recorded: ${touched.join(', ')}`,
+        );
+        assert.true(
+          touched.includes(keyFor('pet-person', 'PetPerson')),
+          `a dependent card's type is recorded too: ${touched.join(', ')}`,
+        );
+        assert.false(
+          touched.includes(keyFor('person', 'Person')),
+          'an untouched type is absent',
+        );
+        assert.false(
+          touched.includes(keyFor('post', 'Post')),
+          'a second untouched type is absent',
+        );
+      });
+
       // A batch reads the realm's loader epoch when it starts, and with no
       // executable in its invalidation set its own epoch getter returns that
       // same token. Committing it unconditionally would write the read-at-start

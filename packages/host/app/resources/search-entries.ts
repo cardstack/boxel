@@ -65,6 +65,10 @@ import type {
 } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
+// The anchor resolution is async and nothing else awaits it, so without its
+// own waiter a `settled()` could land between an event arriving and the keys
+// that event asked for being ready.
+const typeKeysWaiter = buildWaiter('search-entries-resource:type-keys-waiter');
 
 // `SearchEntryRendering` is the card-facing rendering view-model (it rides the
 // `@context` search surface), so it lives in runtime-common; re-exported
@@ -698,6 +702,18 @@ export class SearchEntriesResource extends Resource<Args> {
   // Any anchor that can't be resolved abandons the whole set, leaving the
   // query on the unconditional re-run.
   async #resolveQueryTypeKeys(anchors: CodeRef[], epoch: number) {
+    let token = typeKeysWaiter.beginAsync();
+    try {
+      let keys = await this.#typeKeysFor(anchors);
+      if (keys && epoch === this.#queryTypeKeysEpoch && !isDestroyed(this)) {
+        this.#queryTypeKeys = keys;
+      }
+    } finally {
+      typeKeysWaiter.endAsync(token);
+    }
+  }
+
+  async #typeKeysFor(anchors: CodeRef[]): Promise<Set<string> | undefined> {
     let { virtualNetwork } = this.network;
     let keys = new Set<string>();
     for (let ref of anchors) {
@@ -705,7 +721,7 @@ export class SearchEntriesResource extends Resource<Args> {
       // document that issued the query; the client has no basis to resolve it
       // to the same place, so it isn't comparable to what the index stamped.
       if (isRelativePath(moduleFrom(ref))) {
-        return;
+        return undefined;
       }
       keys.add(internalKeyFor(ref, undefined, virtualNetwork));
       let canonical: CodeRef | undefined;
@@ -716,16 +732,14 @@ export class SearchEntriesResource extends Resource<Args> {
       } catch (_e) {
         // A ref that names no loadable type is the same uncertainty as one
         // that names a type we can't canonicalize.
-        return;
+        return undefined;
       }
       if (!canonical) {
-        return;
+        return undefined;
       }
       keys.add(internalKeyFor(canonical, undefined, virtualNetwork));
     }
-    if (epoch === this.#queryTypeKeysEpoch && !isDestroyed(this)) {
-      this.#queryTypeKeys = keys;
-    }
+    return keys;
   }
 
   // Drop the resolved keys and orphan any resolution still in flight for

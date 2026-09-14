@@ -23,6 +23,7 @@ import {
   searchEntryRealms,
   searchEntryWireQueryFromQuery,
   wireFilterHasMatches,
+  wireFilterTypeAnchors,
   SearchRequestError,
   DEFAULT_HTML_QUERY,
   rri,
@@ -515,6 +516,77 @@ module(basename(import.meta.filename), function () {
           ],
         }),
       );
+    });
+  });
+
+  // The types an entry must be one of to satisfy a wire filter — what lets a
+  // live search sit out an index event that touched none of them.
+  module('wire filter type anchors', function () {
+    let bookRef: ResolvedCodeRef = {
+      module: rri(`${realmURL}book`),
+      name: 'Book',
+    };
+
+    test('an anchored node answers for its whole subtree', function (assert) {
+      assert.deepEqual(wireFilterTypeAnchors({ 'item.on': authorRef }), [
+        authorRef,
+      ]);
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          'item.on': authorRef,
+          eq: { 'item.status': 'ready' },
+        }),
+        [authorRef],
+      );
+      // The engine ANDs the node's own anchor with everything below it, so an
+      // unanchored branch underneath can't widen what the node matches.
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          'item.on': authorRef,
+          any: [{ eq: { 'item.status': 'ready' } }, { matches: 'pigeon' }],
+        }),
+        [authorRef],
+      );
+    });
+
+    test('every is satisfied by one anchored branch, any needs them all', function (assert) {
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          every: [{ eq: { 'item.status': 'ready' } }, { 'item.on': authorRef }],
+        }),
+        [authorRef],
+      );
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          any: [{ 'item.on': authorRef }, { 'item.on': bookRef }],
+        }),
+        [authorRef, bookRef],
+      );
+      assert.strictEqual(
+        wireFilterTypeAnchors({
+          any: [{ 'item.on': authorRef }, { eq: { 'item.status': 'ready' } }],
+        }),
+        undefined,
+        'an unanchored branch of `any` admits an entry of any type',
+      );
+    });
+
+    test('a filter that admits any type anchors nothing', function (assert) {
+      for (let filter of [
+        undefined,
+        {},
+        { matches: 'pigeon' },
+        { eq: { 'item.status': 'ready' } },
+        { not: { 'item.on': authorRef } },
+        { every: [] },
+        { any: [] },
+      ]) {
+        assert.strictEqual(
+          wireFilterTypeAnchors(filter),
+          undefined,
+          `${JSON.stringify(filter)} → undefined`,
+        );
+      }
     });
   });
 

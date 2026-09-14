@@ -10,6 +10,7 @@ import { module, test } from 'qunit';
 
 import {
   htmlResourceId,
+  internalKeyFor,
   CssResourceType,
   HtmlResourceType,
   EntryResourceType,
@@ -524,6 +525,130 @@ module('Integration | search-entries resource', function (hooks) {
       search.entries.find((entry) => entry.id === `${testRealmURL}books/3`),
       'the new book appears after the incremental index event',
     );
+  });
+
+  // A write to a type a query isn't anchored on used to re-run that query in
+  // full, on every client holding it. The event now names the adoption chains
+  // it touched, so a query whose anchors are disjoint from them can sit it out.
+  module('index event type gating', function () {
+    // Nothing in this realm adopts from it — the stand-in for "somebody else's
+    // unrelated write".
+    const unrelatedType = 'http://test-realm/test/observation/Observation';
+
+    function relayIndexEvent(invalidatedTypes?: string[]) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}observations/1.json`],
+        ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+        realmURL: testRealmURL,
+      });
+    }
+
+    function countingSearch(): () => number {
+      let searchCount = 0;
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      };
+      return () => searchCount;
+    }
+
+    test('an event that touched no anchored type does not re-run the query', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        // The anchors resolve off the first event that carries types, so that
+        // event takes the re-run it would have taken anyway.
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'a write to a type the query is not anchored on is skipped',
+        );
+
+        relayIndexEvent([
+          unrelatedType,
+          internalKeyFor(
+            bookRef,
+            undefined,
+            getService('network').virtualNetwork,
+          ),
+        ]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an event naming the anchored type re-runs the query',
+        );
+
+        relayIndexEvent();
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 3,
+          'an event carrying no type information re-runs the query',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('a query that admits an entry of any type re-runs on every event', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { eq: { 'item.status': 'ready' } },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an unanchored filter can gain a member of any type, so nothing is skipped',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
   });
 
   test('a burst of realm events coalesces into a single re-run', async function (assert) {

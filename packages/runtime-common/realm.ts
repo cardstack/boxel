@@ -532,24 +532,28 @@ interface IndexPassResult extends IncrementalIndexMeta {
   invalidations: string[];
 }
 
-// A write can drive more than one index pass — `writeMany` flushes modules
-// ahead of the instances that depend on them — and the broadcast that follows
-// covers all of them, so the type sets union the same way the URL sets do. A
-// pass that reports no types at all leaves the accumulator untouched rather
-// than contributing an empty set, so one silent pass in a batch takes the
-// whole broadcast back to the unconditional re-run.
-function unionInvalidatedTypes(
-  accumulated: Set<string> | undefined,
-  meta: IncrementalIndexMeta,
-): Set<string> | undefined {
-  if (meta.invalidatedTypes === undefined) {
-    return accumulated;
-  }
-  let next = accumulated ?? new Set<string>();
-  for (let type of meta.invalidatedTypes) {
-    next.add(type);
-  }
-  return next;
+// Accumulates the type sets of every index pass standing behind one
+// broadcast — a `writeMany` flushes modules ahead of the instances that depend
+// on them, so a single event can cover several passes. A pass that couldn't
+// report its types poisons the accumulation for good rather than being skipped
+// over: the event speaks for every pass behind it, and a set that quietly
+// omitted one would let a subscriber sit out a re-run it needed.
+function makeInvalidatedTypeAccumulator() {
+  let types: Set<string> | undefined = new Set();
+  return {
+    add(meta: IncrementalIndexMeta): void {
+      if (meta.invalidatedTypes === undefined) {
+        types = undefined;
+      } else if (types) {
+        for (let type of meta.invalidatedTypes) {
+          types.add(type);
+        }
+      }
+    },
+    get value(): string[] | undefined {
+      return types ? [...types] : undefined;
+    },
+  };
 }
 
 // An invalidation event's type set is bounded by the realm's type count, not
@@ -1974,11 +1978,13 @@ export class Realm {
     },
   ): Promise<IndexPassResult> {
     if (changes.length === 0) {
-      return { invalidations: [] };
+      // No pass ran, so nothing was touched — which the empty set states
+      // exactly, and more usefully than staying silent would.
+      return { invalidations: [], invalidatedTypes: [] };
     }
 
     let invalidations = new Set<string>();
-    let invalidatedTypes: Set<string> | undefined;
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
@@ -1996,7 +2002,7 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
-        invalidatedTypes = unionInvalidatedTypes(invalidatedTypes, meta);
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
     });
@@ -2004,7 +2010,7 @@ export class Realm {
     return {
       invalidations: [...invalidations],
       generation,
-      ...(invalidatedTypes ? { invalidatedTypes: [...invalidatedTypes] } : {}),
+      invalidatedTypes: invalidatedTypes.value,
     };
   }
 
@@ -2035,13 +2041,13 @@ export class Realm {
   ): Promise<{ settled: Promise<void> }> {
     if (changes.length === 0) {
       if (opts.onSettled) {
-        await opts.onSettled([], {});
+        await opts.onSettled([], { invalidatedTypes: [] });
       }
       return { settled: Promise.resolve() };
     }
 
     let invalidations = new Set<string>();
-    let invalidatedTypes: Set<string> | undefined;
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
@@ -2053,16 +2059,14 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
-        invalidatedTypes = unionInvalidatedTypes(invalidatedTypes, meta);
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
       onSettled: async () => {
         if (opts.onSettled) {
           await opts.onSettled([...invalidations], {
             generation,
-            ...(invalidatedTypes
-              ? { invalidatedTypes: [...invalidatedTypes] }
-              : {}),
+            invalidatedTypes: invalidatedTypes.value,
           });
         }
       },
@@ -2665,7 +2669,7 @@ export class Realm {
     let updatedFiles: LocalPath[] = [];
     let removedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
-    let invalidatedTypes: Set<string> | undefined;
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
@@ -2679,9 +2683,7 @@ export class Realm {
         initiatedBy: initiatingUser,
       });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
-      invalidatedTypes = unionInvalidatedTypes(invalidatedTypes, {
-        invalidatedTypes: workingTypes,
-      });
+      invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
     };
 
@@ -2943,9 +2945,7 @@ export class Realm {
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
           generation: indexGeneration,
-          ...(invalidatedTypes
-            ? { invalidatedTypes: [...invalidatedTypes] }
-            : {}),
+          invalidatedTypes: invalidatedTypes.value,
         });
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
@@ -2966,7 +2966,7 @@ export class Realm {
         // never hit the intermediate path, so this snapshot is empty for
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
-        let priorTypes = invalidatedTypes;
+        let priorTypes = invalidatedTypes.value;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           changes,
           {
@@ -2981,13 +2981,15 @@ export class Realm {
             // test teardown (mock-matrix already destroyed → broadcast
             // throws on serverState).
             onSettled: (deferredInvalidations, meta) => {
-              let types = unionInvalidatedTypes(priorTypes, meta);
+              let types = makeInvalidatedTypeAccumulator();
+              types.add({ invalidatedTypes: priorTypes });
+              types.add(meta);
               this.broadcastIncrementalInvalidationEvent(
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
                   generation: meta.generation ?? indexGeneration,
-                  ...(types ? { invalidatedTypes: [...types] } : {}),
+                  invalidatedTypes: types.value,
                 },
               );
             },
@@ -3010,9 +3012,7 @@ export class Realm {
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
-        ...(invalidatedTypes
-          ? { invalidatedTypes: [...invalidatedTypes] }
-          : {}),
+        invalidatedTypes: invalidatedTypes.value,
       });
     }
     return {
