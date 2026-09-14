@@ -66,8 +66,9 @@ import type {
 
 export interface LoweringContext {
   // The type the operations are declared on, as its definition-cache entry.
-  // Field paths in the clauses are rooted here.
-  definition: Pick<Definition, 'fields' | 'fieldDefs'>;
+  // Field paths in the clauses are rooted here, and `type` is what decides
+  // which behaviors the type may build on at all.
+  definition: Pick<Definition, 'type' | 'fields' | 'fieldDefs'>;
   // Resolves a code ref to its definition, for chasing a path into a
   // contained value or a linked card's type.
   lookupDefinition: (codeRef: CodeRef) => Promise<Definition | undefined>;
@@ -121,6 +122,54 @@ interface ResolvedPath {
 const LINK_KINDS = ['linksTo', 'linksToMany'];
 const PLURAL_KINDS = ['containsMany', 'linksToMany'];
 
+// Which behaviors each def family may build an operation on, mirroring the
+// authoring API's own division of them. A card reaches its JSON:API document,
+// a file reaches its bytes, and a field is not addressable at all, so field
+// data is reached through the operations of the card that contains it.
+//
+// `readSource` is carried by a card and a file and appears in neither list:
+// the realm answers it without reading a definition, so nothing may be built
+// on it — the refusal for that is its own, below.
+//
+// The kind comes off the definition entry, which cannot tell a bare `BaseDef`
+// subclass from a field: both are recorded `field-def`. Such a def carries the
+// two reads, and it is the authoring decorator — which has the class — that
+// lets one declare a `read`.
+const DECLARABLE_BASES: Record<
+  Definition['type'],
+  readonly BaseOperationName[]
+> = {
+  'card-def': [
+    'read',
+    'create',
+    'update',
+    'delete',
+    'query',
+    'transform',
+    'appendContainsMany',
+  ],
+  'file-def': ['read', 'update', 'appendLine'],
+  'field-def': [],
+};
+
+const DEF_KIND_LABELS: Record<Definition['type'], string> = {
+  'card-def': 'card definition',
+  'file-def': 'file definition',
+  'field-def': 'field definition',
+};
+
+// The bases that run no BXL program, so a `transformations` program stored for
+// one would never be reached. Mirrors the authoring API's refusal of the same
+// declaration; a file def's `update` joins them, which is why the kind is read
+// here too.
+function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
+  return (
+    base === 'appendLine' ||
+    base === 'appendContainsMany' ||
+    kind === 'file-def'
+  );
+}
+
 // Lower every declared operation on one type.
 //
 // `raw` is the authored view — `getDeclaredOperations`, not `getOperations`.
@@ -159,6 +208,29 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
+    let refusal = baseRefusal(raw[name]?.base, context.definition.type);
+    if (refusal) {
+      // A behavior the def type does not carry leaves every clause pointing at
+      // something that is not there, so there is nothing to lower against.
+      // Stored all the same, flagged, so invoking it says what is wrong with
+      // the declaration rather than that it does not exist.
+      let operation: OperationDefinition = {
+        base: raw[name].base,
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: refusal.code,
+            operation: name,
+            path: 'base',
+            message: refusal.message,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
     let operation = await lowerOperation(raw[name], sink, context);
     if (sink.issues.length > 0) {
       operation.invalid = true;
@@ -186,6 +258,44 @@ class IssueSink {
   }
 }
 
+// Why a def type cannot build an operation on this behavior, or undefined when
+// it can.
+//
+// The authoring decorator refuses both of these at class-definition time, so
+// nothing an author writes reaches here. It is checked again because a
+// definition-cache entry outlives the code that built it and because this pass
+// is exported over plain data: a stored entry naming a behavior its type does
+// not carry would be dispatched to an executor the target has no surface for.
+function baseRefusal(
+  base: BaseOperationName | undefined,
+  kind: Definition['type'],
+): { code: OperationLoweringIssueCode; message: string } | undefined {
+  if (base === undefined) {
+    return undefined;
+  }
+  if (isDefinitionFreeBaseOperation(base)) {
+    return {
+      code: 'reserved-name',
+      message: `a "${base}" serves the bytes stored at the target's URL, which the realm answers without reading a definition — so there is nothing for an operation to build on`,
+    };
+  }
+  let declarable = DECLARABLE_BASES[kind] ?? [];
+  if (declarable.includes(base)) {
+    return undefined;
+  }
+  return {
+    code: 'base-not-carried',
+    message:
+      declarable.length === 0
+        ? `a ${DEF_KIND_LABELS[kind]} carries no operations of its own, so it cannot build one on "${base}" — its data is reached through the operations of the card that holds it`
+        : `a ${DEF_KIND_LABELS[kind]} carries ${quoteList(declarable)}, so it cannot build an operation on "${base}"`,
+  };
+}
+
+function quoteList(values: readonly string[]): string {
+  return values.map((value) => `"${value}"`).join(', ');
+}
+
 async function lowerOperation(
   declaration: OperationDeclaration,
   sink: IssueSink,
@@ -211,7 +321,13 @@ async function lowerOperation(
   );
   let rawProgram = (declaration as { transformations?: { $bxl: string } })
     .transformations;
-  if (rawProgram) {
+  if (rawProgram && runsNoProgram(base, context.definition.type)) {
+    sink.add(
+      'unrunnable-program',
+      'transformations',
+      `a "${base}" operation on a ${DEF_KIND_LABELS[context.definition.type]} writes to the stored file rather than running a program over a document, so this program would never be reached`,
+    );
+  } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
     // it here means the realm sees one program shape whichever spelling
     // produced it.
@@ -276,6 +392,17 @@ async function lowerOperation(
     );
     if (query) {
       operation.query = query;
+    }
+  }
+  if (base === 'appendContainsMany') {
+    let items = await lowerAppendContainsMany(
+      declaration as AppendContainsManyClauses,
+      paramNames,
+      sink,
+      context,
+    );
+    if (items) {
+      operation.items = items;
     }
   }
 
@@ -1028,6 +1155,31 @@ async function lowerReference(
           : `${builtin}(${bxlLiteral(String(key))})`;
       return asLink ? `card(${read})` : read;
     }
+    case 'realmConfig': {
+      // The key names a setting of the realm the operation runs in, which
+      // lowering has no view of: a type is lowered once and its cards live in
+      // whatever realms hold them. So the key travels unchecked, and a realm
+      // that carries no such setting says so when the program runs.
+      let key = marker.key;
+      if (identifies && key === undefined) {
+        // Without a key this reads the whole configuration map, which is not
+        // one card's identity and never will be. Reported and then lowered
+        // against the slot anyway, for the reason a marker always is: the
+        // unwrapped spelling is the one the executor writes, so a refused
+        // operation would otherwise store a program that quietly writes
+        // something else.
+        sink.add(
+          'link-requires-identity',
+          path,
+          notAnIdentity(path, `the realm's whole configuration`),
+        );
+      }
+      let read =
+        key === undefined
+          ? 'realmConfig()'
+          : `realmConfig(${bxlLiteral(String(key))})`;
+      return asLink ? `card(${read})` : read;
+    }
     case 'card': {
       // Whatever `card(…)` wraps is an identity by definition, so the value
       // inside it lowers in an identity slot however the marker itself is
@@ -1266,6 +1418,137 @@ function templateOf(
     return value;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// `appendContainsMany`
+// ---------------------------------------------------------------------------
+
+interface AppendContainsManyClauses {
+  field?: unknown;
+  item?: unknown;
+  fields?: Record<string, unknown>;
+}
+
+// `field: 'events', item: {…}` → `items: { events: {…} }`, and `fields: {…}`
+// the same one entry at a time.
+//
+// The item stays a marker-carrying template rather than becoming a program,
+// for the reason `fill` does: an append substitutes values into a stored
+// document, and nothing on this path evaluates BXL.
+//
+// A field name is held to naming an immediate `containsMany` this card stores
+// itself — the same thing the executor holds it to, since that is the only
+// field a splice can reach. A dotted path is not among them: an append writes
+// into one array, and which item of an outer collection a path continued
+// through is not something a field name says.
+async function lowerAppendContainsMany(
+  declaration: AppendContainsManyClauses,
+  paramNames: Set<string>,
+  sink: IssueSink,
+  context: LoweringContext,
+): Promise<Record<string, OperationTemplate> | undefined> {
+  // The two spellings, flattened to the one shape the lowered form carries.
+  // Each entry keeps the clause path it was written at, so a finding names
+  // where the author wrote it rather than where lowering put it.
+  let declared: { field: string; item: unknown; path: string }[] = [];
+  if (declaration.fields && isPlainObject(declaration.fields)) {
+    for (let [field, item] of Object.entries(declaration.fields)) {
+      declared.push({ field, item, path: `fields.${field}` });
+    }
+  } else if (typeof declaration.field === 'string') {
+    declared.push({
+      field: declaration.field,
+      item: declaration.item,
+      path: 'item',
+    });
+  }
+  let items: Record<string, OperationTemplate> = {};
+  for (let { field, item, path } of declared) {
+    let fieldPath = path === 'item' ? 'field' : path;
+    let fieldDef = getImmediateFieldDef(context.definition, field);
+    if (!fieldDef) {
+      sink.add(
+        'unknown-field',
+        fieldPath,
+        `"${field}" is not a field of this type`,
+      );
+      continue;
+    }
+    let unwritable = unwritableReason(field, fieldDef);
+    if (unwritable) {
+      sink.add(unwritable.code, fieldPath, unwritable.why);
+      continue;
+    }
+    if (fieldDef.type !== 'containsMany') {
+      sink.add(
+        'not-a-collection',
+        fieldPath,
+        `"${field}" is a ${fieldDef.type} field; an append adds items to a \`containsMany\`, which is the only collection a card holds in its own file`,
+      );
+      continue;
+    }
+    items[field] = lowerItem(
+      item,
+      await itemDefinitionOf(fieldDef, context),
+      path,
+      paramNames,
+      sink,
+    );
+  }
+  return Object.keys(items).length > 0 ? items : undefined;
+}
+
+// The type of one item of a collection, or undefined where its items have no
+// fields of their own — a `containsMany` of primitives, or an item type
+// nothing resolves.
+async function itemDefinitionOf(
+  fieldDef: FieldDefinition,
+  context: LoweringContext,
+): Promise<Definition | undefined> {
+  if (fieldDef.isPrimitive || !isResolvedCodeRef(fieldDef.fieldOrCard)) {
+    return undefined;
+  }
+  return await context.lookupDefinition(fieldDef.fieldOrCard);
+}
+
+// One appended item as a template, with its members checked against the item
+// type's own fields — which is where an author finds out a member is
+// misspelled, rather than the realm finding out when the spliced card next
+// indexes.
+//
+// A marker in the item's place stands for whatever the invocation supplies, so
+// there are no members to check; the same holds for a collection of
+// primitives, whose items have no fields at all.
+function lowerItem(
+  item: unknown,
+  itemDefinition: Definition | undefined,
+  path: string,
+  paramNames: Set<string>,
+  sink: IssueSink,
+): OperationTemplate {
+  if (itemDefinition && !isMarker(item) && isPlainObject(item)) {
+    for (let key of Object.keys(item)) {
+      let fieldDef = getImmediateFieldDef(itemDefinition, key);
+      let unwritable = fieldDef && unwritableReason(key, fieldDef);
+      if (!fieldDef) {
+        sink.add(
+          'unknown-field',
+          `${path}.${key}`,
+          `"${key}" is not a field of ${describeDefinition(itemDefinition)}`,
+        );
+      } else if (unwritable) {
+        sink.add(
+          unwritable.code,
+          `${path}.${key}`,
+          `${unwritable.why}, and ${describeDefinition(
+            itemDefinition,
+          )} is what an appended item holds`,
+        );
+      }
+    }
+  }
+  return templateOf(item, path, paramNames, sink);
 }
 
 // ---------------------------------------------------------------------------

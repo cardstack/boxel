@@ -212,11 +212,11 @@ export function newOperationScope(core: OperationCore): OperationScope {
 
 // The def types, as the operation core distinguishes them.
 //
-// The file/card line is drawn from the target URL, by the registered-extension
-// test `urlNamesFile` — not from `Definition.type`, which cannot express it: a
-// file def's entry says `field-def`, since `FileDef` descends from `BaseDef`
-// rather than `CardDef`, and dispatching off that would leave a file carrying
-// no operations at all rather than `read`.
+// For an instance target the file/card line is drawn from the target URL, by
+// the registered-extension test `urlNamesFile`, rather than from the entry's
+// own `Definition.type`. The entry does say which family a type belongs to,
+// but reaching it means a definition lookup, and an instance target's URL
+// settles the question without one.
 //
 // Reading the extension is a commitment made before the index is consulted,
 // which the card+json GET does not make — it asks for a card document first
@@ -228,15 +228,17 @@ export function newOperationScope(core: OperationCore): OperationScope {
 // names the card's stored bytes rather than the card, and a `readSource` of it
 // is what serves them.
 //
-// A `type` target has only its ref, so its kind comes from the entry, and a
-// file def named that way therefore carries nothing. That is correct rather
-// than a gap: operations belong to cards, and what a file has are its two
-// reads, both of which need an instance to read.
+// A `type` target has only its ref, so its kind comes from the entry. A file
+// def named that way carries nothing in practice, which is correct rather than
+// a gap: what a file has are reads and writes of one file's bytes, and every
+// one of them needs an instance to reach.
 type DefKind = 'card-def' | 'file-def' | 'field-def';
 
-// Exhaustive over `BaseOperation` on purpose: a further built-in behavior has
-// to say here whether a card carries it, rather than defaulting to "no".
-const CARD_DEF_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
+// Every behavior the runtime knows a name for, which is a different question
+// from which of them a given target carries. Exhaustive over `BaseOperation`
+// on purpose: a further built-in behavior has to be named here before any
+// target can be asked for it.
+const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   read: true,
   readSource: true,
   create: true,
@@ -245,18 +247,32 @@ const CARD_DEF_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   query: true,
   transform: true,
   appendContainsMany: true,
+  appendLine: true,
 };
 
 const ALLOWED_BASE_OPERATIONS: Readonly<
   Record<DefKind, Partial<Record<BaseOperation, true>>>
 > = {
-  'card-def': CARD_DEF_OPERATIONS,
-  // A file's metadata is derived from its bytes and read-only: there is no
-  // JSON:API mutation surface for anything else to reach. Its bytes are the
-  // representation that matters for a file, though, so it carries the
-  // stored-bytes read alongside the document one. A file has no field schema,
-  // so it has no `containsMany` to append to either.
-  'file-def': { read: true, readSource: true },
+  // Everything but the one behavior that appends a line of text: a card's
+  // stored bytes are a JSON:API document, and a line appended to one leaves
+  // behind a file that is no longer a card.
+  'card-def': {
+    read: true,
+    readSource: true,
+    create: true,
+    update: true,
+    delete: true,
+    query: true,
+    transform: true,
+    appendContainsMany: true,
+  },
+  // A file's metadata is derived from its bytes and read-only, so there is no
+  // JSON:API mutation surface for anything to reach — and no field schema, so
+  // no `containsMany` to append to. Its bytes are the representation a file is
+  // for, though, and both writes here work on them: an `update` replaces the
+  // content wholesale and an `appendLine` adds one line to the end of a text
+  // file without reading what is already there.
+  'file-def': { read: true, readSource: true, update: true, appendLine: true },
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
   'field-def': {},
@@ -294,7 +310,7 @@ const DEFINITION_FREE_OPERATIONS: Readonly<
 );
 
 function isBaseOperation(name: string): name is BaseOperation {
-  return own(CARD_DEF_OPERATIONS, name) !== undefined;
+  return own(ALL_BASE_OPERATIONS, name) !== undefined;
 }
 
 function isDefinitionFreeOperation(name: string): name is BaseOperation {
@@ -464,6 +480,7 @@ export async function runOperation(
     case 'delete':
     case 'transform':
     case 'appendContainsMany':
+    case 'appendLine':
       throw new OperationFailure({
         id: targetId(canonical.target),
         status: 501,
