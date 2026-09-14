@@ -62,7 +62,7 @@ import {
 
 // The behaviors every declaration builds on. Which of them a def carries is
 // implied by the def type rather than written in author code — a `CardDef`
-// has all six, a `FileDef` only `read`, a `FieldDef` none — so
+// has all of them, a `FileDef` only the two reads, a `FieldDef` none — so
 // `getOperations` synthesizes them. A declaration *named* after a base op
 // takes its place: it specializes that behavior when it names the same
 // `base`, and rebinds the verb when it names another — a `delete` declared
@@ -72,6 +72,7 @@ import {
 // and neither is inferred from the other.
 export const BASE_OPERATIONS = [
   'read',
+  'readSource',
   'create',
   'update',
   'delete',
@@ -80,6 +81,25 @@ export const BASE_OPERATIONS = [
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
+
+// The base operations a declaration may neither build on nor be named after.
+// A stored-bytes read serves what is on disk: there is no payload to reshape,
+// no program stage to run, and no result to project, so a declaration built on
+// it would describe work nothing carries out.
+//
+// Both halves of that refusal matter, because a name and a base are
+// independent. The realm answers one of these by name without reading a
+// definition at all, so a declaration under the name — whatever base it
+// builds on — would be dispatched straight past: the built-in would run and
+// the author's operation would never be reached. Refusing the name here is
+// what keeps a new declaration out of that state, and refusing the base is
+// what stops the behavior being reached under some other name. Lowering
+// refuses the name too, so no stored definition can carry one either.
+const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
+
+function isNotDeclarable(name: string): boolean {
+  return NOT_DECLARABLE.includes(name as BaseOperationName);
+}
 
 // ============================================================================
 // Typed references
@@ -356,6 +376,19 @@ export type OperationDeclaration =
   | ReadOperationDeclaration
   | QueryOperationDeclaration;
 
+// A base operation a def carries with nothing declared on it. It is not a
+// declaration and the union above deliberately cannot express one: an author
+// writes no clauses for a base operation, and a `NOT_DECLARABLE` name cannot
+// be written at all, so a declaration type that admitted one would invite
+// exactly what the decorator refuses. `getOperations` returns both
+// shapes, so a consumer reading `base` to dispatch gets every operation a def
+// carries — including the ones no `OperationDeclaration` could name.
+export interface ImpliedOperation {
+  readonly base: BaseOperationName;
+}
+
+export type CarriedOperation = OperationDeclaration | ImpliedOperation;
+
 // The operations declared on a def, read off the class type. Keyed by
 // operation name, so an invocation surface can be typed from the class alone.
 //
@@ -420,6 +453,10 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   update: [],
   delete: [],
   read: [],
+  // A stored-bytes read takes no clauses because it takes no declaration at
+  // all; the entry is here because this table is exhaustive over the base
+  // operations, so a new one has to say what it accepts.
+  readSource: [],
   query: ['query'],
 };
 
@@ -459,6 +496,11 @@ export const operation = function (
     );
   }
   let owner = assertOperationTarget(target, key);
+  if (isNotDeclarable(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — a "${key}" serves the bytes stored at the def's URL, which the realm answers without reading a definition, so a declaration under this name would never be reached`,
+    );
+  }
   assertNameAvailable(owner, key);
   if (typeof descriptor?.initializer !== 'function') {
     throw new Error(
@@ -497,14 +539,11 @@ export const operation = function (
 // relied on to carry one, so lower from `getDeclaredOperations`.
 export function getOperations(
   classOrInstance: BaseDef | typeof BaseDef,
-): Record<string, OperationDeclaration> {
+): Record<string, CarriedOperation> {
   let owner = defConstructorFor(classOrInstance, 'getOperations');
-  let operations = emptyOperationRecord();
+  let operations = emptyOperationRecord() as Record<string, CarriedOperation>;
   for (let base of impliedOperations(owner)) {
-    // A base operation with nothing declared on it is the declaration
-    // `{ base }`; the cast is only because a union does not narrow from a
-    // computed discriminant.
-    operations[base] = { base } as OperationDeclaration;
+    operations[base] = { base };
   }
   return Object.assign(operations, declaredOperations(owner));
 }
@@ -547,14 +586,19 @@ function impliedOperations(
   }
   if (isSubclassOf(owner, FileDef)) {
     // A file's metadata is content-derived and read-only: there is no
-    // JSON:API mutation surface for anything else to reach.
+    // JSON:API mutation surface for anything else to reach. Its bytes are the
+    // representation that matters, so it carries the stored-bytes read too.
     return READ_ONLY;
   }
-  // The one operation every addressable def shares.
+  // The operations every addressable def shares.
   return READ_ONLY;
 }
 
-const READ_ONLY = ['read'] as const;
+// The two reads, neither of which writes. A `read` serves the def's indexed
+// document; a `readSource` serves the bytes stored at the instance's URL, a
+// representation every addressable def has whether or not its document is the
+// interesting one — for a file it is the bytes that are the point.
+const READ_ONLY = ['read', 'readSource'] as const;
 
 function declaredOperations(
   owner: typeof BaseDef,
@@ -692,6 +736,11 @@ function assertValidDeclaration(
   if (!isBaseOperationName(base)) {
     throw new Error(
       `${label}: \`base\` must name the built-in behavior this operation builds on — one of ${quoteList(BASE_OPERATIONS)}`,
+    );
+  }
+  if (isNotDeclarable(base)) {
+    throw new Error(
+      `${label}: a "${base}" operation serves the bytes stored at the def's URL, so there is nothing for a declaration to specialize or rebind`,
     );
   }
   // An author may only specialize a base operation the def type actually

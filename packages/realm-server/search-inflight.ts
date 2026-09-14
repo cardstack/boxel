@@ -4,14 +4,18 @@ import {
 } from '@cardstack/runtime-common';
 
 // Admission gate for the realm-server's search endpoints (`/_search`,
-// `/_federated-search`). Every in-flight search holds tens of MB of heap while
-// its result set is assembled, and the process is a single event loop, so the
-// number of searches running at once is what decides whether the heap survives
-// a burst. The gate bounds it: up to `limit` searches run concurrently,
-// arrivals above that wait up to a bounded time for a slot in FIFO order, and a
-// request still waiting when its time is up is shed — the middleware answers
-// 429 + Retry-After without having parsed a body or touched the index, so a
-// shed costs the process almost nothing.
+// `/_federated-search`). A search that assembles its own result document holds
+// tens of MB of heap while it does, and the process is a single event loop, so
+// the number of such computations running at once is what decides whether the
+// heap survives a burst. The gate bounds it: up to `limit` searches hold a
+// slot at once, arrivals above that wait up to a bounded time for a slot in
+// FIFO order, and a request still waiting when its time is up is shed — the
+// middleware answers 429 + Retry-After without having parsed a body or
+// touched the index, so a shed costs the process almost nothing. A request
+// that the live-search cache serves from another request's computation hands
+// its slot back as soon as the cache decides so, so in steady state the slots
+// are held by computations plus the requests briefly between admission and
+// the cache lookup.
 //
 // Indexing traffic (a request stamped with a prerender job id or the
 // during-prerender header) is admitted unconditionally: shedding an in-render

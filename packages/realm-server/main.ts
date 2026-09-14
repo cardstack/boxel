@@ -3,6 +3,7 @@ import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
+  CardDocumentCache,
   Realm,
   VirtualNetwork,
   isUrlLike,
@@ -182,6 +183,15 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // 1-prerender-per-fleet on cold fan-out.
 const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
+
+// How much of a card's link graph a live read carries. Off, a live card GET
+// or search assembles the card's whole transitive link closure into
+// `included[]` so a consumer can render every linked field without asking for
+// anything more. On, the response answers each card's relationships and stops
+// there, and the consumer fetches the linked cards it displays. Absent means
+// off, so an environment that has not set it keeps side-loading.
+const LIVE_READS_RESOLVE_LINKS_ONLY =
+  process.env.REALM_SERVER_LIVE_READS_RESOLVE_LINKS_ONLY === 'true';
 
 let {
   port,
@@ -524,6 +534,12 @@ const reportHostShellToManager = async () => {
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
 
+  // One card+json response cache for the whole process, shared across every
+  // realm it mounts: entries are keyed on absolute card URLs, and the byte
+  // cap is meant to bound this process's heap rather than each realm's share
+  // of it.
+  let cardDocumentCache = new CardDocumentCache();
+
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -636,6 +652,7 @@ const reportHostShellToManager = async () => {
               DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
           mediaCacheAdapter,
+          cardDocumentCache,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -648,6 +665,9 @@ const reportHostShellToManager = async () => {
           ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
+            : {}),
+          ...(LIVE_READS_RESOLVE_LINKS_ONLY
+            ? { liveReadsResolveLinksOnly: true as const }
             : {}),
         },
       );
@@ -702,6 +722,7 @@ const reportHostShellToManager = async () => {
       : undefined,
     prerenderer,
     reportHostShell: reportHostShellToManager,
+    liveReadsResolveLinksOnly: LIVE_READS_RESOLVE_LINKS_ONLY,
   });
 
   let httpServer = server.listen(port);

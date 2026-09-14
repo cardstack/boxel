@@ -67,6 +67,42 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(a.body, b.body, 'both callers share the body');
   });
 
+  test('onOutcome fires when the cache decides, not when the body resolves', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 60_000 });
+    let deferred = deferredPopulate('{"data":[1]}');
+    let realms = ['http://a/'];
+    let decided: string[] = [];
+    let load = () =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(),
+        opts: undefined,
+        populate: deferred.populate,
+        onOutcome: (outcome) => decided.push(outcome),
+      });
+
+    let first = load();
+    assert.deepEqual(decided, ['miss'], 'the miss is announced as it starts');
+    let second = load();
+    assert.deepEqual(
+      decided,
+      ['miss', 'join'],
+      'the join is announced before the joiner has anything to wait on',
+    );
+    assert.strictEqual(deferred.calls, 1, 'one populate');
+
+    deferred.resolve();
+    await Promise.all([first, second]);
+
+    let third = load();
+    assert.deepEqual(
+      decided,
+      ['miss', 'join', 'hit'],
+      'a hit is announced synchronously on the call',
+    );
+    assert.strictEqual((await third).outcome, 'hit');
+  });
+
   test('different queries do not coalesce', async function (assert) {
     let cache = new LiveSearchCache({ ttlMs: 60_000 });
     let realms = ['http://a/'];
