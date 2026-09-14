@@ -1490,12 +1490,12 @@ LIMIT 20;
 
 The four stages, in the order they run:
 
-| Stage         | What runs                                                                                                                | The reading when it dominates                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fetchSource` | GET the card's source doc from the realm                                                                                 | The realm-server is slow to serve source — not a card problem. Correlate with `realm:requests` for the same correlation id (Mode G's join). |
-| `deriveType`  | Resolve `adoptsFrom`: load and **evaluate** the card's module graph, then the realm-meta and declared-screenshot lookups | The module graph. `moduleEvaluationsMs` names the modules; see step 3.                                                                      |
-| `hydrate`     | `store.add` — instantiate the card by deserializing its fields                                                           | Deserialization. `hydrateFieldsMs` names the fields; see step 4.                                                                            |
-| `storeSettle` | `store.loaded()` — drain the loads hydration fired                                                                       | Link loads / query fields. `storeSettleWaits` names the targets; see step 5.                                                                |
+| Stage         | What runs                                                                                                                    | The reading when it dominates                                                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fetchSource` | GET the card's source doc from the realm                                                                                     | The realm-server is slow to serve source — not a card problem. Correlate with `realm:requests` for the same correlation id (Mode G's join). |
+| `deriveType`  | Resolve `adoptsFrom`: **load** and **evaluate** the card's module graph, then the realm-meta and declared-screenshot lookups | The module graph — but split it first: `moduleEvaluationTotalMs` is the evaluate half, and the rest is the load half. See step 3.           |
+| `hydrate`     | `store.add` — instantiate the card by deserializing its fields                                                               | Deserialization. `hydrateFieldsMs` names the fields; see step 4.                                                                            |
+| `storeSettle` | `store.loaded()` — drain the loads hydration fired                                                                           | Link loads / query fields. `storeSettleWaits` names the targets; see step 5.                                                                |
 
 Each detail block is bounded the same way `searchDocFieldsMs` is — the slowest 20 entries at ≥ 1 ms — so a cheap build persists none of them, and their absence on an expensive stage is itself a reading (step 6).
 
@@ -1565,7 +1565,31 @@ WHERE realm_url = '<realm-url>'
   AND diagnostics->'buildModelMs' IS NOT NULL;
 ```
 
-**Step 3 — `deriveType` dominant: which modules were evaluated.**
+**Step 3 — `deriveType` dominant: split loading from evaluating first.**
+
+`deriveType` covers two different costs, and they have different fixes. `moduleEvaluationTotalMs` is the **evaluate** half — the synchronous body of each module, where Glimmer template compilation lives. Everything left over is the **load** half: fetching and transpiling the modules over the wire.
+
+```sql
+SELECT
+  url,
+  (diagnostics->'buildModelMs'->>'deriveType')::numeric   AS derive_ms,
+  (diagnostics->>'moduleEvaluationCount')::int            AS n_modules,
+  (diagnostics->>'moduleEvaluationTotalMs')::numeric      AS evaluate_ms,
+  round((diagnostics->'buildModelMs'->>'deriveType')::numeric
+      - COALESCE((diagnostics->>'moduleEvaluationTotalMs')::numeric, 0)) AS load_ms
+FROM boxel_index
+WHERE realm_url = '<realm-url>' AND type = 'instance'
+  AND (diagnostics->>'moduleEvaluationCount')::int > 0
+ORDER BY derive_ms DESC NULLS LAST
+LIMIT 20;
+```
+
+The split is frequently lopsided toward loading, and the itemized list will not tell you that — a realm card measured locally spent 1365 ms in `deriveType` while evaluating 131 modules in a combined 5 ms. Reading `moduleEvaluationsMs` there would have sent someone after five trivial modules while the whole cost sat in fetching the graph.
+
+- **`load_ms` dominant** — the graph is wide, not slow. The lever is the module pre-warm and the definition cache ([Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss)) and the realm-server's module-serving path, not any one `.gts`. `n_modules` is the size of the graph the card pulls; a card type whose ancestry drags in a hundred modules pays this on every cold tab.
+- **`evaluate_ms` dominant** — a module's synchronous body is expensive (Glimmer compile, top-level side effects). Now the per-module list is the right next read.
+
+**Step 3a — which modules were evaluated.**
 
 `moduleEvaluationsMs` is the per-module wall-clock of `Loader.evaluate()` — the synchronous body of each module, which is where Glimmer template compilation lives. It is attributed to the visit by diffing the Loader's rolling history across the build, so it names the modules **this** visit paid for. That history is the slowest N for the loader's whole life, so the list is a sample, not a census — `moduleEvaluationCount` and `moduleEvaluationTotalMs` are the complete figures, from monotonic counters that cannot be evicted. Always read the count alongside the list.
 
@@ -1599,7 +1623,7 @@ Read the shape:
 
 - **A high `deriveType` with entries, on the first few rows of a job only** — a cold module graph. The tab warms and later cards of the same type pay nothing; the lever is pre-warm (Mode F), not the card.
 - **A high `deriveType` with entries on _every_ row** — the graph is being re-evaluated per visit. That means the loader keeps resetting: check `clearCache` retries and the loader-epoch reset (an instance-only pass shouldn't change the epoch), and read Mode F's cache-key hit/miss channel.
-- **A high `deriveType` with _no_ entries** — check `moduleEvaluationCount` before concluding anything. The itemized list comes from diffing the Loader's slowest-N history, which is kept for the loader's whole life and **saturates**: one cold card can fill every slot, after which a later card's modest evaluations are dropped on insert and never appear in the diff. So an empty list on a row with a non-zero `moduleEvaluationCount` means the evaluations happened and lost the slowest-N race to an earlier card in the same job — read `moduleEvaluationTotalMs` for their summed cost and go find them on the job's first rows. Only `moduleEvaluationCount = 0` means the stage genuinely isn't evaluation, in which case it is the fetch/resolve half: many small modules loading over the wire (correlate with the realm-server's request log), or the realm-meta / declared-screenshot lookups that close the stage.
+- **A high `deriveType` with _no_ entries** — check `moduleEvaluationCount` and the load/evaluate split above before concluding anything. The itemized list comes from diffing the Loader's slowest-N history, which is kept for the loader's whole life and **saturates**: one cold card can fill every slot, after which a later card's modest evaluations are dropped on insert and never appear in the diff. So an empty list on a row with a non-zero `moduleEvaluationCount` means the evaluations happened and lost the slowest-N race to an earlier card in the same job — read `moduleEvaluationTotalMs` for their summed cost and go find them on the job's first rows. Only `moduleEvaluationCount = 0` means the stage genuinely isn't evaluation, in which case it is the fetch/resolve half: many small modules loading over the wire (correlate with the realm-server's request log), or the realm-meta / declared-screenshot lookups that close the stage.
 - **One module dominating everywhere** — a heavy `.gts` in the realm's common ancestry. That single module is the whole realm's tax; it is also the same module a live-app card load pays for (see the cross-reference below).
 
 **Step 4 — `hydrate` dominant: which fields were expensive to deserialize.**
