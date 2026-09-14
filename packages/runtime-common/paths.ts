@@ -306,3 +306,17 @@ export function isMarkdownFile(id: string): boolean {
   }
   return MARKDOWN_FILE_EXTENSION.test(pathname);
 }
+
+// The subtree capture serving claims. A realm's GET dispatch answers every
+// path under it from the capture ledger, so a realm file stored there could
+// never be read back: it would index and list, and every GET of it would come
+// back an uncaptured miss. Every surface that writes into a realm refuses it
+// for that reason — direct writes, `/_atomic` operations, and batch entries —
+// and each one reads the reservation from here so a change to it reaches all
+// of them. Removals stay admitted everywhere, being the recovery path for
+// anything already stored under it.
+export const CAPTURE_SERVING_PREFIX = '_screenshot/';
+
+export function isCaptureServingPath(localPath: LocalPath): boolean {
+  return localPath.startsWith(CAPTURE_SERVING_PREFIX);
+}
