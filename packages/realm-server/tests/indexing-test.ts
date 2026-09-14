@@ -938,6 +938,22 @@ module(basename(import.meta.filename), function () {
         );
       }
 
+      // The uncapped module-evaluation totals, which a reader needs in order
+      // to tell an empty `moduleEvaluationsMs` apart from a warm graph.
+      for (let field of [
+        'moduleEvaluationCount',
+        'moduleEvaluationTotalMs',
+      ] as const) {
+        let value = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          field
+        ];
+        assert.strictEqual(
+          typeof value,
+          'number',
+          `diagnostics.${field} persists on boxel_index, got: ${JSON.stringify(value)}`,
+        );
+      }
+
       // The residual: what the visit's wall-clock has left after every
       // recorded step bucket. Emitted as a field so a reader accounting for
       // a visit sees a complete set rather than doing the subtraction.

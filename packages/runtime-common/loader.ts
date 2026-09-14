@@ -355,13 +355,30 @@ export class Loader {
   #currentlyEvaluatingModule: string | null = null;
   #moduleEvaluationHistory: Array<{ url: string; ms: number }> = [];
   static #MAX_MODULE_EVAL_HISTORY = 30;
+  // Monotonic totals over this loader's whole life. The history above is the
+  // slowest N and is therefore SATURABLE: one cold card can fill every slot,
+  // after which a later card's modest evaluations are dropped on insert. A
+  // caller attributing evaluations to one render by diffing the history
+  // across it then sees nothing and cannot tell "evaluated nothing" from
+  // "evaluated a dozen modules that all lost to an earlier card's". These
+  // counters can't be evicted, so their delta answers that.
+  #moduleEvaluationCount = 0;
+  #moduleEvaluationTotalMs = 0;
   get currentlyEvaluatingModule(): string | null {
     return this.#currentlyEvaluatingModule;
   }
   get recentModuleEvaluations(): Array<{ url: string; ms: number }> {
     return [...this.#moduleEvaluationHistory];
   }
+  get moduleEvaluationTotals(): { count: number; totalMs: number } {
+    return {
+      count: this.#moduleEvaluationCount,
+      totalMs: this.#moduleEvaluationTotalMs,
+    };
+  }
   private recordModuleEvaluation(url: string, ms: number): void {
+    this.#moduleEvaluationCount++;
+    this.#moduleEvaluationTotalMs += ms;
     let hist = this.#moduleEvaluationHistory;
     hist.push({ url, ms });
     // Keep only the slowest N. Sort desc by ms and truncate.

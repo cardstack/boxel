@@ -151,6 +151,11 @@ export default class RenderRoute extends Route<Model> {
   // stages that completed before the stall — a model that never resolves
   // never reaches a child route to report through.
   #buildModelMs: BuildModelStagesMs | undefined;
+  // The same build's live per-field hydration collector. A stall inside the
+  // `hydrate` stage is exactly the case where the stage bucket never closes,
+  // so the fields collected up to the stall are what names the field the
+  // deserialization is stuck on.
+  #hydrateFieldsMs: Record<string, number> | undefined;
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
   #releaseTimerBlock: (() => void) | undefined;
@@ -226,6 +231,7 @@ export default class RenderRoute extends Route<Model> {
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
     this.#buildModelMs = undefined;
+    this.#hydrateFieldsMs = undefined;
     this.#lastAttemptedCardId = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
@@ -372,6 +378,9 @@ export default class RenderRoute extends Route<Model> {
         // is in absent, and `renderStage` / `stageAgeMs` name that one — so
         // the two together account for the whole build.
         buildModelMs: this.#buildModelMs ?? {},
+        // Pruned on read: the collector is unbounded while the build runs,
+        // and a wedged page's diagnostic payload has to stay small.
+        hydrateFieldsMs: pruneTimingPaths(this.#hydrateFieldsMs ?? {}) ?? {},
         currentId: id,
         currentNonce: nonce,
         cardDocsInFlight: storeService.cardDocsInFlight ?? [],
@@ -447,6 +456,7 @@ export default class RenderRoute extends Route<Model> {
     // readable as this build's. The trivial file branches below return
     // before any stage runs, so they leave this empty.
     this.#buildModelMs = {};
+    this.#hydrateFieldsMs = undefined;
     // Bind the stores to this visit's render scope before anything is fetched
     // or hydrated. A tab serves visits from many scopes and holds the
     // instances they loaded, and a resident link target is handed to
@@ -622,10 +632,16 @@ export default class RenderRoute extends Route<Model> {
     // rolling history across it. Snapshotted here rather than at the top of
     // the method so a loader reset above (epoch change, clearCache) isn't
     // read as this build having evaluated the whole graph twice.
+    // The slowest-N history saturates over a loader's life, so a later card
+    // in a job can evaluate modules that never enter it. The monotonic
+    // totals are snapshotted alongside it so the row can say an evaluation
+    // happened even when the itemized list comes back empty.
     let loader = this.loaderService.loader;
     let moduleEvaluationsBefore = loader.recentModuleEvaluations;
+    let moduleTotalsBefore = loader.moduleEvaluationTotals;
     // Filled in place by `store.add` below; keyed by dotted field path.
     let hydrateFieldsMs: Record<string, number> = {};
+    this.#hydrateFieldsMs = hydrateFieldsMs;
 
     enterStage('buildModel:fetching-source', 'fetchSource');
     let response: Response;
@@ -770,8 +786,13 @@ export default class RenderRoute extends Route<Model> {
       newLoadEntries(moduleEvaluationsBefore, loader.recentModuleEvaluations),
     );
     let prunedHydrateFieldsMs = pruneTimingPaths(hydrateFieldsMs);
+    let moduleTotalsAfter = loader.moduleEvaluationTotals;
     model.buildModelDiagnostics = {
       buildModelMs,
+      moduleEvaluationCount: moduleTotalsAfter.count - moduleTotalsBefore.count,
+      moduleEvaluationTotalMs: roundMs(
+        moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
+      ),
       ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
       ...(prunedHydrateFieldsMs
         ? { hydrateFieldsMs: prunedHydrateFieldsMs }

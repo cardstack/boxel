@@ -2714,6 +2714,7 @@ export async function withTimeout<T>(
       renderStage?: string;
       stageAgeMs?: number;
       buildModelMs?: BuildModelStagesMs;
+      hydrateFieldsMs?: Record<string, number>;
       inFlightModuleImports?: string[];
       currentlyEvaluatingModule?: string | null;
       recentModuleEvaluations?: Array<{ url: string; ms: number }>;
@@ -2829,6 +2830,13 @@ export async function withTimeout<T>(
       ...(richDiagnostics?.buildModelMs &&
       Object.keys(richDiagnostics.buildModelMs).length > 0
         ? { buildModelMs: richDiagnostics.buildModelMs }
+        : {}),
+      // The per-field hydration collected before the stall. A stall inside
+      // the `hydrate` stage leaves that stage's bucket absent, so this is
+      // the only thing that names the field it is stuck deserializing.
+      ...(richDiagnostics?.hydrateFieldsMs &&
+      Object.keys(richDiagnostics.hydrateFieldsMs).length > 0
+        ? { hydrateFieldsMs: richDiagnostics.hydrateFieldsMs }
         : {}),
       ...(Array.isArray(richDiagnostics?.cardDocsInFlight)
         ? { cardDocsInFlight: richDiagnostics!.cardDocsInFlight }

@@ -1481,7 +1481,12 @@ LIMIT 20;
 
 **When to use this mode.** A card-instance index visit's `card.meta` bucket is far larger than the search-doc work inside it (`searchDocMs + searchDocSettleMs + serializeMs`), and Mode J has already said the doc isn't the cost. That difference is the **model build** — the four phases the parent `render` route runs before `render.meta` does anything of its own — and `buildModelMs` names them. This is normally where a card-instance visit's time actually goes.
 
-**Why the model build lands inside a route step.** `render.meta` is a child of `render`, so transitioning into it runs the parent's `model()` hook first, and the meta route opens by awaiting the model it produces. The runner's timer brackets the whole transition, so `indexRoutesMs.card.meta` contains the model build on top of the meta route's own work. A model is built once per visit and shared by every route step in it, so on a **fused** visit (html + index in one pass) the isolated render triggers the build instead and it lands in `renderFormatsMs.card.isolated`; `buildModelMs` itself is per-visit either way.
+**Why the model build lands inside a route step.** `render.meta` is a child of `render`, so transitioning into it runs the parent's `model()` hook first, and the meta route opens by awaiting the model it produces. The runner's timer brackets the whole transition, so `indexRoutesMs.card.meta` contains the model build on top of the meta route's own work.
+
+**Which bucket to reconcile against depends on the visit shape**, because a model is built once per visit and charged to whichever step triggered the parent transition:
+
+- **Index visit** (no html steps) — `render.meta` is the entry, so everything below is in `indexRoutesMs.card.meta`. Against a fused-capable host that step also performs the file row's extract, so `fileExtractMs` is part of the same bucket and belongs in the reconciliation.
+- **Fused visit** (html + index in one pass) — the isolated render triggers the parent transition, so `buildModelMs` and the ready settle it drives land in `renderFormatsMs.card.isolated`. Everything the meta route does itself still runs in the later `meta` step: `cardApiLoadMs`, `searchableLoadMs`, the search-doc timings, `serializeMs`, `fileExtractMs` — and `readySettleMs` reads ~0 there, because the isolated render already paid it. Reconcile the two buckets separately or you will look for the model build in the step that doesn't hold it.
 
 The four stages, in the order they run:
 
@@ -1508,6 +1513,8 @@ SELECT
   (diagnostics->'indexRoutesMs'->'card'->>'meta')::numeric AS meta_ms,
   (diagnostics->'buildModelMs'->>'fetchSource')::numeric   AS fetch_ms,
   (diagnostics->'buildModelMs'->>'deriveType')::numeric    AS derive_ms,
+  (diagnostics->>'moduleEvaluationCount')::int             AS n_modules,
+  (diagnostics->>'moduleEvaluationTotalMs')::numeric       AS module_eval_ms,
   (diagnostics->'buildModelMs'->>'hydrate')::numeric       AS hydrate_ms,
   (diagnostics->'buildModelMs'->>'storeSettle')::numeric   AS settle_ms,
   (diagnostics->>'cardApiLoadMs')::numeric                 AS card_api_ms,
@@ -1560,10 +1567,12 @@ WHERE realm_url = '<realm-url>'
 
 **Step 3 — `deriveType` dominant: which modules were evaluated.**
 
-`moduleEvaluationsMs` is the per-module wall-clock of `Loader.evaluate()` — the synchronous body of each module, which is where Glimmer template compilation lives. It is attributed to the visit by diffing the Loader's rolling history across the build, so it names the modules **this** visit paid for.
+`moduleEvaluationsMs` is the per-module wall-clock of `Loader.evaluate()` — the synchronous body of each module, which is where Glimmer template compilation lives. It is attributed to the visit by diffing the Loader's rolling history across the build, so it names the modules **this** visit paid for. That history is the slowest N for the loader's whole life, so the list is a sample, not a census — `moduleEvaluationCount` and `moduleEvaluationTotalMs` are the complete figures, from monotonic counters that cannot be evicted. Always read the count alongside the list.
 
 ```sql
--- One row's module evaluations, slowest first.
+-- One row's module evaluations, slowest first. Check the row's
+-- moduleEvaluationCount first — if this returns fewer rows than that count,
+-- the rest lost the slowest-N race to an earlier card in the same job.
 SELECT me->>'url' AS module_url, (me->>'ms')::numeric AS ms
 FROM boxel_index i
 CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'moduleEvaluationsMs') AS me
@@ -1590,12 +1599,12 @@ Read the shape:
 
 - **A high `deriveType` with entries, on the first few rows of a job only** — a cold module graph. The tab warms and later cards of the same type pay nothing; the lever is pre-warm (Mode F), not the card.
 - **A high `deriveType` with entries on _every_ row** — the graph is being re-evaluated per visit. That means the loader keeps resetting: check `clearCache` retries and the loader-epoch reset (an instance-only pass shouldn't change the epoch), and read Mode F's cache-key hit/miss channel.
-- **A high `deriveType` with _no_ entries** — nothing crossed the 1 ms floor, so the stage isn't evaluation. It is the fetch/resolve half: many small modules loading over the wire (correlate with the realm-server's request log), or the realm-meta / declared-screenshot lookups that close the stage.
+- **A high `deriveType` with _no_ entries** — check `moduleEvaluationCount` before concluding anything. The itemized list comes from diffing the Loader's slowest-N history, which is kept for the loader's whole life and **saturates**: one cold card can fill every slot, after which a later card's modest evaluations are dropped on insert and never appear in the diff. So an empty list on a row with a non-zero `moduleEvaluationCount` means the evaluations happened and lost the slowest-N race to an earlier card in the same job — read `moduleEvaluationTotalMs` for their summed cost and go find them on the job's first rows. Only `moduleEvaluationCount = 0` means the stage genuinely isn't evaluation, in which case it is the fetch/resolve half: many small modules loading over the wire (correlate with the realm-server's request log), or the realm-meta / declared-screenshot lookups that close the stage.
 - **One module dominating everywhere** — a heavy `.gts` in the realm's common ancestry. That single module is the whole realm's tax; it is also the same module a live-app card load pays for (see the cross-reference below).
 
 **Step 4 — `hydrate` dominant: which fields were expensive to deserialize.**
 
-`hydrateFieldsMs` is keyed by dotted field path from the card's root, with **inclusive** times — a parent covers its nested fields, so read the deepest hot key as the culprit and its ancestors as the route to it. Sibling fields deserialize concurrently, so the values overlap and don't sum to `hydrate`.
+`hydrateFieldsMs` is keyed by dotted field path from the card's root. The path names the field; it is **not** a tree you can add up or drill down. Sibling fields deserialize concurrently, so their spans overlap and don't sum to `hydrate`. And a plural field's items all report under the owning field's path, so a nested key accumulates across items while the owning field's own key is one span over those concurrent items — a child key can exceed its parent's, and the floor can keep a child while pruning the parent out entirely. Read each value as that key's own measured cost.
 
 ```sql
 SELECT key AS field_path, value::numeric AS ms
@@ -1605,7 +1614,7 @@ WHERE i.url = '<card-url>' AND i.type = 'instance'
 ORDER BY value::numeric DESC;
 ```
 
-A hot path here is a field whose deserializer is doing real work: a big `containsMany`, a field whose serializer parses something expensive, or a field override whose `adoptsFrom` pulled another module (that module also shows in `moduleEvaluationsMs`). A large `hydrate` with **no** entries is a wide-but-cheap card — many fields under the floor — which is a card-shape problem, not a single-field bug.
+A hot path here is a field whose deserializer is doing real work: a field whose serializer parses something expensive, or a field override whose `adoptsFrom` pulled another module (that module also shows in `moduleEvaluationsMs`). A hot key under a plural field's path is the per-item cost **summed over the items**, so it reads high on a wide `containsMany` of cheap items as readily as on a few expensive ones — divide by the item count before calling it a slow deserializer. A large `hydrate` with **no** entries is a wide-but-cheap card, which is a card-shape problem, not a single-field bug.
 
 **Step 5 — `storeSettle` dominant: what the settle waited on.**
 
@@ -1641,7 +1650,8 @@ A few large values at the top decaying to near-zero is a warming graph (healthy)
 - **Nothing below the module or field grain.** A hot module's evaluation is one number; what inside it is slow (template compile vs. top-level side effects) is Mode H territory.
 - **The stage a stall is IN is absent, not zero.** A stage's bucket is stamped when the stage closes, so a render that timed out mid-build reports the stages it finished and nothing for the one it was in — `renderStage` and `stageAgeMs` name that one. The two together still account for the whole build.
 - **A fused visit's build isn't in the `meta` bucket.** On a fused pass the isolated render triggered the model build, so `buildModelMs` explains `renderFormatsMs.card.isolated`, not `indexRoutesMs.card.meta`. The stage numbers themselves are per-visit and read the same way.
-- **The split pipeline's html-only visit reports none of this.** These stages ride out on the `render.meta` payload, and a `prerender-html` visit never runs that route — so `prerendered_html.diagnostics` carries no `buildModelMs`. Its model build is inside `renderFormatsMs.card.isolated` unattributed. Read the same card's `boxel_index` row instead: it is the same card's module graph, built in the same tab.
+- **A successful split-pipeline html visit reports none of this.** These fields ride out on the `render.meta` payload, and a `prerender-html` visit never runs that route — so a successful one leaves its model build inside `renderFormatsMs.card.isolated` unattributed. Read the same card's `boxel_index` row instead: same module graph, same tab. A **timed-out** html visit is the exception — the timeout capture reads the stages out of the page, so `prerendered_html.diagnostics` does carry `buildModelMs` (and `hydrateFieldsMs`) there.
+- **A non-timeout error row carries no build breakdown.** The stages are assembled when the build completes and the timeout capture is the only other producer, so a row that errored some other way has neither.
 - **The bounded lists drop the tail.** Entries below the floor (or beyond the slowest 20) aren't persisted; the stage totals still carry it, so the un-itemized remainder is the difference.
 - **A row can predate the instrumentation.** Absence means "not measured", not "fast" — check `indexedAt` against when the realm was last reindexed.
 
@@ -1763,22 +1773,34 @@ A few large values at the top decaying to near-zero is a warming graph (healthy)
                                  // Itemized by `storeSettleWaits`.
   },
   "moduleEvaluationsMs": [       // slowest modules THIS visit evaluated (the Loader's
-                                 // rolling history, diffed across the model build, so
-                                 // a warm tab reports none — which is itself the
-                                 // reading that the graph was already loaded). Each
-                                 // `ms` is the synchronous body of the module:
-                                 // Glimmer template compile + top-level init. Same
-                                 // bounding as `searchDocFieldsMs`.
+                                 // rolling slowest-N history, diffed across the model
+                                 // build). Each `ms` is the synchronous body of the
+                                 // module: Glimmer template compile + top-level init.
+                                 // Same bounding as `searchDocFieldsMs`. A SAMPLE, not
+                                 // a census: that history is kept for the loader's
+                                 // whole life and saturates, so a later card in a job
+                                 // can evaluate modules that never enter it. Never
+                                 // read an empty list as "evaluated nothing" — read
+                                 // moduleEvaluationCount.
     { "url": "https://realm.example/product.gts", "ms": 210.5 }
   ],
-  "hydrateFieldsMs": {           // per-field inclusive deserialization timings from the
-                                 // hydrate stage, keyed by dotted field path from the
-                                 // card's root — the deserialization sibling of
-                                 // `searchDocFieldsMs`. Sibling fields deserialize
-                                 // concurrently, so the values overlap and don't sum
-                                 // to `buildModelMs.hydrate`. Same bounding; a large
-                                 // `hydrate` with NO entries is a wide-but-cheap card.
-    "lineItems": 61.4
+  "moduleEvaluationCount": 9,    // how many modules the build evaluated, and their
+  "moduleEvaluationTotalMs": 640,// summed wall-clock, from monotonic Loader counters
+                                 // that cannot be evicted. These are complete where
+                                 // the list above is bounded: 0 is the only value that
+                                 // means the module graph was already warm.
+  "hydrateFieldsMs": {           // per-field deserialization timings from the hydrate
+                                 // stage, keyed by dotted field path from the card's
+                                 // root. The path NAMES the field; it is not a tree.
+                                 // Siblings deserialize concurrently so spans overlap
+                                 // and don't sum to `buildModelMs.hydrate`, and a
+                                 // plural field's items all report under the owning
+                                 // field's path — so a nested key accumulates across
+                                 // items while the owning key is one span over them,
+                                 // and a child can exceed (or outlive the pruning of)
+                                 // its parent. Same bounding; a large `hydrate` with
+                                 // NO entries is a wide-but-cheap card.
+    "lineItems.sku": 61.4
   },
   "storeSettleWaits": [          // what store.loaded() drained during the settle stage.
                                  // `kind` picks the follow-up: card/file are link-target
@@ -1965,7 +1987,7 @@ All ms values are server-observed walltime.
 - `indexRoutesMs.{card,file}.*` sum to **less** than `renderElapsedMs`: each is one index-visit route step's wall-clock, and the gap between their sum and `renderElapsedMs` is the inter-route plumbing (route transitions, instantiation, settle handoffs) — the part of the per-visit floor that isn't a route step. A route step's own transition + settle is inside its number, so `meta` on a near-zero-search-doc card is mostly route machinery, not the doc build (`searchDocMs` / `searchDocSettleMs` break the doc build out of the `meta` number). An `icon` leg served by the per-type memo contributes nothing this visit and isn't recorded.
 - `Σ buildModelMs` + `cardApiLoadMs` + `readySettleMs` + `searchableLoadMs` + `fileExtractMs` + (`searchDocSettleMs` + `searchDocMs` + `serializeMs`) accounts for nearly all of `indexRoutesMs.card.meta` on an index visit — `fileExtractMs` included, because a card-instance visit's `meta` is the fused transition and does the file row's extract inside it. The remainder is the route transition plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The model build is normally the larger half — a `meta` bucket that dwarfs the doc build is a Mode N question, not a Mode J one. On a fused visit the same identity holds against `renderFormatsMs.card.isolated` instead, because that render triggered the parent transition.
 - `unattributedMs` = `renderElapsedMs` − Σ(`indexRoutesMs` + `renderFormatsMs`), computed server-side rather than left to the reader. On a row produced by two visits it is the sum of both visits' residuals, matching how `renderElapsedMs` itself merges.
-- `moduleEvaluationsMs` is a subset of `recentModuleEvaluations` scoped to this visit's model build. `recentModuleEvaluations` is the Loader's whole rolling window (every render this tab served, timeout path only); `moduleEvaluationsMs` is the part this row paid for, and rides every successful row.
+- `moduleEvaluationsMs` is a subset of `recentModuleEvaluations` scoped to this visit's model build. `recentModuleEvaluations` is the Loader's whole rolling window (every render this tab served, timeout path only); `moduleEvaluationsMs` is the part this row paid for, and rides every successful row. Both are drawn from the same slowest-N history, so both under-report once it saturates — `moduleEvaluationCount` / `moduleEvaluationTotalMs` are the uncapped totals for this row's build and are what a "did it evaluate anything" question must read.
 - `stageAgeMs` is host-observed — it's computed as `Date.now() - stageSetAt` at the moment the post-timeout capture ran, so there can be a small read-delay offset vs. `renderElapsedMs`. For triage, `stageAgeMs` represents "how long the render has been stuck in its current stage".
 - `recentModuleEvaluations[*].ms` are per-module evaluation times measured inside `Loader.evaluate()` via `performance.now()`; they're wall time for the synchronous body of the module (Glimmer compile + top-level init). Sum them to estimate the sync-compile budget eaten by module evaluation on this page.
 - `queryLoadsInFlight[*].ageMs` is the wall time since that specific search/query-field load started — i.e. how long it's been hanging.

@@ -59,9 +59,13 @@ export const roundMs = (ms: number) => Math.round(ms * 100) / 100;
 
 // Slowest-N-at/over-the-floor pruning for a path-keyed timing map. Rank by
 // value when reading — jsonb normalizes key order, so the persisted object
-// carries no ordering. An ancestor's inclusive time is >= any descendant's,
-// so a kept entry's parent chain makes the cut with it (barring an
-// exact-tie at the cut-off).
+// carries no ordering.
+//
+// The cut is per key, not per subtree: a collector whose plural fields
+// accumulate their items under one key can produce a child larger than its
+// parent, in which case the child survives and the parent is pruned. The
+// surviving key still names its field by path, so this loses the hierarchy,
+// not the attribution.
 export function pruneTimingPaths(
   pathsMs: Record<string, number>,
 ): Record<string, number> | undefined {

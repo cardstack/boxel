@@ -255,26 +255,55 @@ export interface StoreSettleWait {
 }
 
 // The host render route's account of building the render model. Shared by
-// both diagnostic shapes that carry it: the success path reports it on the
-// `render.meta` payload (`PrerenderMetaDiagnostics`), and the timeout path
-// reads the same numbers out of the page through `__boxelRenderDiagnostics`
-// (`RenderTimeoutDiagnostics`). Both land in the same persisted
-// `Diagnostics` blob, so a reader queries one set of keys either way.
+// both diagnostic shapes that carry it, so a reader queries one set of keys
+// whichever path produced the row.
+//
+// The success path reports all of it on the `render.meta` payload
+// (`PrerenderMetaDiagnostics`). The timeout path reads what a stalled page
+// can still answer through `__boxelRenderDiagnostics`
+// (`RenderTimeoutDiagnostics`): the stage buckets that closed, and the
+// hydration breakdown collected so far — the two a stall inside the build
+// is diagnosed from. The module and settle-wait lists are assembled only
+// when the build completes, so a timed-out row carries neither.
 export interface BuildModelDiagnostics {
   buildModelMs?: BuildModelStagesMs;
   // The slowest modules evaluated during the model build. Bounded the same
   // way as `searchDocFieldsMs`: only entries at/over a floor, slowest first,
-  // capped — so a warm graph records nothing and a cold one records what it
-  // paid for.
+  // capped.
+  //
+  // Attributed to the visit by diffing the Loader's rolling slowest-N
+  // history, which is kept for the loader's whole life, not per render. That
+  // history SATURATES: one cold card can fill every slot, and a later card's
+  // modest evaluations are then dropped on insert and never show up in the
+  // diff. So an empty list does NOT mean "this visit evaluated nothing" —
+  // read `moduleEvaluationCount` for that, which cannot be evicted.
   moduleEvaluationsMs?: ModuleEvaluation[];
-  // Per-field inclusive hydration wall-clock, keyed by dotted field path
-  // from the card's root — the deserialization sibling of
-  // `searchDocFieldsMs`, and the breakdown of `buildModelMs.hydrate`. A
-  // parent's time covers its nested fields, so a slow leaf surfaces
-  // alongside its ancestors. Sibling fields deserialize concurrently, so
-  // spans overlap: read each value as that field's own wall-clock, not as a
-  // summable slice. Same bounding as `searchDocFieldsMs`, so a cheap card
+  // How many modules the visit's model build evaluated, and their summed
+  // wall-clock, from the Loader's monotonic counters. Unlike
+  // `moduleEvaluationsMs` these are complete: a count of zero is the only
+  // thing that means the module graph was already warm, and a large count
+  // with an empty list means the evaluations lost the slowest-N race to an
+  // earlier card in the same job rather than not happening.
+  moduleEvaluationCount?: number;
+  moduleEvaluationTotalMs?: number;
+  // Per-field hydration wall-clock, keyed by dotted field path from the
+  // card's root — the deserialization sibling of `searchDocFieldsMs`, and
+  // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
   // records nothing.
+  //
+  // The keys are a naming scheme, NOT a tree with an inclusive invariant,
+  // and two things break the "parent covers its children" reading:
+  //
+  //   - Sibling fields deserialize concurrently under one `Promise.all`, so
+  //     their spans overlap and do not sum to `hydrate`.
+  //   - A plural field's items all report under the OWNING field's path, so
+  //     a nested key accumulates across items while the owning field's own
+  //     key is a single span over those (concurrent) items. A child key can
+  //     therefore exceed its parent's, and the floor can keep a child while
+  //     pruning the parent out.
+  //
+  // So read each value as that key's own measured cost and use the path to
+  // locate the field, not to reconstruct a hierarchy.
   hydrateFieldsMs?: Record<string, number>;
   // The slowest loads the settle stage drained, same bounding again.
   // Separates "hydration fired a slow link load" from "hydration itself was
