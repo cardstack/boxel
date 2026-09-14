@@ -303,9 +303,10 @@ module(basename(import.meta.filename), function () {
     // tag for every HTTP write route: a handler that drops its
     // `initiatingUser` argument silently disables read-your-writes for that
     // route, which no black-box read test can catch deterministically. The
-    // spy shadows `enqueueUpdate` (the synchronous `update` path calls
-    // through it, so one spy covers both), delegates to the prototype, and
-    // captures each job's `initiatedBy`.
+    // spy shadows `enqueueChanges`, which is where every incremental job is
+    // enqueued — `enqueueUpdate` and both awaited forms delegate to it — so
+    // one spy covers every route regardless of which of them it entered by.
+    // It delegates to the prototype and captures each job's `initiatedBy`.
     test('every HTTP write route tags its indexing job with the writer', async function (assert) {
       let auth = () =>
         `Bearer ${createJWT(testRealm, 'hassan', ['read', 'write'])}`;
@@ -313,9 +314,9 @@ module(basename(import.meta.filename), function () {
       let proto = Object.getPrototypeOf(updater);
       let tags = new Map<string, string | null | undefined>();
       let currentOp = 'none';
-      updater.enqueueUpdate = function (urls: URL[], opts?: any) {
+      updater.enqueueChanges = function (changes: unknown[], opts?: any) {
         tags.set(currentOp, opts?.initiatedBy);
-        return proto.enqueueUpdate.call(this, urls, opts);
+        return proto.enqueueChanges.call(this, changes, opts);
       };
       let drainJobs = async () => {
         let pending = testRealm.incrementalIndexing();
@@ -467,7 +468,7 @@ module(basename(import.meta.filename), function () {
         }
       } finally {
         await drainJobs();
-        delete updater.enqueueUpdate;
+        delete updater.enqueueChanges;
       }
     });
   });

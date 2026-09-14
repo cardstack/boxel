@@ -1215,6 +1215,29 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
     });
 
+    test('a deep link arriving with the layout already mounted opens the modal', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      })!;
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+
+      // Arriving from an in-app link rather than a cold boot: the submode
+      // layout is already mounted and is not rebuilt by this navigation, so
+      // nothing tied to its construction can act on the param.
+      await visit('/?openProfileSettings=subscription');
+
+      assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
+      assert.notOk(
+        currentURL().includes('openProfileSettings'),
+        'the param is consumed on arrival',
+      );
+    });
+
     test('a closed settings modal stays closed when operator mode state persists', async function (assert) {
       await visit('/?openProfileSettings=subscription');
       assert.dom('[data-test-settings-modal]').exists();

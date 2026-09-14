@@ -30,6 +30,7 @@ import {
   type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
+import { baseRealm } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -62,6 +63,89 @@ type VisitRenderOutcome =
   | { status: 'rendered'; result: IndexVisitRenderResult }
   | { status: 'skipped' }
   | { status: 'error'; error: unknown };
+
+// A render that times out while its page is idle — main thread responsive, no
+// script running, nothing fetching, no module import or document load in
+// flight — was waiting on nothing, and nothing about the next file changes
+// that. Several in a row therefore describe the stack rather than the files:
+// an origin the page needs (the host bundle, the realm-server, the icons
+// server) is unreachable from the browser, and every remaining file would
+// cost the full render timeout to fail the same way. A from-scratch pass gives
+// up after this many consecutive idle timeouts, so the job fails within
+// minutes naming the cause instead of grinding to its wall-clock limit and
+// being rejected with nothing written. 0 disables the guard.
+const DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER = 3;
+const envIdleRenderTimeoutAbortAfter = Number(
+  (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.INDEX_IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+);
+export const IDLE_RENDER_TIMEOUT_ABORT_AFTER =
+  Number.isFinite(envIdleRenderTimeoutAbortAfter) &&
+  envIdleRenderTimeoutAbortAfter >= 0
+    ? envIdleRenderTimeoutAbortAfter
+    : DEFAULT_IDLE_RENDER_TIMEOUT_ABORT_AFTER;
+
+// Script-busy fraction below which the page counts as idle. The CPU sample
+// covers a short window, so a page that is doing nothing useful can still show
+// a few percent of housekeeping.
+const IDLE_SCRIPT_BUSY_MAX = 0.05;
+
+const RENDER_TIMEOUT_TITLE = 'Render timeout';
+
+// A module every realm depends on and none owns. When consecutive renders
+// have timed out idle, whether this renders decides between a stack that
+// cannot render anything and cards that happen to hang on their own.
+const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
+
+// Whether a visit's render timed out with nothing in flight. The timeout error
+// carries the diagnostics the prerender server captured as it fired (see
+// RenderTimeoutDiagnostics), flattened onto the visit's `diagnostics`. The
+// signals that decide idleness are the ones captured from outside the page —
+// the responsiveness probe, the CPU sample, the CDP request list — and each
+// must be present and idle: a timeout whose diagnostics are missing, or show
+// work in progress, is a slow or stuck render rather than an idle one and does
+// not count. The in-page counters are captured only once the page has reached
+// a render stage; when present they can show work the outside view cannot, and
+// then disqualify, but their absence says nothing.
+export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
+  let errors = [
+    result.pageUnusableError,
+    result.card?.error,
+    result.fileExtract?.error,
+    result.fileRender?.error,
+  ];
+  if (!errors.some((e) => e?.error?.title === RENDER_TIMEOUT_TITLE)) {
+    return false;
+  }
+  let d = result.diagnostics;
+  if (!d || d.mainThreadResponsive !== true) {
+    return false;
+  }
+  if (
+    typeof d.scriptBusyFraction !== 'number' ||
+    d.scriptBusyFraction >= IDLE_SCRIPT_BUSY_MAX
+  ) {
+    return false;
+  }
+  if (
+    !Array.isArray(d.pendingNetworkRequests) ||
+    d.pendingNetworkRequests.length > 0
+  ) {
+    return false;
+  }
+  let busy = (list: unknown[] | undefined) =>
+    Array.isArray(list) && list.length > 0;
+  return !(
+    busy(d.inFlightModuleImports) ||
+    busy(d.cardDocsInFlight) ||
+    busy(d.fileMetaDocsInFlight) ||
+    busy(d.cardDocLoadsInFlight) ||
+    busy(d.fileMetaDocLoadsInFlight)
+  );
+}
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -123,6 +207,7 @@ export class IndexRunner {
   // warm loader ownership — intended). Populated in the constructor after
   // jobInfo is known so the id is easy to correlate with a job in logs.
   #batchId!: string;
+  #idleRenderTimeoutAbortAfter: number;
 
   constructor({
     realmURL,
@@ -140,6 +225,7 @@ export class IndexRunner {
     auth,
     fetch,
     realmOwnerUserId,
+    idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -151,6 +237,9 @@ export class IndexRunner {
     auth: string;
     fetch: typeof globalThis.fetch;
     realmOwnerUserId: string;
+    // Consecutive idle render timeouts after which a from-scratch pass gives
+    // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
+    idleRenderTimeoutAbortAfter?: number;
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -189,6 +278,7 @@ export class IndexRunner {
     this.#auth = auth;
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
+    this.#idleRenderTimeoutAbortAfter = idleRenderTimeoutAbortAfter;
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
@@ -300,6 +390,7 @@ export class IndexRunner {
     let resumedSkipped = 0;
     try {
       await current.#runVisitLoop(invalidations, {
+        abortAfterIdleRenderTimeouts: current.#idleRenderTimeoutAbortAfter,
         // Resume guard. If a previous attempt of this same job already wrote
         // URL_X to the working table AND the EFS mtime hasn't changed since,
         // skip the visit — the existing working row is still authoritative
@@ -486,6 +577,11 @@ export class IndexRunner {
         let orderStart = Date.now();
         invalidations = sortInvalidations(
           current.batch.invalidations.map((href) => new URL(href)),
+          current.realmURL,
+        );
+        invalidations = prioritizeWrittenURLs(
+          invalidations,
+          urls,
           current.realmURL,
         );
         invalidations =
@@ -709,14 +805,21 @@ export class IndexRunner {
       skipReason,
       onSkip,
       onVisited,
+      abortAfterIdleRenderTimeouts = 0,
     }: {
       skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
       onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
       onVisited: (url: URL) => void;
+      // When set, the pass throws — abandoning the batch — once this many
+      // consecutive visits time out idle (see isIdleRenderTimeout). A
+      // from-scratch pass sets it; an incremental pass, whose rows are the
+      // only record of a write, does not.
+      abortAfterIdleRenderTimeouts?: number;
     },
   ): Promise<void> {
     let n = invalidations.length;
     let renders = new Map<number, Promise<VisitRenderOutcome>>();
+    let idleTimeouts: string[] = [];
     // Start the render for the next non-skipped URL at or after `from`,
     // keeping exactly one render in flight ahead of the finish cursor.
     let prefetch = (from: number) => {
@@ -757,6 +860,74 @@ export class IndexRunner {
         await this.#handleVisitError(url, err);
       }
       onVisited(url);
+      if (abortAfterIdleRenderTimeouts > 0) {
+        if (
+          outcome.status === 'rendered' &&
+          isIdleRenderTimeout(outcome.result)
+        ) {
+          idleTimeouts.push(url.href);
+        } else {
+          idleTimeouts = [];
+        }
+        if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
+          // Consecutive idle timeouts are not proof of a broken stack on their
+          // own: the visit order groups a definition's instances together, so
+          // one card type that hangs on an untracked promise produces the same
+          // run. A module the realm does not own settles it — if that cannot
+          // render either, nothing in this pass can.
+          let canary = await this.#canaryRenderFailure();
+          if (!canary) {
+            this.#log.warn(
+              `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
+                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+            );
+            idleTimeouts = [];
+            continue;
+          }
+          // Thrown past #handleVisitError on purpose: this is not one file's
+          // failure to isolate but the pass's inability to render anything,
+          // and the job's rejection is what carries that to whoever awaits
+          // it (readiness, a publish, an operator).
+          let message =
+            `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
+            `(main thread responsive, no script running, nothing fetching, no module import in flight), and a base module ` +
+            `could not render either (${canary}), so the page is waiting on nothing and no file in this pass can render. ` +
+            `Check that the prerender's browser can reach the host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
+          this.#log.error(message);
+          throw new Error(message);
+        }
+      }
+    }
+  }
+
+  // Renders CANARY_MODULE_URL on this pass's affinity and reports why it did
+  // not render, or undefined when it did. A module render rather than a card
+  // render: it needs nothing from this realm but the loader epoch, and it goes
+  // through the same page, host bundle, realm-server and icons origins every
+  // visit in the pass depends on.
+  async #canaryRenderFailure(): Promise<string | undefined> {
+    try {
+      let response = await this.#prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: this.#realmURL.href,
+        realm: this.#realmURL.href,
+        url: CANARY_MODULE_URL,
+        auth: this.#auth,
+        priority: this.#jobPriority,
+        renderOptions: { loaderEpoch: this.batch.loaderEpoch },
+      });
+      if (response.status === 'ready') {
+        return undefined;
+      }
+      return (
+        response.error?.error?.message ??
+        `module render reported status ${response.status}`
+      );
+    } catch (err) {
+      return coerceErrorMessage(
+        err,
+        'module render threw with no error message',
+      );
     }
   }
 
@@ -1185,34 +1356,112 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
+// Order the pass's visit list so the URLs the triggering write named — the
+// pass's targets — come first, in the order they were written, ahead of the
+// dependents the invalidation fan-out discovered.
+//
+// Visit class outranks being a target (see `visitClassRank`), for targets and
+// dependents alike: a module is visited before any instance whether or not
+// the write named it, because an instance rendering before the module it
+// adopts from has no file entry to render against — a failure, not a stale
+// read. Ranking class first is also what carries the target-first guarantee
+// through `orderInvalidationsByDependencies`, which treats this order as a
+// tie-break priority rather than a fixed sequence: inside a dependency cycle
+// it has no satisfiable order to offer and ranks the members by priority
+// alone, so a module that arrived behind an instance would stay behind it.
+//
+// Within one class the targets lead, in the order they were written, then the
+// dependents in the order they arrived in. Every URL in a class is either a
+// target with its own write position or a dependent with its own arrival
+// position, so the comparison is total and the result does not depend on the
+// sort being stable.
+//
+// A recorded dependency edge still overrules all of this downstream. What the
+// priority decides is the cases the dependency graph leaves open — a
+// dependent no persisted `deps` row connects to its target, and a target
+// stranded in a dependency cycle — where the ordering falls back to the
+// incoming order and would otherwise be free to leave the target last.
+//
+// This is a guarantee about the order in which a pass writes its rows, not
+// about what a concurrent reader can observe: the pass promotes its whole
+// working table in one transaction (`batch.done()`), so no reader ever sees
+// one row of a pass ahead of another.
+export function prioritizeWrittenURLs(
+  invalidations: URL[],
+  written: URL[],
+  realmURL: URL,
+): URL[] {
+  if (invalidations.length < 2) {
+    return invalidations;
+  }
+  let inFanOut = new Set(invalidations.map((url) => url.href));
+  // A written URL missing from the fan-out is one the invalidation walk
+  // recorded under its node-resolved alias instead. Nothing to rank: the
+  // dependency graph and the incoming order decide, as they always have.
+  let writePositions = new Map<string, number>();
+  for (let url of written) {
+    if (inFanOut.has(url.href) && !writePositions.has(url.href)) {
+      writePositions.set(url.href, writePositions.size);
+    }
+  }
+  let realmConfigHref = realmConfigHrefFor(realmURL);
+  let ranked = invalidations.map((url, arrival) => {
+    let writePosition = writePositions.get(url.href);
+    return {
+      url,
+      visitClass: visitClassRank(url, realmConfigHref),
+      isDependent: writePosition === undefined ? 1 : 0,
+      position: writePosition ?? arrival,
+    };
+  });
+  ranked.sort(
+    (a, b) =>
+      a.visitClass - b.visitClass ||
+      a.isDependent - b.isDependent ||
+      a.position - b.position,
+  );
+  return ranked.map(({ url }) => url);
+}
+
+// Visit-class priority, in the order a pass must write the classes:
+//
+//   0. The realm's RealmConfig card at <realmURL>realm.json — write its
+//      working-index row first so any /_info query that lands AFTER the
+//      pass commits (`batch.done()` swaps boxel_index_working into
+//      boxel_index) sees the RealmConfig overlay and resolves the realm's
+//      display name. parseRealmInfo's overlay path queries the live
+//      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+//      see realm.json mid-pass; this ordering only guarantees a correct
+//      answer at and after the pass-end commit (and on subsequent
+//      passes). Host-side prerender caching of stale realmInfo (see
+//      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+//      concern not addressed here.
+//   1. Non-.json files (modules, source) — file entries must exist before
+//      the cards that depend on them are rendered.
+//   2. Other .json files.
+//
+// Class 1 before class 2 is a correctness requirement, not a preference,
+// and it holds for a class-2 URL whose dependency on a class-1 URL the index
+// has not recorded yet — a brand-new instance and the module it adopts from,
+// written by one job. Both orderers below therefore rank by class before
+// applying their own tie-break.
+function visitClassRank(url: URL, realmConfigHref: string): number {
+  if (url.href === realmConfigHref) {
+    return 0;
+  }
+  return url.href.endsWith('.json') ? 2 : 1;
+}
+
+function realmConfigHrefFor(realmURL: URL): string {
+  return new RealmPaths(realmURL).fileURL('realm.json').href;
+}
+
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
-  // Visit order priority:
-  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
-  //      working-index row first so any /_info query that lands AFTER the
-  //      pass commits (`batch.done()` swaps boxel_index_working into
-  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
-  //      display name. parseRealmInfo's overlay path queries the live
-  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
-  //      see realm.json mid-pass; this ordering only guarantees a correct
-  //      answer at and after the pass-end commit (and on subsequent
-  //      passes). Host-side prerender caching of stale realmInfo (see
-  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
-  //      concern not addressed here.
-  //   2. Non-.json files (modules, source) — file entries must exist before
-  //      the cards that depend on them are rendered.
-  //   3. Other .json files, sorted lexically for determinism.
-  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
+  // Class order (see visitClassRank), then lexical by href for determinism.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
   return urls.sort((a, b) => {
-    let aRealmConfig = a.href === realmConfigHref;
-    let bRealmConfig = b.href === realmConfigHref;
-    if (aRealmConfig !== bRealmConfig) {
-      return aRealmConfig ? -1 : 1;
-    }
-    let aJson = a.href.endsWith('.json');
-    let bJson = b.href.endsWith('.json');
-    if (aJson === bJson) {
-      return a.href.localeCompare(b.href);
-    }
-    return aJson ? 1 : -1;
+    let rank =
+      visitClassRank(a, realmConfigHref) - visitClassRank(b, realmConfigHref);
+    return rank !== 0 ? rank : a.href.localeCompare(b.href);
   });
 }

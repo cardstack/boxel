@@ -1,4 +1,4 @@
-import { find } from '@ember/test-helpers';
+import { find, waitUntil } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -436,6 +436,73 @@ module('Integration | content-only file preview components', function (hooks) {
     );
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
+  test('PdfViewer hands its fetched document to the object as a blob URL in live renders', async function (assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let { PdfViewer } = await loader.import<any>(
+      `${baseRealm.url}file-formats/pdf-viewer`,
+    );
+    // A native <object>'s own fetch bypasses service workers, so the viewer
+    // fetches the bytes itself and hands the object a blob URL. A data: URL
+    // stands in for the realm document — the fetch path is identical, no
+    // auth needed. What this pins is the fetch→blob handoff only: the
+    // Authorization injection that motivates it lives in the host auth
+    // service worker, and `isServiceWorkerSupported()` short-circuits under
+    // `isTesting()`, so the authed private-realm leg has no test coverage —
+    // a green run here says nothing about it.
+    let pdfB64 =
+      'JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMjAwXT4+CmVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA0L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKMTY0CiUlRU9G';
+    let model = {
+      url: `data:application/pdf;base64,${pdfB64}`,
+      name: 'doc.pdf',
+      contentType: 'application/pdf',
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 400px; height: 300px;'>
+          <PdfViewer @model={{model}} @format='isolated' />
+        </div>
+      </template>,
+    );
+    // The object is withheld until the fetch settles (no unauthenticated
+    // flash), then mounts with the blob-backed document.
+    await waitUntil(() => find('[data-test-pdf-viewer]'), { timeout: 10000 });
+    let data = find('[data-test-pdf-viewer]')?.getAttribute('data') ?? '';
+    assert.ok(
+      data.startsWith('blob:'),
+      `the object loads the fetched blob, not the plain URL (got: ${data})`,
+    );
+  });
+
+  test('PdfViewer falls back to the plain URL when its fetch cannot get the bytes', async function (assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let { PdfViewer } = await loader.import<any>(
+      `${baseRealm.url}file-formats/pdf-viewer`,
+    );
+    // An anonymous visitor on a public realm has no session for the viewer's
+    // fetch to ride; the plain URL is the working path there, so a failed
+    // fetch must fall back to it rather than rendering nothing.
+    let model = {
+      url: '/definitely-not-here.pdf',
+      name: 'missing.pdf',
+      contentType: 'application/pdf',
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 400px; height: 300px;'>
+          <PdfViewer @model={{model}} @format='isolated' />
+        </div>
+      </template>,
+    );
+    await waitUntil(() => find('[data-test-pdf-viewer]'), { timeout: 10000 });
+    let data = find('[data-test-pdf-viewer]')?.getAttribute('data') ?? '';
+    assert.ok(
+      data.endsWith('/definitely-not-here.pdf'),
+      `the object falls back to the plain URL (got: ${data})`,
+    );
   });
 
   test('AudioPreview renders the waveform and player from a bare FileDef instance', async function (assert) {

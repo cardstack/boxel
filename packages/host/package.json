@@ -168,6 +168,7 @@
     "monaco-editor": "catalog:",
     "ms": "catalog:",
     "path-browserify": "catalog:",
+    "pdfjs-dist": "catalog:",
     "pluralize": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",

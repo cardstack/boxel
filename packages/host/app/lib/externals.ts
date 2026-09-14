@@ -63,6 +63,7 @@ import {
   fallbackShim,
 } from '@cardstack/runtime-common/package-shim-handler';
 
+import * as pdfjsLoader from '../lib/pdfjs-loader';
 import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
@@ -213,6 +214,27 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: 'ethers',
     resolve: () => import('ethers'),
   });
+  // The PDF family's capture-only poster component rasterizes page 1 with
+  // pdf.js. Vendored (not fetched from a CDN inside the render) so realm
+  // indexing never depends on public-network reachability from the
+  // prerender, and lazy so the engine's chunk loads only when a capture
+  // render asks for it — the wrapper also wires a same-origin worker asset
+  // (see `../lib/pdfjs`).
+  //
+  // Two shims on purpose. The async shim serves card code that statically
+  // imports `pdfjs-dist` (the proven consumption shape for async shims —
+  // fflate, ethers). The sync loader shim is what the capture component
+  // uses: it needs the engine only at capture time, and a static import of
+  // this zero-cost function keeps the chunk load at the call, on the
+  // loader path static imports already exercise.
+  virtualNetwork.shimAsyncModule({
+    id: 'pdfjs-dist',
+    resolve: () => import('../lib/pdfjs.js'),
+  });
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/lib/pdfjs-loader',
+    pdfjsLoader,
+  );
   virtualNetwork.shimAsyncModule({
     id: 'uuid',
     resolve: () => import('uuid'),

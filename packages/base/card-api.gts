@@ -2915,6 +2915,28 @@ export type BaseDefComponent = ComponentLike<{
 // element fails that slot's capture rather than persisting an unready frame.
 // Components with no async work omit the attribute and capture immediately.
 //
+// A component that learns its content can never become ready — a corrupt or
+// password-protected document, an undecodable video — should not leave the
+// pending attribute standing until the engine's timeout: swap in a
+// `data-screenshot-failed` attribute instead (remove the pending attribute,
+// set the failed one), which fails the slot immediately. Set the attribute's
+// value to a short human-readable cause; the engine carries it into the
+// slot's failure diagnostics, so an unreadable file is distinguishable from
+// a hung component. Failing the slot is the correct outcome for unreadable
+// content — no manifest entry lands and consumers fall back — where
+// resolving readiness over an unpainted box would persist a blank frame as
+// if it were real content.
+//
+// Clear the attribute with `el.removeAttribute('data-screenshot-pending')`
+// from the async continuation (and set the failure signal with
+// `el.setAttribute('data-screenshot-failed', cause)`) — never by
+// re-rendering it off a tracked property
+// (`data-screenshot-pending={{if this.pending 'true'}}`). Capture
+// pages run in backgrounded tabs, where the browser throttles the timers a
+// tracked update's render flush rides, so the flip can sit unflushed past
+// the engine's whole wait; the engine watches for the DOM mutation itself,
+// which a direct attribute mutation produces immediately.
+//
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —

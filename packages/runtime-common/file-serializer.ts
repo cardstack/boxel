@@ -17,7 +17,10 @@ import type { VirtualNetwork } from './virtual-network.ts';
 import { isMeta, type CardFields, type Meta } from './resource-types.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
-import { maybeRelativeReference as makeRelativeReference } from './url.ts';
+import {
+  isScopedReference,
+  maybeRelativeReference as makeRelativeReference,
+} from './url.ts';
 
 export default async function serialize({
   doc,
@@ -319,6 +322,57 @@ async function resolveChildDef(
   return await definitionLookup.lookupDefinition(codeRef);
 }
 
+// What a relationship's `links.self` should be stored as.
+//
+// Inside the writing realm a link is stored relative, whichever form the
+// client sent. Outside it, a scoped reference is stored exactly as sent and
+// anything else is stored resolved.
+//
+// Whether a link is inside the realm is decided in URL space, so the link is
+// resolved before the question is asked: `relativeTo` is always a URL here,
+// and `relativeReference` refuses a mixed RRI/URL pair rather than resolve
+// across forms — handing it a scoped reference returns that reference
+// unchanged, which looks like "cannot be relativized" even for a link into
+// this very realm.
+//
+// Storing a resolved URL for a cross-realm scoped link is the bug this exists
+// to prevent: it bakes whatever URL the linked realm answers to in this
+// environment into a realm that is version controlled.
+export function storedRelationshipLink(
+  selfLink: string,
+  relativeTo: URL,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): string {
+  // A scoped reference whose prefix this process has not registered cannot be
+  // resolved, and asking anyway is worse than not asking: `resolveURL` treats
+  // it as a relative reference and joins it against the base, so
+  // `@scope/name/x` comes back as a URL *inside* the writing realm and then
+  // relativizes to `./@scope/name/x`. It is absolute and cross-realm by
+  // construction, so store it exactly as sent.
+  if (
+    !virtualNetwork.isRegisteredPrefix(selfLink) &&
+    selfLink.startsWith('@')
+  ) {
+    return selfLink;
+  }
+  let resolved: URL;
+  try {
+    resolved = virtualNetwork.resolveURL(selfLink, relativeTo);
+  } catch (e) {
+    // A reference that will not resolve is left exactly as it arrived.
+    return selfLink;
+  }
+  let relative = makeRelativeReference(resolved, relativeTo, realmURL);
+  if (
+    relative === resolved.href &&
+    isScopedReference(selfLink, virtualNetwork)
+  ) {
+    return selfLink;
+  }
+  return relative;
+}
+
 async function processRelationships({
   relationships,
   definition,
@@ -346,15 +400,12 @@ async function processRelationships({
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
         if (realmURL && selfLink) {
-          try {
-            selfLink = makeRelativeReference(
-              virtualNetwork.resolveURL(selfLink, relativeTo),
-              relativeTo,
-              realmURL,
-            );
-          } catch (e) {
-            // ignore malformed URLs and leave as-is
-          }
+          selfLink = storedRelationshipLink(
+            selfLink,
+            relativeTo,
+            realmURL,
+            virtualNetwork,
+          );
         }
         processedValue.links = {
           self: selfLink,

@@ -211,6 +211,9 @@ catalog:
   openai: 5.12.2
   parse-static-imports: ^1.1.0
   path-browserify: ^1.0.1
+  # Exact pin: pdf.js requires its main library and worker asset to be the
+  # same build, so a range here could split them across installs.
+  pdfjs-dist: 4.10.38
   pg: ^8.11.5
   pluralize: ^8.0.0
   prettier: ^3.6.2

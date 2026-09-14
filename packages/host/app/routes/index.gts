@@ -16,6 +16,7 @@ import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type IndexController from '@cardstack/host/controllers';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
@@ -94,6 +95,7 @@ export default class Card extends Route {
       cardPath?: string;
       path: string;
       operatorModeState: string;
+      openProfileSettings?: string | null;
     },
     transition: Transition,
   ) {
@@ -220,6 +222,10 @@ export default class Card extends Route {
       return;
     }
 
+    // Read from `params`, not the controller: `Route#setup` does not write this
+    // transition's params onto the controller until after `model()` resolves.
+    this.consumeProfileSettingsDeepLink(params.openProfileSettings);
+
     if (!isTesting()) {
       // we don't want to fetch subscription data in integration tests
       // we need to fetch the subscription data right after login
@@ -266,6 +272,11 @@ export default class Card extends Route {
       this.router.transitionTo(routeName, ...routeArgs, {
         queryParams: {
           cardPath: undefined,
+          // Consumed just above when there is a session to act on it, and
+          // dropped here either way: the router would otherwise rebuild this
+          // param from its own cache and put the request back in the URL after
+          // the modal has already been opened.
+          openProfileSettings: undefined,
           operatorModeState: stringify({
             stacks,
             submode: Submodes.Interact,
@@ -292,6 +303,69 @@ export default class Card extends Route {
 
       return;
     }
+  }
+
+  // `?openProfileSettings` deep link — a marketing page links straight into
+  // the profile settings modal, optionally scrolled to a section.
+  //
+  // Called from two points, because the request can be lost at either one:
+  //
+  //   - from `model()`, ahead of the redirect it performs for a URL carrying no
+  //     `operatorModeState`. That redirect aborts the transition before the
+  //     router has written this param onto the controller, and it rebuilds the
+  //     param set from the router's own cache — which never learned the value,
+  //     so the request would be dropped from both the controller and the URL.
+  //   - from `setupController`, which runs immediately after `Route#setup`
+  //     rewrites every declared param onto the controller from the transition's
+  //     captured values. Without this, a transition that captured the param
+  //     before it was consumed puts it straight back.
+  //
+  // Consuming on the route rather than when a component is constructed is what
+  // makes the timing irrelevant: both points run at fixed places in the
+  // transition, whereas the submode layout is mounted and unmounted by the
+  // authentication gate and so reads the param at whatever moment the session
+  // happens to settle.
+  //
+  // A logged-out arrival renders <Auth /> instead of the modal, so the request
+  // is left in the URL to outlive the login form; the post-login route refresh
+  // brings it back here with a session to open it against.
+  //
+  // Nulled on consumption, like `sid` in matrix/auth.gts, so the modal does not
+  // reopen on the model refresh every `schedulePersist()` triggers, and so the
+  // request does not survive into a URL someone might share.
+  private consumeProfileSettingsDeepLink(requested?: string | null) {
+    let controller = this.operatorModeStateService.operatorModeController;
+    requested = requested ?? controller.openProfileSettings;
+    if (!requested) {
+      return;
+    }
+    if (!this.matrixService.isLoggedIn) {
+      if (isTesting()) {
+        console.warn(
+          `[profile-deep-link] holding ${requested} for the login form`,
+        );
+      }
+      return;
+    }
+    controller.openProfileSettings = null;
+    if (isTesting()) {
+      console.warn(`[profile-deep-link] opening settings on ${requested}`);
+    }
+    // An unrecognized value still opens settings: this param is linked from
+    // external pages, so a stale or mistyped link degrades to the modal's
+    // default view rather than doing nothing.
+    this.operatorModeStateService.openProfileSettings(
+      requested === 'subscription' ? 'subscription' : undefined,
+    );
+  }
+
+  setupController(
+    controller: IndexController,
+    model: ReturnType<StoreService['get']>,
+    transition: Transition,
+  ) {
+    super.setupController(controller, model, transition);
+    this.consumeProfileSettingsDeepLink();
   }
 
   // Query params to carry onto a redirect rule's target, read from the

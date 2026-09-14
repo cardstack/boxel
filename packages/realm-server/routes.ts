@@ -143,6 +143,9 @@ export type CreateRoutesArgs = {
   // (coalescing on, retention off) to force each caller to compute; when
   // unset the handler constructs its own with production defaults.
   liveSearchCache?: LiveSearchCache;
+  // When true, a live search answers each result's relationships but
+  // side-loads none of their targets.
+  liveReadsResolveLinksOnly?: boolean;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -249,6 +252,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       searchCache,
       dbAdapter: args.dbAdapter,
       liveSearchCache: args.liveSearchCache,
+      liveReadsResolveLinksOnly: args.liveReadsResolveLinksOnly,
     }),
   );
   router.all(

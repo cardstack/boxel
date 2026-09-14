@@ -26,6 +26,7 @@ import {
   internalKeyFor,
   visitInstanceURLs,
   maybeRelativeReference,
+  isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
 import type { Realm } from './realm.ts';
@@ -146,6 +147,22 @@ type Options = {
   // external `_federated-search` callers still receive fully-assembled
   // compound documents.
   omitIncluded?: boolean;
+  // When true, `loadLinks` resolves the roots' relationships and then stops:
+  // the query-field pass runs, so every field a caller asked for names its
+  // targets, but no linked resource is fetched, cloned, or pushed into
+  // `included[]` — and no further layer is walked, so the transitive closure
+  // behind those targets is never assembled at all. A relationship is left
+  // naming a target the document does not carry, which is the shape the host
+  // reads as "not loaded yet" and resolves for itself, one card at a time,
+  // for the links a template actually displays.
+  //
+  // This is the middle of three positions on how much of a card's link graph
+  // a response carries. `omitIncluded` skips the pass outright, which leaves
+  // a query-backed field with no umbrella and sends the consumer to its own
+  // search; the default assembles the whole closure. This one keeps the
+  // answer to "which cards does this field name?" — the part a consumer
+  // cannot cheaply recompute — and drops the cards themselves, which it can.
+  resolveLinksOnly?: boolean;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
   // query and the `loadLinks` relationship assembly — stamp their elapsed
@@ -159,6 +176,16 @@ type Options = {
   // promptly instead of running every layer to completion. Threaded like
   // `timings`; absent for everything except a bounded live search.
   signal?: AbortSignal;
+  // Fires once per query-backed field this pass applies, whatever the
+  // outcome. The caller cannot read this off the assembled document:
+  // `applyQueryResults` writes the `links.search` marker only when the query
+  // normalized to a searchable form, so a field whose query aborted (an
+  // interpolated `$this.<path>` resolved to undefined) or whose realms could
+  // not be placed is written as a bare `links.self` — indistinguishable on
+  // the wire from a static `linksTo`, yet still a value that depends on
+  // cards other than this one. Reporting from the one choke point every
+  // application passes through is exact where sniffing the output is not.
+  onQueryFieldApplied?: () => void;
 } & QueryOptions;
 
 export type SearchResult = SearchResultDoc | SearchResultError;
@@ -188,6 +215,15 @@ export interface SearchResultDoc {
   // assembled `doc` and joined into per-instance `meta.screenshots` only by
   // the realm's card+json GET handler.
   screenshots: ScreenshotManifest | null;
+  // Whether assembling this document applied any query-backed field — a
+  // field whose targets are found by running a query now rather than by
+  // following a stored link. Such a document is not a function of this
+  // card's own index row: a write to some other card that enters or leaves
+  // the query changes it, and deliberately does not move this card's `deps`
+  // or `indexed_at`. The realm's card+json GET uses this to decide the
+  // document cannot be retained in its response cache. False when
+  // `loadLinks` did not run, since nothing was resolved.
+  queryBacked: boolean;
 }
 
 export interface SearchResultError {
@@ -768,6 +804,7 @@ export class RealmIndexQueryEngine {
         `bug: should never get here--search index doc is undefined`,
       );
     }
+    let queryBacked = false;
     if (opts?.loadLinks) {
       let included = await this.loadLinks(
         {
@@ -775,7 +812,13 @@ export class RealmIndexQueryEngine {
           rootResources: [doc.data],
           omit: [...(doc.data.id ? [doc.data.id] : [])],
         },
-        opts,
+        {
+          ...opts,
+          onQueryFieldApplied: () => {
+            queryBacked = true;
+            opts.onQueryFieldApplied?.();
+          },
+        },
       );
       if (included.length > 0) {
         doc.included = included;
@@ -790,6 +833,7 @@ export class RealmIndexQueryEngine {
       indexedAt: instance.indexedAt,
       deps: instance.deps,
       screenshots: instance.screenshots,
+      queryBacked,
     };
   }
 
@@ -931,6 +975,7 @@ export class RealmIndexQueryEngine {
           errors,
           searchURL,
           total,
+          opts,
         });
         continue;
       }
@@ -1020,6 +1065,7 @@ export class RealmIndexQueryEngine {
         errors,
         searchURL,
         total,
+        opts,
       });
     }
   }
@@ -1243,6 +1289,7 @@ export class RealmIndexQueryEngine {
     errors,
     searchURL,
     total,
+    opts,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
@@ -1251,7 +1298,11 @@ export class RealmIndexQueryEngine {
     errors: QueryFieldErrorDetail[];
     searchURL: string;
     total: number | undefined;
+    opts?: Options;
   }): void {
+    // Every query-backed field application lands here, including the ones
+    // that leave no `links.search` marker behind — see `onQueryFieldApplied`.
+    opts?.onQueryFieldApplied?.();
     resource.relationships = resource.relationships ?? {};
     for (let key of Object.keys(resource.relationships)) {
       if (key === fieldName || key.startsWith(`${fieldName}.`)) {
@@ -1678,19 +1729,50 @@ export class RealmIndexQueryEngine {
       // handler's time-budget race is what actually returns the 408.
       opts?.signal?.throwIfAborted();
       let currentLayerIndex = layerIndex++;
-      // Step 1: run populateQueryFields for every resource in this layer in
-      // parallel. Each runs an independent searchCards query for its
-      // computed query-fields; collapsing those across the layer is a
-      // separate optimization.
+      // Step 1: run populateQueryFields for the layer's roots in parallel.
+      // Each runs an independent searchCards query for its computed
+      // query-fields; collapsing those across a layer is a separate
+      // optimization.
+      //
+      // Side-loaded resources are skipped, the way `linkFields` already is.
+      // A query-backed field stores no target — its value is whatever a
+      // query returns at the moment it is asked — so resolving one costs a
+      // walk of the card's whole field tree plus a search per query field it
+      // finds, and the relationships it writes back carry a `links.self` the
+      // next layer follows and expands, whose targets resolve their own
+      // query fields in turn. Applied across a closure rather than to the
+      // cards a caller named, that is nearly all of the work, and it lands on
+      // cards present only as context for rendering a link.
+      //
+      // No consumer is left without a way to get the value. A live one
+      // re-runs the query for itself whatever the document says —
+      // `ensureQueryFieldSearchResource` makes a query field's search
+      // resource live outside a render context — so a field resolved on a
+      // side-loaded card is work it discards, beyond seeding the first paint
+      // before its own query lands. A render resolves a query field only
+      // when a template reads it (`resolveQueryFieldEagerly` defers to the
+      // field getter inside a render context), so it reaches only the fields
+      // it displays; for those it runs the query itself rather than reading
+      // an answer off the document.
+      //
+      // A skipped field is left the way the pristine index row carries it:
+      // no umbrella, so no `links.search` and no `data` — the shape an
+      // `omitIncluded` search already ships. `captureQueryFieldSeedData`
+      // reads that as an unanswered field rather than as an answer of none,
+      // which is what sends a consumer to its own query. A card reachable
+      // only over such an edge is absent from `included[]`; it arrives by
+      // that query instead.
       try {
         await Promise.all(
-          layer.map(async ({ resource, applyLinkFields }) => {
-            let popOpts = applyLinkFields
-              ? opts
-              : opts?.linkFields
-                ? { ...opts, linkFields: undefined }
-                : opts;
-            let timings = popOpts?.timings;
+          layer.map(async ({ resource, isRoot }) => {
+            if (!isRoot) {
+              return;
+            }
+            // A root carries `linkFields` as the caller passed it — the
+            // narrowing this pass reads directly, and the one step 2 strips
+            // below the root layer so a side-loaded card's stored links still
+            // expand.
+            let timings = opts?.timings;
             let storedDefs = (
               resource.meta as {
                 queryFieldDefs?: Record<string, QueryFieldMeta>;
@@ -1702,14 +1784,14 @@ export class RealmIndexQueryEngine {
             // concurrently across the layer); the wall-clock of the whole pass
             // is the outer `loadLinks` stage.
             let runPopulate = () =>
-              popOpts?.cacheOnlyDefinitions && storedDefs
+              opts?.cacheOnlyDefinitions && storedDefs
                 ? this.populateQueryFieldsFromMeta(
                     resource,
                     realmURL,
                     storedDefs,
-                    popOpts,
+                    opts,
                   )
-                : this.populateQueryFields(resource, realmURL, popOpts);
+                : this.populateQueryFields(resource, realmURL, opts);
             if (timings) {
               await timings.busyTime('populate', runPopulate);
             } else {
@@ -1736,9 +1818,11 @@ export class RealmIndexQueryEngine {
       // targets are not expanded into `included[]` produces orphan-link
       // errors. The umbrella entry (`fieldName`) stays — it carries
       // `links.search` and `data: [array of IDs]` for the host's per-URL
-      // hydration path. Set by the card-document prerender path
-      // (`skipQueryBackedExpansion`).
-      if (opts?.skipQueryBackedExpansion) {
+      // hydration path. Both callers that leave a query-backed field's
+      // targets out of `included[]` need this: the one that expands static
+      // links but not query-backed ones (`skipQueryBackedExpansion`), and the
+      // one that expands nothing (`resolveLinksOnly`).
+      if (opts?.skipQueryBackedExpansion || opts?.resolveLinksOnly) {
         for (let { resource } of layer) {
           if (!resource.relationships) {
             continue;
@@ -1759,6 +1843,25 @@ export class RealmIndexQueryEngine {
             }
           }
         }
+      }
+
+      // A caller that wants the links resolved but not side-loaded stops
+      // here, before the first link is classified. The roots leave with their
+      // relationships answered by step 1 and their query-backed sub-entries
+      // stripped by step 1b, and `included` stays as it arrived — so the
+      // batched instance/file reads below, the cross-realm fetches, and every
+      // layer they would have seeded never run. Taking the exit at the top of
+      // the loop rather than skipping the walk per-resource is what makes that
+      // true of the whole closure and not just of one layer.
+      //
+      // The query-backed signal still reports everything it has to. The two
+      // things that raise it are a field this realm resolved, reported by
+      // `applyQueryResults` in step 1, and a peer's already-resolved answer
+      // arriving on a cross-realm resource, reported below. Leaving here
+      // fetches no cross-realm resource, so the document embeds no answer this
+      // realm did not run, and there is none to miss.
+      if (opts?.resolveLinksOnly) {
+        break;
       }
 
       // Step 2: walk every resource's relationships, classify each link,
@@ -1954,6 +2057,35 @@ export class RealmIndexQueryEngine {
       this.#log.debug(
         `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
       );
+
+      // A cross-realm link is served by its own realm, where it is that
+      // request's root — so it arrives with its query-backed fields already
+      // resolved, carrying the `links.search` marker this pass would
+      // otherwise have written. The document is then a function of a query
+      // this realm never ran, which is exactly what the query-backed signal
+      // exists to report: a write to some other card that enters or leaves
+      // that query changes this document and moves neither this card's
+      // `deps` nor its `indexed_at`. Report it from here, since
+      // `applyQueryResults` — the only other place that fires this — does
+      // not run for a resource this realm did not resolve.
+      if (opts?.onQueryFieldApplied) {
+        for (let resource of crossRealmMap.values()) {
+          let relationships = resource.relationships;
+          if (!relationships) {
+            continue;
+          }
+          for (let relationship of Object.values(relationships)) {
+            if (
+              relationship &&
+              !Array.isArray(relationship) &&
+              relationship.links?.search
+            ) {
+              opts.onQueryFieldApplied();
+              break;
+            }
+          }
+        }
+      }
 
       // Step 4: per-entry — resolve linkResource from the prefetched
       // maps (in-realm or cross-realm), build the next layer, and
@@ -2192,19 +2324,6 @@ export function relativizeDocument(
       );
     }
   }
-}
-
-// A reference in scoped RRI form (e.g. `@cardstack/base/card-api`) is an
-// absolute cross-realm identifier and must never be treated as realm-relative.
-// Registered prefixes are a subset, but a scoped reference to a realm this
-// VirtualNetwork does not know is still scoped — the leading `@` is the signal.
-function isScopedReference(
-  reference: string,
-  virtualNetwork: VirtualNetwork,
-): boolean {
-  return (
-    reference.startsWith('@') || virtualNetwork.isRegisteredPrefix(reference)
-  );
 }
 
 function relativizeResource(
