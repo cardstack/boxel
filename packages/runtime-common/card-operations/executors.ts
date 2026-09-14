@@ -464,11 +464,13 @@ export async function stageUpdate(
     // error row the way an empty `PATCH` does: that handler takes its short
     // circuit only when the index holds a healthy entry, and otherwise
     // rewrites the card to get it re-indexed. Reproducing that here would mean
-    // reading the index to decide what to stage, and an executor reads the
-    // file it merges over and nothing else — the index is downstream of the
-    // file and can lag it, which is the whole reason the merge base is the
-    // bytes. Repairing an error row stays with the path that has the index in
-    // hand.
+    // deciding what to stage from the index row of the very card being
+    // changed, which no executor reads — the index is downstream of the file
+    // and can lag it, which is the whole reason the merge base is the bytes.
+    // (A type's definition is a different read: it describes the type rather
+    // than the card, and is what serialization needs to resolve fields at
+    // all.) Repairing an error row stays with the path that has the card's
+    // row in hand.
     writes.push({ path: sourcePath, content: stored.content });
   } else {
     // The id lives in the file's name, not in its contents.
