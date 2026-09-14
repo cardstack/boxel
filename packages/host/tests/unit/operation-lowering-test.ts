@@ -79,7 +79,7 @@ module('Unit | operation lowering', function (hooks) {
       typeof import('@cardstack/base/number')
     >('@cardstack/base/number'));
 
-    let { field, contains, linksTo, CardDef, FieldDef } = api;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = api;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -101,6 +101,7 @@ module('Unit | operation lowering', function (hooks) {
       @field label = contains(StringField);
       @field postedBy = contains(StringField);
       @field owner = linksTo(() => Author);
+      @field witnesses = linksToMany(() => Author);
     }
     shim({ Author, Address, Comment, Activity });
     fixtures = {
@@ -257,14 +258,22 @@ module('Unit | operation lowering', function (hooks) {
         of: () => fixtures.Activity,
         fill: { owner: actor() },
       } satisfies OperationsModule.OperationDeclaration;
+      @operation static addWitnessed = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { witnesses: [actor()] },
+      } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Classroom });
 
     let result = await lower(Classroom);
     assert.deepEqual(
       result.issues.map((issue) => [issue.code, issue.path]),
-      [['actor-not-a-card', 'fill.owner']],
-      'a template filling a link field is a card identity like any other',
+      [
+        ['actor-not-a-card', 'fill.owner'],
+        ['actor-not-a-card', 'fill.witnesses[0]'],
+      ],
+      'a link collection is filled with a list, so every entry is an identity too',
     );
   });
 

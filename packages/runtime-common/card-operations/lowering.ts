@@ -1282,8 +1282,11 @@ function templateOf(
     return null;
   }
   if (Array.isArray(value)) {
+    // A link collection's members are each a card identity, so the slot's
+    // reading carries into every entry — a list is how a `linksToMany` is
+    // filled, not a place where the question changes.
     return value.map((entry, index) =>
-      templateOf(entry, `${path}[${index}]`, paramNames, sink),
+      templateOf(entry, `${path}[${index}]`, paramNames, sink, identifies),
     );
   }
   if (isPlainObject(value)) {

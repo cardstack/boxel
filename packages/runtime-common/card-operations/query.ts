@@ -24,9 +24,8 @@ import {
 // ============================================================================
 
 export interface QueryInvocation {
-  // The invoking user's identity, as `actor()` resolves to. Only the identity
-  // is available: resolving any other member of the actor would mean loading
-  // the actor's card, which a query is not entitled to do.
+  // The invoking user's id, which is what `actor()` resolves to and the whole
+  // of what the realm knows about the caller.
   actor: string;
   // The payload, keyed the way the definition's `params` schema declares it.
   params?: Record<string, unknown>;
@@ -138,12 +137,13 @@ function resolveMarker(
     }
     case 'actor':
       // A query compares against what the index holds, and what it holds for
-      // an actor is the actor's identity. A keyed `actor("name")` would need
-      // the actor's card loaded, so only the identity resolves.
-      if (marker.key !== undefined && marker.key !== 'id') {
+      // an actor is the caller's user id — which is the whole of what the
+      // realm knows about them, so the marker carries no key and a stored one
+      // names a member that does not exist.
+      if (marker.key !== undefined) {
         throw invalidParams(
           path,
-          `references actor("${String(marker.key)}"); a query can only compare against the actor's identity`,
+          `references actor("${String(marker.key)}"); the caller is a user id with no members to read`,
         );
       }
       return invocation.actor;
