@@ -7,7 +7,9 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import ApplySearchReplaceBlockTool from '@cardstack/host/tools/apply-search-replace-block';
+import ApplySearchReplaceBlockTool, {
+  APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES,
+} from '@cardstack/host/tools/apply-search-replace-block';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -773,5 +775,127 @@ ${REPLACE_MARKER}`;
       result.resultContent.includes(SEPARATOR_MARKER),
       'no separator marker leaks into the file',
     );
+  });
+
+  test('matches a search block that differs from the file only by a trailing comma', async function (assert) {
+    // A model writing a JSON search block from memory ends the object with `}`
+    // where the file has `},` because another key follows. The block still
+    // applies, and the replacement is written exactly as the model wrote it.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`,
+    );
+  });
+
+  test('prefers an exact match over a trailing-comma match', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `first,
+first
+last`;
+    const codeBlock = `${SEARCH_MARKER}
+first
+${SEPARATOR_MARKER}
+changed
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `first,
+changed
+last`,
+      'the exact line is replaced, not the line that only matches without its comma',
+    );
+  });
+
+  test('names the first search line that is missing from the file', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `export class Task extends CardDef {
+  @field title = contains(StringField);
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+export class Task extends CardDef {
+  @field cardTitle = contains(StringField);
+}
+${SEPARATOR_MARKER}
+export class Task extends CardDef {
+  @field cardTitle = contains(StringField);
+  @field dueDate = contains(DateField);
+}
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: @field cardTitle = contains(StringField);`,
+      );
+    }
+  });
+
+  test('reports when every search line exists but not contiguously', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `a
+b
+c`;
+    const codeBlock = `${SEARCH_MARKER}
+c
+a
+${SEPARATOR_MARKER}
+x
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`,
+      );
+    }
   });
 });
