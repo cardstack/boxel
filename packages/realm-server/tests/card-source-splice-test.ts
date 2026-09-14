@@ -354,7 +354,10 @@ module(basename(import.meta.filename), function () {
 
   test('a file written without whitespace is appended to without any', async function (assert) {
     // The realm does not always store a card pretty-printed, so an insertion
-    // reads the style out of the document rather than assuming one.
+    // reads the style out of the document rather than assuming one. The item
+    // carries a link, so `relationships` is a member this creates — which is
+    // where a key and its value are separated, and a compact file separates
+    // them with nothing.
     let stored = JSON.stringify({
       data: {
         type: 'card',
@@ -363,15 +366,22 @@ module(basename(import.meta.filename), function () {
       },
     });
     assert.strictEqual(
-      await appended(stored, { field: 'events', items: [{ label: 'first' }] }),
+      await appended(stored, {
+        field: 'events',
+        items: [{ label: 'first', author: `${REALM}Person/mango` }],
+      }),
       JSON.stringify({
         data: {
           type: 'card',
           attributes: { events: [{ label: 'first' }] },
           meta: { adoptsFrom: LOG },
+          relationships: {
+            'events.0.author': { links: { self: './Person/mango' } },
+          },
         },
       }),
-      'the file stays compact rather than gaining a pretty-printed member',
+      'the file stays compact — no pretty-printed member, and no space ' +
+        'between a key and its value where the rest of the file has none',
     );
   });
 

@@ -229,6 +229,7 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       Object.keys(getOperations(Report)).sort(),
       [
+        'appendContainsMany',
         'create',
         'delete',
         'query',
@@ -256,6 +257,7 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       Object.keys(getOperations(Archivable)).sort(),
       [
+        'appendContainsMany',
         'create',
         'delete',
         'query',

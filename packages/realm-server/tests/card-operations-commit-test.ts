@@ -502,7 +502,9 @@ module(basename(import.meta.filename), function (hooks) {
       ];
       resource.relationships = {
         ...resource.relationships,
-        'events.1.author': { links: { self: `${testRealmHref}Person/mango` } },
+        // Relative to the file that holds it, the way the realm's own
+        // serializer records a link inside the writing realm.
+        'events.1.author': { links: { self: './Person/mango' } },
       };
       resource.meta.fields = {
         ...resource.meta.fields,

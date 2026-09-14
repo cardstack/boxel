@@ -723,10 +723,16 @@ export function renderValue(
 }
 
 // An object member — `"key": value` — written the same way.
+//
+// The space after the colon goes with the rest of the whitespace: a file
+// written without any separates a key from its value with nothing, and
+// `JSON.stringify` does the same when given no indentation. So the separator
+// follows the unit rather than being fixed.
 export function renderMember(
   key: string,
   value: unknown,
   indents: { member: string; unit: string },
 ): string {
-  return `${JSON.stringify(key)}: ${renderValue(value, indents)}`;
+  let separator = indents.unit === '' ? ':' : ': ';
+  return `${JSON.stringify(key)}${separator}${renderValue(value, indents)}`;
 }
