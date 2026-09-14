@@ -1752,6 +1752,15 @@ export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
   relativeTo?: RealmResourceIdentifier | URL | undefined;
+  // When `false`, the card write tells the realm not to block on the realm's
+  // in-flight incremental indexing before responding — it indexes the write
+  // deferred and answers from the serialized document instead of reading it
+  // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to waiting,
+  // which is the synchronous-indexing contract every existing caller relies
+  // on. Opt out only when the caller consumes the returned instance directly
+  // and can tolerate its own immediately-following reads/searches lagging
+  // until the deferred index job lands (CS-12968).
+  waitForIndex?: boolean;
 }
 
 export interface AddOptions extends CreateOptions {

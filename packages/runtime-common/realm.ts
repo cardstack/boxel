@@ -392,6 +392,26 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
+// Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
+// write on the realm's in-flight incremental indexing — index deferred and
+// answer me from the document I sent". This is the write-side half of what
+// DURING_PRERENDER_HEADER does, without the search-path changes (cacheOnly-
+// Definitions, skipQueryBackedExpansion) that header also triggers, so an
+// ordinary interactive save can take it safely.
+//
+// Motivation (CS-12968): the default synchronous-indexing contract makes a
+// single-card save await `incrementalIndexing()`, which resolves only once
+// EVERY in-flight incremental/copy job for the realm settles — so an unrelated
+// reindex draining in the worker pool can stall (and time out) the save. A
+// caller that consumes the returned instance directly (e.g. SaveCardCommand)
+// doesn't need the freshly-indexed read-back and can opt out. The tradeoff is
+// eventual consistency: the caller's own immediately-following index-backed
+// reads/searches may not see the write until its deferred index job lands.
+export const SKIP_INDEX_WAIT_HEADER = 'x-boxel-skip-index-wait';
+function isSkipIndexWaitRequest(request: Request): boolean {
+  return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
+}
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -6335,6 +6355,12 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
+    // write-side treatment as a prerender write: index deferred, answer from
+    // the serialized echo. `answerFromEcho` gates exactly those two decisions
+    // (the pre-write drain, and reading the card back out of the index vs.
+    // echoing it) and nothing prerender-specific beyond them.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
     // card. fileSerialization runs lookupDefinition on the card's
     // adoptsFrom module, and with CS-11003's deferred +source POST a
@@ -6353,7 +6379,7 @@ export class Realm {
     // same reason: `_batchWriteUnlocked` drops that module's cached
     // definition as it writes the bytes, so no indexing-dependent step
     // stands between a module rewrite and the serialization that follows it.
-    if (!duringPrerender) {
+    if (!answerFromEcho) {
       let pending = this.incrementalIndexing();
       if (pending) {
         await pending;
@@ -6457,12 +6483,12 @@ export class Realm {
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(duringPrerender ? { waitForIndex: false } : {}),
+      ...(answerFromEcho ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
-    if (duringPrerender) {
+    if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet.
       doc = await this.serializedInstanceEcho(
@@ -6529,6 +6555,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
+    // write-side path as a prerender write — index deferred, answer from the
+    // serialized echo — without the prerender-only serialization tweaks
+    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -6797,10 +6828,10 @@ export class Realm {
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(duringPrerender ? { waitForIndex: false } : {}),
+        ...(answerFromEcho ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
-      if (duringPrerender) {
+      if (answerFromEcho) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
         // nothing to read back yet.
         doc = await this.serializedInstanceEcho(
