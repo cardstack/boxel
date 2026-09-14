@@ -12,7 +12,14 @@ export default class SendRequestViaProxyTool extends HostBaseTool<
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Send';
-  description = 'Make a request to an external API through the Boxel proxy';
+  description =
+    'Make a request to an external API through the Boxel proxy. ' +
+    'Optionally set timeoutMs to give up on a slow upstream and release ' +
+    'the per-user lock that serializes your calls; omit it to wait ' +
+    'indefinitely. Model calls through this proxy commonly take tens of ' +
+    'seconds and have been observed beyond 100s, so a budget under two ' +
+    'minutes will abandon answers that were coming. A call that times out ' +
+    'is neither answered nor billed.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();

@@ -142,6 +142,25 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
           throw new Error('Network error: Failed to fetch');
         }
 
+        if (body.url.includes('/slow-error-body')) {
+          // Headers promptly, body slowly, status not ok — so the caller
+          // reads the body on the error path while a short budget is still
+          // counting. The server did answer; only the reading is slow.
+          const stream = new ReadableStream({
+            async start(controller) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              controller.enqueue(
+                new TextEncoder().encode('upstream refused the request'),
+              );
+              controller.close();
+            },
+          });
+          return new Response(stream, {
+            status: 502,
+            statusText: 'Bad Gateway',
+          });
+        }
+
         if (body.url.includes('/slow')) {
           // Stands in for a model call still running: it answers only when
           // the caller's deadline cancels the request, which is what proves
@@ -548,6 +567,38 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
     assert.true(
       String(responseData.error).includes('timed out after 50ms'),
       'the error names the budget that was exceeded',
+    );
+  });
+
+  test('a budget that elapses while reading an answered response is not a timeout', async function (assert) {
+    // The budget covers time-to-response. Once the server has answered, a
+    // deadline landing during the body read must not be reported as a timeout:
+    // doing so discards the status and body that did arrive, and blames the
+    // clock for a request that was answered.
+    const toolService = getService('tool-service');
+    const requestForwardCommand = new SendRequestViaProxyTool(
+      toolService.toolContext,
+    );
+
+    const input = createMockSendRequestViaProxyInput({
+      url: 'https://api.example.com/slow-error-body',
+      timeoutMs: 150,
+    });
+    const result = await requestForwardCommand.execute(input);
+
+    const responseData = await result.response.json();
+    const message = String(responseData.error);
+    assert.false(
+      message.includes('timed out'),
+      `an answered request is not reported as a timeout (got: ${message})`,
+    );
+    assert.true(
+      message.includes('502'),
+      `the status the server actually returned survives (got: ${message})`,
+    );
+    assert.true(
+      message.includes('upstream refused the request'),
+      `the body the server actually returned survives (got: ${message})`,
     );
   });
 

@@ -1283,6 +1283,7 @@ export default class RealmServerService
       deadlineTimer = setTimeout(() => deadline!.abort(), timeoutMs);
     }
 
+    let responded = false;
     try {
       const response = await this.network.fetch(
         `${this.url.href}_request-forward`,
@@ -1297,6 +1298,13 @@ export default class RealmServerService
           signal: deadline?.signal,
         },
       );
+      // The budget covers time-to-response, so it stops the moment a response
+      // is in hand — here rather than on the way out, because the error path
+      // below reads the body while the timer would still be armed. A firing
+      // during that read aborts a body the server did answer with.
+      responded = true;
+      clearTimeout(deadlineTimer);
+      deadlineTimer = undefined;
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -1310,14 +1318,15 @@ export default class RealmServerService
       // The abort surfaces as a generic `AbortError` from whichever layer
       // noticed it first; the controller is the only thing that knows the
       // deadline was the reason, so name it here.
-      if (deadline?.signal.aborted) {
+      // Only a deadline that fired before any response is a timeout. Once the
+      // server has answered, a later failure is that failure — reporting it as
+      // a timeout would discard the status and body that did arrive.
+      if (!responded && deadline?.signal.aborted) {
         throw new Error(`Request forward timed out after ${timeoutMs}ms`);
       }
       throw e;
     } finally {
-      // The budget covers time-to-response, so the timer stops once the
-      // response is in hand — a late firing would otherwise abort a body the
-      // caller is already reading.
+      // Already cleared on the responded path; this covers a fetch that threw.
       clearTimeout(deadlineTimer);
     }
   }

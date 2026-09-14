@@ -40,7 +40,9 @@ module(basename(import.meta.filename), function () {
       // the signal, so it fails on its own terms. Reading this as a
       // cancellation is how a billing failure goes unreported — and it can
       // only happen when nobody is watching, because the client has left.
-      let dbError = new Error('could not serialize access due to concurrent update');
+      let dbError = new Error(
+        'could not serialize access due to concurrent update',
+      );
       assert.false(
         isClientDisconnectError(dbError, signal),
         'a database failure during the cost write reaches the error channel',
