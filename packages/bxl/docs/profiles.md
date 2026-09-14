@@ -461,7 +461,7 @@ const prepared = prepareBxlMutation('append(Comment, params("note"));', {
 
 const plan = prepared.plan(card, {
   programId: 'assistant:call-42',
-  context: { params: { note: 'looks right to me' }, actor: { id: 'user:ada' } },
+  context: { params: { note: 'looks right to me' }, actor: 'user:ada' },
 });
 ```
 

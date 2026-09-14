@@ -148,6 +148,29 @@ export interface NativeRequestContext {
 const requestContextStack: NativeRequestContext[] = [];
 
 /**
+ * What to add to `'NAME/arity' is not defined` when the name is a
+ * request-context builtin written at an arity it does not have.
+ *
+ * Resolution is per `NAME/arity`, so `actor("id")` is not a wrong argument to
+ * a call that exists — it is a call that does not exist, and the bare "not
+ * defined" leaves an author to guess whether the builtin is unavailable here
+ * or merely spelled differently. The shape of each accessor is this module's
+ * subject, so the sentence that resolves that guess lives with it.
+ */
+const NOT_DEFINED_HINTS: Readonly<Record<string, string>> = {
+  'actor/1':
+    "`actor()` takes no argument and returns the caller's user id; there is " +
+    'no member to read out of it.',
+};
+
+/** The guidance {@link NOT_DEFINED_HINTS} holds for `name`, if any. */
+export function notDefinedHint(name: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(NOT_DEFINED_HINTS, name)
+    ? NOT_DEFINED_HINTS[name]
+    : undefined;
+}
+
+/**
  * Scope `context` to one `callback`, which is the only way a program reaches
  * these values. Nesting is a stack, so the innermost scope wins and an
  * evaluation outside every scope sees no context at all — which the builtins
