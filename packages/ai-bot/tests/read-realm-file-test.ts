@@ -11,6 +11,7 @@ import {
   readFilesLabel,
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
+  selectReadRealmFileUrls,
   urlsFromReadRealmFileArguments,
 } from '../lib/read-realm-file.ts';
 
@@ -187,6 +188,54 @@ module('urlsFromReadRealmFileArguments', () => {
     assert.deepEqual(
       urlsFromReadRealmFileArguments('{"description":"https://x.test/a"'),
       [],
+    );
+  });
+});
+
+module('selectReadRealmFileUrls', () => {
+  // More unique urls than one call may read, in the order the model listed
+  // them. The schema's maxItems is only a hint the model can ignore.
+  const MANY_URLS = Array.from(
+    { length: READ_REALM_FILE_MAX_URLS + 3 },
+    (_, i) => `${REALM}skills/trip-planner/reference/file-${i}.md`,
+  );
+
+  test('a well-formed call past the cap reads the first urls and reports the rest', () => {
+    let selection = selectReadRealmFileUrls(
+      JSON.stringify({ urls: [...MANY_URLS, MANY_URLS[0]] }),
+    );
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+      'the first unique urls are read, in order',
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+      'the urls past the cap are reported, without the duplicate',
+    );
+  });
+
+  test('a cut-off call past the cap is capped the same way', () => {
+    // The motivating shape: the same files repeated until the output limit
+    // cut the list mid-url.
+    let repeated = [...MANY_URLS, ...MANY_URLS, ...MANY_URLS];
+    let truncated = `{"urls":${JSON.stringify(repeated).slice(0, -2)}`;
+    let selection = selectReadRealmFileUrls(truncated);
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+    );
+  });
+
+  test('a call within the cap drops nothing', () => {
+    assert.deepEqual(
+      selectReadRealmFileUrls(JSON.stringify({ urls: [FILE_URL] })),
+      { urls: [FILE_URL], dropped: [] },
     );
   });
 });

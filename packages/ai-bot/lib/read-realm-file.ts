@@ -75,14 +75,25 @@ export interface ReadRealmFileArgs {
   urls: string[];
 }
 
-// The urls a readRealmFile call names, deduplicated and in order. When the
-// arguments are not valid JSON — a generation cut off at the provider's output
-// limit leaves the list unterminated — every complete quoted URL is still
-// recovered from the text, so the files the model asked for get read instead
-// of the call failing and the model re-requesting them on the next turn.
-export function urlsFromReadRealmFileArguments(
+// The urls a readRealmFile call names, deduplicated, in order, and capped at
+// READ_REALM_FILE_MAX_URLS. `dropped` holds the unique urls past the cap, so
+// the caller can tell the model which files it did not get. The cap is
+// enforced here and not only in the schema: the schema's maxItems is a hint
+// the model may ignore, and a well-formed call naming thirty files would
+// otherwise fetch all of them and inline every one into each later prompt.
+// When the arguments are not valid JSON — a generation cut off at the
+// provider's output limit leaves the list unterminated — every complete
+// quoted URL is still recovered from the text, so the files the model asked
+// for get read instead of the call failing and the model re-requesting them
+// on the next turn.
+export interface ReadRealmFileUrlSelection {
+  urls: string[];
+  dropped: string[];
+}
+
+export function selectReadRealmFileUrls(
   argumentsJson: string,
-): string[] {
+): ReadRealmFileUrlSelection {
   let urls: unknown[] = [];
   try {
     let parsed = JSON.parse(argumentsJson) as Partial<ReadRealmFileArgs>;
@@ -97,13 +108,25 @@ export function urlsFromReadRealmFileArguments(
       }
     }
   }
-  return [
+  let unique = [
     ...new Set(
       urls.filter(
         (url): url is string => typeof url === 'string' && url.length > 0,
       ),
     ),
   ];
+  return {
+    urls: unique.slice(0, READ_REALM_FILE_MAX_URLS),
+    dropped: unique.slice(READ_REALM_FILE_MAX_URLS),
+  };
+}
+
+// The urls a readRealmFile call will read: `selectReadRealmFileUrls` without
+// the dropped list, for callers that only label the call.
+export function urlsFromReadRealmFileArguments(
+  argumentsJson: string,
+): string[] {
+  return selectReadRealmFileUrls(argumentsJson).urls;
 }
 
 // Realm servers echo the owning realm's root on every response — success or

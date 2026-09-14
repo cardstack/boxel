@@ -2,7 +2,10 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
 import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
-import { READ_REALM_FILE_TOOL_NAME } from '../lib/read-realm-file.ts';
+import {
+  READ_REALM_FILE_MAX_URLS,
+  READ_REALM_FILE_TOOL_NAME,
+} from '../lib/read-realm-file.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -449,6 +452,52 @@ module('fulfillReadRealmFileCalls', () => {
     );
     assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
     assert.strictEqual(dataOf(sent[0]).attachedFiles.length, 1);
+  });
+
+  test('urls past the per-call cap are not fetched and are named in the result', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('cities', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    // Non-markdown files, so each url costs exactly one fetch.
+    let urls = Array.from(
+      { length: READ_REALM_FILE_MAX_URLS + 2 },
+      (_, i) =>
+        `https://localhost:4201/user/jane/skills/trip-planner/file-${i}.txt`,
+    );
+    let dropped = urls.slice(READ_REALM_FILE_MAX_URLS);
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/file',
+      }),
+    );
+
+    assert.deepEqual(
+      fetched,
+      urls.slice(0, READ_REALM_FILE_MAX_URLS),
+      'only the first urls up to the cap are fetched',
+    );
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
+    assert.strictEqual(
+      dataOf(sent[0]).attachedFiles.length,
+      READ_REALM_FILE_MAX_URLS,
+    );
+    let failureReason: string = sent[0].content.failureReason;
+    assert.true(
+      failureReason.includes(
+        `${dropped.length} of the ${urls.length} urls in this call were not read`,
+      ),
+      'the model is told how many files it did not get',
+    );
+    for (let url of dropped) {
+      assert.true(failureReason.includes(url), `${url} is named as not read`);
+    }
+    assert.false(outcomes[0].ok, 'a capped read is not reported as complete');
   });
 
   test('an empty urls list fails without fetching', async () => {
