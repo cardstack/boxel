@@ -26,9 +26,11 @@ This CLI is the bridge.
   `.claude/skills/<realm>-<name>/`, so the same skill Boxel's assistant loads is
   available in a Claude Code session as `/<realm>-<name>`. One definition, both
   harnesses.
-- **Scriptable and CI-friendly.** Profiles, non-interactive auth via
-  `BOXEL_PASSWORD`, and `--staging` / `--local` switches mean the same commands
-  run on your laptop and in a pipeline.
+- **Work across your realms and profiles.** `boxel profile add` keeps a named
+  identity per account and environment — production, staging, local, or your
+  own realm server — and every command takes the realm you point it at. Move
+  between workspaces and accounts without re-authenticating or leaving the
+  terminal.
 - **Nothing to stand up.** It talks to a hosted realm. No Docker, no Matrix
   server, no local stack — that is only needed if you are developing Boxel
   itself.
