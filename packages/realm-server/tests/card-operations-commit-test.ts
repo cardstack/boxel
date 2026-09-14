@@ -39,6 +39,14 @@ const testRealmHref = testRealm.href;
 // lands under its type's directory, one level deep, so a root-relative
 // spelling would resolve against that directory instead of the realm.
 const PERSON = { module: rri(`${testRealmHref}person`), name: 'Person' };
+const EVENT_LOG = {
+  module: rri(`${testRealmHref}event-log`),
+  name: 'EventLog',
+};
+const HOTFIX_EVENT = {
+  module: rri(`${testRealmHref}event-log`),
+  name: 'HotfixEvent',
+};
 
 // ============================================================================
 // The batch coordinator, driven against a real realm.
@@ -82,6 +90,51 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A card whose `containsMany` holds composite items, one of whose fields
+    // is a link — the shape `appendContainsMany` writes all three legs for.
+    'event-log.gts': `
+      import { contains, containsMany, field, linksTo, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { Person } from "./person";
+
+      export class LogEvent extends FieldDef {
+        @field label = contains(StringField);
+        @field author = linksTo(() => Person);
+      }
+
+      export class HotfixEvent extends LogEvent {
+        @field severity = contains(StringField);
+      }
+
+      export class EventLog extends CardDef {
+        @field title = contains(StringField);
+        @field events = containsMany(LogEvent);
+        @field notes = containsMany(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+      }
+    `,
+    ...Object.fromEntries(
+      ['append-legs', 'append-visible', 'append-mixed', 'append-rollback'].map(
+        (name) => [
+          `${name}.json`,
+          {
+            data: {
+              type: 'card',
+              attributes: { title: 'Deploys', events: [], notes: [] },
+              meta: { adoptsFrom: EVENT_LOG },
+            },
+          },
+        ],
+      ),
+    ),
     ...Object.fromEntries(
       [
         // A card per test that mutates one, so the file's tests do not have to
@@ -407,6 +460,196 @@ module(basename(import.meta.filename), function (hooks) {
       [...indexEvents[0].invalidations].sort(),
       [`${testRealmHref}commit-write`, `${testRealmHref}commit-delete`].sort(),
       'the one event covers both the write and the removal',
+    );
+  });
+
+  // ==========================================================================
+  // `appendContainsMany`, against a real realm
+  //
+  // The bytes an append describes are only bytes once a realm writes them, and
+  // the property that matters — that they are the bytes loading, changing and
+  // writing back the file would have produced — is only checkable on disk.
+  // ==========================================================================
+
+  // What loading the stored file, making the same change in memory and writing
+  // it back would produce. An append never does this; the cases below use it to
+  // say what the file should end up holding.
+  function loadModifyWrite(
+    localPath: string,
+    change: (resource: any) => void,
+  ): string {
+    let doc = JSON.parse(readFileSync(realmFile(localPath), 'utf8'));
+    change(doc.data);
+    return JSON.stringify(doc, null, 2);
+  }
+
+  test("an append writes an item's values, its links and its type into the stored file", async function (assert) {
+    let expected = loadModifyWrite('append-legs.json', (resource) => {
+      resource.attributes.events.push(
+        { label: 'shipped' },
+        { label: 'hotfix', severity: 'high' },
+      );
+      resource.attributes.notes.push('rolled forward');
+      resource.relationships = {
+        'events.1.author': { links: { self: `${testRealmHref}Person/mango` } },
+      };
+      resource.meta.fields = {
+        events: [{}, { adoptsFrom: HOTFIX_EVENT }],
+      };
+    });
+
+    let [result] = await commit([
+      {
+        op: 'create',
+        lid: 'mango',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      },
+      {
+        op: 'appendContainsMany',
+        href: `${testRealmHref}append-legs`,
+        fields: {
+          events: [
+            { label: 'shipped' },
+            {
+              label: 'hotfix',
+              severity: 'high',
+              author: { lid: 'mango' },
+              meta: { adoptsFrom: HOTFIX_EVENT },
+            },
+          ],
+          notes: ['rolled forward'],
+        },
+      },
+    ]);
+
+    assert.ok(result, 'the create reports its identity');
+    assert.strictEqual(
+      readFileSync(realmFile('append-legs.json'), 'utf8'),
+      expected,
+      'the file holds what loading it, appending and writing it back would ' +
+        'have — values in the array, the link under its flattened key, the ' +
+        "item's own type in the sidecar",
+    );
+  });
+
+  test('a card an append changed serves the new item back', async function (assert) {
+    await commit([
+      {
+        op: 'appendContainsMany',
+        href: `${testRealmHref}append-visible`,
+        field: 'events',
+        items: [{ label: 'indexed' }],
+      },
+    ]);
+
+    let response = await request
+      .get('/append-visible')
+      .set('Accept', 'application/vnd.card+json');
+    assert.strictEqual(response.status, 200, 'the card is served');
+    assert.deepEqual(
+      response.body.data.attributes.events,
+      [{ label: 'indexed' }],
+      'the appended item is in the document the realm assembles, so the ' +
+        'spliced file re-indexed as the card it is',
+    );
+  });
+
+  test('an append and a patch to another card commit under one index job and one index event', async function (assert) {
+    let jobsBefore = await indexJobIds();
+    let since = Date.now();
+
+    await commit(
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${testRealmHref}append-mixed`,
+          field: 'notes',
+          items: ['mixed'],
+        },
+        {
+          op: 'update',
+          href: `${testRealmHref}commit-write`,
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Alongside' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+      ],
+      'batch-append',
+    );
+
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the append and the patch share one index job (got ${newJobs.length})`,
+    );
+
+    await waitUntil(async () => {
+      let seen = await incrementalIndexEventsSince(since);
+      return seen.some((event) => event.clientRequestId === 'batch-append');
+    });
+    let indexEvents = (await incrementalIndexEventsSince(since)).filter(
+      (event) =>
+        event.invalidations.includes(`${testRealmHref}append-mixed`) ||
+        event.invalidations.includes(`${testRealmHref}commit-write`),
+    );
+    assert.strictEqual(
+      indexEvents.length,
+      1,
+      `the batch broadcasts one index event (got ${indexEvents.length})`,
+    );
+    assert.deepEqual(
+      [...indexEvents[0].invalidations].sort(),
+      [`${testRealmHref}append-mixed`, `${testRealmHref}commit-write`].sort(),
+      'the one event covers the card the append changed and the patched one',
+    );
+  });
+
+  test('a failing sibling leaves the file an append would have changed byte-identical', async function (assert) {
+    let before = readFileSync(realmFile('append-rollback.json'), 'utf8');
+    let jobsBefore = await indexJobIds();
+
+    let failure: unknown;
+    try {
+      await commit([
+        {
+          op: 'appendContainsMany',
+          href: `${testRealmHref}append-rollback`,
+          field: 'notes',
+          items: ['never lands'],
+        },
+        { op: 'delete', href: `${testRealmHref}not-a-card` },
+      ]);
+    } catch (err: unknown) {
+      failure = err;
+    }
+
+    assert.strictEqual(
+      isOperationFailure(failure) ? failure.error.status : undefined,
+      404,
+      'the batch is refused for the entry that cannot be carried out',
+    );
+    assert.strictEqual(
+      readFileSync(realmFile('append-rollback.json'), 'utf8'),
+      before,
+      'and the file the append would have changed is exactly as it was',
+    );
+    assert.deepEqual(
+      await indexJobIds(),
+      jobsBefore,
+      'with nothing queued for indexing',
     );
   });
 

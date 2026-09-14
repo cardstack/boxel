@@ -218,6 +218,81 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('an item is appended to the array the field is stored in', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an item appended to an empty array opens it', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test("an item's links become relationship keys under the item's index", async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a link to a card the same batch creates resolves to its minted url', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an item that is not a saved card or a local id is not a link', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an item names its own type when that is not the declared one', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('two fields are appended to in one entry', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a field that holds one value is not a field an append adds to', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a field the type does not have is refused', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test("a member the item's type does not declare is refused rather than stored", async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an append names the items to append', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an append has nothing to add to when the card is not there', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a stored file an append cannot read is the realm to answer for', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('two appends to one card compose, and the file is written once', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a patch cannot merge over a card an append staged without reading', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an append composes over a patch staged earlier in the batch', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an append has no base version to be computed on top of', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a failing sibling leaves an append with nothing committed', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('an append reports the version the commit wrote', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
     test('a create with nothing to create is refused', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

@@ -5,7 +5,12 @@ import {
   type BatchEntry,
   type OperationDefinition,
 } from '../card-operations/index.ts';
-import { computeContentHash } from '../index.ts';
+import {
+  computeContentHash,
+  isSplicedSource,
+  streamSpliced,
+  type SplicedSource,
+} from '../index.ts';
 import { CardError } from '../error.ts';
 import type { CodeRef } from '../code-ref.ts';
 import type { RealmIdentifier } from '../realm-identifiers.ts';
@@ -31,6 +36,12 @@ const REALM = 'http://example.com/test/';
 const PERSON = { module: `${REALM}person`, name: 'Person' } as CodeRef;
 const PET = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
 const STRING = { module: `${REALM}string`, name: 'default' } as CodeRef;
+const EVENT_LOG = { module: `${REALM}event-log`, name: 'EventLog' } as CodeRef;
+const LOG_EVENT = { module: `${REALM}event-log`, name: 'LogEvent' } as CodeRef;
+const HOTFIX_EVENT = {
+  module: `${REALM}event-log`,
+  name: 'HotfixEvent',
+} as CodeRef;
 
 interface Commit {
   writes: Record<string, string>;
@@ -61,6 +72,29 @@ interface StubOptions {
   // is the identity, which keeps a test's expected bytes readable; a test that
   // cares about a serializer refusal supplies its own.
   serialize?: (doc: any) => any;
+}
+
+// The bytes a described content stands for. A realm streams these to disk;
+// a test reads them so it can compare them to what a load-modify-write of the
+// same file would have produced.
+async function materialize(
+  content: SplicedSource,
+  stored: Record<string, string>,
+): Promise<string> {
+  let source = new TextEncoder().encode(stored[content.path] ?? '');
+  let chunks: Uint8Array[] = [];
+  for await (let chunk of streamSpliced(content, async function* (start, end) {
+    yield source.subarray(start, end);
+  })) {
+    chunks.push(chunk);
+  }
+  let bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function cardFile(attributes: Record<string, unknown>, adoptsFrom: unknown) {
@@ -101,9 +135,29 @@ function stub(opts: StubOptions = {}): Stub {
         ? undefined
         : { content, lastModified: 1000 };
     },
+    async openSourceBytes(localPath) {
+      readsOutsideLock += held > 0 ? 0 : 1;
+      let content = stored[localPath];
+      if (content === undefined) {
+        return undefined;
+      }
+      let bytes = new TextEncoder().encode(content);
+      return {
+        size: bytes.length,
+        // Yielded one byte at a time, so a scan that assumed a chunk was a
+        // whole document — or a whole token — would be found out here rather
+        // than only against a real file.
+        async *read(start: number, end: number) {
+          for (let at = start; at < end; at++) {
+            yield bytes.subarray(at, at + 1);
+          }
+        },
+      };
+    },
     assertWriteSize(localPath, content) {
       let limit = opts.sizeLimit;
-      if (limit !== undefined && content.length > limit) {
+      let size = isSplicedSource(content) ? content.size : content.length;
+      if (limit !== undefined && size > limit) {
         // The shape `Realm.assertWriteSize` throws, down to the status: a
         // stub that threw a bare `Error` here could not tell whether the
         // coordinator carries the realm's 413 through or flattens it.
@@ -121,11 +175,12 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async commitUnlocked(batch, options) {
       readsOutsideLock += held > 0 ? 0 : 1;
-      let writes = Object.fromEntries(
-        [...(batch.writes ?? new Map<string, string | Uint8Array>())].map(
-          ([path, content]) => [path, String(content)],
-        ),
-      );
+      let writes: Record<string, string> = {};
+      for (let [path, content] of batch.writes ?? []) {
+        writes[path] = isSplicedSource(content)
+          ? await materialize(content, stored)
+          : String(content);
+      }
       commits.push({
         writes,
         deletes: [...(batch.deletes ?? [])],
@@ -186,6 +241,115 @@ function personDefinition(): Definition {
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: STRING,
+      },
+    },
+  } as Definition;
+}
+
+// A card whose `containsMany` holds composite items — the shape an append is
+// for. Built by serializing the whole document, so a test's expected bytes are
+// the bytes a load-modify-write of the same card produces rather than a
+// separately-maintained idea of them.
+function eventLog(
+  events: Record<string, unknown>[],
+  relationships?: Record<string, unknown>,
+  metaFields?: Record<string, unknown>,
+  notes?: string[],
+): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Deploys',
+          events,
+          ...(notes ? { notes } : {}),
+        },
+        ...(relationships ? { relationships } : {}),
+        meta: {
+          ...(metaFields ? { fields: metaFields } : {}),
+          adoptsFrom: EVENT_LOG,
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+// What loading the stored file, making the same change in memory and writing
+// it back would produce — the oracle every append case is compared to. The
+// description an append stages is what makes a large card affordable; it earns
+// that only if the bytes are the ones the ordinary path would have written,
+// down to where a container the file did not carry ends up.
+function loadModifyWrite(
+  stored: string,
+  change: (resource: any) => void,
+): string {
+  let doc = JSON.parse(stored);
+  change(doc.data);
+  return JSON.stringify(doc, null, 2);
+}
+
+function eventLogDefinition(): Definition {
+  return {
+    type: 'card-def',
+    codeRef: EVENT_LOG,
+    displayName: 'Event Log',
+    fields: { title: 'f0', events: 'f1', notes: 'f2', count: 'f3' },
+    fieldDefs: {
+      f0: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f1: {
+        type: 'containsMany',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: LOG_EVENT,
+      },
+      f2: {
+        type: 'containsMany',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f3: {
+        type: 'containsMany',
+        isPrimitive: true,
+        isComputed: true,
+        fieldOrCard: STRING,
+      },
+    },
+  } as Definition;
+}
+
+function logEventDefinition(): Definition {
+  return {
+    type: 'field-def',
+    codeRef: LOG_EVENT,
+    displayName: null,
+    fields: { label: 'f0', author: 'f1', witnesses: 'f2' },
+    fieldDefs: {
+      f0: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f1: {
+        type: 'linksTo',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: PERSON,
+      },
+      f2: {
+        type: 'linksToMany',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: PERSON,
       },
     },
   } as Definition;
@@ -2026,6 +2190,598 @@ const tests: SharedTests<Record<string, never>> = {
       undefined,
       "the removed members' per-index metadata does not survive to be " +
         're-applied when the array grows again',
+    );
+  },
+
+  // ==========================================================================
+  // `appendContainsMany`
+  //
+  // Every case below compares the committed bytes to what the same change
+  // would have produced had the file been loaded, changed and written back —
+  // which is the property the whole behavior rests on. The description it
+  // stages is what makes a large card affordable; the bytes have to be the
+  // ones the general-purpose path would have written, or the two ways of
+  // changing a card would not be interchangeable.
+  // ==========================================================================
+
+  'an item is appended to the array the field is stored in': async (assert) => {
+    let stored = eventLog([{ label: 'first' }]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'second' }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'second' });
+      }),
+      'the file holds what loading it, appending and writing it back would have',
+    );
+  },
+
+  'an item appended to an empty array opens it': async (assert) => {
+    let stored = eventLog([]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first' }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'first' });
+      }),
+      'an empty array is filled rather than extended, with no stray comma',
+    );
+  },
+
+  "an item's links become relationship keys under the item's index": async (
+    assert,
+  ) => {
+    let stored = eventLog([{ label: 'first' }]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [
+            {
+              label: 'second',
+              author: `${REALM}Person/mango`,
+              witnesses: [`${REALM}Person/van-gogh`],
+            },
+          ],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'second' });
+        resource.relationships = {
+          'events.1.author': { links: { self: `${REALM}Person/mango` } },
+          'events.1.witnesses.0': {
+            links: { self: `${REALM}Person/van-gogh` },
+          },
+        };
+      }),
+      'a link leaves the array and is recorded under the flattened key',
+    );
+  },
+
+  'a link to a card the same batch creates resolves to its minted url': async (
+    assert,
+  ) => {
+    let stored = eventLog([]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+        Person: personDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'create',
+          lid: 'mango',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+        },
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first', author: { lid: 'mango' } }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'first' });
+        resource.relationships = {
+          'events.0.author': { links: { self: `${REALM}Person/mango` } },
+        };
+      }),
+      'the local id resolves to the url the create mints',
+    );
+  },
+
+  'an item that is not a saved card or a local id is not a link': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first', author: 42 }],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'an item names its own type when that is not the declared one': async (
+    assert,
+  ) => {
+    let stored = eventLog([{ label: 'first' }]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'second', meta: { adoptsFrom: HOTFIX_EVENT } }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'second' });
+        resource.meta.fields = { events: [{}, { adoptsFrom: HOTFIX_EVENT }] };
+      }),
+      'the sidecar reaches the item, standing in for the item ahead of it ' +
+        'that had no type of its own',
+    );
+  },
+
+  'two fields are appended to in one entry': async (assert) => {
+    let stored = eventLog([{ label: 'first' }], undefined, undefined, ['a']);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          fields: { events: [{ label: 'second' }], notes: ['b'] },
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'second' });
+        resource.attributes.notes.push('b');
+      }),
+      'both arrays grow, from one pass over the file',
+    );
+  },
+
+  'a field that holds one value is not a field an append adds to': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'title',
+        items: ['x'],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a field the type does not have is refused': async (assert) => {
+    let { core } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'nope',
+        items: ['x'],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+  },
+
+  "a member the item's type does not declare is refused rather than stored":
+    async (assert) => {
+      let { core } = stub({
+        stored: { 'log-1.json': eventLog([]) },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first', severity: 'high' }],
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+    },
+
+  'an append names the items to append': async (assert) => {
+    let { core } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+  },
+
+  'an append has nothing to add to when the card is not there': async (
+    assert,
+  ) => {
+    let { core } = stub({
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first' }],
+      },
+    ]);
+    assert.deepEqual(failed, {
+      status: 404,
+      code: 'target-not-found',
+      entry: 0,
+    });
+  },
+
+  'a stored file an append cannot read is the realm to answer for': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': '{"data": {"attributes": {"events": [1, 2' },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first' }],
+      },
+    ]);
+    assert.deepEqual(failed, {
+      status: 500,
+      code: 'internal-error',
+      entry: 0,
+    });
+    assert.strictEqual(commits.length, 0, 'nothing is written');
+  },
+
+  'two appends to one card compose, and the file is written once': async (
+    assert,
+  ) => {
+    let stored = eventLog([{ label: 'first' }]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'second' }],
+        },
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'third', author: `${REALM}Person/mango` }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      Object.keys(commits[0].writes).length,
+      1,
+      'one file, written once',
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push(
+          { label: 'second' },
+          { label: 'third' },
+        );
+        resource.relationships = {
+          'events.2.author': { links: { self: `${REALM}Person/mango` } },
+        };
+      }),
+      'the second entry appends after the first rather than instead of it, ' +
+        'and indexes its links against the composed array',
+    );
+  },
+
+  'a patch cannot merge over a card an append staged without reading': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first' }],
+      },
+      {
+        op: 'update',
+        href: `${REALM}log-1`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { title: 'Renamed' },
+            meta: { adoptsFrom: EVENT_LOG },
+          },
+        },
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 1 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'an append composes over a patch staged earlier in the batch': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+      serialize: (doc: any) => doc,
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'update',
+          href: `${REALM}log-1`,
+          document: {
+            data: {
+              type: 'card',
+              attributes: { title: 'Renamed' },
+              meta: { adoptsFrom: EVENT_LOG },
+            },
+          },
+        },
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first' }],
+        },
+      ],
+      {},
+    );
+    let { data } = JSON.parse(commits[0].writes['log-1.json']);
+    assert.strictEqual(
+      data.attributes.title,
+      'Renamed',
+      "the patch's change survives",
+    );
+    assert.deepEqual(
+      data.attributes.events,
+      [{ label: 'first' }],
+      'and the append lands on top of it',
+    );
+  },
+
+  'an append has no base version to be computed on top of': async (assert) => {
+    let { core } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first' }],
+        baseVersion: 'abc',
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+  },
+
+  'a failing sibling leaves an append with nothing committed': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first' }],
+      },
+      { op: 'delete', href: `${REALM}not-there` },
+    ]);
+    assert.deepEqual(failed, {
+      status: 404,
+      code: 'target-not-found',
+      entry: 1,
+    });
+    assert.strictEqual(commits.length, 0, 'the append does not land either');
+  },
+
+  'an append reports the version the commit wrote': async (assert) => {
+    let { core } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let results = await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first' }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      results[0]?.id,
+      `${REALM}log-1`,
+      'the target is reported',
+    );
+    assert.ok(results[0]?.meta.version, 'with the version the file now holds');
+    assert.strictEqual(
+      results[0]?.meta.baseMatched,
+      undefined,
+      'and no base match, since an append names no base',
     );
   },
 

@@ -244,6 +244,7 @@ const CARD_DEF_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   delete: true,
   query: true,
   transform: true,
+  appendContainsMany: true,
 };
 
 const ALLOWED_BASE_OPERATIONS: Readonly<
@@ -253,7 +254,8 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
   // A file's metadata is derived from its bytes and read-only: there is no
   // JSON:API mutation surface for anything else to reach. Its bytes are the
   // representation that matters for a file, though, so it carries the
-  // stored-bytes read alongside the document one.
+  // stored-bytes read alongside the document one. A file has no field schema,
+  // so it has no `containsMany` to append to either.
   'file-def': { read: true, readSource: true },
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
@@ -461,6 +463,7 @@ export async function runOperation(
     case 'update':
     case 'delete':
     case 'transform':
+    case 'appendContainsMany':
       throw new OperationFailure({
         id: targetId(canonical.target),
         status: 501,

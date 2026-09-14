@@ -73,6 +73,7 @@ import {
   ensureTrailingSlash,
   isCaptureServingPath,
   join,
+  partialWritePath,
 } from './paths.ts';
 import type ms from 'ms';
 import {
@@ -253,8 +254,10 @@ import { RealmIndexUpdater, type IndexChange } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
 import {
   fileSizeLimitFor,
+  validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
+import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -875,6 +878,47 @@ function toISOStringOrNull(value: string | Date | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// One bounded range of a stored file, as bytes. The ranges a fingerprint is
+// assembled from are at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` wide however
+// large the file is, so this holds a bounded amount however large the file is.
+async function readRangeBytes(
+  adapter: RealmAdapter,
+  path: LocalPath,
+  start: number,
+  length: number,
+): Promise<Uint8Array> {
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (let chunk of adapter.readRange(path, start, start + length)) {
+    chunks.push(chunk);
+    total += chunk.length;
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
+// Which ceiling a write is held to. A card's `.json` and a description of one
+// are both cards; everything else is a file. Read once here so what a batch is
+// held to before it commits is what the commit applies.
+function writeSizeType(
+  localPath: LocalPath,
+  content: WriteContent,
+): 'card' | 'file' {
+  if (isSplicedSource(content)) {
+    return 'card';
+  }
+  return localPath.endsWith('.json') &&
+    typeof content === 'string' &&
+    isCardDocumentString(content)
+    ? 'card'
+    : 'file';
+}
+
 function computeContentSize(content: string | Uint8Array): number {
   if (content instanceof Uint8Array) {
     return content.byteLength;
@@ -945,9 +989,16 @@ export interface FileWriteResult extends AdapterWriteResult {
 // Everything one commit changes. Both members are optional so a caller that
 // only writes, or only removes, says exactly that.
 export interface CommitBatch {
-  writes?: Map<LocalPath, string | Uint8Array>;
+  writes?: Map<LocalPath, WriteContent>;
   deletes?: LocalPath[];
 }
+
+// What a caller hands the commit for one file: the bytes themselves, or a
+// description of them — a list of ranges of a stored file and the text going
+// between them. The second form exists for a file too large to hold: it is
+// written by streaming the ranges straight through, so a change to a file of
+// any size costs the change rather than the file.
+export type WriteContent = string | Uint8Array | SplicedSource;
 
 export interface CommitBatchResult {
   // One result per staged write, in the order the caller staged them. A path
@@ -1009,6 +1060,28 @@ export interface RealmAdapter {
     path: LocalPath,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult>;
+
+  // Replace a file's content with a rearrangement of its own bytes plus new
+  // text — the form a change to a file too large to hold takes.
+  //
+  // The description's ranges name the file at `path` as it stands, so the
+  // write's source is its own destination. Resolving that is the adapter's,
+  // since only the adapter knows whether its storage can read and write one
+  // path at once; what the contract requires is that the file end up holding
+  // the described content, or be left as it was.
+  writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult>;
+
+  // Read `[start, end)` of a stored file. What a caller building a description
+  // of a file's content reads to find the offsets it describes, and what a
+  // fingerprint of a file too large to hash whole is assembled from.
+  readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -2558,7 +2631,7 @@ export class Realm {
     batch: CommitBatch,
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
-    let files = batch.writes ?? new Map<LocalPath, string | Uint8Array>();
+    let files = batch.writes ?? new Map<LocalPath, WriteContent>();
     let deletes = batch.deletes ?? [];
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
@@ -2627,6 +2700,18 @@ export class Realm {
 
     for (let [path, content] of orderedFiles) {
       let url = this.paths.fileURL(path);
+      if (isSplicedSource(content)) {
+        // A splice edits a stored card, so it neither needs a module flushed
+        // to the index ahead of it — nothing about it is serialized — nor
+        // stands in for the instance that does. `lastWriteType` is therefore
+        // left as the last write that did serialize.
+        let written = await this.#writeSplicedUnlocked(path, content);
+        results.push(written.result);
+        fileMetaRows.push(written.row);
+        updatedFiles.push(path);
+        urls.push(url);
+        continue;
+      }
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
           ? 'module'
@@ -3323,6 +3408,56 @@ export class Realm {
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher
+
+  // Write a file whose content is described as an edit of its own bytes.
+  //
+  // Everything the byte path does per file it does too, in the same order —
+  // the ceiling, the initiation event, the own-write tracking, the byte-cache
+  // drop and the peer notification — with two differences, both of which
+  // follow from never holding the content. The unchanged-bytes short circuit
+  // is gone: telling whether the result matches what is on disk would mean
+  // reading what is on disk, and an edit that adds items never matches it
+  // anyway. And the fingerprint is assembled from bounded reads of the file
+  // once it is written, rather than computed from bytes in hand; it is the
+  // same value either way, which is what lets a version computed here validate
+  // against one computed the other way.
+  //
+  // A splice edits a card, so it is held to the card ceiling — by the byte
+  // length the description reports, which costs no read.
+  async #writeSplicedUnlocked(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<{
+    result: { path: LocalPath; lastModified: number; contentHash: string };
+    row: { path: LocalPath; contentHash?: string; contentSize?: number };
+  }> {
+    this.assertWriteSize(content, 'card', path);
+    let url = this.paths.fileURL(path);
+    this.sendIndexInitiationEvent(url.href);
+    await this.trackOwnWrite(path);
+    // The content is assembled beside the file before it is renamed onto it,
+    // so a watching realm sees that file appear and vanish. Both are this
+    // realm's own doing, and tracking them is what keeps them out of the
+    // change events it broadcasts — the ignore rule that keeps the same path
+    // out of the index is the backstop for the write that does not get this
+    // far.
+    let staging = partialWritePath(path);
+    await this.trackOwnWrite(staging);
+    await this.trackOwnWrite(staging, { isDelete: true });
+    let { lastModified } = await this.#adapter.writeSpliced(path, content);
+    this.invalidateCache(path);
+    await this.#notifyFileChange(path);
+    let contentHash = await computeContentHashFromRanges(
+      content.size,
+      async (start, length) =>
+        await readRangeBytes(this.#adapter, path, start, length),
+    );
+    return {
+      result: { path, lastModified, contentHash },
+      row: { path, contentHash, contentSize: content.size },
+    };
+  }
+
   private async trackOwnWrite(path: LocalPath, opts?: { isDelete: true }) {
     let type = opts?.isDelete
       ? 'removed'
@@ -3542,6 +3677,25 @@ export class Realm {
             ? { content: file.content, lastModified: file.lastModified }
             : undefined;
         },
+        openSourceBytes: async (localPath) => {
+          let file = await this.#adapter.openFile(localPath);
+          if (!file) {
+            return undefined;
+          }
+          // From the stat the adapter already performed. An adapter that
+          // cannot say how large a file is without reading it cannot offer an
+          // entry that edits one without reading it either, which is also why
+          // the size is never recovered from `file.content` — the single-use
+          // body this read leaves untouched.
+          if (file.size === undefined) {
+            return undefined;
+          }
+          return {
+            size: file.size,
+            read: (start, end) =>
+              this.#adapter.readRange(localPath, start, end),
+          };
+        },
         // Classified exactly as `_batchWriteUnlocked` classifies the same
         // bytes when it writes them, so the ceiling a batch holds its staged
         // bytes to is the ceiling the commit will apply rather than a second
@@ -3549,9 +3703,7 @@ export class Realm {
         assertWriteSize: (localPath, content) =>
           this.assertWriteSize(
             content,
-            localPath.endsWith('.json') && isCardDocumentString(content)
-              ? 'card'
-              : 'file',
+            writeSizeType(localPath, content),
             localPath,
           ),
         drainIndexing: async () => {
@@ -5587,7 +5739,7 @@ export class Realm {
   }
 
   private assertWriteSize(
-    content: string | Uint8Array,
+    content: WriteContent,
     type: 'card' | 'file',
     path: LocalPath,
   ) {
@@ -5600,7 +5752,13 @@ export class Realm {
             video: this.#videoSizeLimitBytes,
           });
     try {
-      validateWriteSize(content, limit, type);
+      // Described content reports its byte length without being read, which is
+      // the whole point of it, so the ceiling is applied to that.
+      if (isSplicedSource(content)) {
+        validateByteLength(content.size, limit, type);
+      } else {
+        validateWriteSize(content, limit, type);
+      }
     } catch (error: any) {
       throw new CardError(error?.message ?? 'Payload too large', {
         status: 413,
