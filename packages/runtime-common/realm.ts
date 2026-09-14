@@ -556,21 +556,27 @@ function makeInvalidatedTypeAccumulator() {
   };
 }
 
-// An invalidation event's type set is bounded by the realm's type count, not
-// its row count, so it stays small where `invalidations` does not. This caps
-// the pathological realm anyway: past the ceiling the set has stopped being
-// selective enough to earn its place on the wire, and omitting it puts
-// subscribers back on the unconditional re-run rather than misleading them.
-const MAX_BROADCAST_INVALIDATED_TYPES = 200;
+// The type set is bounded by the realm's type count rather than its row count,
+// so it stays small where `invalidations` does not. A realm with this many
+// characters of distinct types in one pass has stopped being selective enough
+// for the set to earn its place beside a URL list that is already the event's
+// bulk, so past the budget the field is dropped — which puts subscribers back
+// on the unconditional re-run rather than growing an event that still has to
+// fit in one message.
+const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
 
 function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
   invalidatedTypes?: string[];
 } {
-  if (
-    invalidatedTypes === undefined ||
-    invalidatedTypes.length > MAX_BROADCAST_INVALIDATED_TYPES
-  ) {
+  if (invalidatedTypes === undefined) {
     return {};
+  }
+  let budget = MAX_BROADCAST_INVALIDATED_TYPES_BYTES;
+  for (let type of invalidatedTypes) {
+    budget -= type.length;
+    if (budget < 0) {
+      return {};
+    }
   }
   return { invalidatedTypes };
 }
@@ -3508,9 +3514,7 @@ export class Realm {
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
-              ...(meta.invalidatedTypes !== undefined
-                ? { invalidatedTypes: meta.invalidatedTypes }
-                : {}),
+              invalidatedTypes: meta.invalidatedTypes,
             });
           },
         },
