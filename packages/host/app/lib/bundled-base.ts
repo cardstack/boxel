@@ -13,6 +13,12 @@ export const BUNDLED_BASE_MODULES: Record<
   string,
   () => Promise<Record<string, unknown>>
 > = {
+  // card-api declares the classes every other base module extends, so it is
+  // bundled first and unconditionally: while it is fetched and anything else is
+  // bundled, a bundled module extends the build's FieldDef while a fetched one
+  // extends the loader's, and nothing that compares the two agrees. Serving it
+  // from the bundle collapses both onto one set of classes.
+  'card-api': () => import('@cardstack/base/card-api'),
   'date/day': () => import('@cardstack/base/date/day'),
   'date/month': () => import('@cardstack/base/date/month'),
   'date/month-day': () => import('@cardstack/base/date/month-day'),
