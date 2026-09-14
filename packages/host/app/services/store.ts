@@ -898,7 +898,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.persistAndUpdate(instance, {
         realm: opts?.realm,
         localDir: opts?.localDir,
-        waitForIndex: opts?.waitForIndex,
+        skipIndexWait: opts?.skipIndexWait,
       });
     } else if (!opts?.doNotPersist) {
       // An existing card in a realm the user cannot write to is left alone:
@@ -930,7 +930,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.persistAndUpdate(instance, {
           realm: opts?.realm,
           localDir: opts?.localDir,
-          waitForIndex: opts?.waitForIndex,
+          skipIndexWait: opts?.skipIndexWait,
         }),
       )) as T | CardErrorJSONAPI;
     }
@@ -3367,7 +3367,7 @@ export default class StoreService extends Service implements StoreInterface {
         // index + serialized-echo response the header above asks for, but
         // driven by an explicit per-save option rather than the prerender
         // context. Defaults to waiting when unset.
-        ...(opts?.waitForIndex === false
+        ...(opts?.skipIndexWait === true
           ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
           : {}),
       },
@@ -3460,7 +3460,7 @@ export default class StoreService extends Service implements StoreInterface {
               realm: realmURL.href,
               localDir: opts?.localDir,
               clientRequestId: opts?.clientRequestId,
-              waitForIndex: opts?.waitForIndex,
+              skipIndexWait: opts?.skipIndexWait,
             });
 
             let api = await this.cardService.getAPI();

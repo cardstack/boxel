@@ -43,13 +43,15 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
-  // When explicitly false, the save does not block on the realm's in-flight
-  // incremental indexing: the realm indexes the write deferred and responds
-  // from the serialized document. Use when the caller consumes the returned
-  // card directly and can tolerate its own immediately-following searches
-  // lagging until the deferred index job lands. Omitted/true preserves the
-  // synchronous-indexing behavior (CS-12968).
-  @field waitForIndex = contains(BooleanField);
+  // When true, the save does not block on the realm's in-flight incremental
+  // indexing: the realm indexes the write deferred and responds from the
+  // serialized document. Use when the caller consumes the returned card
+  // directly and can tolerate its own immediately-following searches lagging
+  // until the deferred index job lands. Defaults to false — an unset
+  // BooleanField reads as false — which preserves the synchronous-indexing
+  // behavior every caller relies on (CS-12968). The polarity is opt-in
+  // precisely so the safe default survives the field being unset.
+  @field skipIndexWait = contains(BooleanField);
 }
 
 export class CopyCardToRealmInput extends CardDef {

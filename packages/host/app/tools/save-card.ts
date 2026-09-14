@@ -32,10 +32,11 @@ export default class SaveCardTool extends HostBaseTool<
     let result = await this.store.add(input.card, {
       realm: input.realm,
       localDir: input.localDir,
-      // Undefined (field unset) keeps the default synchronous-indexing wait;
-      // only an explicit `false` opts the save out of blocking on the realm's
-      // in-flight incremental indexing. See SaveCardInput.waitForIndex.
-      waitForIndex: input.waitForIndex,
+      // An unset field reads as false (BooleanField's empty value), which keeps
+      // the default synchronous-indexing wait; only an explicit `true` opts the
+      // save out of blocking on the realm's in-flight incremental indexing. See
+      // SaveCardInput.skipIndexWait.
+      skipIndexWait: input.skipIndexWait,
     });
     if (!isCardInstance(result)) {
       throw new Error(`Failed to save card: ${JSON.stringify(result)}`);
