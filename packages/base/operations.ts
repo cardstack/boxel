@@ -460,8 +460,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   readSource: [],
   query: ['query'],
   // Appending to a `containsMany` is reached as a base operation, whose
-  // invocation names the field and the items. There is no declarative clause
-  // for it yet, so an author writes none.
+  // invocation names the field and the items it appends. It takes no
+  // declarative clause, so an author writes none.
   appendContainsMany: [],
 };
 

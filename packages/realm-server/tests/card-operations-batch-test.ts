@@ -242,6 +242,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('an item cannot name a type the realm has no definition for', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('two fields are appended to in one entry', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
@@ -293,6 +297,7 @@ module(basename(import.meta.filename), function () {
     test('an append reports the version the commit wrote', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
+
     test('a create with nothing to create is refused', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

@@ -1388,8 +1388,23 @@ export async function stageAppendContainsMany(
           `as something other than an array`,
       });
     }
+    let filled = sidecar?.count ?? 0;
+    if (filled > at) {
+      // The sidecar is positional, so one longer than the array it describes
+      // names items that are not there — and an entry appended after it would
+      // land at an index no item occupies.
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `the stored file for ${url.href} records ${filled} types for ` +
+          `"${field}", which holds ${at} items`,
+      });
+    }
     let entries: unknown[] = [];
-    for (let index = sidecar?.count ?? 0; index < at; index++) {
+    for (let index = filled; index < at; index++) {
       entries.push({});
     }
     for (let type of types) {
@@ -1690,6 +1705,10 @@ interface SplitItem {
 // level down, and everything else stays where it was written. A member the
 // item type does not declare is refused rather than stored, since nothing
 // would ever read it back.
+//
+// An item that names its own type is split against *that* type, not against
+// the declared one — a subtype's own fields are the point of declaring it, so
+// splitting against the declared type would refuse every one of them.
 async function splitItem(
   item: unknown,
   itemDef: Definition | undefined,
@@ -1732,8 +1751,37 @@ async function splitItem(
     rest = { ...item };
     delete rest.meta;
   }
-  let split = await splitValue(rest, itemDef, path, url, ctx);
+  let against = adoptsFrom
+    ? await declaredItemType(adoptsFrom, path, url, ctx)
+    : itemDef;
+  let split = await splitValue(rest, against, path, url, ctx);
   return { ...split, ...(adoptsFrom ? { adoptsFrom } : {}) };
+}
+
+// The type an item named for itself. Whether it is one the declared item type
+// admits is not something the cached definitions can answer — they record a
+// type's own fields, not what it adopts — so a type the realm can read is
+// taken at its word here, and a value the field ultimately refuses surfaces
+// where every other one does, when the card indexes.
+async function declaredItemType(
+  adoptsFrom: CodeRef,
+  path: string,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  let definition = await ctx.lookupDefinition(adoptsFrom, url);
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Unknown item type',
+      detail:
+        `\`${path}.meta\` names ${JSON.stringify(adoptsFrom)}, which the ` +
+        `realm has no definition for`,
+    });
+  }
+  return definition;
 }
 
 function itemTypeOf(meta: unknown, path: string): CodeRef {

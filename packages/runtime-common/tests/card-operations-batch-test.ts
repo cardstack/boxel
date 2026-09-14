@@ -326,6 +326,25 @@ function eventLogDefinition(): Definition {
   } as Definition;
 }
 
+// A subtype of the declared item type, with a field of its own. An item that
+// names it is split against this rather than against the declared type.
+function hotfixEventDefinition(): Definition {
+  return {
+    ...logEventDefinition(),
+    codeRef: HOTFIX_EVENT,
+    fields: { label: 'f0', author: 'f1', witnesses: 'f2', severity: 'f3' },
+    fieldDefs: {
+      ...logEventDefinition().fieldDefs,
+      f3: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+    },
+  } as Definition;
+}
+
 function logEventDefinition(): Definition {
   return {
     type: 'field-def',
@@ -2386,6 +2405,7 @@ const tests: SharedTests<Record<string, never>> = {
       definitions: {
         EventLog: eventLogDefinition(),
         LogEvent: logEventDefinition(),
+        HotfixEvent: hotfixEventDefinition(),
       },
     });
     await commitBatch(
@@ -2395,7 +2415,16 @@ const tests: SharedTests<Record<string, never>> = {
           op: 'appendContainsMany',
           href: `${REALM}log-1`,
           field: 'events',
-          items: [{ label: 'second', meta: { adoptsFrom: HOTFIX_EVENT } }],
+          items: [
+            {
+              label: 'second',
+              // Declared by the item's own type and not by the declared one,
+              // so an append that split against the declared type would
+              // refuse it.
+              severity: 'high',
+              meta: { adoptsFrom: HOTFIX_EVENT },
+            },
+          ],
         },
       ],
       {},
@@ -2403,12 +2432,34 @@ const tests: SharedTests<Record<string, never>> = {
     assert.strictEqual(
       commits[0].writes['log-1.json'],
       loadModifyWrite(stored, (resource) => {
-        resource.attributes.events.push({ label: 'second' });
+        resource.attributes.events.push({ label: 'second', severity: 'high' });
         resource.meta.fields = { events: [{}, { adoptsFrom: HOTFIX_EVENT }] };
       }),
-      'the sidecar reaches the item, standing in for the item ahead of it ' +
-        'that had no type of its own',
+      'the item is split against its own type, and the sidecar reaches it — ' +
+        'standing in for the item ahead of it that had no type of its own',
     );
+  },
+
+  'an item cannot name a type the realm has no definition for': async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'first', meta: { adoptsFrom: HOTFIX_EVENT } }],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
   'two fields are appended to in one entry': async (assert) => {
@@ -2777,7 +2828,10 @@ const tests: SharedTests<Record<string, never>> = {
       `${REALM}log-1`,
       'the target is reported',
     );
-    assert.ok(results[0]?.meta.version, 'with the version the file now holds');
+    assert.ok(
+      results[0]?.meta.version,
+      'with the version the file holds once the commit lands',
+    );
     assert.strictEqual(
       results[0]?.meta.baseMatched,
       undefined,
