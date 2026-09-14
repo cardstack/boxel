@@ -60,6 +60,35 @@ module('Unit | Lib | tool-auto-execute', function () {
     );
   });
 
+  test('a tool whose class never auto-executes waits for the user in every mode', function (assert) {
+    // Deleting a workspace is the motivating case: destructive and not
+    // undoable, so act mode and requiresApproval=false both stay manual.
+    assert.false(
+      isAutoExecutableTool(
+        { ...cmd('deleteWorkspace', true), neverAutoExecutes: true },
+        'act',
+        true,
+      ),
+      'act mode does not override the class opt-out',
+    );
+    assert.false(
+      isAutoExecutableTool(
+        { ...cmd('deleteWorkspace', false), neverAutoExecutes: true },
+        'act',
+        true,
+      ),
+      'requiresApproval=false does not override the class opt-out',
+    );
+    assert.true(
+      isAutoExecutableTool(
+        { ...cmd('patchCardInstance', true), neverAutoExecutes: false },
+        'act',
+        true,
+      ),
+      'a tool without the opt-out keeps auto-executing in act mode',
+    );
+  });
+
   test('commands already executed by a server-side actor never auto-execute', function (assert) {
     // readRealmFile and friends are run by ai-bot itself; the host records them
     // in the timeline but must never execute them, even in act mode or with

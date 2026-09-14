@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 
 import { ri } from '@cardstack/runtime-common';
 
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import DeleteWorkspaceTool from '@cardstack/host/tools/delete-workspace';
 
@@ -78,6 +79,64 @@ module('Integration | tools | delete-workspace', function (hooks) {
     assert.true(
       operatorModeStateService.state?.workspaceChooserOpened,
       'the app falls back to the workspace chooser',
+    );
+  });
+
+  test('cleans up the published copies the realm server deletes along with the workspace', async function (assert) {
+    let toolService = getService('tool-service');
+    let realmService = getService('realm') as RealmService;
+    let recentFilesService = getService('recent-files-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let publishedRealmURL = 'https://team.boxel.site/';
+    let originalInfo = realmService.info;
+    realmService.info = ((url: string) => ({
+      ...originalInfo(url),
+      lastPublishedAt: { [publishedRealmURL]: '1700000000000' },
+    })) as RealmService['info'];
+    recentFilesService.recentFiles.push(
+      {
+        realmURL: new URL(publishedRealmURL),
+        filePath: 'index.json',
+        cursorPosition: null,
+        timestamp: 2,
+      },
+      {
+        realmURL: new URL('https://other.boxel.site/'),
+        filePath: 'index.json',
+        cursorPosition: null,
+        timestamp: 1,
+      },
+    );
+    // The user is viewing the published copy, not the source workspace.
+    operatorModeStateService.restore({
+      stacks: [[{ id: `${publishedRealmURL}index`, format: 'isolated' }]],
+      submode: 'interact',
+    });
+
+    let tool = new DeleteWorkspaceTool(toolService.toolContext);
+    await tool.execute({ realmIdentifier: testRealmURL });
+
+    assert.deepEqual(deleteRealmCalls, [testRealmURL]);
+    assert.deepEqual(
+      recentFilesService.recentFiles.map((file) => file.realmURL.href),
+      ['https://other.boxel.site/'],
+      'recent files of the published copy are removed too',
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks.length,
+      0,
+      'stacks showing the deleted published copy are cleared',
+    );
+    assert.true(
+      operatorModeStateService.state?.workspaceChooserOpened,
+      'the app falls back to the workspace chooser',
+    );
+  });
+
+  test('always waits for the user before running', function (assert) {
+    assert.true(
+      DeleteWorkspaceTool.neverAutoExecutes,
+      'a realm deletion is never run without a click, whatever the room mode',
     );
   });
 

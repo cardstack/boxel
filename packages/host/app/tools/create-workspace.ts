@@ -3,9 +3,9 @@ import { service } from '@ember/service';
 import HostBaseTool from '../lib/host-base-tool';
 import { generateRandomWorkspaceName } from '../lib/random-name';
 import {
-  cleanseString,
   getRandomBackgroundURL,
   iconURLFor,
+  toWorkspaceEndpoint,
 } from '../lib/utils';
 
 import type MatrixService from '../services/matrix-service';
@@ -45,7 +45,7 @@ export default class CreateWorkspaceTool extends HostBaseTool<
     // The server accepts only lowercase letters, digits and hyphens in an
     // endpoint. Normalize whatever was given (or the name) into that shape
     // rather than rejecting near-misses like "My Workspace".
-    let endpoint = toEndpoint(input.endpoint?.trim() || name);
+    let endpoint = toWorkspaceEndpoint(input.endpoint?.trim() || name);
     if (!endpoint) {
       throw new Error(
         `Cannot derive a workspace endpoint from '${input.endpoint ?? name}'. Provide an endpoint made of letters, digits and hyphens.`,
@@ -76,11 +76,4 @@ export default class CreateWorkspaceTool extends HostBaseTool<
     await this.operatorModeStateService.openWorkspace(realmURL.href);
     return undefined;
   }
-}
-
-function toEndpoint(value: string): string {
-  return cleanseString(value)
-    .replace(/_/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
