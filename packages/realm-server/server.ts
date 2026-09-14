@@ -576,33 +576,6 @@ export function startSessionKeepalive(
 // force-closes on shutdown without a special case. (Standard mode doesn't
 // need this here — its h2 server is wrapped by the dispatcher, which already
 // tracks sockets and mirrors the same method.)
-// An idle backend connection must outlive the load balancer's willingness to
-// reuse it. The load balancer keeps a pooled connection and sends on it without
-// asking; if this server has closed it in the meantime, that request dies on a
-// socket already going away and the balancer answers 502 — with an HTML body,
-// having no response of its own to relay.
-//
-// Node's default keep-alive idle timeout is 5 seconds. The ALB in front of the
-// hosted deployments is configured at 4000, so the window for that race is open
-// essentially always, and it shows: production serves a steady 2–30 such 502s
-// an hour, and one of them landed mid-prerender and latched a card into a
-// three-day outage.
-//
-// The rule is only that this side is the more patient one. These values are
-// deliberately far above any load-balancer setting we run rather than tuned to
-// one, because the failure is silent and the cost of being generous is some
-// idle sockets. `headersTimeout` must stay above `keepAliveTimeout` or it
-// becomes the same race one layer up: a connection held open for reuse whose
-// request headers are then judged late.
-const LOAD_BALANCER_KEEP_ALIVE_MS = 4200 * 1000;
-const HEADERS_TIMEOUT_MS = LOAD_BALANCER_KEEP_ALIVE_MS + 60 * 1000;
-
-export function withLoadBalancerKeepAlive<T extends http.Server>(server: T): T {
-  server.keepAliveTimeout = LOAD_BALANCER_KEEP_ALIVE_MS;
-  server.headersTimeout = HEADERS_TIMEOUT_MS;
-  return server;
-}
-
 function withForcedConnectionClose(
   server: http2.Http2SecureServer,
 ): http2.Http2SecureServer {
@@ -623,6 +596,30 @@ function withForcedConnectionClose(
     }
     activeSockets.clear();
   };
+  return server;
+}
+
+// An idle connection must outlive the load balancer's willingness to reuse it.
+// The balancer keeps a pooled connection and sends on it without asking; if
+// this server has closed it in the meantime, that request dies on a socket
+// already going away, and the balancer answers 502 with a body of its own
+// making — having no response to relay.
+//
+// Node's default is 5 seconds and the balancer in front of the hosted
+// deployments allows 4000, so this side has to be the more patient one. The
+// value sits far above any balancer setting we run rather than tracking one:
+// the failure is silent, and the cost of being generous is some idle sockets.
+//
+// `headersTimeout` is deliberately left at Node's default. Raising it above
+// `requestTimeout` does not extend the header deadline — the two are swapped
+// when headers is the larger, so the only effect is to silently stretch the
+// whole-request timeout. The header clock starts at a request's first byte
+// rather than when the connection went idle, so keep-alive time never counts
+// toward it and it needs no relationship to the value above.
+const LOAD_BALANCER_KEEP_ALIVE_MS = 4200 * 1000;
+
+export function withLoadBalancerKeepAlive<T extends http.Server>(server: T): T {
+  server.keepAliveTimeout = LOAD_BALANCER_KEEP_ALIVE_MS;
   return server;
 }
 
