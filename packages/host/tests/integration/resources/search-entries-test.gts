@@ -527,9 +527,9 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
-  // A write to a type a query isn't anchored on used to re-run that query in
-  // full, on every client holding it. The event now names the adoption chains
-  // it touched, so a query whose anchors are disjoint from them can sit it out.
+  // An index event names the adoption chains its pass touched, so a query
+  // whose type anchors are disjoint from them can sit the event out instead of
+  // re-running in full on every client holding it.
   module('index event type gating', function () {
     // Nothing in this realm adopts from it — the stand-in for "somebody else's
     // unrelated write".

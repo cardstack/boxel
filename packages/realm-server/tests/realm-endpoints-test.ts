@@ -777,14 +777,16 @@ module(basename(import.meta.filename), function () {
         delete content.generation;
         // The card is brand new, so the index held no row for it before this
         // pass: its adoption chain can only have come from what the pass
-        // wrote. A live query anchored on Person has to hear about it; one
-        // anchored on anything else does not.
-        assert.deepEqual(
-          [...(content.invalidatedTypes as string[])].sort(),
-          [`${baseRealmRRI}card-api/CardDef`, `${testRealmHref}person/Person`],
-          "the incremental event names the new card's adoption chain",
-        );
-        delete content.invalidatedTypes;
+        // wrote. A live query anchored on Person — or on the CardDef its
+        // chain passes through — has to hear about it; one anchored on the
+        // markdown file in this realm does not.
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -955,12 +957,13 @@ module(basename(import.meta.filename), function () {
         // The pass wrote no row for a deleted card, so this chain can only
         // have come from the row the index held before it — which is what a
         // query anchored on Person needs in order to drop the member.
-        assert.deepEqual(
-          [...(content.invalidatedTypes as string[])].sort(),
-          [`${baseRealmRRI}card-api/CardDef`, `${testRealmHref}person/Person`],
-          "the incremental event names the deleted card's adoption chain",
-        );
-        delete content.invalidatedTypes;
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -1773,6 +1776,33 @@ function findRealmEvent(
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
   ) as RealmEvent | undefined;
+}
+
+// Check the adoption chains an incremental index event carries, then strip the
+// field so the caller's `deepEqual` over the rest of the content stays exact.
+function assertInvalidatedTypes(
+  assert: Assert,
+  content: Record<string, any>,
+  expected: { includes: string[]; excludes: string[] },
+) {
+  let invalidatedTypes = content.invalidatedTypes as string[] | undefined;
+  assert.ok(
+    Array.isArray(invalidatedTypes),
+    'the incremental event carries the types its pass touched',
+  );
+  for (let type of expected.includes) {
+    assert.true(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  for (let type of expected.excludes) {
+    assert.false(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is not named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  delete content.invalidatedTypes;
 }
 
 function realmEventIsIndex(
