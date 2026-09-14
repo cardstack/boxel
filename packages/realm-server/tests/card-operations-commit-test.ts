@@ -93,6 +93,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'patch-over-batch',
         'unchanged',
         'legacy-version',
+        'create-parity-target',
       ].map((name) => [
         `${name}.json`,
         {
@@ -500,6 +501,39 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       readFileSync(realmFile('patch-over-batch.json'), 'utf8'),
       readFileSync(realmFile('patch-over-http.json'), 'utf8'),
+      'the two files are byte-identical',
+    );
+  });
+
+  test('a create writes the same bytes a POST of the same document writes', async function (assert) {
+    // The half of the parity that has a reason to differ: `createCard` stamps
+    // `meta.realmURL` from the request's own URL, where staging stamps it from
+    // the realm root, and serialization reads that value to decide how the
+    // links it writes are spelled. A POST to the realm root is where the two
+    // agree, so it is where the bytes are comparable; a POST into a
+    // subdirectory is a spelling the facade has yet to settle.
+    let document: BatchDocument = {
+      data: {
+        type: 'card',
+        attributes: { firstName: 'Paparazzi', hourlyRate: 42 },
+        relationships: {
+          friend: { links: { self: `${testRealmHref}create-parity-target` } },
+        },
+        meta: { adoptsFrom: PERSON },
+      },
+    };
+
+    let response = await request
+      .post('/')
+      .send({ data: { ...document.data, lid: 'create-over-http' } })
+      .set('Accept', 'application/vnd.card+json');
+    assert.strictEqual(response.status, 201, 'the POST is served');
+
+    await commit([{ op: 'create', lid: 'create-over-batch', document }]);
+
+    assert.strictEqual(
+      readFileSync(realmFile('Person/create-over-batch.json'), 'utf8'),
+      readFileSync(realmFile('Person/create-over-http.json'), 'utf8'),
       'the two files are byte-identical',
     );
   });

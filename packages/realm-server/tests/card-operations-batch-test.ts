@@ -106,6 +106,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a card removed in the batch cannot be minted again at its path', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('a card the batch creates is not a target for a later entry', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

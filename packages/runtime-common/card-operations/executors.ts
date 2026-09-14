@@ -60,10 +60,11 @@ export type LidIndex = ReadonlyMap<string, StagedIdentity>;
 export interface StoredFile {
   content: string;
   lastModified: number;
-  // The fingerprint recorded when the file was last written — the version a
-  // caller's `baseVersion` names. Undefined for a file written before the
-  // realm began recording one.
-  contentHash: string | undefined;
+  // A fingerprint of the bytes above, computed when they were read inside the
+  // write lock — the version a caller's `baseVersion` is compared against.
+  // Never the file's recorded row, which can name a version the bytes no
+  // longer hold; `readStoredFiles` has the reason.
+  contentHash: string;
 }
 
 // A JSON:API card document as a batch entry carries it. `included` side-loads
@@ -448,6 +449,16 @@ export async function stageUpdate(
     // says so. The commit finds them unchanged, writes nothing, leaves the
     // modification time alone, and queues nothing for indexing, while the
     // entry's result still reports the version the file holds.
+    //
+    // Unconditional, which means a batch does not repair a card sitting on an
+    // error row the way an empty `PATCH` does: that handler takes its short
+    // circuit only when the index holds a healthy entry, and otherwise
+    // rewrites the card to get it re-indexed. Reproducing that here would mean
+    // reading the index to decide what to stage, and an executor reads the
+    // file it merges over and nothing else — the index is downstream of the
+    // file and can lag it, which is the whole reason the merge base is the
+    // bytes. Repairing an error row stays with the path that has the index in
+    // hand.
     writes.push({ path: sourcePath, content: stored.content });
   } else {
     // The id lives in the file's name, not in its contents.

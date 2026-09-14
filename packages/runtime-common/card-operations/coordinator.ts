@@ -1,6 +1,11 @@
 import { computeContentHash } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
-import { RealmPaths, type LocalPath } from '../paths.ts';
+import {
+  CAPTURE_SERVING_PREFIX,
+  RealmPaths,
+  isCaptureServingPath,
+  type LocalPath,
+} from '../paths.ts';
 import {
   createIdentity,
   includedResources,
@@ -448,23 +453,24 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // Committing
 // ---------------------------------------------------------------------------
 
-// `_screenshot/` is claimed by capture serving, so a realm file stored there
-// could never be read back — it would index and list, and answer every GET as
-// an uncaptured miss. Direct writes and `/_atomic` operations each refuse the
-// subtree before writing anything, and a batch is the third way in, so it
-// refuses it too. Removals are not covered, deliberately: they are the
-// recovery path for anything already stored there, which is why the other two
-// admit them as well.
+// A batch is the third way into a realm, after direct writes and `/_atomic`,
+// so it holds its staged writes to the same capture-serving reservation both
+// of those refuse — read from `isCaptureServingPath`, which states it once for
+// all three. Removals are not covered, deliberately: they are the recovery
+// path for anything already stored there, which is why the other two admit
+// them as well.
 function assertWritesAllowed(staged: StagedChange[]): void {
   for (let [index, change] of staged.entries()) {
     for (let write of change.writes) {
-      if (write.path.startsWith('_screenshot/')) {
+      if (isCaptureServingPath(write.path)) {
         throw atEntry(
           new OperationFailure({
             status: 422,
             code: 'invalid-params',
             title: 'Reserved path',
-            detail: `cannot write "${write.path}": "_screenshot/" is reserved for serving captures`,
+            detail:
+              `cannot write "${write.path}": "${CAPTURE_SERVING_PREFIX}" is ` +
+              `reserved for serving captures`,
           }),
           index,
         );
@@ -544,13 +550,31 @@ function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
 //
 // Checked inside the lock, against the same critical section the commit runs
 // in, so nothing can take the path between the check and the write.
+//
+// A path an earlier entry removes is not what this check is about, so it is
+// left out of it: the stored card is on its way out, and what stops the batch
+// is the two entries asking for opposite things rather than the card being
+// there. Skipping it hands that pair to the conflicting-entries check, which
+// names the entry it collides with instead of telling a caller that meant to
+// remove and re-mint a card to patch the one it just removed.
 async function assertDestinationsFree(
   core: BatchCore,
   staged: StagedChange[],
 ): Promise<void> {
+  let removedBefore: Set<LocalPath>[] = [];
+  let removed = new Set<LocalPath>();
+  for (let change of staged) {
+    removedBefore.push(new Set(removed));
+    for (let path of change.deletes) {
+      removed.add(path);
+    }
+  }
   let occupied = await Promise.all(
     staged.map(async (change, index) => {
       for (let path of change.mints) {
+        if (removedBefore[index].has(path)) {
+          continue;
+        }
         if (await core.fileExists(path)) {
           return { index, path };
         }

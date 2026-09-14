@@ -61,7 +61,13 @@ import {
   type HostRoutingRule,
 } from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
-import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
+import {
+  CAPTURE_SERVING_PREFIX,
+  RealmPaths,
+  ensureTrailingSlash,
+  isCaptureServingPath,
+  join,
+} from './paths.ts';
 import type ms from 'ms';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
@@ -2961,13 +2967,14 @@ export class Realm {
           return;
         }
 
-        // Same reservation `internalHandle` enforces for direct writes:
-        // the `_screenshot/` subtree is claimed by capture serving, so a
-        // file written there could never be read back.
-        if (localPath.startsWith('_screenshot/')) {
+        // Same reservation `internalHandle` enforces for direct writes,
+        // read from the one place it is stated.
+        if (isCaptureServingPath(localPath)) {
           errors.push({
             title: 'Reserved path',
-            detail: `Cannot write '${operation.href}': '_screenshot/' is reserved for serving captures`,
+            detail:
+              `Cannot write '${operation.href}': ` +
+              `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures`,
             status: 422,
           });
           return;
@@ -3484,10 +3491,16 @@ export class Realm {
             ? { content: file.content, lastModified: file.lastModified }
             : undefined;
         },
+        // Classified exactly as `_batchWriteUnlocked` classifies the same
+        // bytes when it writes them, so the ceiling a batch holds its staged
+        // bytes to is the ceiling the commit will apply rather than a second
+        // opinion about it.
         assertWriteSize: (localPath, content) =>
           this.assertWriteSize(
             content,
-            isCardDocumentString(content) ? 'card' : 'file',
+            localPath.endsWith('.json') && isCardDocumentString(content)
+              ? 'card'
+              : 'file',
             localPath,
           ),
         drainIndexing: async () => {
@@ -3781,11 +3794,11 @@ export class Realm {
       // hand unauthenticated callers an existence/size/content-hash oracle
       // over a private realm's captures; no consumer of this route (image
       // loads, crawlers) sends HEAD.
-      if (request.method === 'GET' && localPath.startsWith('_screenshot/')) {
+      if (request.method === 'GET' && isCaptureServingPath(localPath)) {
         return await this.serveScreenshot(
           request,
           requestContext,
-          localPath.slice('_screenshot/'.length),
+          localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
       // The GET dispatch above claims the whole `_screenshot/` subtree, so a
@@ -3797,10 +3810,12 @@ export class Realm {
       // anything already stored there.
       if (
         ['PUT', 'PATCH', 'POST'].includes(request.method) &&
-        localPath.startsWith('_screenshot/')
+        isCaptureServingPath(localPath)
       ) {
         return badRequest({
-          message: `'_screenshot/' is reserved for serving captures and cannot be written to`,
+          message:
+            `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures ` +
+            `and cannot be written to`,
           requestContext,
         });
       }

@@ -1030,6 +1030,62 @@ const tests: SharedTests<Record<string, never>> = {
     );
   },
 
+  'a card removed in the batch cannot be minted again at its path': async (
+    assert,
+  ) => {
+    // Removing a card and minting one at the same path is the same pair of
+    // opposite asks as any other write over a removal, so it is answered as
+    // that pair rather than as an occupied destination: the stored card is on
+    // its way out, and telling the caller to patch it instead would describe
+    // a batch it did not send.
+    let { core, commits } = stub({
+      stored: {
+        'Person/reuse.json': cardFile({ firstName: 'Stored' }, PERSON),
+      },
+    });
+    let failure:
+      | { status: number; code: string; entry: unknown; detail?: string }
+      | undefined;
+    try {
+      await commitBatch(
+        core,
+        [
+          { op: 'delete', href: `${REALM}Person/reuse` },
+          {
+            op: 'create',
+            lid: 'reuse',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Reminted' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      failure = {
+        status: err.error.status,
+        code: err.error.code,
+        entry: err.error.meta?.entry,
+        detail: err.error.detail,
+      };
+    }
+    assert.strictEqual(failure?.status, 400);
+    assert.strictEqual(failure?.code, 'invalid-params');
+    assert.strictEqual(failure?.entry, 1);
+    assert.true(
+      failure?.detail?.includes('which an earlier entry removes') ?? false,
+      'the refusal names the entries that conflict, not the stored card',
+    );
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
   'a card the batch creates is not a target for a later entry': async (
     assert,
   ) => {
