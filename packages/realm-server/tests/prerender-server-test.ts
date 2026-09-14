@@ -1028,6 +1028,25 @@ module(basename(import.meta.filename), function () {
         };
       }
 
+      // A render that failed for its own reasons and merely *mentions* a
+      // missing export among the console errors `RenderRunner` merged onto it.
+      function timeoutCarryingModuleError() {
+        return {
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timed out after 30000ms',
+                  additionalErrors: [{ message: MISSING_EXPORT }],
+                },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        };
+      }
+
       function rendered() {
         return {
           response: { card: { isolatedHTML: '<div>fresh</div>' } },
@@ -1245,6 +1264,156 @@ module(basename(import.meta.filename), function () {
           'so the warmed pair agrees with the reported pair — one render, four consistent values',
         );
         await built.prerenderer.stop();
+      });
+
+      // The verdict the write site acts on, in both directions. Suppressing a
+      // row is only safe if the mark is absent whenever the failure might be
+      // the card's — so these two cases differ in nothing but whether the pool
+      // ever reached the shell being served.
+      test('a pool that never reaches the current shell marks the failure unattributable', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}pool-never-current`,
+          authFor(),
+        );
+        assert.strictEqual(calls, 2, 'one re-render, and no more');
+        assert.strictEqual(res.status, 201, 'the failure is still returned');
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          ['instance'],
+          'marked, and scoped to the row that actually failed this way',
+        );
+      });
+
+      test('a genuine break on a current pool is not marked', async function (assert) {
+        // The pool is behind for the first render and current after the
+        // recycle, so the retry runs on the shell being served and its failure
+        // is the card's. Nothing here may be withheld.
+        let warmed = 'babf3612';
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => warmed,
+          awaitHostShellRecycle: async () => {
+            warmed = 'b778fe76';
+          },
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}genuinely-broken-import`,
+          authFor(),
+        );
+        assert.strictEqual(calls, 2, 'the re-render happened');
+        assert.strictEqual(res.status, 201);
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          'unmarked, so the error persists and the break stays visible',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          "and it is the card's own failure that is returned",
+        );
+      });
+
+      // The scoping the review asked for. One visit produces the instance and
+      // file rows independently: here the card render hit the stale bundle
+      // while the file extraction failed for a reason of its own. A verdict
+      // naming the response rather than the rows would withhold both, hiding
+      // the file's genuine failure.
+      test('a verdict names only the rows that failed on the stale bundle', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: { error: { error: { message: MISSING_EXPORT } } },
+            fileExtract: {
+              error: { error: { message: 'Unexpected end of JSON input' } },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}two-failures`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own failure stays visible",
+        );
+      });
+
+      // The narrowing that separates driving a re-render from withholding a
+      // row. A timeout whose console happens to carry a missing-export line is
+      // worth one more render — the broad test allows that — but it is not
+      // grounds to withhold the timeout the render actually produced. Using the
+      // broad predicate for the mark makes this fail.
+      test('a failure that merely mentions a missing export is not marked', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return timeoutCarryingModuleError();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}timed-out-render`,
+          authFor(),
+        );
+        assert.strictEqual(
+          calls,
+          2,
+          'the broad test still drove a re-render, which is cheap and fine',
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          'but the timeout is not withheld: the missing export was not the failure',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          'Render timed out after 30000ms',
+          'and the real failure is what reaches the caller',
+        );
       });
 
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {

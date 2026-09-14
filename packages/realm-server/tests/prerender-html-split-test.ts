@@ -656,6 +656,102 @@ module(basename(import.meta.filename), function () {
       };
     }
 
+    // Withholding a stale-shell failure has to happen on THIS channel as well
+    // as on `boxel_index`, because `effectiveHasError()` is
+    // `COALESCE(i.has_error, FALSE) OR (ph.error_doc IS NOT NULL AND
+    // ph.generation >= i.generation)` — a current error doc here makes the row
+    // read as errored whatever the index channel says, and `effectiveErrorDoc()`
+    // then serves this column. Postgres uses the split channel by default, so a
+    // suppression that covered only the index channel would be inert in
+    // production.
+    module('withholding a stale-shell failure', function () {
+      async function writeError(
+        generation: number,
+        url: string,
+        opts: { diagnostics?: Diagnostics; message?: string } = {},
+      ) {
+        let batch = await makeBatch(generation);
+        await batch.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: {
+            message: opts.message ?? 'has no exported member',
+            status: 500,
+            additionalErrors: null,
+          },
+          ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
+        } as any);
+        await batch.done();
+      }
+
+      test('a covered verdict keeps the published render and writes no error', async function (assert) {
+        let url = `${testRealm}withheld.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        await writeError(2, url, {
+          diagnostics: { staleShellFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'no error doc, so `effectiveHasError` does not see a current render error',
+        );
+        assert.strictEqual(
+          row.isolated_html,
+          '<div>good</div>',
+          'and the last good render is still what readers get',
+        );
+      });
+
+      test('a verdict naming another row does not withhold this one', async function (assert) {
+        let url = `${testRealm}other-row.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        // The card render hit the stale bundle; this instance row failed for
+        // its own reasons and must stay visible.
+        await writeError(2, url, {
+          diagnostics: { staleShellFailure: ['file'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the error is published, because the verdict did not cover this row',
+        );
+      });
+
+      test('an unmarked failure is published as before', async function (assert) {
+        let url = `${testRealm}unmarked.json`;
+        await writeInstance(1, url, '<div>good</div>');
+        await writeError(2, url);
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'absence of a verdict means no verdict, never "withhold"',
+        );
+      });
+
+      test('a first render has nothing to keep, so its failure surfaces', async function (assert) {
+        let url = `${testRealm}brand-new.json`;
+        // No prior good render at all — withholding here would leave the row
+        // blank rather than protecting anything.
+        await writeError(1, url, {
+          diagnostics: { staleShellFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the failure has to surface somewhere when there is no good content',
+        );
+      });
+    });
+
     test('writes rendered rows and swaps them under the carried generation', async function (assert) {
       let url = `${testRealm}1.json`;
       await writeInstance(5, url, '<h1>v5</h1>');
