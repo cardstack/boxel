@@ -838,6 +838,59 @@ export function wireFilterHasMatches(
   return false;
 }
 
+// The card types an entry must be one of to satisfy this filter, or
+// `undefined` when the filter admits an entry of any type. An over-
+// approximation, and deliberately so: every entry the filter matches adopts
+// from at least one of the returned refs, but not every entry adopting from
+// one of them matches.
+//
+// That direction is what a live search needs. An index event names the types
+// it touched; a query whose anchors are disjoint from them cannot have gained
+// or lost a member, because a member would have to be of one of these types
+// and a row of one of these types would have named it in the event. The
+// reverse — narrowing the anchors — would let a real membership change slip
+// past, so every shape whose anchors can't be established returns `undefined`
+// and leaves the caller re-running unconditionally.
+//
+// The engine ANDs a node's own `item.on` with everything under it (see
+// `filterCondition`), so an anchored node answers for its whole subtree
+// whatever that subtree contains. Below an unanchored node: `every` is
+// satisfied by any one branch's anchors, `any` needs all of its branches
+// anchored (an unanchored branch admits any type), and a bare `not` or
+// operator node anchors nothing at all.
+export function wireFilterTypeAnchors(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let anchor = filter[ITEM_ANCHOR];
+  if (anchor) {
+    return [anchor];
+  }
+  if (filter.every?.length) {
+    for (let branch of filter.every) {
+      let anchors = wireFilterTypeAnchors(branch);
+      if (anchors) {
+        return anchors;
+      }
+    }
+    return undefined;
+  }
+  if (filter.any?.length) {
+    let anchors: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchAnchors = wireFilterTypeAnchors(branch);
+      if (!branchAnchors) {
+        return undefined;
+      }
+      anchors.push(...branchAnchors);
+    }
+    return anchors;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // The wire grammar — what a client sends to `_search` /
 // `_federated-search`. `SearchEntryWireQuery` is the entry-rooted
