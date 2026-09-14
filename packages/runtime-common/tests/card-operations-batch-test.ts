@@ -194,9 +194,10 @@ function personDefinition(): Definition {
 async function refusal(
   core: BatchCore,
   entries: BatchEntry[],
+  options: Parameters<typeof commitBatch>[2] = {},
 ): Promise<{ status: number; code: string; entry: unknown } | undefined> {
   try {
-    await commitBatch(core, entries, {});
+    await commitBatch(core, entries, options);
   } catch (err: unknown) {
     if (!isOperationFailure(err)) {
       throw err;
@@ -1899,6 +1900,30 @@ const tests: SharedTests<Record<string, never>> = {
       'a side-load names a card the caller is rewriting, as it does on a PATCH',
     );
   },
+
+  'a template that keys into the actor names a member that does not exist':
+    async (assert) => {
+      // The caller is a user id. A stored marker carrying a key asks for a
+      // member of it, and answering the id anyway would write the caller
+      // under a name the declaration did not mean.
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'actor', key: 'id' } as never },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+      });
+      assert.deepEqual(
+        await refusal(core, [{ op: 'create', lid: 'anon', definition }], {
+          actor: '@tester:localhost',
+        }),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'a keyed actor read is refused even when the caller is known',
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    },
 
   'a template that reads the actor needs one': async (assert) => {
     let definition: OperationDefinition = {

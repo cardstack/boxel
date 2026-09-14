@@ -802,7 +802,15 @@ async function lowerValue(
   // unwrapped spelling is the one the executor accepts and writes, so the
   // stored program for a refused operation would go from one the planner
   // rejects to one that quietly writes the wrong thing.
-  if (slot.kind === 'links' && !Array.isArray(value)) {
+  //
+  // An actor is the exception, and gets one finding rather than two: telling
+  // an author to write a list of callers answers a question they should not
+  // be asking, so the finding below says the one thing that is wrong.
+  if (
+    slot.kind === 'links' &&
+    !Array.isArray(value) &&
+    !(isMarker(value) && value.$ref === 'actor')
+  ) {
     sink.add('link-requires-identity', path, notAList(path));
   }
   if (isMarker(value)) {

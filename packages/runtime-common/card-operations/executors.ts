@@ -1060,18 +1060,21 @@ function resolveMarker(
             `made without one`,
         });
       }
-      // The realm knows the actor by identity, which is what a link to them
-      // needs and the only member there is to read.
-      if (marker.key !== undefined && marker.key !== 'id') {
+      // The realm authenticates the caller as a user id and knows nothing
+      // else about them, so the marker carries no key and a stored one names
+      // a member that does not exist.
+      if (marker.key !== undefined) {
         throw new OperationFailure({
           status: 400,
           code: 'invalid-params',
           title: 'Invalid reference',
           detail:
-            `\`${path}\` reads actor("${String(marker.key)}"), and the realm ` +
-            `knows the actor by identity alone`,
+            `\`${path}\` reads actor("${String(marker.key)}"), and the ` +
+            `caller is a user id with no members to read`,
         });
       }
+      // A user id is a value, never a card: `isLink` stays false so the
+      // caller lands in a text field rather than in a relationship.
       return { value: ctx.actor, isLink: false };
     case 'instance': {
       if (!anchor) {
