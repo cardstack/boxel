@@ -9,7 +9,10 @@ import {
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import { handleStreamingRequest } from '../lib/proxy-forward.ts';
+import {
+  clientDisconnectSignal,
+  handleStreamingRequest,
+} from '../lib/proxy-forward.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
@@ -121,6 +124,13 @@ export default function handleRequestForward({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    // A caller that stops waiting must take the upstream call with it. The
+    // forward runs inside a per-user advisory lock that serializes that
+    // user's billable calls across replicas, so an upstream request nobody is
+    // reading any more still blocks that user's next forward for as long as
+    // it runs — on a slow model call, over a minute.
+    let clientGone = clientDisconnectSignal(ctxt);
+
     try {
       // 1. Validate JWT token and extract user
       const token = ctxt.state.token;
@@ -303,6 +313,7 @@ export default function handleRequestForward({
             destinationConfig,
             dbAdapter,
             matrixUserId,
+            clientGone,
           );
           return;
         }
@@ -310,6 +321,10 @@ export default function handleRequestForward({
         const fetchOptions: RequestInit = {
           method: json.method,
           headers,
+          // Cancelling the upstream call is what ends the critical section:
+          // without it the lock is held until a response the client will
+          // never read finally arrives.
+          signal: clientGone,
         };
 
         // Only add body for non-GET requests or when requestBody is provided
@@ -344,6 +359,16 @@ export default function handleRequestForward({
         await setContextResponse(ctxt, response);
       });
     } catch (error) {
+      if (clientGone.aborted) {
+        // Cancelling on purpose is not a fault: there is no one left to
+        // answer and nothing an on-call engineer could act on, so this stays
+        // out of the error channel. Returning here is what lets the cost lock
+        // release for this user's next forward.
+        log.info(
+          'Client disconnected during request forward; upstream call cancelled',
+        );
+        return;
+      }
       log.error('Error in request forward handler:', error);
       Sentry.captureException(error);
       await sendResponseForSystemError(
