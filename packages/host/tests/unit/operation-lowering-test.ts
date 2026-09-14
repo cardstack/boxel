@@ -80,7 +80,7 @@ module('Unit | operation lowering', function (hooks) {
       typeof import('@cardstack/base/number')
     >('@cardstack/base/number'));
 
-    let { field, contains, linksTo, CardDef, FieldDef } = api;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = api;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -93,13 +93,16 @@ module('Unit | operation lowering', function (hooks) {
     class Comment extends FieldDef {
       static displayName = 'Comment';
       @field body = contains(StringField);
+      @field postedBy = contains(StringField);
       @field author = linksTo(() => Author);
       @field where = contains(Address);
     }
     class Activity extends CardDef {
       static displayName = 'Activity';
       @field label = contains(StringField);
+      @field postedBy = contains(StringField);
       @field owner = linksTo(() => Author);
+      @field witnesses = linksToMany(() => Author);
     }
     shim({ Author, Address, Comment, Activity });
     fixtures = {
@@ -172,17 +175,21 @@ module('Unit | operation lowering', function (hooks) {
 
   test('append lowers to an append statement, with a link-typed member as a card identity', async function (assert) {
     let { field, contains, containsMany, CardDef } = api;
-    let { operation, params, actor } = operations;
+    let { operation, params, actor, linkTo } = operations;
     class Report extends CardDef {
       static displayName = 'Report';
       @field title = contains(StringField);
       @field comments = containsMany(fixtures.Comment);
       @operation static addComment = {
         base: 'transform',
-        params: { body: StringField },
+        params: { body: StringField, author: linkTo(() => fixtures.Author) },
         append: {
           to: 'comments',
-          value: { body: params('body'), author: actor() },
+          value: {
+            body: params('body'),
+            postedBy: actor(),
+            author: params('author'),
+          },
         },
       } satisfies OperationsModule.OperationDeclaration;
     }
@@ -196,15 +203,82 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         params: {
           body: { kind: 'field', codeRef: identifyCard(StringField)! },
+          author: { kind: 'link', codeRef: identifyCard(fixtures.Author)! },
         },
         program: {
           source:
-            'append(.comments;{body:params("body"),author:card(actor("id"))});',
+            'append(.comments;{body:params("body"),postedBy:actor(),author:card(params("author"))});',
           syntax: 'solidified',
         },
         deterministic: true,
       },
-      "`author: actor()` on a linksTo member becomes the actor's card identity",
+      'a link-typed member becomes a card identity while a scalar one stays the bare builtin',
+    );
+  });
+
+  test('an actor in a link position is an authoring issue, not a spelling the lowering repairs', async function (assert) {
+    let { field, contains, containsMany, linksTo, CardDef } = api;
+    let { operation, actor } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field owner = linksTo(() => fixtures.Author);
+      @field comments = containsMany(fixtures.Comment);
+      @operation static claim = {
+        base: 'transform',
+        set: { owner: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static addComment = {
+        base: 'transform',
+        append: { to: 'comments', value: { author: actor() } },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['actor-not-a-card', 'actor-not-a-card']);
+    assert.deepEqual(
+      result.issues.map((issue) => issue.path),
+      ['set.owner', 'append.value.author'],
+      'both the field itself and a member of a contained value are reached',
+    );
+    assert.true(
+      result.issues[0].message.includes('linkTo(…)'),
+      'the message names the declaration that does express a link to a person',
+    );
+    assert.true(
+      result.operations.claim.invalid,
+      'an operation carrying the issue reports it rather than running',
+    );
+  });
+
+  test('a create fills a link field with a card identity, and the caller is not one', async function (assert) {
+    let { field, contains, CardDef } = api;
+    let { operation, actor } = operations;
+    class Classroom extends CardDef {
+      static displayName = 'Classroom';
+      @field name = contains(StringField);
+      @operation static addActivity = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { owner: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static addWitnessed = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { witnesses: [actor()] },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Classroom });
+
+    let result = await lower(Classroom);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['actor-not-a-card', 'fill.owner'],
+        ['actor-not-a-card', 'fill.witnesses[0]'],
+      ],
+      'a link collection is filled with a list, so every entry is an identity too',
     );
   });
 
@@ -215,14 +289,12 @@ module('Unit | operation lowering', function (hooks) {
       static displayName = 'Report';
       @field status = contains(StringField);
       @field closedBy = contains(StringField);
-      @field owner = api.linksTo(() => fixtures.Author);
       @operation static close = {
         base: 'transform',
         params: { note: StringField },
         set: {
           status: 'closed',
-          closedBy: actor('id'),
-          owner: actor(),
+          closedBy: actor(),
           'cardInfo.notes': params('note'),
         },
       } satisfies OperationsModule.OperationDeclaration;
@@ -235,11 +307,10 @@ module('Unit | operation lowering', function (hooks) {
       lowered.close.program?.source,
       [
         '.status="closed";',
-        '.closedBy=actor("id");',
-        '.owner=card(actor("id"));',
+        '.closedBy=actor();',
         '.cardInfo.notes=params("note");',
       ].join('\n'),
-      'a scalar field reads the builtin directly, a link wraps it in card()',
+      'a scalar field reads the builtin directly',
     );
   });
 
@@ -272,11 +343,20 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         assert: { unique: 'reviewers', by: actor(), snapshot: true },
       } satisfies OperationsModule.OperationDeclaration;
+      @operation static tagSelf = {
+        base: 'transform',
+        assert: { unique: 'tags', by: actor() },
+        append: { to: 'tags', value: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
 
     let { operations: lowered, issues } = await lower(Report);
-    assert.deepEqual(issues, [], 'every declaration lowers cleanly');
+    assert.deepEqual(
+      issues.map((issue) => [issue.code, issue.path]),
+      [['actor-not-a-card', 'assert.by']],
+      'only the comparison against a link collection is refused',
+    );
     assert.strictEqual(
       lowered.addTag.program?.source,
       [
@@ -291,9 +371,16 @@ module('Unit | operation lowering', function (hooks) {
       'a link collection compares the linked card id against the identity itself — not against a card() projection — and an omitted message gets a default',
     );
     assert.strictEqual(
-      lowered.claimReview.program?.source,
-      'assert(all(.reviewers[];.id!=actor("id"));"reviewers already holds this value");',
-      'a keyless actor() being compared narrows to the id it is compared against, the way it does on its way into a link — the whole record would never equal an id string, so the check would hold for every item',
+      lowered.tagSelf.program?.source,
+      [
+        'assert(all(.tags[];.!=actor());"tags already holds this value");',
+        'append(.tags;actor());',
+      ].join('\n'),
+      'a contained collection compares the caller id against the item itself',
+    );
+    assert.true(
+      lowered.claimReview.invalid,
+      'while a link collection compares against a linked card id, which the caller is not',
     );
     assert.true(
       lowered.addReviewer.snapshot,
@@ -316,7 +403,7 @@ module('Unit | operation lowering', function (hooks) {
         base: 'create',
         params: { label: StringField, teacher: linkTo(() => fixtures.Author) },
         of: () => fixtures.Activity,
-        fill: { label: params('label'), owner: actor() },
+        fill: { label: params('label'), postedBy: actor() },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Classroom });
@@ -334,7 +421,7 @@ module('Unit | operation lowering', function (hooks) {
         of: identifyCard(fixtures.Activity),
         fill: {
           label: { $ref: 'params', key: 'label' },
-          owner: { $ref: 'actor' },
+          postedBy: { $ref: 'actor' },
         },
         deterministic: true,
       },
@@ -354,7 +441,7 @@ module('Unit | operation lowering', function (hooks) {
         query: {
           filter: {
             on: () => fixtures.Author,
-            eq: { name: actor('id') },
+            eq: { name: actor() },
           },
           sort: [{ by: 'name', on: () => fixtures.Author, direction: 'desc' }],
           page: { size: 20, number: 0 },
@@ -374,7 +461,7 @@ module('Unit | operation lowering', function (hooks) {
           every: [
             {
               'item.on': identifyCard(fixtures.Author),
-              eq: { 'item.name': { $ref: 'actor', key: 'id' } },
+              eq: { 'item.name': { $ref: 'actor' } },
             },
             { matches: { $ref: 'params', key: 'term' } },
           ],
@@ -428,7 +515,7 @@ module('Unit | operation lowering', function (hooks) {
       @field title = contains(StringField);
       @operation static read: OperationsModule.OperationDeclaration = {
         base: 'read',
-        output: { label: actor('id') },
+        output: { label: actor() },
       };
     }
     shim({ Report });
@@ -439,7 +526,7 @@ module('Unit | operation lowering', function (hooks) {
       lowered.read,
       {
         base: 'read',
-        output: { source: '{label:actor("id")}', syntax: 'solidified' },
+        output: { source: '{label:actor()}', syntax: 'solidified' },
         deterministic: true,
       },
       'a declarative projection and a raw program reach the realm in one form',
@@ -617,7 +704,7 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         params: { note: StringField },
         set: { title: params('note') },
-        output: { who: actor('id') },
+        output: { who: actor() },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
@@ -786,7 +873,7 @@ module('Unit | operation lowering', function (hooks) {
 
   test('card() naming a link identity lowers the same as naming it bare', async function (assert) {
     let { field, contains, linksTo, linksToMany, CardDef } = api;
-    let { operation, actor, card } = operations;
+    let { operation, params, card, linkTo } = operations;
     class Report extends CardDef {
       static displayName = 'Report';
       @field title = contains(StringField);
@@ -796,29 +883,29 @@ module('Unit | operation lowering', function (hooks) {
       });
       @operation static assignBare = {
         base: 'transform',
-        set: { owner: actor() },
+        params: { who: linkTo(() => fixtures.Author) },
+        set: { owner: params('who') },
       } satisfies OperationsModule.OperationDeclaration;
       @operation static assignExplicit = {
         base: 'transform',
-        set: { owner: card(actor()) },
+        params: { who: linkTo(() => fixtures.Author) },
+        set: { owner: card(params('who')) },
       } satisfies OperationsModule.OperationDeclaration;
       @operation static enrolExplicit = {
         base: 'transform',
-        append: { to: 'reviewers', value: card(actor()) },
+        params: { who: linkTo(() => fixtures.Author) },
+        append: { to: 'reviewers', value: card(params('who')) },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
 
     let { operations: lowered, issues } = await lower(Report);
     assert.deepEqual(issues, [], 'the declarations lower cleanly');
-    // `card(…)` says "this value is a card", so the marker inside it is
-    // narrowed to the id the constructor takes, exactly as the bare spelling
-    // is. Emitting `card(actor())` instead hands the whole actor record to a
-    // constructor that wants one id string, so the more precise spelling
-    // would be the one that fails.
+    // `card(…)` says "this value is a card", which a link slot already says,
+    // so naming it changes nothing about what the program does.
     assert.strictEqual(
       lowered.assignExplicit.program?.source,
-      '.owner=card(actor("id"));',
+      '.owner=card(params("who"));',
     );
     assert.strictEqual(
       lowered.assignBare.program?.source,
@@ -827,7 +914,7 @@ module('Unit | operation lowering', function (hooks) {
     );
     assert.strictEqual(
       lowered.enrolExplicit.program?.source,
-      'append(.reviewers;card(actor("id")));',
+      'append(.reviewers;card(params("who")));',
     );
   });
 

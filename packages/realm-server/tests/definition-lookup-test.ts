@@ -2760,8 +2760,7 @@ module(basename(import.meta.filename), function () {
             },
           },
           program: {
-            source:
-              'append(.comments;{body:params("body"),author:card(actor("id"))});',
+            source: 'append(.comments;{body:params("body"),postedBy:actor()});',
             syntax: 'solidified',
           },
           deterministic: true,

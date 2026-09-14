@@ -6,6 +6,13 @@
  * who the caller is, and the stored document behind the edit — each supplied
  * by the host and scoped to one evaluation by `withRequestContext`.
  *
+ * `params` and `instance` are keyed objects a program reads a member out of.
+ * `actor` is not: it is the caller's user id as a string and nothing else, so
+ * it has one form, `actor()`. A host authenticates a caller as a user id and
+ * knows nothing further about them, so any other member would be whatever
+ * request detail the host happened to post — and a program reading one is a
+ * commitment to keep posting it.
+ *
  * They are functions rather than `$`-prefixed variables, matching the form
  * card operations are authored in, and named `params` rather than the more
  * obvious `input` because the mutation profile denies `input`. Registry
@@ -50,17 +57,17 @@ const SLOT_DESCRIPTIONS: Record<ContextSlot, string> = {
 };
 
 /**
- * How to ask for a key that may legitimately be absent. `actor` and
- * `instance` hand back the whole object with no argument, so a program that
- * wants a default rather than a failure has somewhere to go; a missing
- * payload key has no such reading, since the operation declares its keys.
+ * How to ask for a key that may legitimately be absent. `instance()` hands
+ * back the whole object with no argument, so a program that wants a default
+ * rather than a failure has somewhere to go; a missing payload key has no
+ * such reading, since the operation declares its keys.
  */
 const OPTIONAL_KEY_HINTS: Partial<Record<ContextSlot, string>> = {
-  actor: 'Use `actor()` and index it if the key may be absent.',
   instance: 'Use `instance()` and index it if the key may be absent.',
 };
 
-function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
+/** The slot's value, once the host is known to have supplied one. */
+function slotValue(slot: ContextSlot, call: string): unknown {
   const context = currentRequestContext();
   if (!context) {
     throw new JqEvaluateError(
@@ -76,6 +83,11 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
         `supply in this request's context.`,
     );
   }
+  return value;
+}
+
+function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
+  const value = slotValue(slot, call);
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new JqEvaluateError(
       `${call} needs ${SLOT_DESCRIPTIONS[slot]} to be an object, but the ` +
@@ -83,6 +95,25 @@ function slotObject(slot: ContextSlot, call: string): Record<string, unknown> {
     );
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * The caller's user id, which is the whole of what `actor()` answers.
+ *
+ * A host that supplies anything else has a defect in it, and is told so here
+ * rather than having the value reach a document: a record where an id belongs
+ * lands in a text field as an object and in a filter as a value that matches
+ * nothing.
+ */
+function actorString(call: string): string {
+  const value = slotValue('actor', call);
+  if (typeof value !== 'string') {
+    throw new JqEvaluateError(
+      `${call} needs ${SLOT_DESCRIPTIONS.actor} to be a string, but the ` +
+        `host supplied ${Array.isArray(value) ? 'an array' : typeof value}.`,
+    );
+  }
+  return value;
 }
 
 /**
@@ -185,10 +216,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield requireKey('params', 'params(key)', key);
   },
   'actor/0': function* () {
-    yield readable(slotObject('actor', 'actor()'));
-  },
-  'actor/1': function* (_input, key) {
-    yield requireKey('actor', 'actor(key)', key);
+    yield actorString('actor()');
   },
   'instance/0': function* () {
     yield readable(slotObject('instance', 'instance()'));

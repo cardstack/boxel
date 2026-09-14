@@ -177,6 +177,11 @@ export type OperationLoweringIssueCode =
   // A class reference that no module exports under a name, so there is no
   // code ref to store.
   | 'unresolved-type'
+  // An `actor()` where a card identity belongs: a link field, a `by` on a link
+  // collection, or inside `card(…)`. The realm authenticates a caller as a
+  // user id and no card represents a user, so the link would name a card that
+  // does not exist.
+  | 'actor-not-a-card'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.

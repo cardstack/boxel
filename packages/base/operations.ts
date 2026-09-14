@@ -21,7 +21,7 @@ import {
 // the built-in behavior it builds on (`base`), the payload it accepts
 // (`params`), and what it does to the target. Values that are only known at
 // invocation time are written as typed references: `params('body')` for a
-// member of the request payload, `actor()` for the invoking actor,
+// member of the request payload, `actor()` for the caller's user id,
 // `instance()` for the target's stored source document, `realmConfig('key')`
 // for a setting of the realm the operation runs in, `card(…)` for a link
 // identity, and the `bxl` tag for a raw program.
@@ -32,7 +32,7 @@ import {
 //       params: { body: StringField },
 //       append: {
 //         to: 'comments',
-//         value: { body: params('body'), author: actor() },
+//         value: { body: params('body'), postedBy: actor() },
 //       },
 //     } satisfies OperationDeclaration;
 //   }
@@ -156,9 +156,12 @@ export interface ParamsReference<Key extends string = string> {
   readonly key: Key;
 }
 
+// The caller's identity, which is a user id and nothing else — so the marker
+// carries no key, and is not a card. It is stored in text fields and compared
+// in filters; a link to the person acting is a `params` member declared with
+// `linkTo(…)`.
 export interface ActorReference {
   readonly $ref: 'actor';
-  readonly key?: string;
 }
 
 export interface InstanceReference {
@@ -173,10 +176,11 @@ export interface RealmConfigReference<Key extends string = string> {
 
 export interface CardReference {
   readonly $ref: 'card';
+  // No `ActorReference`: the caller is a user id, and no card represents a
+  // user, so an actor here would name a link that cannot resolve.
   readonly value:
     | string
     | ParamsReference
-    | ActorReference
     | InstanceReference
     | RealmConfigReference;
 }
@@ -203,10 +207,21 @@ export function params<Key extends string>(key: Key): ParamsReference<Key> {
   return { $ref: 'params', key };
 }
 
-// The invoking actor — the whole actor, or one of its members: `actor('id')`.
-export function actor(key?: string): ActorReference {
-  assertOptionalReferenceKey('actor', key);
-  return key === undefined ? { $ref: 'actor' } : { $ref: 'actor', key };
+// The caller's user id, as the realm authenticated them. The rest parameter
+// takes `never` so an argument is a type error, and is checked at run time
+// for a declaration assembled outside TypeScript.
+export function actor(...args: never[]): ActorReference {
+  if (args.length > 0) {
+    throw new Error(`actor() takes no argument; it is the caller's user id`);
+  }
+  return { $ref: 'actor' };
+}
+
+// Why the caller cannot stand in for a card, wherever one is asked for. The
+// realm authenticates a caller as a user id, and no card represents a user,
+// so a link built from one names a card that does not exist.
+function actorIsNotACard(what: string): string {
+  return `${what} takes a card identity, and \`actor()\` is the caller's user id rather than a card — declare the person as a \`params\` member typed \`linkTo(…)\` and link that`;
 }
 
 // The invocation target's stored source document — never a live card
@@ -234,7 +249,7 @@ export function realmConfig<Key extends string>(
 }
 
 // A link identity: the URL of a saved card, or the reference that resolves to
-// one — `card(params('activity'))`, `card(actor('id'))`.
+// one — `card(params('activity'))`, `card(instance('id'))`.
 export function card(reference: CardReference['value']): CardReference {
   if (typeof reference === 'string') {
     if (reference.length === 0) {
@@ -244,6 +259,9 @@ export function card(reference: CardReference['value']): CardReference {
   }
   if (!isReferenceMarker(reference)) {
     throw new Error(`card() takes a card URL or a typed reference to one`);
+  }
+  if ((reference as { $ref?: unknown }).$ref === 'actor') {
+    throw new Error(actorIsNotACard('card()'));
   }
   return { $ref: 'card', value: reference };
 }
@@ -336,7 +354,7 @@ export interface AssertClause {
   readonly unique: string;
   // What decides whether an item is already there. On a collection of links
   // this is compared against the linked card's `id`, so it must be an
-  // identity — a card URL, a param declared with `linkTo(…)`, or `actor()` /
+  // identity — a card URL, a param declared with `linkTo(…)`, or
   // `instance()`. On a collection of contained values the item is compared
   // whole, so a partial object never matches an item that has any other field
   // set: key such a check on the value the collection actually holds.
@@ -1524,7 +1542,17 @@ function assertValidReference(
       }
       return;
     }
-    case 'actor':
+    case 'actor': {
+      // Named before the generic key check, so a key gets the reason rather
+      // than a list of the one key that is allowed.
+      if (reference.key !== undefined) {
+        throw new Error(
+          `${label}: the actor reference at \`${path}\` carries a key; actor() is the caller's user id and has no members to read`,
+        );
+      }
+      assertOnlyKeys(label, path, reference, ['$ref']);
+      return;
+    }
     case 'instance': {
       assertOnlyKeys(label, path, reference, ['$ref', 'key']);
       if (
@@ -1532,7 +1560,7 @@ function assertValidReference(
         (typeof reference.key !== 'string' || reference.key.length === 0)
       ) {
         throw new Error(
-          `${label}: the ${reference.$ref} reference at \`${path}\` must name a member, or none at all`,
+          `${label}: the instance reference at \`${path}\` must name a member, or none at all`,
         );
       }
       return;
@@ -1566,6 +1594,11 @@ function assertValidReference(
       if (!isReferenceMarker(value)) {
         throw new Error(
           `${label}: the card reference at \`${path}\` must carry a card URL or a reference to one`,
+        );
+      }
+      if ((value as { $ref?: unknown }).$ref === 'actor') {
+        throw new Error(
+          `${label}: ${actorIsNotACard(`the card reference at \`${path}\``)}`,
         );
       }
       ancestors.add(node);
