@@ -3469,10 +3469,11 @@ export class Realm {
     await this.trackOwnWrite(path);
     // The content is assembled beside the file before it is renamed onto it,
     // so a watching realm sees that file appear and vanish. Both are this
-    // realm's own doing, and tracking them is what keeps them out of the
-    // change events it broadcasts — the ignore rule that keeps the same path
-    // out of the index is the backstop for the write that does not get this
-    // far.
+    // realm's own doing, so both are tracked — but tracking is keyed by what
+    // the path holds when the key is seeded, and a file that does not exist
+    // yet seeds `added` and `removed` while the assembly is also a write. What
+    // holds regardless is that the path is ignored, so nothing the watcher
+    // reports about it reaches the index.
     let staging = partialWritePath(path);
     await this.trackOwnWrite(staging);
     await this.trackOwnWrite(staging, { isDelete: true });
