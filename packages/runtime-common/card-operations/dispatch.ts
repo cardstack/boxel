@@ -272,6 +272,17 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
   // for, though, and both writes here work on them: an `update` replaces the
   // content wholesale and an `appendLine` adds one line to the end of a text
   // file without reading what is already there.
+  //
+  // Reaching either of those writes depends on a target being classified a
+  // file, and `defKindFor` classifies an instance target by its extension —
+  // which does not name every stored file. A `.log`, a `.css`, a `.yml` holds
+  // bytes and serves them, and each is classified `card-def` here, so a
+  // file-only behavior on one is refused before its executor runs. `read`
+  // survives that because a card carries a read too, and its executor falls
+  // back to the file-metadata document for exactly these paths. A write has no
+  // such overlap to fall back through, so the discrimination has to move to
+  // where it can be made: the executor, which knows whether the path holds a
+  // card's `.json` or plain bytes and already has to judge the content type.
   'file-def': { read: true, readSource: true, update: true, appendLine: true },
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.

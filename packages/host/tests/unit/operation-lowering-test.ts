@@ -1205,7 +1205,7 @@ module('Unit | operation lowering', function (hooks) {
         'file definition',
       ],
       ['transform', Attachment as unknown as typeof BaseDef, 'file definition'],
-      ['read', Caption as unknown as typeof BaseDef, 'field definition'],
+      ['create', Caption as unknown as typeof BaseDef, 'field definition'],
     ];
     for (let [base, def, kindLabel] of refused) {
       let result = await lowerOperationDeclarations(
@@ -1238,6 +1238,35 @@ module('Unit | operation lowering', function (hooks) {
         'the operation is stored flagged, so invoking it reports the refusal rather than reading as unknown',
       );
     }
+
+    // A def extending `BaseDef` directly carries the two reads, and the
+    // decorator lets it declare one — but the definition cache records it
+    // under the same kind a field gets, since the kind is derived from the
+    // class and neither is a card or a file. Lowering reads only the entry, so
+    // refusing a field's `read` here would refuse this one too and leave a def
+    // that can declare a read and never invoke it.
+    class Addressable extends api.BaseDef {
+      static displayName = 'Addressable';
+    }
+    shim({ Addressable });
+    assert.strictEqual(
+      buildDefinition(Addressable).type,
+      'field-def',
+      'the two land under one recorded kind',
+    );
+    let addressable = await lowerOperationDeclarations(
+      { readRedacted: { base: 'read', output: { name: true } } } as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      {
+        definition: buildDefinition(Addressable),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(addressable), [], 'so the read lowers');
+    assert.notOk(addressable.operations.readRedacted.invalid);
   });
 
   test('an append names a containsMany field the type actually has', async function (assert) {

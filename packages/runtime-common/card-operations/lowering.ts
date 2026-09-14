@@ -131,10 +131,17 @@ const PLURAL_KINDS = ['containsMany', 'linksToMany'];
 // the realm answers it without reading a definition, so nothing may be built
 // on it — the refusal for that is its own, below.
 //
-// The kind comes off the definition entry, which cannot tell a bare `BaseDef`
-// subclass from a field: both are recorded `field-def`. Such a def carries the
-// two reads, and it is the authoring decorator — which has the class — that
-// lets one declare a `read`.
+// `field-def` is two families rather than one. The recorded kind is derived
+// from the class, and every addressable def that is neither a card nor a file
+// lands there alongside the fields: a def extending `BaseDef` directly is
+// recorded `field-def` too, and that one carries the two reads. Reading only
+// the entry, lowering cannot tell them apart, so it admits what either may
+// declare — which is `read`, and nothing a field could put to use. Refusing a
+// field its `read` is the authoring decorator's, which has the class in hand;
+// refusing to dispatch one is dispatch's, which carries no operations at all
+// for a field. Narrowing it here would instead flag a declaration the
+// decorator accepted, leaving a def that can declare a `read` and never
+// invoke it.
 const DECLARABLE_BASES: Record<
   Definition['type'],
   readonly BaseOperationName[]
@@ -149,7 +156,7 @@ const DECLARABLE_BASES: Record<
     'appendContainsMany',
   ],
   'file-def': ['read', 'update', 'appendLine'],
-  'field-def': [],
+  'field-def': ['read'],
 };
 
 const DEF_KIND_LABELS: Record<Definition['type'], string> = {
