@@ -6,6 +6,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import {
   markdownToHtml,
+  splitCodePatchFencesGluedToProse,
   widenFencesAroundCodePatches,
 } from '@cardstack/runtime-common/marked-sync';
 
@@ -233,7 +234,11 @@ export class Message implements RoomMessageInterface {
       return this.body;
     }
     return markdownToHtml(
-      widenFencesAroundCodePatches(escapeHtmlOutsideCodeBlocks(this.body)!),
+      widenFencesAroundCodePatches(
+        splitCodePatchFencesGluedToProse(
+          escapeHtmlOutsideCodeBlocks(this.body)!,
+        ),
+      ),
       {
         sanitize: false,
         escapeHtmlInCodeBlocks: true,
