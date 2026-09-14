@@ -68,6 +68,21 @@ export interface ErrorEntry {
   cardType?: string;
 }
 
+// HTTP statuses a load balancer or proxy returns when it, not the upstream,
+// is the thing that failed: the upstream was unreachable, timed out, or
+// answered unintelligibly. A render error carrying one of these describes the
+// network between the render and the realm, not the card — the render's own
+// fetch of the card document went through the public balancer and came back a
+// gateway error. The classifier that decides to withhold such a failure keys
+// on exactly this set, and the render's fetch guard stamps a body it could
+// not read as a card document (an HTML error page where JSON was asked for,
+// or a connection reset) with `502` so it lands here too.
+export const GATEWAY_ERROR_STATUSES = [502, 503, 504];
+
+export function isGatewayFailureStatus(status: unknown): boolean {
+  return typeof status === 'number' && GATEWAY_ERROR_STATUSES.includes(status);
+}
+
 // Postgres `jsonb` containers store child offsets in 28 bits, so a
 // single jsonb array's elements must total < 256 MiB — a format-level
 // constraint baked into jsonb, not a column setting we can raise.

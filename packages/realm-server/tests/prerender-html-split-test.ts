@@ -752,6 +752,104 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    // The gateway-failure twin of the stale-shell suppression above. The
+    // write-side mechanism is identical — it reads `diagnostics.gatewayFailure`
+    // and withholds on this channel as well as `boxel_index`, because
+    // `effectiveHasError()` reads both — so these cases mirror the stale-shell
+    // ones, plus one for the re-drive counter that the reconcile sweep keys on.
+    module('withholding a gateway failure', function () {
+      async function writeError(
+        generation: number,
+        url: string,
+        opts: { diagnostics?: Diagnostics; message?: string } = {},
+      ) {
+        let batch = await makeBatch(generation);
+        await batch.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: {
+            message: opts.message ?? 'Gateway or network failure',
+            status: 502,
+            additionalErrors: null,
+          },
+          ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
+        } as any);
+        await batch.done();
+      }
+
+      test('a covered verdict keeps the published render and writes no error', async function (assert) {
+        let url = `${testRealm}gateway-withheld.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        await writeError(2, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'no error doc, so `effectiveHasError` does not see a current render error',
+        );
+        assert.strictEqual(
+          row.isolated_html,
+          '<div>good</div>',
+          'and the last good render is still what readers get',
+        );
+        assert.strictEqual(
+          (row.diagnostics as Diagnostics | null)?.gatewayFailureRenders,
+          1,
+          'the withheld row carries the re-drive counter the reconcile sweep reads',
+        );
+      });
+
+      test('a verdict naming another row does not withhold this one', async function (assert) {
+        let url = `${testRealm}gateway-other-row.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        // The card render hit a gateway failure; this instance row failed for
+        // its own reasons and must stay visible.
+        await writeError(2, url, {
+          diagnostics: { gatewayFailure: ['file'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the error is published, because the verdict did not cover this row',
+        );
+      });
+
+      test('an unmarked failure is published as before', async function (assert) {
+        let url = `${testRealm}gateway-unmarked.json`;
+        await writeInstance(1, url, '<div>good</div>');
+        await writeError(2, url);
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'absence of a verdict means no verdict, never "withhold"',
+        );
+      });
+
+      test('a first render has nothing to keep, so its failure surfaces', async function (assert) {
+        let url = `${testRealm}gateway-brand-new.json`;
+        // No prior good render at all — withholding here would leave the row
+        // blank rather than protecting anything.
+        await writeError(1, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the failure has to surface somewhere when there is no good content',
+        );
+      });
+    });
+
     test('writes rendered rows and swaps them under the carried generation', async function (assert) {
       let url = `${testRealm}1.json`;
       await writeInstance(5, url, '<h1>v5</h1>');

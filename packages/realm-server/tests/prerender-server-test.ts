@@ -1416,6 +1416,116 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The gateway-failure verdict, on the same write-site contract as the
+      // stale-shell one but reached a different way: no shell reasoning, just
+      // the error's status. A gateway status never comes from a card render, so
+      // its presence is the whole conclusion — this is CS-12966, where a render
+      // fetched the card's document through the balancer, got a 502, and had
+      // that latched as the card's verdict.
+      test('a gateway-status card error marks the failure unattributable', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: { message: 'Gateway or network failure', status: 502 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-502`,
+          authFor(),
+        );
+        assert.strictEqual(res.status, 201, 'the failure is still returned');
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          'marked, and scoped to the row whose fetch hit the balancer',
+        );
+      });
+
+      test('a gateway failure withholds only its row, not one that failed for its own reasons', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: { message: 'Gateway or network failure', status: 503 },
+              },
+            },
+            fileExtract: {
+              error: {
+                error: { message: 'Unexpected end of JSON input', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-and-file`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own 500 stays visible",
+        );
+      });
+
+      test('a genuine card error carrying no gateway status is not marked', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: { message: 'the card is genuinely broken', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}genuine-500`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 500 is the card, not the network — the break stays visible',
+        );
+      });
+
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
