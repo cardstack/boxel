@@ -13,6 +13,7 @@ import {
   clientDisconnectSignal,
   handleStreamingRequest,
   isClientDisconnectError,
+  upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
 import * as Sentry from '@sentry/node';
 
@@ -319,13 +320,17 @@ export default function handleRequestForward({
           return;
         }
 
+        // Cancelling the upstream call is what ends the critical section:
+        // without it the lock is held until a response the client will never
+        // read finally arrives. The signal is released once that response
+        // exists, so reading it and recording its cost cannot be cancelled —
+        // by then the provider has already generated and billed for the
+        // tokens, and abandoning the read only loses the charge.
+        const upstreamCall = upstreamCallSignal(clientGone);
         const fetchOptions: RequestInit = {
           method: json.method,
           headers,
-          // Cancelling the upstream call is what ends the critical section:
-          // without it the lock is held until a response the client will
-          // never read finally arrives.
-          signal: clientGone,
+          signal: upstreamCall.signal,
         };
 
         // Only add body for non-GET requests or when requestBody is provided
@@ -340,6 +345,7 @@ export default function handleRequestForward({
             at processTicksAndRejections (node:internal/process/task_queues:105:5)
         */
         const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
+        upstreamCall.release();
 
         const responseData = await externalResponse.json();
 

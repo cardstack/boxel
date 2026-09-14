@@ -34,6 +34,43 @@ export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
   return controller.signal;
 }
 
+/**
+ * A signal that follows `clientGone` only until the upstream answers.
+ *
+ * Cancelling the upstream call is the whole point while it is still running:
+ * it ends the critical section instead of holding the cost lock for a response
+ * nobody will read. Once the upstream has answered, the calculus inverts. The
+ * provider has generated the tokens and billed us for them, so what is left —
+ * reading the body and recording the usage cost — is how that charge gets
+ * attributed. Cancelling there does not save anything; it discards the record
+ * of something already paid for.
+ *
+ * The window is not academic. A chat completion's body is a few KB, but this
+ * endpoint is also the route for image generation, whose base64 payload runs
+ * to megabytes: seconds of reading during which a closed tab would lose the
+ * charge for the most expensive call the proxy serves.
+ *
+ * `release()` is called once the response is in hand. Streaming callers must
+ * not use this — there the body *is* the generation, so the signal has to stay
+ * live for the whole read.
+ */
+export function upstreamCallSignal(clientGone: AbortSignal): {
+  signal: AbortSignal;
+  release: () => void;
+} {
+  let controller = new AbortController();
+  let mirror = () => controller.abort(clientGone.reason);
+  if (clientGone.aborted) {
+    mirror();
+  } else {
+    clientGone.addEventListener('abort', mirror, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    release: () => clientGone.removeEventListener('abort', mirror),
+  };
+}
+
 // A `cause` chain is walked rather than inspected one level deep because
 // `fetch` surfaces an abort reason wrapped rather than rethrown. The bound
 // stops a malformed or self-referential chain from spinning.

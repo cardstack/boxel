@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { isClientDisconnectError } from '../lib/proxy-forward.ts';
+import {
+  isClientDisconnectError,
+  upstreamCallSignal,
+} from '../lib/proxy-forward.ts';
 
 // The reason `clientDisconnectSignal` aborts with. Constructed the same way
 // here so the identity check has something real to match.
@@ -14,6 +17,45 @@ function disconnectedSignal(): AbortSignal {
 }
 
 module(basename(import.meta.filename), function () {
+  module('upstreamCallSignal', function () {
+    test('cancels while the upstream is still answering', function (assert) {
+      let clientGone = new AbortController();
+      let call = upstreamCallSignal(clientGone.signal);
+      assert.false(call.signal.aborted, 'live while the call is in flight');
+
+      clientGone.abort(new Error('client left'));
+      assert.true(
+        call.signal.aborted,
+        'a disconnect mid-call cancels the upstream and frees the lock',
+      );
+    });
+
+    test('stops cancelling once the response is in hand', function (assert) {
+      let clientGone = new AbortController();
+      let call = upstreamCallSignal(clientGone.signal);
+      // The upstream answered: the provider has generated and billed for the
+      // tokens, so reading the body and recording the cost must not be
+      // cancellable — abandoning them loses the charge rather than saving it.
+      call.release();
+
+      clientGone.abort(new Error('client left'));
+      assert.false(
+        call.signal.aborted,
+        'the body read and cost save survive a disconnect',
+      );
+    });
+
+    test('a client already gone cancels immediately', function (assert) {
+      let clientGone = new AbortController();
+      clientGone.abort(new Error('client left before the call started'));
+      let call = upstreamCallSignal(clientGone.signal);
+      assert.true(
+        call.signal.aborted,
+        'no upstream call is started for a client that has already left',
+      );
+    });
+  });
+
   module('isClientDisconnectError', function () {
     test('the abort reason itself is a disconnect', function (assert) {
       let signal = disconnectedSignal();

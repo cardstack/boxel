@@ -8,6 +8,7 @@ import {
   clientDisconnectSignal,
   handleStreamingRequest,
   isClientDisconnectError,
+  upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
 import {
   fetchRequestFromContext,
@@ -149,12 +150,17 @@ export default function handleOpenRouterPassthrough({
           return;
         }
 
+        // Released once the response exists: cancelling after that would
+        // discard the charge for tokens the provider has already generated
+        // and billed us for, rather than saving anything.
+        const upstreamCall = upstreamCallSignal(clientGone);
         const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
           method: 'POST',
           headers,
           body: finalBody,
-          signal: clientGone,
+          signal: upstreamCall.signal,
         });
+        upstreamCall.release();
         const responseData = await externalResponse.json();
 
         await destinationConfig.creditStrategy.saveUsageCost(

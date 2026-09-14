@@ -19,7 +19,8 @@ export default class SendRequestViaProxyTool extends HostBaseTool<
     'indefinitely. Model calls through this proxy commonly take tens of ' +
     'seconds and have been observed beyond 100s, so a budget under two ' +
     'minutes will abandon answers that were coming. A call that times out ' +
-    'is neither answered nor billed.';
+    'returns no answer, and must not be assumed to have had no effect ' +
+    'upstream.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
