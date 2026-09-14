@@ -222,6 +222,14 @@
    PRIMARY KEY ( realm_url, username ) 
 );
 
+ CREATE TABLE IF NOT EXISTS scoped_css (
+   realm_url TEXT NOT NULL,
+   hash TEXT NOT NULL,
+   css TEXT NOT NULL,
+   created_at NOT NULL,
+   PRIMARY KEY ( realm_url, hash ) 
+);
+
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    source_realm_url TEXT NOT NULL,

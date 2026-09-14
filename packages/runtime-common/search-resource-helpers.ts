@@ -26,9 +26,11 @@ export function parseUsedRenderType(
   };
 }
 
-// The scoped-CSS hrefs a row depends on, in dependency order. A scoped-CSS
-// "URL" base64-embeds the whole stylesheet in its filename, so the href is the
-// dep string verbatim — the host module-loads it as-is.
+// The scoped-CSS hrefs a row depends on, in dependency order. The href is the
+// dep string verbatim — the host module-loads it as-is: an inline-form href
+// base64-embeds the whole stylesheet in its filename (answered locally with no
+// network hop), while a hashed-form href carries a content hash the realm
+// serves by `scoped_css` table lookup.
 export function scopedCssHrefsFromDeps(
   deps: string[] | null | undefined,
 ): string[] {

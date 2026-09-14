@@ -56,6 +56,13 @@ import {
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { md5 } from 'super-fast-md5';
+import {
+  isScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  encodeHashedScopedCSSRequest,
+} from './scoped-css.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -278,6 +285,9 @@ const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // CSS content hashes this batch has already interned into the `scoped_css`
+  // table, so a stylesheet shared by many rows in one pass is written once.
+  #internedScopedCSSHashes = new Set<string>();
   #nodeResolvedInvalidations: string[] | undefined;
   // URLs already written to boxel_index_working by an earlier attempt
   // of *this same job*, with the last_modified value the previous
@@ -1431,13 +1441,18 @@ export class Batch {
     // form. Normalizing here keeps one canonical form on disk; dependency
     // invalidation already searches both the real and prefix forms.
     if (preparedEntry.deps) {
-      preparedEntry.deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.deps,
+      preparedEntry.deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.deps),
       );
     }
     if (preparedEntry.last_known_good_deps) {
-      preparedEntry.last_known_good_deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.last_known_good_deps,
+      preparedEntry.last_known_good_deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.last_known_good_deps),
+      );
+    }
+    if (preparedEntry.error_doc?.deps) {
+      preparedEntry.error_doc.deps = await this.internScopedCSSDeps(
+        preparedEntry.error_doc.deps,
       );
     }
 
@@ -1650,6 +1665,17 @@ export class Batch {
           `Unsupported prerendered-html entry type: ${(entry as { type: string }).type}`,
         );
     }
+    for (let key of ['deps', 'last_known_good_deps'] as const) {
+      if (Array.isArray(payload[key])) {
+        payload[key] = await this.internScopedCSSDeps(payload[key] as string[]);
+      }
+    }
+    let payloadErrorDoc = payload.error_doc as SerializedError | null;
+    if (payloadErrorDoc?.deps) {
+      payloadErrorDoc.deps = await this.internScopedCSSDeps(
+        payloadErrorDoc.deps,
+      );
+    }
     let preparedEntry = {
       url: url.href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
@@ -1832,6 +1858,66 @@ export class Batch {
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
+  }
+
+  // Drop this realm's `scoped_css` rows that no live production row
+  // references any more. Only sound after a from-scratch pass has promoted:
+  // production `boxel_index` + `prerendered_html` then hold the realm's
+  // complete reference set, so a hash absent from every live row's deps /
+  // last_known_good_deps has no remaining reader. (An incremental pass sees
+  // only its invalidation slice and must not sweep.) Rows another realm
+  // interned for the same stylesheet are untouched — each realm ref-counts
+  // its own copy. Returns the number of rows removed.
+  async sweepUnreferencedScopedCSS(): Promise<number> {
+    let referenced = new Set<string>();
+    for (let table of ['boxel_index', 'prerendered_html'] as const) {
+      for (let column of ['deps', 'last_known_good_deps'] as const) {
+        let rows = (await this.#query([
+          dbExpression({
+            pg: `SELECT DISTINCT dep_entry.value AS dep FROM ${table} AS i CROSS JOIN LATERAL jsonb_array_elements_text(i.${column}) AS dep_entry(value) WHERE`,
+            sqlite: `SELECT DISTINCT dep_entry.value AS dep FROM ${table} AS i CROSS JOIN json_each(i.${column}) AS dep_entry WHERE`,
+          }),
+          ...every([
+            ['i.realm_url =', param(this.realmURL.href)],
+            [`i.${column} IS NOT NULL`],
+            any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+            [`dep_entry.value LIKE '%.glimmer-scoped.css'`],
+          ]),
+        ] as Expression)) as unknown as { dep: string }[];
+        for (let { dep } of rows) {
+          if (isHashedScopedCSSRequest(dep)) {
+            let parsed = parseScopedCSSRequest(dep);
+            if (parsed.form === 'hashed') {
+              referenced.add(parsed.cssHash);
+            }
+          }
+        }
+      }
+    }
+    let stored = (await this.#query([
+      `SELECT hash FROM scoped_css WHERE realm_url =`,
+      param(this.realmURL.href),
+    ] as Expression)) as unknown as { hash: string }[];
+    let unreferenced = stored
+      .map(({ hash }) => hash)
+      .filter((hash) => !referenced.has(hash));
+    const hashesPerDelete = 100;
+    for (let i = 0; i < unreferenced.length; i += hashesPerDelete) {
+      let slice = unreferenced.slice(i, i + hashesPerDelete);
+      await this.#query([
+        `DELETE FROM scoped_css WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'hash IN',
+            ...addExplicitParens(
+              separatedByCommas(slice.map((hash) => [param(hash)])),
+            ),
+          ],
+        ]),
+      ] as Expression);
+    }
+    return unreferenced.length;
   }
 
   // Re-stamp the current committed generation's realm_meta value at this
@@ -2988,6 +3074,65 @@ export class Batch {
     } catch (_err) {
       return dep;
     }
+  }
+
+  // Rewrite inline scoped-CSS deps (the `glimmer-scoped-css` form that
+  // base64-embeds the entire stylesheet in the URL) to their hashed form,
+  // interning the CSS bytes into the content-addressed `scoped_css` table.
+  // The stylesheet text was by far the largest share of `deps` storage; the
+  // hashed form keeps the dependency identity (and the realm's ability to
+  // serve the stylesheet — by hash lookup) without carrying the bytes in
+  // every referencing row. Non-scoped-CSS deps, already-hashed deps, and
+  // unparseable entries pass through verbatim.
+  private async internScopedCSSDeps(deps: string[]): Promise<string[]> {
+    let toInsert: { hash: string; css: string }[] = [];
+    let rewritten = deps.map((dep) => {
+      if (
+        typeof dep !== 'string' ||
+        !isScopedCSSRequest(dep) ||
+        isHashedScopedCSSRequest(dep)
+      ) {
+        return dep;
+      }
+      let parsed: ReturnType<typeof parseScopedCSSRequest>;
+      try {
+        parsed = parseScopedCSSRequest(dep);
+      } catch (_err) {
+        return dep;
+      }
+      if (parsed.form !== 'inline') {
+        return dep;
+      }
+      let hash = md5(parsed.css);
+      if (!this.#internedScopedCSSHashes.has(hash)) {
+        this.#internedScopedCSSHashes.add(hash);
+        toInsert.push({ hash, css: parsed.css });
+      }
+      return encodeHashedScopedCSSRequest(parsed.fromFile, hash);
+    });
+    // Modest chunks: each value carries a whole stylesheet, and a from-scratch
+    // pass interns at most one row per distinct stylesheet in the realm.
+    const rowsPerUpsert = 20;
+    for (let i = 0; i < toInsert.length; i += rowsPerUpsert) {
+      let slice = toInsert.slice(i, i + rowsPerUpsert);
+      let expressions = slice.map(({ hash, css }) =>
+        asExpressions({
+          realm_url: this.realmURL.href,
+          hash,
+          css,
+          created_at: Date.now(),
+        }),
+      );
+      await this.#query([
+        ...upsertMultipleRows(
+          'scoped_css',
+          'scoped_css_pkey',
+          expressions[0].nameExpressions,
+          expressions.map((e) => e.valueExpressions),
+        ),
+      ]);
+    }
+    return rewritten;
   }
 
   private updateIds(obj: any, fromRealm: URL) {

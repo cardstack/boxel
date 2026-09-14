@@ -119,6 +119,9 @@ import {
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  scopedCSSInjectorSource,
   authorizationMiddleware,
   internalKeyFor,
   unixTime,
@@ -3852,6 +3855,18 @@ export class Realm {
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
+      // Hashed scoped-CSS serving also dispatches on the path shape rather
+      // than the router table: the request is a module load (`loader.import`
+      // of a `css` resource's href from search results), whose Accept header
+      // matches no supported mime type. The URL carries only a content hash —
+      // the stylesheet bytes live in the `scoped_css` table — so unlike the
+      // inline form (which `maybeHandleScopedCSSRequest` answers locally with
+      // no network hop) this form must be answered here. Placed after
+      // checkPermission so it inherits realm-read auth; GET only for the same
+      // HEAD-oracle reason as screenshot serving above.
+      if (request.method === 'GET' && isHashedScopedCSSRequest(localPath)) {
+        return await this.serveHashedScopedCSS(request, requestContext);
+      }
       // The GET dispatch above claims the whole `_screenshot/` subtree, so a
       // realm file stored under it could never be read back — it would
       // index, list, and answer every GET as an uncaptured miss. Refuse
@@ -4886,6 +4901,43 @@ export class Realm {
       parsed.spec,
       perf,
     );
+  }
+
+  // Serve a hashed scoped-CSS module request
+  // (`<fromFile>.md5-<hash>.glimmer-scoped.css`): look the stylesheet up by
+  // content hash in the `scoped_css` table and answer with the same
+  // style-injecting JS module the inline form produces locally. The lookup is
+  // by hash alone — any realm's interned copy of the same content-addressed
+  // bytes qualifies, which keeps deps on another realm's modules servable.
+  // The body is a pure function of the URL, so it caches as immutable.
+  private async serveHashedScopedCSS(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<ResponseWithNodeStream> {
+    let pathname = new URL(request.url).pathname;
+    let parsed = parseScopedCSSRequest(pathname);
+    if (parsed.form !== 'hashed') {
+      return notFound(request, requestContext);
+    }
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT css FROM scoped_css WHERE hash =`,
+      param(parsed.cssHash),
+      `LIMIT 1`,
+    ])) as { css: string }[];
+    if (rows.length === 0 || typeof rows[0].css !== 'string') {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: scopedCSSInjectorSource(pathname, rows[0].css),
+      init: {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          'cache-control': 'public, max-age=31536000, immutable',
+        },
+      },
+      requestContext,
+    });
   }
 
   // The stage clocks `serveScreenshot` accumulates before the hit/miss
