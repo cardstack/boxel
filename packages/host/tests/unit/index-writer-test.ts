@@ -145,6 +145,78 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  // The sweep's only call site (IndexRunner.fromScratch finalization)
+  // degrades any error to a log warning, so this direct test — the SQLite
+  // twin of the Postgres one in realm-server's indexing-test — is what turns
+  // a broken scan or delete red.
+  test('sweepUnreferencedScopedCSS drops rows no live row references, scoped to the batch realm', async function (assert) {
+    let liveHash = '1'.repeat(32);
+    let tombstonedHash = '2'.repeat(32);
+    let orphanHash = '3'.repeat(32);
+    let foreignHash = '4'.repeat(32);
+    let hashedDep = (hash: string) =>
+      `${testRealmURL}style-source.gts.md5-${hash}.glimmer-scoped.css`;
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_url: testRealmURL,
+          deps: [hashedDep(liveHash)],
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          realm_url: testRealmURL,
+          is_deleted: true,
+          deps: [hashedDep(tombstonedHash)],
+        },
+        {
+          url: `${testRealmURL2}A.json`,
+          realm_url: testRealmURL2,
+          deps: [hashedDep(foreignHash)],
+        },
+      ],
+    );
+    for (let [realmUrl, hash] of [
+      [testRealmURL, liveHash],
+      [testRealmURL, tombstonedHash],
+      [testRealmURL, orphanHash],
+      [testRealmURL2, foreignHash],
+    ]) {
+      await adapter.execute(
+        `INSERT INTO scoped_css (realm_url, hash, css, created_at)
+         VALUES ('${realmUrl}', '${hash}', '.x {}', ${Date.now()})`,
+      );
+    }
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    let swept = await batch.sweepUnreferencedScopedCSS();
+
+    assert.strictEqual(
+      swept,
+      2,
+      'the orphan and the tombstone-only rows were swept',
+    );
+    let remaining = (await adapter.execute(
+      `SELECT realm_url, hash FROM scoped_css ORDER BY hash`,
+    )) as { realm_url: string; hash: string }[];
+    assert.deepEqual(
+      remaining,
+      [
+        { realm_url: testRealmURL, hash: liveHash },
+        { realm_url: testRealmURL2, hash: foreignHash },
+      ],
+      "the live-referenced row and the other realm's row survived",
+    );
+  });
+
   test('can perform invalidations for a instance entry', async function (assert) {
     await setupIndex(
       adapter,

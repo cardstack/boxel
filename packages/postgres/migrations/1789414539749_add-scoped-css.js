@@ -9,10 +9,13 @@ exports.shorthands = undefined;
 //
 // `realm_url` is the realm whose index rows reference the stylesheet — the
 // *consuming* realm, not necessarily the realm the styled module lives in — so
-// each realm ref-counts its own rows: a reindex can drop the realm's rows that
-// its live deps no longer reference, and deleting a realm drops all of its
-// rows. Serving looks up by `hash` alone (any realm's copy of the same
-// content-addressed bytes qualifies), which keeps cross-realm deps servable.
+// each realm ref-counts its own rows: a from-scratch reindex sweeps the
+// realm's rows its live deps no longer reference
+// (`Batch.sweepUnreferencedScopedCSS`), and realm deletion removes them
+// (`removeRealmDatabaseArtifacts`). The realm's own `_scoped-css/` serving
+// route looks up by (realm_url, hash) — the consuming realm interned every
+// stylesheet its rows reference, so cross-realm deps stay servable without
+// consulting other realms' rows.
 //
 // `created_at` is a unix-ms bigint like `prerendered_html.rendered_at` (pg
 // returns them as JS strings).
@@ -27,7 +30,9 @@ exports.up = (pgm) => {
   pgm.addConstraint('scoped_css', 'scoped_css_pkey', {
     primaryKey: ['realm_url', 'hash'],
   });
-  // Serving resolves a hashed request by hash alone, across realms.
+  // The published-site pipeline (`resolveScopedCSSFromDeps`) resolves a
+  // page's hashed deps by hash alone; realm serving goes through the primary
+  // key.
   pgm.createIndex('scoped_css', ['hash']);
 };
 

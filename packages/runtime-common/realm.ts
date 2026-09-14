@@ -4903,13 +4903,16 @@ export class Realm {
     );
   }
 
-  // Serve a hashed scoped-CSS module request
-  // (`<fromFile>.md5-<hash>.glimmer-scoped.css`): look the stylesheet up by
-  // content hash in the `scoped_css` table and answer with the same
-  // style-injecting JS module the inline form produces locally. The lookup is
-  // by hash alone — any realm's interned copy of the same content-addressed
-  // bytes qualifies, which keeps deps on another realm's modules servable.
-  // The body is a pure function of the URL, so it caches as immutable.
+  // Serve a hashed scoped-CSS module request (the `_scoped-css/` serving
+  // space `scopedCSSServingHref` roots under this realm): look the stylesheet
+  // up by content hash among THIS realm's interned rows and answer with the
+  // same style-injecting JS module the inline form produces locally. The
+  // realm-scoped lookup is always satisfiable — indexing interned every
+  // stylesheet this realm's rows reference under this realm's own
+  // `realm_url` — and it keeps a caller from probing whether some other
+  // realm's stylesheet bytes exist by guessing hashes. The body is a pure
+  // function of the URL, so it caches as immutable; visibility follows realm
+  // readability like the sibling capture-serving route.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
@@ -4922,6 +4925,8 @@ export class Realm {
     let rows = (await query(this.#dbAdapter, [
       `SELECT css FROM scoped_css WHERE hash =`,
       param(parsed.cssHash),
+      `AND realm_url =`,
+      param(this.url),
       `LIMIT 1`,
     ])) as { css: string }[];
     if (rows.length === 0 || typeof rows[0].css !== 'string') {
@@ -4933,7 +4938,7 @@ export class Realm {
         status: 200,
         headers: {
           'content-type': 'text/javascript',
-          'cache-control': 'public, max-age=31536000, immutable',
+          'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=31536000, immutable`,
         },
       },
       requestContext,

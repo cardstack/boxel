@@ -14,7 +14,12 @@ import jsEscapeString from 'js-string-escape';
 // - hashed: `<fromFile>.md5-<32 hex>.glimmer-scoped.css` — the form the index
 //   writer persists into `deps` (see `scoped_css` table). The URL carries only
 //   a content hash; the CSS bytes live in the `scoped_css` table and the realm
-//   serves the request by hash lookup.
+//   serves the request by hash lookup. A hashed dep keeps `fromFile` as its
+//   base so module-URL-anchored dependency invalidation still matches it, but
+//   it is NOT the URL clients fetch: only the realm whose indexing interned
+//   the stylesheet is guaranteed to hold the bytes, so responses rewrite
+//   hashed deps to that realm's `_scoped-css/` serving space (see
+//   `scopedCSSServingHref`).
 const SCOPED_CSS_PATTERN = /^(.*)\.([^.]*)\.glimmer-scoped.css$/;
 const HASHED_SCOPED_CSS_PATTERN =
   /^(.*)\.md5-([0-9a-f]{32})\.glimmer-scoped.css$/;
@@ -32,6 +37,36 @@ export function encodeHashedScopedCSSRequest(
   cssHash: string,
 ): string {
   return `${fromFile}.md5-${cssHash}.glimmer-scoped.css`;
+}
+
+// Path prefix under a realm where hashed scoped-CSS requests are served.
+// Purely a namespace for serving URLs — the dispatch itself matches the
+// hashed filename shape, not this prefix.
+export const SCOPED_CSS_SERVING_PREFIX = '_scoped-css/';
+
+// The URL clients load a hashed scoped-CSS dep from: rooted under
+// `servingRealmURL` — the realm whose index row carries the dep. Interning is
+// per-referencing-realm, so that realm's database is the one guaranteed to
+// hold the stylesheet bytes; the module named by `fromFile` may live on a
+// realm from a different server or database entirely (a base realm booted
+// with indexing skipped has an empty `scoped_css` table). Only `fromFile`'s
+// basename is kept: enough to keep the injector-registry pathname key
+// distinct per module while letting the URL live under the serving realm.
+// Non-hashed deps (the inline form loads locally with no fetch) pass through
+// unchanged.
+export function scopedCSSServingHref(
+  dep: string,
+  servingRealmURL: string,
+): string {
+  let hashed = HASHED_SCOPED_CSS_PATTERN.exec(dep);
+  if (!hashed) {
+    return dep;
+  }
+  let basename = hashed[1].split('/').pop() || 'style';
+  return `${servingRealmURL}${SCOPED_CSS_SERVING_PREFIX}${encodeHashedScopedCSSRequest(
+    basename,
+    hashed[2],
+  )}`;
 }
 
 export type ScopedCSSRequest =

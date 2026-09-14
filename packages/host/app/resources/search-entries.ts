@@ -766,16 +766,26 @@ export class SearchEntriesResource extends Resource<Args> {
     return fields === undefined ? undefined : fields.join(',');
   }
 
-  // The `css` resources base64-embed their whole stylesheet in the href; the
-  // loader import is what registers each scoped stylesheet with the document,
-  // so entries are paint-ready when exposed.
+  // The loader import is what registers each scoped stylesheet with the
+  // document, so entries are paint-ready when exposed. An inline-form href
+  // resolves locally, but a hashed-form href is a network fetch that can fail
+  // (a post-sweep orphan, an unreachable realm) — a missing stylesheet
+  // degrades that entry's styling, never the result list.
   private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
       .map((resource) => resource.attributes.href);
-    await Promise.all(
+    let results = await Promise.allSettled(
       hrefs.map((href) => this.loaderService.loader.import(href)),
     );
+    for (let [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        this.#log.warn(
+          `could not load scoped stylesheet ${hrefs[i]}; results render unstyled`,
+          result.reason,
+        );
+      }
+    }
   }
 
   private buildEntries(doc: EntryCollectionDocument): SearchEntry[] {

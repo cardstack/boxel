@@ -1828,6 +1828,69 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The sweep's only call site (IndexRunner.fromScratch finalization)
+      // degrades any error to a log warning, so this direct test is what
+      // turns a broken scan or delete red.
+      test("sweepUnreferencedScopedCSS drops this realm's unreferenced rows and nothing else", async function (assert) {
+        let referencedRows = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1`,
+          { bind: [realm.url] },
+        )) as { hash: string }[];
+        assert.ok(
+          referencedRows.length > 0,
+          'precondition: indexing interned scoped CSS for the fixture realm',
+        );
+
+        let orphanHash = 'a'.repeat(32);
+        let foreignHash = 'b'.repeat(32);
+        let foreignRealmURL = 'http://example.com/other-realm/';
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, created_at)
+           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)`,
+          {
+            bind: [
+              realm.url,
+              orphanHash,
+              '.superseded {}',
+              Date.now(),
+              foreignRealmURL,
+              foreignHash,
+              '.foreign {}',
+              Date.now(),
+            ],
+          },
+        );
+
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        let swept = await batch.sweepUnreferencedScopedCSS();
+
+        assert.strictEqual(swept, 1, 'exactly the orphan row was swept');
+        let remaining = (await testDbAdapter.execute(
+          `SELECT realm_url, hash FROM scoped_css ORDER BY realm_url, hash`,
+        )) as { realm_url: string; hash: string }[];
+        assert.false(
+          remaining.some(
+            (row) => row.realm_url === realm.url && row.hash === orphanHash,
+          ),
+          'the unreferenced row is gone',
+        );
+        assert.strictEqual(
+          remaining.filter((row) => row.realm_url === realm.url).length,
+          referencedRows.length,
+          'every referenced row survived',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === foreignRealmURL && row.hash === foreignHash,
+          ),
+          "another realm's rows are untouched, even unreferenced ones",
+        );
+      });
+
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
         // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
