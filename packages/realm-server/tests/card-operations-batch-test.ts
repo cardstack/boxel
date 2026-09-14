@@ -78,6 +78,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a link to a side-load in another realm says which realm holds it', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('two entries changing one card compose, and the file is written once', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });

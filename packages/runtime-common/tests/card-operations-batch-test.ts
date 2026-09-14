@@ -773,6 +773,68 @@ const tests: SharedTests<Record<string, never>> = {
     assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
+  'a link to a side-load in another realm says which realm holds it': async (
+    assert,
+  ) => {
+    // The caller did send this resource, so the refusal a link to an id
+    // nobody sent gets would describe a batch it did not compose — and the
+    // remedy is a different one.
+    let { core, commits } = stub();
+    let failure:
+      | { status: number; code: string; entry: unknown; detail?: string }
+      | undefined;
+    try {
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'local',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Local' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'abroad' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'abroad',
+                  attributes: { firstName: 'Abroad' },
+                  meta: {
+                    adoptsFrom: PERSON,
+                    realmURL: 'http://elsewhere.example/other/',
+                  },
+                } as any,
+              ],
+            },
+          },
+        ],
+        {},
+      );
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      failure = {
+        status: err.error.status,
+        code: err.error.code,
+        entry: err.error.meta?.entry,
+        detail: err.error.detail,
+      };
+    }
+    assert.strictEqual(failure?.status, 400);
+    assert.strictEqual(failure?.entry, 0);
+    assert.true(
+      failure?.detail?.includes('another realm') ?? false,
+      'the refusal names the realm holding the card, not a missing entry',
+    );
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
   'two entries changing one card compose, and the file is written once': async (
     assert,
   ) => {

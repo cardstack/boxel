@@ -6542,6 +6542,14 @@ export class Realm {
       delete original.meta.lastModified;
       let originalClone = cloneDeep(original);
 
+      // The merge from here to the write is stated twice: `stageUpdate` in
+      // card-operations/executors.ts carries the same guard, the same
+      // realm-managed-key deletes, the same array-replacing customizer, the
+      // same relationship merge and the same no-op short circuit, so a batch
+      // update and a `PATCH` of one document land the same bytes. Anything
+      // learned here — a fifth server-stamped key that must not persist from
+      // a client echo, say — has to be learned there in the same change,
+      // until the two are one path.
       if (
         originalClone.meta?.adoptsFrom &&
         internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==

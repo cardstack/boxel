@@ -154,6 +154,10 @@ export interface StagingContext {
   realmURL: string;
   paths: RealmPaths;
   lids: LidIndex;
+  // The local ids a side-load claimed for another realm. They name no card
+  // this batch writes, so a link to one is refused — this is what tells that
+  // refusal apart from a link to an id nobody sent.
+  foreignLids: ReadonlySet<string>;
   // Every target's stored file, keyed by local path, read inside the write
   // lock before any executor runs.
   stored: ReadonlyMap<LocalPath, StoredFile>;
@@ -405,6 +409,12 @@ export async function stageUpdate(
     });
   }
   let included = includedResources(entry.document);
+  // What follows — down to the bytes this stages — is the merge
+  // `patchCardInstance` applies, stated here so an entry merges the way the
+  // endpoint does, and pinned byte for byte by a test that patches one
+  // document through both. The two move together until the endpoint
+  // dispatches through this.
+  //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
   // prerendered manifest at serve time, and `type` is fixed by the document
@@ -664,6 +674,22 @@ export function namesForeignRealm(
 function stagedLid(lid: string, ctx: StagingContext): StagedIdentity {
   let staged = ctx.lids.get(lid);
   if (!staged) {
+    if (ctx.foreignLids.has(lid)) {
+      // The caller did send this resource; the batch declined to write it, so
+      // saying nothing creates it would describe a payload it did not send.
+      // The remedy is a different one, too: the card is another realm's to
+      // create, so either the link names it by URL or the resource stops
+      // claiming a realm and this batch mints it.
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Foreign local id',
+        detail:
+          `local id "${lid}" names a side-loaded resource stored in another ` +
+          `realm, which a batch does not write; link to that card by its URL, ` +
+          `or drop its \`meta.realmURL\` so this batch creates it here`,
+      });
+    }
     throw new OperationFailure({
       status: 400,
       code: 'invalid-params',
@@ -705,7 +731,12 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
         // no key of its own to carry a link, so it is refused: staging it
         // would store the collection with the edge missing and say nothing,
         // which is the one outcome worse than a refusal for the mechanism
-        // the whole batch exists to provide.
+        // the whole batch exists to provide. `promoteLocalIdsToRemoteIds`,
+        // which the `POST` and `PATCH` handlers link through, takes the
+        // second course for the same payload — it finds no per-member key,
+        // records nothing, and reports success — so a document written this
+        // way is answered differently depending on which surface it arrives
+        // at until those handlers dispatch through here.
         let indexed = normalized[`${fieldName}.${index}`];
         if (!indexed) {
           throw new OperationFailure({

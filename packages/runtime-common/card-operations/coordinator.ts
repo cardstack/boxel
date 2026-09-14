@@ -166,7 +166,7 @@ export async function commitBatch(
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
     // entry link to a card a later entry mints.
-    let lids = indexLids(entries, paths);
+    let { lids, foreignLids } = indexLids(entries, paths);
     let stored = await readStoredFiles(core, entries, paths);
     let staged: StagedChange[] = [];
     // The version each entry's merge was computed over, captured as it stages
@@ -179,6 +179,7 @@ export async function commitBatch(
         realmURL: core.realmURL,
         paths,
         lids,
+        foreignLids,
         stored,
         actor: opts.actor ?? '',
         serializeCard: core.serializeCard,
@@ -312,8 +313,16 @@ function atEntry(err: unknown, index: number): OperationFailure {
 // Every card the batch mints, keyed by `lid`. A `lid` names one card, so two
 // entries claiming the same one is a payload the realm cannot carry out: it
 // says two different cards are the same card.
-function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
+//
+// The local ids that go unclaimed because they name another realm are
+// collected alongside, so a link to one is refused as what it is rather than
+// as a link to a card nobody sent.
+function indexLids(
+  entries: BatchEntry[],
+  paths: RealmPaths,
+): { lids: LidIndex; foreignLids: ReadonlySet<string> } {
   let lids = new Map<string, StagedIdentity>();
+  let foreignLids = new Set<string>();
   let claim = (lid: string, identity: StagedIdentity, position: string) => {
     if (lids.has(lid)) {
       throw new OperationFailure({
@@ -356,10 +365,11 @@ function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
         // A side-loaded resource with no `lid` is not staged and nothing can
         // link to it; one naming another realm is not this batch's to write.
         // Neither takes an identity here, so neither can be linked to either.
-        if (
-          typeof resource.lid !== 'string' ||
-          namesForeignRealm(resource, paths.url)
-        ) {
+        if (typeof resource.lid !== 'string') {
+          continue;
+        }
+        if (namesForeignRealm(resource, paths.url)) {
+          foreignLids.add(resource.lid);
           continue;
         }
         claim(
@@ -377,7 +387,7 @@ function indexLids(entries: BatchEntry[], paths: RealmPaths): LidIndex {
       throw atEntry(err, index);
     }
   }
-  return lids;
+  return { lids, foreignLids };
 }
 
 // ---------------------------------------------------------------------------
