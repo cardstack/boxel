@@ -26,7 +26,7 @@ import {
   BoxelButton,
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
-import type { Loader } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common';
 import {
   getMenuItems,
   codeRefWithAbsoluteIdentifier,
@@ -1142,12 +1142,16 @@ function getIcon(specType: string) {
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
+  // A Loader that evaluates this module injects `import.meta.loader`. A module
+  // compiled into the host bundle is evaluated by the platform instead, and
+  // uses the loader the host publishes for bundled modules.
 
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // When type-checking realm-server, tsc sees this file as CommonJS output and
+  // so complains about import.meta.
   // @ts-ignore
-  return (import.meta as any).loader;
+  let loader = (import.meta as any).loader ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('no Loader is available to this module');
+  }
+  return loader;
 }

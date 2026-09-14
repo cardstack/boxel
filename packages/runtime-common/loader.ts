@@ -506,6 +506,21 @@ export class Loader {
     return undefined;
   }
 
+  // A module a Loader evaluates discovers its loader through
+  // `import.meta.loader`, which the Loader injects at eval time. A module
+  // compiled into the host bundle is evaluated by the platform instead, so it
+  // has no such injection; the host publishes its active loader here for those
+  // modules to fall back to. Read only when `import.meta.loader` is absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
+  }
+
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
