@@ -10,7 +10,9 @@ import {
 import {
   awaitPublishedHtmlReady,
   enqueuePrerenderHtmlJob,
+  prerenderHtmlConcurrencyGroup,
 } from './jobs/prerender-html.ts';
+import { JobClaimHold } from './jobs/claim-hold.ts';
 import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -426,6 +428,24 @@ const CACHE_MISS_VALUE = 'miss';
 // a second transpile before the winner finishes.
 const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
 const COALESCE_NOTIFY_WAIT_MS = 180_000;
+
+// Smallest batch write that takes a hold on its realm's render lane. Below
+// this the write is over in well under the time a render pass takes to start,
+// so a hold could not collect anything to merge and would only add two
+// queries to the path a card save takes. Editing writes a card and sometimes
+// its module; an import writes hundreds at once, so the two are far apart and
+// the exact line between them does not matter much.
+const RENDER_HOLD_MIN_BATCH_SIZE = 10;
+// How long a hold survives without a refresh. A holder that dies mid-write
+// costs the lane this much idleness, so it wants to be short; a refresh that
+// loses a race with a slow query must not drop the hold, so it wants to be
+// comfortably longer than the refresh interval.
+const RENDER_HOLD_LEASE_MS = 30_000;
+const RENDER_HOLD_REFRESH_MS = 10_000;
+// Longest any one write may keep the lane held. Holds chain across
+// consecutive writes on purpose, so without a cap a realm taking bulk writes
+// back to back could keep its HTML from ever being rendered.
+const RENDER_HOLD_MAX_MS = 5 * 60_000;
 // `localPath`s (no leading slash) exempt from the archived-realm seal: the
 // realm's public operational endpoints, which must keep working while a realm
 // is archived. `_readiness-check` is the health probe; `_session` is the
@@ -2529,6 +2549,84 @@ export class Realm {
   }
 
   private async _batchWriteUnlocked(
+    files: Map<LocalPath, string | Uint8Array>,
+    options?: WriteOptions,
+  ): Promise<FileWriteResult[]> {
+    // A write large enough to outlast a render pass holds this realm's render
+    // lane for its duration. Coalescing can only merge into a job no worker
+    // has claimed, so on an idle cluster a bulk import gets none of it: each
+    // write's render pass is claimed and finished before the next write ends,
+    // and cards touched by more than one write are re-rendered once per write.
+    // Holding the lane leaves the earlier pass pending, so the next one merges
+    // into it and the union renders once. Nothing is skipped — the hold delays
+    // rendering, it never cancels it.
+    if (files.size < RENDER_HOLD_MIN_BATCH_SIZE) {
+      return await this.#batchWriteUnlockedInner(files, options);
+    }
+    let hold = await JobClaimHold.acquire(
+      this.#dbAdapter,
+      prerenderHtmlConcurrencyGroup(this.url),
+      RENDER_HOLD_LEASE_MS,
+    );
+    let heldSince = Date.now();
+    let heartbeat = setInterval(() => {
+      // A realm under continuous bulk writes would otherwise never render.
+      // Past the cap the lease simply stops being renewed, so the lane frees
+      // itself within one lease and the import pays an extra render pass
+      // rather than starving.
+      if (Date.now() - heldSince > RENDER_HOLD_MAX_MS) {
+        return;
+      }
+      hold.refresh(RENDER_HOLD_LEASE_MS).catch((e: any) => {
+        // The lease simply lapses and the lane frees early — the write is
+        // unaffected, so this must not surface as a write failure.
+        this.#log.warn(
+          `failed to refresh render hold for ${this.url}: ${e?.message}`,
+        );
+      });
+    }, RENDER_HOLD_REFRESH_MS);
+    heartbeat.unref?.();
+    let releaseHold = async () => {
+      clearInterval(heartbeat);
+      try {
+        await hold.release();
+      } catch (e: any) {
+        // Left alone the lease expires on its own, so a failed release costs
+        // one interval of delayed rendering rather than the write.
+        this.#log.warn(
+          `failed to release render hold for ${this.url}: ${e?.message}`,
+        );
+      }
+    };
+    let results: FileWriteResult[];
+    try {
+      results = await this.#batchWriteUnlockedInner(files, options);
+    } catch (e) {
+      await releaseHold();
+      throw e;
+    }
+    // The write's own render job does not exist yet: the index pass this
+    // write just queued is what enqueues it, moments from now. Releasing at
+    // the end of the write would free the lane in that gap, so the previous
+    // write's pass — the one the hold was keeping available as a merge target
+    // — gets claimed just before the new job arrives, and the two render the
+    // same cards one after the other. Hold until the indexing settles
+    // instead, so both land on a held lane and merge into one pass.
+    //
+    // Deliberately not awaited: the caller's write is durable and its
+    // response must not wait on indexing. Consecutive bulk writes chain —
+    // each one's hold covers the next one's start — which is what collapses a
+    // whole import into one render pass.
+    let settled = this.incrementalIndexing();
+    if (settled) {
+      settled.then(releaseHold, releaseHold);
+    } else {
+      await releaseHold();
+    }
+    return results;
+  }
+
+  async #batchWriteUnlockedInner(
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {

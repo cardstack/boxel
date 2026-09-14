@@ -18,6 +18,13 @@ export interface JobsTable {
   result: PgPrimitive;
 }
 
+// A lease holding one concurrency group's jobs un-claimable. See the
+// add-job-claim-holds migration for what it is for.
+export interface JobClaimHoldsTable {
+  concurrency_group: string;
+  expires_at: Date;
+}
+
 export interface JobReservationsTable {
   id: number;
   job_id: number;

@@ -22,6 +22,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=job_reservations \
   --exclude-table-and-children=job_progress \
   --exclude-table-and-children=job_scoped_search_cache \
+  --exclude-table-and-children=job_claim_holds \
   --exclude-table-and-children=subscription_cycles \
   --exclude-table-and-children=subscriptions \
   --exclude-table-and-children=ai_actions \
