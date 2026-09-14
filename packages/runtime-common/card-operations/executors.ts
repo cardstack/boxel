@@ -28,6 +28,7 @@ import {
 } from '../spliced-content.ts';
 import {
   appendMembers,
+  indentStyleOf,
   indentsFor,
   renderMember,
   renderValue,
@@ -241,6 +242,12 @@ export interface StagingContext {
     moduleId: RealmResourceIdentifier,
     relativeTo: string,
   ): RealmResourceIdentifier;
+  // A relationship's `links.self` as the realm stores it: a link inside the
+  // writing realm is recorded relative to the file that holds it, so a realm
+  // that is cloned or served under another host keeps linking within itself.
+  // Resolving one needs the realm's fetch layer, which no executor reaches, so
+  // it arrives bound — the same reason `resolveModuleId` and `codeRefKey` do.
+  storedLink(selfLink: string, relativeTo: URL): string;
   // The definition-cache entry for a type, or undefined when it cannot be
   // read.
   lookupDefinition(
@@ -1292,6 +1299,7 @@ export async function stageAppendContainsMany(
 ): Promise<StagedChange> {
   let url = targetURL(entry.href);
   let sourcePath = `${localPathIn(url, ctx)}.json` as LocalPath;
+  let target: AppendTarget = { url, file: ctx.paths.fileURL(sourcePath) };
   let requested = requestedItems(entry, url);
   let bytes = await ctx.openSourceBytes(sourcePath);
   if (!bytes) {
@@ -1312,6 +1320,11 @@ export async function stageAppendContainsMany(
   // appending to two fields costs the same read as appending to one.
   let layout = await readLayout(base, [...requested.keys()], bytes, url);
   let definition = await appendTargetDefinition(layout, url, ctx);
+  // Read once from the document rather than assumed, so an insertion into a
+  // container that carries no whitespace of its own — an empty array, a
+  // container the file does not have — is written the way the rest of the file
+  // is written.
+  let style = indentStyleOf(layout);
 
   // Every member an insertion will add, by the container it goes into.
   // Grouped so a container gaining members for two reasons — two fields whose
@@ -1354,7 +1367,7 @@ export async function stageAppendContainsMany(
         item,
         itemDef,
         `${field}.${at + offset}`,
-        url,
+        target,
         ctx,
       );
       values.push(split.value);
@@ -1364,7 +1377,7 @@ export async function stageAppendContainsMany(
     if (array) {
       addTo(
         array,
-        values.map((value) => renderValue(value, indentsFor(array))),
+        values.map((value) => renderValue(value, indentsFor(array, style))),
       );
     } else {
       newArrays.set(field, values);
@@ -1413,7 +1426,7 @@ export async function stageAppendContainsMany(
     if (sidecar) {
       addTo(
         sidecar,
-        entries.map((entry) => renderValue(entry, indentsFor(sidecar))),
+        entries.map((entry) => renderValue(entry, indentsFor(sidecar, style))),
       );
     } else {
       newSidecars.set(field, entries);
@@ -1427,7 +1440,7 @@ export async function stageAppendContainsMany(
       addTo(
         into,
         [...newArrays].map(([field, values]) =>
-          renderMember(field, values, indentsFor(into)),
+          renderMember(field, values, indentsFor(into, style)),
         ),
       );
     } else {
@@ -1435,7 +1448,7 @@ export async function stageAppendContainsMany(
         renderMember(
           'attributes',
           Object.fromEntries(newArrays),
-          indentsFor(data),
+          indentsFor(data, style),
         ),
       ]);
     }
@@ -1446,7 +1459,7 @@ export async function stageAppendContainsMany(
       addTo(
         into,
         newRelationships.map(([key, value]) =>
-          renderMember(key, value, indentsFor(into)),
+          renderMember(key, value, indentsFor(into, style)),
         ),
       );
     } else {
@@ -1454,7 +1467,7 @@ export async function stageAppendContainsMany(
         renderMember(
           'relationships',
           Object.fromEntries(newRelationships),
-          indentsFor(data),
+          indentsFor(data, style),
         ),
       ]);
     }
@@ -1468,13 +1481,13 @@ export async function stageAppendContainsMany(
       into,
       layout.metaFields
         ? [...newSidecars].map(([field, entries]) =>
-            renderMember(field, entries, indentsFor(into)),
+            renderMember(field, entries, indentsFor(into, style)),
           )
         : [
             renderMember(
               'fields',
               Object.fromEntries(newSidecars),
-              indentsFor(into),
+              indentsFor(into, style),
             ),
           ],
     );
@@ -1482,7 +1495,7 @@ export async function stageAppendContainsMany(
 
   let edits: SpliceEdit[] = [];
   for (let [container, members] of pending) {
-    let edit = appendMembers(container, members);
+    let edit = appendMembers(container, members, style);
     if (edit) {
       edits.push(edit);
     }
@@ -1580,6 +1593,30 @@ async function readLayout(
       title: 'Invalid stored card',
       detail: `the stored file for ${url.href} carries no \`data\` member`,
     });
+  }
+  // Each of these holds named members, and an insertion writes `"key": value`
+  // into it. One holding an array instead takes that text just as readily and
+  // leaves behind a file that no longer parses — so the kind is checked here,
+  // where every container an insertion can reach passes through, rather than
+  // at each of the places one is written to.
+  for (let [name, container] of [
+    ['data', layout.data],
+    ['data.attributes', layout.attributes],
+    ['data.relationships', layout.relationships],
+    ['data.meta', layout.meta],
+    ['data.meta.fields', layout.metaFields],
+  ] as const) {
+    if (container && container.kind !== 'object') {
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `the stored file for ${url.href} holds an array under \`${name}\`, ` +
+          `which names members rather than positions`,
+      });
+    }
   }
   return layout;
 }
@@ -1686,14 +1723,23 @@ async function itemDefinitionOf(
   return definition;
 }
 
+// The card an append is writing to, in the two forms its parts are addressed
+// by: the URL it answers to, which names it in a refusal, and the file its
+// bytes live in, which a stored link is recorded relative to.
+interface AppendTarget {
+  url: URL;
+  file: URL;
+}
+
 interface SplitItem {
   // What the array holds: the item's own values, with every link taken out.
   value: unknown;
   // The item's concrete type, when it declared one.
   adoptsFrom?: CodeRef;
   // The flattened relationship keys the item's links are recorded under, and
-  // what each records.
-  relationships: [string, { links: { self: string } }][];
+  // what each records. A null link is a position the author emptied, which the
+  // file records rather than leaves out.
+  relationships: [string, { links: { self: string | null } }][];
 }
 
 // Split one appended item into the parts the file stores separately.
@@ -1713,7 +1759,7 @@ async function splitItem(
   item: unknown,
   itemDef: Definition | undefined,
   path: string,
-  url: URL,
+  target: AppendTarget,
   ctx: StagingContext,
 ): Promise<SplitItem> {
   if (!itemDef) {
@@ -1752,9 +1798,9 @@ async function splitItem(
     delete rest.meta;
   }
   let against = adoptsFrom
-    ? await declaredItemType(adoptsFrom, path, url, ctx)
+    ? await declaredItemType(adoptsFrom, path, target.url, ctx)
     : itemDef;
-  let split = await splitValue(rest, against, path, url, ctx);
+  let split = await splitValue(rest, against, path, target, ctx);
   return { ...split, ...(adoptsFrom ? { adoptsFrom } : {}) };
 }
 
@@ -1800,14 +1846,59 @@ function itemTypeOf(meta: unknown, path: string): CodeRef {
         `\`{ adoptsFrom: { module, name } }\``,
     });
   }
+  // A sidecar entry is an item's whole `meta`, and a nested composite of its
+  // own contributes a `fields` member to it. An append writes only the type,
+  // so anything else here would be accepted and then dropped — which is the
+  // one outcome worse than refusing it.
+  let extra = Object.keys(meta as Record<string, unknown>).filter(
+    (key) => key !== 'adoptsFrom',
+  );
+  if (extra.length > 0) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid item type',
+      detail:
+        `\`${path}.meta\` carries ${quoted(extra)}, and an append records ` +
+        `only an item's own type there; a value whose nested fields need ` +
+        `types of their own is written with a \`transform\``,
+    });
+  }
   return { module: rri(adoptsFrom.module), name: adoptsFrom.name };
+}
+
+function quoted(names: string[]): string {
+  return names.map((name) => `"${name}"`).join(', ');
+}
+
+// A link position an author left empty, as the file stores it.
+function emptyLink(): { links: { self: null } } {
+  return { links: { self: null } };
+}
+
+// One relationship as the file stores it. A link is recorded the way the
+// realm's own serializer records one — relative to the file that holds it when
+// it points inside this realm — so two entries in one batch that link to the
+// same card write the same thing, whether one of them was an append and the
+// other a create.
+function storedRelationship(
+  value: unknown,
+  target: AppendTarget,
+  path: string,
+  ctx: StagingContext,
+): { links: { self: string } } {
+  let identity = identityOf(resolveLinkParam(value, ctx, path), path);
+  // Against the file rather than the card: a relative reference is resolved
+  // from the document that carries it, which is what the serializer passes and
+  // what a reader of the stored bytes resolves against.
+  return { links: { self: ctx.storedLink(identity, target.file) } };
 }
 
 async function splitValue(
   value: Record<string, unknown>,
   definition: Definition,
   path: string,
-  url: URL,
+  target: AppendTarget,
   ctx: StagingContext,
 ): Promise<{ value: unknown; relationships: SplitItem['relationships'] }> {
   let stored: Record<string, unknown> = {};
@@ -1834,9 +1925,14 @@ async function splitValue(
       });
     }
     if (fieldDef.type === 'linksTo') {
+      // The same answer as the collection above: a link an author cleared is
+      // stored as a null link rather than refused, so both spellings of "no
+      // link" reach the file the way the canonical serialization writes them.
       relationships.push([
         at,
-        { links: { self: identityOf(resolveLinkParam(member, ctx, at), at) } },
+        member == null
+          ? emptyLink()
+          : storedRelationship(member, target, at, ctx),
       ]);
       continue;
     }
@@ -1849,17 +1945,19 @@ async function splitValue(
           detail: `\`${at}\` holds a collection of links, so it needs a list`,
         });
       }
-      member.forEach((target, index) => {
+      if (member.length === 0) {
+        // A collection with no members is stored under the field's own key
+        // with a null link, which is how the canonical serialization spells a
+        // collection an author emptied — and what its deserializer reads to
+        // tell that apart from a collection never set. Writing nothing here
+        // would store the second when the caller said the first.
+        relationships.push([at, emptyLink()]);
+        continue;
+      }
+      member.forEach((link, index) => {
         relationships.push([
           `${at}.${index}`,
-          {
-            links: {
-              self: identityOf(
-                resolveLinkParam(target, ctx, `${at}[${index}]`),
-                `${at}[${index}]`,
-              ),
-            },
-          },
+          storedRelationship(link, target, `${at}[${index}]`, ctx),
         ]);
       });
       continue;
@@ -1868,7 +1966,7 @@ async function splitValue(
       stored[key] = member;
       continue;
     }
-    let nestedDef = await itemDefinitionOf(fieldDef, key, url, ctx);
+    let nestedDef = await itemDefinitionOf(fieldDef, key, target.url, ctx);
     if (fieldDef.type === 'contains') {
       if (!isPlainRecord(member)) {
         throw new OperationFailure({
@@ -1880,7 +1978,7 @@ async function splitValue(
             `fields`,
         });
       }
-      let nested = await splitValue(member, nestedDef, at, url, ctx);
+      let nested = await splitValue(member, nestedDef, at, target, ctx);
       stored[key] = nested.value;
       relationships.push(...nested.relationships);
       continue;
@@ -1909,7 +2007,7 @@ async function splitValue(
         entry,
         nestedDef,
         `${at}.${index}`,
-        url,
+        target,
         ctx,
       );
       members.push(nested.value);

@@ -203,8 +203,11 @@ export async function scanCardSource(
 
   let top = () => stack[stack.length - 1];
 
+  // An empty run is not an absent one: a file written without whitespace
+  // separates its members with nothing, and an insertion into it has to do the
+  // same. Only a run too long to be indentation is reported as unknown.
   let takeWhitespace = (): string | undefined =>
-    whitespaceOverflowed || whitespace.length === 0
+    whitespaceOverflowed
       ? undefined
       : decoder.decode(new Uint8Array(whitespace));
 
@@ -561,20 +564,26 @@ function decodeJsonString(bytes: number[], offset: number): string {
         out.push(0x09);
         break;
       case 0x75: {
-        let digits = String.fromCharCode(...bytes.slice(i + 1, i + 5));
-        let code = /^[0-9a-fA-F]{4}$/.test(digits)
-          ? parseInt(digits, 16)
-          : undefined;
-        if (code === undefined) {
-          throw new MalformedCardSourceError(
-            `a key carries an invalid \\u escape`,
-            offset,
-          );
-        }
-        for (let byte of encoder.encode(String.fromCharCode(code))) {
-          out.push(byte);
-        }
+        let code = hexEscapeAt(bytes, i + 1, offset);
         i += 4;
+        // A character outside the basic plane is spelled as two escapes, and
+        // each half is meaningless alone — encoding them separately yields two
+        // replacement characters rather than the character they name. So a
+        // high surrogate takes its partner with it.
+        if (
+          code >= 0xd800 &&
+          code <= 0xdbff &&
+          bytes[i + 1] === 0x5c /* \ */ &&
+          bytes[i + 2] === 0x75 /* u */
+        ) {
+          let low = hexEscapeAt(bytes, i + 3, offset);
+          if (low >= 0xdc00 && low <= 0xdfff) {
+            pushUtf8(out, String.fromCharCode(code, low));
+            i += 6;
+            break;
+          }
+        }
+        pushUtf8(out, String.fromCharCode(code));
         break;
       }
       default:
@@ -587,9 +596,62 @@ function decodeJsonString(bytes: number[], offset: number): string {
   return decoder.decode(new Uint8Array(out));
 }
 
+function hexEscapeAt(bytes: number[], at: number, offset: number): number {
+  let digits = String.fromCharCode(...bytes.slice(at, at + 4));
+  if (!/^[0-9a-fA-F]{4}$/.test(digits)) {
+    throw new MalformedCardSourceError(
+      `a key carries an invalid \\u escape`,
+      offset,
+    );
+  }
+  return parseInt(digits, 16);
+}
+
+function pushUtf8(out: number[], text: string): void {
+  for (let byte of encoder.encode(text)) {
+    out.push(byte);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Describing an insertion
 // ---------------------------------------------------------------------------
+
+// How a file separates one member of a container from the next: the line break
+// between them, and how much deeper each level of nesting is indented than the
+// one above it. A file written without whitespace reports both as empty, which
+// is what makes an insertion into such a file compact rather than pretty.
+export interface IndentStyle {
+  newline: string;
+  unit: string;
+}
+
+// The two-space indentation `JSON.stringify(…, null, 2)` writes, which is what
+// the realm's own card writes produce.
+const DEFAULT_INDENT_STYLE: IndentStyle = { newline: '\n', unit: '  ' };
+
+// The style a stored file is written in, read off its outermost container.
+//
+// `data` is the reference because every card document has it and it always
+// holds members, so it carries both of the runs the style is derived from: the
+// indentation of its members and the indentation of its closing brace differ
+// by exactly one level, which is the unit. A container nested anywhere under it
+// can then be indented correctly whether or not it holds anything of its own.
+export function indentStyleOf(layout: CardSourceLayout): IndentStyle {
+  let { memberIndent, closeIndent } = layout.data ?? {};
+  if (memberIndent === undefined || closeIndent === undefined) {
+    return DEFAULT_INDENT_STYLE;
+  }
+  if (memberIndent === '' && closeIndent === '') {
+    return { newline: '', unit: '' };
+  }
+  return {
+    newline: '\n',
+    unit: memberIndent.startsWith(closeIndent)
+      ? memberIndent.slice(closeIndent.length)
+      : DEFAULT_INDENT_STYLE.unit,
+  };
+}
 
 // The indentation an insertion into a container is written with: where its
 // members sit, where its closing bracket sits, and how much deeper one nesting
@@ -598,22 +660,29 @@ function decodeJsonString(bytes: number[], offset: number): string {
 // All three are read off the container where it has them, so an insertion is
 // indented the way the file already indents — including inside a new member,
 // whose own nested lines step by the file's unit rather than by an assumed
-// one. The unit is what the members are indented past the closing bracket,
-// which is exactly one level. A container holding nothing has none of this, so
-// it falls back to its depth and the two-space indentation every card the
-// realm writes is stored with.
-export function indentsFor(container: StoredContainer): {
+// one. A container holding nothing carries none of this, so it is indented
+// from its depth and the document's own style instead.
+export function indentsFor(
+  container: StoredContainer,
+  style: IndentStyle = DEFAULT_INDENT_STYLE,
+): {
   member: string;
   close: string;
   unit: string;
 } {
   let member =
-    container.memberIndent ?? `\n${'  '.repeat(container.depth + 1)}`;
-  let close = container.closeIndent ?? `\n${'  '.repeat(container.depth)}`;
+    container.memberIndent ??
+    `${style.newline}${style.unit.repeat(container.depth + 1)}`;
+  let close =
+    container.closeIndent ??
+    `${style.newline}${style.unit.repeat(container.depth)}`;
   return {
     member,
     close,
-    unit: member.startsWith(close) ? member.slice(close.length) : '  ',
+    unit:
+      member.length > close.length && member.startsWith(close)
+        ? member.slice(close.length)
+        : style.unit,
   };
 }
 
@@ -627,11 +696,15 @@ export function indentsFor(container: StoredContainer): {
 export function appendMembers(
   container: StoredContainer,
   members: string[],
+  style?: IndentStyle,
 ): SpliceEdit | undefined {
   if (members.length === 0) {
     return undefined;
   }
-  let { member: memberIndent, close: closeIndent } = indentsFor(container);
+  let { member: memberIndent, close: closeIndent } = indentsFor(
+    container,
+    style,
+  );
   let joined = members.join(`,${memberIndent}`);
   return container.count > 0
     ? { at: container.lastMemberEnd!, text: `,${memberIndent}${joined}` }

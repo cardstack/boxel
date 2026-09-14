@@ -69,9 +69,11 @@ import {
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
+  PARTIAL_WRITE_SUFFIX,
   RealmPaths,
   ensureTrailingSlash,
   isCaptureServingPath,
+  isPartialWritePath,
   join,
   partialWritePath,
 } from './paths.ts';
@@ -251,7 +253,7 @@ import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater, type IndexChange } from './realm-index-updater.ts';
-import serialize from './file-serializer.ts';
+import serialize, { storedRelationshipLink } from './file-serializer.ts';
 import {
   fileSizeLimitFor,
   validateByteLength,
@@ -893,6 +895,16 @@ async function readRangeBytes(
     chunks.push(chunk);
     total += chunk.length;
   }
+  if (total !== length) {
+    // A short read means the file is no longer the file the caller measured,
+    // and a fingerprint assembled from it would describe content of one length
+    // under a marker claiming another — a version that identifies nothing. The
+    // caller persists this value, so there is no later point at which a wrong
+    // one is noticed.
+    throw new Error(
+      `expected ${length} bytes at offset ${start} of ${path}, read ${total}`,
+    );
+  }
   let bytes = new Uint8Array(total);
   let offset = 0;
   for (let chunk of chunks) {
@@ -917,6 +929,27 @@ function writeSizeType(
     isCardDocumentString(content)
     ? 'card'
     : 'file';
+}
+
+// Why a path is not a caller's to write to, or undefined when it is. Both
+// reservations answer here so every surface that chooses a write destination —
+// a direct write, an `/_atomic` operation, a batch entry — refuses the same
+// set. Removals stay admitted everywhere: they are the recovery path for
+// anything already stored under either name.
+function reservedWriteDestination(localPath: LocalPath): string | undefined {
+  if (isCaptureServingPath(localPath)) {
+    return (
+      `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures and ` +
+      `cannot be written to`
+    );
+  }
+  if (isPartialWritePath(localPath)) {
+    return (
+      `'${PARTIAL_WRITE_SUFFIX}' names a file the realm is part-way through ` +
+      `writing, and cannot be written to`
+    );
+  }
+  return undefined;
 }
 
 function computeContentSize(content: string | Uint8Array): number {
@@ -3105,12 +3138,11 @@ export class Realm {
 
         // Same reservation `internalHandle` enforces for direct writes,
         // read from the one place it is stated.
-        if (isCaptureServingPath(localPath)) {
+        let reserved = reservedWriteDestination(localPath);
+        if (reserved) {
           errors.push({
             title: 'Reserved path',
-            detail:
-              `Cannot write '${operation.href}': ` +
-              `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures`,
+            detail: `Cannot write '${operation.href}': ${reserved}`,
             status: 422,
           });
           return;
@@ -3718,6 +3750,16 @@ export class Realm {
           internalKeyFor(codeRef, relativeTo, this.#virtualNetwork),
         resolveModuleId: (moduleId, relativeTo) =>
           this.#virtualNetwork.resolveRRI(moduleId, rri(relativeTo)),
+        // The same normalization `fileSerialization` applies to every link it
+        // writes, reached from the one place that owns identifier resolution,
+        // so a card's links are spelled the same however the write arrived.
+        storedLink: (selfLink, relativeTo) =>
+          storedRelationshipLink(
+            selfLink,
+            relativeTo,
+            new URL(this.url),
+            this.#virtualNetwork,
+          ),
         lookupDefinition: async (codeRef, relativeTo) => {
           let absolute = codeRefWithAbsoluteIdentifier(
             codeRef,
@@ -4004,6 +4046,12 @@ export class Realm {
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
+      // A file the realm is part-way through assembling, or one a write that
+      // died left behind. It is never indexed, so serving it would hand back
+      // content the realm does not otherwise acknowledge exists.
+      if (isPartialWritePath(localPath)) {
+        return notFound(request, requestContext);
+      }
       // The GET dispatch above claims the whole `_screenshot/` subtree, so a
       // realm file stored under it could never be read back — it would
       // index, list, and answer every GET as an uncaptured miss. Refuse
@@ -4011,16 +4059,11 @@ export class Realm {
       // (the `/_atomic` precheck enforces the same reservation for its
       // operation hrefs). DELETE stays admitted as the recovery path for
       // anything already stored there.
-      if (
-        ['PUT', 'PATCH', 'POST'].includes(request.method) &&
-        isCaptureServingPath(localPath)
-      ) {
-        return badRequest({
-          message:
-            `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures ` +
-            `and cannot be written to`,
-          requestContext,
-        });
+      let reserved = ['PUT', 'PATCH', 'POST'].includes(request.method)
+        ? reservedWriteDestination(localPath)
+        : undefined;
+      if (reserved) {
+        return badRequest({ message: reserved, requestContext });
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);

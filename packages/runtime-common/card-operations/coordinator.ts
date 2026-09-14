@@ -130,6 +130,9 @@ export interface BatchCore {
     moduleId: RealmResourceIdentifier,
     relativeTo: string,
   ): RealmResourceIdentifier;
+  // A relationship's `links.self` as the realm stores it — relative to the
+  // file that holds it when the link points inside this realm.
+  storedLink(selfLink: string, relativeTo: URL): string;
   lookupDefinition(
     codeRef: CodeRef,
     relativeTo: URL,
@@ -201,6 +204,7 @@ export async function commitBatch(
         serializeCard: core.serializeCard,
         codeRefKey: core.codeRefKey,
         resolveModuleId: core.resolveModuleId,
+        storedLink: core.storedLink,
         lookupDefinition: core.lookupDefinition,
       });
       baseHashes.push(

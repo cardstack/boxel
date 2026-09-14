@@ -632,7 +632,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       [...indexEvents[0].invalidations].sort(),
-      [`${testRealmHref}append-mixed`, `${testRealmHref}commit-write`].sort(),
+      [`${testRealmHref}append-mixed`, `${testRealmHref}append-sibling`].sort(),
       'the one event covers the card the append changed and the patched one',
     );
   });

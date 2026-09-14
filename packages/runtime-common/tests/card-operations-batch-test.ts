@@ -8,6 +8,7 @@ import {
 import {
   computeContentHash,
   isSplicedSource,
+  maybeRelativeReference,
   streamSpliced,
   type SplicedSource,
 } from '../index.ts';
@@ -209,6 +210,15 @@ function stub(opts: StubOptions = {}): Stub {
     },
     resolveModuleId(moduleId) {
       return moduleId;
+    },
+    // The realm's own normalization, reached through the same pure path math
+    // it uses, so what a test pins is the form a link is actually stored in.
+    storedLink(selfLink: string, relativeTo: URL) {
+      return maybeRelativeReference(
+        new URL(selfLink),
+        relativeTo,
+        new URL(REALM),
+      );
     },
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
@@ -2316,11 +2326,12 @@ const tests: SharedTests<Record<string, never>> = {
       commits[0].writes['log-1.json'],
       loadModifyWrite(stored, (resource) => {
         resource.attributes.events.push({ label: 'second' });
+        // Relative, the way the realm's own serializer records a link inside
+        // the writing realm — so a realm that is cloned or served under
+        // another host keeps linking within itself.
         resource.relationships = {
-          'events.1.author': { links: { self: `${REALM}Person/mango` } },
-          'events.1.witnesses.0': {
-            links: { self: `${REALM}Person/van-gogh` },
-          },
+          'events.1.author': { links: { self: './Person/mango' } },
+          'events.1.witnesses.0': { links: { self: './Person/van-gogh' } },
         };
       }),
       'a link leaves the array and is recorded under the flattened key',
@@ -2367,10 +2378,11 @@ const tests: SharedTests<Record<string, never>> = {
       loadModifyWrite(stored, (resource) => {
         resource.attributes.events.push({ label: 'first' });
         resource.relationships = {
-          'events.0.author': { links: { self: `${REALM}Person/mango` } },
+          'events.0.author': { links: { self: './Person/mango' } },
         };
       }),
-      'the local id resolves to the url the create mints',
+      'the local id resolves to the card the create mints, stored the way ' +
+        'every other write in the batch stores a link',
     );
   },
 
@@ -2459,6 +2471,102 @@ const tests: SharedTests<Record<string, never>> = {
       },
     ]);
     assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a link collection an author emptied is stored as one': async (assert) => {
+    let stored = eventLog([]);
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+      },
+    });
+    await commitBatch(
+      core,
+      [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'first', author: null, witnesses: [] }],
+        },
+      ],
+      {},
+    );
+    assert.strictEqual(
+      commits[0].writes['log-1.json'],
+      loadModifyWrite(stored, (resource) => {
+        resource.attributes.events.push({ label: 'first' });
+        resource.relationships = {
+          'events.0.author': { links: { self: null } },
+          'events.0.witnesses': { links: { self: null } },
+        };
+      }),
+      'an emptied link and an emptied collection are both recorded, so the ' +
+        'item reads back as emptied rather than as never set',
+    );
+  },
+
+  "an item's meta carries its type and nothing an append would drop": async (
+    assert,
+  ) => {
+    let { core, commits } = stub({
+      stored: { 'log-1.json': eventLog([]) },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+        HotfixEvent: hotfixEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [
+          {
+            label: 'first',
+            meta: {
+              adoptsFrom: HOTFIX_EVENT,
+              // A nested value's own type, which the sidecar entry an append
+              // writes has no room for.
+              fields: { detail: { adoptsFrom: HOTFIX_EVENT } },
+            },
+          },
+        ],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
+    assert.strictEqual(commits.length, 0, 'nothing is committed');
+  },
+
+  'a sidecar that describes more items than the field holds is refused': async (
+    assert,
+  ) => {
+    // Positional, so one longer than the array names items that are not there
+    // — and an entry appended after it would land at an index no item occupies.
+    let stored = eventLog([{ label: 'first' }], undefined, {
+      events: [{}, {}, {}],
+    });
+    let { core, commits } = stub({
+      stored: { 'log-1.json': stored },
+      definitions: {
+        EventLog: eventLogDefinition(),
+        LogEvent: logEventDefinition(),
+        HotfixEvent: hotfixEventDefinition(),
+      },
+    });
+    let failed = await refusal(core, [
+      {
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label: 'second', meta: { adoptsFrom: HOTFIX_EVENT } }],
+      },
+    ]);
+    assert.deepEqual(failed, { status: 500, code: 'internal-error', entry: 0 });
     assert.strictEqual(commits.length, 0, 'nothing is committed');
   },
 
@@ -2668,7 +2776,7 @@ const tests: SharedTests<Record<string, never>> = {
           { label: 'third' },
         );
         resource.relationships = {
-          'events.2.author': { links: { self: `${REALM}Person/mango` } },
+          'events.2.author': { links: { self: './Person/mango' } },
         };
       }),
       'the second entry appends after the first rather than instead of it, ' +

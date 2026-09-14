@@ -246,6 +246,18 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
 
+    test('a link collection an author emptied is stored as one', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test("an item's meta carries its type and nothing an append would drop", async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
+    test('a sidecar that describes more items than the field holds is refused', async function (assert) {
+      await runSharedTest(cardOperationsBatchTests, assert, {});
+    });
+
     test('two fields are appended to in one entry', async function (assert) {
       await runSharedTest(cardOperationsBatchTests, assert, {});
     });
