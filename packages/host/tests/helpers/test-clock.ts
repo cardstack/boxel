@@ -25,6 +25,24 @@
 // in the current month are disabled by a `today` sentinel, and guards itself
 // with `getDate() > 1` — pinned to the first, that assertion would skip rather
 // than fail, which is a quieter way to lose it than leaving it broken.
+// It has to be a fixed absolute instant rather than something derived from the
+// real clock: Percy compares a snapshot against a baseline captured on another
+// day, so a rendered age is only stable if every build measures from the same
+// point. Anything day-relative would drift by construction.
+//
+// What that costs is a gap from real time that widens as real time moves past
+// it, which matters wherever a value minted from the real clock is compared
+// against one measured from here. Nothing in the suite does that today — the
+// adapter's token expiry mints and checks on the real clock on both sides, so
+// it is internally consistent — and the intent is that any producer which ends
+// up on both sides of such a comparison moves behind the seam rather than the
+// instant chasing real time. Until then this constant is load-bearing in a way
+// no assertion covers.
+//
+// UTC noon leaves twelve hours of margin either side for a local-date reading.
+// Real offsets reach +14, so at UTC+13 or +14 the local date is the 16th.
+// Nothing asserts the literal day, so that is latent rather than broken, and CI
+// runs in UTC.
 export const TEST_CLOCK_INSTANT = Date.UTC(2026, 8, 15, 12, 0, 0);
 
 export function pinTestClock() {
@@ -56,6 +74,18 @@ const FIXTURE_MTIME_SPAN_S = 59;
 export function createFixtureMtimeSequence(): () => number {
   let pinnedSeconds = Math.floor(TEST_CLOCK_INSTANT / 1000);
   let step = 0;
-  return () =>
-    Math.min(pinnedSeconds - FIXTURE_MTIME_SPAN_S + step++, pinnedSeconds - 1);
+  return () => {
+    // Throwing rather than clamping, because the clamped failure is silent and
+    // wrong in the direction that matters: past the span every write would
+    // reuse the same mtime, and an mtime equal to the one on the index row is
+    // exactly what the indexer skips. A test seeding more than this into one
+    // realm would get a quietly incomplete index rather than a red test.
+    if (step >= FIXTURE_MTIME_SPAN_S) {
+      throw new Error(
+        `fixture mtime sequence exhausted after ${FIXTURE_MTIME_SPAN_S} writes to one realm; ` +
+          `a further write would reuse an mtime and become invisible to indexing`,
+      );
+    }
+    return pinnedSeconds - FIXTURE_MTIME_SPAN_S + step++;
+  };
 }
