@@ -65,6 +65,10 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
     return this.args.overlays ?? true;
   }
 
+  private get displayContainer(): boolean {
+    return this.args.displayContainer ?? true;
+  }
+
   // Created once per component: the view-model layer memoizes render-stable
   // entries on top of a search resource. With `@resource` it wraps the
   // caller-owned resource (whose subscriptions and re-runs outlive this
@@ -77,12 +81,14 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
         this.args.resource,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
       )
     : getRenderableSearchEntries(
         this,
         () => this.args.query,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
         {
           cardInitiated: this.args.cardInitiated,
           getDefaultRealm: this.args.getDefaultRealm,
