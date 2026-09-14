@@ -85,7 +85,14 @@ export default class RenderMetaRoute extends Route<Model> {
   #authGuard = createAuthErrorGuard();
 
   async model(_: unknown, transition: Transition) {
+    // Loading `card-api`, like the `searchable` module below: per-loader
+    // cached, so the first card a tab renders pays the whole module load
+    // here and every card after it reads ~0. Timed for the same reason —
+    // it is the difference between a first-in-tab card's `meta` bucket
+    // being an unexplained outlier and being an explained one.
+    let cardApiLoadStart = performance.now();
     let api = await this.cardService.getAPI();
+    let cardApiLoadMs = performance.now() - cardApiLoadStart;
     let parentModel = this.modelFor('render') as ParentModel | undefined;
     // the global use below is to support in-browser rendering, where we actually don't have the
     // ability to lookup the parent route using RouterService.recognizeAndLoad()
@@ -292,6 +299,7 @@ export default class RenderMetaRoute extends Route<Model> {
             computedCacheHits: passSnapshot.cacheHits,
           }
         : {}),
+      cardApiLoadMs: roundMs(cardApiLoadMs),
       readySettleMs: roundMs(readySettleMs),
       searchableLoadMs: roundMs(searchableLoadMs),
       serializeMs: roundMs(serializeMs),

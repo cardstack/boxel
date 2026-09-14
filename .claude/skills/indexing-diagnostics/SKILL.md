@@ -1494,10 +1494,11 @@ The four stages, in the order they run:
 
 Each detail block is bounded the same way `searchDocFieldsMs` is — the slowest 20 entries at ≥ 1 ms — so a cheap build persists none of them, and their absence on an expensive stage is itself a reading (step 6).
 
-**Two more serial phases sit between the model build and the search doc**, both inside the same `meta` bucket and neither part of `buildModelMs`:
+**Three more serial phases sit around the model build**, all inside the same `meta` bucket and none of them part of `buildModelMs`:
 
-- **`readySettleMs`** — the meta route awaiting the parent's ready settle (the load-stability loop the parent kicks off and returns from). Frequently the largest phase after `deriveType`. It is a _wait_, so read it with `storeSettleWaits` and the card's link graph, not with the module list. On a visit whose html render already drove the settle this is ~0 and the cost is in that render's format bucket instead.
-- **`searchableLoadMs`** — loading the `searchable` base module. Per-loader cached, so exactly one card per job (per tab) pays it and the rest read ~0. A single outlier row with a large value here and nothing else remarkable is this and needs no further chasing; a large value on _many_ rows means the loader is being reset between cards (same lead as a flat `deriveType`, step 6).
+- **`cardApiLoadMs`** — loading the `card-api` base module, the route's first await. Per-loader cached, so the first card a tab renders pays it and the rest read ~0.
+- **`readySettleMs`** — the meta route awaiting the parent's ready settle (the load-stability loop the parent kicks off and returns from). Near-zero on a card whose graph hydration already resolved, and the phase a link-heavy card pays in. It is a _wait_, so read a large one with `storeSettleWaits` and the card's link graph, not with the module list. On a visit whose html render already drove the settle this is ~0 and the cost is in that render's format bucket instead.
+- **`searchableLoadMs`** — loading the `searchable` base module the search-doc generator lives in. Cached the same way, and usually paid by the same first card as `cardApiLoadMs`. A single outlier row with a large value in either and nothing else remarkable is a first-in-tab card and needs no further chasing; large values on _many_ rows mean the loader is being reset between cards (same lead as a flat `deriveType`, step 6).
 
 **Step 1 — find the rows whose model build dominates the visit.**
 
@@ -1509,8 +1510,10 @@ SELECT
   (diagnostics->'buildModelMs'->>'deriveType')::numeric    AS derive_ms,
   (diagnostics->'buildModelMs'->>'hydrate')::numeric       AS hydrate_ms,
   (diagnostics->'buildModelMs'->>'storeSettle')::numeric   AS settle_ms,
+  (diagnostics->>'cardApiLoadMs')::numeric                 AS card_api_ms,
   (diagnostics->>'readySettleMs')::numeric                 AS ready_ms,
   (diagnostics->>'searchableLoadMs')::numeric              AS searchable_ms,
+  (diagnostics->>'fileExtractMs')::numeric                 AS extract_ms,
   COALESCE((diagnostics->>'searchDocMs')::numeric, 0)
     + COALESCE((diagnostics->>'searchDocSettleMs')::numeric, 0)
     + COALESCE((diagnostics->>'serializeMs')::numeric, 0)  AS doc_ms,
@@ -1528,7 +1531,7 @@ ORDER BY (
 LIMIT 20;
 ```
 
-`Σ buildModelMs + ready_ms + searchable_ms + doc_ms` should account for nearly all of `meta_ms`; what is left is the route transition itself plus the types / displayNames / deps resolution, which is a prototype-chain walk and cheap. The largest phase picks the next step.
+`Σ buildModelMs + card_api_ms + ready_ms + searchable_ms + extract_ms + doc_ms` should account for nearly all of `meta_ms` — remember `extract_ms` (`fileExtractMs`), because a card-instance visit's `meta` is the **fused** transition and performs the file row's extract inside it. What is left is the route transition itself plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The largest phase picks the next step.
 
 **Step 2 — attribute a realm's average visit across the stages.**
 
@@ -1542,6 +1545,7 @@ SELECT
   round(avg((diagnostics->'buildModelMs'->>'deriveType')::numeric))   AS avg_derive_ms,
   round(avg((diagnostics->'buildModelMs'->>'hydrate')::numeric))      AS avg_hydrate_ms,
   round(avg((diagnostics->'buildModelMs'->>'storeSettle')::numeric))  AS avg_settle_ms,
+  round(avg((diagnostics->>'cardApiLoadMs')::numeric))                AS avg_card_api_ms,
   round(avg((diagnostics->>'readySettleMs')::numeric))                AS avg_ready_ms,
   round(avg((diagnostics->>'searchableLoadMs')::numeric))             AS avg_searchable_ms,
   round(avg((diagnostics->>'searchDocMs')::numeric
@@ -1874,6 +1878,10 @@ A few large values at the top decaying to near-zero is a warming graph (healthy)
                                  // count relative to `calls` is normal for cards that
                                  // serialize + searchDoc the same field (every contains /
                                  // contains-many / links-to field does this).
+  "cardApiLoadMs": 0.2,          // wall-clock loading the `card-api` base module, the
+                                 // render.meta route's first await. Per-loader cached,
+                                 // so the first card a tab renders pays the module load
+                                 // and the rest read ~0.
   "readySettleMs": 6482,         // wall-clock the render.meta route spent awaiting the
                                  // parent route's ready settle (its load-stability
                                  // loop). A serial phase of the `meta` route step,
@@ -1955,7 +1963,7 @@ All ms values are server-observed walltime.
 - `waits.semaphoreMs` + `waits.admissionMs` + `waits.tabQueueMs` + `waits.tabStartupMs` + `waits.tabProbeMs` ≤ `launchMs`. `launchMs` is measured around the full `PagePool.getPage` call; the sub-waits cover its awaits (semaphore acquire, file admission, affinity-entry selection, standby warmup, warm-tab liveness probe) but not the synchronous bookkeeping between them (affinity reassignment, LRU touch, standby top-up kickoff). For a healthy fleet the residual is < 5 ms; a large residual is unusual and worth inspecting `PagePool` directly.
 - `renderElapsedMs` is wall time _inside_ `withTimeout()` — includes host fetches, store settle, and the actual render pass. It hits the configured `RENDER_TIMEOUT_MS` on a timeout.
 - `indexRoutesMs.{card,file}.*` sum to **less** than `renderElapsedMs`: each is one index-visit route step's wall-clock, and the gap between their sum and `renderElapsedMs` is the inter-route plumbing (route transitions, instantiation, settle handoffs) — the part of the per-visit floor that isn't a route step. A route step's own transition + settle is inside its number, so `meta` on a near-zero-search-doc card is mostly route machinery, not the doc build (`searchDocMs` / `searchDocSettleMs` break the doc build out of the `meta` number). An `icon` leg served by the per-type memo contributes nothing this visit and isn't recorded.
-- `Σ buildModelMs` + `readySettleMs` + `searchableLoadMs` + (`searchDocSettleMs` + `searchDocMs` + `serializeMs`) accounts for nearly all of `indexRoutesMs.card.meta` on an index visit; the remainder is the route transition plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The model build is normally the larger half — a `meta` bucket that dwarfs the doc build is a Mode N question, not a Mode J one. On a fused visit the same identity holds against `renderFormatsMs.card.isolated` instead, because that render triggered the parent transition.
+- `Σ buildModelMs` + `cardApiLoadMs` + `readySettleMs` + `searchableLoadMs` + `fileExtractMs` + (`searchDocSettleMs` + `searchDocMs` + `serializeMs`) accounts for nearly all of `indexRoutesMs.card.meta` on an index visit — `fileExtractMs` included, because a card-instance visit's `meta` is the fused transition and does the file row's extract inside it. The remainder is the route transition plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The model build is normally the larger half — a `meta` bucket that dwarfs the doc build is a Mode N question, not a Mode J one. On a fused visit the same identity holds against `renderFormatsMs.card.isolated` instead, because that render triggered the parent transition.
 - `unattributedMs` = `renderElapsedMs` − Σ(`indexRoutesMs` + `renderFormatsMs`), computed server-side rather than left to the reader. On a row produced by two visits it is the sum of both visits' residuals, matching how `renderElapsedMs` itself merges.
 - `moduleEvaluationsMs` is a subset of `recentModuleEvaluations` scoped to this visit's model build. `recentModuleEvaluations` is the Loader's whole rolling window (every render this tab served, timeout path only); `moduleEvaluationsMs` is the part this row paid for, and rides every successful row.
 - `stageAgeMs` is host-observed — it's computed as `Date.now() - stageSetAt` at the moment the post-timeout capture ran, so there can be a small read-delay offset vs. `renderElapsedMs`. For triage, `stageAgeMs` represents "how long the render has been stuck in its current stage".

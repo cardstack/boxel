@@ -298,6 +298,11 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // computedCacheHits` is the total computed-read pressure of the
   // pass; the ratio tells you how much duplicate work the memo elided.
   computedCacheHits?: number;
+  // Wall-clock loading the `card-api` base module, the render.meta route's
+  // first await. Per-loader cached like `searchableLoadMs`, so the first
+  // card a tab renders pays the module load and the rest read ~0 — which is
+  // what makes a first-in-tab card's `meta` bucket an outlier.
+  cardApiLoadMs?: number;
   // Wall-clock the render.meta route spent awaiting the render model's ready
   // settle — the parent `render` route's load-stability loop, which it kicks
   // off and returns from, so this await is where the settle is paid for. A

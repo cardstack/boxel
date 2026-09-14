@@ -921,9 +921,13 @@ module(basename(import.meta.filename), function () {
         );
       }
 
-      // The meta route's own two waits, which sit inside the same route
-      // bucket as the model build and are not part of it.
-      for (let phase of ['readySettleMs', 'searchableLoadMs'] as const) {
+      // The meta route's own waits, which sit inside the same route bucket
+      // as the model build and are not part of it.
+      for (let phase of [
+        'cardApiLoadMs',
+        'readySettleMs',
+        'searchableLoadMs',
+      ] as const) {
         let ms = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
           phase
         ];

@@ -614,11 +614,16 @@ module('Acceptance | prerender | meta', function (hooks) {
       );
     }
 
-    // The two waits the meta route itself performs before any of its own
-    // work: the parent's ready settle and the searchable module load. Both
-    // are serial phases of the `meta` route step, so leaving them out would
-    // put the gap back in the bucket this breakdown exists to close.
-    for (let phase of ['readySettleMs', 'searchableLoadMs'] as const) {
+    // The three waits the meta route itself performs before any of its own
+    // work: the two per-loader-cached base-module loads and the parent's
+    // ready settle. All are serial phases of the `meta` route step, so
+    // leaving them out would put the gap back in the bucket this breakdown
+    // exists to close.
+    for (let phase of [
+      'cardApiLoadMs',
+      'readySettleMs',
+      'searchableLoadMs',
+    ] as const) {
       assert.strictEqual(
         typeof meta.diagnostics?.[phase],
         'number',
