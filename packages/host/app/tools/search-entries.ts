@@ -154,7 +154,9 @@ export default class SearchEntriesTool extends HostBaseTool<
     'Search across realms for existing cards, specs, listings, themes, and files — ' +
     'the primary tool for discovery: always check what already exists before creating ' +
     'anything new. Takes a card query (`filter` supporting `type`/`on`/`eq`/`contains`/' +
-    '`range`/`any`/`every`/`not` and full-text `matches`, plus optional `sort`), optional ' +
+    '`range`/`any`/`every`/`not` and full-text `matches` — whose bare words are ' +
+    'ANDed, with `OR` supported between alternatives — plus optional `sort`). ' +
+    'Also optional ' +
     '`realms` (realm URLs; defaults to every realm you can read), optional `scope` ' +
     "('cards' | 'files' | 'all', default 'all'), and optional `limit` (default " +
     `${DEFAULT_LIMIT}, max ${MAX_LIMIT}). Returns lightweight entry summaries — url, ` +
