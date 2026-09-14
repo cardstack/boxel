@@ -271,6 +271,11 @@ export interface PrerenderMetaDiagnostics {
   // counter, which no name change can reset. A render that records no
   // capture errors drops it along with `screenshotErrors`.
   screenshotCaptureFailureRenders?: number;
+  // Consecutive renders that withheld a stale-shell failure for this row.
+  // Withholding removes the `has_error` that would have told an operator to
+  // reindex, so the reconcile sweep re-drives these instead — and this bounds
+  // that retrying, for the case where the shells never do agree.
+  staleShellFailureRenders?: number;
   // Per-slot wall-clock of the declared-screenshot captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is

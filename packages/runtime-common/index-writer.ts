@@ -1681,6 +1681,21 @@ export class Batch {
         );
         let withholdHtmlFailure =
           verdictCoversRow(diagnostics, type) && hasPriorRender;
+        if (withholdHtmlFailure) {
+          // Withholding keeps the prior render published and clears the error
+          // that would otherwise have flagged the row — so nothing is left
+          // asking for the re-render once the shells agree again. The
+          // reconcile sweep picks these up instead, and this is the run length
+          // that bounds how long it keeps trying. Extend the prior row's run;
+          // a successful render replaces the row outright and ends it.
+          let priorRun =
+            (production?.diagnostics as Diagnostics | null)
+              ?.staleShellFailureRenders ?? 0;
+          diagnostics = {
+            ...diagnostics,
+            staleShellFailureRenders: priorRun + 1,
+          };
+        }
         if (errorDoc.visitRequestFailure) {
           // Consecutive-failure bookkeeping for the reconcile sweep's
           // bounded retry lane: extend the prior row's run when it was also
