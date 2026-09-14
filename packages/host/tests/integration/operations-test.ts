@@ -1441,7 +1441,7 @@ module('Integration | operations', function (hooks) {
       [
         'an actor reference carrying a key',
         { base: 'transform', set: { x: { $ref: 'actor', key: 'id' } } },
-        /"key" is not a valid key for `set.x`/,
+        /carries a key; actor\(\) is the caller's user id and has no members to read/,
       ],
       [
         'an instance reference with an empty key',

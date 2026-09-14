@@ -151,7 +151,19 @@ function resolveMarker(
       // The explicit "this is a card" spelling. In a query every card-valued
       // slot is a comparison against a stored identity rather than a write, so
       // what the marker wraps resolves to that identity and the wrapper adds
-      // nothing around it.
+      // nothing around it — which is why the caller cannot stand inside one.
+      // A user id is not a card identity, so the comparison would match no
+      // row rather than fail, and a saved search that silently finds nothing
+      // is worse than one that refuses.
+      if (
+        isPlainObject(marker.value) &&
+        (marker.value as Record<string, unknown>).$ref === 'actor'
+      ) {
+        throw invalidParams(
+          path,
+          `wraps actor() in card(); the caller is a user id rather than a card, so nothing stored would ever equal it`,
+        );
+      }
       return resolveMarkers(marker.value, definition, invocation, path);
     case 'instance':
       // A query is rooted in a type, not in one card, so there is no target

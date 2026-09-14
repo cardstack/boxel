@@ -1337,6 +1337,13 @@ function assertValidReference(
       return;
     }
     case 'actor': {
+      // Named before the generic key check, so a key gets the reason rather
+      // than a list of the one key that is allowed.
+      if (reference.key !== undefined) {
+        throw new Error(
+          `${label}: the actor reference at \`${path}\` carries a key; actor() is the caller's user id and has no members to read`,
+        );
+      }
       assertOnlyKeys(label, path, reference, ['$ref']);
       return;
     }

@@ -1925,6 +1925,43 @@ const tests: SharedTests<Record<string, never>> = {
       assert.strictEqual(commits.length, 0, 'nothing is committed');
     },
 
+  'the caller cannot be written into a relationship, however it is spelled':
+    async (assert) => {
+      // Two routes into the same edge: the field's own type makes a link out
+      // of a bare marker, and `card(…)` declares one whatever field it fills.
+      // A user id names no card, so either would store an edge pointing at a
+      // URL nothing is stored at.
+      for (let [name, fill] of [
+        ['a bare marker in a link field', { friend: { $ref: 'actor' } }],
+        [
+          'a marker wrapped in card()',
+          { friend: { $ref: 'card', value: { $ref: 'actor' } } },
+        ],
+        [
+          'a marker inside a link list',
+          { friend: [{ $ref: 'card', value: { $ref: 'actor' } }] },
+        ],
+      ] as [string, Record<string, unknown>][]) {
+        let definition: OperationDefinition = {
+          base: 'create',
+          deterministic: true,
+          of: PERSON,
+          fill: fill as never,
+        };
+        let { core, commits } = stub({
+          definitions: { Person: personDefinition() },
+        });
+        assert.deepEqual(
+          await refusal(core, [{ op: 'create', lid: 'anon', definition }], {
+            actor: '@tester:localhost',
+          }),
+          { status: 400, code: 'invalid-params', entry: 0 },
+          `refused: ${name}`,
+        );
+        assert.strictEqual(commits.length, 0, `nothing committed for ${name}`);
+      }
+    },
+
   'a template that reads the actor needs one': async (assert) => {
     let definition: OperationDefinition = {
       base: 'create',

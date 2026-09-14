@@ -886,6 +886,17 @@ async function resourceFromTemplate(
       continue;
     }
     if (resolved.isLink || linkFields.has(field)) {
+      // The field's own type can make a link out of a value the template did
+      // not mark as one, so this is where a user id headed for a
+      // relationship is caught.
+      if (resolved.isActor) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid reference',
+          detail: actorIsNotACard(field),
+        });
+      }
       setLink(resource, field, resolved.value, field);
       continue;
     }
@@ -993,6 +1004,10 @@ interface ResolvedTemplate {
   // Whether the template itself declared this a link — a `card(…)` marker, or
   // a param the schema declares as one.
   isLink: boolean;
+  // Whether this value came from the caller. Carried separately from the
+  // value because a user id is an ordinary string once resolved, and the
+  // field it lands in is what decides whether that is a problem.
+  isActor: boolean;
 }
 
 function resolveTemplate(
@@ -1007,22 +1022,25 @@ function resolveTemplate(
     return {
       value: members.map((member) => member.value),
       isLink: members.some((member) => member.isLink),
+      isActor: members.some((member) => member.isActor),
     };
   }
   if (!isMarker(template)) {
     if (template !== null && typeof template === 'object') {
       let value: Record<string, unknown> = {};
       let isLink = false;
+      let isActor = false;
       for (let [key, member] of Object.entries(
         template as Record<string, OperationTemplate>,
       )) {
         let resolved = resolveTemplate(member, scope, `${path}.${key}`);
         value[key] = resolved.value;
         isLink ||= resolved.isLink;
+        isActor ||= resolved.isActor;
       }
-      return { value, isLink };
+      return { value, isLink, isActor };
     }
-    return { value: template, isLink: false };
+    return { value: template, isLink: false, isActor: false };
   }
   return resolveMarker(template, scope, path);
 }
@@ -1047,6 +1065,7 @@ function resolveMarker(
             ? resolveLinkParam(value, ctx, path)
             : value,
         isLink: declared?.kind === 'link',
+        isActor: false,
       };
     }
     case 'actor':
@@ -1073,9 +1092,10 @@ function resolveMarker(
             `caller is a user id with no members to read`,
         });
       }
-      // A user id is a value, never a card: `isLink` stays false so the
-      // caller lands in a text field rather than in a relationship.
-      return { value: ctx.actor, isLink: false };
+      // The template says nothing about links, so the field this lands in is
+      // what decides whether a user id belongs there; `isActor` carries the
+      // answer to where that is known.
+      return { value: ctx.actor, isLink: false, isActor: true };
     case 'instance': {
       if (!anchor) {
         throw new OperationFailure({
@@ -1088,20 +1108,35 @@ function resolveMarker(
         });
       }
       if (marker.key === undefined || marker.key === 'id') {
-        return { value: anchor.id, isLink: false };
+        return { value: anchor.id, isLink: false, isActor: false };
       }
       return {
         value: own(anchor.resource.attributes, String(marker.key)),
         isLink: false,
+        isActor: false,
       };
     }
     case 'card': {
       // The marker says this value is a link whatever it resolves to, so a
-      // nested reference is resolved and the result read as an identity.
+      // nested reference is resolved and the result read as an identity —
+      // which is the one thing the caller cannot supply. A user id names no
+      // card, so the edge would point at a URL nothing is stored at.
+      if (isMarker(marker.value) && marker.value.$ref === 'actor') {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid reference',
+          detail: actorIsNotACard(path),
+        });
+      }
       let inner = isMarker(marker.value)
         ? resolveMarker(marker.value, scope, path).value
         : marker.value;
-      return { value: resolveLinkParam(inner, ctx, path), isLink: true };
+      return {
+        value: resolveLinkParam(inner, ctx, path),
+        isLink: true,
+        isActor: false,
+      };
     }
     default:
       throw new OperationFailure({
@@ -1113,6 +1148,13 @@ function resolveMarker(
         )}`,
       });
   }
+}
+
+// Why the caller cannot stand where a card identity belongs. The realm
+// authenticates a caller as a user id and no card represents a user, so an
+// edge built from one points at a URL nothing is stored at.
+function actorIsNotACard(path: string): string {
+  return `\`${path}\` needs a card identity, and actor() is the caller's user id rather than a card — take the person as a param declared with linkTo(…) and write that instead`;
 }
 
 // A link's value as the caller supplied it: the URL of a saved card, or the
