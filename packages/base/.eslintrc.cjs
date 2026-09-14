@@ -22,12 +22,13 @@ const ERASABLE_MINUS_DECORATOR = NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
 // one would keep working in production — but it couples behavior to a hook
 // that exists for tests and may be deleted with them. Banned here as it is in
 // catalog contents; this package has no tests of its own to exempt.
-const CARD_CODE_RESTRICTED_SYNTAX = [
-  'error',
+const CARD_CODE_SELECTORS = [
   ...ERASABLE_MINUS_DECORATOR,
   ...DATA_TEST_SELECTORS,
   ...AMBIENT_CLOCK_SELECTORS,
 ];
+
+const CARD_CODE_RESTRICTED_SYNTAX = ['error', ...CARD_CODE_SELECTORS];
 
 // Rules that apply to `.ts` and `.gts` alike.
 const CARD_CODE_RULES = {
@@ -143,14 +144,19 @@ module.exports = {
       rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
     },
     {
-      // The seam is the one place allowed to read the real clock. It keeps the
-      // rest of the card-code restrictions.
+      // The seam is the one place allowed to read the real clock, and that is
+      // the only exception it gets. Subtracting from the shared list rather
+      // than restating what is left means a group added to card code later
+      // reaches this file too — which matters most here, since a seam that
+      // quietly fell out of the card-code rules is the last file anyone would
+      // think to check.
       files: ['helpers/clock.ts'],
       rules: {
         'no-restricted-syntax': [
           'error',
-          ...ERASABLE_MINUS_DECORATOR,
-          ...DATA_TEST_SELECTORS,
+          ...CARD_CODE_SELECTORS.filter(
+            (selector) => !AMBIENT_CLOCK_SELECTORS.includes(selector),
+          ),
         ],
       },
     },
