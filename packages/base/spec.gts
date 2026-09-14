@@ -1147,9 +1147,11 @@ function myLoader(): Loader {
   // uses the loader the host publishes for bundled modules.
 
   // When type-checking realm-server, tsc sees this file as CommonJS output and
-  // so complains about import.meta.
+  // so complains about import.meta. Scope the suppression to that read alone —
+  // widening it over the fallback would hide real errors there too.
   // @ts-ignore
-  let loader = (import.meta as any).loader ?? Loader.forBundledModules();
+  let injected = (import.meta as any).loader;
+  let loader = injected ?? Loader.forBundledModules();
   if (!loader) {
     throw new Error('no Loader is available to this module');
   }
