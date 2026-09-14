@@ -76,6 +76,14 @@ export function registerJobHeartbeat(
   jobHeartbeats.set(reservationId, onHeartbeat);
 }
 
+// Whether a job is still being tracked. Exists so a test can assert the
+// registry does not retain callbacks for jobs that have ended — a leak that is
+// otherwise invisible, because a retained entry changes nothing a caller can
+// observe until memory runs out.
+export function jobHeartbeatRegistered(reservationId: number): boolean {
+  return jobHeartbeats.has(reservationId);
+}
+
 export function unregisterJobHeartbeat(reservationId: number): void {
   jobHeartbeats.delete(reservationId);
 }

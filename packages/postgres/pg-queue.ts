@@ -750,9 +750,6 @@ export class PgQueueRunner implements QueueRunner {
                 reservationId: jobReservationId,
                 priority: jobToRun.priority,
                 queueWaitMs: Number.isFinite(queueWaitMs) ? queueWaitMs : null,
-              }).finally(() => {
-                unregisterJobHeartbeat(jobReservationId);
-                clearTimeout(deadlineTimer);
               }),
               // We race the job so a promise that never resolves cannot hold
               // this worker hostage. What counts as "never resolves" is now
@@ -765,7 +762,16 @@ export class PgQueueRunner implements QueueRunner {
               new Promise<'timeout'>((r) => {
                 onDeadline = () => r('timeout');
               }),
-            ]);
+            ]).finally(() => {
+              // On the race, not on the handler. The timeout exists precisely
+              // for a handler promise that never settles, so cleanup hung off
+              // the handler would never run in the one case it matters — the
+              // registry would retain the callback and its closures for every
+              // wedged job, and late progress from an abandoned handler would
+              // keep arming timers nobody is waiting on.
+              unregisterJobHeartbeat(jobReservationId);
+              clearTimeout(deadlineTimer);
+            });
             if (result === 'timeout') {
               throw new Error(
                 `Timed-out after ${effectiveTimeoutSec}s waiting for job ${

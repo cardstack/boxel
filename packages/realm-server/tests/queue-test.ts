@@ -20,7 +20,10 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-import { heartbeatJob } from '@cardstack/runtime-common/queue';
+import {
+  heartbeatJob,
+  jobHeartbeatRegistered,
+} from '@cardstack/runtime-common/queue';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
@@ -279,6 +282,49 @@ module(basename(import.meta.filename), function () {
         job.done,
         /Timed-out after 2s/,
         'a job reporting nothing is cut off at its deadline',
+      );
+      releaseHandler();
+    });
+
+    test('a job cut off at its deadline stops being tracked', async function (assert) {
+      // The deadline exists for a handler that never settles, so cleanup hung
+      // off the handler would never run in the one case that needs it: the
+      // registry would keep the callback and its closures for every wedged
+      // job, and late progress from an abandoned handler would keep arming
+      // timers nobody is waiting on.
+      let releaseHandler!: () => void;
+      let reservationSeen!: number;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'abandoned-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            reservationSeen = args.jobInfo!.reservationId;
+            resolveStarted();
+            await new Promise<void>((res) => (releaseHandler = res));
+            return { late: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ late: boolean }>({
+        jobType: 'abandoned-job',
+        concurrencyGroup: 'abandoned-group',
+        timeout: 600, // clamped to 2s
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await assert.rejects(job.done, /Timed-out after 2s/);
+
+      // The handler is still running — exactly the state the leak lived in.
+      // A heartbeat from it must find nothing registered.
+      assert.strictEqual(
+        heartbeatJob(reservationSeen),
+        undefined,
+        'a heartbeat for a cut-off job is a no-op rather than re-arming a timer',
+      );
+      assert.false(
+        jobHeartbeatRegistered(reservationSeen),
+        'the registry does not retain the callback for a job that timed out',
       );
       releaseHandler();
     });
