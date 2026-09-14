@@ -159,7 +159,11 @@ export default class SearchEntriesTool extends HostBaseTool<
     'Also optional ' +
     '`realms` (realm URLs; defaults to every realm you can read), optional `scope` ' +
     "('cards' | 'files' | 'all', default 'all'), and optional `limit` (default " +
-    `${DEFAULT_LIMIT}, max ${MAX_LIMIT}). Returns lightweight entry summaries — url, ` +
+    `${DEFAULT_LIMIT}, max ${MAX_LIMIT}) — a cap on the returned rows, while ` +
+    '`total` reports the full match count across realms. Relevance-ranked ' +
+    'results are ordered across all realms; a sort you supply yourself orders ' +
+    'rows within each realm and then merges them. ' +
+    `Returns lightweight entry summaries — url, ` +
     'ref, specType, title, description, file name, full readMe, and full-text match ' +
     'relevance — not live card instances. A result with `incomplete: true` is ' +
     'partial: at least one searched realm failed to answer, so matches may be ' +
@@ -206,6 +210,14 @@ export default class SearchEntriesTool extends HostBaseTool<
         (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
       );
     }
+    // `page.size` bounds each realm's own search, and the federated merge
+    // concatenates those pages without truncating — so N realms answering a
+    // `limit` of 10 hand back up to 10N summaries, each carrying a full
+    // `readMe`. That is the response size the fixed projection exists to
+    // bound, and the caller was promised a maximum, so impose it here.
+    // `total` still reports the real summed match count, which is what tells
+    // a caller the page is partial.
+    rows = rows.slice(0, limit);
 
     let commandModule = await this.loadToolModule();
     let { SearchEntriesResult, SearchEntrySummaryField } = commandModule;

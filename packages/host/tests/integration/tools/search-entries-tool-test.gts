@@ -21,6 +21,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+const testRealm2URL = 'http://test-realm/test2/';
+
 const longReadMe = `# Author card\n\n${'The Author card models a writer with biographical fields. '.repeat(20)}`;
 
 module('Integration | tools | search-entries', function (hooks) {
@@ -43,7 +45,7 @@ module('Integration | tools | search-entries', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
+    activeRealms: [testRealmURL, testRealm2URL],
     autostart: true,
   });
 
@@ -92,6 +94,15 @@ module('Integration | tools | search-entries', function (hooks) {
         bio: `Prolific example writer number ${i}.`,
       });
     }
+    // Five more under a surname only the federated-cap test queries, so this
+    // realm can fill a page of 5 on its own — the second realm holds five more.
+    for (let i = 1; i <= 5; i++) {
+      authorInstances[`Author/capped-${i}.json`] = new Author({
+        firstName: `Capped${i}`,
+        lastName: 'Capped',
+        bio: `First-realm capped writer number ${i}.`,
+      });
+    }
 
     await withCachedRealmSetup(async () => {
       await setupIntegrationTestRealm({
@@ -117,6 +128,37 @@ module('Integration | tools | search-entries', function (hooks) {
           'notes.md': '# Workspace notes\n\nA plain markdown file fixture.',
           'realm.json': realmConfigCardJSON({
             name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
+        },
+      });
+      // A second realm holding its own matches for the federated-cap test.
+      // `lastName: 'Capped'` is queried by that test alone — the shared
+      // 'Example' surname is what the default-limit test counts, and adding
+      // cross-realm rows under it would change that total.
+      let secondRealmAuthors: Record<string, unknown> = {};
+      for (let i = 1; i <= 5; i++) {
+        secondRealmAuthors[`Author/other-${i}.json`] = {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: `Other${i}`,
+              lastName: 'Capped',
+              bio: `Second-realm capped writer number ${i}.`,
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}author`, name: 'Author' },
+            },
+          },
+        };
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          ...secondRealmAuthors,
+          'realm.json': realmConfigCardJSON({
+            name: 'Second Search Entries Workspace',
             iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
           }),
         },
@@ -280,6 +322,33 @@ module('Integration | tools | search-entries', function (hooks) {
 
     let clamped = await runSearch({ query, limit: 50 });
     assert.strictEqual(clamped.results.length, 10, 'limit clamps to 10');
+  });
+
+  test('limit caps the merged result, not each realm', async function (assert) {
+    // Both realms hold matches for this query. `page.size` bounds each realm's
+    // own search and the federated merge concatenates those pages, so a limit
+    // enforced only per realm returns up to limit x realmCount rows here.
+    let query: Query = {
+      filter: {
+        on: { module: rri(`${testRealmURL}author`), name: 'Author' },
+        contains: { lastName: 'Capped' },
+      },
+    };
+
+    let capped = await runSearch({
+      query,
+      realms: [testRealmURL, testRealm2URL],
+      limit: 5,
+    });
+    assert.strictEqual(
+      capped.results.length,
+      5,
+      'limit bounds the merged rows across both realms, not each realm',
+    );
+    assert.ok(
+      capped.total > 5,
+      'total still reports the full cross-realm match count',
+    );
   });
 
   test('realms input targets the given realm', async function (assert) {
