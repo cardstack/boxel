@@ -17,7 +17,7 @@ Maps every file in `src/jqtools/` to its upstream source at
 | `evaluate/applyBinary.ts`                       | `evaluate/applyBinary.ts`                       | ✓ near-verbatim                   |
 | `evaluate/applyFormat.ts`                       | `evaluate/applyFormat.ts`                       | ✓ near-verbatim                   |
 | `evaluate/compare.ts`                           | `evaluate/compare.ts`                           | ✓ near-verbatim                   |
-| `evaluate/evaluateErrors.ts`                    | `evaluate/evaluateErrors.ts`                    | ✓ near-verbatim                   |
+| `evaluate/evaluateErrors.ts`                    | `evaluate/evaluateErrors.ts`                    | near-verbatim + not-defined hints |
 | `evaluate/generateCombinations.ts`              | `evaluate/generateCombinations.ts`              | ✓ near-verbatim                   |
 | `evaluate/generateObjects.ts`                   | `evaluate/generateObjects.ts`                   | ✓ near-verbatim                   |
 | `evaluate/utils/binaryOperator.ts`              | `evaluate/utils/binaryOperator.ts`              | ✓ near-verbatim                   |
@@ -91,6 +91,12 @@ maxOutputBytes, maxWallClockMs, signal }`.
   synchronous and would be unwound before either completed.
 - `currentRequestContext()` — the innermost scoped context, read by the
   request-context builtins in `bxl/bridge/`.
+- `notDefinedHint(name)` — the sentence `notDefinedError` appends for a
+  `NAME/arity` that names a request-context builtin at an arity it does not
+  have. Resolution is per name _and_ arity, so `actor("id")` is an undefined
+  call rather than a bad argument to a defined one, and the bare upstream
+  message says only that. The hint names the form that exists. It lives here
+  because the accessors' shape is this file's subject.
 
 The request-context trio is BXL's own concept rather than anything jq has, and
 it lives here because a native filter is invoked as `(input, ...args)` with no

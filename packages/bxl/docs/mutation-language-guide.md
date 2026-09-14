@@ -471,7 +471,7 @@ being repeated in every AI-written statement:
   "syntax": "readable",
   "context": {
     "params": { "note": "looks right to me" },
-    "actor": { "id": "user:ada" }
+    "actor": "user:ada"
   },
   "returning": ["changes", "affected", "paths"]
 }
@@ -488,15 +488,18 @@ None of those concerns makes the actual edit harder to read.
 
 A program sees the Card through `.`. Three calls supply the rest of what a
 write needs, each reading a value the host resolved before the program ran:
-`params("note")` is that entry of the payload the caller sent, `actor("id")`
-is the authenticated caller, and `instance("revision")` is the stored
-document. `actor()` and `instance()` with no argument hand back the whole
-object.
+`params("note")` is that entry of the payload the caller sent, `actor()` is
+the authenticated caller's user id, and `instance("revision")` is the stored
+document. `instance()` with no argument hands back the whole object.
+
+`actor` is the one that takes no argument at all. The host authenticates a
+caller as a user id and knows nothing else about them, so the id is the whole
+of what a program can read — there is no member to name.
 
 ```bxl
 assert(Status = "review", "must still be in review");
 append(Comment, params("note"));
-Reviewer = actor("id");
+Reviewer = actor();
 ```
 
 Each of these fails the program rather than reading `null` when the host
@@ -714,7 +717,7 @@ move_item_before(
 reorder_by(Item, ID, params("order"));
 
 # Read the caller and the stored document
-Reviewer = actor("id");
+Reviewer = actor();
 Note = "revision " + (instance("revision") | tostring);
 
 # Structural calls stand alone; never write Item = append(...)
