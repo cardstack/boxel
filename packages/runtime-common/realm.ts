@@ -3,9 +3,14 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  prerenderSpawnedPriority,
   unbuiltIndexFailure,
 } from './jobs/indexing.ts';
-import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
+import {
+  awaitPublishedHtmlReady,
+  enqueuePrerenderHtmlJob,
+} from './jobs/prerender-html.ts';
 import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -156,7 +161,11 @@ import type {
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
-import type { FromScratchResult } from './tasks/indexer.ts';
+import type {
+  DeferredPrerenderHtml,
+  FromScratchResult,
+  IncrementalChange,
+} from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import { merge } from 'lodash-es';
 import { mergeWith } from 'lodash-es';
@@ -1892,18 +1901,36 @@ export class Realm {
       delete?: true;
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      // Ask the pass not to enqueue its own prerender_html job; the returned
+      // `deferredPrerenderHtml` then carries the set it would have rendered.
+      deferPrerenderHtml?: boolean;
+      // Invalidation sets earlier passes of this same write deferred, folded
+      // into the prerender_html job this pass spawns.
+      carriedPrerenderHtmlChanges?: IncrementalChange[];
     },
-  ): Promise<{ invalidations: string[]; generation?: number }> {
+  ): Promise<{
+    invalidations: string[];
+    generation?: number;
+    deferredPrerenderHtml?: DeferredPrerenderHtml;
+  }> {
     if (urls.length === 0) {
       return { invalidations: [] };
     }
 
     let invalidations = new Set<string>();
     let generation: number | undefined;
+    let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     await this.#realmIndexUpdater.update(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+      ...(opts?.carriedPrerenderHtmlChanges?.length
+        ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+        : {}),
+      onDeferredPrerenderHtml: (deferred) => {
+        deferredPrerenderHtml = deferred;
+      },
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -1921,7 +1948,11 @@ export class Realm {
       },
     });
 
-    return { invalidations: [...invalidations], generation };
+    return {
+      invalidations: [...invalidations],
+      generation,
+      ...(deferredPrerenderHtml ? { deferredPrerenderHtml } : {}),
+    };
   }
 
   // Two-phase variant for the deferred-indexing path. Awaits the durable
@@ -1944,6 +1975,9 @@ export class Realm {
       delete?: true;
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      // Invalidation sets earlier passes of this same write deferred, folded
+      // into the prerender_html job this pass spawns.
+      carriedPrerenderHtmlChanges?: IncrementalChange[];
       onSettled?: (
         invalidations: string[],
         meta: { generation?: number },
@@ -1963,6 +1997,9 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.carriedPrerenderHtmlChanges?.length
+        ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+        : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -2529,12 +2566,37 @@ export class Realm {
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
-    let performIndex = async () => {
-      let { invalidations: workingInvalidations, generation } =
-        await this.updateIndexAndCollectInvalidations(urls, {
-          clientRequestId,
-          initiatedBy: initiatingUser,
-        });
+    // The module→instance flush below runs an index pass whose invalidation
+    // set is every dependent of the modules written so far — including the
+    // instances this very batch is about to write, whose on-disk content at
+    // flush time is still the pre-write version. Rendering that set now would
+    // render content the same write supersedes moments later, and the write's
+    // own pass would render it a second time. So the flush defers its
+    // prerender and parks the set here; whichever pass closes the write folds
+    // it into the one prerender_html job the write pays for.
+    let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+    let carriedPrerenderHtmlChanges = () =>
+      deferredPrerenderHtml?.changes ?? [];
+    let performIndex = async (opts?: { deferPrerenderHtml?: boolean }) => {
+      let {
+        invalidations: workingInvalidations,
+        generation,
+        deferredPrerenderHtml: deferred,
+      } = await this.updateIndexAndCollectInvalidations(urls, {
+        clientRequestId,
+        initiatedBy: initiatingUser,
+        ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+        // Handed over either way: a pass that renders folds this into the job
+        // it spawns, and a pass that defers folds it into the set it returns.
+        carriedPrerenderHtmlChanges: carriedPrerenderHtmlChanges(),
+      });
+      // A deferring pass returns the set it declined to render, already
+      // unioned with whatever it was handed. A non-deferring pass normally
+      // returns nothing, having folded the carried set into the job it
+      // spawned — but it can still return a set if it coalesced onto a
+      // running pass that was itself deferring, in which case no job was
+      // spawned and the set is ours again.
+      deferredPrerenderHtml = deferred;
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       indexGeneration = generation ?? indexGeneration;
     };
@@ -2576,7 +2638,7 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        await performIndex();
+        await performIndex({ deferPrerenderHtml: true });
         urls = [];
       }
 
@@ -2763,11 +2825,15 @@ export class Realm {
         // never hit the intermediate path, so this snapshot is empty for
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
+        let carried = carriedPrerenderHtmlChanges();
+        // Handed off: this pass's prerender job renders the deferred set too.
+        deferredPrerenderHtml = undefined;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           urls,
           {
             clientRequestId,
             initiatedBy: initiatingUser,
+            ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -2805,11 +2871,50 @@ export class Realm {
         generation: indexGeneration,
       });
     }
+    // A mixed batch whose instances all turned out to be byte-identical
+    // leaves the flush's deferred set with no later pass to fold it into.
+    // Those URLs are real dependents of a module that did change, so the
+    // write still owes them a render — enqueue the job the flush skipped.
+    await this.enqueueDeferredPrerenderHtml(deferredPrerenderHtml);
     return results.map(({ path, lastModified }) => ({
       path,
       lastModified,
       created: createdMap.get(path)?.createdAt ?? null,
     }));
+  }
+
+  // Enqueue the prerender_html job an intermediate index pass deferred, for
+  // the case where no later pass in the same write picked the set up. Uses
+  // the deferring pass's own generation and loader epoch — the stamp those
+  // URLs were invalidated under. Fire-and-forget, and best-effort, for the
+  // same reason the in-worker enqueue is: an index pass must never fail on
+  // its prerender enqueue, and a missed one self-heals on the next pass.
+  private async enqueueDeferredPrerenderHtml(
+    deferred: DeferredPrerenderHtml | undefined,
+  ): Promise<void> {
+    if (!deferred || deferred.changes.length === 0) {
+      return;
+    }
+    try {
+      await enqueuePrerenderHtmlJob(this.#queue, {
+        realmURL: this.url,
+        realmUsername: await this.getRealmOwnerUsername(),
+        changes: deferred.changes,
+        generation: deferred.generation,
+        loaderEpoch: deferred.loaderEpoch,
+        spawningJobId: null,
+        spawningPriority: prerenderSpawnedPriority({
+          realmURL: this.url,
+          indexPriority: userInitiatedPriority,
+        }),
+        timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        preWarm: false,
+      });
+    } catch (e: any) {
+      this.#log.warn(
+        `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
+      );
+    }
   }
 
   // persist created_at into realm_file_meta table using db adapter
