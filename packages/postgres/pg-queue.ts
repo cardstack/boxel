@@ -59,6 +59,30 @@ const log = logger('queue');
 // keeps aborts short without restating a smaller timeout at every publish site.
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
+// How long a lease outlives the handler deadline it protects.
+//
+// The invariant: a lease is how long a worker owns a job; the deadline is how
+// long its handler may run. The lease has to outlast the deadline, or a
+// handler has no uncontested moment in which to record what it did.
+//
+// Sharing one instant denies it that moment. The deadline fires, the handler
+// throws, and by the time it reaches `finalizeJobVerdict` the job is already
+// claimable: a peer that gets there first makes the verdict `superseded`, so
+// it is discarded and the job runs again — repeatedly, because every attempt
+// loses the same race. The cost lands twice, in duplicated work and in a job
+// whose recorded state never catches up with what actually happened.
+//
+// `findStuckReservations` already defends the same boundary from the other
+// side, with the same 30 seconds and for the same stated reason — "the lease
+// boundary is not synchronized with the finalize transaction". This is that
+// protection applied to the claim path, which had none: the instant
+// `locked_until` passed, a peer could take the job.
+//
+// The window only has to cover a `finalizeJobVerdict` transaction against a
+// database that answered the rest of the pass in milliseconds, so 30s is
+// generous. Its price is how long a genuinely dead worker delays a retry.
+const LEASE_GRACE_SEC = 30;
+
 interface CoalesceCandidateRow extends Pick<
   JobsTable,
   'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
@@ -620,21 +644,19 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
-          // Serves both the lease and the handler's abort timer, so a healthy
-          // handler can never outlive the reservation protecting it.
+          // The handler's deadline. The lease outlives it by
+          // LEASE_GRACE_SEC — see the constant — so the two do not expire
+          // together.
           let effectiveTimeoutSec = Math.min(
             jobToRun.timeout,
             this.#maxTimeoutSec,
           );
+          let leaseSec = effectiveTimeoutSec + LEASE_GRACE_SEC;
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
               [param(jobToRun.id)],
-              [
-                '(',
-                param(effectiveTimeoutSec),
-                ` || ' seconds')::interval + now()`,
-              ],
+              ['(', param(leaseSec), ` || ' seconds')::interval + now()`],
               [param(this.#workerId)],
             ]),
             ') RETURNING id',

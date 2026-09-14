@@ -154,6 +154,50 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a lease outlives the handler deadline it protects', async function (assert) {
+      // The deadline and the lease used to expire together, so a handler that
+      // hit its deadline found the job already claimable and raced a peer to
+      // record its own outcome. Losing that race discards the verdict and the
+      // job runs again — every attempt losing it the same way. The lease has
+      // to outlast the deadline for the handler to have an uncontested moment
+      // to finalize in.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register('lease-margin-job', async () => {
+          resolveStarted();
+          await new Promise<void>((res) => (releaseHandler = res));
+          return 1;
+        });
+      });
+
+      let job = await publisher.publish<number>({
+        jobType: 'lease-margin-job',
+        concurrencyGroup: 'lease-margin-group',
+        // Larger than the runner's `maxTimeoutSec: 2`, so the deadline is
+        // clamped to 2s and the expected margin is unambiguous.
+        timeout: 600,
+        args: 1,
+      });
+      await handlerStarted;
+
+      let rows = (await adapter.execute(
+        `SELECT EXTRACT(EPOCH FROM (locked_until - NOW()))::float AS remaining_s
+         FROM job_reservations WHERE job_id = $1 AND completed_at IS NULL`,
+        { bind: [job.id] },
+      )) as unknown as { remaining_s: number }[];
+      assert.strictEqual(rows.length, 1, 'the running job holds one lease');
+
+      // The deadline is 2s (clamped). Anything at or under that means the
+      // lease lapses the moment the handler is cut off, which is the race.
+      assert.true(
+        rows[0].remaining_s > 2,
+        `the lease outlasts the 2s deadline (remaining ${rows[0].remaining_s.toFixed(1)}s)`,
+      );
+
+      releaseHandler();
+      assert.strictEqual(await job.done, 1, 'the handler still completes');
+    });
+
     test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {
       await runner.destroy();
 
