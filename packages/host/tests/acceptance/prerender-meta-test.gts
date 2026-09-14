@@ -634,22 +634,23 @@ module('Acceptance | prerender | meta', function (hooks) {
     // The uncapped module-evaluation totals. These are what distinguishes
     // "the graph was already warm" from "the itemized list lost the
     // slowest-N race", so a reader must always be able to get them — the
-    // bounded list below can legitimately be empty either way. This visit
-    // asked for a cold build, so it evaluated something.
-    assert.strictEqual(
-      typeof meta.diagnostics?.moduleEvaluationCount,
-      'number',
-      'moduleEvaluationCount is measured',
-    );
-    assert.ok(
-      (meta.diagnostics?.moduleEvaluationCount ?? 0) > 0,
-      'a clearCache build evaluates modules, so the count is non-zero',
-    );
-    assert.strictEqual(
-      typeof meta.diagnostics?.moduleEvaluationTotalMs,
-      'number',
-      'moduleEvaluationTotalMs is measured',
-    );
+    // bounded list below can legitimately be empty either way.
+    //
+    // Only their presence is asserted, not a non-zero count: this realm's
+    // modules are registered as objects, which the test adapter installs
+    // via `shimModule`, and a shimmed module is evaluated by definition
+    // rather than through `Loader.evaluate()`. A count of zero here is the
+    // harness, not the card.
+    for (let field of [
+      'moduleEvaluationCount',
+      'moduleEvaluationTotalMs',
+    ] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[field],
+        'number',
+        `${field} is measured, got: ${JSON.stringify(meta.diagnostics?.[field])}`,
+      );
+    }
 
     // The per-stage detail blocks are bounded to the slowest entries at or
     // over a floor, so a small fixture card legitimately records none of
