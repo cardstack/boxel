@@ -157,6 +157,35 @@ function normalizeDecorativeBullets(markdown: string): string {
 // partially received plan file already renders as one block.
 const FILE_URL_LINE_PATTERN = /^\s*https?:\/\/\S+(\s*\(\s*new\s*\))?\s*\r?$/;
 
+// A fence opens a code block only at the start of a line. A model that ends a
+// sentence and starts the patch on the same line — "Let's write the block!```json"
+// — has written a patch the renderer reads as prose: the url, the markers and
+// the file content collapse into one paragraph, the host finds no code block
+// and applies nothing, and the bot, which counts patches by their markers,
+// waits for a result that never comes. The block itself is correct; only the
+// line break before the fence is missing. Put it back when the two lines after
+// the fence are a file url and the SEARCH marker, which is what makes this a
+// patch rather than prose that happens to end in backticks.
+const FENCE_GLUED_TO_PROSE_PATTERN = /^(.*\S)(`{3,}\w*)\s*(\r?)$/;
+
+export function splitCodePatchFencesGluedToProse(markdown: string): string {
+  let lines = markdown.split('\n');
+  for (let i = 0; i + 2 < lines.length; i++) {
+    let glued = lines[i].match(FENCE_GLUED_TO_PROSE_PATTERN);
+    if (
+      glued &&
+      !CODE_FENCE_PATTERN.test(lines[i]) &&
+      FILE_URL_LINE_PATTERN.test(lines[i + 1]) &&
+      SEARCH_MARKER_PATTERN.test(lines[i + 2])
+    ) {
+      let [, prose, fence, cr] = glued;
+      lines.splice(i, 1, `${prose}${cr}`, `${fence}${cr}`);
+      i++;
+    }
+  }
+  return lines.join('\n');
+}
+
 export function widenFencesAroundCodePatches(markdown: string): string {
   let lines = markdown.split('\n');
   let i = 0;
