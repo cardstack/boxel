@@ -6,6 +6,10 @@ import {
   bfmExtensionsForKeyword,
 } from './bfm-card-references.ts';
 import { markedKatexPlaceholder } from './bfm-math.ts';
+import {
+  REPLACE_MARKER_PATTERN,
+  SEARCH_MARKER_PATTERN,
+} from './search-replace-markers.ts';
 
 import {
   Marked,
@@ -134,6 +138,123 @@ function normalizeDecorativeBullets(markdown: string): string {
       );
     })
     .join('\n');
+}
+
+// A code patch is a fenced block whose first line is a file url and whose
+// second line is the SEARCH marker. When the file being written is itself
+// markdown with fenced code inside — a plan document with an ASCII layout,
+// say — the first bare ``` in that content closes the patch's fence early.
+// The rest of the file content renders as prose, and the fence meant to
+// close the patch opens a new block that swallows the *next* patch: its url
+// is then not on the block's first line, the host reports "Missing file URL",
+// and that file is never written. A fence closes only on a run at least as
+// long as the one that opened it, so lengthening the patch's opening and
+// closing fence past every run inside it keeps the patch as one block.
+//
+// Only the two fence lines change. The patch text between the markers, which
+// the applier matches against the target file, is not touched. A patch whose
+// REPLACE marker has not streamed in yet gets only its opener widened, so a
+// partially received plan file already renders as one block.
+const FILE_URL_LINE_PATTERN = /^\s*https?:\/\/\S+(\s*\(\s*new\s*\))?\s*\r?$/;
+
+export function widenFencesAroundCodePatches(markdown: string): string {
+  let lines = markdown.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    let open =
+      lines[i].match(CODE_FENCE_PATTERN) ??
+      lines[i].match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+    if (!open) {
+      i++;
+      continue;
+    }
+    let fenceChar = open[2][0];
+    let fenceLength = open[2].length;
+    let isPatch =
+      fenceChar === '`' &&
+      FILE_URL_LINE_PATTERN.test(lines[i + 1] ?? '') &&
+      SEARCH_MARKER_PATTERN.test(lines[i + 2] ?? '');
+    if (!isPatch) {
+      let close = indexOfClosingFence(lines, i + 1, fenceChar, fenceLength);
+      i = close === -1 ? lines.length : close + 1;
+      continue;
+    }
+
+    let replaceIndex = indexOfLine(lines, i + 3, (line) =>
+      REPLACE_MARKER_PATTERN.test(line),
+    );
+    let contentEnd = replaceIndex === -1 ? lines.length : replaceIndex;
+    let longestInnerRun = 0;
+    for (let j = i + 1; j < contentEnd; j++) {
+      let inner = lines[j].match(CODE_FENCE_PATTERN);
+      if (inner && inner[2][0] === '`') {
+        longestInnerRun = Math.max(longestInnerRun, inner[2].length);
+      }
+    }
+
+    if (longestInnerRun < fenceLength) {
+      // Nothing inside can close this fence early; skip past its closer.
+      if (replaceIndex === -1) {
+        break;
+      }
+      let close = indexOfClosingFence(
+        lines,
+        replaceIndex + 1,
+        '`',
+        fenceLength,
+      );
+      i = close === -1 ? lines.length : close + 1;
+      continue;
+    }
+
+    let widened = '`'.repeat(longestInnerRun + 1);
+    lines[i] = lines[i].replace(open[2], widened);
+    if (replaceIndex === -1) {
+      break;
+    }
+    // The first bare backtick fence after the REPLACE marker is the one the
+    // model wrote to close this patch, whatever its length.
+    let close = indexOfLine(lines, replaceIndex + 1, (line) => {
+      let m = line.match(CODE_FENCE_PATTERN);
+      return !!m && m[2][0] === '`' && m[3].trim() === '';
+    });
+    if (close === -1) {
+      break;
+    }
+    lines[close] = lines[close].replace(/`+/, widened);
+    i = close + 1;
+  }
+  return lines.join('\n');
+}
+
+function indexOfLine(
+  lines: string[],
+  from: number,
+  predicate: (line: string) => boolean,
+): number {
+  for (let i = from; i < lines.length; i++) {
+    if (predicate(lines[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function indexOfClosingFence(
+  lines: string[],
+  from: number,
+  fenceChar: string,
+  fenceLength: number,
+): number {
+  return indexOfLine(lines, from, (line) => {
+    let m = line.match(CODE_FENCE_PATTERN);
+    return (
+      !!m &&
+      m[2][0] === fenceChar &&
+      m[2].length >= fenceLength &&
+      m[3].trim() === ''
+    );
+  });
 }
 
 const DEFAULT_MARKED_SYNC_OPTIONS = {

@@ -9,6 +9,7 @@ import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/h
 import {
   markedSync,
   markdownToHtml,
+  widenFencesAroundCodePatches,
 } from '@cardstack/runtime-common/marked-sync';
 
 import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
@@ -17,16 +18,144 @@ import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 // it: markdown body → bodyHTML (message.ts) → parseHtmlContent →
 // codeData.searchReplaceBlock. The patch must survive this byte-identical —
 // the applier matches it against the target file.
-function roundTripSearchReplaceBlock(body: string) {
-  let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
-    sanitize: false,
-    escapeHtmlInCodeBlocks: true,
-  });
+function renderBodyToCodeData(body: string) {
+  let html = markdownToHtml(
+    widenFencesAroundCodePatches(escapeHtmlOutsideCodeBlocks(body)!),
+    {
+      sanitize: false,
+      escapeHtmlInCodeBlocks: true,
+    },
+  );
   let parts = parseHtmlContent(html, 'room-1', 'event-1');
-  return parts.find((p) => p.type === 'pre_tag')?.codeData ?? null;
+  return parts.filter((p) => p.type === 'pre_tag').map((p) => p.codeData!);
 }
 
+function roundTripSearchReplaceBlock(body: string) {
+  return renderBodyToCodeData(body)[0] ?? null;
+}
+
+const PLAN_PATCH_WITH_INNER_FENCES = `\`\`\`md
+https://example.com/realm/plan.md (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+# Plan
+
+\`\`\`text
+┌──────┐
+│ Home │
+└──────┘
+\`\`\`
+
+Second layout:
+
+\`\`\`text
+[ Person ]
+\`\`\`
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`gts
+https://example.com/realm/person.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+import { CardDef } from '@cardstack/base/card-api';
+export class Person extends CardDef {
+  static isolated = <template><h1>Person</h1></template>;
+}
+${REPLACE_MARKER}
+\`\`\`
+`;
+
 module('Unit | marked-sync', function () {
+  test('a patch that writes markdown with fenced code inside renders as one block, and the patch after it keeps its url', function (assert) {
+    // Without widening, the first bare ``` inside the plan closes the patch's
+    // fence; the fence meant to close the patch then opens a block that
+    // swallows the person.gts patch, whose url is no longer its first line.
+    let blocks = renderBodyToCodeData(PLAN_PATCH_WITH_INNER_FENCES);
+
+    assert.deepEqual(
+      blocks.map((b) => b.fileUrl),
+      [
+        'https://example.com/realm/plan.md',
+        'https://example.com/realm/person.gts',
+      ],
+      'two patches, each with its own url',
+    );
+    assert.true(
+      blocks[0].searchReplaceBlock!.includes('```text\n┌──────┐'),
+      'the inner fences stay inside the plan patch as file content',
+    );
+    assert.true(
+      blocks[1].searchReplaceBlock!.includes(
+        'static isolated = <template><h1>Person</h1></template>;',
+      ),
+      'the following patch survives byte-identical',
+    );
+  });
+
+  test('widenFencesAroundCodePatches lengthens only the two fence lines of a patch with inner fences', function (assert) {
+    let widened = widenFencesAroundCodePatches(PLAN_PATCH_WITH_INNER_FENCES);
+    let lines = widened.split('\n');
+
+    assert.strictEqual(
+      lines[0],
+      '````md',
+      'the opener is one run longer than the inner fences',
+    );
+    assert.strictEqual(
+      lines[lines.indexOf(REPLACE_MARKER) + 1],
+      '````',
+      'the closer after the first REPLACE marker is widened to match',
+    );
+    assert.strictEqual(
+      widened.replace(/^````md$/m, '```md').replace(/^````$/m, '```'),
+      PLAN_PATCH_WITH_INNER_FENCES,
+      'every other line is unchanged, the gts patch included',
+    );
+  });
+
+  test('widenFencesAroundCodePatches leaves bodies without nested fences alone', function (assert) {
+    let plainPatch = `\`\`\`gts
+https://example.com/realm/a.gts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(widenFencesAroundCodePatches(plainPatch), plainPatch);
+
+    let proseWithCode =
+      'Use this:\n\n```text\nfoo\n```\n\nand then ```inline``` text.';
+    assert.strictEqual(
+      widenFencesAroundCodePatches(proseWithCode),
+      proseWithCode,
+      'ordinary code blocks are not patches and are not widened',
+    );
+  });
+
+  test('widenFencesAroundCodePatches widens the opener of a patch that is still streaming', function (assert) {
+    let streaming = `\`\`\`md
+https://example.com/realm/plan.md (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+# Plan
+
+\`\`\`text
+box
+\`\`\`
+
+more plan te`;
+    let widened = widenFencesAroundCodePatches(streaming);
+    assert.true(widened.startsWith('````md\n'), 'the opener is widened');
+    assert.strictEqual(
+      widened.slice('````md'.length),
+      streaming.slice('```md'.length),
+      'nothing else changes while the REPLACE marker has not arrived',
+    );
+  });
+
   test('markedSync converts markdown to HTML', function (assert) {
     const markdown = '# Hello\n**Bold text**';
     const result = markedSync(markdown);
