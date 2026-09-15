@@ -1940,6 +1940,20 @@ function resolveMarker(
         isActor: false,
       };
     }
+    case 'realmConfig':
+      // A realm setting is a value the realm supplies, and nothing supplies
+      // one yet: the `config` map a marker reads from arrives with the builtin
+      // that reads it. Refused as the realm's own gap rather than the
+      // caller's, since the declaration is well formed and there is nothing a
+      // caller could send to satisfy it.
+      throw new OperationFailure({
+        status: 501,
+        code: 'internal-error',
+        title: 'Operation not implemented',
+        detail:
+          `\`${path}\` reads a realm setting, which this realm does not yet ` +
+          `supply to an operation`,
+      });
     default:
       throw new OperationFailure({
         status: 400,
