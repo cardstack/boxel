@@ -1931,24 +1931,67 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a from-scratch rebuild moves the catch-all key', async function (assert) {
-        // A rebuild names the types it wrote, but not a type whose last row it
-        // dropped — nothing is left to name it. Absence has to read as
-        // "unknown", so the key every scoped query folds in moves instead.
-        let catchAll = async () => {
+      test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
+        // The type a row departs is the one a cached search anchored on it
+        // still holds the row as a member of, and nothing else in the pass
+        // names it — so the pass has to read the row it is overwriting, not
+        // just the chain it writes.
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
           let rows = (await query(testDbAdapter, [
-            `SELECT index_generation FROM realm_type_generations WHERE realm_url =`,
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
             param(realm.url),
-            ` AND type_key =`,
-            param(ALL_TYPES_KEY),
-          ] as Expression)) as { index_generation: number }[];
-          return rows[0] ? Number(rows[0].index_generation) : undefined;
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
         };
+        let asPet = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+          },
+        });
+        let asPerson = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+          },
+        });
 
-        let before = await catchAll();
-        await realm.realmIndexUpdater.fullIndex();
+        await realm.write('vangogh.json', asPet);
+        let afterPet = await watermarks();
+        await realm.write('vangogh.json', asPerson);
+        let afterPerson = await watermarks();
 
-        assert.notStrictEqual(await catchAll(), before, 'the catch-all moved');
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('pet', 'Pet')),
+          afterPet.get(keyFor('pet', 'Pet')),
+          `the departed type moves: ${afterPerson.get(keyFor('pet', 'Pet'))}`,
+        );
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('person', 'Person')),
+          afterPet.get(keyFor('person', 'Person')),
+          'and so does the type it joined',
+        );
+        assert.strictEqual(
+          afterPerson.get(ALL_TYPES_KEY),
+          afterPet.get(ALL_TYPES_KEY),
+          'a pass that read the row it overwrote needs no catch-all bump',
+        );
       });
 
       // A batch reads the realm's loader epoch when it starts, and with no

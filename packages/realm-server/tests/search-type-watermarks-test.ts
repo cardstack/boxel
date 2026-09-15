@@ -13,19 +13,61 @@ import {
   type Expression,
   type SearchEntryWireFilter,
 } from '@cardstack/runtime-common';
-import { IndexWriter } from '@cardstack/runtime-common';
+import {
+  IndexWriter,
+  type CodeRef,
+  type Realm,
+} from '@cardstack/runtime-common';
 import {
   fetchTypeScopedGenerations,
+  resetAnchorKeysForTests,
   resolveSearchGenerations,
   searchTypeWatermarkKeys,
+  warmSearchTypeWatermarkKeys,
 } from '../search-type-watermarks.ts';
 import { createVirtualNetwork, setupDB } from './helpers/index.ts';
+
+// Stands in for the mounted realm the warm-up resolves through. The real one
+// delegates to `IndexQueryEngine.typeKeysFor`, whose contract this mirrors:
+// the ref's own spelling plus its canonical defining-module spelling.
+function realmResolving(canonical: Record<string, string[]> = {}): () => Realm {
+  return () =>
+    ({
+      realmIndexQueryEngine: {
+        typeKeysFor: async (ref: CodeRef) => {
+          let own = internalKeyFor(ref, undefined, createVirtualNetwork());
+          return canonical[own] ?? [own];
+        },
+      },
+    }) as unknown as Realm;
+}
+
+// The warm-up is fire-and-forget by design, so a test that depends on its
+// result waits for the keys rather than for a promise it was never handed.
+async function warmed(
+  anchors: CodeRef[],
+  virtualNetwork: ReturnType<typeof createVirtualNetwork>,
+  mountedRealm: () => Realm | undefined,
+): Promise<string[] | undefined> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    let keys = searchTypeWatermarkKeys(anchors, virtualNetwork);
+    if (keys) {
+      return keys;
+    }
+    warmSearchTypeWatermarkKeys({ anchors, virtualNetwork, mountedRealm });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return searchTypeWatermarkKeys(anchors, virtualNetwork);
+}
 
 const realmA = 'http://127.0.0.1:4444/a/';
 const realmB = 'http://127.0.0.1:4444/b/';
 
 const personRef = { module: rri(`${realmA}person`), name: 'Person' };
 const petRef = { module: rri(`${realmA}pet`), name: 'Pet' };
+// A spelling that names `Pet` through a module that re-exports it, so its own
+// key is not the one the indexer stamps on the rows it matches.
+const reExportedRef = { module: rri(`${realmA}pets-index`), name: 'Pet' };
 
 module(basename(import.meta.filename), function () {
   module('the keys a query is scoped by', function (hooks) {
@@ -33,33 +75,74 @@ module(basename(import.meta.filename), function () {
 
     hooks.beforeEach(function () {
       virtualNetwork = createVirtualNetwork();
+      resetAnchorKeysForTests();
     });
 
+    let anchorsOf = (filter: SearchEntryWireFilter | undefined) =>
+      wireFilterTypeAnchors(filter);
     let keysFor = (filter: SearchEntryWireFilter | undefined) =>
-      searchTypeWatermarkKeys(wireFilterTypeAnchors(filter), virtualNetwork);
+      searchTypeWatermarkKeys(anchorsOf(filter), virtualNetwork);
+    let warmKeysFor = (
+      filter: SearchEntryWireFilter | undefined,
+      canonical?: Record<string, string[]>,
+    ) => warmed(anchorsOf(filter)!, virtualNetwork, realmResolving(canonical));
 
-    test('an anchored filter is scoped to its own type plus the catch-all', function (assert) {
-      assert.deepEqual(keysFor({ 'item.on': personRef }), [
+    test('an anchored filter is scoped to its own type plus the catch-all', async function (assert) {
+      assert.deepEqual(await warmKeysFor({ 'item.on': personRef }), [
         internalKeyFor(personRef, undefined, virtualNetwork),
         ALL_TYPES_KEY,
       ]);
     });
 
-    test("a filter's ancestors are deliberately not resolved", function (assert) {
+    test('an anchor is unscoped until its keys are resolved', async function (assert) {
+      // Resolving a `CodeRef` to the keys the indexer stamps can cost a
+      // definition lookup, which must not land on the cache-hit path — so a
+      // cold anchor reads the realm-wide generation and the resolution runs
+      // behind it.
+      assert.strictEqual(
+        keysFor({ 'item.on': personRef }),
+        undefined,
+        'a cold anchor is unscoped',
+      );
+      assert.ok(
+        await warmKeysFor({ 'item.on': personRef }),
+        'and is scoped once its keys land',
+      );
+    });
+
+    test('an anchor spelled through a re-exporting module is scoped by the key its rows carry', async function (assert) {
+      // The indexer stamps a row with its defining module's spelling, so
+      // scoping on the query's own spelling alone would address a row nothing
+      // ever writes — a key no write could move.
+      let ownKey = internalKeyFor(reExportedRef, undefined, virtualNetwork);
+      let canonicalKey = internalKeyFor(petRef, undefined, virtualNetwork);
+
+      assert.deepEqual(
+        await warmKeysFor(
+          { 'item.on': reExportedRef },
+          {
+            [ownKey]: [ownKey, canonicalKey],
+          },
+        ),
+        [ownKey, canonicalKey, ALL_TYPES_KEY],
+      );
+    });
+
+    test("a filter's ancestors are deliberately not resolved", async function (assert) {
       // The write side stamps the full adoption chain, so a `Person` write
       // moves `CardDef` too. Reading `CardDef` here as well would put a key
       // every write moves into every query, leaving no selectivity at all.
       assert.false(
-        (keysFor({ 'item.on': personRef }) ?? []).includes(
+        (await warmKeysFor({ 'item.on': personRef }))!.includes(
           internalKeyFor(baseCardRef, undefined, virtualNetwork),
         ),
         'the anchor resolves to itself, not to what it adopts from',
       );
     });
 
-    test('an `any` scopes to every branch it could match', function (assert) {
+    test('an `any` scopes to every branch it could match', async function (assert) {
       assert.deepEqual(
-        keysFor({
+        await warmKeysFor({
           any: [{ 'item.on': personRef }, { 'item.on': petRef }],
         }),
         [
@@ -90,14 +173,14 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a relative module spelling is not scoped', function (assert) {
+    test('a relative module spelling is not scoped', async function (assert) {
       // The server resolves it against the document that issued the query,
       // which the watermark key has no access to — so it cannot be compared
       // with the spelling the indexer stamped.
-      assert.strictEqual(
-        keysFor({ 'item.on': { module: rri('./person'), name: 'Person' } }),
-        undefined,
-      );
+      let filter: SearchEntryWireFilter = {
+        'item.on': { module: rri('./person'), name: 'Person' },
+      };
+      assert.strictEqual(await warmKeysFor(filter), undefined);
     });
   });
 
@@ -109,6 +192,7 @@ module(basename(import.meta.filename), function () {
       beforeEach: async (_dbAdapter) => {
         dbAdapter = _dbAdapter;
         virtualNetwork = createVirtualNetwork();
+        resetAnchorKeysForTests();
       },
     });
 
@@ -238,8 +322,20 @@ module(basename(import.meta.filename), function () {
           [personRef],
           virtualNetwork,
         ),
+        { [realmA]: { index: 42, html: 0 } },
+        'an anchor whose keys are not resolved yet reads the realm-wide generation too',
+      );
+
+      await warmed([personRef], virtualNetwork, realmResolving());
+      assert.deepEqual(
+        await resolveSearchGenerations(
+          dbAdapter,
+          [realmA],
+          [personRef],
+          virtualNetwork,
+        ),
         { [realmA]: { index: 7, html: 5 } },
-        'an anchored query reads its own type instead',
+        'once they land the query reads its own type instead',
       );
     });
   });
@@ -255,6 +351,7 @@ module(basename(import.meta.filename), function () {
       beforeEach: async (_dbAdapter) => {
         dbAdapter = _dbAdapter;
         virtualNetwork = createVirtualNetwork();
+        resetAnchorKeysForTests();
       },
     });
 
@@ -280,11 +377,15 @@ module(basename(import.meta.filename), function () {
     }
 
     // A minimal pass that writes one row carrying `types`.
+    //
+    // `invalidates` is what the pass reads before writing. Passing the URL it
+    // goes on to write is the ordinary incremental shape; passing a different
+    // URL, or none, is the shape a rebuild takes when its visit list is not
+    // the set it tombstoned — the case where the pass cannot account for a
+    // type its rows are leaving.
     async function indexPass(opts?: {
       splitPrerenderHtml?: boolean;
-      // Skipping `invalidate()` is what a from-scratch rebuild does: it
-      // writes rows without first reading what the realm held.
-      scoped?: boolean;
+      invalidates?: 'the written url' | 'a different url' | 'nothing';
       realmURL?: URL;
       types?: string[];
     }) {
@@ -298,8 +399,11 @@ module(basename(import.meta.filename), function () {
           : { splitPrerenderHtml: opts.splitPrerenderHtml },
       );
       let url = new URL(`${realmURL.href}pet-1.json`);
-      if (opts?.scoped !== false) {
+      let invalidates = opts?.invalidates ?? 'the written url';
+      if (invalidates === 'the written url') {
         await batch.invalidate([url]);
+      } else if (invalidates === 'a different url') {
+        await batch.invalidate([new URL(`${realmURL.href}gone.json`)]);
       }
       await batch.updateEntry(url, {
         type: 'file',
@@ -330,9 +434,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a pass that never read what the realm held moves the catch-all', async function (assert) {
-      // A from-scratch rebuild names the types it wrote but not one whose
-      // last row it dropped, so absence there has to read as "unknown".
-      await indexPass({ scoped: false });
+      // A rebuild names the types it wrote but not one whose last row it
+      // dropped, so absence there has to read as "unknown".
+      await indexPass({ invalidates: 'nothing' });
 
       assert.deepEqual(
         (await stampedRows()).find(({ typeKey }) => typeKey === ALL_TYPES_KEY),
@@ -340,12 +444,49 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a pass whose reads do not cover its writes moves the catch-all', async function (assert) {
+      // Having called `invalidate()` at all is not the property: a rebuild
+      // whose disk state matches nothing in the index invalidates only the
+      // deleted URLs and then writes every file in the realm. Those rows are
+      // written without their prior chain ever being read, so a card that
+      // changed what it adopts from would leave the type it departed
+      // unstamped and reachable.
+      await indexPass({ invalidates: 'a different url' });
+
+      assert.deepEqual(
+        (await stampedRows()).find(({ typeKey }) => typeKey === ALL_TYPES_KEY),
+        { typeKey: ALL_TYPES_KEY, index: 1, html: 0 },
+      );
+    });
+
+    test('a departed type is stamped when the pass read the row it overwrote', async function (assert) {
+      await indexPass({ types: [`${realmA}pet/Pet`] });
+      await indexPass({ types: [`${realmA}dog/Dog`] });
+
+      let rows = await stampedRows();
+      assert.deepEqual(
+        rows.find(({ typeKey }) => typeKey === `${realmA}pet/Pet`),
+        { typeKey: `${realmA}pet/Pet`, index: 2, html: 0 },
+        'the type the row left moves, so a search anchored on it recomputes',
+      );
+      assert.deepEqual(
+        rows.find(({ typeKey }) => typeKey === `${realmA}dog/Dog`),
+        { typeKey: `${realmA}dog/Dog`, index: 2, html: 0 },
+        'and so does the type it joined',
+      );
+      assert.false(
+        rows.some(({ typeKey }) => typeKey === ALL_TYPES_KEY),
+        'a pass that can account for both needs no catch-all',
+      );
+    });
+
     test('a query anchored elsewhere reads past the pass entirely', async function (assert) {
       await indexPass();
 
-      let keys = searchTypeWatermarkKeys(
+      let keys = await warmed(
         [{ module: rri(`${realmA}person`), name: 'Person' }],
         virtualNetwork,
+        realmResolving(),
       );
       assert.deepEqual(
         await fetchTypeScopedGenerations(dbAdapter, [realmA], keys!),
@@ -353,7 +494,7 @@ module(basename(import.meta.filename), function () {
         'the Pet pass moved nothing a Person-anchored query reads',
       );
 
-      let petKeys = searchTypeWatermarkKeys([petRef], virtualNetwork);
+      let petKeys = await warmed([petRef], virtualNetwork, realmResolving());
       assert.deepEqual(
         await fetchTypeScopedGenerations(dbAdapter, [realmA], petKeys!),
         { [realmA]: { index: 1, html: 0 } },

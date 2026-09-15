@@ -34,10 +34,14 @@ import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import { LiveSearchCache } from '../live-search-cache.ts';
-import { resolveSearchGenerations } from '../search-type-watermarks.ts';
+import {
+  resolveSearchGenerations,
+  warmSearchTypeWatermarkKeys,
+} from '../search-type-watermarks.ts';
 import type {
   CodeRef,
   DBAdapter,
+  Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -272,6 +276,19 @@ export default function handleSearch(opts: {
           dbAdapter,
           virtualNetwork,
           typeAnchors: parsed.typeAnchors,
+          // Only realms this process already holds. Resolving an anchor's
+          // canonical spelling must never be the thing that forces a mount —
+          // this request may well be a cache hit, which skips mounting
+          // entirely.
+          mountedRealm: () => {
+            for (let url of realmList) {
+              let realm = reconciler.mounted.get(url);
+              if (realm) {
+                return realm;
+              }
+            }
+            return undefined;
+          },
         },
       });
     } catch (e) {
@@ -334,6 +351,7 @@ async function respondWithJobScopedSearchCache(
       dbAdapter: DBAdapter;
       virtualNetwork: VirtualNetwork;
       typeAnchors: CodeRef[] | undefined;
+      mountedRealm: () => Realm | undefined;
     };
   },
 ): Promise<void> {
@@ -399,16 +417,24 @@ async function respondWithJobScopedSearchCache(
   // fingerprints, scoped to the types this query's filter is anchored on — so
   // a swap on one of those types changes the key and the next request
   // recomputes, while a swap on a type the query cannot match leaves the entry
-  // reachable. A query with no readable anchors takes the realm-wide
+  // reachable. A query with no readable anchors, and one whose anchors have
+  // not been resolved to their index keys yet, take the realm-wide
   // generation, which every index batch advances. See
   // `resolveSearchGenerations` for what the scoped key does and does not
-  // cover; outside the anchors the TTL is the staleness bound rather than
-  // merely a retention bound.
+  // cover; for a change outside the anchors the TTL is the staleness bound
+  // rather than merely a retention bound.
   // Authorization is realm-scoped and was validated for this exact realm list
   // by `multiRealmAuthorization` before the handler ran, so a body computed
   // for one caller is byte-identical to what any other authorized caller
   // would compute.
   if (args.liveSearch) {
+    // Off the critical path: resolves the anchors whose keys are cold or aged
+    // out so a later request is scoped, and never blocks this one.
+    warmSearchTypeWatermarkKeys({
+      anchors: args.liveSearch.typeAnchors,
+      virtualNetwork: args.liveSearch.virtualNetwork,
+      mountedRealm: args.liveSearch.mountedRealm,
+    });
     let generations = await resolveSearchGenerations(
       args.liveSearch.dbAdapter,
       realms,

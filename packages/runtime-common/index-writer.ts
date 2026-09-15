@@ -327,14 +327,13 @@ export class Batch {
   // representation here. Keys are `internalKeyFor` spellings, the same form
   // `boxel_index.types` stores and a type filter compiles to.
   #touchedTypes = new Set<string>();
-  // Whether `invalidate()` established this pass's change set. Only a pass
-  // that ran it knows what the realm held before it wrote — the pre-pass half
-  // of `#touchedTypes` comes from tombstoning the invalidation set — so only
-  // there is the type set a complete account of what moved. A from-scratch
-  // rebuild, a copy, and the setup-failure error pass all write rows without
-  // that read, and a type whose last row they drop is named by nothing; they
-  // move the catch-all `realm_type_generations` key instead.
-  #invalidationScoped = false;
+  // URLs whose production adoption chain this batch read before writing —
+  // the pre-pass half of `#touchedTypes`, recorded by `tombstoneEntries` for
+  // every URL in the set it is handed. A row written without that read can be
+  // *leaving* a type nothing else in the pass names, so `#touchedTypes` only
+  // accounts for everything that moved when this set covers every URL the
+  // swap promotes (see `typeSetIsComplete`).
+  #preReadURLs = new Set<string>();
   // Whether `applyBatchUpdates` published this pass's `prerendered_html` rows,
   // which decides whether the pass stamps the HTML leg of its type
   // watermarks. Set there rather than recomputed at stamp time so the two
@@ -2007,7 +2006,7 @@ export class Batch {
     await this.stampTypeGenerations({
       types: this.touchedTypes,
       channels: { index: true, html: this.#publishedPrerenderedHtml },
-      bumpAllTypes: !this.#invalidationScoped,
+      bumpAllTypes: !this.typeSetIsComplete,
     });
     await this.#query(['COMMIT']);
 
@@ -2280,6 +2279,30 @@ export class Batch {
     }
   }
 
+  // Whether `#touchedTypes` is a complete account of what this pass moved.
+  //
+  // The swap promotes exactly `#invalidations`, and each of those rows
+  // contributes two chains: the one it lands on, recorded by the write path,
+  // and the one it held before, recorded only where `tombstoneEntries` read
+  // production first. A row written without that read can be leaving a type
+  // no other row in the pass names — a card that changes what it adopts from
+  // is the plain case — so the departed type's watermark would stay put while
+  // a search anchored on it still holds the card as a member.
+  //
+  // It is a property of the rows, not of which entry point ran: a pass can
+  // call `invalidate()` for a deleted URL and then go on to write every file
+  // in the realm, which is what a from-scratch rebuild does when nothing on
+  // disk matches the index. A pass whose reads do not cover its writes moves
+  // the catch-all key instead, so absence reads as "unknown".
+  private get typeSetIsComplete(): boolean {
+    for (let url of this.#invalidations) {
+      if (!this.#preReadURLs.has(url)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // The card types this pass moved, stamped against the generation it
   // committed. A live search folds the watermarks of the types its filter is
   // anchored on into its cache key, so a write only unreaches the cached
@@ -2313,19 +2336,25 @@ export class Batch {
     // guard the `prerendered_html` swap it accompanies applies. Lowering a
     // watermark is sound — it moves the key, so readers recompute — but an
     // expired-reservation zombie job would otherwise churn every reader's
-    // key on its way out.
+    // key on its way out. The predicate is built from the channels this call
+    // writes, so it can never compare a column the statement is not setting.
     monotonicGuard?: boolean;
   }): Promise<void> {
-    let columns: string[][] = [['realm_url'], ['type_key']];
+    let channels: string[] = [];
     if (args.channels.index) {
-      columns.push(['index_generation']);
+      channels.push('index_generation');
     }
     if (args.channels.html) {
-      columns.push(['html_generation']);
+      channels.push('html_generation');
     }
-    if (columns.length === 2) {
+    if (channels.length === 0) {
       return;
     }
+    let columns: string[][] = [
+      ['realm_url'],
+      ['type_key'],
+      ...channels.map((channel) => [channel]),
+    ];
     let keys = new Set(args.types);
     if (args.bumpAllTypes) {
       keys.add(ALL_TYPES_KEY);
@@ -2336,13 +2365,11 @@ export class Batch {
     // A row absent from this table reads as generation 0, which is why the
     // channels the caller omits can be left to the column default on insert:
     // a type no pass has stamped on that channel cannot have moved on it.
-    // Every channel column carries this batch's generation; which columns
-    // those are was decided above.
-    let channelColumns = columns.length - 2;
+    // Every channel column carries this batch's generation.
     let rows = [...keys].map((typeKey) => [
       [param(this.realmURL.href)],
       [param(typeKey)],
-      ...new Array(channelColumns).fill([param(this.generation)]),
+      ...channels.map(() => [param(this.generation)]),
     ]) as Expression[][];
     // Chunked so a realm with a large type vocabulary stays inside the
     // driver's bound-parameter ceiling.
@@ -2356,7 +2383,12 @@ export class Batch {
         ),
         ...(args.monotonicGuard
           ? [
-              'WHERE realm_type_generations.html_generation <= EXCLUDED.html_generation',
+              `WHERE ${channels
+                .map(
+                  (channel) =>
+                    `realm_type_generations.${channel} <= EXCLUDED.${channel}`,
+                )
+                .join(' AND ')}`,
             ]
           : []),
       ] as Expression);
@@ -2367,17 +2399,34 @@ export class Batch {
   // Read from `boxel_index` because the HTML channel stores no chain of its
   // own, and from production rather than the working table because the index
   // half of these URLs landed in an earlier pass.
+  //
+  // The distinct keys are extracted in SQL rather than by reading each row's
+  // `types` array back and deduping here: the swap that follows a from-scratch
+  // index covers every card in the realm, and this runs on the commit path, so
+  // the payload has to be bounded by the realm's type vocabulary — the same
+  // bound `TYPE_STAMP_CHUNK` asserts — and not by its row count. A
+  // `prerenderHtmlOnly` batch is Postgres-only (SQLite fuses the two
+  // channels), so the `jsonb` spelling is safe here.
   private async publishedHtmlTypes(): Promise<string[]> {
-    let types = new Set<string>();
-    let existing = await this.existingIndexTypes([...this.#invalidations]);
-    for (let entries of existing.values()) {
-      for (let { cardTypes } of entries) {
-        for (let type of cardTypes ?? []) {
-          types.add(type);
-        }
-      }
+    let urls = [...new Set(this.#invalidations)];
+    if (urls.length === 0) {
+      return [];
     }
-    return [...types];
+    let rows = (await this.#query([
+      'SELECT DISTINCT jsonb_array_elements_text(types) AS type_key',
+      'FROM boxel_index WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['types IS NOT NULL'],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as { type_key: string }[];
+    return rows.map(({ type_key }) => type_key);
   }
 
   // Swap `prerendered_html_working` rows into production `prerendered_html`,
@@ -2504,6 +2553,12 @@ export class Batch {
       for (let { cardTypes } of entries) {
         this.#recordTouchedTypes(cardTypes);
       }
+    }
+    // Every URL read above now has its prior chain in `#touchedTypes`,
+    // including the ones production holds no row for — those have no prior
+    // chain to leave. This is the read `typeSetIsComplete` asks about.
+    for (let url of invalidations) {
+      this.#preReadURLs.add(url);
     }
     if (toTombstone.length === 0) {
       return;
@@ -2774,7 +2829,6 @@ export class Batch {
       );
     }
     await this.ready;
-    this.#invalidationScoped = true;
     // Drain anything still buffered under the OUTGOING correlation ID before
     // rotating it. `#prepareIndexRow` reads the ID at flush time, so a row
     // buffered before this call and flushed after it would be filed under the

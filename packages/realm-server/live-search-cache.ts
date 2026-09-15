@@ -33,11 +33,20 @@ export type LiveSearchCacheSummary = ResponseCacheSummary;
 // scale heap linearly and have OOM'd the realm-server in production.
 //
 // The key is the same canonical `(realms, query, opts)` hash the job-scoped
-// cache uses. Freshness is structural, not temporal: the caller folds each
-// realm's generation fingerprint into `opts`, so any index or
-// prerendered-HTML swap on a searched realm changes the key and the next
-// request recomputes. The TTL exists to bound retention, not to bound
-// staleness.
+// cache uses. Freshness is structural rather than temporal: the caller folds
+// a generation fingerprint for each searched realm into `opts`, so a swap the
+// fingerprint covers changes the key and the next request recomputes.
+//
+// That fingerprint is scoped to the card types the query's filter is anchored
+// on (`search-type-watermarks.ts`), which is what stops one write from
+// unreaching every cached search in the realm — and it is why the TTL is not
+// purely a retention bound. A change the anchors do not cover moves no key,
+// and the side-loaded `included` closure is that case: its link targets are
+// cards of other types, so the body keeps serving them as they stood until
+// the entry ages out. `DEFAULT_TTL_MS` is therefore the staleness bound for
+// that closure and has to stay short; raising it, here or through
+// `LIVE_SEARCH_CACHE_TTL_MS`, widens the window in which a linked card is
+// served stale.
 //
 // Sharing across users is safe: the body is a pure function of
 // `(realms, query, opts)` — permissions are realm-scoped and

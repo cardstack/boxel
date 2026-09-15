@@ -890,13 +890,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       // Prime an entry and confirm it is there, so a later `miss` is
       // attributable to the write rather than to the entry never existing.
+      //
+      // Repeated rather than a single pair: a query's type anchors are
+      // resolved to their index keys behind the request that first sees them,
+      // so the first requests are keyed on the realm-wide generation and the
+      // key changes once under the caller. Settling on a `hit` is what makes
+      // the entry the assertions below reason about the type-scoped one.
       async function primed(assert: Assert, body: Record<string, unknown>) {
-        await postSearch(body);
-        let hit = await postSearch(body);
+        let outcome: string | undefined;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          let response = await postSearch(body);
+          outcome = response.headers[LIVE_SEARCH_CACHE_HEADER];
+          if (outcome === 'hit' && attempt > 0) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         assert.strictEqual(
-          hit.headers[LIVE_SEARCH_CACHE_HEADER],
+          outcome,
           'hit',
-          'the entry is cached before the write',
+          'the entry is cached under a settled key before the write',
         );
       }
 
