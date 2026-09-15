@@ -27,6 +27,7 @@ import {
   canonicalCaptureSpecQuery,
   canonicalCaptureSpecString,
   captureSpecHash,
+  countPdfPages,
   findMediaCacheEntry,
   insert,
   logger,
@@ -324,9 +325,11 @@ module(basename(import.meta.filename), function () {
     test('not-yet-supported output types and media are refused naming the param', function (assert) {
       for (let [qs, field, message] of [
         [
+          // pdf output exists but is capture-only: the GET surface refuses
+          // what it could never serve, with its own wording.
           'type=pdf',
           'type',
-          'captureSpec.type "pdf" is not supported by this capture engine',
+          'type "pdf" is not supported by this serving surface',
         ],
         [
           'type=jpeg',
@@ -357,19 +360,80 @@ module(basename(import.meta.filename), function () {
         );
       }
 
-      // The POST body runs the same gate with the same wording.
-      let viaPost = parseScreenshotCaptureSpec({ type: 'pdf' }, 'isolated');
+      // The POST body runs the same engine gate with the same wording.
+      let viaPost = parseScreenshotCaptureSpec({ type: 'jpeg' }, 'isolated');
       assert.strictEqual(
         viaPost.error,
-        'captureSpec.type "pdf" is not supported by this capture engine',
+        'captureSpec.type "jpeg" is not supported by this capture engine',
+      );
+    });
+
+    test('pdf output parses on the POST surface, singular-only', function (assert) {
+      let singular = parseScreenshotCaptureSpec({ type: 'pdf' }, 'isolated');
+      assert.strictEqual(singular.error, undefined, 'a singular pdf parses');
+      assert.deepEqual(
+        singular.captureSpec,
+        { type: 'pdf' },
+        'the normalized spec carries the encoding',
+      );
+
+      // Raster crop modes are contradictions, not compositions.
+      for (let [raw, message] of [
+        [
+          { type: 'pdf', fullPage: true },
+          'captureSpec cannot set both type "pdf" and fullPage',
+        ],
+        [
+          { type: 'pdf', clip: { x: 0, y: 0, width: 100, height: 100 } },
+          'captureSpec cannot set both type "pdf" and clip',
+        ],
+        [
+          { type: 'pdf', target: '.avatar' },
+          'captureSpec cannot set both type "pdf" and target',
+        ],
+        [
+          { captures: [{ name: 'doc', type: 'pdf' }] },
+          'captureSpec.captures[0].type "pdf" is only valid on a singular capture',
+        ],
+      ] as const) {
+        assert.strictEqual(
+          parseScreenshotCaptureSpec(raw, 'isolated').error,
+          message,
+        );
+      }
+    });
+
+    test('countPdfPages counts page objects, with the page-tree count as a floor', function (assert) {
+      let pdfWith = (body: string) =>
+        new TextEncoder().encode(`%PDF-1.4\n${body}\n%%EOF`);
+      assert.strictEqual(
+        countPdfPages(
+          pdfWith(
+            '1 0 obj << /Type /Pages /Kids [2 0 R 3 0 R] /Count 2 >> endobj\n' +
+              '2 0 obj << /Type /Page /Parent 1 0 R >> endobj\n' +
+              '3 0 obj << /Type /Page /Parent 1 0 R >> endobj',
+          ),
+        ),
+        2,
+        'counts uncompressed page dictionaries',
+      );
+      assert.strictEqual(
+        countPdfPages(pdfWith('1 0 obj << /Type /Pages /Count 7 >> endobj')),
+        7,
+        'falls back to the page-tree /Count when page objects are compressed away',
+      );
+      assert.strictEqual(
+        countPdfPages(pdfWith('')),
+        0,
+        'no page markers means zero, never a guess',
       );
     });
 
     test('output type and media are identity axes: each non-default value is its own cache key', async function (assert) {
-      // Constructed directly rather than parsed: the parse gates these values
-      // until the engine grows the corresponding leg, but the identity
-      // beneath is already wired, so unlocking a value later never re-keys
-      // existing captures.
+      // Constructed directly rather than parsed: media=print (and the GET
+      // DSL's type=pdf) are still gated at parse, but the identity beneath
+      // is fully wired, so unlocking a value never re-keys existing
+      // captures.
       let png: CaptureSpec = { format: 'isolated' };
       let pdf: CaptureSpec = { format: 'isolated', type: 'pdf' };
       let print: CaptureSpec = { format: 'isolated', media: 'print' };
@@ -907,6 +971,58 @@ module(basename(import.meta.filename), function () {
         }),
         undefined,
         'nothing lands under the mismatched identity',
+      );
+    });
+
+    test('the task refuses to persist a pdf render under any claimed identity', async function (assert) {
+      // pdf output is capture-only: the task hashes a pdf render to null and
+      // refuses whatever identity the producer claimed — even the pdf spec's
+      // own honest hash — so no paged document lands in a ledger the serving
+      // surfaces cannot yet serve it from.
+      await seedInstanceRow('card-1');
+      await startWorker();
+
+      let pdfSpecHash = await captureSpecHash({
+        format: 'isolated',
+        type: 'pdf',
+      });
+      let job = await enqueueScreenshotCardJob(
+        {
+          realmURL: REALM_URL,
+          realmUsername: OWNER,
+          runAs: OWNER,
+          cardId: `${REALM_URL}card-1`,
+          format: 'isolated',
+          captureSpec: { type: 'pdf' },
+          persist: {
+            realmURL: REALM_URL,
+            sourceURL: `${REALM_URL}card-1`,
+            captureSpecHash: pdfSpecHash,
+            sourceGeneration: 1,
+            lane: 'on-demand',
+          },
+          surface: 'post',
+          loggingCorrelationId: null,
+        },
+        publisher,
+        dbAdapter,
+        0,
+      );
+      let result = await job.done;
+      assert.strictEqual(
+        result.status,
+        'ready',
+        'the capture itself still succeeds',
+      );
+      assert.strictEqual(
+        await findMediaCacheEntry(dbAdapter, {
+          realmURL: REALM_URL,
+          sourceURL: `${REALM_URL}card-1`,
+          captureSpecHash: pdfSpecHash,
+          sourceGeneration: 1,
+        }),
+        undefined,
+        'no pdf bytes land in the ledger',
       );
     });
 

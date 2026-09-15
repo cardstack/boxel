@@ -1442,15 +1442,19 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
-// One captured image in a screenshot response. `deviceScaleFactor` is the
-// effective scale used for this capture, so a consumer can reconstruct physical
-// vs CSS pixel dimensions.
+// One captured artifact in a screenshot response. `deviceScaleFactor` is the
+// scale the render ran at, so a consumer can reconstruct physical vs CSS
+// pixel dimensions for raster output.
 export type ScreenshotCaptureResult = {
   name: string;
   base64: string;
-  width: number;
-  height: number;
+  // CSS dimensions of a raster capture; absent for pdf output, which has no
+  // single pixel extent — `pageCount` describes it instead.
+  width?: number;
+  height?: number;
   deviceScaleFactor: number;
+  // Page count of a pdf capture; absent for raster output.
+  pageCount?: number;
 };
 
 export type ScreenshotPrerenderResponse = {

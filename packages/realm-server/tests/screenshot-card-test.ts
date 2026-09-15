@@ -1583,6 +1583,34 @@ module(basename(import.meta.filename), function () {
       assert.false('captures' in attrs, 'no served URL without a persist');
     });
 
+    test('a pdf capture is capture-only: no persist identity, no served URL', async function (assert) {
+      // pdf output is not part of the ledger/GET-DSL serving contract yet, so
+      // an indexed card's pdf capture must return its bytes without minting a
+      // durable URL that the serving surface could never answer.
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { type: 'pdf' },
+      }).expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'an indexed card still gets no persist identity for a pdf capture',
+      );
+      assert.deepEqual(
+        (published[0]?.args as any)?.captureSpec,
+        { type: 'pdf' },
+        'the encoding rides the job args to the engine',
+      );
+      let attrs = response.body.data.attributes;
+      assert.false('captures' in attrs, 'no served URL for a pdf capture');
+    });
+
     test('a caller without realm read never touches the ledger', async function (assert) {
       await seedInstanceRow();
       let ledgerBytes = new TextEncoder().encode('private-ledger-bytes');

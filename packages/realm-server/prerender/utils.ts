@@ -10,7 +10,12 @@ import {
   SCREENSHOT_DEFAULT_IMAGE_TYPE,
   SCREENSHOT_MAX_CAPTURES,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  SCREENSHOT_PDF_MAX_BYTES,
+  SCREENSHOT_PDF_MAX_PAGES,
+  captureOutputContentType,
+  countPdfPages,
   screenshotContentType,
+  type CaptureContentType,
   type DeclaredScreenshotCaptureResult,
   type DeclaredScreenshotError,
   type DeclaredScreenshotFormat,
@@ -1235,6 +1240,10 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // The encoding of every capture in this render: pdf output is singular-only
+  // (the shared parse refuses it in batch entries), so a batch is always
+  // raster and the response-level contentType stays single-valued.
+  contentType: CaptureContentType;
   // Per-step wall-clock across the shared render, for stage telemetry:
   // navigation (route transition + path settle), the prerender settle wait
   // (including any envelope-box wait), the image/font paint wait, and the
@@ -1361,8 +1370,16 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip, target, envelope } =
-    captureSpec ?? {};
+  let {
+    viewport,
+    deviceScaleFactor,
+    fullPage,
+    clip,
+    target,
+    envelope,
+    type,
+    media,
+  } = captureSpec ?? {};
   return [
     {
       name: 'default',
@@ -1372,6 +1389,8 @@ function normalizeCaptureEntries(
       clip,
       target,
       envelope,
+      type,
+      media,
     },
   ];
 }
@@ -1552,6 +1571,50 @@ async function captureOneEntry(
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A pdf capture paginates the settled render onto paper instead of
+  // rasterizing the viewport. Same settle sequence, different capture call —
+  // and its bounds (page count, byte size) exist only once Chrome has
+  // paginated, so they are enforced here, the fullPage late-check pattern.
+  if (entry.type === 'pdf') {
+    // Defensive: the shared parse refuses these combinations; a direct
+    // prerender-server caller could still send one.
+    if (entry.target || entry.clip || entry.fullPage) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot combine pdf output with target, clip, or fullPage`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    let bytes = await page.pdf({
+      printBackground: true,
+      // The author's own `@page { size: … }` rule wins; Chrome's default
+      // paper applies when the card declares none.
+      preferCSSPageSize: true,
+    });
+    if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
+      return buildInvalidRenderResponseError(
+        page,
+        `pdf capture "${entry.name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+        { title: 'PDF capture too large' },
+      );
+    }
+    let pageCount = countPdfPages(bytes);
+    if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
+      return buildInvalidRenderResponseError(
+        page,
+        `pdf capture "${entry.name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+        { title: 'PDF capture too large' },
+      );
+    }
+    return {
+      name: entry.name,
+      base64: Buffer.from(bytes).toString('base64'),
+      // Pagination has no single pixel extent; the scale is the render's,
+      // reported for parity with raster captures.
+      deviceScaleFactor,
+      pageCount,
+    };
+  }
   // A `target` is an element-handle screenshot, a capture call distinct from
   // the page-level one below: it crops to the first match's box and honors no
   // clip/fullPage (rejected above). `page.$` runs the selector through
@@ -1741,6 +1804,16 @@ export async function captureScreenshot(
         { title: 'Invalid screenshot capture spec' },
       );
     }
+    // pdf output is singular-only (one contentType per response) and honors
+    // none of the raster crop modes; the shared parse refuses both, this
+    // guards direct prerender-server callers.
+    if (entry.type === 'pdf' && entries.length > 1) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" requests pdf output, which is only valid on a singular capture`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
   }
 
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
@@ -1915,11 +1988,19 @@ export async function captureScreenshot(
     }
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
-        .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
+        .map(
+          (c) =>
+            `${c.name}:${c.width ?? '-'}x${c.height ?? '-'}@${c.deviceScaleFactor}`,
+        )
         .join(',')}`,
     );
     return {
       captures,
+      // pdf is singular-only, so a batch is always raster; declared entries
+      // carry their own per-slot contentType and never read this field.
+      contentType: captureOutputContentType(
+        entries.length === 1 ? (entries[0].type ?? 'png') : 'png',
+      ),
       stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
     };
   } finally {
@@ -2154,8 +2235,10 @@ export async function captureDeclaredScreenshots(
     entries.push({
       name: resolved.name,
       specHash: resolved.specHash,
-      width: item.width,
-      height: item.height,
+      // Declared captures are always raster (their payload type is an image
+      // type), so the item always carries pixel dimensions.
+      width: item.width!,
+      height: item.height!,
       deviceScaleFactor: item.deviceScaleFactor,
       contentType: screenshotContentType(resolved.imageType),
       imageType: resolved.imageType,

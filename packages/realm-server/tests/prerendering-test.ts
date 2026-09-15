@@ -1319,6 +1319,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a pdf capture paginates the settled render', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, { type: 'pdf' });
+      assert.strictEqual(response.status, 'ready', 'pdf capture succeeded');
+      assert.strictEqual(
+        response.contentType,
+        'application/pdf',
+        'the response declares the paged content type',
+      );
+      let bytes = Buffer.from(response.base64!, 'base64');
+      assert.strictEqual(
+        bytes.subarray(0, 5).toString('latin1'),
+        '%PDF-',
+        'payload is a PDF (magic bytes)',
+      );
+      let first = response.captures?.[0];
+      assert.ok(
+        (first?.pageCount ?? 0) >= 1,
+        `reports at least one page (got ${first?.pageCount})`,
+      );
+      assert.strictEqual(
+        first?.width,
+        undefined,
+        'a paged capture reports no pixel width',
+      );
+
+      // Pooled-page hygiene: the same page then serves a raster capture with
+      // the canonical geometry, undisturbed by the pdf leg.
+      let raster = await screenshot(`${realmURL}1`);
+      assert.strictEqual(raster.response.status, 'ready');
+      let png = decodePng(raster.response.base64!);
+      assert.deepEqual(
+        { width: png.width, height: png.height },
+        { width: 800, height: 600 },
+        'the next raster capture still renders at the default viewport',
+      );
+    });
+
     test('a target capture crops to the addressed element', async function (assert) {
       // A `target` selector crops the shot to that element's box. The fixture's
       // `title` field is a fixed 200×50, so the crop dimensions are predictable.
