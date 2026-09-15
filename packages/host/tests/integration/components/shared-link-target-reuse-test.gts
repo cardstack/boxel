@@ -184,7 +184,11 @@ module('Integration | shared link target reuse', function (hooks) {
     for (let id of ids) {
       let owner = await read(id);
       await renderCard(loader, owner, 'isolated');
+      // The link the rendered template reads, read here as well so the edge is
+      // driven whatever the default template chooses to show.
+      (owner as any).pet;
       await settled();
+      await storeService.flush();
     }
   }
 
