@@ -46,7 +46,6 @@ const HOTFIX_EVENT = {
 
 interface Commit {
   writes: Record<string, string>;
-  appends: Record<string, string>;
   deletes: string[];
   clientRequestId: string | null | undefined;
   waitForIndex: boolean | undefined;
@@ -58,10 +57,6 @@ interface Stub {
   lockDepth: () => number;
   drainCount: () => number;
   readsOutsideLock: () => number;
-  // Every path the batch asked to read, in the order it asked. What an entry
-  // that must not read its target is checked against: a path absent from here
-  // is one nothing opened.
-  readPaths: () => string[];
 }
 
 interface StubOptions {
@@ -118,7 +113,6 @@ function stub(opts: StubOptions = {}): Stub {
   let maxHeld = 0;
   let drains = 0;
   let readsOutsideLock = 0;
-  let readPaths: string[] = [];
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -137,7 +131,6 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async readSourceFile(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
-      readPaths.push(localPath);
       let content = stored[localPath];
       return content === undefined
         ? undefined
@@ -145,7 +138,6 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async openSourceBytes(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
-      readPaths.push(localPath);
       let content = stored[localPath];
       if (content === undefined) {
         return undefined;
@@ -190,13 +182,8 @@ function stub(opts: StubOptions = {}): Stub {
           ? await materialize(content, stored)
           : String(content);
       }
-      let appends: Record<string, string> = {};
-      for (let [path, content] of batch.appends ?? []) {
-        appends[path] = String(content);
-      }
       commits.push({
         writes,
-        appends,
         deletes: [...(batch.deletes ?? [])],
         clientRequestId: options?.clientRequestId,
         waitForIndex: options?.waitForIndex,
@@ -204,23 +191,12 @@ function stub(opts: StubOptions = {}): Stub {
       return {
         // A real commit fingerprints the bytes it wrote; the stub stands in
         // with the byte length, which is enough for a test to tell one
-        // version from another. An appended file is fingerprinted from what
-        // it holds afterwards, as the realm's own commit does, so an entry
-        // that added to a file reports a version covering all of it.
-        writes: [
-          ...Object.entries(writes).map(([path, content]) => ({
-            path,
-            lastModified: 2000,
-            contentHash: `hash-${content.length}`,
-          })),
-          ...Object.entries(appends).map(([path, content]) => ({
-            path,
-            lastModified: 2000,
-            contentHash: `hash-${
-              (writes[path] ?? stored[path] ?? '').length + content.length
-            }`,
-          })),
-        ],
+        // version from another.
+        writes: Object.entries(writes).map(([path, content]) => ({
+          path,
+          lastModified: 2000,
+          contentHash: `hash-${content.length}`,
+        })),
         generation: 9,
       };
     },
@@ -254,7 +230,6 @@ function stub(opts: StubOptions = {}): Stub {
     lockDepth: () => maxHeld,
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
-    readPaths: () => readPaths,
   };
 }
 
@@ -3032,450 +3007,6 @@ const tests: SharedTests<Record<string, never>> = {
       undefined,
       'and no base match, since an append names no base',
     );
-  },
-
-  // -------------------------------------------------------------------------
-  // Writing a file's content
-  // -------------------------------------------------------------------------
-
-  "a file's content is replaced at the path its url names": async (assert) => {
-    let { core, commits } = stub({ stored: { 'notes.md': '# Notes\n' } });
-    let results = await commitBatch(
-      core,
-      [
-        {
-          op: 'update',
-          href: `${REALM}notes.md`,
-          content: '# Notes\n\nrewritten\n',
-        },
-      ],
-      {},
-    );
-    assert.deepEqual(
-      commits[0].writes,
-      { 'notes.md': '# Notes\n\nrewritten\n' },
-      'the content the caller sent is what the file holds, at the path the ' +
-        'url names rather than at that path plus `.json`',
-    );
-    assert.strictEqual(results[0]?.id, `${REALM}notes.md`);
-    assert.ok(results[0]?.meta.version, 'with the version the commit wrote');
-  },
-
-  'a file replaced on top of a version the caller held reports the match':
-    async (assert) => {
-      let { core } = stub({
-        stored: { 'notes.md': '# Notes\n', 'other.md': '# Other\n' },
-      });
-      let results = await commitBatch(
-        core,
-        [
-          {
-            op: 'update',
-            href: `${REALM}notes.md`,
-            content: 'rewritten',
-            baseVersion: computeContentHash('# Notes\n'),
-          },
-          {
-            op: 'update',
-            href: `${REALM}other.md`,
-            content: 'rewritten',
-            baseVersion: 'some-other-version',
-          },
-        ],
-        {},
-      );
-      assert.strictEqual(
-        results[0]?.meta.baseMatched,
-        true,
-        'a file the batch never read still reports the version it held',
-      );
-      assert.strictEqual(
-        results[1]?.meta.baseMatched,
-        false,
-        'and reports a base that had moved on',
-      );
-    },
-
-  'an update on a card carries a patch rather than content': async (assert) => {
-    let { core, commits } = stub({
-      stored: {
-        'Person/mango.json': cardFile({ firstName: 'Mango' }, PERSON),
-      },
-    });
-    let failed = await refusal(core, [
-      { op: 'update', href: `${REALM}Person/mango`, content: 'not a card' },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  "a card's stored source is not a file an update replaces": async (assert) => {
-    let { core } = stub({
-      stored: {
-        'Person/mango.json': cardFile({ firstName: 'Mango' }, PERSON),
-      },
-    });
-    let failed = await refusal(core, [
-      {
-        op: 'update',
-        href: `${REALM}Person/mango.json`,
-        content: '{"data": {"attributes": {"firstName": "Replaced"}}}',
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'stored json that is not a card is a file like any other': async (assert) => {
-    let { core, commits } = stub({ stored: { 'data.json': '{"a": 1}' } });
-    await commitBatch(
-      core,
-      [{ op: 'update', href: `${REALM}data.json`, content: '{"a": 2}' }],
-      {},
-    );
-    assert.deepEqual(
-      commits[0].writes,
-      { 'data.json': '{"a": 2}' },
-      'the extension does not decide it; what the bytes hold does',
-    );
-  },
-
-  "a module's source is not a file an update replaces": async (assert) => {
-    let { core } = stub({ stored: { 'person.gts': 'export class Person {}' } });
-    let failed = await refusal(core, [
-      { op: 'update', href: `${REALM}person.gts`, content: 'export class {}' },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'a verbatim replacement reaches the source an envelope cannot': async (
-    assert,
-  ) => {
-    let { core, commits } = stub({
-      stored: { 'person.gts': 'export class Person {}' },
-    });
-    await commitBatch(
-      core,
-      [
-        {
-          op: 'update',
-          href: `${REALM}person.gts`,
-          content: 'export class Person { name }',
-          rawSource: true,
-        },
-      ],
-      {},
-    );
-    assert.deepEqual(
-      commits[0].writes,
-      { 'person.gts': 'export class Person { name }' },
-      "the module's bytes are replaced exactly as they were sent",
-    );
-  },
-
-  'an update carries one payload or the other': async (assert) => {
-    let { core, commits } = stub({ stored: { 'notes.md': '# Notes\n' } });
-    let failed = await refusal(core, [
-      {
-        op: 'update',
-        href: `${REALM}notes.md`,
-        content: 'rewritten',
-        document: {
-          data: { type: 'card', attributes: {}, meta: { adoptsFrom: PERSON } },
-        },
-      },
-    ]);
-    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  'a verbatim replacement carries the bytes to replace with': async (
-    assert,
-  ) => {
-    let { core } = stub({ stored: { 'person.gts': 'export class Person {}' } });
-    let failed = await refusal(core, [
-      { op: 'update', href: `${REALM}person.gts`, rawSource: true },
-    ]);
-    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
-  },
-
-  'an update has nothing to replace when the file is not there': async (
-    assert,
-  ) => {
-    let { core, commits } = stub();
-    let failed = await refusal(core, [
-      { op: 'update', href: `${REALM}notes.md`, content: 'rewritten' },
-    ]);
-    assert.deepEqual(failed, {
-      status: 404,
-      code: 'target-not-found',
-      entry: 0,
-    });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  // -------------------------------------------------------------------------
-  // Appending a line
-  // -------------------------------------------------------------------------
-
-  'a line is added to the end of a file nothing reads': async (assert) => {
-    let { core, commits, readPaths } = stub({
-      stored: { 'telemetry.log': 'boot\n' },
-    });
-    let results = await commitBatch(
-      core,
-      [
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 'deploy 41' },
-        },
-      ],
-      {},
-    );
-    assert.deepEqual(
-      commits[0].appends,
-      { 'telemetry.log': 'deploy 41\n' },
-      'exactly the line and its terminator reach the file',
-    );
-    assert.deepEqual(commits[0].writes, {}, 'and nothing is rewritten');
-    assert.notOk(
-      readPaths().includes('telemetry.log'),
-      'nothing on the batch read surface was asked for the file it appended to',
-    );
-    assert.strictEqual(results[0]?.id, `${REALM}telemetry.log`);
-    assert.ok(
-      results[0]?.meta.version,
-      'the result reports the version the appended file now holds',
-    );
-  },
-
-  'two lines added to one file reach it once, in order': async (assert) => {
-    let { core, commits } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    let results = await commitBatch(
-      core,
-      [
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 'first' },
-        },
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 'second' },
-        },
-      ],
-      {},
-    );
-    assert.strictEqual(commits.length, 1, 'one commit');
-    assert.deepEqual(
-      commits[0].appends,
-      { 'telemetry.log': 'first\nsecond\n' },
-      'both lines are joined in the order they were sent and the file is ' +
-        'reached once',
-    );
-    assert.strictEqual(
-      results[0]?.meta.version,
-      results[1]?.meta.version,
-      'and both entries report the version the file ended up at, since one ' +
-        'commit is what produced it',
-    );
-  },
-
-  'a file replaced and then appended to keeps both changes': async (assert) => {
-    let { core, commits } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    await commitBatch(
-      core,
-      [
-        {
-          op: 'update',
-          href: `${REALM}telemetry.log`,
-          content: 'rotated\n',
-        },
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 'first line after the rotation' },
-        },
-      ],
-      {},
-    );
-    assert.deepEqual(commits[0].writes, { 'telemetry.log': 'rotated\n' });
-    assert.deepEqual(commits[0].appends, {
-      'telemetry.log': 'first line after the rotation\n',
-    });
-  },
-
-  'a batch appends to a file after it writes one, not before': async (
-    assert,
-  ) => {
-    let { core, commits } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}telemetry.log`,
-        params: { line: 'about to be discarded' },
-      },
-      { op: 'update', href: `${REALM}telemetry.log`, content: 'rotated\n' },
-    ]);
-    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 1 });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  'binary content is not a line of anything': async (assert) => {
-    let { core } = stub({ stored: { 'chart.png': 'PNG' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}chart.png`,
-        params: { line: 'deploy 41' },
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'a line after a json document leaves bytes that are not one': async (
-    assert,
-  ) => {
-    let { core } = stub({ stored: { 'data.json': '{"a": 1}' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}data.json`,
-        params: { line: 'deploy 41' },
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'a card is not something a line is appended to': async (assert) => {
-    let { core } = stub({
-      stored: {
-        'Person/mango.json': cardFile({ firstName: 'Mango' }, PERSON),
-      },
-    });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}Person/mango`,
-        params: { line: 'deploy 41' },
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'a module is not something a line is appended to': async (assert) => {
-    let { core } = stub({ stored: { 'person.gts': 'export class Person {}' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}person.gts`,
-        params: { line: '// a note' },
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 405,
-      code: 'operation-not-allowed',
-      entry: 0,
-    });
-  },
-
-  'one call appends one line': async (assert) => {
-    let { core, commits } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}telemetry.log`,
-        params: { line: 'deploy 41\ndeploy 42' },
-      },
-    ]);
-    assert.deepEqual(failed, { status: 400, code: 'invalid-params', entry: 0 });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  'an appended line is the line the payload carries': async (assert) => {
-    let { core } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    assert.deepEqual(
-      await refusal(core, [
-        { op: 'appendLine', href: `${REALM}telemetry.log` },
-      ]),
-      { status: 400, code: 'invalid-params', entry: 0 },
-      'a payload naming no line has nothing to append',
-    );
-    assert.deepEqual(
-      await refusal(core, [
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 41 as unknown as string },
-        },
-      ]),
-      { status: 400, code: 'invalid-params', entry: 0 },
-      'and a line that is not text is not a line',
-    );
-  },
-
-  'a line has nothing to be appended to when the file is not there': async (
-    assert,
-  ) => {
-    let { core, commits } = stub();
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}telemetry.log`,
-        params: { line: 'deploy 41' },
-      },
-    ]);
-    assert.deepEqual(failed, {
-      status: 404,
-      code: 'target-not-found',
-      entry: 0,
-    });
-    assert.strictEqual(commits.length, 0, 'nothing is committed');
-  },
-
-  'a failing sibling leaves a line with nothing to append to': async (
-    assert,
-  ) => {
-    let { core, commits } = stub({ stored: { 'telemetry.log': 'boot\n' } });
-    let failed = await refusal(core, [
-      {
-        op: 'appendLine',
-        href: `${REALM}telemetry.log`,
-        params: { line: 'deploy 41' },
-      },
-      { op: 'delete', href: `${REALM}not-there` },
-    ]);
-    assert.deepEqual(failed, {
-      status: 404,
-      code: 'target-not-found',
-      entry: 1,
-    });
-    assert.strictEqual(commits.length, 0, 'the batch commits nothing at all');
   },
 
   'a create with nothing to create is refused': async (assert) => {

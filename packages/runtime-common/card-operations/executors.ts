@@ -13,6 +13,7 @@ import { hasExecutableExtension } from '../index.ts';
 import {
   inferContentType,
   isBinaryContentType,
+  isJSONContentType,
 } from '../infer-content-type.ts';
 import { mergeRelationships } from '../merge-relationships.ts';
 import type { RealmPaths } from '../paths.ts';
@@ -858,6 +859,16 @@ export async function stageAppendLine(
       detail,
     });
   };
+  // Asked first, ahead of the checks the name alone settles, because a card's
+  // URL carries no extension and would otherwise be turned away as binary
+  // content — which is the right answer given in terms that describe nothing
+  // the caller sent.
+  if (await ctx.fileExists(`${path}.json` as LocalPath)) {
+    refuse(
+      `${url.href} names a card, whose stored source is a JSON document; a ` +
+        `line appended to one leaves bytes that are no longer a card`,
+    );
+  }
   // Classified by name, which is what the realm serves the file's content type
   // from, so the operation refuses exactly what a reader of the file would be
   // told it is getting. An unknown extension resolves to a binary type and is
@@ -872,9 +883,9 @@ export async function stageAppendLine(
   if (isJSONContentType(contentType)) {
     // Text, but text whose shape a trailing line destroys: what follows a JSON
     // document's closing brace is no longer a JSON document. A card's stored
-    // source is the case that matters most — appending to one leaves bytes the
-    // realm can no longer serve as a card — and it is the same objection for
-    // every other stored JSON, so the content type answers for all of them.
+    // source addressed by its own path is the case that matters most, and it
+    // is the same objection for every other stored JSON, so the content type
+    // answers for all of them.
     refuse(
       `${url.href} holds ${contentType}, and a line appended after a JSON ` +
         `document leaves bytes that are no longer one`,
@@ -889,20 +900,10 @@ export async function stageAppendLine(
         `source endpoint, not by appending a line`,
     );
   }
-  if (await ctx.fileExists(`${path}.json` as LocalPath)) {
-    // The URL names a card, whose stored source is JSON — refused above when
-    // addressed by its own path, and refused here when addressed as the card
-    // it is.
-    refuse(
-      `${url.href} names a card, whose stored source is a JSON document; a ` +
-        `line appended to one leaves bytes that are no longer a card`,
-    );
-  }
-  // An earlier entry in the batch may have staged this file's content without
-  // it being on disk yet, which is as good as stored for an append that lands
-  // after it.
-  let staged =
-    ctx.stored.has(path) || ctx.storedMeta.has(path) || ctx.splices.has(path);
+  // An earlier entry may have staged this file's content without it being on
+  // disk yet — a verbatim source write creates the file it writes — which is
+  // as good as stored for an append that lands after it in the same commit.
+  let staged = ctx.stored.has(path) || ctx.storedMeta.has(path);
   if (!staged && !(await ctx.fileExists(path))) {
     // Appending to a path holding nothing would create the file, and creating
     // a file is not an operation.
@@ -922,14 +923,6 @@ export async function stageAppendLine(
     id: url.href,
     primaryPath: path,
   };
-}
-
-// Whether a content type carries a JSON document, in the same terms
-// `isBinaryContentType` classifies one: the JSON media type itself, and the
-// structured-syntax suffix every type that is JSON underneath ends with.
-function isJSONContentType(contentType: string): boolean {
-  let mimeType = contentType.split(';')[0].trim().toLowerCase();
-  return mimeType === 'application/json' || mimeType.endsWith('+json');
 }
 
 // ---------------------------------------------------------------------------
