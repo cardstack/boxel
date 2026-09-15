@@ -24,6 +24,7 @@ import type {
 } from './lattice-query-registry.ts';
 
 const perfLog = logger('index-perf');
+const MAX_PENDING_INDEX_EVENTS = 100_000;
 
 // IndexRunner prepares these outside the commit lock. The actual publication,
 // watch replacement and dirty markers all use Batch.done's pinned transaction.
@@ -45,6 +46,16 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     this.registry = registry;
   }
 
+  async analyzeAfterFullIndex() {
+    if (this.db.kind === 'pg') {
+      // Run after promotion, outside its transaction. Fresh imports otherwise
+      // leave the query planner using statistics from the old/empty index.
+      await this.db.execute(
+        'ANALYZE boxel_index, boxel_index_working, lattice_index_events, lattice_pending_generations, lattice_owners, lattice_query_watches',
+      );
+    }
+  }
+
   // No definition loads, reverse matching, or owner renders on the source
   // commit path. These set-based copies and the queue wake-up share the swap's
   // transaction, so a crash cannot leave an apparently current orphaned view.
@@ -61,6 +72,27 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       "AND type = 'instance' AND pristine_doc->'meta'->'publication' IS NOT NULL)",
     ]);
     if (!enabled) return;
+    // These are outstanding obligations, not history: never TTL/drop an
+    // unmatched transition. The realm's source-swap lock serializes admission
+    // with matching. Bound the count before copying any more JSON bodies;
+    // overflow rolls back the entire source promotion and can retry after
+    // matching drains capacity. A single oversized full import also refuses.
+    let [backlog] = await tx([
+      'SELECT count(*) AS count FROM (SELECT 1 FROM lattice_index_events WHERE realm_url =',
+      param(realmURL),
+      'UNION ALL SELECT 1 FROM boxel_index_working WHERE realm_url =',
+      param(realmURL),
+      'AND generation =',
+      param(generation),
+      "AND type = 'instance' LIMIT",
+      param(MAX_PENDING_INDEX_EVENTS + 1),
+      ') pending',
+    ]);
+    if (Number(backlog.count) > MAX_PENDING_INDEX_EVENTS) {
+      throw new Error(
+        `Lattice index event backlog limit (${MAX_PENDING_INDEX_EVENTS}) reached for ${realmURL}; drain pending materialization work and retry indexing`,
+      );
+    }
     await tx([
       'INSERT INTO lattice_pending_generations (realm_url, generation, definition_revision) VALUES (',
       param(realmURL),

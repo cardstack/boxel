@@ -8,7 +8,9 @@ import {
   type DefinitionLookup,
   type InstanceEntry,
   type QueuePublisher,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
+import { IndexRunner } from '@cardstack/runtime-common/index-runner';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { latticeMaterialize } from '@cardstack/runtime-common/tasks/lattice';
 import { setupDB } from './helpers/index.ts';
@@ -140,6 +142,110 @@ module('Lattice | writer opt-in', function (hooks) {
     return statements.filter((sql) => /\b(lattice_|lattice_)/.test(sql));
   }
 
+  test('a full event backlog rejects source promotion without losing transitions and retries after matching', async function (assert) {
+    let writer = new IndexWriter(db, {
+      lattice: new LatticeRealmConfig([enabledRealm]),
+    });
+    let publication = writer.latticePublication(lookup, network);
+    let url = new URL(enabledRealm + 'card.json');
+    let source = await writer.createBatch(new URL(enabledRealm), network);
+    await source.updateEntry(url, entry(enabledRealm, 1, 0));
+    await source.done({ lattice: publication });
+    let changed = await writer.createBatch(new URL(enabledRealm), network);
+    await changed.updateEntry(url, entry(enabledRealm, 2, 0));
+    await changed.done({ lattice: publication, latticeRealmUsername: 'test' });
+
+    // Bulk fixture of independent, unmatched inputs in the same generation.
+    // Keep one real owner transition so the normal matcher also exercises it.
+    await db.execute(
+      `INSERT INTO lattice_index_events (realm_url, generation, url, next_row)
+       SELECT $1::text, 2, $1 || 'padding/' || n || '.json',
+         jsonb_build_object('url', $1 || 'padding/' || n || '.json',
+           'type', 'instance', 'search_doc', jsonb_build_object('value', n),
+           'types', '[]'::jsonb)
+       FROM generate_series(1, 99999) n`,
+      { bind: [enabledRealm] },
+    );
+    let overflow = await writer.createBatch(new URL(enabledRealm), network);
+    await overflow.updateEntry(url, entry(enabledRealm, 3, 0));
+    await assert.rejects(
+      overflow.done({ lattice: publication, latticeRealmUsername: 'test' }),
+      /Lattice index event backlog limit.*drain.*retry/,
+    );
+    let [row] = await db.execute(
+      `SELECT generation, pristine_doc->'attributes'->>'value' AS value
+       FROM boxel_index WHERE realm_url=$1 AND url=$2 AND type='instance'`,
+      { bind: [enabledRealm, url.href] },
+    );
+    assert.strictEqual(
+      Number(row.generation),
+      2,
+      'source promotion rolled back',
+    );
+    assert.strictEqual(row.value, '2', 'failed generation is not exposed');
+    let count = async () =>
+      Number(
+        (
+          await db.execute(
+            'SELECT count(*) FROM lattice_index_events WHERE realm_url=$1',
+            { bind: [enabledRealm] },
+          )
+        )[0].count,
+      );
+    assert.strictEqual(
+      await count(),
+      100000,
+      'no pending transition was dropped',
+    );
+    assert.true(await publication.hasUnmatched(enabledRealm));
+    let checkpoints = await db.execute(
+      'SELECT generation FROM lattice_pending_generations WHERE realm_url=$1 ORDER BY generation',
+      { bind: [enabledRealm] },
+    );
+    assert.deepEqual(
+      checkpoints.map((r) => Number(r.generation)),
+      [2],
+    );
+
+    let ordinary = await writer.createBatch(new URL(ordinaryRealm), network);
+    await ordinary.updateEntry(
+      new URL(ordinaryRealm + 'card.json'),
+      entry(ordinaryRealm, 4),
+    );
+    await ordinary.done();
+    assert.strictEqual(
+      await count(),
+      100000,
+      'ordinary writes leave this backlog alone',
+    );
+
+    assert.true(await publication.matchPending(enabledRealm, 'test'));
+    assert.strictEqual(
+      await count(),
+      99750,
+      'only a committed matching chunk frees capacity',
+    );
+    let retry = await writer.createBatch(new URL(enabledRealm), network);
+    await retry.updateEntry(url, entry(enabledRealm, 3, 0));
+    await retry.done({ lattice: publication, latticeRealmUsername: 'test' });
+    assert.strictEqual(
+      await count(),
+      99751,
+      'retry records its own transition',
+    );
+    [row] = await db.execute(
+      `SELECT generation, pristine_doc->'attributes'->>'value' AS value
+       FROM boxel_index WHERE realm_url=$1 AND url=$2 AND type='instance'`,
+      { bind: [enabledRealm, url.href] },
+    );
+    assert.strictEqual(Number(row.generation), 3);
+    assert.strictEqual(row.value, '3');
+    assert.true(
+      await publication.hasUnmatched(enabledRealm),
+      'remaining obligations stay pending',
+    );
+  });
+
   test('enabled batch setup initializes archive locking without changing authority', async function (assert) {
     let writer = new IndexWriter(db, {
       lattice: new LatticeRealmConfig([enabledRealm]),
@@ -189,6 +295,78 @@ module('Lattice | writer opt-in', function (hooks) {
       ),
       before,
       'repeated setup preserves existing metadata, its version and archive',
+    );
+  });
+
+  test('successful full indexing refreshes PostgreSQL planner statistics only for enabled realms', async function (assert) {
+    let writer = new IndexWriter(db, {
+      lattice: new LatticeRealmConfig([enabledRealm]),
+    });
+    let definitions = {
+      ...lookup,
+      forRealm() {
+        return this;
+      },
+    } as unknown as DefinitionLookup;
+    let run = (realm: string, fail = false) =>
+      IndexRunner.fromScratch(
+        new IndexRunner({
+          realmURL: new URL(realm),
+          indexWriter: writer,
+          virtualNetwork: network,
+          definitionLookup: definitions,
+          reader: {
+            mtimes: async () => {
+              if (fail) throw new Error('source unavailable');
+              return { [realm + 'card.json']: 1 };
+            },
+            readFile: async () => undefined,
+            readStream: async () => undefined,
+          },
+          prerenderer: {
+            prerenderVisit: async () => {
+              throw new Error('unchanged source must not render');
+            },
+          } as unknown as Prerenderer,
+          auth: 'test',
+          fetch: globalThis.fetch,
+          realmOwnerUserId: '@test:matrix.example',
+          latticeRealmUsername: 'test',
+        }),
+      );
+    for (let realm of [ordinaryRealm, enabledRealm]) {
+      let batch = await writer.createBatch(new URL(realm), network);
+      await batch.updateEntry(new URL(realm + 'card.json'), entry(realm, 1));
+      await batch.done();
+    }
+    let before = statements.length;
+    await run(ordinaryRealm);
+    assert.false(
+      statements.slice(before).some((sql) => /^ANALYZE\b/i.test(sql)),
+      'flag off retains ordinary full-index statements',
+    );
+    before = statements.length;
+    await run(enabledRealm);
+    assert.strictEqual(
+      statements.slice(before).filter((sql) => /^ANALYZE\b/i.test(sql)).length,
+      1,
+    );
+    let [stats] = await db.execute(
+      "SELECT reltuples::int AS rows FROM pg_class WHERE oid='boxel_index'::regclass",
+    );
+    let [actual] = await db.execute(
+      'SELECT count(*)::int AS rows FROM boxel_index',
+    );
+    assert.strictEqual(
+      stats.rows,
+      actual.rows,
+      'planner sees the actual tiny fixture after the committed full index',
+    );
+    before = statements.length;
+    await assert.rejects(run(enabledRealm, true), /source unavailable/);
+    assert.false(
+      statements.slice(before).some((sql) => /^ANALYZE\b/i.test(sql)),
+      'failed full indexing does not refresh statistics',
     );
   });
 

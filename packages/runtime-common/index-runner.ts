@@ -497,6 +497,7 @@ export class IndexRunner {
         lattice: current.#lattice,
         latticeRealmUsername: current.#latticeRealmUsername,
       });
+      await current.#lattice?.analyzeAfterFullIndex();
       swapMs = Date.now() - finalizeStart;
       current.#latticeSourceWriteMs = current.batch.writeMs;
       if (!current.#latticeRealmUsername)
