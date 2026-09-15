@@ -14,15 +14,17 @@ import type { Prerenderer } from '../prerender/prerenderer.ts';
 import {
   localBaseRealm,
   getPrerendererForTesting,
+  getTestPrerenderer,
   setupPermissionedRealm,
   testCreatePrerenderAuth,
+  testRealmURLFor,
   waitUntil,
 } from './helpers/index.ts';
 import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/prerender-page-patches.ts';
 
 const { module, test } = QUnit;
-const origin = 'http://127.0.0.1:4460/';
-const realmURL = origin + 'lattice-direct-links/';
+const realmURL = testRealmURLFor('lattice-direct-links/').href;
+const origin = new URL(realmURL).origin + '/';
 const actor = '@lattice-direct-links:localhost';
 const source = `
   import { CardDef, field, contains, linksTo, linksToMany, Component } from '@cardstack/base/card-api';
@@ -163,8 +165,10 @@ module('Lattice | direct declared-link publication', (hooks) => {
       throw new Error('Unexpected fixture command');
     },
   };
-  hooks.before((assert) => {
+  hooks.before(async (assert) => {
     assert.timeout(300_000);
+    // Coexist with the shared renderer, as this fixture does in the full suite.
+    await getTestPrerenderer();
     restore = installRealmServerAssertOwnRealmServerBypassPatch();
     browser = getPrerendererForTesting({ serverURL: origin, maxPages: 2 });
     worker = new LatticeBxlWorker();
