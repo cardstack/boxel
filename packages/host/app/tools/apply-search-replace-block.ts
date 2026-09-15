@@ -21,12 +21,34 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
 // trailing comma: a model writing a JSON or object-literal search block from
 // memory routinely ends the last line with `}` where the file has `},`, and
 // that single character is the most common reason an otherwise correct block
-// fails to apply. Only the comparison is relaxed; the replacement is written
-// exactly as the model wrote it.
-const LINE_NORMALIZERS: ((line: string) => string)[] = [
-  (line) => line.trim(),
-  (line) => line.trim().replace(/,$/, ''),
+// fails to apply. When only that pass matches, the replacement's last line is
+// given the file's trailing comma (or relieved of one), but only when the
+// model wrote search and replace with the same comma state, which says it
+// did not mean to change it. Writing the replacement verbatim there would
+// turn the file's `},` into `}` and break the JSON the patch set out to fix.
+const LINE_NORMALIZERS: {
+  normalize: (line: string) => string;
+  reconcileTrailingComma: boolean;
+}[] = [
+  { normalize: (line) => line.trim(), reconcileTrailingComma: false },
+  {
+    normalize: (line) => line.trim().replace(/,$/, ''),
+    reconcileTrailingComma: true,
+  },
 ];
+
+function lastNonEmptyLineIndex(lines: string[]): number {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() !== '') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function endsWithComma(line: string | undefined): boolean {
+  return line !== undefined && line.trim().endsWith(',');
+}
 
 // The bare "not found" message gives the model nothing to correct, so it
 // tends to resend the same block. Naming the first search line that occurs
@@ -168,12 +190,13 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     // Each pass compares lines under a looser normalization than the one
     // before it, and the first pass that matches wins, so a block that
     // matches exactly is never redirected to a looser match elsewhere.
-    for (const normalize of LINE_NORMALIZERS) {
+    for (const { normalize, reconcileTrailingComma } of LINE_NORMALIZERS) {
       const result = this.applySearchReplaceWith(
         content,
         searchPattern,
         replacePattern,
         normalize,
+        reconcileTrailingComma,
       );
       if (result !== undefined) {
         return result;
@@ -187,8 +210,10 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     searchPattern: string,
     replacePattern: string,
     normalize: (line: string) => string,
+    reconcileTrailingComma: boolean,
   ): string | undefined {
-    const normalizedSearchLines = searchPattern.split('\n').map(normalize);
+    const searchLines = searchPattern.split('\n');
+    const normalizedSearchLines = searchLines.map(normalize);
 
     // Split content into lines for line-by-line processing
     const contentLines = content.split('\n');
@@ -209,6 +234,23 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
         // We found a match
         // Split the replacement text by lines and add each line exactly as is
         const replaceLines = replacePattern.split('\n');
+        if (reconcileTrailingComma && replacePattern !== '') {
+          const fileLine = contentLines[i + matchResult.matchLength - 1];
+          const searchLast = searchLines[lastNonEmptyLineIndex(searchLines)];
+          const replaceLastIndex = lastNonEmptyLineIndex(replaceLines);
+          const replaceLast = replaceLines[replaceLastIndex];
+          const modelKeptComma =
+            endsWithComma(searchLast) === endsWithComma(replaceLast);
+          if (
+            replaceLastIndex !== -1 &&
+            modelKeptComma &&
+            endsWithComma(fileLine) !== endsWithComma(replaceLast)
+          ) {
+            replaceLines[replaceLastIndex] = endsWithComma(fileLine)
+              ? replaceLast.replace(/\s*$/, ',')
+              : replaceLast.replace(/,\s*$/, '');
+          }
+        }
         for (const line of replaceLines) {
           resultLines.push(line);
         }

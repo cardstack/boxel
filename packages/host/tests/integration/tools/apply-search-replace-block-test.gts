@@ -821,6 +821,91 @@ ${REPLACE_MARKER}`;
     );
   });
 
+  test("carries the file's trailing comma into a replacement that omits it in both halves", async function (assert) {
+    // The model believes the object ends with `}`, so it writes `}` in both
+    // SEARCH and REPLACE. The block applies through the trailing-comma pass,
+    // and the file's `},` must stay `},` or the JSON breaks.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`,
+      'the comma the file had is kept',
+    );
+  });
+
+  test('removes a trailing comma the model imagined when the file has none', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../a",
+      "name": "A"
+    }
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../a",
+      "name": "A"
+    },
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./a",
+      "name": "A"
+    },
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./a",
+      "name": "A"
+    }
+  }
+}`,
+      'no stray comma before the closing brace',
+    );
+  });
+
   test('prefers an exact match over a trailing-comma match', async function (assert) {
     let toolService = getService('tool-service');
     let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);

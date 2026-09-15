@@ -1116,36 +1116,94 @@ function getCodePatchResults(
 // events are not rendered into the history. For an applied block that is
 // fine: the correctness check reports on the result. A failed block left the
 // model with no signal at all, so it would re-read the file and resend the
-// same block. This message tells it which blocks of its message failed and
-// why, and what to do instead.
+// same block. This message records which blocks of the reply failed and why.
+// It is a record, not an instruction: a retry is a new block in a new reply,
+// so this block stays failed for the rest of the session, and an imperative
+// here would stand in history long after the fix landed. The instruction
+// rides the trailing message, see buildFailedCodePatchFollowUp.
 //
 // Only a block whose latest result is a failure is reported: a block that
 // failed once and then applied on a retry is an applied block.
-function buildFailedCodePatchMessage(
+function failedCodePatchResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-): string | undefined {
+): CodePatchResultEvent[] {
   let latestResultByBlock = new Map<number, CodePatchResultEvent>();
   for (let result of getCodePatchResults(cardMessageEvent, history)) {
     latestResultByBlock.set(result.content.codeBlockIndex, result);
   }
-  let failures = [...latestResultByBlock.values()]
+  return [...latestResultByBlock.values()]
     .filter((result) => result.content['m.relates_to']?.key === 'failed')
     .sort((a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex);
+}
+
+function buildFailedCodePatchMessage(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): string | undefined {
+  let failures = failedCodePatchResults(cardMessageEvent, history);
   if (failures.length === 0) {
     return undefined;
   }
-  let lines = failures.map((result) => {
-    let fileUrl = result.content.data?.attachedFiles?.[0]?.sourceUrl;
-    let reason = result.content.failureReason ?? 'unknown error';
-    return `Code block ${result.content.codeBlockIndex + 1}${
-      fileUrl ? ` (${fileUrl})` : ''
-    } was not applied: ${reason}`;
-  });
-  lines.push(
-    'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.',
+  return failures
+    .map((result) => {
+      let fileUrl = result.content.data?.attachedFiles?.[0]?.sourceUrl;
+      let reason = result.content.failureReason ?? 'unknown error';
+      return `Code block ${result.content.codeBlockIndex + 1}${
+        fileUrl ? ` (${fileUrl})` : ''
+      } was not applied: ${reason}`;
+    })
+    .join('\n');
+}
+
+// The instruction that goes with a failed patch, for this request only. It
+// applies while the bot's most recent reply that carried patches has a
+// failed block and nothing has replaced it: a re-read turn in between keeps
+// it, a later reply with new patches ends it, and a new message from the
+// user ends it too. Consecutive failed replies since the user's message are
+// counted, and at the same cap the correctness check uses the retrying stops
+// and the model is told to report to the user instead — otherwise a model
+// that cannot get the SEARCH block right would loop, fail, and pay for it
+// until someone noticed.
+function buildFailedCodePatchFollowUp(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): string | undefined {
+  let lastUserMessageIndex = findLastIndex(
+    history,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isToolOrCodePatchResult(event),
   );
-  return lines.join('\n');
+  let patchReplies = history.slice(lastUserMessageIndex + 1).filter((event) => {
+    if (
+      event.sender !== aiBotUserId ||
+      event.type !== 'm.room.message' ||
+      isToolOrCodePatchResult(event)
+    ) {
+      return false;
+    }
+    let content = event.content as CardMessageContent;
+    if (content.isStreamingFinished === false) {
+      return false;
+    }
+    return extractCodePatchBlocks(content.body ?? '').length > 0;
+  }) as CardMessageEvent[];
+  let failedAttempts = 0;
+  for (let i = patchReplies.length - 1; i >= 0; i--) {
+    if (failedCodePatchResults(patchReplies[i], history).length === 0) {
+      break;
+    }
+    failedAttempts++;
+  }
+  if (failedAttempts === 0) {
+    return undefined;
+  }
+  if (failedAttempts >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
+    return FAILED_CODE_PATCH_LIMIT_INSTRUCTION;
+  }
+  return `${FAILED_CODE_PATCH_RETRY_INSTRUCTION} Attempt ${failedAttempts} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`;
 }
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
@@ -1349,6 +1407,16 @@ const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have 
 // for a summary reads as the end of the work. It was: a build announced as
 // two cards delivered one, reported it was clean, and stopped, because
 // nothing resumes a plan across turns.
+// A failed patch leaves two traces in the prompt. History carries a record of
+// the failure after the reply that produced it (buildFailedCodePatchMessage):
+// past tense, stable bytes, and it stays true for the rest of the session.
+// The instruction to retry rides the volatile trailing message instead
+// (buildFailedCodePatchFollowUp), so it is present only while the retry is
+// pending and disappears once the next patch lands, rather than standing in
+// history as an order a weak model keeps obeying after the fix.
+const FAILED_CODE_PATCH_RETRY_INSTRUCTION = `A code block in your last reply was not applied; the reason is recorded after that reply. Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.`;
+const FAILED_CODE_PATCH_LIMIT_INSTRUCTION = `Code patches have failed to apply ${MAX_CORRECTNESS_FIX_ATTEMPTS} times in a row. Do not send another patch. Tell the user which file could not be updated and why, and ask how they want to proceed.`;
+
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
   'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
@@ -1744,6 +1812,7 @@ export async function buildPromptForModel(
   let trailingContent = [
     contextContent,
     unsupportedNote,
+    buildFailedCodePatchFollowUp(history, aiBotUserId),
     shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
       ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
       : undefined,
