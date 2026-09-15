@@ -4403,15 +4403,19 @@ function lazilyLoadLink(
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      // Only reuse an instance that finished deserializing. A store also holds
-      // partially-built, non-tracked instances: a failed
-      // `_updateFromSerialized` leaves its half-built instance behind (the
-      // store keeps it so cyclic deserialization can resolve), with
-      // `isSavedInstance` still false — it flips true only at the end of a
-      // successful deserialize. Reusing such a partial would skip the
-      // load/error path that plants the broken-link sentinel and hand the
-      // reader an incomplete target; falling through re-attempts the load and
-      // re-plants the sentinel.
+      // Whether the held instance finished deserializing is part of what the
+      // store answers above, and it has to be: a deserialize plants its
+      // instance before it builds any field and leaves a failed one in place
+      // so cyclic deserialization can still resolve it, and nothing on the
+      // instance records which of those it is. `isSavedInstance` reads like
+      // that record and is not one — a `FileDef` carries it true from its
+      // class body and never has it cleared, and the link deserializers stamp
+      // it true on any resident instance they hand back without checking. It
+      // stays here as a narrowing on the card branch, not as the answer.
+      //
+      // Reusing a partial would skip the load/error path that plants the
+      // broken-link sentinel and hand the reader an incomplete target;
+      // falling through re-attempts the load and re-plants the sentinel.
       if (
         reusable &&
         reusable[isSavedInstance] === true &&

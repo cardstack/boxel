@@ -256,6 +256,45 @@ module('Integration | shared link target reuse', function (hooks) {
     }
   });
 
+  // The judgement the whole gate rests on, read directly rather than through
+  // its effect on a load count: does this store hear that a given id was
+  // re-indexed? It is a realm lookup against the store's live subscription
+  // set, and an id reaches it under whichever spelling a link carried — so the
+  // fold in front of that lookup has to agree with the one the subscribe path
+  // performs, whatever spelling it is handed.
+  test('index-event coverage is reported per subscribed realm, in any spelling of an id', async function (assert) {
+    let answersFor = (id: string) =>
+      (storeService as any).receivesIndexEventsFor(id) as boolean;
+
+    // Reading a card is what subscribes the store to its realm.
+    await read(LOCAL_PET);
+
+    assert.true(
+      answersFor(LOCAL_PET),
+      'a target in a realm this store reads is covered',
+    );
+    assert.true(
+      answersFor(rri(LOCAL_PET)),
+      'and is still covered when the id arrives as an RRI',
+    );
+    assert.false(
+      answersFor(FOREIGN_PET),
+      'a realm nothing on the page has read is not covered',
+    );
+    assert.false(
+      answersFor('some-local-id-no-realm-has-indexed'),
+      'a local id names an instance no realm has indexed',
+    );
+
+    // Reading the second realm subscribes to it, and the answer moves with the
+    // subscription rather than with the realm boundary.
+    await read(FOREIGN_NEIGHBOR);
+    assert.true(
+      answersFor(FOREIGN_PET),
+      'the same target is covered once its realm is subscribed',
+    );
+  });
+
   test('a target in a second realm the page also reads loads once', async function (assert) {
     // Reading any card in that realm is what subscribes this store to its index
     // events, which is the whole of what the target has to be covered by.
