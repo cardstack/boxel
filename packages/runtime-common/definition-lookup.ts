@@ -1390,6 +1390,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //
     // A read per populate, not per lookup: cache hits never reach here.
     let loaderEpoch = await readRealmLoaderEpoch(this.#dbAdapter, realmURL);
+    // One line per populate, and a populate only happens when no cached row
+    // satisfied the lookup. A module that populates on every read is a cache
+    // that never takes, which is invisible from the cached path alone.
+    log.info(
+      `definition-cache populate via prerenderer: module=${moduleUrl} realm=${realmURL}`,
+    );
     return await this.#prerenderer.prerenderModule({
       affinityType: 'realm',
       affinityValue: realmURL,
