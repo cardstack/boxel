@@ -390,7 +390,7 @@ export class LatticeMaterializationInputs {
         `SELECT i.url,i.xmin::text AS version,i.generation,
           i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS row_version,
           octet_length(i.pristine_doc::text) AS bytes,i.has_error,i.is_deleted,
-          COALESCE(i.pristine_doc->'meta' ? 'lattice',FALSE) AS materialized,
+          COALESCE(i.pristine_doc->'meta' ? 'publication',FALSE) AS materialized,
           i.pristine_doc->'meta'->'publication'->>'version' AS stamp_version,
           i.pristine_doc->'meta'->'publication'->>'state' AS state,
           i.pristine_doc->'meta'->'publication'->>'outputRevision' AS published,
