@@ -1068,6 +1068,16 @@ export interface AdapterWriteResult {
   lastModified: number;
 }
 
+export interface AdapterAppendResult extends AdapterWriteResult {
+  // The file's byte length once the append has landed. Reported by the
+  // adapter because it is already holding the stat the modification time
+  // above comes from, and because the alternative — asking what the file's
+  // length is afterwards — is a second question about a file another writer
+  // may have moved on by then. It is what the appended file's fingerprint is
+  // computed against, so the two have to describe one state.
+  size: number;
+}
+
 export interface FileWriteResult extends AdapterWriteResult {
   path: string;
   lastModified: number;
@@ -1079,10 +1089,15 @@ export interface FileWriteResult extends AdapterWriteResult {
   contentHash: string;
 }
 
-// Everything one commit changes. Both members are optional so a caller that
+// Everything one commit changes. Every member is optional so a caller that
 // only writes, or only removes, says exactly that.
 export interface CommitBatch {
   writes?: Map<LocalPath, WriteContent>;
+  // Content to add to the end of a file, for a change that neither reads nor
+  // rewrites what is already stored there. One entry per path holding
+  // everything bound for it, so a caller adding two lines to one file adds
+  // them in one append rather than reaching the file twice.
+  appends?: Map<LocalPath, string | Uint8Array>;
   deletes?: LocalPath[];
 }
 
@@ -1166,6 +1181,23 @@ export interface RealmAdapter {
     path: LocalPath,
     content: SplicedSource,
   ): Promise<AdapterWriteResult>;
+
+  // Add `contents` to the end of the file at `path`, leaving everything
+  // already stored there untouched and unread.
+  //
+  // This is the primitive an append-only change is worth having: expressing
+  // one as a write means holding the file's whole content to produce the
+  // content it should hold next, so adding a line to a log costs the log.
+  // Here it costs the line, whatever the file's size — which is also why the
+  // result reports the new length rather than a caller measuring it.
+  //
+  // The file is created when nothing is stored at the path, which is what
+  // makes this primitive total; whether a missing target is an error is the
+  // caller's question, and the operation core answers it before it gets here.
+  append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult>;
 
   // Read `[start, end)` of a stored file. What a caller building a description
   // of a file's content reads to find the offsets it describes, and what a
@@ -2718,18 +2750,21 @@ export class Realm {
     return writes;
   }
 
-  // One commit covering every file a caller is changing — the bytes it writes
-  // and the paths it removes — under a single index job and a single index
-  // event. A caller staging several changes to several cards needs them to
-  // land together: two jobs would compute their invalidation fan-outs against
-  // different snapshots of the realm, and two events would let a subscriber
-  // observe the batch half-applied.
+  // One commit covering every file a caller is changing — the bytes it writes,
+  // the content it adds to the end of a file, and the paths it removes — under
+  // a single index job and a single index event. A caller staging several
+  // changes to several cards needs them to land together: two jobs would
+  // compute their invalidation fan-outs against different snapshots of the
+  // realm, and two events would let a subscriber observe the batch
+  // half-applied.
   //
-  // Writes land before removals. The write leg carries a mid-loop index flush
-  // that a module followed by an instance depends on, so it has an ordering
-  // constraint of its own; a removal invalidates rows, touches no definition,
-  // and has nothing to contribute to that flush or to gain from running ahead
-  // of it.
+  // Writes land first, then appends, then removals. The write leg carries a
+  // mid-loop index flush that a module followed by an instance depends on, so
+  // it has an ordering constraint of its own; an append and a removal each
+  // touch no definition and have nothing to contribute to that flush or to
+  // gain from running ahead of it. Writing before appending is what makes a
+  // caller's own ordering hold when it both replaces a file's content and adds
+  // to the end of it: the append lands on the content the write left.
   //
   // Assumes the realm's write lock is held — the caller reads the pre-state it
   // stages from inside the same critical section. `write` and `writeMany` are
@@ -2746,6 +2781,7 @@ export class Realm {
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
     let files = batch.writes ?? new Map<LocalPath, WriteContent>();
+    let appends = batch.appends ?? new Map<LocalPath, string | Uint8Array>();
     let deletes = batch.deletes ?? [];
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
@@ -3017,6 +3053,45 @@ export class Realm {
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
+    }
+
+    // The append leg. Each path gets the same per-file treatment a write does
+    // — the ceiling, the initiation event, the own-write tracking, the
+    // byte-cache drop, the peer notification, and a `realm_file_meta` row —
+    // with two differences, both of which follow from never holding the file.
+    //
+    // The ceiling is applied to what is being added rather than to what the
+    // file will hold, and it is the file ceiling whatever the path's
+    // extension: the limit is over the bytes a caller hands the realm, and a
+    // file that grew past it one line at a time is what an append-only file
+    // is. Nothing here classifies the content as a card, because appending to
+    // a card's stored JSON is not something the operation core permits —
+    // bytes added after a document's closing brace are no longer a document.
+    //
+    // And the fingerprint is assembled from bounded reads of the file once the
+    // append has landed, rather than computed from bytes in hand. That is the
+    // same value hashing the whole content would produce, and its cost has a
+    // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
+    // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
+    // adding a line to a file of any size costs the line plus a bounded read.
+    for (let [path, content] of appends) {
+      let url = this.paths.fileURL(path);
+      this.assertWriteSize(content, 'file', path);
+      let existed = await this.#adapter.exists(path);
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path);
+      let { lastModified, size } = await this.#adapter.append(path, content);
+      (existed ? updatedFiles : addedFiles).push(path);
+      this.invalidateCache(path);
+      await this.#notifyFileChange(path);
+      let contentHash = await computeContentHashFromRanges(
+        size,
+        async (start, length) =>
+          await readRangeBytes(this.#adapter, path, start, length),
+      );
+      results.push({ path, lastModified, contentHash });
+      fileMetaRows.push({ path, contentHash, contentSize: size });
+      urls.push(url);
     }
 
     // The removal leg. Each path gets the same per-file treatment a write

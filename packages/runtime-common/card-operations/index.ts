@@ -28,24 +28,28 @@ export type {
 } from './coordinator.ts';
 export {
   stageAppendContainsMany,
+  stageAppendLine,
   stageCreate,
   stageDelete,
   stageUpdate,
 } from './executors.ts';
 export type {
   AppendContainsManyEntry,
+  AppendLineEntry,
   BatchDocument,
   BatchEntry,
   CreateEntry,
   DeleteEntry,
   LidIndex,
   SourceBytes,
+  StagedAppend,
   StagedChange,
   StagedContent,
   StagedIdentity,
   StagedWrite,
   StagingContext,
   StoredFile,
+  StoredMeta,
   UpdateEntry,
 } from './executors.ts';
 export {

@@ -1,4 +1,7 @@
-import { computeContentHash } from '../content-hash.ts';
+import {
+  computeContentHash,
+  computeContentHashFromRanges,
+} from '../content-hash.ts';
 import { isCardError } from '../error.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -14,6 +17,7 @@ import {
   localIdOf,
   namesForeignRealm,
   stageAppendContainsMany,
+  stageAppendLine,
   stageCreate,
   stageDelete,
   stagedIdentity,
@@ -26,6 +30,7 @@ import {
   type StagedIdentity,
   type StagingContext,
   type StoredFile,
+  type StoredMeta,
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
 import {
@@ -105,11 +110,13 @@ export interface BatchCore {
   // never visited by indexing, so it never gets an index row.
   isIgnored(url: URL): Promise<boolean>;
 
-  // The realm's unlocked commit: writes and removals under one index job and
-  // one index event. Assumes the write lock is held, which it is.
+  // The realm's unlocked commit: writes, additions to the end of a file, and
+  // removals under one index job and one index event. Assumes the write lock
+  // is held, which it is.
   commitUnlocked(
     batch: {
       writes?: Map<LocalPath, string | Uint8Array | SplicedSource>;
+      appends?: Map<LocalPath, string | Uint8Array>;
       deletes?: LocalPath[];
     },
     options?: {
@@ -180,7 +187,7 @@ export async function commitBatch(
     // over the type it adopts — no read and no write — which is what lets an
     // entry link to a card a later entry mints.
     let { lids, foreignLids } = indexLids(entries, paths);
-    let stored = await readStoredFiles(core, entries, paths);
+    let { stored, storedMeta } = await readPreState(core, entries, paths);
     // What an append stages for a file it never read whole. Kept beside
     // `stored` rather than in it: the two describe the same file in different
     // terms, and an executor that needs one cannot work from the other.
@@ -198,8 +205,10 @@ export async function commitBatch(
         lids,
         foreignLids,
         stored,
+        storedMeta,
         splices,
         openSourceBytes: core.openSourceBytes,
+        fileExists: core.fileExists,
         actor: opts.actor ?? '',
         serializeCard: core.serializeCard,
         codeRefKey: core.codeRefKey,
@@ -209,10 +218,11 @@ export async function commitBatch(
       });
       baseHashes.push(
         change.primaryPath
-          ? stored.get(change.primaryPath)?.contentHash
+          ? (stored.get(change.primaryPath)?.contentHash ??
+              storedMeta.get(change.primaryPath)?.contentHash)
           : undefined,
       );
-      compose(stored, splices, entry, change);
+      compose(stored, storedMeta, splices, entry, change);
       staged.push(change);
     }
     assertWritesAllowed(staged);
@@ -242,12 +252,14 @@ export async function commitBatch(
 // path math the caller has to reproduce to predict it.
 function compose(
   stored: Map<LocalPath, StoredFile>,
+  storedMeta: Map<LocalPath, StoredMeta>,
   splices: Map<LocalPath, SplicedSource>,
   entry: BatchEntry,
   change: StagedChange,
 ): void {
   for (let path of change.deletes) {
     stored.delete(path);
+    storedMeta.delete(path);
     splices.delete(path);
   }
   if (entry.op === 'create') {
@@ -262,6 +274,20 @@ function compose(
       continue;
     }
     splices.delete(write.path);
+    // Recorded as a version whatever the content is, so a later entry naming
+    // this file reads the version this entry staged rather than the one the
+    // batch started from — which is what a `baseVersion` on it is compared
+    // against.
+    storedMeta.set(write.path, {
+      contentHash: computeContentHash(write.content),
+    });
+    if (typeof write.content !== 'string') {
+      // Bytes rather than text: the content a file was replaced with, which
+      // nothing merges over. What a later entry needs from it is the version
+      // above; the bytes themselves are the caller's and are not read back.
+      stored.delete(write.path);
+      continue;
+    }
     stored.set(write.path, {
       content: write.content,
       // The file has not been written yet, so its modification time is still
@@ -270,6 +296,11 @@ function compose(
       contentHash: computeContentHash(write.content),
     });
   }
+  // An append is deliberately not folded in. What it stages is an addition
+  // rather than a content, so there is nothing to merge over and no version to
+  // report until it lands — and the file it appends to is still on disk and
+  // still holds whatever it held, which is what a later entry asking whether
+  // the target is there finds.
 }
 
 // Run one executor, and label whatever it refuses with the entry's position.
@@ -291,6 +322,8 @@ async function stageEntry(
         return stageDelete(entry, ctx);
       case 'appendContainsMany':
         return await stageAppendContainsMany(entry, ctx);
+      case 'appendLine':
+        return await stageAppendLine(entry, ctx);
       default:
         throw new OperationFailure({
           status: 400,
@@ -370,9 +403,13 @@ function indexLids(
     lids.set(lid, identity);
   };
   for (let [index, entry] of entries.entries()) {
-    // Neither mints a card nor side-loads one, so neither claims an identity
+    // None of them mints a card or side-loads one, so none claims an identity
     // anything else in the batch could link to.
-    if (entry.op === 'delete' || entry.op === 'appendContainsMany') {
+    if (
+      entry.op === 'delete' ||
+      entry.op === 'appendContainsMany' ||
+      entry.op === 'appendLine'
+    ) {
       continue;
     }
     // Labelled with the entry's position like every other refusal: a caller
@@ -429,36 +466,41 @@ function indexLids(
 // Reading the pre-state
 // ---------------------------------------------------------------------------
 
-// Every file the batch reads, loaded once inside the write lock: the merge base
-// for each update, the existence check for each delete, and the anchoring card
-// a named create reads through `instance(…)`. Loading them up front is what
-// makes the executors pure — they resolve nothing and read nothing — and it is
-// what makes the bytes a `baseVersion` is compared against the same bytes the
-// merge is computed over, read inside the critical section the write happens
-// in.
-async function readStoredFiles(
+// Everything the batch knows about its targets before any executor runs, read
+// once inside the write lock: the merge base for each update, the existence
+// check for each delete, the anchoring card a named create reads through
+// `instance(…)`, and the version of each file an entry replaces wholesale.
+// Loading it up front is what makes the executors pure — they resolve nothing
+// and read nothing — and it is what makes the bytes a `baseVersion` is compared
+// against the same bytes the merge is computed over, read inside the critical
+// section the write happens in.
+//
+// What an entry needs from its target is not the same for every entry, so the
+// form of the read is the entry's to name (`targetRead`). A card is read whole,
+// because a patch merges over it. A file whose content is being replaced is not
+// read at all: there is no merge base, and the bytes could be a hundred
+// megabytes of log. What the batch keeps for one of those is its version,
+// assembled from bounded reads, which is all a `baseVersion` comparison needs.
+async function readPreState(
   core: BatchCore,
   entries: BatchEntry[],
   paths: RealmPaths,
-): Promise<Map<LocalPath, StoredFile>> {
-  let wanted = new Set<LocalPath>();
+): Promise<{
+  stored: Map<LocalPath, StoredFile>;
+  storedMeta: Map<LocalPath, StoredMeta>;
+}> {
+  let text = new Set<LocalPath>();
+  let meta = new Set<LocalPath>();
   for (let entry of entries) {
-    // A create's href is the card it is anchored on, when it has one; an
-    // update's and a delete's is the card itself. An append's is the card
-    // too, and deliberately not read: the whole point of that entry is to
-    // edit a file without holding it, so reading it here would spend the cost
-    // it exists to avoid — and it opens the file itself, in bounded pieces.
-    if (!entry.href || entry.op === 'appendContainsMany') {
-      continue;
-    }
-    let localPath = sourcePathOf(entry.href, paths);
-    if (localPath) {
-      wanted.add(localPath);
+    let read = targetRead(entry, paths);
+    if (read) {
+      (read.form === 'text' ? text : meta).add(read.path);
     }
   }
   let stored = new Map<LocalPath, StoredFile>();
-  await Promise.all(
-    [...wanted].map(async (localPath) => {
+  let storedMeta = new Map<LocalPath, StoredMeta>();
+  await Promise.all([
+    ...[...text].map(async (localPath) => {
       let file = await core.readSourceFile(localPath);
       if (!file) {
         return;
@@ -476,25 +518,106 @@ async function readStoredFiles(
         contentHash: computeContentHash(file.content),
       });
     }),
-  );
-  return stored;
+    ...[...meta]
+      // A path already being read whole has its version from those bytes, so
+      // asking for it a second way would read the same file twice to produce
+      // the same string.
+      .filter((localPath) => !text.has(localPath))
+      .map(async (localPath) => {
+        let bytes = await core.openSourceBytes(localPath);
+        if (!bytes) {
+          return;
+        }
+        storedMeta.set(localPath, {
+          // The same value hashing the whole file would produce, assembled
+          // from ranges instead — `computeContentHashFromRanges` asks for at
+          // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is,
+          // so knowing a file's version never costs the file.
+          contentHash: await computeContentHashFromRanges(
+            bytes.size,
+            async (start, length) =>
+              await collect(bytes.read(start, start + length)),
+          ),
+        });
+      }),
+  ]);
+  return { stored, storedMeta };
 }
 
-// The stored-source path a target's href names, or undefined when the href is
-// not a URL this realm contains. An unusable href is left for the executor to
-// refuse, which has the target's own terms to refuse it in.
-function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
+// One range of a stored file, as bytes. Bounded by whatever the caller asked
+// for, which for a fingerprint is bounded by the fingerprint's own shape.
+async function collect(chunks: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+  let read: Uint8Array[] = [];
+  let total = 0;
+  for await (let chunk of chunks) {
+    read.push(chunk);
+    total += chunk.length;
+  }
+  let bytes = new Uint8Array(total);
+  let at = 0;
+  for (let chunk of read) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
+  return bytes;
+}
+
+// The stored file an entry's target names, and how much of it the entry needs.
+// Undefined when the entry reads nothing, or when its href is not a URL this
+// realm contains — an unusable href is left for the executor to refuse, which
+// has the target's own terms to refuse it in.
+//
+// The path is the entry's to decide as much as the form is. A card's stored
+// bytes live at its URL plus `.json`, while a file's URL *is* its path, and
+// what tells the two apart is the payload the entry carries: a patch to merge
+// is a card's, content to replace is a file's. So neither the coordinator nor
+// the caller has to classify the target by reading its URL — which is the one
+// thing a URL cannot settle, since a realm holds files whose extensions it
+// knows nothing about.
+function targetRead(
+  entry: BatchEntry,
+  paths: RealmPaths,
+):
+  | {
+      path: LocalPath;
+      form: 'text' | 'meta';
+    }
+  | undefined {
+  // An append's target is deliberately not read: the whole point of either
+  // entry is to change a file without holding it, so reading it here would
+  // spend the cost it exists to avoid. `appendContainsMany` opens its target
+  // itself, in bounded pieces; `appendLine` never opens it at all.
+  if (
+    !entry.href ||
+    entry.op === 'appendContainsMany' ||
+    entry.op === 'appendLine'
+  ) {
+    return undefined;
+  }
   let url: URL;
   try {
-    url = new URL(href);
+    url = new URL(entry.href);
   } catch {
     return undefined;
   }
+  let localPath: LocalPath;
   try {
-    return `${paths.local(url)}.json` as LocalPath;
+    localPath = paths.local(url);
   } catch {
     return undefined;
   }
+  if (entry.op !== 'update' || entry.content === undefined) {
+    return { path: `${localPath}.json` as LocalPath, form: 'text' };
+  }
+  // A `.json` at a file's own path is either a card's stored source or a data
+  // file the realm merely holds, and only the bytes tell them apart — the same
+  // question, answered the same way, that the realm's own size classification
+  // asks before it decides which ceiling a write is held to. Everything else
+  // is a file, and its version is all the batch needs.
+  return {
+    path: localPath,
+    form: localPath.endsWith('.json') ? 'text' : 'meta',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +632,7 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // why the other two admit them as well.
 function assertWritesAllowed(staged: StagedChange[]): void {
   for (let [index, change] of staged.entries()) {
-    for (let write of change.writes) {
+    for (let write of [...change.writes, ...change.appends]) {
       let reserved = isCaptureServingPath(write.path)
         ? `"${CAPTURE_SERVING_PREFIX}" is reserved for serving captures`
         : isPartialWritePath(write.path)
@@ -569,7 +692,13 @@ async function assertRemovalsAllowed(
 // staged write here, where a refusal still costs nothing.
 function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
   for (let [index, change] of staged.entries()) {
-    for (let write of change.writes) {
+    // An append is held to the ceiling by what it adds rather than by what the
+    // file will hold: the limit is over the bytes a caller hands the realm,
+    // and a file grown past it one line at a time is what an append-only file
+    // is. Measuring the result instead would mean knowing the file's length,
+    // which is a question about the file this entry exists in order not to
+    // ask.
+    for (let write of [...change.writes, ...change.appends]) {
       try {
         core.assertWriteSize(write.path, write.content);
       } catch (err: unknown) {
@@ -661,10 +790,35 @@ async function commitStaged(
   // them rather than twice, and a removal that follows drops the write
   // entirely instead of writing bytes the same commit then unlinks.
   let writes = new Map<LocalPath, string | Uint8Array | SplicedSource>();
+  // Everything bound for the end of a file, joined in batch order so two
+  // entries adding a line to one log both land, in the order they were sent,
+  // and the file is reached once.
+  let appends = new Map<LocalPath, string>();
   let deleted = new Set<LocalPath>();
   let writtenBy = new Map<LocalPath, number>();
+  let appendedBy = new Map<LocalPath, number>();
   for (let [index, change] of staged.entries()) {
     for (let write of change.writes) {
+      let appender = appendedBy.get(write.path);
+      if (appender !== undefined) {
+        // The commit writes before it appends, which is what makes "replace
+        // this file, then add a line to it" land in that order. Asked the
+        // other way round it cannot: the earlier entry's line would end up
+        // after the later entry's content instead of being replaced by it,
+        // and both entries would report success over a file neither of them
+        // described. Refused rather than reordered, since reordering would
+        // silently discard the append.
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Conflicting entries',
+          detail:
+            `entry ${index} replaces the content of ${write.path}, which ` +
+            `entry ${appender} appends to; a batch appends to a file after ` +
+            `it writes one, not before`,
+          meta: { entry: index, conflictsWith: appender },
+        });
+      }
       if (deleted.has(write.path)) {
         // The batch already removed this card, so writing it back is not a
         // later step in one story — it is two entries asking for opposite
@@ -701,14 +855,25 @@ async function commitStaged(
       writes.set(write.path, write.content);
       writtenBy.set(write.path, index);
     }
+    for (let append of change.appends) {
+      appends.set(
+        append.path,
+        `${appends.get(append.path) ?? ''}${append.content}`,
+      );
+      appendedBy.set(append.path, index);
+    }
     for (let path of change.deletes) {
       deleted.add(path);
+      // Both legs drop, for the reason the removal wins over either: the file
+      // is on its way out, so producing content for it and unlinking it in the
+      // same commit is work with no observable result.
       writes.delete(path);
+      appends.delete(path);
     }
   }
   let deletes = [...deleted];
   let committed = await core.commitUnlocked(
-    { writes, deletes },
+    { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
       waitForIndex: opts.waitForIndex ?? true,
