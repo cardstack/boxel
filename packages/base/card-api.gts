@@ -4385,9 +4385,11 @@ function lazilyLoadLink(
       //
       // Whether what the store holds is current enough to stand in for a load
       // is the store's own question, so the store answers it rather than this
-      // module inferring it from render globals. This is reuse across time,
-      // and it composes with rather than replaces the per-URL in-flight map
-      // above, which collapses edges that ask concurrently.
+      // module inferring it from render globals. What this adds is reuse
+      // across time — an edge asking after an earlier one has already settled.
+      // Edges asking at the same moment are collapsed by the loads still in
+      // flight, both the per-instance map above and the store's own per-URL
+      // one, and this leaves both of those doing their job.
       let reusable = store.canReuseResidentInstance?.(reference)
         ? isFileLink
           ? store.getFileMeta(reference)
