@@ -64,7 +64,11 @@ export interface Workload {
   write: WriteSpec;
 }
 
-interface RawWorkload {
+// The on-disk / on-the-wire shape, before validation. `derive-workload.ts`
+// builds one of these too, so a derived workload and a committed one are the
+// same object validated by the same code — which is what makes an emitted file
+// reproduce the run it was emitted from.
+export interface RawWorkload {
   queries?: unknown;
   secondaryQueries?: unknown;
   extraQueries?: unknown;
@@ -78,6 +82,16 @@ export function loadWorkload(path: string, realmUrl: string): Workload {
   } catch (e) {
     throw new Error(`Could not read workload file ${path}: ${errorMessage(e)}`);
   }
+  return parseWorkload(raw, realmUrl, path);
+}
+
+// `source` names whatever produced `raw`, so a validation failure says where to
+// go and fix it.
+export function parseWorkload(
+  raw: RawWorkload,
+  realmUrl: string,
+  source: string,
+): Workload {
   let workload: Workload = {
     queries: parseQueries(raw.queries, 'queries', realmUrl),
     secondaryQueries: parseQueries(
@@ -89,7 +103,7 @@ export function loadWorkload(path: string, realmUrl: string): Workload {
     write: parseWrite(raw.write, realmUrl),
   };
   if (workload.queries.length === 0) {
-    throw new Error(`${path}: "queries" must list at least one query`);
+    throw new Error(`${source}: "queries" must list at least one query`);
   }
   return workload;
 }

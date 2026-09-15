@@ -27,6 +27,8 @@
 // caveat on `eventCannotMatch` in `lib/realm-events.ts` before quoting the
 // re-run counts as the host's behaviour.
 
+import { writeFileSync } from 'node:fs';
+
 import { authenticate, realmAuthHeader, type Session } from './lib/auth.ts';
 import {
   DEFAULTS,
@@ -44,9 +46,15 @@ import {
   type RealmEvent,
 } from './lib/realm-events.ts';
 import {
+  fetchCardTypeSummary,
+  workloadFromCardTypeSummary,
+} from './lib/derive-workload.ts';
+import {
   loadWorkload,
+  parseWorkload,
   writeAttributes,
   type QuerySpec,
+  type Workload,
 } from './lib/workload.ts';
 
 let args = parseArgs(process.argv.slice(2), {
@@ -67,6 +75,16 @@ let args = parseArgs(process.argv.slice(2), {
   // Every Nth reader also opens the workload's secondary screen.
   secondaryEvery: 3,
   extraQueries: false,
+  // Build the workload from the realm under test instead of from a file, by
+  // ranking its own `_types` summary by instance count. This is how two people
+  // run the same test without exchanging a config: the target defines it.
+  deriveWorkload: false,
+  deriveTop: 8,
+  // Page size for every derived query. 0 leaves them unbounded.
+  derivePageSize: 20,
+  // Write the derived workload here and exit without running, so it can be
+  // committed and re-run verbatim. `-` writes to stdout.
+  emitWorkload: '',
   // Precede each write with a `_request-forward` call, the way a card that
   // generates before saving does. It adds a second authenticated round trip
   // per write without spending tokens; see `modelCall` for exactly how far
@@ -79,9 +97,29 @@ let args = parseArgs(process.argv.slice(2), {
   subscribe: false,
 });
 
-if (!args.csv || !args.realm || !args.workload) {
+if (!args.csv || !args.realm || (!args.workload && !args.deriveWorkload)) {
   console.error(
-    'Usage: node run-load.ts --csv <accounts.csv> --realm <url> --workload <workload.json>',
+    `Usage: node run-load.ts --csv <accounts.csv> --realm <url> \\\n` +
+      `         (--workload <workload.json> | --derive-workload)\n\n` +
+      `  --workload         a committed workload file; workload.experiments.json\n` +
+      `                     is the standard one, and gives numbers comparable to\n` +
+      `                     anyone else's run against the same target\n` +
+      `  --derive-workload  rank the realm's own /_types by instance count and\n` +
+      `                     query the top --derive-top (${args.deriveTop}) types\n` +
+      `  --emit-workload P  write the derived workload to P ('-' for stdout) and\n` +
+      `                     exit, so it can be committed and re-run verbatim`,
+  );
+  process.exit(1);
+}
+if (args.workload && args.deriveWorkload) {
+  console.error(
+    '--workload and --derive-workload both name the queries to run; pass one.',
+  );
+  process.exit(1);
+}
+if (args.emitWorkload && !args.deriveWorkload) {
+  console.error(
+    '--emit-workload only has something to emit with --derive-workload.',
   );
   process.exit(1);
 }
@@ -90,7 +128,14 @@ exitIfProduction(args.matrixUrl, args.realmServerUrl, args.realm);
 let realmUrl = ensureTrailingSlash(args.realm);
 let searchUrl = `${args.realmServerUrl.replace(/\/$/, '')}/_federated-search`;
 let creds = readCredentials(args.csv);
-let workload = loadWorkload(args.workload, realmUrl);
+// Assigned before any loop starts. A committed workload is validated before any
+// login, so a typo costs a second rather than a round of authentication. A
+// derived one cannot be: reading `_types` needs a realm token, so it waits
+// until the first session is up.
+let workload!: Workload;
+if (!args.deriveWorkload) {
+  workload = loadWorkload(args.workload, realmUrl);
+}
 
 let stats = {
   search: [] as number[],
@@ -462,7 +507,8 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-let needed = args.readers + args.writers;
+// Emitting a derived workload only needs a session that can read `_types`.
+let needed = args.emitWorkload ? 1 : args.readers + args.writers;
 if (creds.length < needed) {
   console.error(`Credential file has ${creds.length} rows, need ${needed}`);
   process.exit(1);
@@ -486,19 +532,57 @@ for (let row of creds.slice(0, needed)) {
   }
 }
 console.log(`\n${sessions.length} sessions authenticated.`);
-if (sessions.length < 2) {
-  console.error('Need at least one reader and one writer.');
+if (sessions.length === 0) {
+  console.error('No sessions authenticated.');
   process.exit(1);
+}
+
+if (args.deriveWorkload) {
+  let entries = await fetchCardTypeSummary({
+    realmUrl,
+    // The realm's own JWT. A server token gets a 401 here.
+    authorization: realmAuthHeader(sessions[0], realmUrl),
+  });
+  let raw = workloadFromCardTypeSummary(entries, {
+    realmUrl,
+    top: args.deriveTop,
+    pageSize: args.derivePageSize,
+  });
+  if (args.emitWorkload) {
+    let json = `${JSON.stringify(raw, null, 2)}\n`;
+    if (args.emitWorkload === '-') {
+      process.stdout.write(json);
+    } else {
+      writeFileSync(args.emitWorkload, json);
+      console.log(`Wrote ${args.emitWorkload}`);
+      console.log(
+        `Re-run it verbatim with --workload ${args.emitWorkload}. Check the\n` +
+          `"write" block before committing: attributes are left empty because\n` +
+          `the type summary reports counts, not field schemas.`,
+      );
+    }
+    process.exit(0);
+  }
+  workload = parseWorkload(raw, realmUrl, `${realmUrl}_types`);
+  console.log(
+    `Derived ${workload.queries.length} queries from ${realmUrl}_types: ` +
+      `${workload.queries.map((q) => q.label).join(', ')}`,
+  );
 }
 
 // Each simulated user authenticates as itself. Searches authorize per realm and
 // realm events are broadcast into each user's own session room, so one shared
 // account would reproduce neither the authorization work nor the event volume.
-let writerSessions = sessions.slice(
-  0,
-  Math.min(args.writers, sessions.length - 1),
-);
-let readerSessions = sessions.slice(writerSessions.length);
+//
+// A shortfall in authenticated sessions takes writers before readers: the
+// searches are what the run is about, and `--writers 0` is a legitimate
+// read-only run against a realm nobody wants dirtied.
+let writerCount = Math.min(args.writers, sessions.length);
+if (args.readers > 0 && writerCount >= sessions.length) {
+  writerCount = sessions.length - 1;
+}
+let writerSessions = sessions.slice(0, writerCount);
+let readerSessions = sessions.slice(writerCount);
 console.log(
   `${readerSessions.length} readers, ${writerSessions.length} writers, ${args.minutes} min. ` +
     `Ctrl-C to stop early.\n`,
@@ -565,19 +649,49 @@ function finish() {
   );
 
   console.log(`\nper query shape (end-to-end / headers / body, median):`);
+  let shapes: { label: string; headersMs: number; bytes: number }[] = [];
   for (let [label, rows] of [...stats.byLabel].sort()) {
     let med = (pick: (r: (typeof rows)[number]) => number) => {
       let v = rows.map(pick).sort((a, b) => a - b);
       return v[Math.floor(v.length / 2)] ?? 0;
     };
-    let kb = Math.round(med((r) => r.bytes) / 1024);
+    let headersMs = med((r) => r.headersMs);
+    let bytes = med((r) => r.bytes);
+    shapes.push({ label, headersMs, bytes });
     console.log(
       `  ${label.padEnd(20)} n=${String(rows.length).padStart(3)} ` +
         `${String(Math.round(med((r) => r.total))).padStart(6)}ms / ` +
-        `${String(Math.round(med((r) => r.headersMs))).padStart(5)}ms / ` +
+        `${String(Math.round(headersMs)).padStart(5)}ms / ` +
         `${String(Math.round(med((r) => r.bodyMs))).padStart(6)}ms  ` +
-        `${String(kb).padStart(4)} KB`,
+        `${String(Math.round(bytes / 1024)).padStart(4)} KB`,
     );
+  }
+
+  // Two things the table above contains but does not say out loud, and both
+  // change what a run means.
+  if (shapes.length > 1) {
+    // One render fires the whole set at once, so the sum is what a screen costs
+    // to open — not any single row.
+    let perRender = shapes.reduce((a, s) => a + s.bytes, 0) / 1024;
+    console.log(
+      `\n  one pass over these ${shapes.length} shapes transfers ` +
+        `${perRender >= 1024 ? `${(perRender / 1024).toFixed(1)} MB` : `${Math.round(perRender)} KB`}` +
+        `, which is what opening the screen costs.`,
+    );
+
+    // A wide spread means the realm's cost is concentrated in a few types, so
+    // an average over shapes describes none of them.
+    let ranked = [...shapes].sort((a, b) => a.headersMs - b.headersMs);
+    let fastest = ranked[0];
+    let slowest = ranked[ranked.length - 1];
+    if (fastest.headersMs > 0 && slowest.headersMs / fastest.headersMs >= 3) {
+      console.log(
+        `  server time spans ${(slowest.headersMs / fastest.headersMs).toFixed(1)}× across shapes ` +
+          `(${slowest.label} ${Math.round(slowest.headersMs)}ms vs ` +
+          `${fastest.label} ${Math.round(fastest.headersMs)}ms) — the cost sits\n` +
+          `  in particular types, so read the rows rather than the aggregate.`,
+      );
+    }
   }
 
   if (args.subscribe) {

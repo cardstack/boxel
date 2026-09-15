@@ -52,17 +52,80 @@ API call. Each session authenticates as its own user: searches authorize per
 realm and realm events are broadcast into each user's own session room, so a
 single shared account reproduces neither.
 
-## The workload file
+## Choosing a workload
 
 Which queries the readers issue, and what the writers write, is data rather than
-code — the shapes that matter belong to whichever realm is under test.
-`workload.example.json` is the shape of the file, filled with placeholders that
-match no real realm. Replace every entry.
+code — the shapes that matter belong to whichever realm is under test. There are
+three ways to get them, in increasing order of specificity.
 
-**Transcribe the queries out of the card source** — the `load()` / `loadData()`
-bodies, the query-backed fields — rather than inventing a plausible set. What a
-run measures is the cost of the queries a real screen issues; a workload that
-asks for less than the screen does measures nothing.
+### 1. The standard workload (start here)
+
+`workload.experiments.json` targets the experiments realm, which ships in the
+repo as `packages/experiments-realm` and exists in every deployed environment.
+It is the one realm everybody can point at, so it is how you get a number
+comparable to someone else's without exchanging anything:
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <experiments realm url> \
+  --workload ./workload.experiments.json
+```
+
+Its types are the realm's highest-count instance types, picked by count rather
+than by interest, so the set tracks where the cost actually is.
+
+**Comparable across runs against the same target, not across targets.** The
+realm in the repo and a realm deployed from it are not guaranteed to hold the
+same instances, and nothing keeps them in step — the file records both counts
+side by side. Compare an environment against its own earlier run.
+
+The writers post an `Author`, which is in the read set, so each write
+invalidates a query the readers are running. Point it at a realm you are willing
+to dirty — a clone made by `setup-realm.ts` — or pass `--writers 0` for a
+read-only run.
+
+### 2. Derive one from the realm you care about
+
+`--derive-workload` reads the realm's own `GET <realm>/_types` summary, ranks it
+by instance count, and queries the top `--derive-top` (default 8) types. This is
+the answer to sharing a config: don't share one, derive it from the target.
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <url> --derive-workload
+```
+
+`--derive-page-size` (default 20) bounds every derived query; `0` leaves them
+unbounded. Because the standard workload above is unbounded, a derived run and a
+standard run are not comparable to each other.
+
+To turn a derived workload into a shared one, emit it and commit the file:
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <url> --derive-workload \
+  --emit-workload ./workload.mine.json     # '-' writes to stdout
+```
+
+That writes the file and exits without running, so the run you do next is
+reproducibly the one in the file. Realm-local modules come out as `${realm}…`,
+so the file travels between clones. Check the `write` block before committing:
+its attributes are empty, because the type summary reports counts and not field
+schemas.
+
+`_types` needs the same per-realm JWT the searches use — a bare realm-server
+session token gets a 401. A failure here stops the run rather than falling back
+to a built-in workload, because two people believing they ran the same test and
+not having done is worse than a failed run.
+
+### 3. Write one by hand
+
+When you are reproducing a specific card's query pattern, transcribe it.
+`workload.example.json` is the shape, filled with placeholders.
+
+**Transcribe out of the card source** — the `load()` / `loadData()` bodies, the
+query-backed fields — rather than inventing a plausible set. What a run measures
+is the cost of the queries a real screen issues; a workload that asks for less
+than the screen does measures nothing.
+
+### The wire grammar
 
 Queries are written in the `_federated-search` **entry wire grammar**, not the
 card-query grammar cards are written in. The host translates on the way out
@@ -81,20 +144,24 @@ invalidate) and `${date}`.
 ```sh
 node run-load.ts --csv ./accounts.csv \
   --realm https://realms-staging.stack.cards/<owner>/load-test/ \
-  --workload ./workload.json
+  --workload ./workload.experiments.json
 ```
 
-| Option              | Default | Meaning                                                                         |
-| ------------------- | ------: | ------------------------------------------------------------------------------- |
-| `--readers`         |      12 | Sessions that only search.                                                      |
-| `--writers`         |       2 | Sessions that write, and search not at all.                                     |
-| `--minutes`         |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
-| `--write-every-ms`  |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
-| `--idle-re-run-ms`  |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
-| `--secondary-every` |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
-| `--extra-queries`   |     off | Also issue the workload's `extraQueries`.                                       |
-| `--model-calls`     |     off | A forwarded request before each write (see below).                              |
-| `--subscribe`       |     off | React to real realm events instead of modelling them (see below).               |
+| Option               | Default | Meaning                                                                         |
+| -------------------- | ------: | ------------------------------------------------------------------------------- |
+| `--readers`          |      12 | Sessions that only search.                                                      |
+| `--writers`          |       2 | Sessions that write, and search not at all.                                     |
+| `--minutes`          |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
+| `--write-every-ms`   |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
+| `--idle-re-run-ms`   |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
+| `--secondary-every`  |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
+| `--extra-queries`    |     off | Also issue the workload's `extraQueries`.                                       |
+| `--derive-workload`  |     off | Build the workload from the realm's own `_types` instead of a file.             |
+| `--derive-top`       |       8 | How many types a derived workload queries.                                      |
+| `--derive-page-size` |      20 | Page size for derived queries; `0` leaves them unbounded.                       |
+| `--emit-workload`    |       — | Write the derived workload here and exit. `-` is stdout.                        |
+| `--model-calls`      |     off | A forwarded request before each write (see below).                              |
+| `--subscribe`        |     off | React to real realm events instead of modelling them (see below).               |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -203,12 +270,14 @@ purpose; doing that to production is an outage for real users.
 
 - `setup-realm.ts` — create the realm, push contents, wait for the index
 - `run-load.ts` — the driver
+- `workload.experiments.json` — the standard workload, for comparable numbers
 - `workload.example.json` — the shape of a workload file
+- `lib/derive-workload.ts` — ranking a realm's `_types` into a workload
 - `lib/auth.ts` — Matrix login → OpenID → `_server-session` → `_realm-auth`
 - `lib/workload.ts` — workload loading, the wire grammar, substitution
 - `lib/realm-events.ts` — Matrix `/sync` subscription and the host's skip test
 - `lib/common.ts` — credential reading, the production guard, arg parsing, stats
 
 `tests/load-harness-test.ts` in this package covers the pure logic: credential
-parsing, the production guard, argument parsing, workload validation, and the
-skip test.
+parsing, the production guard, argument parsing, workload validation and
+derivation, and the skip test.

@@ -1,7 +1,9 @@
 # A credential file dropped here must never be committed.
 *.csv
 
-# A real workload file transcribes the card types of the realm under test,
-# which generally belong to someone else. Only the example belongs in the repo.
+# A workload file transcribes the card types of the realm under test, which
+# generally belong to someone else. Only the shared ones belong in the repo:
+# the format example, and the standard experiments-realm workload.
 workload*.json
 !workload.example.json
+!workload.experiments.json

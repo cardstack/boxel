@@ -1,6 +1,6 @@
 ---
 name: realm-load-harness
-description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) writing a workload file — the query shapes and write card, transcribed from the realm's card source into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
+description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -15,6 +15,89 @@ are.
 
 The harness is dependency-free by design — global `fetch` and `node:` built-ins
 only — because where it runs decides what it measures.
+
+## Where the queries come from
+
+Three modes, in increasing order of specificity. Reach for the first one unless
+there is a reason not to.
+
+### 1. The standard workload — recommended starting point
+
+`workload.experiments.json` targets the experiments realm, which ships in the
+repo as `packages/experiments-realm` and exists in every deployed environment.
+It is the one realm everybody can point at, so it is how a run becomes
+comparable to someone else's with zero setup and nothing to exchange.
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <experiments realm url> \
+  --workload ./workload.experiments.json
+```
+
+Its eight query shapes are the realm's highest-count instance types, chosen by
+count rather than by interest.
+
+**Comparable across runs against the same target, not across targets.** The repo
+realm and a realm deployed from it are not kept in step — `Spec` is 117
+instances deployed against 28 in the repo, `CardListing` is 26 against 0. The
+workload file records both columns. Compare an environment against its own
+earlier run; a smaller shape on a repo clone is the realm differing, not a
+regression.
+
+The writers post an `Author`, which is in the read set, so each write
+invalidates a query the readers are running. Point it at a realm you are willing
+to dirty — a clone made by `setup-realm.ts` — or pass `--writers 0` for a
+read-only run.
+
+### 2. `--derive-workload` — for the realm you actually care about
+
+Don't share a config; derive one from the target. `GET <realm>/_types` returns
+one `card-type-summary` entry per type with an instance count; the harness keeps
+`kind: 'instance'` entries, ranks by `attributes.total` (with the id as
+tiebreak, so a tie cannot reorder the selection between runs), splits each `id`
+at the **last** `/` into an `item.on` module/name anchor, and queries the top
+`--derive-top` (default 8).
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <url> --derive-workload
+```
+
+Both id spellings in circulation split correctly: the prefix form
+(`@cardstack/base/spec/Spec`) and the URL form
+(`https://…/experiments/author/Author`).
+
+`--derive-page-size` (default 20) bounds every derived query; `0` leaves them
+unbounded. The standard workload is unbounded, so **a derived run and a standard
+run are not comparable to each other**.
+
+To make a derived workload shared, emit it and commit it:
+
+```sh
+node run-load.ts --csv ./accounts.csv --realm <url> --derive-workload \
+  --emit-workload ./workload.mine.json     # '-' writes to stdout
+```
+
+That writes and exits without running, so what you run next is reproducibly what
+is in the file. Realm-local modules are emitted as `${realm}…` so the file
+travels between clones. The emitted `write` block has empty attributes — the
+summary endpoint reports counts, not field schemas — so fill it in before
+committing.
+
+**`_types` needs the realm's own JWT.** A bare realm-server session token gets
+`401 User permissions in the JWT payload do not match the server's permissions`.
+A 401/404 here **stops the run**; it never falls back to a built-in workload,
+because two people believing they ran the same test and not having done is worse
+than a failed run.
+
+### 3. A hand-written workload file
+
+For reproducing a specific card's query pattern. `workload.example.json` is the
+shape. Transcribe out of the card source — the `load()` / `loadData()` bodies,
+the query-backed fields — rather than inventing a plausible set: a workload that
+asks for less than the screen does measures nothing.
+
+All three are written in the `_federated-search` **entry wire grammar**, not the
+card-query grammar: the type anchor is `item.on`, and field paths inside `eq` /
+`contains` / `in` / `range` carry an `item.` prefix. The card spelling gets a 400. Everything alongside `label` is passed through, so `sort` and `page` work.
 
 ## The first decision: where the driver runs
 
@@ -176,6 +259,31 @@ A throttle or payload change that works shrinks the shapes above 1 MB, and
 in-flight search — rather than absolute ceilings whenever two environments with
 different memory limits are being read together.
 
+### Experiments realm, 20-card pages
+
+A derived workload against a deployed experiments realm, top 6 types, `page:
+{ size: 20 }`. Every query returned 200 with 20 results; `_types` itself took
+245 ms.
+
+```
+ count  server   payload   type
+   117   203ms    417 KB   Spec
+    37  1129ms    301 KB   FileDefFormatPreview
+    30  1258ms    297 KB   Author
+    30   393ms    293 KB   Model
+    26   223ms    566 KB   CardListing
+    25   586ms    325 KB   Company
+```
+
+Two things in that table are the reason the harness prints a spread line and a
+per-render total:
+
+- **Server time spans 6× across types in one realm** (203 ms to 1258 ms), and it
+  does not track instance count — the 117-instance type is the fastest. An
+  average over shapes describes none of them; read the rows.
+- **A 20-card page costs 300–566 KB.** Page size bounds the row count, not the
+  payload: each row carries its `included[]` closure.
+
 ## Reading the server side
 
 The harness's own numbers are the client's view. The ones that decide whether a
@@ -197,10 +305,11 @@ state with `aws-access`.
 1. `aws-access` for the session; confirm the deploy rolled (`rolloutState`
    `COMPLETED`, `updatedAt` before the run).
 2. `setup-realm.ts` to clone the realm under test, then grant the other users
-   read access.
-3. Write the workload file: transcribe the queries out of the card source, in
-   the entry wire grammar. A workload that asks for less than the screen does
-   measures nothing. `workload.example.json` is the shape.
+   read access. Skip this when pointing at an existing experiments realm you are
+   willing to dirty, or run with `--writers 0`.
+3. Pick the workload: `workload.experiments.json` for a comparable number,
+   `--derive-workload` for the realm you actually care about, a hand-written
+   file for a specific card's query pattern.
 4. Get the driver in-region, with the credential file.
 5. Run. Start without `--subscribe` for server-load questions; add it when the
    question is about re-run volume.

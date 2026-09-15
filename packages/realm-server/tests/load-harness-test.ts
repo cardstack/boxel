@@ -14,7 +14,12 @@ import {
 } from '../scripts/load-harness/lib/common.ts';
 import { eventCannotMatch } from '../scripts/load-harness/lib/realm-events.ts';
 import {
+  workloadFromCardTypeSummary,
+  type CardTypeSummaryEntry,
+} from '../scripts/load-harness/lib/derive-workload.ts';
+import {
   loadWorkload,
+  parseWorkload,
   typeKey,
   writeAttributes,
 } from '../scripts/load-harness/lib/workload.ts';
@@ -409,26 +414,45 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('the committed example parses, so it stays a usable starting point', function (assert) {
+    test('the committed files parse, so they stay usable starting points', function (assert) {
+      for (let name of ['workload.example.json', 'workload.experiments.json']) {
+        let workload = loadWorkload(
+          join(import.meta.dirname, '..', 'scripts', 'load-harness', name),
+          realm,
+        );
+        assert.true(workload.queries.length > 0, `${name} has queries`);
+        assert.true(workload.extraQueries.length > 0, `${name} has extras`);
+        assert.true(
+          workload.queries.every((q) => (q.typeKeys?.size ?? 0) > 0),
+          `every ${name} query names a type, so the skip test can compare`,
+        );
+        assert.true(
+          JSON.stringify(workload).includes(realm),
+          `${name} expanded \${realm} rather than leaving it literal`,
+        );
+      }
+    });
+
+    test('the standard workload writes a type its own readers query', function (assert) {
       let workload = loadWorkload(
         join(
           import.meta.dirname,
           '..',
           'scripts',
           'load-harness',
-          'workload.example.json',
+          'workload.experiments.json',
         ),
         realm,
       );
-      assert.true(workload.queries.length > 0);
-      assert.true(workload.extraQueries.length > 0);
-      assert.true(
-        workload.queries.every((q) => (q.typeKeys?.size ?? 0) > 0),
-        'every example query names a type, so the skip test has something to compare',
+      let written = typeKey(
+        workload.write.adoptsFrom.module,
+        workload.write.adoptsFrom.name,
       );
       assert.true(
-        JSON.stringify(workload).includes(realm),
-        '${realm} expanded rather than being left literal',
+        [...workload.queries, ...workload.secondaryQueries].some((q) =>
+          q.typeKeys?.has(written),
+        ),
+        'otherwise every write would be skipped under --subscribe',
       );
     });
 
@@ -495,6 +519,195 @@ module(basename(import.meta.filename), function () {
 
     test('summarize says so rather than printing zeros for an empty sample', function (assert) {
       assert.strictEqual(summarize('write', []), 'write: (none)');
+    });
+  });
+
+  module('derived workload', function () {
+    const realm = 'https://example.test/owner/experiments/';
+
+    // Shaped like a real GET <realm>/_types payload: a flat `data` array of
+    // card-type-summary entries discriminated by `kind`, ids in both the
+    // prefix and the URL spelling.
+    function entry(
+      id: string,
+      total: number,
+      kind = 'instance',
+      displayName?: string,
+    ): CardTypeSummaryEntry {
+      return {
+        type: 'card-type-summary',
+        id,
+        attributes: {
+          displayName: displayName ?? id.slice(id.lastIndexOf('/') + 1),
+          total,
+          iconHTML: '<svg/>',
+          kind,
+        },
+      };
+    }
+
+    const sample: CardTypeSummaryEntry[] = [
+      entry('@cardstack/base/spec/Spec', 117),
+      entry(`${realm}author/Author`, 30),
+      entry(`${realm}llm-model-environment/model/Model`, 30),
+      entry('@cardstack/catalog/catalog-app/listing/listing/CardListing', 26),
+      entry(`${realm}crm/company/Company`, 25),
+      entry(`${realm}some/markdown/Markdown`, 999, 'file'),
+    ];
+
+    test('ranks instance types by count and keeps the top N', function (assert) {
+      let raw = workloadFromCardTypeSummary(sample, {
+        realmUrl: realm,
+        top: 3,
+        pageSize: 20,
+      });
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.deepEqual(
+        workload.queries.map((q) => q.label),
+        ['Spec', 'Author', 'Model'],
+        'highest counts first, file entries excluded',
+      );
+    });
+
+    test('a file entry is never queried, whatever its count', function (assert) {
+      let raw = workloadFromCardTypeSummary(sample, {
+        realmUrl: realm,
+        top: 99,
+        pageSize: 0,
+      });
+      assert.false(
+        JSON.stringify(raw).includes('Markdown'),
+        'the 999-instance file type outranks everything and is still dropped',
+      );
+    });
+
+    test('splits a type id at the last separator, in both spellings', function (assert) {
+      let raw = workloadFromCardTypeSummary(sample, {
+        realmUrl: realm,
+        top: 4,
+        pageSize: 0,
+      });
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.deepEqual(
+        workload.queries.map((q) => [...(q.typeKeys ?? [])][0]),
+        [
+          '@cardstack/base/spec/Spec',
+          `${realm}author/Author`,
+          `${realm}llm-model-environment/model/Model`,
+          '@cardstack/catalog/catalog-app/listing/listing/CardListing',
+        ],
+        'the anchor round-trips back to the id it came from',
+      );
+      assert.deepEqual(
+        (workload.queries[0].query.filter as Record<string, unknown>)[
+          'item.on'
+        ],
+        { module: '@cardstack/base/spec', name: 'Spec' },
+      );
+    });
+
+    test('page size is applied, and 0 leaves the query unbounded', function (assert) {
+      let bounded = parseWorkload(
+        workloadFromCardTypeSummary(sample, {
+          realmUrl: realm,
+          top: 1,
+          pageSize: 20,
+        }),
+        realm,
+        '_types',
+      );
+      assert.deepEqual(bounded.queries[0].query.page, { size: 20 });
+
+      let unbounded = parseWorkload(
+        workloadFromCardTypeSummary(sample, {
+          realmUrl: realm,
+          top: 1,
+          pageSize: 0,
+        }),
+        realm,
+        '_types',
+      );
+      assert.strictEqual(unbounded.queries[0].query.page, undefined);
+    });
+
+    test('a tied count still yields one stable ordering', function (assert) {
+      let forwards = workloadFromCardTypeSummary(sample, {
+        realmUrl: realm,
+        top: 3,
+        pageSize: 0,
+      });
+      let backwards = workloadFromCardTypeSummary([...sample].reverse(), {
+        realmUrl: realm,
+        top: 3,
+        pageSize: 0,
+      });
+      assert.deepEqual(
+        forwards,
+        backwards,
+        'Author and Model are both at 30; input order must not decide',
+      );
+    });
+
+    test('duplicate display names stay distinct labels', function (assert) {
+      let raw = workloadFromCardTypeSummary(
+        [
+          entry(`${realm}a/Thing`, 10, 'instance', 'Thing'),
+          entry(`${realm}b/Thing`, 9, 'instance', 'Thing'),
+        ],
+        { realmUrl: realm, top: 2, pageSize: 0 },
+      );
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.deepEqual(
+        workload.queries.map((q) => q.label),
+        ['Thing', 'Thing #2'],
+        'the per-shape summary table is keyed by label, so it cannot collide',
+      );
+    });
+
+    test('the write targets a realm-local type that the readers query', function (assert) {
+      let raw = workloadFromCardTypeSummary(sample, {
+        realmUrl: realm,
+        top: 8,
+        pageSize: 0,
+      });
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.deepEqual(
+        workload.write.adoptsFrom,
+        { module: `${realm}author`, name: 'Author' },
+        'Spec outranks it but is not addressable relative to this realm',
+      );
+      assert.true(
+        workload.queries.some(
+          (q) => [...(q.typeKeys ?? [])][0] === `${realm}author/Author`,
+        ),
+        'so each write invalidates something a reader is querying',
+      );
+      assert.deepEqual(
+        workload.write.attributes,
+        {},
+        'the summary reports counts, not field schemas, so nothing is guessed',
+      );
+    });
+
+    test('refuses a realm with nothing queryable rather than inventing one', function (assert) {
+      assert.throws(
+        () =>
+          workloadFromCardTypeSummary(
+            [entry(`${realm}some/markdown/Markdown`, 5, 'file')],
+            { realmUrl: realm, top: 8, pageSize: 0 },
+          ),
+        /No instance types found/,
+      );
+      assert.throws(
+        () =>
+          workloadFromCardTypeSummary([entry('NoSeparator', 5)], {
+            realmUrl: realm,
+            top: 8,
+            pageSize: 0,
+          }),
+        /No instance types found/,
+        'an id with no module part names no type',
+      );
     });
   });
 
