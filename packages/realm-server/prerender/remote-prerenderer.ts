@@ -197,10 +197,14 @@ export function createRemotePrerenderer(
           // logs for the same requestId to see where the time went
           // (queue wait vs slow render).
           let elapsedMs = Date.now() - attemptStart;
+          // The subject URL is what identifies a stall: an affinity tag names
+          // only the realm, so without it every module of a realm reads the
+          // same and there is no way to tell which one never came back.
+          let subject = attributes.url ? ` url=${attributes.url}` : '';
           throw new Error(
             `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms ` +
               `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
-              `affinity=${affinityTag}, elapsed=${elapsedMs}ms; ` +
+              `affinity=${affinityTag}${subject}, elapsed=${elapsedMs}ms; ` +
               `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
           );
         }
