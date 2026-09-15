@@ -168,6 +168,7 @@ import type {
 } from './card-operations/dispatch.ts';
 import {
   isDocumentResult,
+  isHeadResult,
   isOperationFailure,
   type OperationFailure,
   type OperationResult,
@@ -1782,14 +1783,31 @@ export class Realm {
         this.getDirectoryListing.bind(this),
       );
 
+    // Realm discovery: a `HEAD` on any path, in any `Accept` bucket without a
+    // `HEAD` route of its own, answers with the realm-identity headers alone.
+    // It says nothing about whether the path names anything and asks nothing
+    // of the caller, which is what lets a client work out which realm serves a
+    // URL — and whether that realm is public — before it has credentials for
+    // it.
     Object.values(SupportedMimeType).forEach((mimeType) => {
-      if (mimeType !== SupportedMimeType.CardSource) {
+      if (
+        mimeType !== SupportedMimeType.CardSource &&
+        mimeType !== SupportedMimeType.CardJson
+      ) {
         this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
           let requestContext = await this.createRequestContext('read');
-          return createResponse({ init: { status: 200 }, requestContext });
+          return this.realmIdentityResponse(requestContext);
         });
       }
     });
+    // card+json is the one bucket where a `HEAD` is a read: a caller permitted
+    // to read gets the headers its `GET` would carry, and everyone else the
+    // discovery answer above.
+    this.#router.head(
+      '/.*',
+      SupportedMimeType.CardJson,
+      this.headCard.bind(this),
+    );
   }
 
   async logInToMatrix() {
@@ -5693,16 +5711,31 @@ export class Realm {
     return response;
   }
 
+  // `probe` asks whether a caller is permitted rather than enforcing it, which
+  // changes two things. The realm-wide `HEAD` exemption does not apply — it
+  // exists so a discovery probe reaches an answer without credentials, and a
+  // caller taking it has not shown it may read anything. And a refusal is an
+  // ordinary answer the caller has a fallback for, so it is not logged as a
+  // failed request.
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
+    { probe = false }: { probe?: boolean } = {},
   ) {
     let realmPermissions = requestContext.permissions;
+    // A refusal the caller asked for rather than ran into is not a failed
+    // request, and logging every unauthenticated discovery probe as one buries
+    // the refusals that are.
+    let warnRefusal = (message: string) => {
+      if (!probe) {
+        this.#log.warn(message);
+      }
+    };
     if (
       requiredPermission !== 'realm-owner' &&
       (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
-        request.method === 'HEAD' ||
+        (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
           realmPermissions['*']?.includes('read')) ||
@@ -5741,7 +5774,7 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      this.#log.warn(
+      warnRefusal(
         `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
@@ -5759,7 +5792,7 @@ export class Realm {
       // and ahead of the delegated branch below, so revoking a user also kills
       // sessions delegated on their behalf.
       if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
         );
         throw new AuthenticationError(
@@ -5791,7 +5824,7 @@ export class Realm {
         if (
           ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
         ) {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
           );
           throw new AuthenticationError(
@@ -5799,13 +5832,13 @@ export class Realm {
           );
         }
         if (requiredPermission !== 'read') {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
           );
           throw new AuthorizationError('Delegated sessions are read-only');
         }
         if (!(await realmPermissionChecker.can(user, 'read'))) {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
           );
           throw new AuthenticationError(
@@ -5838,7 +5871,7 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
@@ -5847,7 +5880,7 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
@@ -5857,13 +5890,13 @@ export class Realm {
       requestContext.authenticatedUser = user;
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
-        this.#log.warn(
+        warnRefusal(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
-        this.#log.warn(
+        warnRefusal(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
@@ -7466,6 +7499,181 @@ export class Realm {
     }
   }
 
+  // The card+json `HEAD`: the headers a `GET` of the same URL would send, and
+  // no body work to produce them. The read runs in its headers-only mode, so
+  // no card document is assembled and no link is expanded — which is the whole
+  // point of asking, since a caller that wanted the body would have sent a
+  // `GET`. `Content-Length` is left off for the same reason: knowing it means
+  // serializing the document.
+  //
+  // Realm discovery also arrives as a `HEAD`, on any path and without
+  // credentials, and reads only the realm-identity headers every response
+  // carries. So the read here is offered to a caller that may have it and the
+  // discovery answer to everyone else: permission is asked rather than
+  // enforced, and a caller who cannot read gets the realm-identity answer
+  // instead of a 401 that would tell them the realm exists and refuse them.
+  // Every other `Accept` bucket keeps that answer outright — this route is
+  // registered for card+json alone.
+  private async headCard(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!(await this.permittedToRead(request, requestContext))) {
+      return this.realmIdentityResponse(requestContext);
+    }
+    // Read-your-writes, as on the `GET`: a validator computed off an index the
+    // requester's own write has not reached yet would 304 their next `GET`
+    // against state they just superseded.
+    await this.drainRequestersOwnIndexing(request, requestContext);
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    if (requestedLocalPath.endsWith('.json')) {
+      // The canonical extension-less URL is the only one that ever carries a
+      // validator, so the `.json` spelling is redirected here as it is on the
+      // `GET` rather than answered with headers a client would file under the
+      // wrong cache key.
+      let canonicalPath = this.paths.local(
+        this.paths.fileURL(
+          requestedLocalPath.replace(/\.json$/, '') || 'index',
+        ),
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: { Location: this.redirectTarget(canonicalPath) },
+        },
+      });
+    }
+    let localPath = requestedLocalPath === '' ? 'index' : requestedLocalPath;
+    let url = this.paths.fileURL(localPath);
+    let start = Date.now();
+    try {
+      let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
+      // Both of these change the document a `GET` would serve, so both are
+      // folded into the validator. A `HEAD` computes them exactly as the `GET`
+      // does or the two would disagree about the same card.
+      let resolveLinksOnly =
+        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
+      let result: OperationResult;
+      try {
+        result = await runOperation(
+          this.operationCore,
+          {
+            target: { kind: 'instance', url: url.href },
+            name: 'read',
+            ...this.#callerOf(request, requestContext),
+          },
+          { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
+        );
+      } catch (e) {
+        if (!isOperationFailure(e)) {
+          throw e;
+        }
+        return await this.#respondToCardJsonOutcome(
+          cardJsonAssemblyFromFailure(e),
+          request,
+          requestContext,
+          url,
+        );
+      }
+      if (!isHeadResult(result)) {
+        throw new Error(
+          `the headers-only read of ${url.href} answered with something other than headers`,
+        );
+      }
+      if (result.type === 'file-meta') {
+        // A `GET` of a path that holds bytes answers with the file's metadata
+        // document, which is derived from those bytes and has no index row
+        // behind it — so there is no validator and no cache directive to
+        // report, and a `HEAD` that invented one would describe a response the
+        // `GET` never sends.
+        return createResponse({
+          requestContext,
+          body: null,
+          init: { headers: { 'content-type': SupportedMimeType.CardJson } },
+        });
+      }
+      await this.getRealmInfo();
+      let foreignDeps = this.hasForeignRealmDeps(result.deps);
+      let etag = foreignDeps
+        ? undefined
+        : buildCardJsonEtag(
+            result.indexedAt,
+            this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(result.screenshots),
+            resolveLinksOnly,
+          );
+      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let lastModified: Record<string, string> =
+        result.lastModified != null
+          ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
+          : {};
+      let ifNoneMatch = request.headers.get('if-none-match');
+      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+        // A conditional request is answered the same way whichever verb asked
+        // it: the validator matched, so there is nothing to send.
+        return createResponse({
+          requestContext,
+          body: null,
+          init: {
+            status: 304,
+            headers: { etag, 'cache-control': cacheControl, ...lastModified },
+          },
+        });
+      }
+      let created = await this.getCreatedTime(
+        (this.paths.local(url) + '.json') as LocalPath,
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            'cache-control': cacheControl,
+            ...(etag ? { etag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
+            ...lastModified,
+            ...(created != null
+              ? { 'x-created': formatRFC7231(created * 1000) }
+              : {}),
+          },
+        },
+      });
+    } finally {
+      this.#logRequestPerformance(request, start);
+    }
+  }
+
+  // The realm-identity answer: the headers `createResponse` stamps on every
+  // response and nothing else. It is what a discovery probe reads, and what a
+  // `HEAD` falls back to whenever it is not answering a read.
+  private realmIdentityResponse(requestContext: RequestContext): Response {
+    return createResponse({ init: { status: 200 }, requestContext });
+  }
+
+  // Whether this caller may read the realm — asked, not enforced. The
+  // realm-wide `HEAD` exemption is deliberately not taken: it exists so a
+  // discovery probe can be answered without credentials, and a caller riding
+  // it has shown nothing about what it may read. A `HEAD` that answers a card's
+  // real headers is a read, so it asks the question a `GET` would.
+  private async permittedToRead(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
+    try {
+      await this.checkPermission(request, requestContext, 'read', {
+        probe: true,
+      });
+      return true;
+    } catch (e) {
+      if (e instanceof AuthenticationError || e instanceof AuthorizationError) {
+        return false;
+      }
+      throw e;
+    }
+  }
   private async getCard(
     request: Request,
     requestContext: RequestContext,
