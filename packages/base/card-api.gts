@@ -4372,6 +4372,14 @@ function lazilyLoadLink(
   });
   void (async () => {
     let isFileLink = isFileDef(field.card);
+    // A field getter is what calls this, and the getter runs inside a render.
+    // Everything below writes the field and notifies card tracking, which a
+    // render that has already read that field treats as a backtracking
+    // re-render and rejects. Yielding here puts every one of those writes in a
+    // later microtask, whichever branch produced the value: a branch that
+    // loads yields on its own fetch, and a branch that hands over an instance
+    // the store already holds has nothing of its own to wait for.
+    await Promise.resolve();
     try {
       let fieldValue: CardDef | FileDef;
       // Hand over an instance the store is already holding instead of
