@@ -6,6 +6,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/prerenderer.ts';
 import {
+  localBaseRealm,
   getPrerendererForTesting,
   setupPermissionedRealm,
   testCreatePrerenderAuth,
@@ -107,7 +108,7 @@ module('Lattice | clinical publication acceptance', function (hooks) {
         const headers = new Headers(request.headers);
         headers.delete('authorization');
         return fetch(
-          request.url.replace(origin + 'base/', 'http://localhost:4201/base/'),
+          request.url.replace(origin + 'base/', localBaseRealm + '/'),
           { method: request.method, headers, signal: request.signal },
         );
       });

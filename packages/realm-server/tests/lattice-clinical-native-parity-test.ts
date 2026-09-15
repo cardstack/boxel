@@ -18,6 +18,7 @@ import { LatticeMaterializationInputs } from '../lib/lattice-materialization-inp
 import { latticeDefinitionDigest } from '../lib/lattice-postgres-admission.ts';
 import type { Prerenderer } from '../prerender/prerenderer.ts';
 import {
+  localBaseRealm,
   getPrerendererForTesting,
   setupPermissionedRealm,
   testCreatePrerenderAuth,
@@ -130,7 +131,7 @@ module('Lattice | clinical native and Chrome data parity', (hooks) => {
         const headers = new Headers(request.headers);
         headers.delete('authorization');
         return fetch(
-          request.url.replace(origin + 'base/', 'http://localhost:4201/base/'),
+          request.url.replace(origin + 'base/', localBaseRealm + '/'),
           { method: request.method, headers, signal: request.signal },
         );
       });

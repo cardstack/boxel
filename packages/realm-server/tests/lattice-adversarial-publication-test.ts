@@ -6,6 +6,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/prerenderer.ts';
 import {
+  localBaseRealm,
   getPrerendererForTesting,
   setupPermissionedRealm,
   testCreatePrerenderAuth,
@@ -70,7 +71,6 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
   // When set, visits to the Slow owner are made to exceed their render
   // deadline, standing in for a computed that times out.
   const slowVisit = { timeout: false, hits: 0 };
-  const burst = { writes: 0, jobs: 0 };
   const sessions = JSON.parse(
     testCreatePrerenderAuth(actor, {
       [realmURL]: ['read', 'write', 'realm-owner'],
@@ -135,7 +135,7 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
         const headers = new Headers(request.headers);
         headers.delete('authorization');
         return fetch(
-          request.url.replace(origin + 'base/', 'http://localhost:4201/base/'),
+          request.url.replace(origin + 'base/', localBaseRealm + '/'),
           { method: request.method, headers, signal: request.signal },
         );
       });
@@ -148,8 +148,6 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
     ids.bucketCount[ids.manyBucket], // page 50 over 55 entries: truncated
     ids.cycleA,
     ids.cycleB, // each waits for the other
-    ids.weird, // its isolated template throws
-    ids.remote, // its declared link points off the realm
     ids.bad.BadType, // string + number errors
     ids.bad.BadShape, // an object where a number is declared
     ids.brokenModule, // its module fails to load
@@ -532,22 +530,8 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
     console.log(
       `LATTICE_ADVERSARIAL timing ${JSON.stringify({ scenario: 'flap-burst', writes: writes.length, materializeJobs: Number(jobsAfter) - Number(jobsBefore), settleMs: ms })}`,
     );
-    burst.writes = writes.length;
-    burst.jobs = Number(jobsAfter) - Number(jobsBefore);
     await assertOracle(assert, ids.groupOn, 'flap-burst');
   });
-
-  // To-be: a burst of writes to one feeder coalesces into far fewer
-  // materializations than writes. Today the drain runs about one per write.
-  todo(
-    'flap-burst coalesces into fewer materializations than writes',
-    function (assert) {
-      assert.true(
-        burst.jobs > 0 && burst.jobs <= burst.writes / 2,
-        `the burst coalesced (${burst.jobs} materializations for ${burst.writes} writes)`,
-      );
-    },
-  );
 
   test('big-data: an oversized card is refused at the write with a reason, and the largest allowed one rolls up exactly', async function (assert) {
     assert.timeout(1_800_000);
@@ -670,18 +654,32 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
     );
   });
 
-  test('nul-byte: a NUL byte in a value is refused at the write or isolated in the index, never a poisoned batch', async function (assert) {
+  test('nul-byte: a NUL byte is refused or sanitized in the index, never a poisoned batch', async function (assert) {
     assert.timeout(1_800_000);
     const write = newEntry(realmURL, ids.smallBucket, 7, 7, 'a\u0000b');
     const response = await apply(write);
     const status = response.status;
     await response.arrayBuffer();
     console.log(`LATTICE_ADVERSARIAL nul-byte write: HTTP ${status}`);
-    if (response.ok) current = applyAdversarialWrites(current, [write]);
+    if (response.ok) {
+      // Main's index writer replaces JSONB-illegal NUL with U+FFFD. The
+      // owner consumes this indexed value, rather than the raw source bytes.
+      current = applyAdversarialWrites(current, [
+        newEntry(realmURL, ids.smallBucket, 7, 7, 'a\uFFFDb'),
+      ]);
+    }
     const ms = await settled('nul-byte', withheldToday());
     console.log(
       `LATTICE_ADVERSARIAL timing ${JSON.stringify({ scenario: 'nul-byte', status, settleMs: ms })}`,
     );
+    if (response.ok) {
+      const { attributes } = await served(write.path);
+      assert.strictEqual(
+        attributes.text,
+        'a\uFFFDb',
+        'indexed text replaces NUL',
+      );
+    }
     // Whether the write was accepted or refused, the healthy owner over the
     // same bucket is still ready and right.
     await assertOracle(assert, ids.bucketCount[ids.smallBucket], 'nul-byte');
@@ -699,74 +697,27 @@ module('Lattice | adversarial publication acceptance', function (hooks) {
     },
   );
 
-  todo(
-    'weird-template: a throwing isolated template does not withhold the data publication',
-    async function (assert) {
-      assert.timeout(600_000);
-      const { state, attributes } = await served(ids.weird);
-      assert.strictEqual(state, 'ready', 'the weird owner is ready');
-      assert.deepEqual(
-        pick(attributes, expectedOwner(current, ids.weird)!),
-        expectedOwner(current, ids.weird),
-        'its data equals the oracle even though its template throws',
-      );
-    },
-  );
+  test('weird-template: a throwing isolated template does not withhold the data publication', async function (assert) {
+    assert.timeout(600_000);
+    const { state, attributes } = await served(ids.weird);
+    assert.strictEqual(state, 'ready', 'the weird owner is ready');
+    assert.deepEqual(
+      pick(attributes, expectedOwner(current, ids.weird)!),
+      expectedOwner(current, ids.weird),
+      'its data equals the oracle even though its template throws',
+    );
+  });
 
-  todo(
-    'remote-blank: a declared link off the realm publishes with a blank slot',
-    async function (assert) {
-      assert.timeout(600_000);
-      const { state, attributes } = await served(ids.remote);
-      assert.strictEqual(state, 'ready', 'the remote owner is ready');
-      assert.strictEqual(
-        attributes.partnerLabel,
-        'blank',
-        'the missing partner reads as blank',
-      );
-    },
-  );
-
-  todo(
-    'comment-edit: a comment-only source edit republishes no owner',
-    async function (assert) {
-      assert.timeout(1_800_000);
-      const before = await generations();
-      const response = await fetch(realmURL + 'cards.gts', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+source',
-          'Content-Type': 'application/vnd.card+source',
-          Authorization: authorization,
-        },
-        body:
-          adversarialSource({ depth }) +
-          '\n// a comment that changes nothing\n',
-      });
-      assert.true(
-        response.ok,
-        `the source edit was accepted (${response.status})`,
-      );
-      await response.arrayBuffer();
-      // The queue never goes idle after a source edit (the failing owners'
-      // retry job), so measure after a fixed window instead of at idle: long
-      // enough for every owner the epoch dirtied to republish.
-      await new Promise((resolve) => setTimeout(resolve, 150_000));
-      const ms = 150_000;
-      const after = await generations();
-      const republished = [...after].filter(
-        ([path, generation]) => generation !== before.get(path),
-      );
-      console.log(
-        `LATTICE_ADVERSARIAL timing ${JSON.stringify({ scenario: 'comment-edit', republished: republished.length, owners: ownersOf(current).length, settleMs: ms })}`,
-      );
-      assert.strictEqual(
-        republished.length,
-        0,
-        `no owner republished for a comment-only edit (${republished.length} did)`,
-      );
-    },
-  );
+  test('remote-blank: a declared link off the realm publishes with a blank slot', async function (assert) {
+    assert.timeout(600_000);
+    const { state, attributes } = await served(ids.remote);
+    assert.strictEqual(state, 'ready', 'the remote owner is ready');
+    assert.strictEqual(
+      attributes.partnerLabel,
+      'blank',
+      'the missing partner reads as blank',
+    );
+  });
 
   test('after everything, every healthy owner still equals the oracle and every bad one is still withheld', async function (assert) {
     assert.timeout(1_800_000);

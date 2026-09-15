@@ -12,6 +12,7 @@ import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import { publishedNativeIndexer } from './helpers/lattice-captured-native-indexer.ts';
 import type { Prerenderer } from '../prerender/prerenderer.ts';
 import {
+  localBaseRealm,
   getPrerendererForTesting,
   setupPermissionedRealm,
   testCreatePrerenderAuth,
@@ -239,7 +240,7 @@ module('Lattice | direct declared-link publication', (hooks) => {
         const forwarded = new Headers(request.headers);
         forwarded.delete('authorization');
         return fetch(
-          request.url.replace(origin + 'base/', 'http://localhost:4201/base/'),
+          request.url.replace(origin + 'base/', localBaseRealm + '/'),
           {
             method: request.method,
             headers: forwarded,
