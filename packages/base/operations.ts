@@ -22,7 +22,8 @@ import {
 // (`params`), and what it does to the target. Values that are only known at
 // invocation time are written as typed references: `params('body')` for a
 // member of the request payload, `actor()` for the caller's user id,
-// `instance()` for the target's stored source document, `card(…)` for a link
+// `instance()` for the target's stored source document, `realmConfig('key')`
+// for a setting of the realm the operation runs in, `card(…)` for a link
 // identity, and the `bxl` tag for a raw program.
 //
 //   class ExternalReport extends CardDef {
@@ -61,15 +62,14 @@ import {
 // ============================================================================
 
 // The behaviors every declaration builds on. Which of them a def carries is
-// implied by the def type rather than written in author code — a `CardDef`
-// has all of them, a `FileDef` only the two reads, a `FieldDef` none — so
-// `getOperations` synthesizes them. A declaration *named* after a base op
-// takes its place: it specializes that behavior when it names the same
-// `base`, and rebinds the verb when it names another — a `delete` declared
-// on `transform` is a soft delete, so asking such a card to delete itself
-// archives it rather than removing it. The name is what a caller invokes and
-// `base` is the behavior that carries it out, so the two are read separately
-// and neither is inferred from the other.
+// implied by the def type rather than written in author code (see
+// `CARRIED_BY`), so `getOperations` synthesizes them. A declaration *named*
+// after a base op takes its place: it specializes that behavior when it names
+// the same `base`, and rebinds the verb when it names another — a `delete`
+// declared on `transform` is a soft delete, so asking such a card to delete
+// itself archives it rather than removing it. The name is what a caller
+// invokes and `base` is the behavior that carries it out, so the two are read
+// separately and neither is inferred from the other.
 export const BASE_OPERATIONS = [
   'read',
   'readSource',
@@ -79,9 +79,48 @@ export const BASE_OPERATIONS = [
   'query',
   'transform',
   'appendContainsMany',
+  'appendLine',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
+
+// The def families a base operation belongs to. `base` is every addressable
+// def that is neither a card nor a file — `BaseDef` itself and a direct
+// subclass of one — which carries the two reads and nothing else; a field is
+// not addressable at all, so it appears here nowhere.
+type DefFamily = 'card' | 'file' | 'base';
+
+// Which families carry which behavior. The table is keyed by base operation
+// rather than by family so it is exhaustive over `BASE_OPERATIONS`: a tenth
+// base operation has to say where it belongs instead of defaulting into the
+// families that already exist.
+//
+// The two writes on a file work on its bytes, which are the representation a
+// file is for — `update` replaces the content wholesale, `appendLine` adds one
+// newline-terminated line without reading what is already there. Everything
+// else a card carries reaches its JSON:API document, which a file has no
+// equivalent of: its `file-meta` fields are content-derived and read-only.
+// `appendLine` goes the other way for the same reason — a line appended to a
+// card's stored file leaves behind bytes that are no longer a card.
+const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
+  read: ['card', 'file', 'base'],
+  readSource: ['card', 'file', 'base'],
+  create: ['card'],
+  update: ['card', 'file'],
+  delete: ['card'],
+  query: ['card'],
+  transform: ['card'],
+  appendContainsMany: ['card'],
+  appendLine: ['file'],
+};
+
+function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
+  return BASE_OPERATIONS.filter((base) => CARRIED_BY[base].includes(family));
+}
+
+const CARD_OPERATIONS = operationsCarriedBy('card');
+const FILE_OPERATIONS = operationsCarriedBy('file');
+const BASE_DEF_OPERATIONS = operationsCarriedBy('base');
 
 // The base operations a declaration may neither build on nor be named after.
 // A stored-bytes read serves what is on disk: there is no payload to reshape,
@@ -130,17 +169,27 @@ export interface InstanceReference {
   readonly key?: string;
 }
 
+export interface RealmConfigReference<Key extends string = string> {
+  readonly $ref: 'realmConfig';
+  readonly key?: Key;
+}
+
 export interface CardReference {
   readonly $ref: 'card';
   // No `ActorReference`: the caller is a user id, and no card represents a
   // user, so an actor here would name a link that cannot resolve.
-  readonly value: string | ParamsReference | InstanceReference;
+  readonly value:
+    | string
+    | ParamsReference
+    | InstanceReference
+    | RealmConfigReference;
 }
 
 export type OperationReference =
   | ParamsReference
   | ActorReference
   | InstanceReference
+  | RealmConfigReference
   | CardReference;
 
 export interface BxlProgram {
@@ -182,6 +231,28 @@ export function instance(key?: string): InstanceReference {
   return key === undefined ? { $ref: 'instance' } : { $ref: 'instance', key };
 }
 
+// A setting of the realm the operation runs in, or the whole map of them when
+// no name is given. It is what lets one card type read a value that differs
+// per realm — an approver, a threshold, a default — without the type
+// hard-coding it.
+//
+// The name is not checked against anything here, and cannot be: a type is
+// declared once and its cards live in whatever realms hold them, so which
+// settings exist is only known where the operation runs.
+//
+// Where the realm keeps those settings, and the builtin that reads them, are
+// being added separately — this is the declaration spelling ahead of them, so
+// a marker written today lowers and stores but is refused when an invocation
+// tries to resolve it.
+export function realmConfig<Key extends string>(
+  key?: Key,
+): RealmConfigReference<Key> {
+  assertOptionalReferenceKey('realmConfig', key);
+  return key === undefined
+    ? { $ref: 'realmConfig' }
+    : { $ref: 'realmConfig', key };
+}
+
 // A link identity: the URL of a saved card, or the reference that resolves to
 // one — `card(params('activity'))`, `card(instance('id'))`.
 export function card(reference: CardReference['value']): CardReference {
@@ -216,7 +287,7 @@ export function bxl(
   }
   if (substitutions.length > 0) {
     throw new Error(
-      `the bxl tag does not interpolate values; read the payload, the actor and the target inside the program with the params(), actor() and instance() builtins`,
+      `the bxl tag does not interpolate values; read the payload, the actor, the target and the realm's configuration inside the program with the params(), actor(), instance() and realmConfig() builtins`,
     );
   }
   return { $bxl: program.raw.join('') };
@@ -388,13 +459,40 @@ export interface QueryOperationDeclaration extends OperationCommon {
   readonly query?: QueryDeclaration;
 }
 
+// Appends one newline-terminated line to a text file. There is no clause: the
+// line is the payload, which the base operation reads under `line`, so a
+// declaration says which param carries it and nothing more. An `input`
+// program is the other way to produce one, for a payload the author would
+// rather shape — several members joined into a line, say.
+export interface AppendLineOperationDeclaration extends OperationCommon {
+  readonly base: 'appendLine';
+}
+
+// Appends an item to a card's `containsMany` field by editing the card's
+// stored JSON as text, without loading the document — the base operation for a
+// collection large enough that loading it is the cost.
+//
+// One field is named with `field` and its item with `item`; several are named
+// together under `fields`, each mapped to its own item. The item is written
+// with the same typed references an `append` value is, and is carried to
+// invocation as a template rather than a program: an append substitutes values
+// into a document, and no BXL runs on its path.
+export interface AppendContainsManyOperationDeclaration extends OperationCommon {
+  readonly base: 'appendContainsMany';
+  readonly field?: string;
+  readonly item?: OperationValue;
+  readonly fields?: { readonly [fieldName: string]: OperationValue };
+}
+
 export type OperationDeclaration =
   | TransformOperationDeclaration
   | CreateOperationDeclaration
   | UpdateOperationDeclaration
   | DeleteOperationDeclaration
   | ReadOperationDeclaration
-  | QueryOperationDeclaration;
+  | QueryOperationDeclaration
+  | AppendLineOperationDeclaration
+  | AppendContainsManyOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -478,10 +576,11 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // operations, so a new one has to say what it accepts.
   readSource: [],
   query: ['query'],
-  // Appending to a `containsMany` is reached as a base operation, whose
-  // invocation names the field and the items it appends. It takes no
-  // declarative clause, so an author writes none.
-  appendContainsMany: [],
+  // One field with its item, or several fields each with their own.
+  appendContainsMany: ['field', 'item', 'fields'],
+  // Appending a line takes no clause: the line is the payload, and the base
+  // operation reads it under `line`.
+  appendLine: [],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -606,23 +705,17 @@ function impliedOperations(
     return [];
   }
   if (isSubclassOf(owner, CardDef)) {
-    return BASE_OPERATIONS;
+    return CARD_OPERATIONS;
   }
   if (isSubclassOf(owner, FileDef)) {
-    // A file's metadata is content-derived and read-only: there is no
-    // JSON:API mutation surface for anything else to reach. Its bytes are the
-    // representation that matters, so it carries the stored-bytes read too.
-    return READ_ONLY;
+    return FILE_OPERATIONS;
   }
-  // The operations every addressable def shares.
-  return READ_ONLY;
+  // The operations every addressable def shares: a `read` serves the def's
+  // indexed document, and a `readSource` serves the bytes stored at the
+  // instance's URL — a representation every addressable def has whether or
+  // not its document is the interesting one.
+  return BASE_DEF_OPERATIONS;
 }
-
-// The two reads, neither of which writes. A `read` serves the def's indexed
-// document; a `readSource` serves the bytes stored at the instance's URL, a
-// representation every addressable def has whether or not its document is the
-// interesting one — for a file it is the bytes that are the point.
-const READ_ONLY = ['read', 'readSource'] as const;
 
 function declaredOperations(
   owner: typeof BaseDef,
@@ -710,6 +803,31 @@ function isDefConstructor(target: unknown): target is typeof BaseDef {
 
 function isSubclassOf(target: typeof BaseDef, def: typeof BaseDef): boolean {
   return target === def || target.prototype instanceof def;
+}
+
+// Why this operation runs no BXL program over the target's document, or
+// undefined when it runs one. A raw `transformations` program declared on one
+// of these would be stored and never reached, which is the one outcome worse
+// than refusing it.
+//
+// The two appends edit the stored file — a line onto the end of a text file,
+// an item into a card's JSON — and never build the document a program would
+// run against. A file's `update` joins them, because it replaces the content
+// wholesale rather than transforming a document; the same base on a card is
+// the declarative merge, which does run one. This keys on the base rather than
+// on the def family, so a file def's `read` keeps the `output` projection it
+// lowers to a program of its own.
+function noProgramReason(
+  owner: typeof BaseDef,
+  base: BaseOperationName,
+): string | undefined {
+  if (base === 'appendLine' || base === 'appendContainsMany') {
+    return `an "${base}" operation appends to the stored file rather than running a program over a document`;
+  }
+  if (base === 'update' && isSubclassOf(owner, FileDef)) {
+    return `an "update" on a file def replaces the file's content wholesale rather than transforming a document`;
+  }
+  return undefined;
 }
 
 function assertOperationTarget(target: unknown, key: string): typeof BaseDef {
@@ -807,6 +925,12 @@ function assertValidDeclaration(
   let hasProgram = declaration.transformations !== undefined;
   if (hasProgram) {
     assertBxlProgram(label, 'transformations', declaration.transformations);
+    let noProgram = noProgramReason(owner, base);
+    if (noProgram) {
+      throw new Error(
+        `${label}: ${noProgram}, so it carries no \`transformations\``,
+      );
+    }
     if (usedClauses.length > 0) {
       throw new Error(
         `${label}: a declaration expresses its work either with clauses (${quoteList(
@@ -999,6 +1123,12 @@ function assertValidClauses(
       );
     }
   }
+  if (base === 'appendLine') {
+    assertAppendsALine(label, declaration);
+  }
+  if (base === 'appendContainsMany') {
+    assertNamesItemsToAppend(label, declaration);
+  }
   if (base === 'query' && declaration.query !== undefined) {
     let query = declaration.query;
     if (!isPlainObject(query) || Object.keys(query).length === 0) {
@@ -1063,6 +1193,84 @@ function assertValidClauses(
         );
       }
     }
+  }
+}
+
+// An `appendLine` names no clause, so the only thing it can get wrong is
+// where the line comes from. The base operation appends what the payload
+// carries under `line`, so a declaration that neither declares that param nor
+// shapes one with an `input` program describes an append with nothing to
+// append — every invocation of it would be refused at the endpoint.
+//
+// A `linkTo(…)` there is refused for the same reason it would be refused at
+// the endpoint: a link is a card's identity, and what goes into a text file is
+// text.
+function assertAppendsALine(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  if (declaration.input !== undefined) {
+    return;
+  }
+  let line = (declaration.params as Record<string, unknown> | undefined)?.line;
+  if (line === undefined) {
+    throw new Error(
+      `${label}: an "appendLine" operation appends the line its payload carries, so it declares a \`line\` param — or an \`input\` program that produces one`,
+    );
+  }
+  if (isPlainObject(line)) {
+    throw new Error(
+      `${label}: \`params.line\` is the text a line holds, so it is a field class rather than a linkTo(…)`,
+    );
+  }
+}
+
+// An `appendContainsMany` names what it appends and where, in one of two
+// spellings: `field` with its `item`, or `fields` mapping each field name to
+// its own item. Mixing them would leave two answers for a field named in both,
+// so a declaration picks one.
+function assertNamesItemsToAppend(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let singular =
+    declaration.field !== undefined || declaration.item !== undefined;
+  let plural = declaration.fields !== undefined;
+  if (singular && plural) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation names one field with its \`item\`, or several under \`fields\` — not both`,
+    );
+  }
+  if (!singular && !plural) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation needs \`field\` and \`item\`, or \`fields\` mapping each field to the item to append to it`,
+    );
+  }
+  if (plural) {
+    let fields = declaration.fields;
+    if (!isPlainObject(fields) || Object.keys(fields).length === 0) {
+      throw new Error(
+        `${label}: \`fields\` must be an object mapping each \`containsMany\` field to the item to append to it`,
+      );
+    }
+    for (let [name, item] of Object.entries(fields)) {
+      if (item === undefined) {
+        throw new Error(
+          `${label}: \`fields.${name}\` must carry the item to append to "${name}"`,
+        );
+      }
+    }
+    return;
+  }
+  if (typeof declaration.field !== 'string' || declaration.field.length === 0) {
+    throw new Error(
+      `${label}: \`field\` must name the \`containsMany\` field to append to`,
+    );
+  }
+  if (declaration.item === undefined) {
+    throw new Error(
+      `${label}: an "appendContainsMany" operation needs an \`item\` to append to "${declaration.field}"`,
+    );
   }
 }
 
@@ -1155,7 +1363,7 @@ function assertReferencesResolve(
     if (typeof node === 'function') {
       if (position !== 'type') {
         throw new Error(
-          `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance() or card(), or a program with the bxl tag`,
+          `${label}: \`${path}\` is a function; a declaration is data — name a run-time value with params(), actor(), instance(), realmConfig() or card(), or a program with the bxl tag`,
         );
       }
       // A thunk defers its class past this point; one named directly is held
@@ -1364,6 +1572,21 @@ function assertValidReference(
       }
       return;
     }
+    case 'realmConfig': {
+      // The name is not held to anything a declaration knows: which settings a
+      // realm carries is the realm's, and a type is declared once for every
+      // realm that holds a card of it.
+      assertOnlyKeys(label, path, reference, ['$ref', 'key']);
+      if (
+        reference.key !== undefined &&
+        (typeof reference.key !== 'string' || reference.key.length === 0)
+      ) {
+        throw new Error(
+          `${label}: the realmConfig reference at \`${path}\` must name a setting, or none at all`,
+        );
+      }
+      return;
+    }
     case 'card': {
       assertOnlyKeys(label, path, reference, ['$ref', 'value']);
       let value = reference.value;
@@ -1398,7 +1621,7 @@ function assertValidReference(
     }
     default:
       throw new Error(
-        `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance() or card()`,
+        `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance(), realmConfig() or card()`,
       );
   }
 }
