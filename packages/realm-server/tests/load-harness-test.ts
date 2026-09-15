@@ -222,6 +222,30 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('a boolean flag accepts an explicit value so an on-by-default option can be turned off', function (assert) {
+      // `--prime-connections` defaults to on, and the only way to disable it is
+      // an explicit value. Reading 'false' as truthy would leave it on while
+      // the operator believed they had turned it off — and the whole point of
+      // that option is what the reported numbers mean.
+      for (let off of ['false', '0', 'no', 'off', 'FALSE']) {
+        assert.false(
+          parseArgs([`--prime-connections=${off}`], { primeConnections: true })
+            .primeConnections,
+          `--prime-connections=${off} disables it`,
+        );
+      }
+      assert.true(
+        parseArgs(['--prime-connections'], { primeConnections: true })
+          .primeConnections,
+        'a bare flag is still true',
+      );
+      assert.true(
+        parseArgs(['--prime-connections=true'], { primeConnections: false })
+          .primeConnections,
+        'and an explicit true turns an off-by-default option on',
+      );
+    });
+
     test('a number flag given a non-number yields NaN rather than a string', function (assert) {
       let args = parseArgs(['--readers', 'lots'], { readers: 12 });
       assert.true(Number.isNaN(args.readers));

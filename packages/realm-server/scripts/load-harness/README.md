@@ -167,21 +167,22 @@ node run-load.ts --csv ./accounts.csv \
   --workload ./workload.experiments.json
 ```
 
-| Option               | Default | Meaning                                                                         |
-| -------------------- | ------: | ------------------------------------------------------------------------------- |
-| `--readers`          |      12 | Sessions that only search.                                                      |
-| `--writers`          |       2 | Sessions that write, and search not at all. `0` is a read-only run.             |
-| `--minutes`          |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
-| `--write-every-ms`   |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
-| `--idle-re-run-ms`   |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
-| `--secondary-every`  |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
-| `--extra-queries`    |     off | Also issue the workload's `extraQueries`.                                       |
-| `--derive-workload`  |     off | Build the workload from the realm's own `_types` instead of a file.             |
-| `--derive-top`       |       8 | How many types a derived workload queries.                                      |
-| `--derive-page-size` |      20 | Page size for derived queries; `0` leaves them unbounded.                       |
-| `--emit-workload`    |       — | Write the derived workload here and exit. `-` is stdout.                        |
-| `--model-calls`      |     off | A forwarded request before each write (see below).                              |
-| `--subscribe`        |     off | React to real realm events instead of modelling them (see below).               |
+| Option                | Default | Meaning                                                                         |
+| --------------------- | ------: | ------------------------------------------------------------------------------- |
+| `--readers`           |      12 | Sessions that only search.                                                      |
+| `--writers`           |       2 | Sessions that write, and search not at all. `0` is a read-only run.             |
+| `--minutes`           |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
+| `--write-every-ms`    |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
+| `--idle-re-run-ms`    |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
+| `--secondary-every`   |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
+| `--extra-queries`     |     off | Also issue the workload's `extraQueries`.                                       |
+| `--derive-workload`   |     off | Build the workload from the realm's own `_types` instead of a file.             |
+| `--derive-top`        |       8 | How many types a derived workload queries.                                      |
+| `--derive-page-size`  |      20 | Page size for derived queries; `0` leaves them unbounded.                       |
+| `--emit-workload`     |       — | Write the derived workload here and exit. `-` is stdout.                        |
+| `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
+| `--model-calls`       |     off | A forwarded request before each write (see below).                              |
+| `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -243,6 +244,32 @@ server deciding what to send plus one round trip, `body` is bytes crossing the
 network. It prints a warning when the body leg dominates. **Byte counts are
 trustworthy regardless of where the driver runs; latency is not.**
 
+### `headers` also has to exclude connection setup
+
+`fetch` resolves when response headers arrive, and if the request had to open a
+socket first that promise covers a TCP handshake and a TLS handshake too.
+Readers re-run on an interval far longer than undici's keep-alive, so on a realm
+nobody is writing to — what `--writers 0` makes normal — nearly every sample
+would open a connection inside the timed window and report the setup as server
+work. Measured against a local server: with priming disabled 59 of 60 timed
+searches opened a connection, and with it on, 0 of 60.
+
+So the driver opens the connections a batch will use **before** starting the
+clock. It primes with the batch's own concurrency, because N concurrent requests
+want N sockets and undici hands a request to an already-free client in
+preference to opening another — priming with a single request would funnel the
+whole batch down one socket and change the concurrency being measured. The
+primer is a CORS preflight, which `@koa/cors` answers ahead of the router, so it
+costs the server nothing beyond the connection it exists to open.
+
+At startup the driver measures what a cold socket costs on this link and prints
+it, so the correction is visible either way. `--prime-connections=false` turns
+priming off, and `headers` is then labelled as including setup, because it does.
+
+Even primed, `headers` is still one round trip away from the server's own
+duration. **Compare runs from the same place**, and take the server's own timing
+when you need its absolute number.
+
 The driver is dependency-free — global `fetch` and `node:` built-ins only — so
 getting it into the region is a copy, not a build:
 
@@ -265,7 +292,8 @@ server's own timing rather than inferred.
 
 ## Reading the results
 
-Read `headers` as the platform number and `body` as your connection. The
+Read `headers` as the server's work plus a round trip, and `body` as your
+connection. The
 per-shape byte counts in the summary table are the signal that does not depend on
 where the driver ran.
 

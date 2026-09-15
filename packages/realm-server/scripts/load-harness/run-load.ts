@@ -87,6 +87,11 @@ let args = parseArgsOrExit(process.argv.slice(2), {
   // Write the derived workload here and exit without running, so it can be
   // committed and re-run verbatim. `-` writes to stdout.
   emitWorkload: '',
+  // Open the connections a batch of searches will use BEFORE the clock starts.
+  // Without this, `headers` silently includes a TCP and TLS handshake on every
+  // sample whose socket had gone cold, which on a quiet realm is most of them.
+  // `--prime-connections=false` turns it off.
+  primeConnections: true,
   // Precede each write with a `_request-forward` call, the way a card that
   // generates before saving does. It adds a second authenticated round trip
   // per write without spending tokens; see `modelCall` for exactly how far
@@ -185,6 +190,77 @@ function record(
   let bucket = stats.byLabel.get(label) ?? [];
   bucket.push({ total, headersMs, bodyMs, bytes });
   stats.byLabel.set(label, bucket);
+}
+
+// A cold socket costs a TCP handshake and a TLS handshake before the request is
+// even written, and `fetch` resolves only once the response headers arrive — so
+// a timed search that had to open a connection reports all of that as if it
+// were the server thinking. Readers re-run on an interval far longer than
+// undici's keep-alive (a few seconds), so on a realm nobody is writing to,
+// which is what `--writers 0` makes normal, nearly every sample would pay it.
+//
+// Priming has to match the batch's concurrency. A batch of N concurrent
+// requests opens N sockets when the pool is cold, and undici hands a request to
+// an already-free client in preference to opening another — so priming with a
+// single request would funnel the whole batch down one socket and change the
+// concurrency under measurement, while priming with N leaves N free clients for
+// the N searches to take.
+//
+// The primer is a CORS preflight. `@koa/cors` answers it ahead of the router,
+// so it costs the server nothing beyond the connection it exists to open, and
+// it is traffic the server already sees from browsers. A failed preflight is
+// ignored: an unhappy response still leaves a warm socket, which is the point.
+async function primeConnections(count: number): Promise<void> {
+  if (!args.primeConnections || count < 1) {
+    return;
+  }
+  await Promise.all(
+    Array.from({ length: count }, () =>
+      fetch(searchUrl, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://load-harness.invalid',
+          'Access-Control-Request-Method': 'QUERY',
+        },
+      })
+        // The body must be consumed or the socket is never returned to the
+        // pool, which would leave the batch opening fresh connections anyway.
+        .then((response) => response.text())
+        .then(() => undefined)
+        .catch(() => undefined),
+    ),
+  );
+  // A socket returns to the pool a tick after its response settles, so
+  // dispatching the batch in the same microtask leaves the last primed
+  // connection still checked out and one search opens a fresh one anyway.
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+// What a cold socket costs, measured rather than assumed. Called before
+// anything else touches this origin, so the first request pays a full handshake
+// and the second reuses its socket; the difference is what `headers` silently
+// contains for any unprimed sample. Reported so the operator can judge a run
+// from a distance instead of reading setup as server time.
+async function measureConnectionSetup(): Promise<number | undefined> {
+  let preflight = async () => {
+    let started = Date.now();
+    let response = await fetch(searchUrl, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://load-harness.invalid',
+        'Access-Control-Request-Method': 'QUERY',
+      },
+    });
+    await response.text();
+    return Date.now() - started;
+  };
+  try {
+    let cold = await preflight();
+    let warm = await preflight();
+    return Math.max(0, cold - warm);
+  } catch {
+    return undefined;
+  }
 }
 
 // Stamped on every search so a line here can be joined to the realm server's
@@ -442,6 +518,7 @@ async function readerLoop(session: Session, index: number): Promise<void> {
     : undefined;
 
   // First render: the screen fires its whole set at once.
+  await primeConnections(specs.length);
   await Promise.all(specs.map((spec) => search(session, spec)));
 
   if (!args.subscribe) {
@@ -451,6 +528,7 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       if (!running) {
         break;
       }
+      await primeConnections(specs.length);
       await Promise.all(specs.map((spec) => search(session, spec)));
     }
     return;
@@ -480,6 +558,7 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       stats.eventsSkipped += batch.length * (specs.length - due.length);
       stats.eventsMatched += batch.length * due.length;
       if (due.length) {
+        await primeConnections(due.length);
         await Promise.all(due.map((spec) => search(session, spec)));
       }
     }
@@ -519,6 +598,24 @@ let needed = args.emitWorkload ? 1 : args.readers + args.writers;
 if (creds.length < needed) {
   console.error(`Credential file has ${creds.length} rows, need ${needed}`);
   process.exit(1);
+}
+
+// Before anything else reaches this origin, so the first request is genuinely
+// cold.
+let connectionSetupMs = args.emitWorkload
+  ? undefined
+  : await measureConnectionSetup();
+if (connectionSetupMs !== undefined) {
+  console.log(
+    `Connection setup to ${new URL(searchUrl).host}: ~${connectionSetupMs}ms ` +
+      `(TCP + TLS).`,
+  );
+  if (!args.primeConnections) {
+    console.log(
+      `  --prime-connections=false: that cost lands inside "headers" on every\n` +
+        `  sample whose socket had gone cold.`,
+    );
+  }
 }
 
 console.log(`Authenticating ${needed} sessions…`);
@@ -631,7 +728,10 @@ function finish() {
   console.log(`writes:   ${stats.writes} (${stats.writeErrors} errors)`);
   console.log(summarize('end-to-end ', stats.search));
   console.log(
-    summarize('  headers  ', stats.headers) + '   ← server work + 1 RTT',
+    summarize('  headers  ', stats.headers) +
+      (args.primeConnections
+        ? '   ← server work + 1 RTT'
+        : '   ← server work + 1 RTT + connection setup'),
   );
   console.log(
     summarize('  body     ', stats.body) + '   ← bytes crossing the network',
@@ -668,6 +768,24 @@ function finish() {
     `\ntransferred: ${mb.toFixed(1)} MB` +
       (bodySec > 0 ? ` at ~${(mb / bodySec).toFixed(1)} MB/s` : ''),
   );
+
+  // What `headers` does and does not contain, stated with this run's own
+  // number rather than left for the reader to infer.
+  if (connectionSetupMs !== undefined) {
+    if (args.primeConnections) {
+      console.log(
+        `connections were opened before each timed batch, so "headers" excludes\n` +
+          `  the ~${connectionSetupMs}ms TCP+TLS setup this link costs. It is still one round\n` +
+          `  trip away from the server's own duration — compare runs from one place.`,
+      );
+    } else {
+      console.log(
+        `⚠  "headers" above INCLUDES the ~${connectionSetupMs}ms TCP+TLS setup on every sample\n` +
+          `   whose socket had gone cold, which on a quiet realm is most of them.\n` +
+          `   Drop --prime-connections=false to measure server work instead.`,
+      );
+    }
+  }
 
   console.log(`\nper query shape (end-to-end / headers / body, median):`);
   let shapes: { label: string; headersMs: number; bytes: number }[] = [];

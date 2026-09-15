@@ -125,6 +125,8 @@ export function ensureTrailingSlash(url: string): string {
 
 type ArgValue = string | number | boolean;
 
+const FALSEY = new Set(['false', '0', 'no', 'off']);
+
 // `--kebab-case` and `--kebab-case=value` into the camelCase keys of `spec`.
 // The spec's value type decides the parse: a boolean key is a bare flag, a
 // number key is coerced, anything else takes the next argv entry.
@@ -156,10 +158,17 @@ export function parseArgs<T extends Record<string, ArgValue>>(
       continue;
     }
     let value: ArgValue;
-    if (inlineValue !== undefined) {
+    if (typeof spec[name] === 'boolean') {
+      // A boolean is a bare flag, but it also has to accept an explicit value:
+      // an option that defaults to ON can only be turned off by `--flag=false`,
+      // and silently reading that string as truthy would leave the option on
+      // while the operator believed they had disabled it.
+      value =
+        inlineValue === undefined
+          ? true
+          : !FALSEY.has(inlineValue.toLowerCase());
+    } else if (inlineValue !== undefined) {
       value = inlineValue;
-    } else if (typeof spec[name] === 'boolean') {
-      value = true;
     } else {
       value = argv[++i];
     }

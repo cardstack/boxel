@@ -1,6 +1,6 @@
 ---
 name: realm-load-harness
-description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
+description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms — itself about one handshake above the server's own number, since `fetch` resolves only after any TCP+TLS setup, which is why the driver primes each batch's connections outside the timed window and why `--prime-connections=false` relabels `headers` as including setup); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -135,8 +135,7 @@ result it would have been wrong by a factor of twenty-seven.
 
 The harness splits the two legs so this cannot be misread silently:
 
-- **`headers`** — the server deciding what to send, plus one round trip. This is
-  the platform number.
+- **`headers`** — the server deciding what to send, plus one round trip.
 - **`body`** — bytes crossing the network. This is your connection.
 
 It prints a warning when the body leg takes more than half the end-to-end time.
@@ -145,6 +144,30 @@ Treat that warning as "these latency numbers are not about the realm server".
 **Byte counts are trustworthy regardless of where the driver runs; latency is
 not.** So a payload change can be evaluated from anywhere, but a latency claim
 cannot.
+
+### `headers` excludes connection setup only because the driver primes for it
+
+`fetch` resolves when response headers arrive, and a request that had to open a
+socket first has a TCP and a TLS handshake inside that promise. Readers re-run on
+an interval far longer than undici's keep-alive, so on a realm nobody is writing
+to — what `--writers 0` makes normal — a naive driver pays setup on nearly every
+sample and reports it as server time. Measured against a local server: with
+priming disabled 59 of 60 timed searches opened a connection; with it on, 0 of 60.
+
+The driver therefore opens each batch's connections before starting the clock,
+priming with the batch's own concurrency (N concurrent requests want N sockets,
+and undici prefers a free client to a new one, so a single primer would funnel
+the batch onto one socket and change what is being measured). It also measures
+what a cold socket costs on the current link and prints it at startup.
+
+Two consequences when reading someone's numbers:
+
+- If the run used `--prime-connections=false`, `headers` **includes** setup and
+  the summary says so. Do not quote it as server time.
+- Even primed, `headers` is a round trip away from the server's own duration.
+  **Compare runs from the same place.** The 521 ms in-region figure above sits
+  about one handshake above the server's own 225 ms, which is exactly this
+  effect — it is an end-to-end observation, not a server measurement.
 
 Getting in-region is a copy, not a build — zip the directory, upload it and the
 credential file to a CloudShell session in the right region, and run it there.
@@ -249,7 +272,7 @@ files, 14 readers / 3 writers / 15 minutes with `--subscribe`:
 
 ```
 end-to-end p50   730 ms
-  headers p50    663 ms      ← the platform number
+  headers p50    663 ms      ← server work + 1 RTT (+ setup: unprimed run)
   body    p50     29 ms
 write       p50 2524 ms
 rate            889 searches/min sustained
