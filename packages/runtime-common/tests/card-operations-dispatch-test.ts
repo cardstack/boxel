@@ -778,6 +778,7 @@ const tests = Object.freeze({
       headersOnly: true,
     });
     assert.deepEqual(fromRow, {
+      type: 'file-meta',
       indexedAt: 1700,
       lastModified: 1699,
       generation: 4,
@@ -797,6 +798,7 @@ const tests = Object.freeze({
       headersOnly: true,
     });
     assert.deepEqual(fromDisk, {
+      type: 'file-meta',
       indexedAt: null,
       lastModified: 42,
       generation: null,

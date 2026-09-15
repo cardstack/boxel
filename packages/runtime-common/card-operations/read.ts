@@ -46,8 +46,8 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 // holds bytes, and the same mapping from an errored index row to an HTTP
 // status.
 //
-// The body, and not the response around it. Three things stay the handler's,
-// and a caller that is not it has to account for them:
+// The body, and not the response around it. Two things stay the handler's, and
+// a caller that is not it has to account for them:
 //
 //   * It drains in-flight incremental indexing before reading, so a read here
 //     serves whatever the index currently holds rather than waiting for a
@@ -57,11 +57,12 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 //     what it literally names — the card's stored source, a file-def target —
 //     so the two diverge there by intent rather than by omission. A path that
 //     merely normalizes to a different one is served, not redirected.
-//   * It computes the 200's validator from the assembled document's own
-//     `deps` / `indexedAt` / `screenshots`, which this result does not carry —
-//     only the headers mode reports those. A caller wanting both a body and an
-//     ETag needs them threaded through, or it re-peeks and takes on the
-//     snapshot skew the handler avoids by reading them off the assembly.
+//
+// What the handler does not have to reconstruct is the row behind the answer.
+// Both modes report it: the headers mode is nothing else, and the document
+// mode carries it alongside the body, read off the same assembly the body came
+// from. That is what lets one read produce both a document and a validator
+// that describes it, instead of a second peek that a write can land inside of.
 // ============================================================================
 
 export async function readOperation(
@@ -118,11 +119,12 @@ async function readDocument(
   opts: RunOperationOptions,
 ): Promise<OperationDocumentResult> {
   if (urlNamesFile(url)) {
-    return { document: await fileMetaOrMissing(core, url, localPath) };
+    return fileMetaResult(await fileMetaOrMissing(core, url, localPath));
   }
   let result = await core.indexQueryEngine.cardDocument(url, {
     loadLinks: true,
     skipQueryBackedExpansion: opts.skipQueryBackedExpansion ?? false,
+    resolveLinksOnly: opts.resolveLinksOnly ?? false,
   });
   if (result === undefined) {
     // A path with no instance row may still hold bytes: a file asked for as
@@ -130,7 +132,7 @@ async function readDocument(
     // the caller receives JSON it can discriminate on `data.type`.
     let fileMeta = await core.fileMetaDocument(localPath);
     if (fileMeta) {
-      return { document: fileMeta };
+      return fileMetaResult(fileMeta);
     }
     throw await missingTarget(core, url, localPath);
   }
@@ -157,7 +159,33 @@ async function readDocument(
         }
       : {}),
   };
-  return { document: doc };
+  return {
+    document: doc,
+    // Read off the assembly rather than off a peek taken before it: the two
+    // can disagree when a write lands in between, and the validator a caller
+    // builds from this has to describe the document it is returned with.
+    headers: {
+      type: 'card',
+      indexedAt: result.indexedAt,
+      lastModified: numberOrNull(doc.data.meta.lastModified),
+      generation: result.generation,
+      screenshots: result.screenshots,
+      deps: result.deps,
+    },
+    queryBacked: result.queryBacked,
+  };
+}
+
+// A file's metadata document, and what it can say about its own headers.
+function fileMetaResult(
+  document: SingleFileMetaDocument,
+): OperationDocumentResult {
+  return {
+    document,
+    headers: headersFromDisk(document),
+    // Derived from the bytes on disk, so there is no query behind it.
+    queryBacked: false,
+  };
 }
 
 // The peek, and nothing else. `cardDocument` is deliberately not reached here:
@@ -177,6 +205,7 @@ async function readHeaders(
       return headersFromDisk(await fileMetaOrMissing(core, url, localPath));
     }
     return {
+      type: 'file-meta',
       indexedAt: file.indexedAt,
       lastModified: file.lastModified,
       generation: file.generation,
@@ -215,6 +244,7 @@ async function readHeaders(
     });
   }
   return {
+    type: 'card',
     indexedAt: row.indexedAt,
     lastModified: row.lastModified,
     generation: row.generation,
@@ -229,6 +259,7 @@ function headersFromDisk(
   document: SingleFileMetaDocument,
 ): OperationHeadResult {
   return {
+    type: 'file-meta',
     indexedAt: null,
     lastModified: numberOrNull(document.data.attributes?.lastModified),
     generation: null,
@@ -248,6 +279,31 @@ async function fileMetaOrMissing(
   }
   return document;
 }
+
+// The errored index row behind a `target-errored` refusal, exactly as the row
+// itself reported it. The refusal renders one sentence out of these; a surface
+// that builds its own error body needs the parts instead — its own sentence
+// names the URL the caller asked for rather than the one the read resolved —
+// along with the row's unmapped status and the salvage a client shows in place
+// of the card it could not get.
+export interface ErroredTargetRow {
+  status: number;
+  title: string | undefined;
+  message: string;
+  stack: string | undefined;
+  lastKnownGoodHtml: string | null;
+  cardTitle: string | null;
+  scopedCssUrls: string[];
+}
+
+export function erroredTargetRow(
+  failure: OperationFailure,
+): ErroredTargetRow | undefined {
+  let row = failure.error.meta?.[ERRORED_ROW];
+  return row === undefined ? undefined : (row as ErroredTargetRow);
+}
+
+const ERRORED_ROW = 'erroredRow';
 
 // The index has a row for this card, it just cannot be served cleanly, so the
 // underlying error's own HTTP status carries through when it is a real one —
@@ -270,6 +326,15 @@ function errorRowFailure(
     errorDetail.status !== 404
       ? errorDetail.status
       : 500;
+  let row: ErroredTargetRow = {
+    status: errorDetail.status,
+    title: errorDetail.title,
+    message: errorDetail.message,
+    stack: errorDetail.stack,
+    lastKnownGoodHtml: result.error.lastKnownGoodHtml,
+    cardTitle: result.error.cardTitle,
+    scopedCssUrls: result.error.scopedCssUrls,
+  };
   return new OperationFailure({
     id: url.href,
     status,
@@ -281,6 +346,7 @@ function errorRowFailure(
       cardTitle: result.error.cardTitle,
       scopedCssUrls: result.error.scopedCssUrls,
       stack: errorDetail.stack,
+      [ERRORED_ROW]: row,
     },
   });
 }

@@ -19,7 +19,8 @@ export type {
   OperationStoredFileMeta,
   RunOperationOptions,
 } from './dispatch.ts';
-export { readOperation } from './read.ts';
+export { readOperation, erroredTargetRow } from './read.ts';
+export type { ErroredTargetRow } from './read.ts';
 export { commitBatch } from './coordinator.ts';
 export type {
   BatchCore,
