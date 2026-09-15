@@ -1849,7 +1849,7 @@ module(`Integration | search resource`, function (hooks) {
         );
       });
 
-      test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
+      test(`a live resource seeded with its document's answer subscribes without searching`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         fetchCalls = 0;
 
@@ -1872,18 +1872,21 @@ module(`Integration | search resource`, function (hooks) {
         await search.loaded;
         await settled();
 
-        // Today the live path with a matching seed.searchURL happens
-        // to short-circuit via the previousQueryString equality check
-        // in SearchResource. The contract we care about for this
-        // ticket is the opposite case (non-live + seed must NOT
-        // fetch), so we only assert that live + seed produces the
-        // correct result set. Whether or not the equality-skip path
-        // saves a fetch here is an implementation detail of
-        // SearchResource that's orthogonal to this change.
+        // A seed's search URL and the query the client rebuilds compare equal
+        // under the resource's spelling-tolerant signature, so a live resource
+        // handed its document's answer has nothing left to ask for. This is
+        // what makes a query field the document resolved cost no request, and
+        // it is the half of eager resolution that is genuinely free — the
+        // subscription the same pass arms is not.
         assert.strictEqual(
           search.instances.length,
           cards.length,
-          'live path with seed still resolves to the correct set',
+          'the seed resolves the field to the set the document named',
+        );
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'and no search is issued to re-derive it',
         );
       });
 

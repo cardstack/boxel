@@ -116,7 +116,6 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
-  peekQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
@@ -4627,14 +4626,30 @@ function hasInflightLoadForField(
 
 // Supply `getRelationshipMembershipState` with the loading status and query-field membership
 // that live above field-support: in-flight link loads (here) and per-field
-// search resources (in query-field-support). Observe-only — this never starts a
-// load or a search; the template's field getter does that.
+// search resources (in query-field-support). In-flight link loads are observed
+// rather than started; a query field is resolved, for the reason below.
 registerRelationshipProbe((instance, field) => {
   // Entangle the reading render with the field's loading signal so a deferred
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
-    let resource = peekQueryFieldSearchResource(instance, field.name);
+    // Asking a query field for its state is a demand for the field. A card that
+    // renders a pending state while `isLoaded` is false, and reaches its rows
+    // only once loaded, would otherwise wait forever on a search nothing had
+    // started. Creation is idempotent — an existing resource comes back as-is
+    // without re-arming anything — so repeated reads observe rather than
+    // restart, and a field whose query is not yet resolvable still reports as
+    // unresolved until it is.
+    let resource = ensureQueryFieldSearchResource(
+      getStore(instance),
+      instance,
+      field,
+      runtimeQueryDependencyContext({
+        queryField: field.name,
+        consumer: (instance as CardDef).id,
+        source: 'card-api:relationship-probe',
+      }),
+    );
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
@@ -5483,11 +5498,19 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // computed once and every card without one skips the walk entirely.
     if (hasQueryFields(instance)) {
       let store = getStore(instance);
+      // A document's `data` is what it is about; its `included` carries the
+      // cards its links name. `resourceFrom` hands a link's target on by
+      // identity, so comparing against `data` separates the two exactly, and a
+      // link followed on its own reaches here as the `data` of the document its
+      // own read returned.
+      let isDocumentSubject = Array.isArray(doc.data)
+        ? (doc.data as LooseCardResource[]).includes(resource)
+        : doc.data === resource;
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
         if (field?.queryDefinition) {
-          resolveQueryFieldEagerly(store, instance, field);
+          resolveQueryFieldEagerly(store, instance, field, isDocumentSubject);
         }
       }
     }

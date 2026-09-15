@@ -26,8 +26,19 @@ export interface ResponseCacheSummary {
   hits: number;
   joins: number;
   misses: number;
+  // Why each miss found nothing to serve: the key was never stored (or its
+  // entry had already been reclaimed), or it was stored and had aged past its
+  // TTL. They sum to `misses`, and they separate a cache too small or too
+  // churned to retain a key from one whose TTL is simply shorter than the gap
+  // between reads of it — two problems with opposite fixes.
+  missesKeyAbsent: number;
+  missesKeyExpired: number;
   // Entry lifecycle: aged out past the TTL / displaced by the byte cap
   // (LRU) / never retained because the value alone exceeds the whole cap.
+  // `expired` counts entries removed, wherever they were noticed — a lookup,
+  // the head reaper, or the eviction scan — so it measures TTL turnover rather
+  // than the outcome of any particular lookup. `missesKeyExpired` is the
+  // lookup-side figure.
   expired: number;
   evicted: number;
   oversized: number;
@@ -49,6 +60,8 @@ type ResponseCacheCounters = {
   hits: number;
   joins: number;
   misses: number;
+  missesKeyAbsent: number;
+  missesKeyExpired: number;
   expired: number;
   evicted: number;
   oversized: number;
@@ -139,6 +152,8 @@ export class TtlResponseCache<T> {
     hits: 0,
     joins: 0,
     misses: 0,
+    missesKeyAbsent: 0,
+    missesKeyExpired: 0,
     expired: 0,
     evicted: 0,
     oversized: 0,
@@ -197,8 +212,14 @@ export class TtlResponseCache<T> {
     populate: () => Promise<T>;
     onOutcome?: (outcome: ResponseCacheOutcome) => void;
   }): Promise<{ value: T; outcome: ResponseCacheOutcome }> {
-    this.#reapExpiredHead();
     let { key } = args;
+    // Classified before the reaper runs. It removes expired entries from the
+    // head, so a key it takes would read as absent below and this lookup would
+    // be indistinguishable from one for a key that was never stored.
+    let entryAtLookup = this.#entries.get(key);
+    let keyWasExpired =
+      entryAtLookup !== undefined && entryAtLookup.expiresAt <= Date.now();
+    this.#reapExpiredHead();
     let onOutcome = args.onOutcome ?? (() => {});
 
     let entry = this.#entries.get(key);
@@ -232,6 +253,8 @@ export class TtlResponseCache<T> {
     try {
       let value = await promise;
       this.#counters.misses += 1;
+      this.#counters[keyWasExpired ? 'missesKeyExpired' : 'missesKeyAbsent'] +=
+        1;
       this.#counters.missBytes += this.#sizeOf(value);
       this.#store(key, value);
       return { value, outcome: 'miss' };

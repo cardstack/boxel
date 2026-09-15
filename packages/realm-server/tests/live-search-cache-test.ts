@@ -355,6 +355,78 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(cache.stats.errors, 1, 'one error per failed compute');
   });
 
+  test('a miss says whether the key was absent or had aged out', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 50 });
+    let realms = ['http://a/'];
+    let load = (name: string) =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(name),
+        opts: undefined,
+        populate: async () => '0123456789',
+      });
+
+    await load('A');
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent,
+      1,
+      'a key never stored misses because it is absent',
+    );
+    assert.strictEqual(cache.stats.missesKeyExpired, 0);
+
+    // The same key past its TTL. The reason is the TTL, not capacity, and the
+    // two point at different fixes — a longer TTL against a bigger cache.
+    await sleep(80);
+    await load('A');
+    assert.strictEqual(
+      cache.stats.missesKeyExpired,
+      1,
+      'a key that aged out misses because it expired',
+    );
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent,
+      1,
+      'and that is not also counted as absent',
+    );
+
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent + cache.stats.missesKeyExpired,
+      cache.stats.misses,
+      'every miss is attributed to exactly one reason',
+    );
+  });
+
+  test('the reaper moves the removal counter without inventing a lookup', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 50 });
+    let realms = ['http://a/'];
+    let load = (name: string) =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(name),
+        opts: undefined,
+        populate: async () => '0123456789',
+      });
+
+    await load('A');
+    await sleep(80);
+
+    // `B` is a key of its own. Serving it reaps the aged-out `A` on the way
+    // past, so `expired` moves for a removal no lookup asked about — which is
+    // why it cannot stand in for a miss reason.
+    await load('B');
+    assert.ok(cache.stats.expired >= 1, 'the reaper recorded the removal');
+    assert.strictEqual(
+      cache.stats.missesKeyExpired,
+      0,
+      "and B's own miss is not attributed to A's expiry",
+    );
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent,
+      2,
+      'both lookups missed on a key that was not there to serve',
+    );
+  });
+
   test('telemetry summarizes window deltas once per interval', async function (assert) {
     let summaries: LiveSearchCacheSummary[] = [];
     let cache = new LiveSearchCache({

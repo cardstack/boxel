@@ -5,7 +5,9 @@ import { module, test } from 'qunit';
 
 import { baseRealm, PermissionsContextName } from '@cardstack/runtime-common';
 import type { Permissions } from '@cardstack/runtime-common';
+import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
 import type { Loader } from '@cardstack/runtime-common/loader';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   provideConsumeContext,
@@ -22,6 +24,7 @@ import {
   field,
   linksTo,
   linksToMany,
+  NumberField,
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
@@ -49,9 +52,18 @@ function makeCards() {
     @field matches = linksToMany(() => Person, {
       query: { filter: { eq: { name: '$this.cardTitle' } } },
     });
+    // A rollup reducing over the query-backed field. It is the shape that reads
+    // a number rather than a set, so an unresolved field shows up in it as a
+    // confident zero rather than as a visibly missing row.
+    @field matchCount = contains(NumberField, {
+      computeVia: function (this: Child) {
+        return (this.matches ?? []).length;
+      },
+    });
     static embedded = class extends Component<typeof Child> {
       <template>
         <div data-test-child>
+          <span data-test-match-count>{{@model.matchCount}}</span>
           {{#each @model.matches as |person|}}
             <span data-test-match>{{person.name}}</span>
           {{/each}}
@@ -79,6 +91,7 @@ function makeCards() {
 module('Integration | nested query-field rendering', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('@cardstack/base/card-api');
+  let queryFieldSupport: typeof import('@cardstack/base/query-field-support');
 
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -95,6 +108,9 @@ module('Integration | nested query-field rendering', function (hooks) {
     provideConsumeContext(PermissionsContextName, permissions);
     loader = getService('loader-service').loader;
     cardApi = await loader.import('@cardstack/base/card-api');
+    queryFieldSupport = await loader.import(
+      '@cardstack/base/query-field-support',
+    );
 
     let { Person, Child, Parent } = makeCards();
     await setupIntegrationTestRealm({
@@ -125,6 +141,47 @@ module('Integration | nested query-field rendering', function (hooks) {
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),
   );
+
+  // Counts the searches the client issues on its own behalf. This is the call
+  // every query-field resolution goes through, so it separates them from the
+  // card reads the store makes for other reasons.
+  function countSearches() {
+    let realmServer = getService('realm-server');
+    let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    let counter = {
+      count: 0,
+      restore: () => {
+        realmServer.maybeAuthedFetchForRealms = original;
+      },
+    };
+    realmServer.maybeAuthedFetchForRealms = (async (
+      ...args: Parameters<typeof original>
+    ) => {
+      counter.count++;
+      return await original(...args);
+    }) as typeof realmServer.maybeAuthedFetchForRealms;
+    return counter;
+  }
+
+  // Announce a write the way the realm does, so anything subscribed to the
+  // realm has its chance to refresh.
+  async function announceIncrementalIndex() {
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(
+        testRealmURL,
+        '@testuser:localhost',
+      ),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}Person/one`],
+        realmURL: testRealmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await settled();
+  }
 
   test('a link target renders its own query-backed field', async function (this: RenderingTestContext, assert) {
     let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
@@ -214,6 +271,81 @@ module('Integration | nested query-field rendering', function (hooks) {
       getRelationshipMembershipState(child, 'matches').membership?.length,
       2,
       'and the field holds both matches either way',
+    );
+  });
+
+  test('a side-loaded card issues no search until something reads its field', async function (this: RenderingTestContext, assert) {
+    let { peekQueryFieldSearchResource } = queryFieldSupport;
+    let searches = countSearches();
+    try {
+      let parent = (await getService('store').get(
+        PARENT_URL,
+      )) as CardDefType & {
+        child: CardDefType;
+      };
+      await settled();
+
+      // Reading the plain link hands back the side-loaded instance without
+      // touching its query-backed field.
+      let child = parent.child;
+      assert.strictEqual(
+        peekQueryFieldSearchResource(child, 'matches'),
+        undefined,
+        'deserializing a card the document side-loaded resolves none of its query fields',
+      );
+      assert.strictEqual(
+        searches.count,
+        0,
+        'so nothing is asked of the server on its behalf',
+      );
+
+      await renderCard(loader, parent, 'isolated');
+      await settled();
+
+      assert.notStrictEqual(
+        peekQueryFieldSearchResource(child, 'matches'),
+        undefined,
+        'displaying the field is what resolves it',
+      );
+      assert.ok(searches.count > 0, 'and that is when the search is issued');
+    } finally {
+      searches.restore();
+    }
+  });
+
+  test('a side-loaded card holds no realm subscription until its field is read', async function (this: RenderingTestContext, assert) {
+    let searches = countSearches();
+    try {
+      await getService('store').get(PARENT_URL);
+      await settled();
+
+      await announceIncrementalIndex();
+
+      assert.strictEqual(
+        searches.count,
+        0,
+        'a write to the realm wakes no search for a field nothing has read',
+      );
+    } finally {
+      searches.restore();
+    }
+  });
+
+  test('a rollup over a side-loaded query field reports its true count', async function (this: RenderingTestContext, assert) {
+    let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
+    await settled();
+
+    let element = await renderCard(loader, parent, 'isolated');
+    await settled();
+
+    // The number a reader would otherwise have no way to doubt: an unresolved
+    // field reduces to zero, which renders identically to a true count of zero.
+    assert.strictEqual(
+      element
+        .querySelector('[data-test-child] [data-test-match-count]')
+        ?.textContent?.trim(),
+      '2',
+      'the rollup reduces over the resolved field, not over an empty set',
     );
   });
 });
