@@ -225,8 +225,19 @@ type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
-type TrackedCreateOptions = CreateOptions & DependencyTrackingOptions;
-type TrackedAddOptions = AddOptions & DependencyTrackingOptions;
+// Opt-in per-field hydration timing, threaded straight through to
+// `card-api.createFromSerialized`. The prerender's render route supplies the
+// collector so a visit can attribute its `buildModelMs.hydrate` stage across
+// the card's fields; every other caller omits it and pays nothing.
+type HydrateTimingOptions = {
+  hydrateFieldsMs?: Record<string, number>;
+};
+type TrackedCreateOptions = CreateOptions &
+  DependencyTrackingOptions &
+  HydrateTimingOptions;
+type TrackedAddOptions = AddOptions &
+  DependencyTrackingOptions &
+  HydrateTimingOptions;
 
 // How many times a search the realm-server shed (a 429 from its search
 // admission gate) is retried before the shed surfaces as an error. Three
@@ -825,6 +836,7 @@ export default class StoreService extends Service implements StoreInterface {
         instanceOrDoc,
         opts?.relativeTo,
         opts?.dependencyTrackingContext,
+        opts?.hydrateFieldsMs,
       );
     } else {
       instance = instanceOrDoc;
@@ -2022,6 +2034,7 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    hydrateFieldsMs?: Record<string, number>,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
     let shouldStubTimers =
@@ -2030,6 +2043,7 @@ export default class StoreService extends Service implements StoreInterface {
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
         dependencyTrackingContext,
+        ...(hydrateFieldsMs ? { hydrateFieldsMs } : {}),
       })) as T;
     // Time the deserialize and report it (no-op when telemetry is disabled).
     let telemetry = this.#clientTelemetry();

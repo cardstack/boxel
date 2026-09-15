@@ -142,6 +142,7 @@ topk(20, max by (card_id) (
 - **Heavy deserialization** → [Mode D](#mode-d--heavy-response-deserialization). Large `deserialize.duration_ms` / `doc_bytes` for a `card_type` in the load — a big linked graph deserializes slowly.
 - **Rebuild churn** → [Mode E](#mode-e--rebuild-churn-after-a-code-edit). If the load raced a loader/store rebuild (a `rebuild` event in the window), the card waited on the rebuild; `trigger_module` names what forced it.
 - **Index-event churn** → [Mode F](#mode-f--realm-index-event-write-burst-churn). A `realm-event` storm (high `reloads_triggered`) during the window means the tab was busy absorbing incoming index events while trying to load.
+- **The card's module graph is expensive everywhere** → the shared-cause check. A card the browser is slow to open and the indexer is slow to index is one cost with two symptoms: both pay to load and evaluate the same modules. If this card's realm also indexes slowly, read `indexing-diagnostics` Mode N — its `buildModelMs.deriveType` and `moduleEvaluationsMs` name the modules from the server side, where they are attributable per row by SQL. Fixing the module moves both numbers.
 
 Whichever event overlaps the window with the outsized number is the lead. The whole point of pinning the session first is that this spider is then confined to one tab's timeline, so the overlap is real rather than coincidental.
 
@@ -342,6 +343,6 @@ The event fields are facts; the line between "fine" and "slow" is per-realm. A c
 
 ## Related skills
 
-- **`indexing-diagnostics`** — the server-side half. When a `server-request` `correlation_id` points at a slow realm-server response, that skill attributes the server's time across its request→response stages (parse / SQL / loadLinks / serialize / queue) and, for renders, across the prerender pipeline. The correlation id is the seam between the two skills.
+- **`indexing-diagnostics`** — the server-side half. When a `server-request` `correlation_id` points at a slow realm-server response, that skill attributes the server's time across its request→response stages (parse / SQL / loadLinks / serialize / queue) and, for renders, across the prerender pipeline. The correlation id is the seam between the two skills. It is also where a **shared** cause is nameable: the module graph a card load evaluates in the browser is the same one an index visit evaluates in the prerender tab, and that skill's Mode N attributes it per module from `boxel_index.diagnostics` — so a card slow in both places is one investigation, not two.
 - **`tail-logs`** — reading the realm-server's raw log stream directly (including the `corr=<id>` lines you join to).
 - **`aws-access`** — the AWS session and read-only DB tunnel for deployed environments, needed only when a client investigation crosses into server-side data that isn't in Loki.

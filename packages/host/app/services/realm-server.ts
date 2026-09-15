@@ -1254,37 +1254,81 @@ export default class RealmServerService
 
   private reauthenticating: Promise<string | undefined> | undefined;
 
-  // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
+  // The forwarded fields are `RequestForwardBody` in
+  // realm-server/handlers/handle-request-forward. `timeoutMs` is not one of
+  // them — it is the caller's budget for the call, spent here rather than
+  // sent.
+  //
+  // Abandoning the wait is not enough to honour a budget: the realm server
+  // holds a per-user lock across replicas for the whole life of the upstream
+  // call, so a model call nobody is reading any more still delays that user's
+  // next one. Aborting the request is what releases it, hence a real signal on
+  // the fetch rather than a race against a timer. Omitting `timeoutMs` sends
+  // no signal at all and waits indefinitely.
   async requestForward(args: {
     url: string;
     method: string;
     requestBody: string;
     headers?: Record<string, string>;
     multipart?: boolean;
+    timeoutMs?: number;
   }) {
     await this.login();
 
-    const response = await this.network.fetch(
-      `${this.url.href}_request-forward`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify(args),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Request forward failed: ${response.status} - ${errorText}`,
-      );
+    let { timeoutMs, ...forwardedRequest } = args;
+    let deadline: AbortController | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs != null && timeoutMs > 0) {
+      deadline = new AbortController();
+      deadlineTimer = setTimeout(() => deadline!.abort(), timeoutMs);
     }
 
-    return response;
+    let responded = false;
+    try {
+      const response = await this.network.fetch(
+        `${this.url.href}_request-forward`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(forwardedRequest),
+          signal: deadline?.signal,
+        },
+      );
+      // The budget covers time-to-response, so it stops the moment a response
+      // is in hand — here rather than on the way out, because the error path
+      // below reads the body while the timer would still be armed. A firing
+      // during that read aborts a body the server did answer with.
+      responded = true;
+      clearTimeout(deadlineTimer);
+      deadlineTimer = undefined;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Request forward failed: ${response.status} - ${errorText}`,
+        );
+      }
+
+      return response;
+    } catch (e) {
+      // The abort surfaces as a generic `AbortError` from whichever layer
+      // noticed it first; the controller is the only thing that knows the
+      // deadline was the reason, so name it here.
+      // Only a deadline that fired before any response is a timeout. Once the
+      // server has answered, a later failure is that failure — reporting it as
+      // a timeout would discard the status and body that did arrive.
+      if (!responded && deadline?.signal.aborted) {
+        throw new Error(`Request forward timed out after ${timeoutMs}ms`);
+      }
+      throw e;
+    } finally {
+      // Already cleared on the responded path; this covers a fetch that threw.
+      clearTimeout(deadlineTimer);
+    }
   }
 
   async registerBot(username: string) {

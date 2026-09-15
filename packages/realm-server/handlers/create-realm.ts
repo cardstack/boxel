@@ -27,7 +27,7 @@ import {
   realmReadmeTemplate,
   shouldSeedRealmReadme,
 } from '../lib/realm-readme.ts';
-import type { SendEvent } from './send-event.ts';
+import type { SendEvent } from '@cardstack/runtime-common/send-event';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   fetchRequestFromContext,

@@ -2,8 +2,10 @@ import { computeContentHash } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
 import {
   CAPTURE_SERVING_PREFIX,
+  PARTIAL_WRITE_SUFFIX,
   RealmPaths,
   isCaptureServingPath,
+  isPartialWritePath,
   type LocalPath,
 } from '../paths.ts';
 import {
@@ -11,17 +13,21 @@ import {
   includedResources,
   localIdOf,
   namesForeignRealm,
+  stageAppendContainsMany,
   stageCreate,
   stageDelete,
   stagedIdentity,
   stageUpdate,
   type BatchEntry,
   type LidIndex,
+  type SourceBytes,
   type StagedChange,
+  type StagedContent,
   type StagedIdentity,
   type StagingContext,
   type StoredFile,
 } from './executors.ts';
+import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -78,14 +84,18 @@ export interface BatchCore {
   readSourceFile(
     localPath: LocalPath,
   ): Promise<{ content: string; lastModified: number } | undefined>;
+  // A stored file as a size and a bounded reader, for an entry that edits a
+  // file too large to read. Called only inside the lock.
+  openSourceBytes(localPath: LocalPath): Promise<SourceBytes | undefined>;
   // Whether anything is stored at this path. Distinct from reading it: the
   // destinations a create mints are checked for being free, and their bytes
   // are of no interest.
   fileExists(localPath: LocalPath): Promise<boolean>;
-  // Refuses bytes the realm will not store at this path — the size ceiling a
+  // Refuses content the realm will not store at this path — the size ceiling a
   // card or a file is held to. Throws the realm's own error, whose status the
-  // coordinator carries through to the caller.
-  assertWriteSize(localPath: LocalPath, content: string): void;
+  // coordinator carries through to the caller. Described content is held to
+  // the same ceiling by its byte length, which it reports without being read.
+  assertWriteSize(localPath: LocalPath, content: StagedContent): void;
   // Waits for indexing already in flight. A card's serialization resolves the
   // definitions its type is built from, and a module written moments earlier
   // may still be indexing, so a batch drains before it stages rather than
@@ -99,7 +109,7 @@ export interface BatchCore {
   // one index event. Assumes the write lock is held, which it is.
   commitUnlocked(
     batch: {
-      writes?: Map<LocalPath, string | Uint8Array>;
+      writes?: Map<LocalPath, string | Uint8Array | SplicedSource>;
       deletes?: LocalPath[];
     },
     options?: {
@@ -120,6 +130,9 @@ export interface BatchCore {
     moduleId: RealmResourceIdentifier,
     relativeTo: string,
   ): RealmResourceIdentifier;
+  // A relationship's `links.self` as the realm stores it — relative to the
+  // file that holds it when the link points inside this realm.
+  storedLink(selfLink: string, relativeTo: URL): string;
   lookupDefinition(
     codeRef: CodeRef,
     relativeTo: URL,
@@ -168,6 +181,10 @@ export async function commitBatch(
     // entry link to a card a later entry mints.
     let { lids, foreignLids } = indexLids(entries, paths);
     let stored = await readStoredFiles(core, entries, paths);
+    // What an append stages for a file it never read whole. Kept beside
+    // `stored` rather than in it: the two describe the same file in different
+    // terms, and an executor that needs one cannot work from the other.
+    let splices = new Map<LocalPath, SplicedSource>();
     let staged: StagedChange[] = [];
     // The version each entry's merge was computed over, captured as it stages
     // rather than read back at the end: `stored` moves underneath the batch
@@ -181,10 +198,13 @@ export async function commitBatch(
         lids,
         foreignLids,
         stored,
+        splices,
+        openSourceBytes: core.openSourceBytes,
         actor: opts.actor ?? '',
         serializeCard: core.serializeCard,
         codeRefKey: core.codeRefKey,
         resolveModuleId: core.resolveModuleId,
+        storedLink: core.storedLink,
         lookupDefinition: core.lookupDefinition,
       });
       baseHashes.push(
@@ -192,7 +212,7 @@ export async function commitBatch(
           ? stored.get(change.primaryPath)?.contentHash
           : undefined,
       );
-      compose(stored, entry, change);
+      compose(stored, splices, entry, change);
       staged.push(change);
     }
     assertWritesAllowed(staged);
@@ -222,16 +242,26 @@ export async function commitBatch(
 // path math the caller has to reproduce to predict it.
 function compose(
   stored: Map<LocalPath, StoredFile>,
+  splices: Map<LocalPath, SplicedSource>,
   entry: BatchEntry,
   change: StagedChange,
 ): void {
   for (let path of change.deletes) {
     stored.delete(path);
+    splices.delete(path);
   }
   if (entry.op === 'create') {
     return;
   }
   for (let write of change.writes) {
+    if (isSplicedSource(write.content)) {
+      // Described rather than read, so there is nothing to fingerprint and
+      // nothing to merge over — an append that follows splices into this
+      // description, and an executor that needs the bytes whole refuses.
+      splices.set(write.path, write.content);
+      continue;
+    }
+    splices.delete(write.path);
     stored.set(write.path, {
       content: write.content,
       // The file has not been written yet, so its modification time is still
@@ -259,6 +289,8 @@ async function stageEntry(
         return await stageUpdate(entry, ctx);
       case 'delete':
         return stageDelete(entry, ctx);
+      case 'appendContainsMany':
+        return await stageAppendContainsMany(entry, ctx);
       default:
         throw new OperationFailure({
           status: 400,
@@ -274,8 +306,9 @@ async function stageEntry(
 
 // A `baseVersion` names the state a write is computed on top of, and the
 // result reports whether the target was still at it. Only an update has both:
-// a create has no prior state to name, and a delete's result carries no state
-// to report a match on.
+// a create has no prior state to name, a delete's result carries no state to
+// report a match on, and an append never reads the state it edits, so it has
+// nothing to compare one against.
 function assertVersionable(entry: BatchEntry, index: number): void {
   if (entry.baseVersion === undefined || entry.op === 'update') {
     return;
@@ -337,7 +370,9 @@ function indexLids(
     lids.set(lid, identity);
   };
   for (let [index, entry] of entries.entries()) {
-    if (entry.op === 'delete') {
+    // Neither mints a card nor side-loads one, so neither claims an identity
+    // anything else in the batch could link to.
+    if (entry.op === 'delete' || entry.op === 'appendContainsMany') {
       continue;
     }
     // Labelled with the entry's position like every other refusal: a caller
@@ -409,8 +444,11 @@ async function readStoredFiles(
   let wanted = new Set<LocalPath>();
   for (let entry of entries) {
     // A create's href is the card it is anchored on, when it has one; an
-    // update's and a delete's is the card itself.
-    if (!entry.href) {
+    // update's and a delete's is the card itself. An append's is the card
+    // too, and deliberately not read: the whole point of that entry is to
+    // edit a file without holding it, so reading it here would spend the cost
+    // it exists to avoid — and it opens the file itself, in bounded pieces.
+    if (!entry.href || entry.op === 'appendContainsMany') {
       continue;
     }
     let localPath = sourcePathOf(entry.href, paths);
@@ -464,23 +502,27 @@ function sourcePathOf(href: string, paths: RealmPaths): LocalPath | undefined {
 // ---------------------------------------------------------------------------
 
 // A batch is the third way into a realm, after direct writes and `/_atomic`,
-// so it holds its staged writes to the same capture-serving reservation both
-// of those refuse — read from `isCaptureServingPath`, which states it once for
-// all three. Removals are not covered, deliberately: they are the recovery
-// path for anything already stored there, which is why the other two admit
-// them as well.
+// so it holds its staged writes to the same reservations both of those refuse
+// — read from `isCaptureServingPath` and `isPartialWritePath`, which state
+// them once for all three. Removals are not covered, deliberately: they are
+// the recovery path for anything already stored under either name, which is
+// why the other two admit them as well.
 function assertWritesAllowed(staged: StagedChange[]): void {
   for (let [index, change] of staged.entries()) {
     for (let write of change.writes) {
-      if (isCaptureServingPath(write.path)) {
+      let reserved = isCaptureServingPath(write.path)
+        ? `"${CAPTURE_SERVING_PREFIX}" is reserved for serving captures`
+        : isPartialWritePath(write.path)
+          ? `"${PARTIAL_WRITE_SUFFIX}" names a file the realm is part-way ` +
+            `through writing, which is no part of the realm`
+          : undefined;
+      if (reserved) {
         throw atEntry(
           new OperationFailure({
             status: 422,
             code: 'invalid-params',
             title: 'Reserved path',
-            detail:
-              `cannot write "${write.path}": "${CAPTURE_SERVING_PREFIX}" is ` +
-              `reserved for serving captures`,
+            detail: `cannot write "${write.path}": ${reserved}`,
           }),
           index,
         );
@@ -618,7 +660,7 @@ async function commitStaged(
   // bytes the first staged — so the file is written once holding the last of
   // them rather than twice, and a removal that follows drops the write
   // entirely instead of writing bytes the same commit then unlinks.
-  let writes = new Map<LocalPath, string | Uint8Array>();
+  let writes = new Map<LocalPath, string | Uint8Array | SplicedSource>();
   let deleted = new Set<LocalPath>();
   let writtenBy = new Map<LocalPath, number>();
   for (let [index, change] of staged.entries()) {

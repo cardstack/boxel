@@ -13,6 +13,7 @@ import type {
 import {
   asExpressions,
   DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+  STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
   insert,
   insertPermissions,
@@ -1362,6 +1363,100 @@ module(basename(import.meta.filename), function (hooks) {
       'a just-recorded capture failure waits out the minimum age',
     );
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('a withheld stale-shell failure is re-driven once it is old enough', async function (assert) {
+    // Withholding publishes the prior render and clears the error, so the row
+    // reads as a healthy current-generation render. That removes the very
+    // signal — `has_error` — that used to tell an operator to reindex, so
+    // without this lane a deploy overlap that resolves leaves nothing asking
+    // for the re-render.
+    const realmURL = 'http://example.com/stale-shell-retry/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      // Current generation and no error_doc: indistinguishable from healthy
+      // on every other lane.
+      generation: 5,
+      diagnostics: {
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: 1,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the withheld row is enqueued for a fresh render',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 1);
+  });
+
+  test('a withheld stale-shell failure younger than the minimum age waits', async function (assert) {
+    const realmURL = 'http://example.com/stale-shell-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: 1,
+      },
+      renderedMinutesAgo: 2,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a shell disagreement is given time to resolve before re-rendering',
+    );
+  });
+
+  test('a withheld stale-shell failure at the retry cap is terminal', async function (assert) {
+    // If the shells never agree, retrying forever buys nothing — the
+    // diagnostics stay on the row for someone to read.
+    const realmURL = 'http://example.com/stale-shell-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        staleShellFailure: ['instance'],
+        staleShellFailureRenders: STALE_SHELL_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a row that has exhausted its retries stops being re-driven',
+    );
   });
 
   test('a healthy row with capture timings but no capture failures is not residue', async function (assert) {

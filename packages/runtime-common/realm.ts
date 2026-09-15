@@ -69,10 +69,13 @@ import {
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
+  PARTIAL_WRITE_SUFFIX,
   RealmPaths,
   ensureTrailingSlash,
   isCaptureServingPath,
+  isPartialWritePath,
   join,
+  partialWritePath,
 } from './paths.ts';
 import type ms from 'ms';
 import {
@@ -252,12 +255,18 @@ import { AliasCache } from './cache/alias-cache.ts';
 import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
-import { RealmIndexUpdater, type IndexChange } from './realm-index-updater.ts';
-import serialize from './file-serializer.ts';
+import {
+  RealmIndexUpdater,
+  type IncrementalIndexMeta,
+  type IndexChange,
+} from './realm-index-updater.ts';
+import serialize, { storedRelationshipLink } from './file-serializer.ts';
 import {
   fileSizeLimitFor,
+  validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
+import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -288,6 +297,8 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
+import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
@@ -525,6 +536,62 @@ export const REALM_FILE_CHANGES_WILDCARD = '*';
 // searchCards walk plus a stale RealmInfo on `_info` until the next swap
 // or write), not data corruption.
 export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
+
+// What an index pass reports back to the write paths that drive it.
+interface IndexPassResult extends IncrementalIndexMeta {
+  invalidations: string[];
+}
+
+// Accumulates the type sets of every index pass standing behind one
+// broadcast — a `writeMany` flushes modules ahead of the instances that depend
+// on them, so a single event can cover several passes. A pass that couldn't
+// report its types poisons the accumulation for good rather than being skipped
+// over: the event speaks for every pass behind it, and a set that quietly
+// omitted one would let a subscriber sit out a re-run it needed.
+function makeInvalidatedTypeAccumulator() {
+  let types: Set<string> | undefined = new Set();
+  return {
+    add(meta: IncrementalIndexMeta): void {
+      if (meta.invalidatedTypes === undefined) {
+        types = undefined;
+      } else if (types) {
+        for (let type of meta.invalidatedTypes) {
+          types.add(type);
+        }
+      }
+    },
+    get value(): string[] | undefined {
+      return types ? [...types] : undefined;
+    },
+  };
+}
+
+// What this field may add to an event, encoded. It bounds this member's own
+// contribution and nothing else: `invalidations` carries no ceiling, so it is
+// what decides whether a large fan-out's event is deliverable at all, and a
+// budget here neither helps nor hurts that. What it buys is that a realm whose
+// pass touches a pathological number of distinct types — where the set has
+// stopped being selective enough to be worth carrying — drops the member
+// instead of adding to the bulk, and its subscribers take the unconditional
+// re-run they would have taken without it.
+const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
+
+function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
+  invalidatedTypes?: string[];
+} {
+  if (invalidatedTypes === undefined) {
+    return {};
+  }
+  // Measure what goes on the wire — the JSON encoding, not the character
+  // count of the strings inside it.
+  let encodedLength = new TextEncoder().encode(
+    JSON.stringify(invalidatedTypes),
+  ).length;
+  if (encodedLength > MAX_BROADCAST_INVALIDATED_TYPES_BYTES) {
+    return {};
+  }
+  return { invalidatedTypes };
+}
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
 // post-update site inside Realm (Realm.update's onInvalidation, the
@@ -878,6 +945,78 @@ function toISOStringOrNull(value: string | Date | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// One bounded range of a stored file, as bytes. The ranges a fingerprint is
+// assembled from are at most `CONTENT_HASH_WHOLE_LIMIT_BYTES` wide however
+// large the file is, so this holds a bounded amount however large the file is.
+async function readRangeBytes(
+  adapter: RealmAdapter,
+  path: LocalPath,
+  start: number,
+  length: number,
+): Promise<Uint8Array> {
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (let chunk of adapter.readRange(path, start, start + length)) {
+    chunks.push(chunk);
+    total += chunk.length;
+  }
+  if (total !== length) {
+    // A short read means the file is no longer the file the caller measured,
+    // and a fingerprint assembled from it would describe content of one length
+    // under a marker claiming another — a version that identifies nothing. The
+    // caller persists this value, so there is no later point at which a wrong
+    // one is noticed.
+    throw new Error(
+      `expected ${length} bytes at offset ${start} of ${path}, read ${total}`,
+    );
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
+// Which ceiling a write is held to. A card's `.json` and a description of one
+// are both cards; everything else is a file. Read once here so what a batch is
+// held to before it commits is what the commit applies.
+function writeSizeType(
+  localPath: LocalPath,
+  content: WriteContent,
+): 'card' | 'file' {
+  if (isSplicedSource(content)) {
+    return 'card';
+  }
+  return localPath.endsWith('.json') &&
+    typeof content === 'string' &&
+    isCardDocumentString(content)
+    ? 'card'
+    : 'file';
+}
+
+// Why a path is not a caller's to write to, or undefined when it is. Both
+// reservations answer here so every surface that chooses a write destination —
+// a direct write, an `/_atomic` operation, a batch entry — refuses the same
+// set. Removals stay admitted everywhere: they are the recovery path for
+// anything already stored under either name.
+function reservedWriteDestination(localPath: LocalPath): string | undefined {
+  if (isCaptureServingPath(localPath)) {
+    return (
+      `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures and ` +
+      `cannot be written to`
+    );
+  }
+  if (isPartialWritePath(localPath)) {
+    return (
+      `'${PARTIAL_WRITE_SUFFIX}' names a file the realm is part-way through ` +
+      `writing, and cannot be written to`
+    );
+  }
+  return undefined;
+}
+
 function computeContentSize(content: string | Uint8Array): number {
   if (content instanceof Uint8Array) {
     return content.byteLength;
@@ -948,9 +1087,16 @@ export interface FileWriteResult extends AdapterWriteResult {
 // Everything one commit changes. Both members are optional so a caller that
 // only writes, or only removes, says exactly that.
 export interface CommitBatch {
-  writes?: Map<LocalPath, string | Uint8Array>;
+  writes?: Map<LocalPath, WriteContent>;
   deletes?: LocalPath[];
 }
+
+// What a caller hands the commit for one file: the bytes themselves, or a
+// description of them — a list of ranges of a stored file and the text going
+// between them. The second form exists for a file too large to hold: it is
+// written by streaming the ranges straight through, so a change to a file of
+// any size costs the change rather than the file.
+export type WriteContent = string | Uint8Array | SplicedSource;
 
 export interface CommitBatchResult {
   // One result per staged write, in the order the caller staged them. A path
@@ -1012,6 +1158,28 @@ export interface RealmAdapter {
     path: LocalPath,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult>;
+
+  // Replace a file's content with a rearrangement of its own bytes plus new
+  // text — the form a change to a file too large to hold takes.
+  //
+  // The description's ranges name the file at `path` as it stands, so the
+  // write's source is its own destination. Resolving that is the adapter's,
+  // since only the adapter knows whether its storage can read and write one
+  // path at once; what the contract requires is that the file end up holding
+  // the described content, or be left as it was.
+  writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult>;
+
+  // Read `[start, end)` of a stored file. What a caller building a description
+  // of a file's content reads to find the offsets it describes, and what a
+  // fingerprint of a file too large to hash whole is assembled from.
+  readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -1927,12 +2095,15 @@ export class Realm {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
     },
-  ): Promise<{ invalidations: string[]; generation?: number }> {
+  ): Promise<IndexPassResult> {
     if (changes.length === 0) {
-      return { invalidations: [] };
+      // No pass ran, so nothing was touched — which the empty set states
+      // exactly, and more usefully than staying silent would.
+      return { invalidations: [], invalidatedTypes: [] };
     }
 
     let invalidations = new Set<string>();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
@@ -1950,11 +2121,16 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
     });
 
-    return { invalidations: [...invalidations], generation };
+    return {
+      invalidations: [...invalidations],
+      generation,
+      invalidatedTypes: invalidatedTypes.value,
+    };
   }
 
   // Two-phase variant for the deferred-indexing path. Awaits the durable
@@ -1978,18 +2154,19 @@ export class Realm {
       initiatedBy?: string | null;
       onSettled?: (
         invalidations: string[],
-        meta: { generation?: number },
+        meta: IncrementalIndexMeta,
       ) => Promise<void> | void;
     },
   ): Promise<{ settled: Promise<void> }> {
     if (changes.length === 0) {
       if (opts.onSettled) {
-        await opts.onSettled([], {});
+        await opts.onSettled([], { invalidatedTypes: [] });
       }
       return { settled: Promise.resolve() };
     }
 
     let invalidations = new Set<string>();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
@@ -2001,11 +2178,15 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
       onSettled: async () => {
         if (opts.onSettled) {
-          await opts.onSettled([...invalidations], { generation });
+          await opts.onSettled([...invalidations], {
+            generation,
+            invalidatedTypes: invalidatedTypes.value,
+          });
         }
       },
       onFailed: async () => {
@@ -2028,7 +2209,11 @@ export class Realm {
 
   private broadcastIncrementalInvalidationEvent(
     invalidations: string[],
-    opts?: { clientRequestId?: string | null; generation?: number },
+    opts?: {
+      clientRequestId?: string | null;
+      generation?: number;
+      invalidatedTypes?: string[];
+    },
   ): void {
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -2040,6 +2225,7 @@ export class Realm {
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
+      ...boundedInvalidatedTypes(opts?.invalidatedTypes),
       realmURL: this.url,
     });
   }
@@ -2102,12 +2288,15 @@ export class Realm {
       }
     }
 
-    let { invalidations, generation } =
+    let { invalidations, generation, invalidatedTypes } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'update' as const })),
         { initiatedBy: requestContext.authenticatedUser ?? null },
       );
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+      invalidatedTypes,
+    });
 
     return createResponse({
       body: null,
@@ -2561,7 +2750,7 @@ export class Realm {
     batch: CommitBatch,
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
-    let files = batch.writes ?? new Map<LocalPath, string | Uint8Array>();
+    let files = batch.writes ?? new Map<LocalPath, WriteContent>();
     let deletes = batch.deletes ?? [];
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
@@ -2599,16 +2788,21 @@ export class Realm {
     let updatedFiles: LocalPath[] = [];
     let removedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
     let performIndex = async (changes: IndexChange[]) => {
-      let { invalidations: workingInvalidations, generation } =
-        await this.updateIndexAndCollectInvalidations(changes, {
-          clientRequestId,
-          initiatedBy: initiatingUser,
-        });
+      let {
+        invalidations: workingInvalidations,
+        generation,
+        invalidatedTypes: workingTypes,
+      } = await this.updateIndexAndCollectInvalidations(changes, {
+        clientRequestId,
+        initiatedBy: initiatingUser,
+      });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
+      invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
     };
 
@@ -2630,6 +2824,18 @@ export class Realm {
 
     for (let [path, content] of orderedFiles) {
       let url = this.paths.fileURL(path);
+      if (isSplicedSource(content)) {
+        // A splice edits a stored card, so it neither needs a module flushed
+        // to the index ahead of it — nothing about it is serialized — nor
+        // stands in for the instance that does. `lastWriteType` is therefore
+        // left as the last write that did serialize.
+        let written = await this.#writeSplicedUnlocked(path, content);
+        results.push(written.result);
+        fileMetaRows.push(written.row);
+        updatedFiles.push(path);
+        urls.push(url);
+        continue;
+      }
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
           ? 'module'
@@ -2870,6 +3076,7 @@ export class Realm {
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
           generation: indexGeneration,
+          invalidatedTypes: invalidatedTypes.value,
         });
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
@@ -2890,6 +3097,7 @@ export class Realm {
         // never hit the intermediate path, so this snapshot is empty for
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
+        let priorTypes = invalidatedTypes.value;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           changes,
           {
@@ -2904,11 +3112,15 @@ export class Realm {
             // test teardown (mock-matrix already destroyed → broadcast
             // throws on serverState).
             onSettled: (deferredInvalidations, meta) => {
+              let types = makeInvalidatedTypeAccumulator();
+              types.add({ invalidatedTypes: priorTypes });
+              types.add(meta);
               this.broadcastIncrementalInvalidationEvent(
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
                   generation: meta.generation ?? indexGeneration,
+                  invalidatedTypes: types.value,
                 },
               );
             },
@@ -2931,6 +3143,7 @@ export class Realm {
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
+        invalidatedTypes: invalidatedTypes.value,
       });
     }
     return {
@@ -3023,12 +3236,11 @@ export class Realm {
 
         // Same reservation `internalHandle` enforces for direct writes,
         // read from the one place it is stated.
-        if (isCaptureServingPath(localPath)) {
+        let reserved = reservedWriteDestination(localPath);
+        if (reserved) {
           errors.push({
             title: 'Reserved path',
-            detail:
-              `Cannot write '${operation.href}': ` +
-              `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures`,
+            detail: `Cannot write '${operation.href}': ${reserved}`,
             status: 422,
           });
           return;
@@ -3326,6 +3538,57 @@ export class Realm {
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher
+
+  // Write a file whose content is described as an edit of its own bytes.
+  //
+  // Everything the byte path does per file it does too, in the same order —
+  // the ceiling, the initiation event, the own-write tracking, the byte-cache
+  // drop and the peer notification — with two differences, both of which
+  // follow from never holding the content. The unchanged-bytes short circuit
+  // is gone: telling whether the result matches what is on disk would mean
+  // reading what is on disk, and an edit that adds items never matches it
+  // anyway. And the fingerprint is assembled from bounded reads of the file
+  // once it is written, rather than computed from bytes in hand; it is the
+  // same value either way, which is what lets a version computed here validate
+  // against one computed the other way.
+  //
+  // A splice edits a card, so it is held to the card ceiling — by the byte
+  // length the description reports, which costs no read.
+  async #writeSplicedUnlocked(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<{
+    result: { path: LocalPath; lastModified: number; contentHash: string };
+    row: { path: LocalPath; contentHash?: string; contentSize?: number };
+  }> {
+    this.assertWriteSize(content, 'card', path);
+    let url = this.paths.fileURL(path);
+    this.sendIndexInitiationEvent(url.href);
+    await this.trackOwnWrite(path);
+    // The content is assembled beside the file before it is renamed onto it,
+    // so a watching realm sees that file appear and vanish. Both are this
+    // realm's own doing, so both are tracked — but tracking is keyed by what
+    // the path holds when the key is seeded, and a file that does not exist
+    // yet seeds `added` and `removed` while the assembly is also a write. What
+    // holds regardless is that the path is ignored, so nothing the watcher
+    // reports about it reaches the index.
+    let staging = partialWritePath(path);
+    await this.trackOwnWrite(staging);
+    await this.trackOwnWrite(staging, { isDelete: true });
+    let { lastModified } = await this.#adapter.writeSpliced(path, content);
+    this.invalidateCache(path);
+    await this.#notifyFileChange(path);
+    let contentHash = await computeContentHashFromRanges(
+      content.size,
+      async (start, length) =>
+        await readRangeBytes(this.#adapter, path, start, length),
+    );
+    return {
+      result: { path, lastModified, contentHash },
+      row: { path, contentHash, contentSize: content.size },
+    };
+  }
+
   private async trackOwnWrite(path: LocalPath, opts?: { isDelete: true }) {
     let type = opts?.isDelete
       ? 'removed'
@@ -3403,12 +3666,15 @@ export class Realm {
     await this.removeFileMeta([path]);
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
-      let { invalidations, generation } =
+      let { invalidations, generation, invalidatedTypes } =
         await this.updateIndexAndCollectInvalidations(
           [{ url, operation: 'delete' }],
           { initiatedBy: options?.initiatingUser ?? null },
         );
-      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+      this.broadcastIncrementalInvalidationEvent(invalidations, {
+        generation,
+        invalidatedTypes,
+      });
     } else {
       // Mirrors the write() waitForIndex:false path: await the durable
       // enqueue so DB-side failures still bubble out, but fire-and-forget
@@ -3423,6 +3689,7 @@ export class Realm {
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
+              invalidatedTypes: meta.invalidatedTypes,
             });
           },
         },
@@ -3472,11 +3739,14 @@ export class Realm {
     });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
-    let { invalidations, generation } =
+    let { invalidations, generation, invalidatedTypes } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'delete' as const })),
       );
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+      invalidatedTypes,
+    });
   }
 
   get realmIndexUpdater() {
@@ -3545,6 +3815,25 @@ export class Realm {
             ? { content: file.content, lastModified: file.lastModified }
             : undefined;
         },
+        openSourceBytes: async (localPath) => {
+          let file = await this.#adapter.openFile(localPath);
+          if (!file) {
+            return undefined;
+          }
+          // From the stat the adapter already performed. An adapter that
+          // cannot say how large a file is without reading it cannot offer an
+          // entry that edits one without reading it either, which is also why
+          // the size is never recovered from `file.content` — the single-use
+          // body this read leaves untouched.
+          if (file.size === undefined) {
+            return undefined;
+          }
+          return {
+            size: file.size,
+            read: (start, end) =>
+              this.#adapter.readRange(localPath, start, end),
+          };
+        },
         // Classified exactly as `_batchWriteUnlocked` classifies the same
         // bytes when it writes them, so the ceiling a batch holds its staged
         // bytes to is the ceiling the commit will apply rather than a second
@@ -3552,9 +3841,7 @@ export class Realm {
         assertWriteSize: (localPath, content) =>
           this.assertWriteSize(
             content,
-            localPath.endsWith('.json') && isCardDocumentString(content)
-              ? 'card'
-              : 'file',
+            writeSizeType(localPath, content),
             localPath,
           ),
         drainIndexing: async () => {
@@ -3569,6 +3856,16 @@ export class Realm {
           internalKeyFor(codeRef, relativeTo, this.#virtualNetwork),
         resolveModuleId: (moduleId, relativeTo) =>
           this.#virtualNetwork.resolveRRI(moduleId, rri(relativeTo)),
+        // The same normalization `fileSerialization` applies to every link it
+        // writes, reached from the one place that owns identifier resolution,
+        // so a card's links are spelled the same however the write arrived.
+        storedLink: (selfLink, relativeTo) =>
+          storedRelationshipLink(
+            selfLink,
+            relativeTo,
+            new URL(this.url),
+            this.#virtualNetwork,
+          ),
         lookupDefinition: async (codeRef, relativeTo) => {
           let absolute = codeRefWithAbsoluteIdentifier(
             codeRef,
@@ -3867,6 +4164,12 @@ export class Realm {
       if (request.method === 'GET' && isHashedScopedCSSRequest(localPath)) {
         return await this.serveHashedScopedCSS(request, requestContext);
       }
+      // A file the realm is part-way through assembling, or one a write that
+      // died left behind. It is never indexed, so serving it would hand back
+      // content the realm does not otherwise acknowledge exists.
+      if (isPartialWritePath(localPath)) {
+        return notFound(request, requestContext);
+      }
       // The GET dispatch above claims the whole `_screenshot/` subtree, so a
       // realm file stored under it could never be read back — it would
       // index, list, and answer every GET as an uncaptured miss. Refuse
@@ -3874,16 +4177,11 @@ export class Realm {
       // (the `/_atomic` precheck enforces the same reservation for its
       // operation hrefs). DELETE stays admitted as the recovery path for
       // anything already stored there.
-      if (
-        ['PUT', 'PATCH', 'POST'].includes(request.method) &&
-        isCaptureServingPath(localPath)
-      ) {
-        return badRequest({
-          message:
-            `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures ` +
-            `and cannot be written to`,
-          requestContext,
-        });
+      let reserved = ['PUT', 'PATCH', 'POST'].includes(request.method)
+        ? reservedWriteDestination(localPath)
+        : undefined;
+      if (reserved) {
+        return badRequest({ message: reserved, requestContext });
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);
@@ -5644,7 +5942,7 @@ export class Realm {
   }
 
   private assertWriteSize(
-    content: string | Uint8Array,
+    content: WriteContent,
     type: 'card' | 'file',
     path: LocalPath,
   ) {
@@ -5657,7 +5955,13 @@ export class Realm {
             video: this.#videoSizeLimitBytes,
           });
     try {
-      validateWriteSize(content, limit, type);
+      // Described content reports its byte length without being read, which is
+      // the whole point of it, so the ceiling is applied to that.
+      if (isSplicedSource(content)) {
+        validateByteLength(content.size, limit, type);
+      } else {
+        validateWriteSize(content, limit, type);
+      }
     } catch (error: any) {
       throw new CardError(error?.message ?? 'Payload too large', {
         status: 413,
@@ -8875,7 +9179,36 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
+    // Tell each affected user their accessible-realm set changed so a running
+    // session re-derives it from `_realm-auth` (which reads the permissions
+    // written just above) without a reload. Nothing else notifies a grantee:
+    // the index_updated broadcast above is server-to-server only.
+    await this.notifyRealmsListUpdated(Object.keys(patch));
     return await this.getRealmPermissions(request, requestContext);
+  }
+
+  // Notify each affected user that their set of accessible realms changed, so
+  // a running session re-derives it from `_realm-auth` without a reload.
+  // Delivered into the user's session DM room via the shared `sendEvent`
+  // helper, which no-ops when the user has no session room and self-heals a
+  // stale one. Best-effort per user: a delivery failure must never roll back
+  // the grant that already committed, so one user's error is logged and the
+  // rest still run.
+  private async notifyRealmsListUpdated(users: string[]): Promise<void> {
+    let sendEvent = createSendEvent({
+      matrixClient: this.#matrixClient,
+      dbAdapter: this.#dbAdapter,
+    });
+    for (let user of users) {
+      try {
+        await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (e) {
+        this.#log.error(
+          `failed to notify ${user} that their realms list changed`,
+          e,
+        );
+      }
+    }
   }
 
   private async getLastPublishedAt(): Promise<
@@ -9600,11 +9933,14 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      let { invalidations, generation } =
+      let { invalidations, generation, invalidatedTypes } =
         await this.updateIndexAndCollectInvalidations([
           { url, operation: operation === 'removed' ? 'delete' : 'update' },
         ]);
-      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+      this.broadcastIncrementalInvalidationEvent(invalidations, {
+        generation,
+        invalidatedTypes,
+      });
     }
     itemsDrained!();
   }
