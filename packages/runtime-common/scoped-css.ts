@@ -14,11 +14,13 @@ import jsEscapeString from 'js-string-escape';
 // - hashed: `<fromFile>.md5-<32 hex>.glimmer-scoped.css` — the form the index
 //   writer persists into `deps` (see `scoped_css` table). The URL carries only
 //   a content hash; the CSS bytes live in the `scoped_css` table and the realm
-//   serves the request by hash lookup. A hashed dep keeps `fromFile` as its
-//   base so module-URL-anchored dependency invalidation still matches it, but
-//   it is NOT the URL clients fetch: only the realm whose indexing interned
-//   the stylesheet is guaranteed to hold the bytes, so responses rewrite
-//   hashed deps to that realm's `_scoped-css/` serving space (see
+//   serves the request by hash lookup. `fromFile` plays no functional role in
+//   this form — dependency invalidation matches deps by exact equality
+//   against a module path, which a `.glimmer-scoped.css` dep never is — it
+//   just names the styled module for a human reading `deps`. A hashed dep is
+//   NOT the URL clients fetch: only the realm whose indexing interned the
+//   stylesheet is guaranteed to hold the bytes, so responses rewrite hashed
+//   deps to that realm's `_scoped-css/` serving space (see
 //   `scopedCSSServingHref`).
 const SCOPED_CSS_PATTERN = /^(.*)\.([^.]*)\.glimmer-scoped.css$/;
 const HASHED_SCOPED_CSS_PATTERN =
@@ -39,9 +41,8 @@ export function encodeHashedScopedCSSRequest(
   return `${fromFile}.md5-${cssHash}.glimmer-scoped.css`;
 }
 
-// Path prefix under a realm where hashed scoped-CSS requests are served.
-// Purely a namespace for serving URLs — the dispatch itself matches the
-// hashed filename shape, not this prefix.
+// Path prefix under a realm where hashed scoped-CSS requests are served; the
+// realm's dispatch admits only hashed-shaped GETs under it.
 export const SCOPED_CSS_SERVING_PREFIX = '_scoped-css/';
 
 // The URL clients load a hashed scoped-CSS dep from: rooted under

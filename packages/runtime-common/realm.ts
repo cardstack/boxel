@@ -125,6 +125,7 @@ import {
   isHashedScopedCSSRequest,
   parseScopedCSSRequest,
   scopedCSSInjectorSource,
+  SCOPED_CSS_SERVING_PREFIX,
   authorizationMiddleware,
   internalKeyFor,
   unixTime,
@@ -4152,16 +4153,23 @@ export class Realm {
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
-      // Hashed scoped-CSS serving also dispatches on the path shape rather
-      // than the router table: the request is a module load (`loader.import`
-      // of a `css` resource's href from search results), whose Accept header
+      // Hashed scoped-CSS serving also dispatches on the path rather than
+      // the router table: the request is a module load (`loader.import` of a
+      // `css` resource's href from search results), whose Accept header
       // matches no supported mime type. The URL carries only a content hash —
       // the stylesheet bytes live in the `scoped_css` table — so unlike the
       // inline form (which `maybeHandleScopedCSSRequest` answers locally with
-      // no network hop) this form must be answered here. Placed after
-      // checkPermission so it inherits realm-read auth; GET only for the same
-      // HEAD-oracle reason as screenshot serving above.
-      if (request.method === 'GET' && isHashedScopedCSSRequest(localPath)) {
+      // no network hop) this form must be answered here. Gated on the
+      // `_scoped-css/` prefix, not just the filename shape, so a realm file
+      // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
+      // is the only producer of these hrefs and always roots them under the
+      // prefix. Placed after checkPermission so it inherits realm-read auth;
+      // GET only for the same HEAD-oracle reason as screenshot serving above.
+      if (
+        request.method === 'GET' &&
+        localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+        isHashedScopedCSSRequest(localPath)
+      ) {
         return await this.serveHashedScopedCSS(request, requestContext);
       }
       // A file the realm is part-way through assembling, or one a write that
