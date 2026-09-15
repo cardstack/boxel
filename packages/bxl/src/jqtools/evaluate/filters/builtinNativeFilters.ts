@@ -39,6 +39,15 @@ import {
   snapshotForDiagnostics,
 } from '../runtimeState.ts';
 
+// A bad format directive is the caller's format, not their input; say so
+// instead of blaming the datetime.
+function strftimeError(name: string, error: unknown): JqEvaluateError {
+  if (error instanceof JqArgumentError) {
+    return new JqEvaluateError(`${name}: ${error.message}`);
+  }
+  return new JqEvaluateError(`${name} requires parsed datetime inputs`);
+}
+
 const MIN_NORMAL = 2.2250738585072014e-308;
 
 function containsValue(haystack: unknown, needle: unknown): boolean {
@@ -1145,10 +1154,8 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       }
       try {
         yield strftimeValue(input, format as string, 'local');
-      } catch (_error) {
-        throw new JqEvaluateError(
-          'strflocaltime/1 requires parsed datetime inputs',
-        );
+      } catch (error) {
+        throw strftimeError('strflocaltime/1', error);
       }
     },
     *'strftime/1'(input: unknown, format: unknown) {
@@ -1160,8 +1167,8 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       }
       try {
         yield strftimeValue(input, format as string, 'utc');
-      } catch (_error) {
-        throw new JqEvaluateError('strftime/1 requires parsed datetime inputs');
+      } catch (error) {
+        throw strftimeError('strftime/1', error);
       }
     },
     *'strptime/1'(input: unknown, format: unknown) {
