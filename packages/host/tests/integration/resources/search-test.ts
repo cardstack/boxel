@@ -1,5 +1,6 @@
 import { destroy } from '@ember/destroyable';
-import { getOwner } from '@ember/owner';
+import { getOwner, setOwner } from '@ember/owner';
+import { run } from '@ember/runloop';
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { settled, waitUntil } from '@ember/test-helpers';
 
@@ -2879,7 +2880,16 @@ module(`Integration | search resource`, function (hooks) {
       let counter = countThrottledRuns();
       fetchCalls = 0;
 
-      let search = getSearchResourceForTest(loaderService, () => ({
+      // The resource's lifetime is its parent's. `Resource.from` hands back a
+      // lazy proxy, and the instance the guard asks about is a destroyable
+      // child of the helper cache rather than of that proxy — so destroying
+      // what `from` returned reaches nothing, and the guard would go on
+      // reporting a live resource. Destroying the parent is what reaches it,
+      // and is how the store's GC sweep reaches these: by dropping the card
+      // that owns them.
+      let parent = {};
+      setOwner(parent, this.owner);
+      let search = getSearchResourceForTest(parent, () => ({
         named: {
           query: abdelRahmanQuery,
           realms: [testRealmURL],
@@ -2895,8 +2905,12 @@ module(`Integration | search resource`, function (hooks) {
         void search.isLoading;
         await waitUntil(() => counter.enqueued() > 0, { timeout: 5_000 });
 
-        // How the store's GC sweep reaches a resource nothing references.
-        destroy(search);
+        // Inside a runloop so the destroy queue flushes here: destruction
+        // cascades to the instance during that flush, and the guard is asked
+        // the moment the throttle admits the run. `settled()` would be the
+        // usual way to wait for it and cannot be used — the queued search
+        // holds a test waiter that the full cap is preventing from resolving.
+        run(() => destroy(parent));
 
         await cap.release();
         await settled();
