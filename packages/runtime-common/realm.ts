@@ -160,11 +160,19 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
+import { runOperation } from './card-operations/dispatch.ts';
 import type {
   OperationCore,
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
+import {
+  isDocumentResult,
+  isOperationFailure,
+  type OperationFailure,
+  type OperationResult,
+} from './card-operations/types.ts';
+import { erroredTargetRow } from './card-operations/read.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
@@ -3819,6 +3827,22 @@ export class Realm {
       };
     }
     return this.#operationCore;
+  }
+
+  // Who an operation dispatched from an HTTP request is running for. The actor
+  // is the identity the realm authenticated, which is empty for an anonymous
+  // caller — an operation that reads it has to treat "nobody" as a value
+  // rather than assume one is always there. The client request id is the
+  // caller's own handle on this request, echoed on the index event a write
+  // produces so the client can tell its own event from anyone else's.
+  #callerOf(
+    request: Request,
+    requestContext: RequestContext,
+  ): { actor: string; clientRequestId: string } {
+    return {
+      actor: requestContext.authenticatedUser ?? '',
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+    };
   }
 
   // The batch coordinator's collaborators, built the same way and for the same
@@ -7591,6 +7615,7 @@ export class Realm {
           skipQueryBackedExpansion,
           resolveLinksOnly,
           peekEtag,
+          this.#callerOf(request, requestContext),
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -7617,7 +7642,6 @@ export class Realm {
           request,
           requestContext,
           url,
-          localPath,
         );
         for (let [name, value] of Object.entries(cacheOutcomeHeader)) {
           response.headers.set(name, value);
@@ -7663,61 +7687,59 @@ export class Realm {
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
     keyEtag: string | undefined,
+    caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
-    // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
-    // realm-info cache, so the hash read for the response ETag below
-    // reflects the post-assembly realm info.
-    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-      loadLinks: true,
-      skipQueryBackedExpansion,
-      resolveLinksOnly,
-    });
-    if (maybeError === undefined) {
-      return { kind: 'missing' };
-    }
-    if (maybeError.type === 'error') {
-      let { error } = maybeError;
-      return {
-        kind: 'error',
-        error: {
-          status: error.errorDetail.status,
-          title: error.errorDetail.title,
-          message: error.errorDetail.message,
-          stack: error.errorDetail.stack,
-          lastKnownGoodHtml: error.lastKnownGoodHtml,
-          cardTitle: error.cardTitle,
-          scopedCssUrls: error.scopedCssUrls,
+    // The document itself is the `read` operation's — link expansion, the
+    // `links.self` and prefix-form ids, the freshly joined `meta.generation`
+    // and `meta.screenshots`, the file-metadata answer for a path that holds
+    // bytes, and which absence a missing row is. What stays here is the
+    // response around it: the validator, the redirect, the creation time, and
+    // the mapping from a refusal to a status.
+    //
+    // The caller travels with the request although a plain read never consults
+    // it, so that the first read that does cannot silently read a stale one.
+    // That an assembly is shareable between callers rests on the same thing
+    // the response cache's sharing does: a plain read is the same document for
+    // everyone permitted to ask for it. A `read` an author has specialized is
+    // refused rather than served, so nothing actor-dependent reaches here.
+    let result: OperationResult;
+    try {
+      // The read runs `attachRealmInfo()`, which (re)populates the realm-info
+      // cache, so the hash the ETag below folds in reflects the post-assembly
+      // realm info.
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: { kind: 'instance', url: url.href },
+          name: 'read',
+          actor: caller.actor,
+          clientRequestId: caller.clientRequestId,
         },
-      };
+        { skipQueryBackedExpansion, resolveLinksOnly },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      return cardJsonAssemblyFromFailure(e);
     }
-    let { doc: card } = maybeError;
-    card.data.links = { self: url.href };
-    this.#serveInstanceIdsAsRRI(card);
-    // Surface the instance's index-data generation
-    // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
-    // card+json GET can tell fresh index data from stale, and join the
-    // instance's declared-screenshot manifest into `meta.screenshots` (the
-    // serve-time join — the manifest is never written back into
-    // `boxel_index` or the source file). A fresh `meta` object — never a
-    // mutation of the cached pristine doc's `meta`.
-    card.data.meta = {
-      ...card.data.meta,
-      generation: maybeError.generation,
-      ...(maybeError.screenshots
-        ? {
-            screenshots: screenshotsMetaFromManifest(maybeError.screenshots, {
-              realmURL: this.url,
-              instanceLocalPath: localPath,
-            }),
-          }
-        : {}),
-    };
+    if (!isDocumentResult(result)) {
+      throw new Error(
+        `the read of ${url.href} answered with something other than a document`,
+      );
+    }
+    let { document, headers, queryBacked } = result;
+    if (document.data.type === 'file-meta') {
+      // A file's metadata is derived from its bytes, so there is no index row
+      // to validate it against and nothing here to cache.
+      return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
+    }
+    let card = document;
 
-    // The 302 redirect for the `.json` form is now done up-front
-    // (see top of getCard). Here we only need to redirect for the
-    // legacy normalization case where `paths.fileURL(localPath)`
-    // produces a different `paths.local()` than what we started
-    // with — same as the prior implementation's behavior.
+    // The 302 redirect for the `.json` form is done up-front (see top of
+    // getCard). Here we only need to redirect for the normalization case where
+    // `paths.fileURL(localPath)` produces a different `paths.local()` than
+    // what we started with.
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
       return { kind: 'redirect', foundPath };
@@ -7726,23 +7748,23 @@ export class Realm {
     // Prefer created_at from DB for instance JSON
     let pathForDb = this.paths.local(url) + '.json';
     let createdAt = await this.getCreatedTime(pathForDb);
-    // Use deps + indexedAt from the just-loaded doc — `cardDocument()`
-    // saw a snapshot that may differ from the early peek if a write
-    // landed between the two reads. Suppress the ETag if the doc
-    // depends on foreign-realm cards: cross-realm invalidation
-    // doesn't cascade `indexed_at`, so a validator we emit here
-    // could 304 a follow-up request whose `included[]` should have
-    // been re-fetched from the foreign realm. A suppressed validator
-    // also makes this assembly unretainable — the response cache keys
-    // on the validator, so without one there is nothing that would make
-    // a superseded entry unreachable.
-    let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
+    // deps + indexedAt come off the assembly the read reports, not off the
+    // early peek: the two see different snapshots when a write lands between
+    // them, and a validator has to describe the bytes it is sent with.
+    // Suppress the ETag if the doc depends on foreign-realm cards: cross-realm
+    // invalidation doesn't cascade `indexed_at`, so a validator we emit here
+    // could 304 a follow-up request whose `included[]` should have been
+    // re-fetched from the foreign realm. A suppressed validator also makes
+    // this assembly unretainable — the response cache keys on the validator,
+    // so without one there is nothing that would make a superseded entry
+    // unreachable.
+    let foreignDeps = this.hasForeignRealmDeps(headers.deps);
     let responseEtag = foreignDeps
       ? undefined
       : buildCardJsonEtag(
-          maybeError.indexedAt,
+          headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(maybeError.screenshots),
+          screenshotsEtagFingerprint(headers.screenshots),
           resolveLinksOnly,
         );
     return {
@@ -7750,7 +7772,7 @@ export class Realm {
       body: JSON.stringify(card, null, 2),
       etag: responseEtag,
       etagSuppressed: foreignDeps,
-      queryBacked: maybeError.queryBacked,
+      queryBacked,
       keyEtag: keyEtag ?? '',
       lastModified: card.data.meta.lastModified,
       created: createdAt,
@@ -7765,27 +7787,28 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     url: URL,
-    localPath: LocalPath,
   ): Promise<Response> {
-    if (assembly.kind === 'missing') {
-      if (await this.nonJsonFileExists(localPath)) {
-        // A path that points to a non-JSON file (e.g. an uploaded binary)
-        // was asked for as card+json. Return a file-meta JSON document so
-        // the caller receives valid JSON it can discriminate via
-        // `data.type === 'file-meta'` — instead of raw binary bytes that
-        // crash a downstream `response.json()`.
-        let fileMeta = await this.fileMetaDocument(
-          requestContext,
-          localPath,
-          SupportedMimeType.CardJson,
-        );
-        return fileMeta ?? notFound(request, requestContext);
-      }
-      return await this.missingInstanceResponse(
-        request,
+    if (assembly.kind === 'file-meta') {
+      // A path that holds bytes rather than a card (an uploaded binary, say)
+      // was asked for as card+json, so the answer is the file's metadata
+      // document — valid JSON the caller discriminates via
+      // `data.type === 'file-meta'`, instead of raw bytes that crash a
+      // downstream `response.json()`.
+      return createResponse({
+        body: assembly.body,
+        init: { headers: { 'content-type': SupportedMimeType.CardJson } },
         requestContext,
-        localPath,
-      );
+      });
+    }
+    if (assembly.kind === 'not-found') {
+      return notFound(request, requestContext);
+    }
+    if (assembly.kind === 'not-indexed') {
+      // The card's source is on disk and the index has not caught up. A read
+      // served by the replica that took the write rarely gets here — that path
+      // drains its own in-flight indexing first — but a read served by any
+      // other replica has no such handle on the write.
+      return notIndexedYet(request, requestContext);
     }
     if (assembly.kind === 'redirect') {
       return createResponse({
@@ -10097,6 +10120,39 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     return true;
   }
   return baseRealm.inRealm(parsed);
+}
+
+// A read's refusal, as the card+json GET reports it. Three of the four codes
+// the read can raise name an outcome the handler already had a shape for; a
+// refusal it does not recognize is an error document rather than a guess, so a
+// behavior added to the read later surfaces as a 500 with its own detail
+// instead of a 404 that claims the card is gone.
+function cardJsonAssemblyFromFailure(
+  failure: OperationFailure,
+): Exclude<CardJsonAssembly, { kind: 'document' } | { kind: 'file-meta' }> {
+  let { error } = failure;
+  if (error.code === 'target-not-found') {
+    return { kind: 'not-found' };
+  }
+  if (error.code === 'target-not-indexed') {
+    return { kind: 'not-indexed' };
+  }
+  // The row's own account of what went wrong, so the response body carries the
+  // underlying title, message and salvage rather than the sentence the refusal
+  // renders from them.
+  let row = erroredTargetRow(failure);
+  return {
+    kind: 'error',
+    error: {
+      status: row?.status ?? error.status,
+      title: row?.title ?? error.title,
+      message: row?.message ?? error.detail,
+      stack: row?.stack,
+      lastKnownGoodHtml: row?.lastKnownGoodHtml ?? null,
+      cardTitle: row?.cardTitle ?? null,
+      scopedCssUrls: row?.scopedCssUrls ?? [],
+    },
+  };
 }
 
 function lastModifiedHeader(
