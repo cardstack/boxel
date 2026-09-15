@@ -37,10 +37,19 @@ export interface IndexChange {
   operation: 'update' | 'delete';
 }
 
+// What an index pass reports about itself alongside the URLs it invalidated.
+export interface IncrementalIndexMeta {
+  generation?: number;
+  // The deduped adoption-chain keys the pass touched. Absent when the pass
+  // couldn't report them (an older worker mid-deploy), which is the signal to
+  // subscribers that nothing can be ruled out from types alone.
+  invalidatedTypes?: string[];
+}
+
 export interface IncrementalIndexOptions {
   onInvalidation?: (
     invalidatedURLs: URL[],
-    meta: { generation?: number },
+    meta: IncrementalIndexMeta,
   ) => Promise<void>;
   // Runs after the worker job resolves and onInvalidation finishes, but
   // before the indexing deferred is fulfilled and removed from
@@ -343,7 +352,8 @@ export class RealmIndexUpdater {
     // quiescence gate always fulfills (see #incrementalIndexingDeferreds).
     let settled = (async () => {
       try {
-        let { invalidations, ignoreData, stats, generation } = await job.done;
+        let { invalidations, invalidatedTypes, ignoreData, stats, generation } =
+          await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -354,7 +364,10 @@ export class RealmIndexUpdater {
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-            { generation },
+            {
+              generation,
+              ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+            },
           );
         }
         if (opts?.onSettled) {

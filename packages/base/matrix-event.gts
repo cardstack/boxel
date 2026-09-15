@@ -475,6 +475,18 @@ export interface IncrementalIndexEventContent {
   eventName: 'index';
   indexType: 'incremental';
   invalidations: string[];
+  // The deduped adoption chains of every row the pass touched, in the same
+  // `internalKeyFor` spelling `boxel_index.types` stores and a type filter
+  // compiles to. A live query anchored on a type that appears nowhere in here
+  // cannot have gained or lost a member, so it can sit the event out. Deduped
+  // across the pass rather than carried per URL: the question a subscriber
+  // asks is "was anything of a type I care about touched?", never "which
+  // card?", so the set is bounded by the realm's type count while
+  // `invalidations` is bounded by its row count. Absent when the pass could
+  // not report it (an older worker mid-deploy, a failed pass, a full
+  // reindex), which means nothing can be ruled out and every subscriber
+  // re-runs.
+  invalidatedTypes?: string[];
   clientRequestId?: string | null;
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.

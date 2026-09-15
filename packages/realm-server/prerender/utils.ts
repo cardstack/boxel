@@ -25,6 +25,7 @@ import {
   type ScreenshotImageType,
   type PrerenderTypes,
   type RenderError,
+  type BuildModelStagesMs,
   type RenderTimeoutDiagnostics,
   type ScreenshotCaptureSpec,
 } from '@cardstack/runtime-common';
@@ -2712,6 +2713,8 @@ export async function withTimeout<T>(
       recentFileMetaLoads?: Array<{ url: string; ms: number }>;
       renderStage?: string;
       stageAgeMs?: number;
+      buildModelMs?: BuildModelStagesMs;
+      hydrateFieldsMs?: Record<string, number>;
       inFlightModuleImports?: string[];
       currentlyEvaluatingModule?: string | null;
       recentModuleEvaluations?: Array<{ url: string; ms: number }>;
@@ -2775,10 +2778,18 @@ export async function withTimeout<T>(
 
     let topPending = pendingNetworkRequests?.[0];
     let pausedStackStr = formatPausedStack(pausedStack);
+    let buildModelSummary = Object.entries(richDiagnostics?.buildModelMs ?? {})
+      .map(([stage, ms]) => `${stage}=${ms}ms`)
+      .join(' ');
     log.warn(
       `render of ${id} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
         ` stageAgeMs=${richDiagnostics?.stageAgeMs ?? '<unknown>'}` +
+        // The model-build stages that closed before the stall, so the
+        // breadcrumb above reads against what the build already spent
+        // rather than in isolation. Omitted when the render never entered
+        // the build (or the host build predates the stamping).
+        (buildModelSummary ? ` buildModel: ${buildModelSummary}` : '') +
         ` cardDocsInFlight=${richDiagnostics?.cardDocsInFlight?.length ?? docsInFlight ?? 0}` +
         ` fileMetaDocsInFlight=${richDiagnostics?.fileMetaDocsInFlight?.length ?? 0}` +
         ` inFlightModuleImports=${richDiagnostics?.inFlightModuleImports?.length ?? 0}` +
@@ -2811,6 +2822,21 @@ export async function withTimeout<T>(
         : {}),
       ...(typeof richDiagnostics?.stageAgeMs === 'number'
         ? { stageAgeMs: richDiagnostics.stageAgeMs }
+        : {}),
+      // The model-build stages that completed before the stall. The stage
+      // the render is IN never closes, so it is absent here and named by
+      // `renderStage` / `stageAgeMs` instead — the two together account for
+      // the whole build.
+      ...(richDiagnostics?.buildModelMs &&
+      Object.keys(richDiagnostics.buildModelMs).length > 0
+        ? { buildModelMs: richDiagnostics.buildModelMs }
+        : {}),
+      // The per-field hydration collected before the stall. A stall inside
+      // the `hydrate` stage leaves that stage's bucket absent, so this is
+      // the only thing that names the field it is stuck deserializing.
+      ...(richDiagnostics?.hydrateFieldsMs &&
+      Object.keys(richDiagnostics.hydrateFieldsMs).length > 0
+        ? { hydrateFieldsMs: richDiagnostics.hydrateFieldsMs }
         : {}),
       ...(Array.isArray(richDiagnostics?.cardDocsInFlight)
         ? { cardDocsInFlight: richDiagnostics!.cardDocsInFlight }
