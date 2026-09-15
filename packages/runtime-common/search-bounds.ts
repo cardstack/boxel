@@ -34,10 +34,11 @@ const log = logger('search-bounds');
 //   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) — client-side only, on the
 //     card `@context` surface: the host federates widely.
 //   - Concurrency (SEARCH_CONCURRENCY_CAP) — client-side only, and a ceiling on
-//     the tab rather than on a caller: the card `@context` surface and
-//     query-field resolution share it, so a page's whole search fan-out is
-//     bounded however it is spread across cards. The host runs its own searches
-//     freely.
+//     a store service rather than on a caller: the card `@context` surface and
+//     query-field resolution share one, so a page's whole search fan-out is
+//     bounded however it is spread across cards. Each store service holds its
+//     own, so this is not a single number across a tab. The host runs its own
+//     searches freely.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
@@ -147,8 +148,8 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
-// Max item-leg searches one tab may have in flight at once, across the card
-// `@context` surface and query-field resolution together. Enforced client-side
+// Max item-leg searches one store service may have in flight at once, across
+// the card `@context` surface and query-field resolution together. Enforced client-side
 // (see host StoreService); exported here so the client and the shared contract
 // agree on one number. Excess searches queue rather than fail, so this bounds
 // the concurrency and never the count.

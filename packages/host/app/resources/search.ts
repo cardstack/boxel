@@ -133,7 +133,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     // concurrency). Set only by `StoreService.getSearchResource` (the card
     // `@context` surface); host-internal `getSearch` callers leave it unset.
     cardInitiated?: boolean;
-    // Take a slot in the store's tab-level search concurrency ceiling without
+    // Take a slot in the store's search concurrency ceiling without
     // the other card caps. Set by query-field resolution, whose fan-out is one
     // search per query field per deserialized card.
     throttled?: boolean;

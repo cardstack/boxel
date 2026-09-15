@@ -1408,8 +1408,10 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
-  // The tab's ceiling on concurrent item-leg searches. One task on one store
-  // service, so it bounds the tab and not a single card: every search routed
+  // This store service's ceiling on concurrent item-leg searches. The task is a
+  // class field, so each store service carries its own — the interactive app's
+  // and a render store's are separate ceilings, not one shared tab-wide number.
+  // Within one it bounds the store and not a single card: every search routed
   // through it competes for the same slots. Two callers route: the card
   // `@context` surface (`getCards` and the card-facing store, via
   // `cardInitiated`), and query-field resolution (via `throttled`), which fires
@@ -1431,7 +1433,7 @@ export default class StoreService extends Service implements StoreInterface {
     },
   );
 
-  // Run `run` under the tab's search concurrency ceiling (`enqueue` +
+  // Run `run` under this store's search concurrency ceiling (`enqueue` +
   // maxConcurrency), so no more than the cap hit the realm-server at once and
   // the rest queue. Called from `search` when `cardInitiated` or `throttled`.
   // Typed as a plain Promise since the caller only awaits the result. Public so
@@ -1866,9 +1868,10 @@ export default class StoreService extends Service implements StoreInterface {
       // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
       // support, the render-store hook), which are not subject to the caps.
       cardInitiated?: boolean;
-      // Set by query-field resolution: take a slot in the tab's search
+      // Set by query-field resolution: take a slot in this store's search
       // concurrency ceiling, leaving the rest of the card caps off. See
-      // `searchThrottle`.
+      // `searchThrottle`. Forced off for a render store, which must not wait on
+      // a queue mid-render.
       throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
       seed?: {
@@ -1902,7 +1905,16 @@ export default class StoreService extends Service implements StoreInterface {
     },
   ): SearchResource<T> {
     if (this.isRenderStore && opts) {
+      // A render store renders as a function of the document it was handed, and
+      // both corrections exist because `__boxelRenderContext` — which is what
+      // the query-field caller derives these from — is a window rather than a
+      // property of this store: `withRenderContext` raises and drops it around
+      // each render, so a resource built between two windows would read as
+      // neither non-live nor unqueued. Queueing one is the case
+      // `throttled: !inPrerender` means to exclude, since the render then waits
+      // on a queue drained at the cap.
       opts.isLive = false;
+      opts.throttled = false;
     }
     // `cardInitiated` + `getDefaultRealm` + `throttled` ride through `opts`:
     // the `@context` providers pass the first two (card-facing `getCards`),
