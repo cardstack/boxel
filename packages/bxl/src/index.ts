@@ -25,7 +25,6 @@ import type {
   NativeRuntimeClock,
   NativeRuntimeLimits,
 } from './jqtools/evaluate/runtimeState.ts';
-export { resolveRuntimeClock } from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,

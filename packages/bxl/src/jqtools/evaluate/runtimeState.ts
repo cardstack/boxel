@@ -12,13 +12,12 @@ export interface NativeRuntimeSignal {
   readonly reason?: unknown;
 }
 
-// What `maxMillis` measures. 'wall' is elapsed time and makes a result
-// depend on host load: the same program passes on a quiet machine and fails
-// on a busy one. Derivations that store their value should bound work by
-// `maxSteps` and use 'cpu' (process CPU time where available) so a blocked
-// event loop or a loaded host cannot fail them; 'wall' then serves only as a
-// coarse safety net set well above any step-bounded run. A function is an
-// explicit clock in milliseconds, for tests and for hosts with a better one.
+// What `maxMillis` measures. 'wall' (the default) is elapsed time, so a
+// result can depend on host load. 'cpu' is process CPU time where the host
+// exposes it (Node's process.cpuUsage) and wall time elsewhere. A function
+// is an explicit clock in milliseconds, for tests and for hosts with a
+// better one. Any runtime limit, this one included, takes the streaming
+// evaluator instead of the compiled-scalar fast path.
 export type NativeRuntimeClock = 'wall' | 'cpu' | (() => number);
 
 export interface NativeRuntimeLimits {

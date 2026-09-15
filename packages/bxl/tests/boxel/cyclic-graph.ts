@@ -657,6 +657,48 @@ check('the view is read-only and refuses to be frozen', () => {
   strictEqual(view.n, 1);
 });
 
+check('a card whose field bridge throws still reads its fields', () => {
+  class BrokenBridgeStub extends StubBase {
+    #amount = 42;
+    get id() {
+      return 'broken-1';
+    }
+    get amount() {
+      return this.#amount;
+    }
+  }
+  Object.defineProperty(BrokenBridgeStub.prototype, GET_FIELDS_BRIDGE, {
+    value: () => {
+      throw new Error('field metadata unavailable');
+    },
+    enumerable: false,
+  });
+  const card = new BrokenBridgeStub();
+  strictEqual(run('.amount', card), 42);
+  strictEqual(run('.id', card), 'broken-1');
+  strictEqual(run('has("amount")', card), true);
+  // Object.prototype stays hidden even on the fallback path.
+  strictEqual(run('.toString', card), null);
+  strictEqual(run('has("toString")', card), false);
+});
+
+check(
+  'a value carrying only the isBaseInstance stamp reads its getters',
+  () => {
+    class StampedOnly {
+      get amount() {
+        return 7;
+      }
+    }
+    Object.defineProperty(StampedOnly.prototype, Symbol.for('isBaseInstance'), {
+      value: true,
+      enumerable: false,
+    });
+    strictEqual(run('.amount', new StampedOnly()), 7);
+    strictEqual(run('.constructor | type', new StampedOnly()), 'null');
+  },
+);
+
 console.log(
   `BXL Boxel cyclic-graph materialization: ${pass}/${pass + fail} cases passed`,
 );

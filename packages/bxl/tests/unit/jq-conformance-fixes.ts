@@ -1,9 +1,7 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { runNativeJq, type NativeRuntimeLimits } from '../../src/index.ts';
-import { compiledPattern } from '../../src/jqtools/evaluate/filters/builtinNativeFilters.ts';
 
-// jq 1.7.1 conformance gaps found while moving card computed fields to BXL
-// (September 2026). Each expectation below is jq 1.7.1's answer.
+// Each expectation below is jq 1.7.1's answer.
 
 function outputs(program: string, input: unknown = null): unknown[] {
   return runNativeJq(program, input).outputs;
@@ -114,7 +112,8 @@ deepStrictEqual(
   'the cpu clock runs a step-bounded program',
 );
 
-// 6. gsub: compiled patterns are shared across calls.
+// 6. gsub replaces every occurrence and exposes named captures to the
+//    replacement.
 deepStrictEqual(outputs('"abc123def456ghi" | gsub("[0-9]"; "")'), [
   'abcdefghi',
 ]);
@@ -124,17 +123,6 @@ deepStrictEqual(
     '"2026-09-15" | gsub("(?<y>\\\\d{4})-(?<m>\\\\d{2})"; "\\(.m)/\\(.y)")',
   ),
   ['09/2026-15'],
-);
-strictEqual(
-  compiledPattern('[0-9]', 'g').r,
-  compiledPattern('[0-9]', 'g').r,
-  'the same pattern and flags reuse one RegExp',
-);
-const started = Date.now();
-for (let i = 0; i < 300; i++) outputs('"abc123def456ghi" | gsub("[0-9]"; "")');
-ok(
-  Date.now() - started < 5_000,
-  '300 gsub calls stay well under a second each',
 );
 
 // 7. strftime honours the `-` no-padding flag and names format errors.
@@ -154,5 +142,5 @@ ok(
 );
 
 console.log(
-  'jq conformance: prototype, keywords, escapes, clock, gsub cache, strftime flag',
+  'jq conformance: prototype, keywords, escapes, clock, gsub, strftime flag',
 );

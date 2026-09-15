@@ -365,9 +365,11 @@ function wrapCard(
   const chain = childAncestors(target, ancestors, via);
   const { readChild, ...traps } = commonTraps(target, chain);
 
-  // Resolved on first enumeration only — pure path access never pays
-  // for the field map. Computeds are included: an expression aggregating
-  // over another card sees that card as its search doc would.
+  // Resolved once per view, on the first enumeration, `has`, or
+  // own-property lookup. jq field lookups are own-property lookups, so
+  // even a plain path read pays for the field map once per materialized
+  // view. Computeds are included: an expression aggregating over another
+  // card sees that card as its search doc would.
   let fieldKeys: string[] | null | undefined;
   const resolveFieldKeys = () => {
     if (fieldKeys === undefined) {
@@ -407,13 +409,22 @@ function wrapCard(
       },
       getOwnPropertyDescriptor(_facade, prop) {
         const desc = Reflect.getOwnPropertyDescriptor(target, prop);
-        const isField =
-          typeof prop === 'string' && !!resolveFieldKeys()?.includes(prop);
+        const keys = resolveFieldKeys();
+        const isField = typeof prop === 'string' && !!keys?.includes(prop);
         // Identity is a prototype getter on an instance, never an own
         // property of the target, yet jq lookups are own-property lookups
         // and `.id` must read.
         const isIdentity = prop === 'id' && Reflect.has(target, 'id');
-        if (!desc && !isField && !isIdentity) {
+        // With no field map (the bridge threw, or none resolved), fall back
+        // to what the instance actually has, minus Object.prototype. A field
+        // is a prototype getter, so the target carries no own descriptor for
+        // it; without this every field on such a card would read as null.
+        const noFieldMap =
+          keys === null &&
+          typeof prop === 'string' &&
+          prop in target &&
+          !Object.hasOwn(Object.prototype, prop);
+        if (!desc && !isField && !isIdentity && !noFieldMap) {
           return undefined;
         }
         return {

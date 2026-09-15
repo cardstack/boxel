@@ -1,5 +1,32 @@
 import type { InputStream } from './InputStream.ts';
 
+// jq's reserved words. The tokenizer classifies identifiers with this set,
+// and the readable compiler respells a field named by one of them as
+// `."name"`; the two decisions must agree, so there is one set.
+export const JQ_TOKENIZER_KEYWORDS: ReadonlySet<string> = new Set([
+  '__loc__',
+  'and',
+  'as',
+  'break',
+  'catch',
+  'def',
+  'elif',
+  'else',
+  'end',
+  'foreach',
+  'if',
+  'import',
+  'include',
+  'label',
+  'module',
+  'modulemeta',
+  'not',
+  'or',
+  'reduce',
+  'then',
+  'try',
+]);
+
 export interface PuncToken {
   type: 'punc';
   value: string;
@@ -97,29 +124,7 @@ export class Tokenizer {
     '/': '/',
     '\\': '\\',
   };
-  private static keywords = new Set([
-    '__loc__',
-    'and',
-    'as',
-    'break',
-    'catch',
-    'def',
-    'elif',
-    'else',
-    'end',
-    'foreach',
-    'if',
-    'import',
-    'include',
-    'label',
-    'module',
-    'modulemeta',
-    'not',
-    'or',
-    'reduce',
-    'then',
-    'try',
-  ]);
+  private static keywords = JQ_TOKENIZER_KEYWORDS;
 
   private static operators = new Set([
     '!=',

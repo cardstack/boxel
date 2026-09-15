@@ -10,6 +10,7 @@ import {
 } from '../bridge/formula-statistical-manifest.ts';
 import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.ts';
 import { canonicalValidationFunctionName } from '../bridge/validation-manifest.ts';
+import { JQ_TOKENIZER_KEYWORDS } from '../../jqtools/parser/Tokenizer.ts';
 
 export type ReadableFieldKind = 'scalar' | 'object' | 'array';
 
@@ -3783,31 +3784,9 @@ export function preprocessReadableSource(source: string): {
 // pass (the unchanged-source fast path, spacing, formatting, the jq
 // tokenizer) sees an unambiguous string index instead of a keyword. Never
 // run it on compiled output, whose spacing is the compiler's.
-// The jq tokenizer's own keyword list (Tokenizer.keywords), not the readable
-// dialect's, since this is about what jq's parser would reject after a dot.
-const JQ_PARSER_KEYWORDS = new Set([
-  '__loc__',
-  'and',
-  'as',
-  'break',
-  'catch',
-  'def',
-  'elif',
-  'else',
-  'end',
-  'foreach',
-  'if',
-  'import',
-  'include',
-  'label',
-  'module',
-  'modulemeta',
-  'not',
-  'or',
-  'reduce',
-  'then',
-  'try',
-]);
+// The jq tokenizer's own keyword set, not the readable dialect's, since
+// this is about what jq's parser would reject after a dot.
+const JQ_PARSER_KEYWORDS = JQ_TOKENIZER_KEYWORDS;
 
 export function respellKeywordFields(source: string): string {
   let tokens: Token[];
