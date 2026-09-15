@@ -1385,11 +1385,10 @@ export type ScreenshotCaptureOverrides = {
   // off one render.
   envelope?: { width: number; height: number };
   // Output encoding of the capture. `png` (the default, elided from the
-  // canonical form) is the only value the engine honors today: the roster
-  // reserves `jpeg`/`webp`/`pdf` for the encode legs the capture engine grows
-  // next, and the shared parse refuses those values by name until it does.
-  // Part of the ledger identity — two encodings of one render are two cache
-  // entries.
+  // canonical form) and `pdf` are the values the engine honors; the roster
+  // reserves `jpeg`/`webp` for the encode legs the capture engine grows next,
+  // and the shared parse refuses those values by name until it does. Part of
+  // the ledger identity — two encodings of one render are two cache entries.
   type?: CaptureOutputType;
   // CSS media the render settles under before capture. `screen` (the
   // default, elided) is the rendering every screenshot has always captured;
@@ -1469,9 +1468,9 @@ export type ScreenshotPrerenderResponse = {
   width?: number;
   height?: number;
   // The encoding of `base64` (and every entry in `captures` — a response is
-  // one encoding throughout). The engine produces only `image/png` today; the
-  // type is the full output union so the persist and serving paths
-  // discriminate on it rather than assuming an image.
+  // one encoding throughout). The engine produces `image/png` and
+  // `application/pdf`; the type is the full output union so the persist and
+  // serving paths discriminate on it rather than assuming an image.
   contentType?: CaptureContentType;
   error?: string | null;
   meta?: PrerenderResponseMeta;

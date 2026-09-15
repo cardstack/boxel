@@ -1585,35 +1585,50 @@ async function captureOneEntry(
         { title: 'Invalid screenshot capture spec' },
       );
     }
-    let bytes = await page.pdf({
-      printBackground: true,
-      // The author's own `@page { size: … }` rule wins; Chrome's default
-      // paper applies when the card declares none.
-      preferCSSPageSize: true,
-    });
-    if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
-      return buildInvalidRenderResponseError(
-        page,
-        `pdf capture "${entry.name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
-        { title: 'PDF capture too large' },
-      );
+    // `page.pdf()` renders under `print` media by default, whatever media the
+    // page settled under. The `media` axis is the caller's control over that,
+    // so pin the emulated media to what the spec asks — `screen` today (the
+    // default, and the only value the shared parse admits), which keeps the
+    // paged document the same render the raster path would capture. Cleared in
+    // `finally` so a reused pooled page carries no media override into the
+    // next capture.
+    let media = entry.media ?? 'screen';
+    await page.emulateMediaType(media);
+    try {
+      let bytes = await page.pdf({
+        printBackground: true,
+        // The author's own `@page { size: … }` rule wins; Chrome's default
+        // paper applies when the card declares none.
+        preferCSSPageSize: true,
+      });
+      if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
+        return buildInvalidRenderResponseError(
+          page,
+          `pdf capture "${entry.name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+          { title: 'PDF capture too large' },
+        );
+      }
+      let pageCount = countPdfPages(bytes);
+      if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
+        return buildInvalidRenderResponseError(
+          page,
+          `pdf capture "${entry.name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+          { title: 'PDF capture too large' },
+        );
+      }
+      return {
+        name: entry.name,
+        base64: Buffer.from(bytes).toString('base64'),
+        // Pagination has no single pixel extent; the scale is the render's,
+        // reported for parity with raster captures.
+        deviceScaleFactor,
+        pageCount,
+      };
+    } finally {
+      // Restore the default (screen) media so the next capture on this pooled
+      // page renders exactly as an un-emulated one would.
+      await page.emulateMediaType();
     }
-    let pageCount = countPdfPages(bytes);
-    if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
-      return buildInvalidRenderResponseError(
-        page,
-        `pdf capture "${entry.name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
-        { title: 'PDF capture too large' },
-      );
-    }
-    return {
-      name: entry.name,
-      base64: Buffer.from(bytes).toString('base64'),
-      // Pagination has no single pixel extent; the scale is the render's,
-      // reported for parity with raster captures.
-      deviceScaleFactor,
-      pageCount,
-    };
   }
   // A `target` is an element-handle screenshot, a capture call distinct from
   // the page-level one below: it crops to the first match's box and honors no
