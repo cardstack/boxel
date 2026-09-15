@@ -76,7 +76,9 @@ export default class LoaderService extends Service {
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
     let previous = this.loader;
-    this.loader = previous ? Loader.cloneLoader(previous) : this.makeInstance();
+    this.loader = this.publish(
+      previous ? Loader.cloneLoader(previous) : this.makeInstance(),
+    );
     previous?.dispose();
   }
 
@@ -145,7 +147,7 @@ export default class LoaderService extends Service {
       let previous = this.loader;
       this.recordLoaderReplacement(previous, options?.codeChange);
       if (previous) {
-        this.loader = Loader.cloneLoader(previous);
+        this.loader = this.publish(Loader.cloneLoader(previous));
         previous.dispose();
       } else {
         this.loader = this.makeInstance();
@@ -196,6 +198,15 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
     });
+    return this.publish(loader);
+  }
+
+  // Base modules compiled into the host bundle cannot read
+  // `import.meta.loader` — the platform evaluated them, not a Loader — so every
+  // loader that becomes this service's active one is also published as the one
+  // those modules fall back to.
+  private publish(loader: Loader): Loader {
+    Loader.setForBundledModules(loader);
     return loader;
   }
 

@@ -523,6 +523,21 @@ export class Loader {
     return undefined;
   }
 
+  // A module a Loader evaluates discovers its loader through
+  // `import.meta.loader`, which the Loader injects at eval time. A module
+  // compiled into the host bundle is evaluated by the platform instead, so it
+  // has no such injection; the host publishes its active loader here for those
+  // modules to fall back to. Read only when `import.meta.loader` is absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
+  }
+
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -1139,16 +1154,21 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let request = this.asRequest(urlOrRequest, init);
+      // A module shimmed on the virtual network is keyed by the URL its
+      // identifier resolves to, and the network's fetch pipeline only answers
+      // shims on the fake packages origin. This is the one path that knows a
+      // request is for a module (not a card instance that may live at the same
+      // realm URL), so the lookup belongs here, ahead of any fetch.
+      let shimmedModule =
+        this.moduleShims.get(request.url) ??
+        (await this.virtualNetwork?.getShimmedModule(request.url));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
         return response;
       }
 
-      let request = this.asRequest(urlOrRequest, init);
       return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =

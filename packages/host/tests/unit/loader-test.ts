@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -394,6 +394,47 @@ module('Unit | loader', function (hooks) {
       loader.isModuleLoaded(`${testRealmURL}g`),
       're-exported module g is loaded as a dependency of reexporter',
     );
+  });
+
+  test('a module shimmed on the virtual network is served to the loader without a fetch, under every spelling', async function (assert) {
+    // A shim for a realm-mapped identifier is keyed by the realm URL the
+    // identifier resolves to, and a loader import resolves to that same URL.
+    // The network's fetch pipeline only answers shims on the fake packages
+    // origin, so the loader has to ask the network for the shim itself.
+    let virtualNetwork = new VirtualNetwork();
+    let realmURL = 'https://shimmed-realm.example/';
+    let aliasURL = 'https://shimmed-alias.example/';
+    virtualNetwork.addURLMapping(new URL(aliasURL), new URL(realmURL));
+    virtualNetwork.addRealmMapping('@test-loader-shim/', realmURL);
+    class Shimmed {}
+    virtualNetwork.shimAsyncModule({
+      id: '@test-loader-shim/shimmed-module',
+      resolve: async () => ({ default: Shimmed }),
+    });
+    let throwIfFetch = new Loader(
+      async () => {
+        throw new Error(
+          'fetch should not be invoked for a module the virtual network shims',
+        );
+      },
+      virtualNetwork.resolveImport,
+      { virtualNetwork },
+    );
+
+    for (let spelling of [
+      '@test-loader-shim/shimmed-module',
+      `${realmURL}shimmed-module`,
+      `${aliasURL}shimmed-module`,
+    ]) {
+      let module = await throwIfFetch.import<{ default: typeof Shimmed }>(
+        spelling,
+      );
+      assert.strictEqual(
+        module.default,
+        Shimmed,
+        `${spelling} is served from the shim`,
+      );
+    }
   });
 
   test('identify preserves original module for reexports', function (assert) {

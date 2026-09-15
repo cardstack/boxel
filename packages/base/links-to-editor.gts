@@ -19,7 +19,7 @@ import {
   brokenLinkItemType,
   isFileDef,
 } from './card-api';
-import type { Loader } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -287,12 +287,18 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
+  // A Loader that evaluates this module injects `import.meta.loader`. A module
+  // compiled into the host bundle is evaluated by the platform instead, and
+  // uses the loader the host publishes for bundled modules.
 
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // When type-checking realm-server, tsc sees this file as CommonJS output and
+  // so complains about import.meta. Scope the suppression to that read alone —
+  // widening it over the fallback would hide real errors there too.
   // @ts-ignore
-  return (import.meta as any).loader;
+  let injected = (import.meta as any).loader;
+  let loader = injected ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('no Loader is available to this module');
+  }
+  return loader;
 }
