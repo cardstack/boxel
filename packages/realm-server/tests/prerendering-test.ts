@@ -381,6 +381,26 @@ function decodePngRGBA(base64: string): RgbaImage {
   return { width, height, data: out };
 }
 
+// Count the pixels exactly matching an RGB color — enough to assert a
+// media-gated style is (or is not) visible in a capture without depending on
+// where the styled element lays out.
+function countPixelsOfColor(
+  image: RgbaImage,
+  [r, g, b]: [number, number, number],
+): number {
+  let count = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (
+      image.data[i] === r &&
+      image.data[i + 1] === g &&
+      image.data[i + 2] === b
+    ) {
+      count++;
+    }
+  }
+  return count;
+}
+
 // Count pixels in `clip` that differ from the region of `full` anchored at
 // (originX+dx, originY+dy). A pixel differs if any RGBA channel differs; a
 // sample that falls outside `full` counts as a difference so an offset can't
@@ -1014,10 +1034,12 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
-            // Short under screen media, 60000px tall under print media — a
-            // height only a print-media render applies. A pdf capture asks for
-            // screen media, so it stays a page or two; a render that fell back
-            // to page.pdf()'s print default would blow past the page cap.
+            // Short under screen media, 60000px tall and magenta under print
+            // media — styles only a print-media render applies. A pdf capture
+            // asking for screen media stays a page or two (a render that fell
+            // back to page.pdf()'s print default would blow past the page
+            // cap); a raster capture shows the magenta only if the settle
+            // itself ran under print media.
             'print-probe.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class PrintProbe extends CardDef {
@@ -1028,7 +1050,7 @@ module(basename(import.meta.filename), function () {
                     <div class="pdf-media-probe">{{@model.name}}</div>
                     <style scoped>
                       .pdf-media-probe { height: 200px; }
-                      @media print { .pdf-media-probe { height: 60000px; } }
+                      @media print { .pdf-media-probe { height: 60000px; background: rgb(255, 0, 254); } }
                     </style>
                   </template>
                 }
@@ -1533,6 +1555,41 @@ module(basename(import.meta.filename), function () {
         { width: png.width, height: png.height },
         { width: 800, height: 600 },
         'the next raster capture still renders at the default viewport',
+      );
+    });
+
+    test('a media=print raster captures the print-media render and restores screen media', async function (assert) {
+      // The raster path is where the render-level emulation is load-bearing on
+      // its own: a pdf capture's print job re-lays-out under its own pinned
+      // media whatever the settle used, but a raster photographs the settled
+      // layout as-is — the probe's print-only magenta reaches its pixels only
+      // if the settle itself ran under print media.
+      let magenta: [number, number, number] = [255, 0, 254];
+      let printed = await screenshot(`${realmURL}print-probe-card`, {
+        media: 'print',
+      });
+      assert.strictEqual(
+        printed.response.status,
+        'ready',
+        `print raster succeeded (got ${printed.response.status}: ${printed.response.error ?? ''})`,
+      );
+      let printedPng = decodePngRGBA(printed.response.base64!);
+      assert.ok(
+        countPixelsOfColor(printedPng, magenta) > 1000,
+        'the print-only background is visible: the settle ran under print media',
+      );
+
+      // A raster capture has no capture-time media pin of its own, so the
+      // render-level restore is all that keeps this capture's print emulation
+      // off the pooled page — the same probe under the default (screen) media
+      // must show none of the print-only color.
+      let after = await screenshot(`${realmURL}print-probe-card`);
+      assert.strictEqual(after.response.status, 'ready');
+      let afterPng = decodePngRGBA(after.response.base64!);
+      assert.strictEqual(
+        countPixelsOfColor(afterPng, magenta),
+        0,
+        'the next capture settles under screen media again',
       );
     });
 

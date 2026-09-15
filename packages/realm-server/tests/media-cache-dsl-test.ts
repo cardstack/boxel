@@ -363,10 +363,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('media=print parses and round-trips on both surfaces', function (assert) {
-      // The engine now emulates print media across the settle, so `print` is
-      // no longer gated — it parses, carries into the identity, and round-trips
-      // back to the same canonical query. It is servable (a print-media raster
-      // is still an image), so the GET surface admits it, unlike type=pdf.
+      // The engine emulates print media across the settle, so `print` parses,
+      // carries into the identity, and round-trips back to the same canonical
+      // query on both surfaces.
       let viaGet = parseCaptureSpecParams(params('media=print'));
       assert.true('spec' in viaGet, 'media=print parses on the GET surface');
       if ('spec' in viaGet) {

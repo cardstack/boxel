@@ -1844,7 +1844,7 @@ export async function captureScreenshot(
     if ((entry.media ?? 'screen') !== firstMedia) {
       return buildInvalidRenderResponseError(
         page,
-        `capture batch mixes media values (${firstMedia} and ${entry.media}); a batch renders under one media`,
+        `capture batch mixes media values (${firstMedia} and ${entry.media ?? 'screen'}); a batch renders under one media`,
         { title: 'Invalid screenshot capture spec' },
       );
     }

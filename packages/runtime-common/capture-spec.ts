@@ -148,9 +148,9 @@ export function isCaptureMedia(value: unknown): value is CaptureMedia {
 // honor yet — refused by name at parse (never ignored, per the module
 // contract), so no request can reach the engine asking for an output it
 // cannot produce. Unlocking a value here means teaching the engine the
-// corresponding leg: a jpeg/webp encode on the on-demand path. (The `print`
-// media value is now honored — the engine emulates print media across the
-// settle — so both `CaptureMedia` values are supported and none is gated.)
+// corresponding leg: a jpeg/webp encode on the on-demand path. Both
+// `CaptureMedia` values are supported — the engine emulates the spec's media
+// across the settle — so only output types are gated here.
 const UNSUPPORTED_CAPTURE_OUTPUT_TYPES: ReadonlySet<CaptureOutputType> =
   new Set(['jpeg', 'webp']);
 
