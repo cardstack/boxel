@@ -1,0 +1,72 @@
+{
+  "_comment": [
+    "EXAMPLE ONLY. Replace every entry with the queries the realm under test",
+    "actually issues, transcribed from its card source. The shapes here are",
+    "invented placeholders that match no real realm.",
+    "",
+    "Queries are written in the `_federated-search` ENTRY wire grammar: the",
+    "type anchor is `item.on`, and field paths inside eq/contains/in/range",
+    "carry an `item.` prefix. `${realm}` expands to the realm URL under test.",
+    "Every key other than `label` is sent to the endpoint as-is, so `sort` and",
+    "`page` work here too. See lib/workload.ts."
+  ],
+
+  "queries": [
+    {
+      "label": "Widget",
+      "filter": {
+        "item.on": { "module": "${realm}schema/widget", "name": "Widget" }
+      }
+    },
+    {
+      "label": "Gadget",
+      "filter": {
+        "item.on": { "module": "${realm}schema/gadget", "name": "Gadget" }
+      }
+    },
+    {
+      "label": "Sprocket",
+      "filter": {
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" }
+      }
+    }
+  ],
+
+  "secondaryQueries": [
+    {
+      "label": "Widget(secondary)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/widget", "name": "Widget" }
+      }
+    },
+    {
+      "label": "Notice",
+      "filter": {
+        "item.on": { "module": "${realm}schema/notice", "name": "Notice" }
+      }
+    }
+  ],
+
+  "extraQueries": [
+    {
+      "label": "Sprocket(bounded)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" },
+        "eq": { "item.category": "active" }
+      }
+    }
+  ],
+
+  "write": {
+    "path": "WidgetReport",
+    "adoptsFrom": {
+      "module": "${realm}schema/widget-report",
+      "name": "WidgetReport"
+    },
+    "attributes": {
+      "title": "Load harness report ${n}",
+      "reportedOn": "${date}",
+      "body": "Written by the load harness."
+    }
+  }
+}
