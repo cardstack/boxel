@@ -8,6 +8,7 @@ import {
   decideHostShellRecycle,
   raceAgainstDrain,
   shouldRerenderForStaleShell,
+  stampGatewayFailure,
   stampHostShellTokens,
   stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
@@ -428,6 +429,44 @@ module(basename(import.meta.filename), function () {
       } as unknown as RenderVisitResponse;
       assert.false(
         'staleShellFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than false — a reader must require presence',
+      );
+    });
+  });
+
+  module('stampGatewayFailure', function () {
+    // Same contract as the stale-shell stamp: the write site tests only for
+    // this field's presence, so absence must mean "no verdict" rather than
+    // "attributable", and the field carries the row types it covers because a
+    // visit's rows fail independently.
+    test('names the rows it covers and leaves the rest of diagnostics alone', function (assert) {
+      let response = {
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampGatewayFailure(response, ['instance']);
+      assert.deepEqual(response.meta, {
+        requestId: 'abc',
+        diagnostics: { renderMs: 12, gatewayFailure: ['instance'] },
+      } as unknown as typeof response.meta);
+    });
+
+    test('an empty verdict stamps nothing', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampGatewayFailure(response, []);
+      assert.false(
+        'gatewayFailure' in ((response.meta as any).diagnostics ?? {}),
+        'absent rather than an empty array a reader might mis-test',
+      );
+    });
+
+    test('an unmarked response carries no verdict at all', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      assert.false(
+        'gatewayFailure' in ((response.meta as any).diagnostics ?? {}),
         'absent rather than false — a reader must require presence',
       );
     });

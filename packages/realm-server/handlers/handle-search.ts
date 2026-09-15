@@ -18,7 +18,12 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
+  describeSearchShape,
+  emitSearchShape,
   type Query,
+  type SearchShapeCacheOutcome,
+  type SearchShapeDescriptor,
+  type SearchShapeLinkMode,
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
@@ -93,6 +98,14 @@ export default function handleSearch(opts: {
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
+    // Slots the query-shape line is assembled from. `shape` is filled in as
+    // soon as the query parses — a request that never gets that far has no
+    // shape to report — and the rest are stamped by whichever path answers.
+    let shape: SearchShapeDescriptor | undefined;
+    let cacheOutcome: SearchShapeCacheOutcome = 'none';
+    let resultCount: number | null = null;
+    let resultTotal: number | null = null;
+    let resultIncomplete: boolean | null = null;
     let loggingCorrelationId = sanitizeLoggingCorrelationId(
       ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
     );
@@ -218,6 +231,30 @@ export default function handleSearch(opts: {
     let consumingRealm = sanitizeConsumingRealmHeader(
       ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
     );
+
+    // Built from the query the search will actually run — the item-leg page
+    // ceiling above has already been applied — so the reported page size is
+    // the one the index saw, not the one the caller asked for. The link mode
+    // travels with it because the same query costs differently in each, and no
+    // header on the request is a reliable stand-in: `x-boxel-during-prerender`
+    // is raised by the module, file-extract and command-runner routes too,
+    // while the job and consuming-realm headers ride only the render route's
+    // visit.
+    let linkMode: SearchShapeLinkMode = cacheOnlyDefinitions
+      ? 'prerender'
+      : resolveLinksOnly
+        ? 'links-only'
+        : 'full';
+    shape = describeSearchShape({
+      query: parsed,
+      realms: realmList,
+      linkMode,
+      correlationId: loggingCorrelationId,
+      jobId: prerenderJobId,
+      consumingRealm,
+      jobPriority,
+    });
+
     // Lazy-mount inside runSearch so cache hits (304 / cached body) skip the
     // lazy-mount work entirely.
     let runSearch = async () => {
@@ -236,6 +273,16 @@ export default function handleSearch(opts: {
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
+        // Counted here rather than off the response because only this path
+        // holds a document: a cache hit, a join and a 304 all answer from a
+        // body another request computed, and they report no counts at all
+        // rather than re-parsing one to invent them. An incomplete merge
+        // reports no total either — it sums only the realms that answered, so
+        // publishing it would claim a number over the rows whose absence made
+        // it unknowable.
+        resultCount = doc.data?.length ?? 0;
+        resultIncomplete = doc.meta.incomplete === true;
+        resultTotal = resultIncomplete ? null : (doc.meta.page?.total ?? null);
         // Serialize compact: an entry doc can run to many MB, so indentation
         // whitespace is pure wire overhead the consumer parses straight back off.
         let stringify = async () => JSON.stringify(doc);
@@ -248,16 +295,32 @@ export default function handleSearch(opts: {
       return itemLegBounded ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
-    let emitTimeline = () => {
-      if (!timings || loggingCorrelationId === null) {
-        return;
+    // Called once by whichever path answers the request — a fresh compute, any
+    // of the cache outcomes, a 304, the time-budget cutoff, or a throw. The
+    // stage timeline rides the caller's correlation id and so is emitted only
+    // for an instrumented request; the query-shape line is emitted for every
+    // request that got far enough to have a shape, which is what makes a load
+    // event replayable from logs alone.
+    let emitTelemetry = (override?: { status?: number }) => {
+      if (timings && loggingCorrelationId !== null) {
+        emitSearchTiming(
+          `corr=${loggingCorrelationId}` +
+            (prerenderJobId ? ` job=${prerenderJobId}` : '') +
+            ` handler=${Date.now() - handlerStart}ms ` +
+            timings.toLogFragment(),
+        );
       }
-      emitSearchTiming(
-        `corr=${loggingCorrelationId}` +
-          (prerenderJobId ? ` job=${prerenderJobId}` : '') +
-          ` handler=${Date.now() - handlerStart}ms ` +
-          timings.toLogFragment(),
-      );
+      if (shape) {
+        emitSearchShape({
+          ...shape,
+          results: resultCount,
+          total: resultTotal,
+          incomplete: resultIncomplete,
+          cache: cacheOutcome,
+          status: override?.status ?? ctxt.status,
+          totalMs: Date.now() - handlerStart,
+        });
+      }
     };
 
     let jobId = searchCache ? prerenderJobId : null;
@@ -270,7 +333,10 @@ export default function handleSearch(opts: {
         query: parsed.itemQuery,
         opts: cacheKeyOpts,
         runSearch,
-        emitTimeline,
+        emitTelemetry,
+        recordCacheOutcome: (outcome) => {
+          cacheOutcome = outcome;
+        },
         liveSearch: {
           cache: liveSearchCache,
           dbAdapter,
@@ -300,9 +366,12 @@ export default function handleSearch(opts: {
           ctxt,
           buildSearchErrorResponse(e.message, e.status),
         );
-        emitTimeline();
+        emitTelemetry();
         return;
       }
+      // Koa answers an escaping throw with a 500 once the handler unwinds, so
+      // report that rather than the status the context is still carrying.
+      emitTelemetry({ status: 500 });
       throw e;
     }
   };
@@ -345,7 +414,10 @@ async function respondWithJobScopedSearchCache(
     query: Query;
     opts: unknown;
     runSearch: () => Promise<string>;
-    emitTimeline?: () => void;
+    emitTelemetry?: () => void;
+    // Which cache, if any, answered — reported before the response is sent so
+    // the telemetry emitted alongside it carries the outcome.
+    recordCacheOutcome?: (outcome: SearchShapeCacheOutcome) => void;
     liveSearch?: {
       cache: LiveSearchCache;
       dbAdapter: DBAdapter;
@@ -356,7 +428,8 @@ async function respondWithJobScopedSearchCache(
   },
 ): Promise<void> {
   let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
-  let emitTimeline = args.emitTimeline ?? (() => {});
+  let emitTelemetry = args.emitTelemetry ?? (() => {});
+  let recordCacheOutcome = args.recordCacheOutcome ?? (() => {});
   let cacheable = searchCache && jobId && consumingRealm;
 
   if (cacheable) {
@@ -388,7 +461,8 @@ async function respondWithJobScopedSearchCache(
       if (cached !== undefined) {
         ctxt.status = 304;
         ctxt.set('ETag', expectedEtag);
-        emitTimeline();
+        recordCacheOutcome('not-modified');
+        emitTelemetry();
         return;
       }
     }
@@ -398,6 +472,8 @@ async function respondWithJobScopedSearchCache(
       query,
       opts: keyOpts,
       populate: runSearch,
+      onOutcome: (decided) =>
+        recordCacheOutcome(decided === 'hit' ? 'job-hit' : 'job-miss'),
     });
     await setContextResponse(
       ctxt,
@@ -408,7 +484,7 @@ async function respondWithJobScopedSearchCache(
         },
       }),
     );
-    emitTimeline();
+    emitTelemetry();
     return;
   }
 
@@ -451,6 +527,7 @@ async function respondWithJobScopedSearchCache(
       // its response ends; the ceiling is then a bound on concurrent
       // computations, which is what holds the heap.
       onOutcome: (decided) => {
+        recordCacheOutcome(decided);
         if (decided !== 'miss') {
           releaseSearchAdmission(ctxt);
         }
@@ -465,7 +542,7 @@ async function respondWithJobScopedSearchCache(
     ctxt.set('content-type', SupportedMimeType.CardJson);
     ctxt.set(LIVE_SEARCH_CACHE_HEADER, outcome);
     ctxt.body = body;
-    emitTimeline();
+    emitTelemetry();
     return;
   }
 
@@ -476,5 +553,5 @@ async function respondWithJobScopedSearchCache(
       headers: { 'content-type': SupportedMimeType.CardJson },
     }),
   );
-  emitTimeline();
+  emitTelemetry();
 }
