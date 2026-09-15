@@ -64,6 +64,9 @@ export default class MessageTool {
     toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
+    // The tool class declares that it must always wait for the user's
+    // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
+    public neverAutoExecutes: boolean = false,
   ) {
     setOwner(this, owner);
 

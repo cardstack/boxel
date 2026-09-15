@@ -952,6 +952,7 @@ export default class MatrixService extends Service {
     });
 
     await this.appendRealmToAccountData(personalRealmURL.href);
+    return personalRealmURL;
   }
 
   // Whether login auto-provisions a personal workspace for a user who has none.

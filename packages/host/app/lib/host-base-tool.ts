@@ -18,6 +18,11 @@ export default abstract class HostBaseTool<
 
   @service declare protected loaderService: LoaderService;
 
+  // A tool that must always wait for the user's click before it runs, even
+  // in a mode that otherwise runs tools without approval, sets this to true.
+  // Reserved for actions that destroy data and cannot be undone.
+  static neverAutoExecutes = false;
+
   protected loadToolModule(): Promise<typeof BaseToolModule> {
     return this.loaderService.loader.import<typeof BaseToolModule>(
       '@cardstack/base/command',
