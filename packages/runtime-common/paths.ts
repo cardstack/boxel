@@ -320,3 +320,25 @@ export const CAPTURE_SERVING_PREFIX = '_screenshot/';
 export function isCaptureServingPath(localPath: LocalPath): boolean {
   return localPath.startsWith(CAPTURE_SERVING_PREFIX);
 }
+
+// The name a file's content is assembled under while it is being written from
+// a description of itself. The write's source is its own destination, so the
+// result is built beside the file and moved onto it — a rename, so the file is
+// only ever the content it held before or the content it holds after.
+//
+// Beside it rather than elsewhere on the machine because a rename is atomic
+// only within one filesystem, and a realm's storage is not the filesystem the
+// operating system's temporary directory is on. That puts the half-written
+// file inside the realm's own tree, so the realm holds it to being no part of
+// the realm: it is never indexed, never served, and never written to
+// deliberately. A process that dies mid-write leaves one behind, and the same
+// rule is what keeps it inert until the next write replaces it.
+export const PARTIAL_WRITE_SUFFIX = '.boxel-partial';
+
+export function partialWritePath(localPath: LocalPath): LocalPath {
+  return `${localPath}${PARTIAL_WRITE_SUFFIX}` as LocalPath;
+}
+
+export function isPartialWritePath(localPath: LocalPath): boolean {
+  return localPath.endsWith(PARTIAL_WRITE_SUFFIX);
+}

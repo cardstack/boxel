@@ -3,7 +3,9 @@ import type {
   Kind,
   FileRef,
   DBAdapter,
+  SplicedSource,
 } from '@cardstack/runtime-common';
+import { streamSpliced } from '@cardstack/runtime-common';
 import {
   createResponse,
   logger,
@@ -15,7 +17,10 @@ import {
   isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import {
+  partialWritePath,
+  type LocalPath,
+} from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
@@ -28,10 +33,13 @@ const {
   ensureDirSync,
   ensureFileSync,
   createReadStream,
+  createWriteStream,
+  renameSync,
   removeSync,
 } = fsExtra;
 import { join } from 'path';
 import { Duplex } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type {
   RequestContext,
   AdapterWriteResult,
@@ -225,6 +233,55 @@ export class NodeAdapter implements RealmAdapter {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
     };
+  }
+
+  // The described content's ranges name the very file being replaced, so it
+  // cannot be written straight over: the read would be reading what the write
+  // had already truncated. It is assembled beside the file and renamed onto
+  // it, which is atomic, so the file only ever holds the content it had or the
+  // content it now has — and the staging name is one the realm treats as no
+  // part of itself, so a half-written file is never indexed or served.
+  async writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult> {
+    let absolutePath = join(this.realmDir, path);
+    let stagedPath = join(this.realmDir, partialWritePath(path));
+    try {
+      ensureFileSync(stagedPath);
+      await pipeline(
+        streamSpliced(content, (start, end) =>
+          // `end` is exclusive here and inclusive for a read stream.
+          createReadStream(absolutePath, { start, end: end - 1 }),
+        ),
+        createWriteStream(stagedPath),
+      );
+      renameSync(stagedPath, absolutePath);
+    } finally {
+      removeSync(stagedPath);
+    }
+    let { mtime } = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: unixTime(mtime.getTime()),
+    };
+  }
+
+  async *readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array> {
+    if (end <= start) {
+      return;
+    }
+    // `end` is exclusive here and inclusive for a read stream.
+    for await (let chunk of createReadStream(join(this.realmDir, path), {
+      start,
+      end: end - 1,
+    })) {
+      yield chunk as Uint8Array;
+    }
   }
 
   async remove(path: LocalPath): Promise<void> {

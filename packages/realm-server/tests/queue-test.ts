@@ -21,6 +21,10 @@ import {
 } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import {
+  heartbeatJob,
+  jobHeartbeatRegistered,
+} from '@cardstack/runtime-common/queue';
+import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
@@ -152,6 +156,231 @@ module(basename(import.meta.filename), function () {
         0,
         'job with no local handler is never reserved',
       );
+    });
+
+    test('a lease outlives the handler deadline it protects', async function (assert) {
+      // The deadline and the lease used to expire together, so a handler that
+      // hit its deadline found the job already claimable and raced a peer to
+      // record its own outcome. Losing that race discards the verdict and the
+      // job runs again — every attempt losing it the same way. The lease has
+      // to outlast the deadline for the handler to have an uncontested moment
+      // to finalize in.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register('lease-margin-job', async () => {
+          resolveStarted();
+          await new Promise<void>((res) => (releaseHandler = res));
+          return 1;
+        });
+      });
+
+      let job = await publisher.publish<number>({
+        jobType: 'lease-margin-job',
+        concurrencyGroup: 'lease-margin-group',
+        // Larger than the runner's `maxTimeoutSec: 2`, so the deadline is
+        // clamped to 2s and the expected margin is unambiguous.
+        timeout: 600,
+        args: 1,
+      });
+      await handlerStarted;
+
+      let rows = (await adapter.execute(
+        `SELECT EXTRACT(EPOCH FROM (locked_until - NOW()))::float AS remaining_s
+         FROM job_reservations WHERE job_id = $1 AND completed_at IS NULL`,
+        { bind: [job.id] },
+      )) as unknown as { remaining_s: number }[];
+      assert.strictEqual(rows.length, 1, 'the running job holds one lease');
+
+      // The deadline is 2s (clamped). Anything at or under that means the
+      // lease lapses the moment the handler is cut off, which is the race.
+      assert.true(
+        rows[0].remaining_s > 2,
+        `the lease outlasts the 2s deadline (remaining ${rows[0].remaining_s.toFixed(1)}s)`,
+      );
+
+      releaseHandler();
+      assert.strictEqual(await job.done, 1, 'the handler still completes');
+    });
+
+    test('a job that keeps reporting progress outlives its deadline', async function (assert) {
+      // `timeout` bounds time without progress, not total runtime. A pass over
+      // a large realm is not stuck because it is taking a while — and bounding
+      // total runtime made such a realm impossible to finish, because the
+      // deadline expired mid-pass however many times it was retried.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'heartbeat-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            resolveStarted();
+            // Beat faster than the 2s deadline for longer than the deadline,
+            // so an unheartbeated job would certainly have been cut off.
+            let beating = setInterval(
+              () => heartbeatJob(args.jobInfo?.reservationId),
+              200,
+            );
+            try {
+              await new Promise<void>((res) => (releaseHandler = res));
+            } finally {
+              clearInterval(beating);
+            }
+            return { survived: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ survived: boolean }>({
+        jobType: 'heartbeat-job',
+        concurrencyGroup: 'heartbeat-group',
+        timeout: 600, // clamped to the runner's maxTimeoutSec: 2
+        // An object: the queue attaches `jobInfo` to object args only, and
+        // the reservation id it carries is what a heartbeat is keyed by.
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await new Promise((res) => setTimeout(res, 5000));
+
+      let [row] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        row.status,
+        'unfulfilled',
+        'still running 5s into a 2s deadline, because it kept reporting progress',
+      );
+
+      releaseHandler();
+      assert.deepEqual(
+        await job.done,
+        { survived: true },
+        'and it completes normally',
+      );
+    });
+
+    test('a job that goes quiet still loses its worker at the deadline', async function (assert) {
+      // The other half of the contract: a deadline that only ever extends
+      // would let a wedged handler hold a worker forever.
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register('silent-job', async () => {
+          resolveStarted();
+          await new Promise<void>((res) => (releaseHandler = res));
+          return { late: true };
+        });
+      });
+
+      let job = await publisher.publish<{ late: boolean }>({
+        jobType: 'silent-job',
+        concurrencyGroup: 'silent-group',
+        timeout: 600, // clamped to 2s
+        args: 1,
+      });
+      await handlerStarted;
+
+      await assert.rejects(
+        job.done,
+        /Timed-out after 2s/,
+        'a job reporting nothing is cut off at its deadline',
+      );
+      releaseHandler();
+    });
+
+    test('a job cut off at its deadline stops being tracked', async function (assert) {
+      // The deadline exists for a handler that never settles, so cleanup hung
+      // off the handler would never run in the one case that needs it: the
+      // registry would keep the callback and its closures for every wedged
+      // job, and late progress from an abandoned handler would keep arming
+      // timers nobody is waiting on.
+      let releaseHandler!: () => void;
+      let reservationSeen!: number;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'abandoned-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            reservationSeen = args.jobInfo!.reservationId;
+            resolveStarted();
+            await new Promise<void>((res) => (releaseHandler = res));
+            return { late: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ late: boolean }>({
+        jobType: 'abandoned-job',
+        concurrencyGroup: 'abandoned-group',
+        timeout: 600, // clamped to 2s
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await assert.rejects(job.done, /Timed-out after 2s/);
+
+      // The handler is still running — exactly the state the leak lived in.
+      // A heartbeat from it must find nothing registered.
+      assert.strictEqual(
+        heartbeatJob(reservationSeen),
+        undefined,
+        'a heartbeat for a cut-off job is a no-op rather than re-arming a timer',
+      );
+      assert.false(
+        jobHeartbeatRegistered(reservationSeen),
+        'the registry does not retain the callback for a job that timed out',
+      );
+      releaseHandler();
+    });
+
+    test('a phase that waits rather than renders still counts as progress', async function (assert) {
+      // The contract this file pins is "bounded by silence, not by elapsed
+      // time". A phase that makes real progress while emitting no per-file
+      // events has to say so itself, or the job is cut off in exactly the case
+      // the contract exists for — the prerender pass's wait for its spawning
+      // generation is one such phase, and its own ceiling equals the deadline
+      // an incremental-spawned pass is given.
+      let beats = 0;
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'waiting-phase-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            resolveStarted();
+            // Stands in for a poll loop: no work reported, but alive and
+            // bounded elsewhere.
+            let polling = setInterval(() => {
+              beats++;
+              heartbeatJob(args.jobInfo?.reservationId);
+            }, 250);
+            try {
+              await new Promise<void>((res) => (releaseHandler = res));
+            } finally {
+              clearInterval(polling);
+            }
+            return { waited: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ waited: boolean }>({
+        jobType: 'waiting-phase-job',
+        concurrencyGroup: 'waiting-phase-group',
+        timeout: 600, // clamped to the runner's maxTimeoutSec: 2
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await new Promise((res) => setTimeout(res, 5000));
+
+      assert.true(beats > 0, 'the waiting phase reported progress');
+      let [row] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        row.status,
+        'unfulfilled',
+        'a job that only waits, but says so, keeps its worker past the deadline',
+      );
+
+      releaseHandler();
+      assert.deepEqual(await job.done, { waited: true });
     });
 
     test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {
@@ -1856,9 +2085,13 @@ module(basename(import.meta.filename), function () {
         await job.done;
         throw new Error(`expected timeout to be thrown`);
       } catch (error: any) {
-        assert.strictEqual(
-          error.message,
-          'Timed-out after 1s waiting for job 1 to complete',
+        // The elapsed figure is real wall clock, so match the shape rather
+        // than pinning a number that can drift by a tick.
+        assert.true(
+          /^Timed-out after 1s without progress from job 1 \(ran \d+s\)$/.test(
+            error.message,
+          ),
+          `the timeout names the silence window and the elapsed time (got: ${error.message})`,
         );
       }
     });
@@ -2008,10 +2241,11 @@ module(basename(import.meta.filename), function () {
           await job.done;
           throw new Error('expected the timed-out job to be rejected');
         } catch (error: any) {
-          assert.strictEqual(
-            error.message,
-            'Timed-out after 1s waiting for job 1 to complete',
-            'the attempt that ran owns the failure',
+          assert.true(
+            /^Timed-out after 1s without progress from job 1 \(ran \d+s\)$/.test(
+              error.message,
+            ),
+            `the attempt that ran owns the failure (got: ${error.message})`,
           );
         }
 
