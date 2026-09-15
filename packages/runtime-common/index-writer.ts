@@ -2006,66 +2006,6 @@ export class Batch {
     return { totalIndexEntries };
   }
 
-  // Drop this realm's `scoped_css` rows that no live production row
-  // references any more. Only sound after a from-scratch pass has promoted:
-  // production `boxel_index` + `prerendered_html` then hold the realm's
-  // complete reference set, so a hash absent from every live row's deps /
-  // last_known_good_deps has no remaining reader. (An incremental pass sees
-  // only its invalidation slice and must not sweep.) Rows another realm
-  // interned for the same stylesheet are untouched — each realm ref-counts
-  // its own copy. Returns the number of rows removed.
-  async sweepUnreferencedScopedCSS(): Promise<number> {
-    let referenced = new Set<string>();
-    for (let table of ['boxel_index', 'prerendered_html'] as const) {
-      for (let column of ['deps', 'last_known_good_deps'] as const) {
-        let rows = (await this.#query([
-          dbExpression({
-            pg: `SELECT DISTINCT dep_entry.value AS dep FROM ${table} AS i CROSS JOIN LATERAL jsonb_array_elements_text(i.${column}) AS dep_entry(value) WHERE`,
-            sqlite: `SELECT DISTINCT dep_entry.value AS dep FROM ${table} AS i CROSS JOIN json_each(i.${column}) AS dep_entry WHERE`,
-          }),
-          ...every([
-            ['i.realm_url =', param(this.realmURL.href)],
-            [`i.${column} IS NOT NULL`],
-            any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
-            [`dep_entry.value LIKE '%.glimmer-scoped.css'`],
-          ]),
-        ] as Expression)) as unknown as { dep: string }[];
-        for (let { dep } of rows) {
-          if (isHashedScopedCSSRequest(dep)) {
-            let parsed = parseScopedCSSRequest(dep);
-            if (parsed.form === 'hashed') {
-              referenced.add(parsed.cssHash);
-            }
-          }
-        }
-      }
-    }
-    let stored = (await this.#query([
-      `SELECT hash FROM scoped_css WHERE realm_url =`,
-      param(this.realmURL.href),
-    ] as Expression)) as unknown as { hash: string }[];
-    let unreferenced = stored
-      .map(({ hash }) => hash)
-      .filter((hash) => !referenced.has(hash));
-    const hashesPerDelete = 100;
-    for (let i = 0; i < unreferenced.length; i += hashesPerDelete) {
-      let slice = unreferenced.slice(i, i + hashesPerDelete);
-      await this.#query([
-        `DELETE FROM scoped_css WHERE`,
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          [
-            'hash IN',
-            ...addExplicitParens(
-              separatedByCommas(slice.map((hash) => [param(hash)])),
-            ),
-          ],
-        ]),
-      ] as Expression);
-    }
-    return unreferenced.length;
-  }
-
   // Re-stamp the current committed generation's realm_meta value at this
   // batch's generation. Runs inside done()'s transaction before
   // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
@@ -3277,6 +3217,11 @@ export class Batch {
     });
     // Modest chunks: each value carries a whole stylesheet, and a from-scratch
     // pass interns at most one row per distinct stylesheet in the realm.
+    // The upsert refreshing `last_interned_at` on conflict is load-bearing:
+    // the scheduled GC's grace window (see `sweepUnreferencedScopedCSS`)
+    // relies on every intern — including one whose bytes were already
+    // stored — marking the row recently touched, so a pass that re-interns a
+    // currently-unreferenced row protects it until the pass promotes.
     const rowsPerUpsert = 20;
     for (let i = 0; i < toInsert.length; i += rowsPerUpsert) {
       let slice = toInsert.slice(i, i + rowsPerUpsert);
@@ -3285,7 +3230,7 @@ export class Batch {
           realm_url: this.realmURL.href,
           hash,
           css,
-          created_at: Date.now(),
+          last_interned_at: Date.now(),
         }),
       );
       await this.#query([

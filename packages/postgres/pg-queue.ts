@@ -40,6 +40,7 @@ import '@cardstack/runtime-common/tasks/full-reindex';
 import '@cardstack/runtime-common/tasks/media-cache-gc';
 import '@cardstack/runtime-common/tasks/prerender-html';
 import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
+import '@cardstack/runtime-common/tasks/scoped-css-gc';
 import type { PgAdapter } from './pg-adapter.ts';
 import type { JobReservationsTable, JobsTable } from './job-tables.ts';
 import { acquireConcurrencyGroupLock } from './job-concurrency-lock.ts';

@@ -1625,6 +1625,7 @@ export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
 export * from './scoped-css.ts';
+export * from './scoped-css-gc.ts';
 export * from './html-utils.ts';
 export * from './utils.ts';
 export * from './authorization-middleware.ts';

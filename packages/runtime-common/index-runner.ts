@@ -440,21 +440,6 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
       current.stats.totalIndexEntries = totalIndexEntries;
-      // The promoted production tables now hold this realm's complete
-      // scoped-CSS reference set, so stylesheets no live row references can
-      // be reclaimed. Best-effort: a sweep failure must not fail the pass.
-      try {
-        let swept = await current.batch.sweepUnreferencedScopedCSS();
-        if (swept > 0) {
-          current.#perfLog.debug(
-            `${jobIdentity(current.#jobInfo)} swept ${swept} unreferenced scoped_css row(s) for ${current.realmURL.href}`,
-          );
-        }
-      } catch (e) {
-        current.#log.warn(
-          `${jobIdentity(current.#jobInfo)} scoped_css sweep failed for ${current.realmURL.href}: ${(e as Error)?.message}`,
-        );
-      }
     } finally {
       current.#onProgress?.({
         type: 'indexing-finished',

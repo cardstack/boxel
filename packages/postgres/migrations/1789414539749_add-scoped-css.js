@@ -9,23 +9,25 @@ exports.shorthands = undefined;
 //
 // `realm_url` is the realm whose index rows reference the stylesheet — the
 // *consuming* realm, not necessarily the realm the styled module lives in — so
-// each realm ref-counts its own rows: a from-scratch reindex sweeps the
-// realm's rows its live deps no longer reference
-// (`Batch.sweepUnreferencedScopedCSS`), and realm deletion removes them
+// each realm ref-counts its own rows: the scheduled `scoped-css-gc` job
+// sweeps the realm's rows its live deps no longer reference
+// (`sweepUnreferencedScopedCSS`), and realm deletion removes them
 // (`removeRealmDatabaseArtifacts`). The realm's own `_scoped-css/` serving
 // route looks up by (realm_url, hash) — the consuming realm interned every
 // stylesheet its rows reference, so cross-realm deps stay servable without
 // consulting other realms' rows.
 //
-// `created_at` is a unix-ms bigint like `prerendered_html.rendered_at` (pg
-// returns them as JS strings).
+// `last_interned_at` is a unix-ms bigint like `prerendered_html.rendered_at`
+// (pg returns them as JS strings). Every intern refreshes it, including one
+// whose bytes were already stored — the GC's grace window reads it as "no
+// unpromoted index pass can still be about to reference this row".
 
 exports.up = (pgm) => {
   pgm.createTable('scoped_css', {
     realm_url: { type: 'varchar', notNull: true },
     hash: { type: 'varchar', notNull: true },
     css: { type: 'text', notNull: true },
-    created_at: { type: 'bigint', notNull: true },
+    last_interned_at: { type: 'bigint', notNull: true },
   });
   pgm.addConstraint('scoped_css', 'scoped_css_pkey', {
     primaryKey: ['realm_url', 'hash'],

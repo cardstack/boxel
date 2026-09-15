@@ -226,7 +226,7 @@
    realm_url TEXT NOT NULL,
    hash TEXT NOT NULL,
    css TEXT NOT NULL,
-   created_at NOT NULL,
+   last_interned_at NOT NULL,
    PRIMARY KEY ( realm_url, hash ) 
 );
 

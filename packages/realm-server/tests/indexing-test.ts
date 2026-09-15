@@ -11,6 +11,7 @@ import {
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
+  sweepUnreferencedScopedCSS,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -1984,9 +1985,9 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      // The sweep's only call site (IndexRunner.fromScratch finalization)
-      // degrades any error to a log warning, so this direct test is what
-      // turns a broken scan or delete red.
+      // The sweep runs from the scheduled `scoped-css-gc` job, whose task
+      // shell adds nothing to the scan, so this direct test is what turns a
+      // broken scan or delete red.
       test("sweepUnreferencedScopedCSS drops this realm's unreferenced rows and nothing else", async function (assert) {
         let referencedRows = (await testDbAdapter.execute(
           `SELECT hash FROM scoped_css WHERE realm_url = $1`,
@@ -1998,32 +1999,34 @@ module(basename(import.meta.filename), function () {
         );
 
         let orphanHash = 'a'.repeat(32);
+        let freshOrphanHash = 'c'.repeat(32);
         let foreignHash = 'b'.repeat(32);
         let foreignRealmURL = 'http://example.com/other-realm/';
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
         await testDbAdapter.execute(
-          `INSERT INTO scoped_css (realm_url, hash, css, created_at)
-           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)`,
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8), ($9, $10, $11, $12)`,
           {
             bind: [
               realm.url,
               orphanHash,
               '.superseded {}',
+              sweepable,
+              realm.url,
+              freshOrphanHash,
+              '.just-interned {}',
               Date.now(),
               foreignRealmURL,
               foreignHash,
               '.foreign {}',
-              Date.now(),
+              sweepable,
             ],
           },
         );
 
-        let batch = await new IndexWriter(testDbAdapter).createBatch(
-          new URL(realm.url),
-          virtualNetwork,
-        );
-        let swept = await batch.sweepUnreferencedScopedCSS();
+        let swept = await sweepUnreferencedScopedCSS(testDbAdapter, realm.url);
 
-        assert.strictEqual(swept, 1, 'exactly the orphan row was swept');
+        assert.strictEqual(swept, 1, 'exactly the stale orphan row was swept');
         let remaining = (await testDbAdapter.execute(
           `SELECT realm_url, hash FROM scoped_css ORDER BY realm_url, hash`,
         )) as { realm_url: string; hash: string }[];
@@ -2033,10 +2036,17 @@ module(basename(import.meta.filename), function () {
           ),
           'the unreferenced row is gone',
         );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === realm.url && row.hash === freshOrphanHash,
+          ),
+          'an unreferenced row still inside the grace window survived',
+        );
         assert.strictEqual(
           remaining.filter((row) => row.realm_url === realm.url).length,
-          referencedRows.length,
-          'every referenced row survived',
+          referencedRows.length + 1,
+          'every referenced row survived (plus the within-grace orphan)',
         );
         assert.true(
           remaining.some(
