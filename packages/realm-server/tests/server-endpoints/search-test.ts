@@ -18,7 +18,9 @@ import {
   param,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
+  setSearchShapeSink,
   type Expression,
+  type SearchShapeEvent,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
@@ -839,6 +841,172 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         afterWrite.body.meta.page.total,
         5,
         'the new instance is in the fresh result',
+      );
+    });
+
+    // Capture the query-shape lines a block of requests emits. The sink
+    // replaces the logger for its duration, so only requests made inside are
+    // observed and the realm-server's own boot/indexing traffic stays out.
+    async function captureSearchShapes(
+      run: () => Promise<void>,
+    ): Promise<SearchShapeEvent[]> {
+      let events: SearchShapeEvent[] = [];
+      setSearchShapeSink((event) => events.push(event));
+      try {
+        await run();
+      } finally {
+        setSearchShapeSink(undefined);
+      }
+      return events;
+    }
+
+    test('a federated search emits one query-shape line describing what it asked for', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+          sort: [{ by: 'item.createdAt', direction: 'desc' }],
+          page: { size: 10 },
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      assert.strictEqual(events.length, 1, 'exactly one line per search');
+      let [event] = events;
+      assert.strictEqual(
+        event.filter,
+        `on(${baseCardRef.module}/${baseCardRef.name})`,
+        'the filter renders its type anchor',
+      );
+      assert.strictEqual(
+        event.sort,
+        'createdAt:desc',
+        'the sort renders its field and direction',
+      );
+      assert.strictEqual(event.pageSize, 10);
+      assert.strictEqual(
+        event.realms,
+        `${testRealm.url},${secondaryRealm.url}`,
+        'the realms searched',
+      );
+      assert.strictEqual(event.realmCount, 2);
+      assert.strictEqual(event.results, 4, 'the entries the response carried');
+      assert.strictEqual(event.total, 4, 'the entries the query matched');
+      assert.false(event.incomplete, 'both realms answered');
+      assert.strictEqual(event.status, 200);
+      assert.strictEqual(event.cache, 'miss', 'this request did the computing');
+      assert.true(event.totalMs >= 0, 'the request is timed');
+      assert.true(event.shapeHash.length > 0, 'the shape is hashed');
+    });
+
+    test('the query-shape line carries no filter value', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearch({
+          filter: {
+            'item.on': baseCardRef,
+            every: [
+              { eq: { 'item.title': 'Jane' } },
+              { contains: { 'item.description': 'a private description' } },
+            ],
+          },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      assert.strictEqual(events.length, 1, 'exactly one line per search');
+      let [event] = events;
+      assert.strictEqual(
+        event.filter,
+        `on(${baseCardRef.module}/${baseCardRef.name}):every(contains(description),eq(title))`,
+        'the operators and the field paths they address, and nothing else',
+      );
+      let line = JSON.stringify(event);
+      assert.false(line.includes('Jane'), 'no eq value reaches the line');
+      assert.false(
+        line.includes('a private description'),
+        'no contains value reaches the line',
+      );
+    });
+
+    test('a live-cache hit reports the outcome and claims no counts', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let events = await captureSearchShapes(async () => {
+        await postSearch(searchBody);
+        let second = await postSearch(searchBody);
+        assert.strictEqual(
+          second.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'the follow-up is served from the live cache',
+        );
+      });
+      assert.strictEqual(events.length, 2, 'both requests are reported');
+      let [first, second] = events;
+      assert.strictEqual(first.cache, 'miss');
+      assert.strictEqual(first.results, 4, 'the computing request counted');
+      assert.strictEqual(second.cache, 'hit');
+      assert.strictEqual(
+        second.results,
+        null,
+        'a hit answers from a body it never built, so it counts nothing',
+      );
+      assert.strictEqual(second.total, null);
+      assert.strictEqual(second.incomplete, null);
+      assert.strictEqual(
+        first.shapeHash,
+        second.shapeHash,
+        'the same query hashes the same however it was answered',
+      );
+    });
+
+    test('searches of the same shape share a hash across realms and pages', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        });
+        await postSearch({
+          filter: personFilter(),
+          realms: [secondaryRealm.url],
+          page: { number: 1, size: 10 },
+        });
+        await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 3 },
+        });
+      });
+      assert.strictEqual(events.length, 3, 'one line per search');
+      assert.strictEqual(
+        events[0].shapeHash,
+        events[1].shapeHash,
+        'a different realm and page number is the same shape',
+      );
+      assert.notStrictEqual(
+        events[0].shapeHash,
+        events[2].shapeHash,
+        'a different page size is a different shape',
+      );
+    });
+
+    test('a rejected query emits no query-shape line', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearch({
+          filter: { eq: { title: 'Jane' } },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(
+          response.status,
+          400,
+          'a field path not addressed through item. is rejected',
+        );
+      });
+      assert.deepEqual(
+        events,
+        [],
+        'a request that never parsed has no shape to report',
       );
     });
   });
