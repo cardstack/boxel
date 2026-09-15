@@ -26,11 +26,14 @@ export interface ResponseCacheSummary {
   hits: number;
   joins: number;
   misses: number;
-  // Why each miss found nothing to serve: the key was never stored (or its
-  // entry had already been reclaimed), or it was stored and had aged past its
-  // TTL. They sum to `misses`, and they separate a cache too small or too
-  // churned to retain a key from one whose TTL is simply shorter than the gap
-  // between reads of it — two problems with opposite fixes.
+  // Why each miss found nothing to serve. `missesKeyExpired` counts a key this
+  // cache had held and let age out — whether the lookup found the stale entry
+  // itself or a sweep had already reclaimed it. `missesKeyAbsent` counts the
+  // rest: a key never stored, one displaced by the byte cap, or one whose
+  // expiry has aged out of what is remembered. They sum to `misses`, and they
+  // separate a cache too small or too churned to retain a key from one whose
+  // TTL is simply shorter than the gap between reads of it — two problems with
+  // opposite fixes.
   missesKeyAbsent: number;
   missesKeyExpired: number;
   // Entry lifecycle: aged out past the TTL / displaced by the byte cap
@@ -133,6 +136,13 @@ export interface TtlResponseCacheOptions<T> {
 // eviction, and telemetry emission rides request activity, so the cache needs
 // no teardown hook and can't leak handles in tests. Idle retention is bounded
 // by the byte cap and reclaimed on the next call.
+
+// How many TTL-reclaimed keys stay attributable. It only has to outlast the
+// gap between a key being reclaimed and the next lookup for that same key, so
+// it is sized to a busy window's distinct keys rather than to the entry cap —
+// overflowing it costs attribution on the oldest keys, never correctness.
+const RECENTLY_EXPIRED_KEYS = 1024;
+
 export class TtlResponseCache<T> {
   readonly #ttlMs: number;
   readonly #maxBytes: number;
@@ -146,6 +156,15 @@ export class TtlResponseCache<T> {
   // head of the map is always the least-recently-used entry.
   #entries = new Map<string, { value: T; bytes: number; expiresAt: number }>();
   #totalBytes = 0;
+  // Keys reclaimed for being past their TTL, so the next lookup for one can say
+  // that is why it missed. Reclamation is lazy and runs on whatever call
+  // happens next, for any key — so on a busy cache an expired entry is usually
+  // dropped by an unrelated lookup, and its own next lookup would otherwise
+  // find nothing and report a key that had simply never been stored. That is
+  // the opposite diagnosis: it points at a cache too small when the answer is a
+  // TTL shorter than the gap between reads. Insertion-ordered and capped, so
+  // this costs a bounded number of keys rather than growing with the workload.
+  #recentlyExpired = new Set<string>();
   // Cumulative counters (never reset — `stats` exposes them raw; telemetry
   // emits per-window deltas against #lastEmitted).
   #counters: ResponseCacheCounters = {
@@ -213,12 +232,17 @@ export class TtlResponseCache<T> {
     onOutcome?: (outcome: ResponseCacheOutcome) => void;
   }): Promise<{ value: T; outcome: ResponseCacheOutcome }> {
     let { key } = args;
-    // Classified before the reaper runs. It removes expired entries from the
-    // head, so a key it takes would read as absent below and this lookup would
-    // be indistinguishable from one for a key that was never stored.
+    // Why this lookup would miss, decided before the reaper runs and before it
+    // can take this key itself. Either the entry is still filed and has aged
+    // out, or an earlier sweep already reclaimed it — reclamation is lazy and
+    // rides whatever call comes next, so on a busy cache the second case is the
+    // common one and reads as a key that was never stored unless it is
+    // remembered.
     let entryAtLookup = this.#entries.get(key);
     let keyWasExpired =
-      entryAtLookup !== undefined && entryAtLookup.expiresAt <= Date.now();
+      entryAtLookup !== undefined
+        ? entryAtLookup.expiresAt <= Date.now()
+        : this.#recentlyExpired.has(key);
     this.#reapExpiredHead();
     let onOutcome = args.onOutcome ?? (() => {});
 
@@ -307,6 +331,9 @@ export class TtlResponseCache<T> {
     if (prior) {
       this.#totalBytes -= prior.bytes;
     }
+    // The key is live again, so the expiry that preceded this store has been
+    // answered and should not explain a later miss.
+    this.#recentlyExpired.delete(key);
     this.#entries.set(key, {
       value,
       bytes,
@@ -321,6 +348,21 @@ export class TtlResponseCache<T> {
     this.#totalBytes -= entry.bytes;
   }
 
+  // Record a key dropped for being past its TTL, so the next lookup for it can
+  // name that as the reason it missed. Re-inserted rather than skipped when
+  // already present, since a Set keeps insertion order and this key is the
+  // freshest evidence; the oldest is dropped once the cap is reached.
+  #rememberExpired(key: string): void {
+    this.#recentlyExpired.delete(key);
+    this.#recentlyExpired.add(key);
+    if (this.#recentlyExpired.size > RECENTLY_EXPIRED_KEYS) {
+      let oldest = this.#recentlyExpired.values().next();
+      if (!oldest.done) {
+        this.#recentlyExpired.delete(oldest.value);
+      }
+    }
+  }
+
   // Drop expired entries from the head of the map. Recency re-insertion
   // means the head holds the least-recently-used entries; an expired entry
   // behind a live one (possible, since a hit re-inserts with its original
@@ -332,6 +374,7 @@ export class TtlResponseCache<T> {
         break;
       }
       this.#delete(key, entry);
+      this.#rememberExpired(key);
       this.#counters.expired += 1;
     }
   }
@@ -346,6 +389,7 @@ export class TtlResponseCache<T> {
     for (let [key, entry] of this.#entries) {
       if (entry.expiresAt <= now) {
         this.#delete(key, entry);
+        this.#rememberExpired(key);
         this.#counters.expired += 1;
       }
     }

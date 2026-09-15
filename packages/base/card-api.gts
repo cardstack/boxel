@@ -4640,6 +4640,13 @@ registerRelationshipProbe((instance, field) => {
     // without re-arming anything — so repeated reads observe rather than
     // restart, and a field whose query is not yet resolvable still reports as
     // unresolved until it is.
+    //
+    // This resolves on the same terms as the field getter, including how the
+    // resource's liveness is decided, because a status read and a value read
+    // are the same demand arriving by different routes. That is deliberately
+    // unlike the pass that runs at deserialization, which defers inside a
+    // render context rather than deciding liveness for a card it was not asked
+    // about: here the caller is the render that wants the field.
     let resource = ensureQueryFieldSearchResource(
       getStore(instance),
       instance,
@@ -5503,6 +5510,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // identity, so comparing against `data` separates the two exactly, and a
       // link followed on its own reaches here as the `data` of the document its
       // own read returned.
+      //
+      // Every caller deserializes from a single-resource document — a search
+      // result is re-wrapped as its own — so the collection form is answered
+      // only because the document type admits one, not because a caller sends
+      // one. Membership of `data` is the same question either way.
       let isDocumentSubject = Array.isArray(doc.data)
         ? (doc.data as LooseCardResource[]).includes(resource)
         : doc.data === resource;

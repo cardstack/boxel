@@ -353,6 +353,16 @@ module(basename(import.meta.filename), function () {
       await attempt.catch(() => {});
     }
     assert.strictEqual(cache.stats.errors, 1, 'one error per failed compute');
+
+    // The reasons account for exactly the misses, asserted here because this
+    // cache has also seen an eviction, an expiry and a failed populate. A
+    // failed compute is an error rather than a miss, so a reason counted before
+    // the populate resolves would break the sum on this path and on no other.
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent + cache.stats.missesKeyExpired,
+      cache.stats.misses,
+      'every miss is attributed to exactly one reason',
+    );
   });
 
   test('a miss says whether the key was absent or had aged out', async function (assert) {
@@ -388,15 +398,9 @@ module(basename(import.meta.filename), function () {
       1,
       'and that is not also counted as absent',
     );
-
-    assert.strictEqual(
-      cache.stats.missesKeyAbsent + cache.stats.missesKeyExpired,
-      cache.stats.misses,
-      'every miss is attributed to exactly one reason',
-    );
   });
 
-  test('the reaper moves the removal counter without inventing a lookup', async function (assert) {
+  test('a key reclaimed before its own next lookup still reports expiring', async function (assert) {
     let cache = new LiveSearchCache({ ttlMs: 50 });
     let realms = ['http://a/'];
     let load = (name: string) =>
@@ -410,20 +414,62 @@ module(basename(import.meta.filename), function () {
     await load('A');
     await sleep(80);
 
-    // `B` is a key of its own. Serving it reaps the aged-out `A` on the way
-    // past, so `expired` moves for a removal no lookup asked about — which is
-    // why it cannot stand in for a miss reason.
+    // `B` is a key of its own, and serving it sweeps the aged-out `A` away on
+    // the way past. This is the ordering a busy cache produces almost always,
+    // and it is the one that would otherwise blame the cache's size for what
+    // the TTL did.
     await load('B');
-    assert.ok(cache.stats.expired >= 1, 'the reaper recorded the removal');
+    assert.ok(cache.stats.expired >= 1, 'the sweep reclaimed the aged-out key');
     assert.strictEqual(
       cache.stats.missesKeyExpired,
       0,
-      "and B's own miss is not attributed to A's expiry",
+      "B's own miss is not attributed to A's expiry",
+    );
+
+    await load('A');
+    assert.strictEqual(
+      cache.stats.missesKeyExpired,
+      1,
+      'and A still misses for having expired, though it was swept by another lookup',
     );
     assert.strictEqual(
       cache.stats.missesKeyAbsent,
       2,
-      'both lookups missed on a key that was not there to serve',
+      'while the two keys that were never stored account for the rest',
+    );
+  });
+
+  test('a key displaced by the byte cap is not reported as expiring', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 60_000, maxBytes: 25 });
+    let realms = ['http://a/'];
+    let load = (name: string) =>
+      cache.getOrPopulate({
+        realms,
+        query: personQuery(name),
+        opts: undefined,
+        populate: async () => '0123456789',
+      });
+
+    // Three 10-char bodies against a 25-char cap: C's arrival displaces A, and
+    // the TTL is nowhere near. Re-reading A has to read as capacity pressure,
+    // which is the diagnosis opposite to expiry.
+    await load('A');
+    await load('B');
+    await load('C');
+    await load('A');
+    // Re-storing A displaces another entry in turn, so the cap is doing the
+    // work throughout and the count is not the point — that none of it reads
+    // as expiry is.
+    assert.ok(cache.stats.evicted >= 1, 'the cap displaced an entry');
+    assert.strictEqual(
+      cache.stats.missesKeyExpired,
+      0,
+      'and no miss here is blamed on a TTL none of them reached',
+    );
+    assert.strictEqual(
+      cache.stats.missesKeyAbsent,
+      4,
+      'every miss is attributed to the key not being held',
     );
   });
 
