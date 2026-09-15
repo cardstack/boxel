@@ -61,6 +61,11 @@ export interface ServerRequestEvent extends BaseEvent {
   correlation_id: string | null;
   retried: boolean;
   realm: TelemetryRealm;
+  // How the realm-server's live-search cache served this response — `hit`,
+  // `join` or `miss`. Only the federated-search endpoint publishes it, so it is
+  // absent from every other event rather than carried as an empty value on
+  // requests the cache has nothing to say about.
+  search_cache?: string;
 }
 
 export interface DeserializeEvent extends BaseEvent {
@@ -443,6 +448,11 @@ export default class ClientTelemetryService
     }
     try {
       let realm = response.headers.get('x-boxel-realm-url') || null;
+      // The realm-server names its live-search cache's outcome on the response
+      // and exposes the header cross-origin, so the outcome of an individual
+      // request is readable here. Its own summary counters are per-process and
+      // span every realm, which is why they cannot speak for one request.
+      let searchCache = response.headers.get('x-boxel-live-search-cache');
       let contentLength = response.headers.get('content-length');
       let respBytes = contentLength ? Number(contentLength) : 0;
       let endpoint = normalizeEndpoint(req.url, req.method);
@@ -474,6 +484,7 @@ export default class ClientTelemetryService
           req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER) || null,
         retried,
         realm,
+        ...(searchCache ? { search_cache: searchCache } : {}),
       });
     } catch (e) {
       console.error('client-telemetry recordServerRequestTiming failed', e);
