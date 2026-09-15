@@ -17,8 +17,11 @@ import {
 import {
   commitBatch,
   isOperationFailure,
+  setOperationPerfSink,
   type BatchDocument,
   type BatchEntry,
+  type OperationDefinition,
+  type OperationPerfEvent,
 } from '@cardstack/runtime-common/card-operations';
 import type {
   DBAdapter,
@@ -54,6 +57,10 @@ const EVENT_LOG = {
 const HOTFIX_EVENT = {
   module: rri(`${testRealmHref}event-log`),
   name: 'HotfixEvent',
+};
+const EXTERNAL_REPORT = {
+  module: rri(`${testRealmHref}report`),
+  name: 'ExternalReport',
 };
 
 // ============================================================================
@@ -129,6 +136,138 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A card whose type declares the operations a transform runs, so what the
+    // executor is handed is what the real pipeline lowered rather than a hand-
+    // written stand-in for it: the module is indexed, the declarations are
+    // lowered into its definition-cache entry, and the tests read them back
+    // out of the same entry the realm would.
+    'report.gts': `
+      import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { operation, params, actor, instance, bxl, linkTo } from "@cardstack/base/operations";
+      import { Person } from "./person";
+
+      export class ReportComment extends FieldDef {
+        @field body = contains(StringField);
+        @field postedBy = contains(StringField);
+      }
+
+      export class ExternalReport extends CardDef {
+        @field headline = contains(StringField);
+        @field status = contains(StringField);
+        @field comments = containsMany(ReportComment);
+        @field reviewers = linksToMany(() => Person);
+        @field owner = linksTo(() => Person, { searchable: true });
+        @field auditor = linksTo(() => Person);
+        @field slug = contains(StringField, {
+          computeVia: function (this: ExternalReport) {
+            return (this.headline ?? '').toLowerCase().split(' ').join('-');
+          },
+        });
+
+        @operation static escalate = {
+          base: 'transform',
+          set: { status: 'escalated' },
+        };
+
+        @operation static addComment = {
+          base: 'transform',
+          params: { body: StringField },
+          append: {
+            to: 'comments',
+            value: { body: params('body'), postedBy: actor() },
+          },
+        };
+
+        @operation static addReviewer = {
+          base: 'transform',
+          params: { person: linkTo(() => Person) },
+          append: { to: 'reviewers', value: params('person') },
+        };
+
+        @operation static restate = {
+          base: 'transform',
+          params: { headline: StringField },
+          set: { headline: params('headline'), status: instance('status') },
+        };
+
+        @operation static openOnly = {
+          base: 'transform',
+          transformations: bxl\`
+            assert(.status == "open"; "Report is not open");
+            .status = "escalated";
+          \`,
+        };
+
+        @operation static stampSlug = {
+          base: 'transform',
+          transformations: bxl\`.headline = .slug;\`,
+        };
+
+        @operation static stampOwner = {
+          base: 'transform',
+          transformations: bxl\`.headline = .owner.firstName;\`,
+        };
+
+        @operation static stampAuditor = {
+          base: 'transform',
+          transformations: bxl\`.headline = .auditor.firstName;\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+      }
+    `,
+    'reviewer.json': {
+      data: {
+        type: 'card',
+        attributes: { firstName: 'Reviewer' },
+        meta: { adoptsFrom: PERSON },
+      },
+    },
+    ...Object.fromEntries(
+      [
+        // One report per test that changes one, so the file's tests do not
+        // have to be ordered against each other.
+        'report-set',
+        'report-append',
+        'report-link',
+        'report-context',
+        'report-assert',
+        'report-assert-held',
+        'report-invalid',
+        'report-computed',
+        'report-linked',
+        'report-unsearchable',
+        'report-dangling',
+        'report-unchanged',
+        'report-version',
+      ].map((name) => [
+        `${name}.json`,
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              headline: 'Quarterly Review',
+              status: 'open',
+              comments: [],
+            },
+            relationships: {
+              owner: { links: { self: './reviewer' } },
+              auditor: { links: { self: './reviewer' } },
+            },
+            meta: { adoptsFrom: EXTERNAL_REPORT },
+          },
+        },
+      ]),
+    ),
     // The files the file-content writes work on. Each test that changes one
     // has its own, so the file's tests do not have to be ordered against each
     // other, and the two kinds a write is refused on — a module's source and
@@ -282,27 +421,6 @@ module(basename(import.meta.filename), function (hooks) {
       clientRequestId: clientRequestId ?? null,
       actor: '@tester:localhost',
     });
-  }
-
-  // What a batch refused, as the caller sees it: the status, the code, and
-  // which entry produced it. A batch that commits instead returns undefined,
-  // which is what a test asserting a refusal fails on.
-  async function refusal(
-    entries: BatchEntry[],
-  ): Promise<{ status: number; code: string; entry: unknown } | undefined> {
-    try {
-      await commit(entries);
-    } catch (err: unknown) {
-      if (!isOperationFailure(err)) {
-        throw err;
-      }
-      return {
-        status: err.error.status,
-        code: err.error.code,
-        entry: err.error.meta?.entry,
-      };
-    }
-    return undefined;
   }
 
   // The `links.self` a stored relationship holds, resolved against the card
@@ -964,6 +1082,403 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  // ==========================================================================
+  // `transform`
+  //
+  // Every case here runs the operation the card's own module declares: the
+  // module is indexed, the prerender host lowers its `@operation`s into the
+  // type's definition-cache entry, and the entry is read back out of that
+  // cache. So what reaches the executor is the program the real pipeline
+  // produced, and a change to how a declaration lowers shows up here rather
+  // than being papered over by a hand-written program.
+  // ==========================================================================
+
+  async function reportOperation(name: string): Promise<OperationDefinition> {
+    let definition = await realm.batchCore.lookupDefinition(
+      EXTERNAL_REPORT,
+      testRealm,
+    );
+    let operation = definition?.operations?.[name];
+    if (!operation) {
+      throw new Error(
+        `the indexed definition for ExternalReport carries no operation "${name}"`,
+      );
+    }
+    return operation;
+  }
+
+  async function invoke(
+    name: string,
+    localPath: string,
+    params?: Record<string, unknown>,
+    opts: { baseVersion?: string } = {},
+  ) {
+    return await commit([
+      {
+        op: 'transform',
+        name,
+        href: `${testRealmHref}${localPath}`,
+        definition: await reportOperation(name),
+        ...(params ? { params } : {}),
+        ...(opts.baseVersion ? { baseVersion: opts.baseVersion } : {}),
+      },
+    ]);
+  }
+
+  function storedCard(localPath: string) {
+    return JSON.parse(readFileSync(realmFile(`${localPath}.json`), 'utf8'))
+      .data as {
+      attributes?: Record<string, any>;
+      relationships?: Record<string, any>;
+    };
+  }
+
+  // The refusal a batch of one produced, as the caller sees it.
+  async function refusalFrom(run: () => Promise<unknown>) {
+    try {
+      await run();
+    } catch (err: unknown) {
+      if (isOperationFailure(err)) {
+        return err.error;
+      }
+      throw err;
+    }
+    throw new Error('expected the batch to be refused');
+  }
+
+  // The refusal a batch of entries produced, as the caller sees it, narrowed
+  // to what a test asserts on.
+  async function refusal(
+    entries: BatchEntry[],
+  ): Promise<{ status: number; code: string; entry: unknown }> {
+    let error = await refusalFrom(() => commit(entries));
+    return {
+      status: error.status,
+      code: error.code,
+      entry: error.meta?.entry,
+    };
+  }
+
+  // Every telemetry record one batch emitted, captured off the channel's own
+  // sink rather than scraped out of the log.
+  async function recording<T>(
+    run: () => Promise<T>,
+  ): Promise<{ result: T; events: OperationPerfEvent[] }> {
+    let events: OperationPerfEvent[] = [];
+    setOperationPerfSink((event) => events.push(event));
+    try {
+      return { result: await run(), events };
+    } finally {
+      setOperationPerfSink(undefined);
+    }
+  }
+
+  test('a declared set writes the value into the stored file', async function (assert) {
+    let [result] = await invoke('escalate', 'report-set');
+
+    assert.strictEqual(
+      storedCard('report-set').attributes?.status,
+      'escalated',
+      'the program wrote the value the declaration names',
+    );
+    assert.strictEqual(
+      storedCard('report-set').attributes?.headline,
+      'Quarterly Review',
+      'a field the program never named is left exactly as it was',
+    );
+    assert.true(
+      (result?.meta.version ?? '').length > 0,
+      'the result reports the version the file now holds',
+    );
+  });
+
+  test('an append adds an item built from the payload and the caller', async function (assert) {
+    await invoke('addComment', 'report-append', { body: 'Reviewed.' });
+
+    assert.deepEqual(
+      storedCard('report-append').attributes?.comments,
+      [{ body: 'Reviewed.', postedBy: '@tester:localhost' }],
+      'the item carries the payload and the authenticated caller',
+    );
+  });
+
+  test('an append to a link collection records an edge to the card the payload names', async function (assert) {
+    await invoke('addReviewer', 'report-link', {
+      person: `${testRealmHref}reviewer`,
+    });
+
+    assert.strictEqual(
+      storedLink('report-link.json', 'reviewers.0'),
+      `${testRealmHref}reviewer`,
+      'the link resolves to the card the payload named',
+    );
+  });
+
+  test('a program reads the payload and the target it runs against', async function (assert) {
+    await invoke('restate', 'report-context', { headline: 'Rewritten' });
+
+    let stored = storedCard('report-context');
+    assert.strictEqual(
+      stored.attributes?.headline,
+      'Rewritten',
+      'params() resolves to what the caller sent',
+    );
+    assert.strictEqual(
+      stored.attributes?.status,
+      'open',
+      "instance() resolves to the target's stored value",
+    );
+  });
+
+  test('a failed assertion carries the message its author wrote and writes nothing', async function (assert) {
+    // The card is escalated first, so the precondition the program asserts no
+    // longer holds when it runs the second time.
+    await invoke('openOnly', 'report-assert');
+    let before = readFileSync(realmFile('report-assert.json'), 'utf8');
+    let jobsBefore = await indexJobIds();
+
+    let error = await refusalFrom(() => invoke('openOnly', 'report-assert'));
+    assert.strictEqual(error.code, 'assertion-failed');
+    assert.strictEqual(error.status, 400);
+    assert.strictEqual(error.detail, 'Report is not open');
+    assert.strictEqual(
+      readFileSync(realmFile('report-assert.json'), 'utf8'),
+      before,
+      'the stored bytes are untouched',
+    );
+    assert.deepEqual(
+      await indexJobIds(),
+      jobsBefore,
+      'nothing is queued for indexing',
+    );
+  });
+
+  test('a program that will not run is refused and the file is left alone', async function (assert) {
+    let before = readFileSync(realmFile('report-invalid.json'), 'utf8');
+    let error = await refusalFrom(async () =>
+      commit([
+        {
+          op: 'transform',
+          href: `${testRealmHref}report-invalid`,
+          program: { source: '.nonesuch="x";', syntax: 'solidified' },
+        },
+      ]),
+    );
+
+    assert.strictEqual(error.status, 400);
+    assert.strictEqual(error.code, 'invalid-params');
+    assert.ok(
+      (error.meta as { bxlCode?: string } | undefined)?.bxlCode,
+      'the refusal names the code the planner refused under',
+    );
+    assert.strictEqual(
+      readFileSync(realmFile('report-invalid.json'), 'utf8'),
+      before,
+      'the stored bytes are untouched',
+    );
+  });
+
+  test('a transform of a card that is not there is a 404', async function (assert) {
+    let error = await refusalFrom(() => invoke('escalate', 'no-such-report'));
+    assert.strictEqual(error.status, 404);
+    assert.strictEqual(error.code, 'target-not-found');
+  });
+
+  test('a program reads a computed value the card never stores', async function (assert) {
+    let { events } = await recording(() =>
+      invoke('stampSlug', 'report-computed'),
+    );
+
+    assert.strictEqual(
+      storedCard('report-computed').attributes?.headline,
+      'quarterly-review',
+      "the value came from the index's rendering of the card, not from its file",
+    );
+    assert.strictEqual(
+      events[0]?.computedReads,
+      1,
+      'the read is attributed to the layer that answered it',
+    );
+    assert.deepEqual(events[0]?.missing, [], 'nothing was missing');
+  });
+
+  test("a program reads a linked card's field through a searchable link", async function (assert) {
+    let { events } = await recording(() =>
+      invoke('stampOwner', 'report-linked'),
+    );
+
+    assert.strictEqual(
+      storedCard('report-linked').attributes?.headline,
+      'Reviewer',
+      "the linked card's value is denormalized into this card's row",
+    );
+    assert.strictEqual(
+      events[0]?.linkedReads,
+      1,
+      'the read is attributed to the linked layer',
+    );
+  });
+
+  test('a read through a link nothing denormalized is refused, with the reason', async function (assert) {
+    let before = readFileSync(realmFile('report-unsearchable.json'), 'utf8');
+    let { result: error, events } = await recording(() =>
+      refusalFrom(() => invoke('stampAuditor', 'report-unsearchable')),
+    );
+
+    assert.strictEqual(error.status, 400);
+    assert.true(
+      error.detail.includes('unavailable'),
+      `the refusal says the value could not be supplied: ${error.detail}`,
+    );
+    assert.deepEqual(
+      events[0]?.missing,
+      [
+        {
+          path: 'auditor.firstName',
+          layer: 'linked',
+          reason: 'not-searchable',
+        },
+      ],
+      'the missing value is reported with the reason nothing supplied it',
+    );
+    assert.strictEqual(
+      readFileSync(realmFile('report-unsearchable.json'), 'utf8'),
+      before,
+      'the stored bytes are untouched',
+    );
+  });
+
+  test('a link to a card the realm does not hold is refused', async function (assert) {
+    let before = readFileSync(realmFile('report-dangling.json'), 'utf8');
+    let error = await refusalFrom(() =>
+      invoke('addReviewer', 'report-dangling', {
+        person: `${testRealmHref}nobody`,
+      }),
+    );
+
+    assert.strictEqual(error.status, 400);
+    assert.strictEqual(error.code, 'invalid-params');
+    assert.true(
+      error.detail.includes(`${testRealmHref}nobody`),
+      `the refusal names the card that is not there: ${error.detail}`,
+    );
+    assert.strictEqual(
+      readFileSync(realmFile('report-dangling.json'), 'utf8'),
+      before,
+      'the stored bytes are untouched',
+    );
+  });
+
+  test('a program that changes nothing leaves the file exactly as it is', async function (assert) {
+    // Escalating twice: the second run plans the same write over a card that
+    // already holds the value, so the document it produces is the one on disk.
+    await invoke('escalate', 'report-unchanged');
+    let before = readFileSync(realmFile('report-unchanged.json'), 'utf8');
+    let jobsBefore = await indexJobIds();
+
+    let { result, events } = await recording(() =>
+      invoke('escalate', 'report-unchanged'),
+    );
+
+    assert.strictEqual(
+      readFileSync(realmFile('report-unchanged.json'), 'utf8'),
+      before,
+      'the stored bytes are untouched',
+    );
+    assert.true(
+      (result[0]?.meta.version ?? '').length > 0,
+      'the result still reports the version the file holds',
+    );
+    assert.deepEqual(
+      await indexJobIds(),
+      jobsBefore,
+      'nothing is queued for indexing',
+    );
+    assert.strictEqual(
+      events[0]?.outcome,
+      'unchanged',
+      'the run is reported as one that changed nothing',
+    );
+  });
+
+  test('a base version is reported against the state the program planned over', async function (assert) {
+    let [first] = await invoke('escalate', 'report-version');
+    let version = first!.meta.version;
+
+    let [matched] = await invoke(
+      'restate',
+      'report-version',
+      {
+        headline: 'Second',
+      },
+      { baseVersion: version },
+    );
+    assert.true(
+      matched!.meta.baseMatched,
+      'the base the caller named is the one the file held',
+    );
+
+    let [moved] = await invoke(
+      'restate',
+      'report-version',
+      {
+        headline: 'Third',
+      },
+      { baseVersion: version },
+    );
+    assert.false(
+      moved!.meta.baseMatched,
+      'the file has moved past the base the caller named',
+    );
+  });
+
+  test('a payload the declaration does not describe is refused before any program runs', async function (assert) {
+    let undeclared = await refusalFrom(() =>
+      invoke('escalate', 'report-set', { body: 'nope' }),
+    );
+    assert.strictEqual(undeclared.status, 400);
+    assert.strictEqual(undeclared.code, 'invalid-params');
+
+    let missing = await refusalFrom(() => invoke('addComment', 'report-set'));
+    assert.strictEqual(missing.status, 400);
+    assert.strictEqual(missing.code, 'invalid-params');
+    assert.true(
+      missing.detail.includes('params("body")'),
+      `the refusal names the param with no value: ${missing.detail}`,
+    );
+  });
+
+  test('one execution is reported on the operations channel', async function (assert) {
+    let { events } = await recording(() =>
+      invoke('addComment', 'report-context', { body: 'Noted.' }),
+    );
+
+    assert.strictEqual(events.length, 1, 'one line per execution');
+    let [event] = events;
+    assert.strictEqual(event.operation, 'addComment');
+    assert.strictEqual(event.base, 'transform');
+    assert.strictEqual(event.target, `${testRealmHref}report-context`);
+    assert.strictEqual(event.realmURL, testRealmHref);
+    assert.strictEqual(event.actor, '@tester:localhost');
+    assert.strictEqual(event.outcome, 'applied');
+    assert.strictEqual(event.missingCount, 0);
+    assert.true(event.totalMs >= 0, 'the execution is timed');
+  });
+
+  test('the result carries the same summary the channel does', async function (assert) {
+    let { result, events } = await recording(() =>
+      invoke('stampSlug', 'report-set'),
+    );
+
+    let diagnostics = result[0]?.meta.diagnostics;
+    assert.ok(diagnostics, 'the result carries the diagnostics');
+    let { realmURL: _realmURL, actor: _actor, ...summary } = events[0];
+    assert.deepEqual(
+      diagnostics,
+      summary,
+      'what the caller is handed is what the channel carries',
+    );
+  });
   // ==========================================================================
   // The file-content writes, against a real realm
   //

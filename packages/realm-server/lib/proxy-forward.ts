@@ -10,6 +10,108 @@ const log = logger('proxy-forward');
 const KEEP_ALIVE_INTERVAL_MS = 15000;
 
 /**
+ * A signal that fires when this request's client goes away before it was
+ * answered — a caller enforcing its own deadline, a closed tab, a dropped
+ * connection. Proxy handlers pass it into the upstream `fetch` so abandoning
+ * the wait also cancels the call.
+ *
+ * The disconnect is observable on the response, not the request. Node
+ * destroys the request stream as soon as its body has been read, so `req`
+ * emits 'close' on every request — served or abandoned — and its deprecated
+ * 'aborted' event never fires once the body has arrived in full. `res` closes
+ * with `writableEnded` still false only when the socket went away before the
+ * response was finished, which is exactly the case worth cancelling.
+ */
+export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
+  let controller = new AbortController();
+  ctxt.res.once('close', () => {
+    if (!ctxt.res.writableEnded) {
+      controller.abort(
+        new Error('Client disconnected before the response was finished'),
+      );
+    }
+  });
+  return controller.signal;
+}
+
+/**
+ * A signal that follows `clientGone` only until the upstream answers.
+ *
+ * Cancelling the upstream call is the whole point while it is still running:
+ * it ends the critical section instead of holding the cost lock for a response
+ * nobody will read. Once the upstream has answered, the calculus inverts. The
+ * provider has generated the tokens and billed us for them, so what is left —
+ * reading the body and recording the usage cost — is how that charge gets
+ * attributed. Cancelling there does not save anything; it discards the record
+ * of something already paid for.
+ *
+ * The window is not academic. A chat completion's body is a few KB, but this
+ * endpoint is also the route for image generation, whose base64 payload runs
+ * to megabytes: seconds of reading during which a closed tab would lose the
+ * charge for the most expensive call the proxy serves.
+ *
+ * `release()` is called once the response is in hand. Streaming callers must
+ * not use this — there the body *is* the generation, so the signal has to stay
+ * live for the whole read.
+ */
+export function upstreamCallSignal(clientGone: AbortSignal): {
+  signal: AbortSignal;
+  release: () => void;
+} {
+  let controller = new AbortController();
+  let mirror = () => controller.abort(clientGone.reason);
+  if (clientGone.aborted) {
+    mirror();
+  } else {
+    clientGone.addEventListener('abort', mirror, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    release: () => clientGone.removeEventListener('abort', mirror),
+  };
+}
+
+// A `cause` chain is walked rather than inspected one level deep because
+// `fetch` surfaces an abort reason wrapped rather than rethrown. The bound
+// stops a malformed or self-referential chain from spinning.
+const MAX_CAUSE_DEPTH = 8;
+
+/**
+ * Whether `error` is the cancellation `signal` asked for, as opposed to a
+ * failure that merely happened while the signal was aborted.
+ *
+ * `signal.aborted` alone cannot answer this. Work that runs *after* the
+ * upstream call — saving the usage cost — never receives the signal, so it
+ * runs to completion or failure regardless of whether the client is still
+ * there. A caller that treats every post-abort exception as a cancellation
+ * therefore swallows a genuine billing failure whenever the client happens to
+ * leave during that write, which is precisely when nobody is watching.
+ *
+ * Identity against `signal.reason` is exact: `clientDisconnectSignal` aborts
+ * with a specific `Error` instance. The `AbortError` name is accepted too, for
+ * an abort that a lower layer reports in its own terms.
+ */
+export function isClientDisconnectError(
+  error: unknown,
+  signal: AbortSignal,
+): boolean {
+  if (!signal.aborted) {
+    return false;
+  }
+  let cursor: unknown = error;
+  for (let depth = 0; cursor != null && depth < MAX_CAUSE_DEPTH; depth++) {
+    if (cursor === signal.reason) {
+      return true;
+    }
+    if ((cursor as { name?: unknown }).name === 'AbortError') {
+      return true;
+    }
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
  * Stream the upstream `text/event-stream` response back to the client, parsing
  * each `data:` line so we can capture the OpenRouter generation id / inline
  * cost and save the credit deduction at `[DONE]`.
@@ -19,6 +121,12 @@ const KEEP_ALIVE_INTERVAL_MS = 15000;
  * same-user requests across replicas; the lock must be held until the cost
  * row commits so the next request can't kick off another billable upstream
  * call before the previous request's debit lands in the ledger.
+ *
+ * `signal` fires when the client that asked for the stream goes away. It
+ * cancels the upstream call and, with it, the body stream this function is
+ * reading, which is how the cost lock is released instead of being held for
+ * the rest of a generation nobody is receiving. A stream cut short never
+ * reaches `[DONE]`, so no cost is saved for it.
  */
 export async function handleStreamingRequest(
   ctxt: Koa.Context,
@@ -29,11 +137,12 @@ export async function handleStreamingRequest(
   endpointConfig: AllowedProxyDestination,
   dbAdapter: DBAdapter,
   matrixUserId: string,
+  signal: AbortSignal,
 ): Promise<void> {
   try {
     setupSSEHeaders(ctxt);
 
-    const fetchInit: RequestInit = { method, headers };
+    const fetchInit: RequestInit = { method, headers, signal };
     if (requestBody !== undefined) {
       fetchInit.body = requestBody;
     }
@@ -111,6 +220,16 @@ export async function handleStreamingRequest(
       },
     );
   } catch (error) {
+    if (isClientDisconnectError(error, signal)) {
+      // The read failed because the client hung up and we cancelled the
+      // upstream call ourselves. There is no socket left to write the error
+      // frames to and no fault to page anyone about. A cost-save that fails
+      // on its own after the client left is not this, and falls through.
+      log.info(
+        `Client disconnected during streaming request for user ${matrixUserId}; upstream call cancelled`,
+      );
+      return;
+    }
     log.error('Error in streaming request:', error);
     Sentry.captureException(error);
     ctxt.res.write(

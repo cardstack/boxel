@@ -9,7 +9,10 @@ import {
   classifyToolCalls,
   fileLabelFromUrl,
   readFilesLabel,
+  READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
+  selectReadRealmFileUrls,
+  urlsFromReadRealmFileArguments,
 } from '../lib/read-realm-file.ts';
 
 const ON_BEHALF_OF = '@user:localhost';
@@ -135,6 +138,104 @@ module('readRealmFile tool definition', () => {
       readRealmFileTool.function.description.includes('next turn'),
       'description tells the model that reading a skill file unlocks its ' +
         'tools on the next turn — without this the mechanism goes unused',
+    );
+  });
+
+  test('caps the url list and asks for each url once', () => {
+    let urls = (readRealmFileTool.function.parameters as any).properties.urls;
+    assert.strictEqual(
+      urls.maxItems,
+      READ_REALM_FILE_MAX_URLS,
+      'an uncapped list invites a small model to repeat urls until it hits ' +
+        'its output limit',
+    );
+    assert.true(urls.uniqueItems, 'each url is listed once');
+    assert.true(
+      urls.description.includes(`at most ${READ_REALM_FILE_MAX_URLS}`),
+      'the cap is spelled out for models that ignore schema constraints',
+    );
+    assert.false(
+      readRealmFileTool.function.description.includes(
+        'request them all in a single call',
+      ),
+      'the description no longer pushes the model to list everything at once',
+    );
+  });
+});
+
+module('urlsFromReadRealmFileArguments', () => {
+  test('parses a complete call and drops duplicates and non-strings', () => {
+    assert.deepEqual(
+      urlsFromReadRealmFileArguments(
+        JSON.stringify({ urls: [FILE_URL, RAW_FILE_URL, FILE_URL, 42, ''] }),
+      ),
+      [FILE_URL, RAW_FILE_URL],
+    );
+  });
+
+  test('recovers the complete urls from arguments cut off mid-list', () => {
+    // What a generation stopped at the output-token limit leaves behind: the
+    // list never closes and the last entry may be partial.
+    let truncated = `{"urls":["${FILE_URL}","${RAW_FILE_URL}","${FILE_URL}","https://localhost:4201/user/jane/skills/trip-pl`;
+    assert.deepEqual(urlsFromReadRealmFileArguments(truncated), [
+      FILE_URL,
+      RAW_FILE_URL,
+    ]);
+  });
+
+  test('malformed arguments without a url list yield nothing', () => {
+    assert.deepEqual(urlsFromReadRealmFileArguments('{not json'), []);
+    assert.deepEqual(
+      urlsFromReadRealmFileArguments('{"description":"https://x.test/a"'),
+      [],
+    );
+  });
+});
+
+module('selectReadRealmFileUrls', () => {
+  // More unique urls than one call may read, in the order the model listed
+  // them. The schema's maxItems is only a hint the model can ignore.
+  const MANY_URLS = Array.from(
+    { length: READ_REALM_FILE_MAX_URLS + 3 },
+    (_, i) => `${REALM}skills/trip-planner/reference/file-${i}.md`,
+  );
+
+  test('a well-formed call past the cap reads the first urls and reports the rest', () => {
+    let selection = selectReadRealmFileUrls(
+      JSON.stringify({ urls: [...MANY_URLS, MANY_URLS[0]] }),
+    );
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+      'the first unique urls are read, in order',
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+      'the urls past the cap are reported, without the duplicate',
+    );
+  });
+
+  test('a cut-off call past the cap is capped the same way', () => {
+    // The motivating shape: the same files repeated until the output limit
+    // cut the list mid-url.
+    let repeated = [...MANY_URLS, ...MANY_URLS, ...MANY_URLS];
+    let truncated = `{"urls":${JSON.stringify(repeated).slice(0, -2)}`;
+    let selection = selectReadRealmFileUrls(truncated);
+    assert.deepEqual(
+      selection.urls,
+      MANY_URLS.slice(0, READ_REALM_FILE_MAX_URLS),
+    );
+    assert.deepEqual(
+      selection.dropped,
+      MANY_URLS.slice(READ_REALM_FILE_MAX_URLS),
+    );
+  });
+
+  test('a call within the cap drops nothing', () => {
+    assert.deepEqual(
+      selectReadRealmFileUrls(JSON.stringify({ urls: [FILE_URL] })),
+      { urls: [FILE_URL], dropped: [] },
     );
   });
 });

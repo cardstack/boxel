@@ -144,6 +144,14 @@ function stub(stored: Record<string, string> = {}): Stub {
         new URL(REALM),
       );
     },
+    resolvedLink(selfLink: string, relativeTo: URL) {
+      return new URL(selfLink, relativeTo).href;
+    },
+    async indexedCardValues() {
+      // Nothing here reads indexed values: a file's content is not a document
+      // the index has a view of, and the two writes under test work on bytes.
+      return undefined;
+    },
     async lookupDefinition() {
       return undefined;
     },

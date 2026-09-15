@@ -31,6 +31,7 @@ export {
   stageAppendLine,
   stageCreate,
   stageDelete,
+  stageTransform,
   stageUpdate,
 } from './executors.ts';
 export type {
@@ -40,6 +41,7 @@ export type {
   BatchEntry,
   CreateEntry,
   DeleteEntry,
+  IndexedCardValues,
   LidIndex,
   SourceBytes,
   StagedAppend,
@@ -50,8 +52,22 @@ export type {
   StagingContext,
   StoredFile,
   StoredMeta,
+  TransformEntry,
   UpdateEntry,
 } from './executors.ts';
+export {
+  OPERATIONS_CHANNEL,
+  emitOperationPerf,
+  setOperationPerfSink,
+} from './telemetry.ts';
+export type {
+  OperationDiagnostics,
+  OperationMissingRead,
+  OperationMissingReason,
+  OperationOutcome,
+  OperationPerfEvent,
+  OperationReadLayer,
+} from './telemetry.ts';
 export {
   MalformedCardSourceError,
   appendMembers,

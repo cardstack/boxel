@@ -257,7 +257,10 @@ import {
   type IncrementalIndexMeta,
   type IndexChange,
 } from './realm-index-updater.ts';
-import serialize, { storedRelationshipLink } from './file-serializer.ts';
+import serialize, {
+  resolvedRelationshipLink,
+  storedRelationshipLink,
+} from './file-serializer.ts';
 import {
   fileSizeLimitFor,
   validateByteLength,
@@ -294,6 +297,8 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
+import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
@@ -3962,6 +3967,20 @@ export class Realm {
           await this.incrementalIndexing();
         },
         isIgnored: (url) => this.isIgnored(url),
+        // Narrowed to the two documents a program reads values from. An error
+        // row is reported as no row: it describes why the card could not be
+        // indexed rather than what it holds, so there is nothing in it for a
+        // program to read.
+        indexedCardValues: async (url) => {
+          let row = await this.#realmIndexQueryEngine.instance(url);
+          if (!row || row.type !== 'instance') {
+            return undefined;
+          }
+          return {
+            computeds: row.instance.attributes,
+            linked: row.searchDoc ?? undefined,
+          };
+        },
         commitUnlocked: (batch, options) =>
           this._commitBatchUnlocked(batch, options),
         serializeCard: (doc, relativeTo) =>
@@ -3980,6 +3999,10 @@ export class Realm {
             new URL(this.url),
             this.#virtualNetwork,
           ),
+        // Its inverse, reached from the same place for the same reason: what a
+        // stored link resolves to is identifier resolution, not URL math.
+        resolvedLink: (selfLink, relativeTo) =>
+          resolvedRelationshipLink(selfLink, relativeTo, this.#virtualNetwork),
         lookupDefinition: async (codeRef, relativeTo) => {
           let absolute = codeRefWithAbsoluteIdentifier(
             codeRef,
@@ -9239,7 +9262,36 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
+    // Tell each affected user their accessible-realm set changed so a running
+    // session re-derives it from `_realm-auth` (which reads the permissions
+    // written just above) without a reload. Nothing else notifies a grantee:
+    // the index_updated broadcast above is server-to-server only.
+    await this.notifyRealmsListUpdated(Object.keys(patch));
     return await this.getRealmPermissions(request, requestContext);
+  }
+
+  // Notify each affected user that their set of accessible realms changed, so
+  // a running session re-derives it from `_realm-auth` without a reload.
+  // Delivered into the user's session DM room via the shared `sendEvent`
+  // helper, which no-ops when the user has no session room and self-heals a
+  // stale one. Best-effort per user: a delivery failure must never roll back
+  // the grant that already committed, so one user's error is logged and the
+  // rest still run.
+  private async notifyRealmsListUpdated(users: string[]): Promise<void> {
+    let sendEvent = createSendEvent({
+      matrixClient: this.#matrixClient,
+      dbAdapter: this.#dbAdapter,
+    });
+    for (let user of users) {
+      try {
+        await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (e) {
+        this.#log.error(
+          `failed to notify ${user} that their realms list changed`,
+          e,
+        );
+      }
+    }
   }
 
   private async getLastPublishedAt(): Promise<

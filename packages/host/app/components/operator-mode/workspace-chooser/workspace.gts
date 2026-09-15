@@ -46,7 +46,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import { skillsRealmURL } from '@cardstack/host/lib/utils';
+import {
+  publishedRealmURLsFromInfo,
+  skillsRealmURL,
+} from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -1945,16 +1948,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get publishedRealmURLs() {
-    let { lastPublishedAt } = this.realmInfo;
-    if (!lastPublishedAt || typeof lastPublishedAt !== 'object') {
-      return [];
-    }
-
-    return Object.entries(lastPublishedAt)
-      .sort(([, leftPublishedAt], [, rightPublishedAt]) => {
-        return Number(rightPublishedAt) - Number(leftPublishedAt);
-      })
-      .map(([publishedRealmURL]) => publishedRealmURL);
+    return publishedRealmURLsFromInfo(this.realmInfo);
   }
 
   private get hasPublishedRealms() {
