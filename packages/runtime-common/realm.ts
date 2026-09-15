@@ -3848,18 +3848,18 @@ export class Realm {
           await this.incrementalIndexing();
         },
         isIgnored: (url) => this.isIgnored(url),
-        // Narrowed to the two documents a program reads values from. An error
-        // row is reported as no row: it describes why the card could not be
-        // indexed rather than what it holds, so there is nothing in it for a
-        // program to read.
+        // Narrowed to the two documents a program reads values from, each
+        // handed over whole. An error row is reported as no row: it describes
+        // why the card could not be indexed rather than what it holds, so
+        // there is nothing in it for a program to read.
         indexedCardValues: async (url) => {
           let row = await this.#realmIndexQueryEngine.instance(url);
           if (!row || row.type !== 'instance') {
             return undefined;
           }
           return {
-            computeds: row.instance.attributes,
-            linked: row.searchDoc ?? undefined,
+            pristine: row.instance,
+            searchDoc: row.searchDoc ?? undefined,
           };
         },
         commitUnlocked: (batch, options) =>
