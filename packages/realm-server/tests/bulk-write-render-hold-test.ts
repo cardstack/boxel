@@ -230,6 +230,38 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  test('a release is not undone by a refresh already in flight', async function (assert) {
+    // The heartbeat and the release race: `clearInterval` stops future
+    // callbacks but not one already running. A refresh that lands after the
+    // delete re-creates the holder for another lease, so the lane reads as
+    // held moments after the NOTIFY told every worker it was free — and the
+    // queued renders then wait for a lease nobody is watching.
+    let group = prerenderHtmlConcurrencyGroup(testRealm.href);
+    let hold = await JobClaimHold.acquire(testDbAdapter, group, 30_000);
+
+    let held = async () => {
+      let rows = (await testDbAdapter.execute(
+        `SELECT COUNT(*)::int AS n FROM job_claim_holds
+          WHERE concurrency_group = $1 AND expires_at > NOW()`,
+        { bind: [group] },
+      )) as unknown as { n: number }[];
+      return rows[0].n;
+    };
+    assert.strictEqual(await held(), 1, 'the lane starts held');
+
+    // Start a refresh and release without awaiting it, which is what the
+    // heartbeat does.
+    let refreshing = hold.refresh(30_000);
+    await hold.release();
+    await refreshing;
+
+    assert.strictEqual(
+      await held(),
+      0,
+      'the lane stays free once released, whatever was in flight',
+    );
+  });
+
   test('a single-file write takes no hold', async function (assert) {
     assert.timeout(300_000);
 

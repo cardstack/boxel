@@ -27,6 +27,9 @@ export class JobClaimHold {
   // back there, so the hold is inert rather than an error, the same way
   // `awaitRealmIndexSettled` reports settled without a query.
   readonly #enabled: boolean;
+  // Set once a release begins, so a later refresh cannot resurrect the row.
+  #released = false;
+  #inFlightRefresh: Promise<void> | undefined;
 
   private constructor(dbAdapter: DBAdapter, concurrencyGroup: string) {
     this.#dbAdapter = dbAdapter;
@@ -57,9 +60,24 @@ export class JobClaimHold {
   }
 
   async refresh(leaseMs: number): Promise<void> {
-    if (!this.#enabled) {
+    if (!this.#enabled || this.#released) {
       return;
     }
+    // Tracked so a release can wait for it. A refresh still in flight when the
+    // row is deleted would otherwise re-insert it, and the lane would look
+    // held again moments after being freed.
+    let pending = this.#writeRow(leaseMs);
+    this.#inFlightRefresh = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.#inFlightRefresh === pending) {
+        this.#inFlightRefresh = undefined;
+      }
+    }
+  }
+
+  async #writeRow(leaseMs: number): Promise<void> {
     await query(this.#dbAdapter, [
       `INSERT INTO job_claim_holds (concurrency_group, holder_id, expires_at)
        VALUES (`,
@@ -80,6 +98,17 @@ export class JobClaimHold {
   async release(): Promise<void> {
     if (!this.#enabled) {
       return;
+    }
+    // Ordering, not just bookkeeping: the flag stops a refresh that has not
+    // started, and the await drains one that has. Deleting the row while an
+    // upsert is in flight re-creates the holder for another lease, and the
+    // `NOTIFY` below would then wake workers to a lane that is held again.
+    this.#released = true;
+    try {
+      await this.#inFlightRefresh;
+    } catch {
+      // A failed refresh leaves nothing to drain; the delete below is what
+      // matters and it runs either way.
     }
     await query(this.#dbAdapter, [
       `DELETE FROM job_claim_holds

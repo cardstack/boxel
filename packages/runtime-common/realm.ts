@@ -1133,6 +1133,10 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
+  // Anchors the render-hold cap across back-to-back bulk writes; see
+  // `_batchWriteUnlocked`. Undefined whenever no write holds the lane.
+  #renderHoldChainStartedAt: number | undefined;
+  #renderHoldDepth = 0;
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -2568,13 +2572,21 @@ export class Realm {
       prerenderHtmlConcurrencyGroup(this.url),
       RENDER_HOLD_LEASE_MS,
     );
-    let heldSince = Date.now();
+    // The cap spans the chain, not the batch. Each write acquires its own
+    // holder, and holds compose — so a per-call start would reset the cap on
+    // every batch, and a realm under back-to-back bulk writes could hold its
+    // render lane indefinitely while no single hold ever looked old. Anchoring
+    // on the first hold in an unbroken run is what makes the cap mean what it
+    // says.
+    this.#renderHoldChainStartedAt ??= Date.now();
+    this.#renderHoldDepth++;
+    let chainStartedAt = this.#renderHoldChainStartedAt;
     let heartbeat = setInterval(() => {
       // A realm under continuous bulk writes would otherwise never render.
       // Past the cap the lease simply stops being renewed, so the lane frees
       // itself within one lease and the import pays an extra render pass
       // rather than starving.
-      if (Date.now() - heldSince > RENDER_HOLD_MAX_MS) {
+      if (Date.now() - chainStartedAt > RENDER_HOLD_MAX_MS) {
         return;
       }
       hold.refresh(RENDER_HOLD_LEASE_MS).catch((e: any) => {
@@ -2588,6 +2600,13 @@ export class Realm {
     heartbeat.unref?.();
     let releaseHold = async () => {
       clearInterval(heartbeat);
+      // The chain ends when a hold is released with none behind it. A write
+      // that starts before this one finishes keeps the anchor, which is the
+      // case the cap exists for.
+      this.#renderHoldDepth--;
+      if (this.#renderHoldDepth === 0) {
+        this.#renderHoldChainStartedAt = undefined;
+      }
       try {
         await hold.release();
       } catch (e: any) {
