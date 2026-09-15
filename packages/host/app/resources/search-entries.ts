@@ -41,6 +41,7 @@ import {
   type FileMetaResource,
   type HtmlResource,
   type IconResource,
+  type Loader,
   type ResolvedCodeRef,
   type Saved,
   type StoreReadType,
@@ -153,16 +154,22 @@ export class SearchEntriesResource extends Resource<Args> {
   private pendingSelectiveRefresh: Map<string, number> | undefined;
 
   // The `types` keys the current query's filter anchors on, in the spelling
-  // `boxel_index.types` stores and an incremental index event carries. Set
-  // once per query, and only once an event has shown there is something to
-  // decide — a query that never sees one (a prerender, a chooser opened and
-  // dismissed) resolves nothing, and the event that starts the resolution
-  // takes the unconditional re-run it would have taken anyway. Stays
-  // undefined for a filter that admits an entry of any type and for one whose
-  // anchors don't resolve, both of which keep this query on that re-run for
-  // good.
+  // `boxel_index.types` stores and an incremental index event carries.
+  // Resolved once per (query, loader) pair, and only once an event has shown
+  // there is something to decide — a query that never sees one (a prerender, a
+  // chooser opened and dismissed) resolves nothing, and the event that starts
+  // the resolution takes the unconditional re-run it would have taken anyway.
+  // Stays undefined for a filter that admits an entry of any type and for one
+  // whose anchors don't resolve, which keeps the query on that re-run until
+  // one of the two it is keyed on changes.
   #queryTypeKeys: Set<string> | undefined;
   #queryTypeKeysResolved = false;
+  // The loader the keys were resolved against. What canonical spelling an
+  // anchor resolves to is a property of that loader — a module rewrite
+  // replaces the loader, and a module that re-exports a type can name a
+  // different one on the far side of that boundary — so keys are only good for
+  // as long as the loader that produced them is the live one.
+  #queryTypeKeysLoader: Loader | undefined;
   // Bumped whenever the query changes (and on teardown) so a resolution
   // in flight for the previous query can't install its keys over the new one.
   #queryTypeKeysEpoch = 0;
@@ -681,15 +688,20 @@ export class SearchEntriesResource extends Resource<Args> {
   // callback is — so the call that starts the resolution reads `undefined`
   // and falls through to the re-run.
   #typeKeysForQuery(): Set<string> | undefined {
+    let loader = this.loaderService.loader;
+    if (this.#queryTypeKeysResolved && this.#queryTypeKeysLoader !== loader) {
+      this.#forgetQueryTypeKeys();
+    }
     if (this.#queryTypeKeysResolved) {
       return this.#queryTypeKeys;
     }
     this.#queryTypeKeysResolved = true;
+    this.#queryTypeKeysLoader = loader;
     let anchors = wireFilterTypeAnchors(this.#previousQuery?.filter);
     if (!anchors?.length) {
       return undefined;
     }
-    void this.#resolveQueryTypeKeys(anchors, this.#queryTypeKeysEpoch);
+    void this.#resolveQueryTypeKeys(anchors, this.#queryTypeKeysEpoch, loader);
     return undefined;
   }
 
@@ -701,10 +713,14 @@ export class SearchEntriesResource extends Resource<Args> {
   // and skipping on that comparison would drop a real membership change.
   // Any anchor that can't be resolved abandons the whole set, leaving the
   // query on the unconditional re-run.
-  async #resolveQueryTypeKeys(anchors: CodeRef[], epoch: number) {
+  async #resolveQueryTypeKeys(
+    anchors: CodeRef[],
+    epoch: number,
+    loader: Loader,
+  ) {
     let token = typeKeysWaiter.beginAsync();
     try {
-      let keys = await this.#typeKeysFor(anchors);
+      let keys = await this.#typeKeysFor(anchors, loader);
       if (keys && epoch === this.#queryTypeKeysEpoch && !isDestroyed(this)) {
         this.#queryTypeKeys = keys;
       }
@@ -713,7 +729,10 @@ export class SearchEntriesResource extends Resource<Args> {
     }
   }
 
-  async #typeKeysFor(anchors: CodeRef[]): Promise<Set<string> | undefined> {
+  async #typeKeysFor(
+    anchors: CodeRef[],
+    loader: Loader,
+  ): Promise<Set<string> | undefined> {
     let { virtualNetwork } = this.network;
     let keys = new Set<string>();
     for (let ref of anchors) {
@@ -726,9 +745,7 @@ export class SearchEntriesResource extends Resource<Args> {
       keys.add(internalKeyFor(ref, undefined, virtualNetwork));
       let canonical: CodeRef | undefined;
       try {
-        canonical = identifyCard(
-          await loadCardDef(ref, { loader: this.loaderService.loader }),
-        );
+        canonical = identifyCard(await loadCardDef(ref, { loader }));
       } catch (_e) {
         // A ref that names no loadable type is the same uncertainty as one
         // that names a type we can't canonicalize.
@@ -747,6 +764,7 @@ export class SearchEntriesResource extends Resource<Args> {
   #forgetQueryTypeKeys(): void {
     this.#queryTypeKeys = undefined;
     this.#queryTypeKeysResolved = false;
+    this.#queryTypeKeysLoader = undefined;
     this.#queryTypeKeysEpoch++;
   }
 

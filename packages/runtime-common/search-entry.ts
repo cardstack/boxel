@@ -852,12 +852,21 @@ export function wireFilterHasMatches(
 // past, so every shape whose anchors can't be established returns `undefined`
 // and leaves the caller re-running unconditionally.
 //
-// The engine ANDs a node's own `item.on` with everything under it (see
+// The engine ANDs a node's own `item.on` with every branch it could take (see
 // `filterCondition`), so an anchored node answers for its whole subtree
-// whatever that subtree contains. Below an unanchored node: `every` is
-// satisfied by any one branch's anchors, `any` needs all of its branches
-// anchored (an unanchored branch admits any type), and a bare `not` or
-// operator node anchors nothing at all.
+// whatever that subtree contains and whichever branch runs.
+//
+// An unanchored node is only readable when exactly one member decides what it
+// matches. A node carrying several is compiled from just one of them and the
+// rest are dead weight — and which one that is cannot be read off the node,
+// because `filterCondition` and the query validator disagree about the order
+// they choose in. Reading the wrong member would anchor a node the engine is
+// running untyped, so a multi-member node anchors nothing.
+//
+// Given the one member: `every` is satisfied by any one branch's anchors (a
+// match satisfies all the branches, so any one of them constrains it), `any`
+// needs all of its branches anchored because an unanchored branch admits an
+// entry of any type, and a bare `not` or operator member anchors nothing.
 export function wireFilterTypeAnchors(
   filter: SearchEntryWireFilter | undefined,
 ): CodeRef[] | undefined {
@@ -868,7 +877,8 @@ export function wireFilterTypeAnchors(
   if (anchor) {
     return [anchor];
   }
-  if (filter.every?.length) {
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
     for (let branch of filter.every) {
       let anchors = wireFilterTypeAnchors(branch);
       if (anchors) {
@@ -877,7 +887,7 @@ export function wireFilterTypeAnchors(
     }
     return undefined;
   }
-  if (filter.any?.length) {
+  if (member === 'any' && filter.any?.length) {
     let anchors: CodeRef[] = [];
     for (let branch of filter.any) {
       let branchAnchors = wireFilterTypeAnchors(branch);
@@ -889,6 +899,44 @@ export function wireFilterTypeAnchors(
     return anchors;
   }
   return undefined;
+}
+
+// The members that decide what a filter node matches, as opposed to the
+// `item.on` anchor that gates whichever of them runs.
+const SHAPE_MEMBERS = [
+  'any',
+  'every',
+  'not',
+  'eq',
+  'in',
+  'contains',
+  'range',
+  'matches',
+] as const;
+
+// The single member that decides what an unanchored node matches, or
+// `undefined` when it carries none or several. An `eq` binding nothing but the
+// `htmlQuery` rendering selection doesn't count: the parser lifts that binding
+// out of the node, so it never decides anything.
+function soleShapeMember(
+  filter: SearchEntryWireFilter,
+): (typeof SHAPE_MEMBERS)[number] | undefined {
+  let members = SHAPE_MEMBERS.filter((member) => {
+    let value = filter[member];
+    if (value === undefined) {
+      return false;
+    }
+    return !(member === 'eq' && bindsOnlyHtmlQuery(value));
+  });
+  return members.length === 1 ? members[0] : undefined;
+}
+
+function bindsOnlyHtmlQuery(eq: unknown): boolean {
+  if (typeof eq !== 'object' || eq == null) {
+    return false;
+  }
+  let keys = Object.keys(eq);
+  return keys.length > 0 && keys.every((key) => key === HTML_QUERY);
 }
 
 // ---------------------------------------------------------------------------

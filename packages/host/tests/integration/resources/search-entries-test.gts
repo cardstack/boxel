@@ -619,6 +619,58 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
+    test('a loader replacement re-resolves the anchors before they gate again', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the anchors resolve and the second event is skipped',
+        );
+
+        // A module rewrite replaces the loader, and what a ref canonicalizes
+        // to is a property of the loader that resolved it — a module that
+        // re-exports a type can name a different one across that boundary.
+        getService('loader-service').resetLoader({
+          clearFetchCache: true,
+          reason: 'test',
+          codeChange: true,
+        });
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'the first event after the replacement re-runs while the anchors re-resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'the re-resolved anchors gate again',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
     test('a query that admits an entry of any type re-runs on every event', async function (assert) {
       let originalSearchEntries = storeService.searchEntries.bind(storeService);
       let searchCount = countingSearch();
