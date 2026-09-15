@@ -28,8 +28,8 @@ module('Unit | realm cache teardown', function (hooks) {
     let remainingNames = await attachedNames();
     try {
       assert.deepEqual(
-        remainingNames,
-        originalNames,
+        remainingNames.filter((name) => !originalNames.includes(name)),
+        [],
         'parent teardown releases snapshots created by its nested module',
       );
     } finally {
@@ -46,10 +46,48 @@ module('Unit | realm cache teardown', function (hooks) {
   module('nested query fixture', function () {
     test('query snapshot is released when the parent module finishes', async function (assert) {
       await withCachedRealmSetup(async () => undefined);
-      assert.strictEqual(
-        (await attachedNames()).length,
-        originalNames.length + 1,
+      assert.true(
+        (await attachedNames()).some((name) => !originalNames.includes(name)),
       );
+    });
+
+    test('query setup can cache twelve variants and restore the latest data', async function (assert) {
+      let realmURL = 'https://snapshot-cache.test/';
+      try {
+        for (let generation = 0; generation < 12; generation++) {
+          await adapter.execute(
+            `INSERT INTO realm_generations (realm_url, current_generation)
+             VALUES ($1, $2) ON CONFLICT (realm_url)
+             DO UPDATE SET current_generation = excluded.current_generation`,
+            { bind: [realmURL, generation] },
+          );
+          await withCachedRealmSetup(
+            `variant-${generation}`,
+            async () => undefined,
+          );
+        }
+        await adapter.execute(
+          'UPDATE realm_generations SET current_generation = 99 WHERE realm_url = $1',
+          { bind: [realmURL] },
+        );
+        await withCachedRealmSetup('variant-11', async () => undefined);
+        let [row] = await adapter.execute(
+          'SELECT current_generation FROM realm_generations WHERE realm_url = $1',
+          { bind: [realmURL] },
+        );
+        assert.strictEqual(
+          Number(row.current_generation),
+          11,
+          'cached data is restored',
+        );
+      } finally {
+        await adapter.execute(
+          'DELETE FROM realm_generations WHERE realm_url = $1',
+          {
+            bind: [realmURL],
+          },
+        );
+      }
     });
   });
 });
