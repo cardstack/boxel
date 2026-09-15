@@ -994,6 +994,39 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
+            // Short under screen media, 60000px tall under print media — a
+            // height only a print-media render applies. A pdf capture asks for
+            // screen media, so it stays a page or two; a render that fell back
+            // to page.pdf()'s print default would blow past the page cap.
+            'print-probe.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class PrintProbe extends CardDef {
+                static displayName = "PrintProbe";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div class="pdf-media-probe">{{@model.name}}</div>
+                    <style scoped>
+                      .pdf-media-probe { height: 200px; }
+                      @media print { .pdf-media-probe { height: 60000px; } }
+                    </style>
+                  </template>
+                }
+              }
+            `,
+            // Named `print-probe-card`, not `print-probe`, for the same
+            // extensionless-id reason as `disco`/`tall` above.
+            'print-probe-card.json': {
+              data: {
+                attributes: { name: 'Print Probe' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./print-probe'),
+                    name: 'PrintProbe',
+                  },
+                },
+              },
+            },
           },
         },
       ],
@@ -1316,6 +1349,65 @@ module(basename(import.meta.filename), function () {
         singular.response.contentType,
         'image/png',
         'contentType preserved',
+      );
+    });
+
+    test('a pdf capture paginates the settled render', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, { type: 'pdf' });
+      assert.strictEqual(response.status, 'ready', 'pdf capture succeeded');
+      assert.strictEqual(
+        response.contentType,
+        'application/pdf',
+        'the response declares the paged content type',
+      );
+      let bytes = Buffer.from(response.base64!, 'base64');
+      assert.strictEqual(
+        bytes.subarray(0, 5).toString('latin1'),
+        '%PDF-',
+        'payload is a PDF (magic bytes)',
+      );
+      let first = response.captures?.[0];
+      assert.ok(
+        (first?.pageCount ?? 0) >= 1,
+        `reports at least one page (got ${first?.pageCount})`,
+      );
+      assert.strictEqual(
+        first?.width,
+        undefined,
+        'a paged capture reports no pixel width',
+      );
+
+      // Pooled-page hygiene: the same page then serves a raster capture with
+      // the canonical geometry, undisturbed by the pdf leg.
+      let raster = await screenshot(`${realmURL}1`);
+      assert.strictEqual(raster.response.status, 'ready');
+      let png = decodePng(raster.response.base64!);
+      assert.deepEqual(
+        { width: png.width, height: png.height },
+        { width: 800, height: 600 },
+        'the next raster capture still renders at the default viewport',
+      );
+    });
+
+    test('a pdf capture renders under the media the spec asks, not page.pdf print default', async function (assert) {
+      // `page.pdf()` renders under print media unless told otherwise, so the
+      // `media` axis has to pin it. The probe card is 200px under screen media
+      // and 60000px under print — a print render would page past the cap and
+      // error, a screen render stays within it. The spec asks for the default
+      // (screen), so the capture must emulate screen and succeed.
+      let { response } = await screenshot(`${realmURL}print-probe-card`, {
+        type: 'pdf',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `screen-media pdf stays within the page cap (got ${response.status}: ${response.error ?? ''})`,
+      );
+      assert.strictEqual(response.contentType, 'application/pdf');
+      let first = response.captures?.[0];
+      assert.ok(
+        (first?.pageCount ?? 0) <= 5,
+        `paginates as a short screen render, not the tall print one (got ${first?.pageCount} pages)`,
       );
     });
 

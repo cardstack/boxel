@@ -148,11 +148,35 @@ export function isCaptureMedia(value: unknown): value is CaptureMedia {
 // honor yet — refused by name at parse (never ignored, per the module
 // contract), so no request can reach the engine asking for an output it
 // cannot produce. Unlocking a value here means teaching the engine the
-// corresponding leg: a pdf/jpeg/webp encode on the on-demand path, or
+// corresponding leg: a jpeg/webp encode on the on-demand path, or
 // print-media emulation.
 const UNSUPPORTED_CAPTURE_OUTPUT_TYPES: ReadonlySet<CaptureOutputType> =
-  new Set(['jpeg', 'webp', 'pdf']);
+  new Set(['jpeg', 'webp']);
 const UNSUPPORTED_CAPTURE_MEDIA: ReadonlySet<CaptureMedia> = new Set(['print']);
+
+// Bounds for pdf output. Neither is knowable at parse time — page count and
+// byte size exist only once Chrome has paginated the settled render — so the
+// capture path enforces both post-render, the same late-check pattern as a
+// fullPage capture's document extent. Over-bounds is a capture error naming
+// the cap, never a truncation.
+export const SCREENSHOT_PDF_MAX_PAGES = 20;
+export const SCREENSHOT_PDF_MAX_BYTES = 10 * 1024 * 1024;
+
+// Count a PDF's pages by scanning for its page-object dictionaries.
+// Chromium's PDF writer (Skia) emits each page's `/Type /Page` dictionary
+// uncompressed, so a byte scan is reliable for the engine's own output; the
+// page-tree `/Count` entries back it up in case some rewriter folds the page
+// objects into compressed streams. The capture path uses this to enforce
+// SCREENSHOT_PDF_MAX_PAGES post-render.
+export function countPdfPages(bytes: Uint8Array): number {
+  let text = new TextDecoder('latin1').decode(bytes);
+  let pageObjects = text.match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0;
+  let maxTreeCount = 0;
+  for (let m of text.matchAll(/\/Count\s+(\d+)/g)) {
+    maxTreeCount = Math.max(maxTreeCount, Number(m[1]));
+  }
+  return Math.max(pageObjects, maxTreeCount);
+}
 
 // The engine's default capture geometry — Puppeteer's launch viewport (no
 // `defaultViewport` override), the size every canonical capture renders at.
@@ -527,6 +551,21 @@ function checkMergedOverrides(
     return `${path} cannot set both target and fullPage`;
   }
 
+  // A pdf capture paginates the settled document onto paper; a region clip,
+  // an element crop, and Chromium's fullPage screenshot mode are raster
+  // concepts it cannot honor — contradictions, not compositions.
+  if (spec.type === 'pdf') {
+    if (spec.fullPage) {
+      return `${path} cannot set both type "pdf" and fullPage`;
+    }
+    if (spec.clip) {
+      return `${path} cannot set both type "pdf" and clip`;
+    }
+    if (spec.target) {
+      return `${path} cannot set both type "pdf" and target`;
+    }
+  }
+
   // Envelope formats lay out in a parent-owned box, so an envelope is
   // required;
   // isolated/embedded fill the viewport, where an envelope would be a
@@ -787,6 +826,13 @@ export function parseScreenshotCaptureSpec(
       return { error: parsed.error };
     }
     let merged = mergeOverrides(singular.overrides, parsed.overrides);
+    // The response carries one contentType across all its captures, so a
+    // paged document cannot ride a batch beside raster entries.
+    if (merged.type === 'pdf') {
+      return {
+        error: `${path}.type "pdf" is only valid on a singular capture`,
+      };
+    }
     let crossError = checkMergedOverrides(merged, path, format);
     if (crossError !== undefined) {
       return { error: crossError };
@@ -1000,6 +1046,18 @@ export function parseCaptureSpecParams(
   // do; the shared validator names a bad or not-yet-supported value.
   let type = searchParams.get('type');
   if (type !== null) {
+    // Deliberately narrower than the POST /_screenshot-card roster: pdf
+    // output is capture-only — the ledger/GET-DSL serving contract does not
+    // yet persist or serve paged documents — so this surface refuses it by
+    // name rather than enqueueing a capture it could never serve.
+    if (type === 'pdf') {
+      return {
+        error: {
+          field: 'type',
+          message: 'type "pdf" is not supported by this serving surface',
+        },
+      };
+    }
     raw.type = type;
   }
   let media = searchParams.get('media');
