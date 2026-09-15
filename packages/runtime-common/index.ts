@@ -1512,6 +1512,20 @@ export {
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
+export {
+  isSplicedSource,
+  splice,
+  streamSpliced,
+  wholeFile,
+  wholeText,
+} from './spliced-content.ts';
+export type {
+  FileSegment,
+  SpliceEdit,
+  SpliceSegment,
+  SplicedSource,
+  TextSegment,
+} from './spliced-content.ts';
 
 export interface ResourceObject {
   type: string;

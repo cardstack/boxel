@@ -2,7 +2,11 @@ import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
 import { v4 as uuidV4 } from 'uuid';
 
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
-import { getImmediateFieldDef, type Definition } from '../definitions.ts';
+import {
+  getImmediateFieldDef,
+  type Definition,
+  type FieldDefinition,
+} from '../definitions.ts';
 import { getCardDirectoryName } from '../helpers/card-directory-name.ts';
 import { mergeRelationships } from '../merge-relationships.ts';
 import type { RealmPaths } from '../paths.ts';
@@ -14,9 +18,27 @@ import {
   type CardResource,
   type Relationship,
 } from '../resource-types.ts';
+import {
+  splice,
+  streamSpliced,
+  wholeFile,
+  wholeText,
+  type SpliceEdit,
+  type SplicedSource,
+} from '../spliced-content.ts';
+import {
+  appendMembers,
+  indentStyleOf,
+  indentsFor,
+  renderMember,
+  renderValue,
+  scanCardSource,
+  type CardSourceLayout,
+  type StoredContainer,
+} from './json-splice.ts';
 import { OperationFailure, type OperationDefinition } from './types.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
-import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { OperationTemplate } from './types.ts';
 
 // ============================================================================
@@ -65,6 +87,14 @@ export interface StoredFile {
   // Never the file's recorded row, which can name a version the bytes no
   // longer hold; `readStoredFiles` has the reason.
   contentHash: string;
+}
+
+// A stored file read in bounded pieces rather than whole: its byte length, and
+// a reader for `[start, end)`. What an executor works from when the file is
+// large enough that reading it is the cost to avoid.
+export interface SourceBytes {
+  size: number;
+  read(start: number, end: number): AsyncIterable<Uint8Array>;
 }
 
 // A JSON:API card document as a batch entry carries it. `included` side-loads
@@ -117,13 +147,36 @@ export interface DeleteEntry extends EntryCommon {
   href: string;
 }
 
-export type BatchEntry = CreateEntry | UpdateEntry | DeleteEntry;
+// Add items to one or more of the target's `containsMany` fields. The members
+// are spelled as the operations envelope spells them in an entry's `data`, so
+// the endpoint hands them straight through.
+export interface AppendContainsManyEntry extends EntryCommon {
+  op: 'appendContainsMany';
+  // The card being appended to, as an absolute URL.
+  href: string;
+  // The field to append to and the items bound for it.
+  field?: string;
+  items?: unknown[];
+  // Or several fields at once, each with its own items. A field appears in
+  // one spelling or the other, never both.
+  fields?: Record<string, unknown[]>;
+}
 
-// One file the batch will write, and the exact bytes it will hold.
+export type BatchEntry =
+  | CreateEntry
+  | UpdateEntry
+  | DeleteEntry
+  | AppendContainsManyEntry;
+
+// One file the batch will write, and the content it will hold — either the
+// bytes themselves, or a description of them for a change that never
+// materialized the file it edits.
 export interface StagedWrite {
   path: LocalPath;
-  content: string;
+  content: StagedContent;
 }
+
+export type StagedContent = string | SplicedSource;
 
 // What one executor stages.
 export interface StagedChange {
@@ -161,6 +214,14 @@ export interface StagingContext {
   // Every target's stored file, keyed by local path, read inside the write
   // lock before any executor runs.
   stored: ReadonlyMap<LocalPath, StoredFile>;
+  // What an earlier entry staged for a file it described rather than read. An
+  // append composes over this so two appends to one card both land, and it is
+  // what tells an executor that needs the bytes whole that it cannot have
+  // them.
+  splices: ReadonlyMap<LocalPath, SplicedSource>;
+  // A stored file as a size and a bounded reader, for an executor that edits
+  // bytes it must not hold. Undefined when nothing is stored at the path.
+  openSourceBytes(localPath: LocalPath): Promise<SourceBytes | undefined>;
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified, and
   // is supplied by the endpoint that verified it — an executor never derives
@@ -181,6 +242,12 @@ export interface StagingContext {
     moduleId: RealmResourceIdentifier,
     relativeTo: string,
   ): RealmResourceIdentifier;
+  // A relationship's `links.self` as the realm stores it: a link inside the
+  // writing realm is recorded relative to the file that holds it, so a realm
+  // that is cloned or served under another host keeps linking within itself.
+  // Resolving one needs the realm's fetch layer, which no executor reaches, so
+  // it arrives bound — the same reason `resolveModuleId` and `codeRefKey` do.
+  storedLink(selfLink: string, relativeTo: URL): string;
   // The definition-cache entry for a type, or undefined when it cannot be
   // read.
   lookupDefinition(
@@ -360,6 +427,23 @@ export async function stageUpdate(
   let url = targetURL(entry.href);
   let localPath = localPathIn(url, ctx);
   let sourcePath = `${localPath}.json` as LocalPath;
+  if (ctx.splices.has(sourcePath)) {
+    // An earlier entry appended to this card without reading it, so the bytes
+    // it staged exist only as a description. A patch merges over the card's
+    // stored state, which would mean materializing exactly the document the
+    // append avoided — and committing without merging would drop the append
+    // with nothing said. So the pair is refused, and the two changes are sent
+    // as separate batches.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Conflicting entries',
+      detail:
+        `an earlier entry appends to ${url.href} without reading it, so a ` +
+        `patch in the same batch has no stored state to merge over`,
+    });
+  }
   let stored = ctx.stored.get(sourcePath);
   if (!stored) {
     throw new OperationFailure({
@@ -1230,4 +1314,751 @@ function isMarker(value: unknown): value is Record<string, unknown> {
     Object.prototype.hasOwnProperty.call(value, '$ref') &&
     typeof value.$ref === 'string'
   );
+}
+
+// ---------------------------------------------------------------------------
+// `appendContainsMany`
+// ---------------------------------------------------------------------------
+
+// Add items to a card's `containsMany` field by editing the stored JSON as
+// text, without ever holding the card's document.
+//
+// One item is stored in up to three parallel places, and its parts go to
+// different ones: its values into the array under `data.attributes.<field>`,
+// every `linksTo` / `linksToMany` its item type declares into
+// `data.relationships` under the flattened key `<field>.<N>.<link>`, and its
+// concrete type — when that is not the declared one — into the sidecar under
+// `data.meta.fields`. Which member is which comes from the type's
+// definition-cache entry, so the split costs a cache read and runs no card
+// JavaScript.
+//
+// The field this writes is why the behavior exists. A ledger, an audit trail,
+// an event log holds as many items as the card has ever recorded, and
+// `transform`'s `append` reaches those items by loading the document. Here the
+// stored file is scanned as a byte stream for the offsets the insertions go
+// at, and what is staged is a description of the result rather than the result
+// — so adding one item costs one item, whatever the array already holds.
+export async function stageAppendContainsMany(
+  entry: AppendContainsManyEntry,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let url = targetURL(entry.href);
+  let sourcePath = `${localPathIn(url, ctx)}.json` as LocalPath;
+  let target: AppendTarget = { url, file: ctx.paths.fileURL(sourcePath) };
+  let requested = requestedItems(entry, url);
+  let bytes = await ctx.openSourceBytes(sourcePath);
+  if (!bytes) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  let base =
+    ctx.splices.get(sourcePath) ??
+    (ctx.stored.has(sourcePath)
+      ? wholeText(sourcePath, ctx.stored.get(sourcePath)!.content)
+      : wholeFile(sourcePath, bytes.size));
+  // One pass over the bytes locates every offset every named field needs, so
+  // appending to two fields costs the same read as appending to one.
+  let layout = await readLayout(base, [...requested.keys()], bytes, url);
+  let definition = await appendTargetDefinition(layout, url, ctx);
+  // Read once from the document rather than assumed, so an insertion into a
+  // container that carries no whitespace of its own — an empty array, a
+  // container the file does not have — is written the way the rest of the file
+  // is written.
+  let style = indentStyleOf(layout);
+
+  // Every member an insertion will add, by the container it goes into.
+  // Grouped so a container gaining members for two reasons — two fields whose
+  // items both link, say — takes one insertion holding both rather than two
+  // that each assume they are the only one.
+  let pending = new Map<StoredContainer, string[]>();
+  let addTo = (container: StoredContainer, members: string[]) => {
+    let existing = pending.get(container);
+    if (existing) {
+      existing.push(...members);
+    } else {
+      pending.set(container, [...members]);
+    }
+  };
+  // Members bound for a container the file does not carry, which is created
+  // once holding all of them.
+  let newArrays = new Map<string, unknown[]>();
+  let newRelationships: [string, unknown][] = [];
+  let newSidecars = new Map<string, unknown[]>();
+
+  for (let [field, items] of requested) {
+    let itemDef = await appendableField(definition, field, url, ctx);
+    let array = layout.arrays.get(field);
+    if (!array && layout.attributeKeys.has(field)) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `"${field}" is a containsMany field, and the stored file for ` +
+          `${url.href} holds something other than an array under it`,
+      });
+    }
+    let at = array?.count ?? 0;
+    let values: unknown[] = [];
+    let types: (CodeRef | undefined)[] = [];
+    for (let [offset, item] of items.entries()) {
+      let split = await splitItem(
+        item,
+        itemDef,
+        `${field}.${at + offset}`,
+        target,
+        ctx,
+      );
+      values.push(split.value);
+      types.push(split.adoptsFrom);
+      newRelationships.push(...split.relationships);
+    }
+    if (array) {
+      addTo(
+        array,
+        values.map((value) => renderValue(value, indentsFor(array, style))),
+      );
+    } else {
+      newArrays.set(field, values);
+    }
+    if (types.every((type) => type === undefined)) {
+      continue;
+    }
+    // A composite `containsMany` records its items' types positionally — one
+    // sidecar entry per item — so an entry has to reach the item's index,
+    // which means standing in for every item ahead of it that had no type of
+    // its own.
+    let sidecar = layout.sidecars.get(field);
+    if (!sidecar && layout.metaFieldKeys.has(field)) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `the stored file for ${url.href} records the types of "${field}" ` +
+          `as something other than an array`,
+      });
+    }
+    let filled = sidecar?.count ?? 0;
+    if (filled > at) {
+      // The sidecar is positional, so one longer than the array it describes
+      // names items that are not there — and an entry appended after it would
+      // land at an index no item occupies.
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `the stored file for ${url.href} records ${filled} types for ` +
+          `"${field}", which holds ${at} items`,
+      });
+    }
+    let entries: unknown[] = [];
+    for (let index = filled; index < at; index++) {
+      entries.push({});
+    }
+    for (let type of types) {
+      entries.push(type ? { adoptsFrom: type } : {});
+    }
+    if (sidecar) {
+      addTo(
+        sidecar,
+        entries.map((entry) => renderValue(entry, indentsFor(sidecar, style))),
+      );
+    } else {
+      newSidecars.set(field, entries);
+    }
+  }
+
+  let data = layout.data!;
+  if (newArrays.size > 0) {
+    let into = layout.attributes;
+    if (into) {
+      addTo(
+        into,
+        [...newArrays].map(([field, values]) =>
+          renderMember(field, values, indentsFor(into, style)),
+        ),
+      );
+    } else {
+      addTo(data, [
+        renderMember(
+          'attributes',
+          Object.fromEntries(newArrays),
+          indentsFor(data, style),
+        ),
+      ]);
+    }
+  }
+  if (newRelationships.length > 0) {
+    let into = layout.relationships;
+    if (into) {
+      addTo(
+        into,
+        newRelationships.map(([key, value]) =>
+          renderMember(key, value, indentsFor(into, style)),
+        ),
+      );
+    } else {
+      addTo(data, [
+        renderMember(
+          'relationships',
+          Object.fromEntries(newRelationships),
+          indentsFor(data, style),
+        ),
+      ]);
+    }
+  }
+  if (newSidecars.size > 0) {
+    // `data.meta` is always there: the type read above found `adoptsFrom`
+    // inside it, and an append that could not read the type never reaches
+    // here.
+    let into = layout.metaFields ?? layout.meta!;
+    addTo(
+      into,
+      layout.metaFields
+        ? [...newSidecars].map(([field, entries]) =>
+            renderMember(field, entries, indentsFor(into, style)),
+          )
+        : [
+            renderMember(
+              'fields',
+              Object.fromEntries(newSidecars),
+              indentsFor(into, style),
+            ),
+          ],
+    );
+  }
+
+  let edits: SpliceEdit[] = [];
+  for (let [container, members] of pending) {
+    let edit = appendMembers(container, members, style);
+    if (edit) {
+      edits.push(edit);
+    }
+  }
+  return {
+    writes: [{ path: sourcePath, content: splice(base, edits) }],
+    deletes: [],
+    // Nothing here is a mint: an append changes a card that is already stored.
+    mints: [],
+    id: url.href,
+    primaryPath: sourcePath,
+  };
+}
+
+// The fields an append names and the items bound for each, from either
+// spelling: one field with its items, or several fields each with their own.
+// The members are the ones the envelope's `data` carries, so the endpoint
+// hands them through rather than translating them.
+function requestedItems(
+  entry: AppendContainsManyEntry,
+  url: URL,
+): Map<string, unknown[]> {
+  let refuse = (detail: string): never => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid append',
+      detail,
+    });
+  };
+  let requested = new Map<string, unknown[]>();
+  if (entry.fields !== undefined) {
+    if (entry.field !== undefined || entry.items !== undefined) {
+      refuse(
+        `an append names one field with its items, or several under ` +
+          `\`fields\`, and this one does both`,
+      );
+    }
+    if (!isPlainRecord(entry.fields)) {
+      refuse(`\`fields\` maps each field name to the items to append to it`);
+    }
+    for (let [field, items] of Object.entries(entry.fields)) {
+      if (!Array.isArray(items)) {
+        refuse(`the items for "${field}" are not a list`);
+      }
+      requested.set(field, items);
+    }
+  } else {
+    if (typeof entry.field !== 'string' || entry.field.length === 0) {
+      refuse(`an append names the field it appends to, and this one does not`);
+    }
+    if (!Array.isArray(entry.items)) {
+      refuse(`the items to append are not a list`);
+    }
+    requested.set(entry.field as string, entry.items as unknown[]);
+  }
+  if ([...requested.values()].every((items) => items.length === 0)) {
+    // An append of nothing would still rewrite the file, and a file without a
+    // change is never rewritten.
+    refuse(`an append names the items to append, and this one names none`);
+  }
+  return requested;
+}
+
+// Where the insertions go, read out of the stored bytes in one pass.
+async function readLayout(
+  base: SplicedSource,
+  fields: string[],
+  bytes: SourceBytes,
+  url: URL,
+): Promise<CardSourceLayout> {
+  let layout: CardSourceLayout;
+  try {
+    layout = await scanCardSource(
+      streamSpliced(base, (start, end) => bytes.read(start, end)),
+      fields,
+    );
+  } catch (err: unknown) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Invalid stored card',
+      detail:
+        `the stored file for ${url.href} is not a JSON document an append ` +
+        `can edit: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+  if (!layout.data) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Invalid stored card',
+      detail: `the stored file for ${url.href} carries no \`data\` member`,
+    });
+  }
+  // Each of these holds named members, and an insertion writes `"key": value`
+  // into it. One holding an array instead takes that text just as readily and
+  // leaves behind a file that no longer parses — so the kind is checked here,
+  // where every container an insertion can reach passes through, rather than
+  // at each of the places one is written to.
+  for (let [name, container] of [
+    ['data', layout.data],
+    ['data.attributes', layout.attributes],
+    ['data.relationships', layout.relationships],
+    ['data.meta', layout.meta],
+    ['data.meta.fields', layout.metaFields],
+  ] as const) {
+    if (container && container.kind !== 'object') {
+      throw new OperationFailure({
+        id: url.href,
+        status: 500,
+        code: 'internal-error',
+        title: 'Invalid stored card',
+        detail:
+          `the stored file for ${url.href} holds an array under \`${name}\`, ` +
+          `which names members rather than positions`,
+      });
+    }
+  }
+  return layout;
+}
+
+// The target's type, named by the card's own bytes rather than by the index:
+// the index is downstream of the file and can lag it, and what an append needs
+// the type for — which of an item's members are links — has to describe the
+// bytes it is editing.
+async function appendTargetDefinition(
+  layout: CardSourceLayout,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  if (!layout.adoptsFrom) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Invalid stored card',
+      detail:
+        `the stored file for ${url.href} does not name its type as a module ` +
+        `and an export under \`data.meta.adoptsFrom\`, so an item cannot be ` +
+        `split into its stored parts`,
+    });
+  }
+  let definition = await ctx.lookupDefinition(layout.adoptsFrom, url);
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Unknown type',
+      detail: `no definition for ${JSON.stringify(layout.adoptsFrom)}`,
+    });
+  }
+  return definition;
+}
+
+// The definition of the items in the field an append names, after holding the
+// field to being one an append can write: a collection of values this card
+// stores itself. Undefined for a collection of primitives, whose items have no
+// fields of their own and so no definition to split against.
+async function appendableField(
+  definition: Definition,
+  field: string,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition | undefined> {
+  let fieldDef = getImmediateFieldDef(definition, field);
+  if (!fieldDef) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Unknown field',
+      detail: `${url.href} has no field named "${field}"`,
+    });
+  }
+  if (fieldDef.type !== 'containsMany') {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Not a containsMany',
+      detail:
+        `"${field}" is a ${fieldDef.type} field; an append adds items to a ` +
+        `containsMany`,
+    });
+  }
+  if (fieldDef.isComputed) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Computed field',
+      detail:
+        `"${field}" is computed, so its value comes from its \`computeVia\` ` +
+        `rather than from what is stored`,
+    });
+  }
+  return fieldDef.isPrimitive
+    ? undefined
+    : await itemDefinitionOf(fieldDef, field, url, ctx);
+}
+
+async function itemDefinitionOf(
+  fieldDef: FieldDefinition,
+  field: string,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  let definition = await ctx.lookupDefinition(fieldDef.fieldOrCard, url);
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Unknown type',
+      detail:
+        `no definition for the items of "${field}" ` +
+        `(${JSON.stringify(fieldDef.fieldOrCard)})`,
+    });
+  }
+  return definition;
+}
+
+// The card an append is writing to, in the two forms its parts are addressed
+// by: the URL it answers to, which names it in a refusal, and the file its
+// bytes live in, which a stored link is recorded relative to.
+interface AppendTarget {
+  url: URL;
+  file: URL;
+}
+
+interface SplitItem {
+  // What the array holds: the item's own values, with every link taken out.
+  value: unknown;
+  // The item's concrete type, when it declared one.
+  adoptsFrom?: CodeRef;
+  // The flattened relationship keys the item's links are recorded under, and
+  // what each records. A null link is a position the author emptied, which the
+  // file records rather than leaves out.
+  relationships: [string, { links: { self: string | null } }][];
+}
+
+// Split one appended item into the parts the file stores separately.
+//
+// An item of a primitive collection is its own value and nothing else. One of
+// a composite collection is a record of that item type's fields, so each
+// member is placed by what the item type says it is: a link leaves the value
+// and becomes a relationship key, a nested composite is split the same way one
+// level down, and everything else stays where it was written. A member the
+// item type does not declare is refused rather than stored, since nothing
+// would ever read it back.
+//
+// An item that names its own type is split against *that* type, not against
+// the declared one — a subtype's own fields are the point of declaring it, so
+// splitting against the declared type would refuse every one of them.
+async function splitItem(
+  item: unknown,
+  itemDef: Definition | undefined,
+  path: string,
+  target: AppendTarget,
+  ctx: StagingContext,
+): Promise<SplitItem> {
+  if (!itemDef) {
+    return { value: item, relationships: [] };
+  }
+  if (!isPlainRecord(item)) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid item',
+      detail:
+        `\`${path}\` holds a composite value, so the item is a record of its ` +
+        `fields`,
+    });
+  }
+  let adoptsFrom: CodeRef | undefined;
+  let rest: Record<string, unknown> = item;
+  // A card declares its type under `meta.adoptsFrom`, and an item whose
+  // concrete type differs from the declared one says so the same way. An item
+  // type that declares a field of its own named `meta` would make the two
+  // spellings indistinguishable, so that collision is named rather than
+  // guessed at.
+  if (Object.prototype.hasOwnProperty.call(item, 'meta')) {
+    if (getImmediateFieldDef(itemDef, 'meta')) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Ambiguous item',
+        detail:
+          `\`${path}\` declares a field named "meta", which is also where an ` +
+          `item names its own type, so the member cannot be placed`,
+      });
+    }
+    adoptsFrom = itemTypeOf(item.meta, path);
+    rest = { ...item };
+    delete rest.meta;
+  }
+  let against = adoptsFrom
+    ? await declaredItemType(adoptsFrom, path, target.url, ctx)
+    : itemDef;
+  let split = await splitValue(rest, against, path, target, ctx);
+  return { ...split, ...(adoptsFrom ? { adoptsFrom } : {}) };
+}
+
+// The type an item named for itself. Whether it is one the declared item type
+// admits is not something the cached definitions can answer — they record a
+// type's own fields, not what it adopts — so a type the realm can read is
+// taken at its word here, and a value the field ultimately refuses surfaces
+// where every other one does, when the card indexes.
+async function declaredItemType(
+  adoptsFrom: CodeRef,
+  path: string,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  let definition = await ctx.lookupDefinition(adoptsFrom, url);
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Unknown item type',
+      detail:
+        `\`${path}.meta\` names ${JSON.stringify(adoptsFrom)}, which the ` +
+        `realm has no definition for`,
+    });
+  }
+  return definition;
+}
+
+function itemTypeOf(meta: unknown, path: string): CodeRef {
+  let adoptsFrom = isPlainRecord(meta) ? meta.adoptsFrom : undefined;
+  if (
+    !isPlainRecord(adoptsFrom) ||
+    typeof adoptsFrom.module !== 'string' ||
+    typeof adoptsFrom.name !== 'string'
+  ) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid item type',
+      detail:
+        `\`${path}.meta\` names the item's own type, as ` +
+        `\`{ adoptsFrom: { module, name } }\``,
+    });
+  }
+  // A sidecar entry is an item's whole `meta`, and a nested composite of its
+  // own contributes a `fields` member to it. An append writes only the type,
+  // so anything else here would be accepted and then dropped — which is the
+  // one outcome worse than refusing it.
+  let extra = Object.keys(meta as Record<string, unknown>).filter(
+    (key) => key !== 'adoptsFrom',
+  );
+  if (extra.length > 0) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid item type',
+      detail:
+        `\`${path}.meta\` carries ${quoted(extra)}, and an append records ` +
+        `only an item's own type there; a value whose nested fields need ` +
+        `types of their own is written with a \`transform\``,
+    });
+  }
+  return { module: rri(adoptsFrom.module), name: adoptsFrom.name };
+}
+
+function quoted(names: string[]): string {
+  return names.map((name) => `"${name}"`).join(', ');
+}
+
+// A link position an author left empty, as the file stores it.
+function emptyLink(): { links: { self: null } } {
+  return { links: { self: null } };
+}
+
+// One relationship as the file stores it. A link is recorded the way the
+// realm's own serializer records one — relative to the file that holds it when
+// it points inside this realm — so two entries in one batch that link to the
+// same card write the same thing, whether one of them was an append and the
+// other a create.
+function storedRelationship(
+  value: unknown,
+  target: AppendTarget,
+  path: string,
+  ctx: StagingContext,
+): { links: { self: string } } {
+  let identity = identityOf(resolveLinkParam(value, ctx, path), path);
+  // Against the file rather than the card: a relative reference is resolved
+  // from the document that carries it, which is what the serializer passes and
+  // what a reader of the stored bytes resolves against.
+  return { links: { self: ctx.storedLink(identity, target.file) } };
+}
+
+async function splitValue(
+  value: Record<string, unknown>,
+  definition: Definition,
+  path: string,
+  target: AppendTarget,
+  ctx: StagingContext,
+): Promise<{ value: unknown; relationships: SplitItem['relationships'] }> {
+  let stored: Record<string, unknown> = {};
+  let relationships: SplitItem['relationships'] = [];
+  for (let [key, member] of Object.entries(value)) {
+    let at = `${path}.${key}`;
+    let fieldDef = getImmediateFieldDef(definition, key);
+    if (!fieldDef) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Unknown field',
+        detail: `the items of this field have no field named "${key}"`,
+      });
+    }
+    if (fieldDef.isComputed) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Computed field',
+        detail:
+          `\`${at}\` is computed, so its value comes from its \`computeVia\` ` +
+          `rather than from what is stored`,
+      });
+    }
+    if (fieldDef.type === 'linksTo') {
+      // The same answer as the collection above: a link an author cleared is
+      // stored as a null link rather than refused, so both spellings of "no
+      // link" reach the file the way the canonical serialization writes them.
+      relationships.push([
+        at,
+        member == null
+          ? emptyLink()
+          : storedRelationship(member, target, at, ctx),
+      ]);
+      continue;
+    }
+    if (fieldDef.type === 'linksToMany') {
+      if (!Array.isArray(member)) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid link',
+          detail: `\`${at}\` holds a collection of links, so it needs a list`,
+        });
+      }
+      if (member.length === 0) {
+        // A collection with no members is stored under the field's own key
+        // with a null link, which is how the canonical serialization spells a
+        // collection an author emptied — and what its deserializer reads to
+        // tell that apart from a collection never set. Writing nothing here
+        // would store the second when the caller said the first.
+        relationships.push([at, emptyLink()]);
+        continue;
+      }
+      member.forEach((link, index) => {
+        relationships.push([
+          `${at}.${index}`,
+          storedRelationship(link, target, `${at}[${index}]`, ctx),
+        ]);
+      });
+      continue;
+    }
+    if (fieldDef.isPrimitive) {
+      stored[key] = member;
+      continue;
+    }
+    let nestedDef = await itemDefinitionOf(fieldDef, key, target.url, ctx);
+    if (fieldDef.type === 'contains') {
+      if (!isPlainRecord(member)) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid item',
+          detail:
+            `\`${at}\` holds a composite value, so it is a record of its ` +
+            `fields`,
+        });
+      }
+      let nested = await splitValue(member, nestedDef, at, target, ctx);
+      stored[key] = nested.value;
+      relationships.push(...nested.relationships);
+      continue;
+    }
+    if (!Array.isArray(member)) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid item',
+        detail: `\`${at}\` holds a collection, so it needs a list`,
+      });
+    }
+    let members: unknown[] = [];
+    for (let [index, entry] of member.entries()) {
+      if (!isPlainRecord(entry)) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid item',
+          detail:
+            `\`${at}[${index}]\` holds a composite value, so it is a record ` +
+            `of its fields`,
+        });
+      }
+      let nested = await splitValue(
+        entry,
+        nestedDef,
+        `${at}.${index}`,
+        target,
+        ctx,
+      );
+      members.push(nested.value);
+      relationships.push(...nested.relationships);
+    }
+    stored[key] = members;
+  }
+  return { value: stored, relationships };
 }

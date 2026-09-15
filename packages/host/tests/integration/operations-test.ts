@@ -133,6 +133,7 @@ module('Integration | operations', function (hooks) {
       Object.keys(getOperations(ExternalReport)).sort(),
       [
         'addComment',
+        'appendContainsMany',
         'create',
         'delete',
         'escalate',
@@ -193,6 +194,7 @@ module('Integration | operations', function (hooks) {
         delete: implied('delete'),
         query: implied('query'),
         transform: implied('transform'),
+        appendContainsMany: implied('appendContainsMany'),
       },
       'a card def carries every base operation, implied by the def type',
     );
@@ -227,6 +229,7 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       Object.keys(getOperations(Report)).sort(),
       [
+        'appendContainsMany',
         'create',
         'delete',
         'query',
@@ -254,6 +257,7 @@ module('Integration | operations', function (hooks) {
     assert.deepEqual(
       Object.keys(getOperations(Archivable)).sort(),
       [
+        'appendContainsMany',
         'create',
         'delete',
         'query',

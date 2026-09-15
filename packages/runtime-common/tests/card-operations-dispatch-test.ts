@@ -436,6 +436,65 @@ const tests = Object.freeze({
     assert.strictEqual(onField.code, 'operation-not-allowed');
   },
 
+  'appending to a containsMany belongs to a card, not to a file or a field':
+    async (assert) => {
+      // A card's fields are what a containsMany is one of, so the behavior
+      // reaches a card and nothing else: a file's metadata is content-derived
+      // and read-only, and a field's instances have no URL to invoke against.
+      let card = stub();
+      let onCard = await resolveOperation(
+        card.core,
+        CARD,
+        'appendContainsMany',
+      );
+      assert.strictEqual(
+        onCard.base,
+        'appendContainsMany',
+        'a card carries it, undeclared, as a base operation',
+      );
+
+      let file = stub();
+      let onFile = await refusalFrom(() =>
+        resolveOperation(file.core, FILE, 'appendContainsMany'),
+      );
+      assert.strictEqual(onFile.code, 'operation-not-allowed');
+      assert.strictEqual(onFile.status, 405);
+
+      let field = stub({ definitionType: 'field-def' });
+      let onField = await refusalFrom(() =>
+        resolveOperation(
+          field.core,
+          { kind: 'type', codeRef: PERSON, realm: REALM },
+          'appendContainsMany',
+        ),
+      );
+      assert.strictEqual(onField.code, 'operation-not-allowed');
+    },
+
+  'a write is carried out by the coordinator rather than by this dispatch':
+    async (assert) => {
+      // Every write takes the realm's write lock once for the whole batch it
+      // belongs to, so it arrives as a batch entry. Reaching one from here is
+      // the caller having used the wrong entry point.
+      let { core } = stub();
+      for (let name of [
+        'create',
+        'update',
+        'delete',
+        'transform',
+        'appendContainsMany',
+      ]) {
+        let error = await refusalFrom(() =>
+          runOperation(core, invoke(CARD, name)),
+        );
+        assert.strictEqual(
+          error.status,
+          501,
+          `"${name}" is not carried out here`,
+        );
+      }
+    },
+
   'a declaration lowering flagged invalid reports its findings': async (
     assert,
   ) => {

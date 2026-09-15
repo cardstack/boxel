@@ -22,6 +22,14 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('appending to a containsMany belongs to a card, not to a file or a field', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
+    test('a write is carried out by the coordinator rather than by this dispatch', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('a declaration lowering flagged invalid reports its findings', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
