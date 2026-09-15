@@ -52,6 +52,7 @@ import { validateLatticeRenderCheckpoint } from '@cardstack/runtime-common/latti
 import { openLatticeNativeWork } from '../lib/lattice-native-work.ts';
 import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
 import { setupDB } from './helpers/index.ts';
+import { persistFileMeta } from '@cardstack/runtime-common/file-meta';
 
 const { module, test } = QUnit;
 const realm = 'https://lattice-pg.example/';
@@ -771,9 +772,17 @@ module('Lattice | PostgreSQL native admission', function (hooks) {
     try {
       assert.true(await canRun());
       const edited = linkedSource + '\n';
-      await db.execute(
-        'UPDATE realm_file_meta SET content_hash=$1,content_size=$2 WHERE realm_url=$3 AND file_path=$4',
-        { bind: [md5(edited), Buffer.byteLength(edited), realm, 'score.gts'] },
+      await persistFileMeta(
+        db,
+        realm,
+        [
+          {
+            path: 'score.gts',
+            contentHash: md5(edited),
+            contentSize: Buffer.byteLength(edited),
+          },
+        ],
+        true,
       );
       for (let i = 0; i < 20 && !work.signal.aborted; i++)
         await new Promise((resolve) => setTimeout(resolve, 25));
@@ -833,16 +842,17 @@ module('Lattice | PostgreSQL native admission', function (hooks) {
         "UPDATE jobs SET status='resolved' WHERE job_type='lattice-materialize' AND concurrency_group=$1",
         { bind: ['indexing:' + realm] },
       );
-      await db.execute(
-        'UPDATE realm_file_meta SET content_hash=$1,content_size=$2 WHERE realm_url=$3 AND file_path=$4',
-        {
-          bind: [
-            md5(linkedSource),
-            Buffer.byteLength(linkedSource),
-            realm,
-            'score.gts',
-          ],
-        },
+      await persistFileMeta(
+        db,
+        realm,
+        [
+          {
+            path: 'score.gts',
+            contentHash: md5(linkedSource),
+            contentSize: Buffer.byteLength(linkedSource),
+          },
+        ],
+        true,
       );
       await createLatticeCodeWorker({
         db,
