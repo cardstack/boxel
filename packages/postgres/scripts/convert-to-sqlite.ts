@@ -1,5 +1,5 @@
 /* eslint-env node */
-import { readFileSync, readdirSync, writeFileSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync, unlinkSync } from 'fs';
 import { resolve, join } from 'path';
 import {
   parse,
@@ -70,10 +70,22 @@ for (let statement of cst.statements) {
   sql.push('\n);\n\n');
 }
 
-let result = sql.join(' ').trim();
+let result = sql
+  .join(' ')
+  .trim()
+  .split('\n')
+  .map((line) => line.trimEnd())
+  .join('\n');
 let filename = getSchemaFilename();
 let schemaFile = join(sqliteSchemaDir, filename);
 writeFileSync(schemaFile, result);
+// Keep the previous schema if dumping or converting fails. Remove obsolete
+// generated files only after their replacement has been written successfully.
+for (let previous of readdirSync(sqliteSchemaDir)) {
+  if (previous.endsWith('_schema.sql') && previous !== filename) {
+    unlinkSync(join(sqliteSchemaDir, previous));
+  }
+}
 console.log(`created SQLite schema file ${schemaFile}`);
 
 function createColumns(

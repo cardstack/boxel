@@ -24,6 +24,7 @@ import {
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { persistFileMeta } from '@cardstack/runtime-common/file-meta';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
@@ -143,6 +144,64 @@ module('Unit | index-writer', function (hooks) {
       definitionLookup,
       virtualNetwork,
     );
+  });
+
+  test('enabled Lattice resume rejects obsolete generations but retains current work', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      {
+        working: [1, 2].map((generation) => ({
+          url: `${testRealmURL}${generation}.json`,
+          realm_url: testRealmURL,
+          generation,
+          type: 'instance',
+          job_id: 42,
+          last_modified: '1700000000',
+          deps: [],
+          types: [],
+        })),
+        production: [],
+      },
+    );
+    let enabledWriter = new IndexWriter(adapter, {
+      lattice: new LatticeRealmConfig([testRealmURL]),
+    });
+    let batch = await enabledWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+      {
+        jobId: 42,
+        reservationId: 1,
+        priority: 0,
+        queueWaitMs: null,
+      },
+    );
+    assert.deepEqual([...batch.resumedRows.keys()], [`${testRealmURL}2.json`]);
+  });
+
+  test('index recovery distinguishes a durable clock from a completed empty index', async function (assert) {
+    assert.true(await indexWriter.isNewIndex(testRealmURLObject));
+    let batch = await indexWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+    );
+    await batch.done();
+    assert.false(await indexWriter.isNewIndex(testRealmURLObject));
+    await adapter.execute('DELETE FROM realm_meta WHERE realm_url=$1', {
+      bind: [testRealmURL],
+    });
+    assert.true(
+      await indexWriter.isNewIndex(testRealmURLObject),
+      'a surviving clock does not hide a missing index',
+    );
+    let rebuilt = await indexWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+    );
+    assert.true(rebuilt.currentGeneration > batch.currentGeneration);
+    await rebuilt.done();
+    assert.false(await indexWriter.isNewIndex(testRealmURLObject));
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -1073,6 +1132,156 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('render link recovery translates copied capture provenance into the destination realm', async function (assert) {
+    let variants = [
+      { name: 'current', generation: 4, error: false, valid: true },
+      { name: 'stale', generation: 3, error: false, valid: false },
+      { name: 'failed-current', generation: 4, error: true, valid: true },
+      { name: 'legacy', generation: undefined, error: false, valid: true },
+      {
+        name: 'failed-legacy',
+        generation: undefined,
+        error: true,
+        valid: false,
+      },
+      { name: 'unvalidated', generation: null, error: false, valid: false },
+    ];
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 8 },
+        { realm_url: testRealmURL2, current_generation: 100 },
+      ],
+      variants.map(({ name, generation, error }) => ({
+        url: `${testRealmURL}${name}.json`,
+        realm_url: testRealmURL,
+        generation: 4,
+        type: 'instance' as const,
+        pristine_doc: makeCardResource(name, name, {
+          module: rri('./person'),
+          name: 'Person',
+        }),
+        search_doc: { name },
+        types: [],
+        deps: [],
+        isolated_html: '<div>Retained</div>',
+        diagnostics: {
+          brokenLinks: [
+            {
+              fieldName: 'wall',
+              reference: `${testRealmURL}missing`,
+              kind: 'not-found',
+            },
+          ],
+          ...(generation === undefined
+            ? {}
+            : { brokenLinksGeneration: generation }),
+        },
+        error_doc: error
+          ? { message: 'Interrupted', status: 500, additionalErrors: [] }
+          : null,
+      })),
+    );
+    await adapter.execute(
+      'UPDATE prerendered_html SET generation=8 WHERE realm_url=$1',
+      { bind: [testRealmURL] },
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+    let rows = await adapter.execute(
+      'SELECT url,generation,diagnostics FROM prerendered_html WHERE realm_url=$1',
+      { bind: [testRealmURL2], coerceTypes: { diagnostics: 'JSON' } },
+    );
+    for (let variant of variants) {
+      let row = rows.find(
+        (entry) => entry.url === `${testRealmURL2}${variant.name}.json`,
+      )!;
+      let diagnostics = row.diagnostics as {
+        brokenLinksGeneration: number | null;
+        brokenLinks: { reference: string }[];
+      };
+      assert.strictEqual(
+        diagnostics.brokenLinksGeneration,
+        variant.valid ? row.generation : null,
+        `${variant.name}: validation transfers only when it covers the copied data`,
+      );
+      assert.strictEqual(
+        diagnostics.brokenLinks[0].reference,
+        `${testRealmURL2}missing`,
+        `${variant.name}: the finding refers to the copied target`,
+      );
+    }
+  });
+
+  test('render link recovery retains SQLite findings through failed and uncaptured visits', async function (assert) {
+    let url = `${testRealmURL}recovery.json`;
+    let missing = [
+      {
+        fieldName: 'wall',
+        reference: `${testRealmURL}missing`,
+        kind: 'not-found' as const,
+      },
+    ];
+    let initial = await indexWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+      undefined,
+      { prerenderHtmlOnly: true, generation: 5 },
+    );
+    await initial.updatePrerenderedHtmlEntry(new URL(url), {
+      type: 'instance',
+      isolatedHtml: '<div>Missing</div>',
+      deps: [],
+      diagnostics: { brokenLinks: missing },
+    });
+    await initial.done();
+    let failure = await indexWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+      undefined,
+      { prerenderHtmlOnly: true, generation: 6 },
+    );
+    await failure.updatePrerenderedHtmlEntry(new URL(url), {
+      type: 'instance-error',
+      error: { message: 'Interrupted', status: 500, additionalErrors: [] },
+      diagnostics: { brokenLinks: [] },
+    });
+    await failure.done();
+    let read = async () =>
+      (
+        await adapter.execute(
+          'SELECT diagnostics FROM prerendered_html WHERE url=$1',
+          { bind: [url], coerceTypes: { diagnostics: 'JSON' } },
+        )
+      )[0].diagnostics;
+    assert.deepEqual(
+      await read(),
+      { brokenLinks: missing, brokenLinksGeneration: 5 },
+      'failed SQLite attempt retains a complete capture at generation 5',
+    );
+    let next = await indexWriter.createBatch(
+      testRealmURLObject,
+      virtualNetwork,
+      undefined,
+      { prerenderHtmlOnly: true, generation: 7 },
+    );
+    await next.updatePrerenderedHtmlEntry(new URL(url), {
+      type: 'instance',
+      isolatedHtml: '<div>Uncaptured</div>',
+      deps: [],
+    });
+    await next.done();
+    assert.deepEqual(
+      await read(),
+      { brokenLinks: missing, brokenLinksGeneration: 5 },
+      'uncaptured visit does not refresh its validation',
+    );
+  });
+
   test('copyFrom rewrites realm keys in copied prerendered_html rows', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
@@ -1657,6 +1866,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
       {
+        valid_until: null,
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
         generation: 2,
@@ -1806,6 +2016,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       errorEntry,
       {
+        valid_until: null,
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
@@ -1999,6 +2210,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       errorEntry,
       {
+        valid_until: null,
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,

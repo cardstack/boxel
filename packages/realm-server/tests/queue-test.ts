@@ -763,7 +763,8 @@ module(basename(import.meta.filename), function () {
       // pre-claim coalesce. Without dedup, a second 'incremental-index'
       // row is inserted for the same change set and the worker runs the
       // same indexing pass twice. With dedup, the second publish reuses
-      // the running job's id and registers a late waiter.
+      // the running job's id and registers a late waiter. Both publishes
+      // carry the same source revision: they are the same write.
       await runner.destroy();
       let realmURL = 'http://example.com/in-flight-dedup-identical/';
       let started = new Deferred<void>();
@@ -802,6 +803,7 @@ module(basename(import.meta.filename), function () {
             realmUsername: 'owner',
             ignoreData: {},
             changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            revisions: { [`${realmURL}a`]: 'rev-1' },
           },
         });
         // Wait for the worker to actually claim and start running the
@@ -816,6 +818,7 @@ module(basename(import.meta.filename), function () {
             realmUsername: 'owner',
             ignoreData: {},
             changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            revisions: { [`${realmURL}a`]: 'rev-1' },
           },
         });
 
@@ -853,10 +856,124 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('incremental dedup: a newer revision of an in-flight URL does not attach to the running job', async function (assert) {
+      // Ledger 4b review: a second save of the same card can land while the
+      // job indexing its first save is running. That worker has already
+      // read the older bytes, so the newer revision needs its own job; a
+      // publish without a revision (a file-watcher event, an older
+      // publisher) cannot be matched either and inserts as well.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-dedup-newer-revision/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-dedup-revision-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let first = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            revisions: { [`${realmURL}a`]: 'rev-1' },
+          },
+        });
+        await started.promise;
+
+        let newer = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            revisions: { [`${realmURL}a`]: 'rev-2' },
+          },
+        });
+        assert.notStrictEqual(
+          first.id,
+          newer.id,
+          'a newer revision gets its own job instead of joining the running one',
+        );
+
+        let unknown = await publishIncrementalIndexJob({
+          clientRequestId: 'request-3',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        assert.notStrictEqual(
+          first.id,
+          unknown.id,
+          'a publish without a revision does not join the running job',
+        );
+        assert.strictEqual(
+          newer.id,
+          unknown.id,
+          'it joins the still-pending newer job instead',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'the running job and one pending job for the newer revision',
+        );
+
+        release.fulfill();
+        let [firstResult, newerResult, unknownResult] = await Promise.all([
+          first.done,
+          newer.done,
+          unknown.done,
+        ]);
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(newerResult.clientRequestId, 'request-2');
+        assert.strictEqual(unknownResult.clientRequestId, 'request-3');
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('incremental dedup: an incoming subset of the in-flight change set attaches as a late waiter', async function (assert) {
       // Subset case: in-flight job is processing [a,b] and a new publish
-      // arrives for just [a]. The running indexing pass already covers
-      // url a, so the new caller can reuse it.
+      // arrives for just [a], at the revision the running job was enqueued
+      // for. The running indexing pass already covers url a, so the new
+      // caller can reuse it.
       await runner.destroy();
       let realmURL = 'http://example.com/in-flight-dedup-subset/';
       let started = new Deferred<void>();
@@ -898,6 +1015,7 @@ module(basename(import.meta.filename), function () {
               { url: `${realmURL}a`, operation: 'update' },
               { url: `${realmURL}b`, operation: 'update' },
             ],
+            revisions: { [`${realmURL}a`]: 'rev-a', [`${realmURL}b`]: 'rev-b' },
           },
         });
         await started.promise;
@@ -909,6 +1027,7 @@ module(basename(import.meta.filename), function () {
             realmUsername: 'owner',
             ignoreData: {},
             changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            revisions: { [`${realmURL}a`]: 'rev-a' },
           },
         });
 

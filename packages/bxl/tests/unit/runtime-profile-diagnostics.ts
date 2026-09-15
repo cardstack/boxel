@@ -12,11 +12,34 @@ if (preparedDef.ok) {
   strictEqual(preparedDef.value.evaluate({}).value, 6);
 }
 
-throws(
-  () => bxl('def twice(x): x * 2; twice(3)'),
-  /derive-def-banned:.*does not allow user-defined helpers/,
-  'computeVia rejects def with an explicit derive-profile capability diagnostic',
+strictEqual(
+  bxl('def twice(x): x * 2; twice(3)').call({}),
+  6,
+  'computeVia accepts a user-defined helper under the derive profile',
 );
+
+throws(
+  () => bxl('def stamp: now; stamp', { readableSyntax: false }),
+  /derive-call-banned:.*now/,
+  'a helper body is still screened: a volatile call inside def is refused',
+);
+
+throws(
+  () => bxl('def apply(f): f; apply(now)', { readableSyntax: false }),
+  /derive-call-banned:.*now/,
+  'a volatile call passed as a helper argument is refused',
+);
+
+const recursive = bxl(
+  'def countdown(n): if n <= 0 then .done else countdown(n - 1) end; countdown(3)',
+  { readableSyntax: false },
+);
+deepStrictEqual(
+  recursive.bxl.deps,
+  ['done'],
+  'dependency tracking expands a recursive helper once instead of overflowing the stack',
+);
+strictEqual(recursive.call({ done: 'yes' }), 'yes');
 
 throws(
   () => evaluateBxlBare('AND([true, true])', {}),

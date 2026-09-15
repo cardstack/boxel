@@ -31,7 +31,14 @@ function makeStubQueue(registered: string[]): QueueRunner {
   } as QueueRunner;
 }
 
-function makeWorker(queue: QueueRunner, indexJobsOnly?: boolean) {
+function makeWorker(
+  queue: QueueRunner,
+  indexJobsOnly?: boolean,
+  extra: Pick<
+    ConstructorParameters<typeof Worker>[0],
+    'codeLinker' | 'latticeJobsOnly'
+  > = {},
+) {
   // Worker.run() only touches these dependencies at registration time via
   // closures inside the task factories, so shallow stubs are sufficient —
   // no task actually executes in these tests.
@@ -47,6 +54,7 @@ function makeWorker(queue: QueueRunner, indexJobsOnly?: boolean) {
     prerenderer: {} as any,
     createPrerenderAuth: () => 'test-auth',
     ...(indexJobsOnly !== undefined ? { indexJobsOnly } : {}),
+    ...extra,
   });
 }
 
@@ -69,6 +77,7 @@ module(basename(import.meta.filename), function () {
         'prerender_html',
         'run-command',
         'screenshot-card',
+        'lattice-materialize',
       ],
       'all job types are registered',
     );
@@ -87,5 +96,21 @@ module(basename(import.meta.filename), function () {
       registered.includes('prerender_html'),
       'the index lane cannot claim prerender_html jobs',
     );
+  });
+
+  test('code linking needs its Node capability and does not occupy source or materialization lanes', async function (assert) {
+    const codeLinker = async () => ({ published: 0, superseded: 0 });
+    for (const kind of ['background', 'source', 'materialization'] as const) {
+      const registered: string[] = [];
+      await makeWorker(makeStubQueue(registered), kind === 'source', {
+        codeLinker,
+        latticeJobsOnly: kind === 'materialization',
+      }).run();
+      assert.strictEqual(
+        registered.includes('lattice-link-code'),
+        kind === 'background',
+        kind,
+      );
+    }
   });
 });

@@ -22,6 +22,7 @@ interface DependencyResolverOptions {
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
+  getDirectDependencyErrorRows?(urls: string[]): Promise<DependencyIndexRow[]>;
   // Slim projection (url, type, deps only) used by invalidation ordering.
   // Selection priority is applied server-side; see IndexWriter.
   getOrderingDependencyRows(urls: string[]): Promise<OrderingDependencyRow[]>;
@@ -55,6 +56,7 @@ export class IndexRunnerDependencyManager {
     virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
+    getDirectDependencyErrorRows,
     getOrderingDependencyRows,
     getInvalidations,
   }: DependencyResolverOptions) {
@@ -65,6 +67,7 @@ export class IndexRunnerDependencyManager {
       virtualNetwork,
       readDefinitionCacheEntries,
       getDependencyRows,
+      getDirectDependencyErrorRows,
       getInvalidations,
       canonicalURLMemo: this.#canonicalURLMemo,
     });
@@ -126,28 +129,33 @@ export class IndexRunnerDependencyManager {
     let byHref = new Map(urls.map((url) => [url.href, url]));
     let hrefs = [...byHref.keys()];
     let order = new Map(hrefs.map((href, index) => [href, index]));
-    let rows = await this.#getOrderingDependencyRows(hrefs);
 
     // dependency -> the URLs in this set that depend on it. Indegrees are
     // derived from these edges by `#kahnByPriority`, over the reduced edge
     // set that survives the cycle drop below.
     let edges = new Map<string, Set<string>>();
-    for (let row of rows) {
-      if (!byHref.has(row.url)) {
-        continue;
-      }
-      let base = new URL(row.url);
-      for (let dep of row.deps ?? []) {
-        let normalized = this.canonicalURL(dep, base.href);
-        if (!byHref.has(normalized) || normalized === row.url) {
+    const rowBatchSize = 250;
+    for (let offset = 0; offset < hrefs.length; offset += rowBatchSize) {
+      let rows = await this.#getOrderingDependencyRows(
+        hrefs.slice(offset, offset + rowBatchSize),
+      );
+      for (let row of rows) {
+        if (!byHref.has(row.url)) {
           continue;
         }
-        let dependents = edges.get(normalized);
-        if (!dependents) {
-          dependents = new Set<string>();
-          edges.set(normalized, dependents);
+        let base = new URL(row.url);
+        for (let dep of row.deps ?? []) {
+          let normalized = this.canonicalURL(dep, base.href);
+          if (!byHref.has(normalized) || normalized === row.url) {
+            continue;
+          }
+          let dependents = edges.get(normalized);
+          if (!dependents) {
+            dependents = new Set<string>();
+            edges.set(normalized, dependents);
+          }
+          dependents.add(row.url);
         }
-        dependents.add(row.url);
       }
     }
 

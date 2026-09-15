@@ -732,6 +732,8 @@ export class Prerenderer {
       jobId,
       screenshots,
       renderScope,
+      inputSnapshot,
+      latticeRenderCheckpoint,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
@@ -794,6 +796,8 @@ export class Prerenderer {
             jobId,
             screenshots,
             renderScope,
+            inputSnapshot,
+            latticeRenderCheckpoint,
             signal,
             onTabAcquired,
           });
@@ -831,6 +835,8 @@ export class Prerenderer {
               jobId,
               screenshots,
               renderScope,
+              inputSnapshot,
+              latticeRenderCheckpoint,
               signal,
               onTabAcquired,
             });

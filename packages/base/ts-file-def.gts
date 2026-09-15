@@ -1,4 +1,7 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  codeFileData,
+} from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GlimmerComponent from '@glimmer/component';
@@ -21,8 +24,6 @@ import { fencedCodeBlock } from './markdown-helpers';
 import { highlightTs } from './ts-highlight';
 export { highlightTs } from './ts-highlight';
 
-const EXCERPT_MAX_LENGTH = 500;
-
 function getExtension(url: string): string {
   try {
     let parsed = new URL(url);
@@ -33,17 +34,6 @@ function getExtension(url: string): string {
     let dot = url.lastIndexOf('.');
     return dot === -1 ? '' : url.slice(dot).toLowerCase();
   }
-}
-
-function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
-}
-
-function truncateExcerpt(text: string): string {
-  if (text.length <= EXCERPT_MAX_LENGTH) {
-    return text;
-  }
-  return `${text.slice(0, EXCERPT_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
 // The family renderer the four shared shells mount into. Source code has no
@@ -285,20 +275,7 @@ export class TsFileDef extends FileDef {
     let base = await FileDef.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let source = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
-
-    return {
-      ...base,
-      title: fallbackTitle,
-      excerpt: truncateExcerpt(source.replace(/\s+/g, ' ').trim()),
-      content: source,
-      // Normalize CRLF/CR to LF first so the count is the same across newline
-      // styles (and matches the fitted projection); a trailing newline
-      // shouldn't inflate the count, and empty content is zero lines.
-      lineCount: source
-        ? source.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').length
-        : 0,
-    };
+    return { ...base, ...codeFileData(source, base.name ?? '') };
   }
 }
 

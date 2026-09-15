@@ -1,6 +1,7 @@
 import { rawArrayValues } from './watched-array';
 import { isSavedInstance } from './-private';
 import {
+  currentLatticeInputSnapshot,
   isCardError,
   matchSearchableRoutes,
   primitive,
@@ -180,6 +181,7 @@ async function loadSearchableTarget(
     return { status: 'loaded', card: resident };
   }
   try {
+    let indexedInput = currentLatticeInputSnapshot();
     let cardDoc = await store.loadCardDocument(reference, { untracked: true });
     if (isCardError(cardDoc)) {
       return {
@@ -193,7 +195,10 @@ async function loadSearchableTarget(
         cardDoc.data,
         cardDoc,
         cardDoc.data.id!,
-        { store },
+        {
+          store,
+          ...(indexedInput ? { latticePublication: 'input' as const } : {}),
+        },
       )) as CardDef,
     };
   } catch (err) {

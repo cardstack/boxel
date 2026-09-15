@@ -25,8 +25,16 @@ import {
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
+import type {
+  LatticeNativeCardIndexer,
+  LatticeNativeFileIndexer,
+} from '../lattice-native-index.ts';
 
 interface RenderFileForIndexingOptions {
+  nativeCardIndexer?: LatticeNativeCardIndexer;
+  nativeFileIndexer?: LatticeNativeFileIndexer;
+  beforeIndex?: (runtime: 'native' | 'browser') => Promise<void>;
+  inputSnapshot?: import('../lattice-materialization.ts').LatticeInputSnapshot;
   url: URL;
   realmURL: URL;
   ignoreMap: Map<string, Ignore>;
@@ -61,6 +69,9 @@ interface RenderFileForIndexingOptions {
 // writes/bookkeeping use only the worker + DB, so they ride in the shadow of a
 // render that happens anyway.
 export interface IndexVisitRenderResult {
+  // A reactive publication updates the card value, not its source FileDef.
+  // Missing file extraction in this mode is intentional, not a file error.
+  latticeCardOnly?: true;
   localPath: LocalPath;
   lastModified: number;
   resourceCreatedAt: number;
@@ -127,6 +138,10 @@ interface RouteIndexVisitCallbacks {
 // render before this one's row writes land. Returns `undefined` when the
 // file is ignored or belongs to a different realm.
 export async function renderFileForIndexing({
+  nativeCardIndexer,
+  nativeFileIndexer,
+  beforeIndex,
+  inputSnapshot,
   url,
   realmURL,
   ignoreMap,
@@ -191,7 +206,19 @@ export async function renderFileForIndexing({
   }
 
   let needCardRender = Boolean(parsedCardResource);
-  let needFileExtract = true; // every file gets a file entry
+  // The fused SQLite path still owns HTML publication. Only the server's
+  // split path has an independent HTML job to update those representations.
+  let latticeCardOnly = inputSnapshot !== undefined && batch.splitPrerenderHtml;
+  if (latticeCardOnly && !parsedCardResource) {
+    let error = new CardError('Lattice computation requires a card source', {
+      status: 422,
+    });
+    error.deps = [url.href];
+    throw error;
+  }
+  // Source indexing owns the FileDef entry. Re-evaluating a persisted card's
+  // computed values does not change its file bytes or require extraction.
+  let needFileExtract = !latticeCardOnly;
   // fileRender is requested for every file, including executable modules
   // (.gts/.ts). Module files are also FileDef subclasses (GtsFileDef /
   // TsFileDef) with their own fitted/embedded/atom/isolated templates, and
@@ -201,7 +228,7 @@ export async function renderFileForIndexing({
   // `hasModulePrerender` flag on the file-index row below (a metadata hint
   // for downstream consumers; the file indexer no longer acts on it).
   // Missing-resource cases are handled downstream by the file indexer.
-  let needFileRender = true;
+  let needFileRender = !latticeCardOnly;
 
   if (lastModified == null) {
     logWarn(
@@ -213,7 +240,103 @@ export async function renderFileForIndexing({
   let fileURL = url.href;
   let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
-  let clearCache = consumeClearCacheForRender();
+  // A reviewed native producer may supply both card data and source-file data.
+  // A materialization-only visit leaves the source-file row untouched.
+  let native;
+  if (process.env.LATTICE_NATIVE_ADMISSION_DEBUG && parsedCardResource)
+    console.warn(
+      `native gate for ${fileURL}: splitPrerenderHtml=${batch.splitPrerenderHtml} indexer=${Boolean(nativeCardIndexer)}`,
+    );
+  if (parsedCardResource && batch.splitPrerenderHtml && nativeCardIndexer) {
+    if (beforeIndex) await beforeIndex('native');
+    native = await nativeCardIndexer({
+      url: fileURL,
+      realmURL: realmURL.href,
+      sourceJSON: content,
+      ...(!latticeCardOnly ? { fileDefCodeRef } : {}),
+      generation: batch.currentGeneration,
+      loaderEpoch: batch.loaderEpoch,
+      lastModified,
+      resourceCreatedAt,
+      inputSnapshot: inputSnapshot,
+    });
+  }
+  if (native) {
+    if (
+      native.card.error ||
+      native.card.serialized?.data.id !== fileURL.replace(/\.json$/, '') ||
+      !native.card.searchDoc ||
+      !native.card.types?.length ||
+      !native.card.displayNames?.length ||
+      !native.card.deps?.length
+    ) {
+      throw new Error('Incomplete native card index result');
+    }
+    batch.registerLatticeNativeCard(
+      fileURL,
+      native.assertCurrent,
+      native.codeReference,
+      native.queryPreparation,
+      native.retainedInputs,
+    );
+    needCardRender = false;
+    if (native.file && !latticeCardOnly) {
+      let { extract, render } = native.file;
+      if (
+        extract.status !== 'ready' ||
+        extract.error ||
+        render.error ||
+        extract.resource?.id !== fileURL ||
+        !extract.searchDoc ||
+        !extract.types?.length ||
+        !extract.displayNames?.length ||
+        !extract.deps.length ||
+        !render.iconHTML
+      )
+        throw new Error('Incomplete native file index result');
+      needFileExtract = false;
+      needFileRender = false;
+    }
+  }
+  // File-data analysis is independently admitted. It never imports the source
+  // being classified, and does not authorize its card computations to run here.
+  let nativeFile =
+    !parsedCardResource &&
+    !latticeCardOnly &&
+    batch.splitPrerenderHtml &&
+    nativeFileIndexer
+      ? await nativeFileIndexer({
+          url: fileURL,
+          realmURL: realmURL.href,
+          source: content,
+          fileDefCodeRef,
+          generation: batch.currentGeneration,
+          loaderEpoch: batch.loaderEpoch,
+          lastModified,
+          resourceCreatedAt,
+        })
+      : undefined;
+  if (nativeFile) {
+    const { extract, render } = nativeFile;
+    if (
+      extract.status !== 'ready' ||
+      extract.error ||
+      extract.resource?.id !== fileURL ||
+      !extract.searchDoc ||
+      !extract.types?.length ||
+      !extract.displayNames?.length ||
+      !extract.deps.length ||
+      render?.error ||
+      (render && !render.iconHTML)
+    )
+      throw new Error('Incomplete native file data result');
+    batch.registerLatticeNativeResult(fileURL, nativeFile.assertCurrent);
+    needFileExtract = false;
+    if (render) needFileRender = false;
+  }
+  let needsBrowserIndex = needCardRender || needFileExtract || needFileRender;
+  if (needsBrowserIndex) await beforeIndex?.('browser');
+  let clearCache = needsBrowserIndex && consumeClearCacheForRender();
 
   // The file-extract pass runs `FileDef.extractAttributes` in the prerenderer,
   // which otherwise buffers the entire file just to MD5 it and measure its
@@ -233,8 +356,23 @@ export async function renderFileForIndexing({
       fileContentSize = contentSize;
     }
   }
+  // Record the hash for a file the realm never wrote (indexed from disk) so
+  // the next visit can be admitted natively; see IndexWriter.ensureContentMeta.
+  if (fileContentHash === undefined && batch.splitPrerenderHtml) {
+    await batch.ensureContentMeta(localPath, content);
+  }
 
   let visitArgs = {
+    ...(inputSnapshot
+      ? {
+          inputSnapshot: {
+            ...inputSnapshot,
+            ...(batch.latticeEnabled && needCardRender
+              ? { retainLinks: true as const, loaderEpoch: batch.loaderEpoch }
+              : {}),
+          },
+        }
+      : {}),
     affinityType: 'realm' as const,
     affinityValue: realmURL.href,
     realm: realmURL.href,
@@ -280,11 +418,48 @@ export async function renderFileForIndexing({
   let renderStart = Date.now();
   let indexResponse: RenderVisitResponse;
   try {
-    indexResponse = await prerenderer.prerenderVisit({
-      ...visitArgs,
-      visitType: 'index',
-      renderOptions: indexRenderOptions,
-    });
+    indexResponse = needsBrowserIndex
+      ? await prerenderer.prerenderVisit({
+          ...visitArgs,
+          visitType: 'index',
+          renderOptions: indexRenderOptions,
+          ...(nativeFile?.extract.resource
+            ? {
+                fileData: {
+                  resource: nativeFile.extract.resource,
+                  fileDefCodeRef,
+                },
+                types: nativeFile.extract.types ?? undefined,
+              }
+            : {}),
+        })
+      : {};
+    if (nativeFile) {
+      indexResponse.fileExtract = nativeFile.extract;
+      if (nativeFile.render) indexResponse.fileRender = nativeFile.render;
+    }
+    if (native) {
+      indexResponse.card = native.card;
+      if (native.file && !latticeCardOnly) {
+        indexResponse.fileExtract = native.file.extract;
+        indexResponse.fileRender = native.file.render;
+      }
+    }
+    if (
+      needCardRender &&
+      batch.latticeEnabled &&
+      inputSnapshot &&
+      !indexResponse.card?.error
+    ) {
+      if (!indexResponse.card?.retainedInputs)
+        throw new Error(
+          'Chrome did not return the requested retained input receipts',
+        );
+      batch.registerLatticeBrowserInputs(
+        fileURL,
+        indexResponse.card.retainedInputs,
+      );
+    }
   } catch (err) {
     logWarn(
       `${jobIdentity(jobInfo)} index visit prerender of ${url.href} threw: ${(err as Error)?.message}`,
@@ -308,6 +483,7 @@ export async function renderFileForIndexing({
   let needFileHtml = needFileRender && htmlFileData !== undefined;
   if (
     !batch.splitPrerenderHtml &&
+    !latticeCardOnly &&
     !indexResponse.pageUnusableError &&
     (needCardRender || needFileHtml)
   ) {
@@ -364,12 +540,28 @@ export async function renderFileForIndexing({
       renderRpc: Math.max(0, renderClientMs - serverRenderMs),
     },
   );
+  if (nativeFile)
+    diagnostics = {
+      ...diagnostics,
+      // Resume must reconstruct the transaction fence for file artifacts too.
+      latticeNative: true,
+      latticeNativeFile: true,
+      latticeNativeFileMs: nativeFile.timings,
+    };
+  if (native)
+    diagnostics = {
+      ...diagnostics,
+      latticeNative: true,
+      ...(native.timings ? { latticeNativeMs: native.timings } : {}),
+      ...(native.compute ? { latticeNativeCompute: native.compute } : {}),
+    };
 
   logDebug(
     `${jobIdentity(jobInfo)} completed render of file ${url.href} in ${Date.now() - start}ms`,
   );
 
   return {
+    ...(latticeCardOnly ? { latticeCardOnly: true as const } : {}),
     localPath,
     lastModified,
     resourceCreatedAt,
@@ -444,6 +636,8 @@ export async function routeIndexVisitResult(
     });
   }
 
+  if (result.latticeCardOnly) return;
+
   // Route file extract + file render to the file indexer. The file indexer's
   // existing error-path handling runs even if extractResult is missing; that
   // behavior is preserved by passing undefined through.
@@ -496,7 +690,7 @@ function attachIndexVisitClientTimings(
 // carries its dependency chain on the index visit's error, which the html
 // render path does not reconstruct. Whichever visit is the sole one to error
 // is used as-is.
-function mergeCardVisitResults(
+export function mergeCardVisitResults(
   index: RenderResponse | undefined,
   html: RenderResponse | undefined,
 ): RenderResponse | undefined {
@@ -520,6 +714,9 @@ function mergeCardVisitResults(
     types: index?.types ?? null,
     deps: mergeDeps(index?.deps ?? null, html?.deps ?? null),
     ...(index?.diagnostics ? { diagnostics: index.diagnostics } : {}),
+    // Time grain (PrerenderMeta.validUntil): the index visit's, never the
+    // HTML visit's.
+    ...(index?.validUntil ? { validUntil: index.validUntil } : {}),
     iconHTML: index?.iconHTML ?? null,
     isolatedHTML: html?.isolatedHTML ?? null,
     headHTML: html?.headHTML ?? null,

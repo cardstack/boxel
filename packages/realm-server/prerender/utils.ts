@@ -361,69 +361,79 @@ async function waitForRoutePathSuffix(
 ): Promise<void> {
   let waitTimeoutMs = effectiveRouteWaitTimeoutMs(opts);
   log.debug(`waitForRoutePathSuffix start suffix=${suffix} url=${page.url()}`);
-  await page.waitForFunction(
-    (
-      targetSuffix: string,
-      expectedId: string | null,
-      expectedNonce: string | null,
-    ) => {
-      if (window.location.pathname.endsWith(targetSuffix)) {
-        return true;
-      }
+  // Same-document navigation need not mutate DOM, and a background renderer
+  // need not receive animation frames. Poll this URL/terminal-state boundary
+  // from Node, whose timer is independent of the app's prerender timer stubs.
+  let startedAt = Date.now();
+  while (
+    !(await page.evaluate(
+      (
+        targetSuffix: string,
+        expectedId: string | null,
+        expectedNonce: string | null,
+      ) => {
+        if (window.location.pathname.endsWith(targetSuffix)) {
+          return true;
+        }
 
-      // If the render has already entered a terminal state (error/unusable),
-      // do not wait for a route suffix that may never arrive.
-      let elements = Array.from(
-        document.querySelectorAll('[data-prerender]'),
-      ) as HTMLElement[];
-      if (!elements.length) {
-        let errorElement = document.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        if (!errorElement) {
-          return false;
+        // If the render has already entered a terminal state (error/unusable),
+        // do not wait for a route suffix that may never arrive.
+        let elements = Array.from(
+          document.querySelectorAll('[data-prerender]'),
+        ) as HTMLElement[];
+        if (!elements.length) {
+          let errorElement = document.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          if (!errorElement) {
+            return false;
+          }
+          let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
+          return raw.trim().length > 0;
         }
-        let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
-        return raw.trim().length > 0;
-      }
-      for (let element of elements) {
-        let status = element.dataset.prerenderStatus ?? '';
-        let errorElement = element.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        let errorText = (
-          errorElement?.textContent ??
-          errorElement?.innerHTML ??
-          ''
-        ).trim();
-        let isTerminal =
-          status === 'error' || status === 'unusable' || errorText.length > 0;
-        if (!isTerminal) {
-          continue;
+        for (let element of elements) {
+          let status = element.dataset.prerenderStatus ?? '';
+          let errorElement = element.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          let errorText = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          let isTerminal =
+            status === 'error' || status === 'unusable' || errorText.length > 0;
+          if (!isTerminal) {
+            continue;
+          }
+          if (
+            expectedId &&
+            element.dataset.prerenderId &&
+            element.dataset.prerenderId !== expectedId
+          ) {
+            continue;
+          }
+          if (
+            expectedNonce &&
+            element.dataset.prerenderNonce &&
+            element.dataset.prerenderNonce !== expectedNonce
+          ) {
+            continue;
+          }
+          return true;
         }
-        if (
-          expectedId &&
-          element.dataset.prerenderId &&
-          element.dataset.prerenderId !== expectedId
-        ) {
-          continue;
-        }
-        if (
-          expectedNonce &&
-          element.dataset.prerenderNonce &&
-          element.dataset.prerenderNonce !== expectedNonce
-        ) {
-          continue;
-        }
-        return true;
-      }
-      return false;
-    },
-    { timeout: waitTimeoutMs },
-    suffix,
-    opts?.expectedId ?? null,
-    opts?.expectedNonce ?? null,
-  );
+        return false;
+      },
+      suffix,
+      opts?.expectedId ?? null,
+      opts?.expectedNonce ?? null,
+    ))
+  ) {
+    if (Date.now() - startedAt >= waitTimeoutMs) {
+      throw new Error(`Timed out waiting for prerender route ${suffix}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   let matchedByPath = false;
   try {
     matchedByPath = new URL(page.url()).pathname.endsWith(suffix);
@@ -679,7 +689,7 @@ export async function captureModule(
         let value = pre?.textContent ?? '';
         return value.trim().length > 0;
       },
-      { timeout: cardRenderTimeout },
+      { timeout: cardRenderTimeout, polling: 'mutation' },
       opts?.expectedId ?? null,
       opts?.expectedNonce ?? null,
     );
@@ -773,7 +783,7 @@ export async function captureFileExtract(
         let value = pre?.textContent ?? '';
         return value.trim().length > 0;
       },
-      { timeout: cardRenderTimeout },
+      { timeout: cardRenderTimeout, polling: 'mutation' },
       opts?.expectedId ?? null,
       opts?.expectedNonce ?? null,
     );
@@ -973,7 +983,7 @@ export async function captureResult(
       }
       return false;
     },
-    { timeout: cardRenderTimeout },
+    { timeout: cardRenderTimeout, polling: 'mutation' },
     statuses,
     opts?.expectedId ?? null,
     opts?.expectedNonce ?? null,

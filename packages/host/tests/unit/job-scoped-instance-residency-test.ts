@@ -1,6 +1,12 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import {
+  isCardInstance,
+  rri,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+
 import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
@@ -38,6 +44,7 @@ module('Unit | job-scoped instance residency', function (hooks) {
   hooks.afterEach(function () {
     delete (globalThis as any).__boxelRenderContext;
     delete (globalThis as any).__boxelJobId;
+    delete (globalThis as any).__latticeInputSnapshot;
   });
 
   // Built per test: the base-realm definitions these extend are only loaded
@@ -47,6 +54,26 @@ module('Unit | job-scoped instance residency', function (hooks) {
       @field name = contains(StringField);
     }
     return new Person({ name });
+  }
+
+  for (let retainLinks of [false, true]) {
+    test(`a new input receipt frame ${retainLinks ? 'resets' : 'preserves'} resident instances at the same generation`, function (assert) {
+      let input = {
+        realmURL: 'https://test-realm/',
+        generation: 4,
+        ...(retainLinks ? { retainLinks: true } : {}),
+      };
+      (globalThis as any).__latticeInputSnapshot = input;
+      let store = makeStore();
+      let person = makePerson('Avery');
+      let id = 'https://test-realm/person';
+      store.setCard(id, person);
+      assert.false(store.observeIndexingJob(), 'reuse within the same frame');
+      assert.strictEqual(store.getCard(id), person);
+      (globalThis as any).__latticeInputSnapshot = { ...input };
+      assert.strictEqual(store.observeIndexingJob(), retainLinks);
+      assert.strictEqual(store.getCard(id), retainLinks ? undefined : person);
+    });
   }
 
   // Serves any card-source request from memory: these tests only need a load
@@ -91,6 +118,79 @@ module('Unit | job-scoped instance residency', function (hooks) {
 
   const residentURL = 'http://localhost:4201/test/jade';
   const otherURL = 'http://localhost:4201/test/queenzy';
+
+  for (let indexedInput of [false, true]) {
+    test(`a resident link keeps ${indexedInput ? 'publication asynchronous' : 'ordinary synchronous'} resolution`, async function (assert) {
+      if (indexedInput) {
+        (globalThis as any).__latticeInputSnapshot = {
+          realmURL: 'http://localhost:4201/test/',
+          generation: 1,
+        };
+      }
+      let store = makeStore();
+      store.observeIndexingJob();
+      let api = await getService('card-service').getAPI();
+      let parentDoc: LooseSingleCardDocument = {
+        data: {
+          id: otherURL,
+          type: 'card',
+          attributes: { cardInfo: {} },
+          relationships: {
+            'cardInfo.theme': { links: { self: residentURL } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('https://cardstack.com/base/card-api'),
+              name: 'CardDef',
+            },
+          },
+        },
+      };
+      let parent = await api.createFromSerialized(
+        parentDoc.data,
+        parentDoc,
+        rri(otherURL),
+        { store },
+      );
+      if (!isCardInstance(parent)) throw new Error('Expected a card parent');
+      // Load the target only after deserializing the parent, so the parent still
+      // holds a lazy reference even though its target is now available locally.
+      let themeDoc: LooseSingleCardDocument = {
+        data: {
+          id: residentURL,
+          type: 'card',
+          attributes: { cssVariables: ':root { --primary: purple; }' },
+          meta: {
+            adoptsFrom: {
+              module: rri('https://cardstack.com/base/card-api'),
+              name: 'Theme',
+            },
+          },
+        },
+      };
+      let theme = await api.createFromSerialized(
+        themeDoc.data,
+        themeDoc,
+        rri(residentURL),
+        { store },
+      );
+      assert.strictEqual(store.getCard(residentURL), theme);
+      assert.strictEqual(parent.cardInfo.theme, undefined);
+      assert.strictEqual(
+        parent.cardInfo.theme,
+        indexedInput ? undefined : theme,
+        indexedInput
+          ? 'publication reads settle outside tracked rendering'
+          : 'ordinary resident reuse does not add a microtask',
+      );
+      await store.loaded();
+      assert.strictEqual(
+        parent.cardInfo.theme,
+        theme,
+        'reuses the same resident instance',
+      );
+    });
+  }
 
   test('a card resident from an earlier job is not handed to the next one', async function (assert) {
     let store = makeStore();

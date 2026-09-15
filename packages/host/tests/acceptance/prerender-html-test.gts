@@ -786,6 +786,44 @@ module('Acceptance | prerender | html', function (hooks) {
     );
   });
 
+  test('render link diagnostics capture settled slots and reset when a page renders another card', async function (assert) {
+    const read = () => (globalThis as any).__boxelRenderReadBrokenLinks?.();
+    await visit(
+      renderPath(`${testRealmURL}Cat/molly.json`, '/html/isolated/0'),
+    );
+    assert.strictEqual(
+      (await capturePrerenderResult('innerHTML')).status,
+      'ready',
+    );
+    let broken = await read();
+    assert.ok(
+      broken?.some(
+        (link: { reference: string; kind: string }) =>
+          link.reference.includes('Cat/missing-link') &&
+          link.kind === 'not-found',
+      ),
+      'HTML-only rendering exposes the settled missing slot',
+    );
+    await visit(
+      renderPath(`${testRealmURL}Pet/mango.json`, '/html/isolated/0', 1),
+    );
+    assert.strictEqual(
+      (await capturePrerenderResult('innerHTML')).status,
+      'ready',
+    );
+    assert.deepEqual(
+      await read(),
+      [],
+      'a healthy next card does not retain the previous finding',
+    );
+    await visit('/');
+    assert.strictEqual(
+      read(),
+      undefined,
+      'leaving the render route clears the captured-instance closure',
+    );
+  });
+
   test('prerender renders the per-element broken-link placeholder for a missing linksToMany element', async function (assert) {
     let url = `${testRealmURL}Person/jade.json`;
     await visit(renderPath(url, '/html/isolated/0'));

@@ -1,5 +1,4 @@
-import { primitive } from '@cardstack/runtime-common';
-import type { BaseDef } from './card-api';
+import { primitive, baseJsonQueryableValue } from '@cardstack/runtime-common';
 import { FieldDef, queryableValue } from './card-api';
 
 // A field whose value is an arbitrary JSON object, round-tripped as-is. It is
@@ -11,7 +10,5 @@ import { FieldDef, queryableValue } from './card-api';
 export class JsonField extends FieldDef {
   static displayName = 'JSON';
   static [primitive]: Record<string, any>;
-  static [queryableValue](_value: any, _stack: BaseDef[]): null {
-    return null;
-  }
+  static [queryableValue] = baseJsonQueryableValue;
 }

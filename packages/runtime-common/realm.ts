@@ -1,4 +1,21 @@
 import { Deferred } from './deferred.ts';
+import { latticeInputHave } from './lattice-input-residency.ts';
+import type { LatticeRealmConfig } from './lattice-config.ts';
+import { readLatticeInputAuthority } from './lattice-browser-inputs.ts';
+import {
+  latticeDisplayHave,
+  latticeDisplayBatchRequest,
+  LATTICE_DISPLAY_REQUEST_LIMIT,
+  type LatticeDisplayReuse,
+} from './lattice-display.ts';
+import {
+  assertLatticeGeneration,
+  latticeRequestedGeneration,
+  latticeStoredDocumentBody,
+  LATTICE_INPUT_GENERATION_HEADER,
+  latticeInputURLs,
+  type LatticeInputResult,
+} from './lattice-materialization.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
@@ -369,8 +386,9 @@ export type RealmIndexCounts = {
 //   - Card writes read `__boxelHeadlessCommand`, raised only by the
 //     command-runner route. Host tests raise `__boxelRenderContext` around
 //     in-browser index renders that run alongside an interactive app, and a
-//     save from that app must keep answering from the index — so a write
-//     cannot use the broader flag. A command is the only writer in a
+//     save from that app must keep answering from the index unless its realm
+//     explicitly enables Lattice — so a write cannot use the broader flag.
+//     A command is the only writer in a
 //     prerender tab anyway; the render routes block persistence outright.
 //
 // Either way the header goes on those requests only, narrowly scoped so
@@ -1356,6 +1374,7 @@ export class Realm {
   // template that we clone for each indexing operation
   readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
+  readonly latticeEnabled: boolean;
 
   get url(): string {
     return this.paths.url;
@@ -1391,6 +1410,7 @@ export class Realm {
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      lattice,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -1420,9 +1440,11 @@ export class Realm {
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
+      lattice?: LatticeRealmConfig;
     },
     opts?: Options,
   ) {
+    this.latticeEnabled = lattice?.isEnabled(url) ?? false;
     this.paths = new RealmPaths(new URL(url), virtualNetwork);
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
@@ -1507,6 +1529,7 @@ export class Realm {
       dbAdapter,
       fetch: _fetch,
       definitionLookup: this.#definitionLookup,
+      lattice,
     });
 
     this.#router = new Router(new URL(url))
@@ -1523,6 +1546,11 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
+      )
+      .query(
+        '/_lattice-inputs',
+        SupportedMimeType.CardJson,
+        this.latticeInputResponse.bind(this),
       )
       .get(
         '/_types',
@@ -1640,6 +1668,14 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       );
+
+    if (this.latticeEnabled) {
+      this.#router.query(
+        '/_lattice-read',
+        SupportedMimeType.CardJson,
+        this.latticeDisplayResponse.bind(this),
+      );
+    }
 
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (mimeType !== SupportedMimeType.CardSource) {
@@ -1985,6 +2021,7 @@ export class Realm {
     opts?: {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      revisions?: Map<string, string>;
     },
   ): Promise<IndexPassResult> {
     if (changes.length === 0) {
@@ -1999,6 +2036,7 @@ export class Realm {
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.revisions ? { revisions: opts.revisions } : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -2043,6 +2081,7 @@ export class Realm {
     opts: {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      revisions?: Map<string, string>;
       onSettled?: (
         invalidations: string[],
         meta: IncrementalIndexMeta,
@@ -2062,6 +2101,7 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.revisions ? { revisions: opts.revisions } : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -2664,6 +2704,8 @@ export class Realm {
       lastModified: number;
       contentHash: string;
     }[] = [];
+    // Revision receipts distinguish a watcher echo from a newer source write.
+    let revisions = new Map<string, string>();
     let fileMetaRows: {
       path: LocalPath;
       contentHash?: string;
@@ -2691,6 +2733,7 @@ export class Realm {
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        revisions,
       });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       invalidatedTypes.add({ invalidatedTypes: workingTypes });
@@ -2900,6 +2943,7 @@ export class Realm {
       results.push({ path, lastModified, contentHash });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
+      revisions.set(url.href, contentHash);
       lastWriteType = currentWriteType ?? lastWriteType;
     }
 
@@ -2982,6 +3026,7 @@ export class Realm {
           {
             clientRequestId,
             initiatedBy: initiatingUser,
+            revisions,
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -3054,6 +3099,7 @@ export class Realm {
         contentHash: r.contentHash,
         contentSize: r.contentSize,
       })),
+      this.latticeEnabled,
     );
     // maintain LocalPath typing on keys
     return new Map(
@@ -3064,7 +3110,7 @@ export class Realm {
   // remove file meta rows for deleted paths
   private async removeFileMeta(paths: LocalPath[]): Promise<void> {
     if (!this.#dbAdapter || paths.length === 0) return;
-    await removeFileMeta(this.#dbAdapter, this.url, paths);
+    await removeFileMeta(this.#dbAdapter, this.url, paths, this.latticeEnabled);
   }
 
   private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
@@ -3973,11 +4019,46 @@ export class Realm {
         });
       }
       if (this.#router.handles(request)) {
+        let latticeGeneration = this.latticeEnabled
+          ? latticeRequestedGeneration(request)
+          : undefined;
+        if (latticeGeneration !== undefined) {
+          if (!['GET', 'QUERY'].includes(request.method)) {
+            return badRequest({
+              requestContext,
+              message: 'Lattice input revisions apply only to reads',
+            });
+          }
+          await assertLatticeGeneration(
+            this.#dbAdapter,
+            this.url,
+            latticeGeneration,
+          );
+          let response = await this.#router.handle(request, requestContext);
+          await assertLatticeGeneration(
+            this.#dbAdapter,
+            this.url,
+            latticeGeneration,
+          );
+          response.headers.set('cache-control', 'no-store');
+          return response;
+        }
         return this.#router.handle(request, requestContext);
       } else {
         return this.fallbackHandle(request, requestContext);
       }
     } catch (e) {
+      if (
+        this.latticeEnabled &&
+        request.headers.has(LATTICE_INPUT_GENERATION_HEADER) &&
+        e instanceof CardError
+      ) {
+        return systemError({
+          requestContext,
+          status: e.status,
+          message: e.message,
+        });
+      }
       if (e instanceof AuthenticationError) {
         return createResponse({
           body: e.message,
@@ -6437,6 +6518,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
+    let deferIndex = duringPrerender || this.latticeEnabled;
     // Drain any in-flight incremental indexing before serializing the new
     // card. fileSerialization runs lookupDefinition on the card's
     // adoptsFrom module, and with CS-11003's deferred +source POST a
@@ -6455,7 +6537,10 @@ export class Realm {
     // same reason: `_batchWriteUnlocked` drops that module's cached
     // definition as it writes the bytes, so no indexing-dependent step
     // stands between a module rewrite and the serialization that follows it.
-    if (!duringPrerender) {
+    // An enabled realm acknowledges durable source writes independently of
+    // publication. The saving Store already owns the authored values; its
+    // save response supplies identity and realm metadata, not recomputation.
+    if (!deferIndex) {
       let pending = this.incrementalIndexing();
       if (pending) {
         await pending;
@@ -6559,12 +6644,12 @@ export class Realm {
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(duringPrerender ? { waitForIndex: false } : {}),
+      ...(deferIndex ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
-    if (duringPrerender) {
+    if (deferIndex) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet.
       doc = await this.serializedInstanceEcho(
@@ -6631,6 +6716,7 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
+    let deferIndex = duringPrerender || this.latticeEnabled;
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -6770,6 +6856,31 @@ export class Realm {
       // If the patch makes no semantic changes and doesn't include side-loaded
       // resources, short-circuit to avoid touching the file (and changing mtime).
       if (included.length === 0 && isEqual(primaryResource, original)) {
+        if (this.latticeEnabled) {
+          // The previous save may still be queued for indexing. A retry must
+          // echo its durable source, not the older indexed representation.
+          let doc = await this.serializedInstanceEcho(
+            { data: original },
+            instanceURL,
+            existingFile.lastModified,
+          );
+          let created = await this.getCreatedTime(`${localPath}.json`);
+          this.#serveInstanceIdsAsRRI(doc);
+          return createResponse({
+            body: JSON.stringify(doc, null, 2),
+            init: {
+              headers: {
+                'content-type': SupportedMimeType.CardJson,
+                'cache-control': this.cardJsonCacheControl(requestContext),
+                ...lastModifiedHeader(doc),
+                ...(created
+                  ? { 'x-created': formatRFC7231(created * 1000) }
+                  : {}),
+              },
+            },
+            requestContext,
+          });
+        }
         let entry = await this.#realmIndexQueryEngine.cardDocument(
           new URL(instanceURL),
           {
@@ -6899,10 +7010,10 @@ export class Realm {
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(duringPrerender ? { waitForIndex: false } : {}),
+        ...(deferIndex ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
-      if (duringPrerender) {
+      if (deferIndex) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
         // nothing to read back yet.
         doc = await this.serializedInstanceEcho(
@@ -7199,10 +7310,351 @@ export class Realm {
     }
   }
 
+  private async latticeDisplayResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!this.latticeEnabled) return notFound(request, requestContext);
+    let payload: unknown;
+    try {
+      let body = await request.text();
+      if (body.length > LATTICE_DISPLAY_REQUEST_LIMIT) {
+        return badRequest({
+          requestContext,
+          message: 'Lattice display request is too large',
+        });
+      }
+      payload = JSON.parse(body);
+    } catch {
+      return badRequest({
+        requestContext,
+        message: 'Invalid Lattice display JSON',
+      });
+    }
+    let read = latticeDisplayBatchRequest(payload, this.url);
+    let have = new Map(read.have.map((entry) => [entry.url, entry.token]));
+    let results: string[] = [];
+    // Only the requested identities, through the same serving/validity seam as
+    // GET. No graph expansion and no decoding of the stored attribute body.
+    let readResult = async (id: string): Promise<string> => {
+      let url = new URL(id);
+      try {
+        let entry = await this.#realmIndexQueryEngine.lattice!.read({
+          url,
+          have: have.get(id),
+        });
+        if (!entry) {
+          let present =
+            (await this.#realmIndexQueryEngine.hasLiveInstance(url, {
+              latticeData: true,
+            })) ||
+            (await this.#adapter.exists(
+              `${this.paths.local(url)}.json` as LocalPath,
+            ));
+          return JSON.stringify({
+            url: id,
+            error: {
+              status: present ? 409 : 404,
+              message: present
+                ? 'Lattice publication is unavailable; use the ordinary card read'
+                : `Missing card ${id}`,
+            },
+          });
+        }
+        let card = this.prepareCardRead(entry, url);
+        let publication: string;
+        if (entry.reuse) {
+          let reply: LatticeDisplayReuse = {
+            lattice: {
+              version: 1,
+              reuse: true,
+              token: entry.token!,
+              id: card.data.id!,
+              state: card.data.meta.publication!.state,
+            },
+          };
+          publication = JSON.stringify(reply);
+        } else {
+          publication = latticeStoredDocumentBody(
+            card.data,
+            entry.attributesJSON!,
+          );
+        }
+        return `{"url":${JSON.stringify(id)},"publication":${publication}}`;
+      } catch (error) {
+        // A failed lookup's 404 is not proof of source deletion. Only the
+        // absent-index AND absent-source branch above can report that state.
+        return JSON.stringify({
+          url: id,
+          error: {
+            status:
+              error instanceof CardError &&
+              error.status >= 400 &&
+              error.status <= 599
+                ? error.status === 404
+                  ? 422
+                  : error.status
+                : 500,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Lattice publication read failed',
+          },
+        });
+      }
+    };
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(4, read.required.length) }, async () => {
+        while (next < read.required.length) {
+          let index = next++;
+          results[index] = await readResult(read.required[index]);
+        }
+      }),
+    );
+    return createResponse({
+      requestContext,
+      body: `{"version":1,"session":${JSON.stringify(read.session)},"epoch":${read.epoch},"results":[${results.join(',')}]}`,
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': 'no-store',
+        },
+      },
+    });
+  }
+
+  private async latticeInputResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!this.latticeEnabled) return notFound(request, requestContext);
+    let started = Date.now();
+    if (latticeRequestedGeneration(request) === undefined) {
+      return badRequest({
+        requestContext,
+        message: 'Lattice input reads require an input generation',
+      });
+    }
+    let payload: unknown;
+    try {
+      let body = await request.text();
+      if (body.length > 256 * 1024) {
+        return badRequest({
+          requestContext,
+          message: 'Lattice input request is too large',
+        });
+      }
+      payload = JSON.parse(body);
+    } catch {
+      return badRequest({
+        requestContext,
+        message: 'Invalid Lattice input JSON',
+      });
+    }
+    let urls = latticeInputURLs(payload, this.url);
+    let have = latticeInputHave(payload, urls);
+    let retainLinks =
+      (payload as { retainLinks?: unknown }).retainLinks === true;
+    let authority = retainLinks
+      ? await readLatticeInputAuthority(
+          (expr) => query(this.#dbAdapter, expr),
+          this.url,
+          requestContext.authenticatedUser ?? '*',
+          latticeRequestedGeneration(request)!,
+        )
+      : undefined;
+    let entries = await this.#realmIndexQueryEngine.latticeInputDocuments(
+      urls,
+      have,
+      retainLinks,
+    );
+    let results: LatticeInputResult[] = await Promise.all(
+      urls.map(async (url): Promise<LatticeInputResult> => {
+        let entry = entries.get(url.href);
+        if (!entry) {
+          // A missing index row is not proof of deletion: the source may have
+          // been written or restored before indexing caught up. Check presence
+          // only on this bounded miss path, without reading/parsing source data.
+          let sourceExists = await this.#adapter.exists(
+            `${this.paths.local(url)}.json` as LocalPath,
+          );
+          return {
+            url: url.href,
+            error: {
+              message: sourceExists
+                ? `Lattice source ${url.href} is not indexed; defer its dependent owner`
+                : `Missing indexed card ${url.href}`,
+              status: sourceExists ? 409 : 404,
+              additionalErrors: null,
+            },
+          };
+        }
+        if (entry.type === 'error') {
+          let error = entry.error.errorDetail;
+          return {
+            url: url.href,
+            // A failed card can have a 404 cause, such as a missing module.
+            // Only the absent-source branch above may report a missing input.
+            error: error.status === 404 ? { ...error, status: 422 } : error,
+          };
+        }
+        if (entry.type === 'lattice-reuse') {
+          return {
+            url: url.href,
+            reuse: true,
+            token: entry.token,
+            ...(entry.receipt ? { receipt: entry.receipt } : {}),
+          };
+        }
+        let document = this.prepareCardRead(entry, url);
+        return {
+          url: url.href,
+          ...(entry.token ? { token: entry.token } : {}),
+          ...(entry.receipt ? { receipt: entry.receipt } : {}),
+          document,
+          headers: {
+            'x-boxel-realm-url': this.url,
+            ...lastModifiedHeader(document),
+          },
+        };
+      }),
+    );
+    let body = JSON.stringify({ results, ...(authority ? { authority } : {}) });
+    this.#logRequestPerformance(
+      request,
+      started,
+      `Lattice input batch (${urls.length} cards)`,
+    );
+    return createResponse({
+      requestContext,
+      body,
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': 'no-store',
+        },
+      },
+    });
+  }
+
+  private prepareCardRead(
+    entry: {
+      doc: SingleCardDocument;
+      generation: number;
+      screenshots?: ScreenshotManifest | null;
+    },
+    url: URL,
+  ): SingleCardDocument {
+    let card = entry.doc;
+    card.data.links = { self: url.href };
+    this.#serveInstanceIdsAsRRI(card);
+    // Use the published data generation and joined screenshot manifest. Neither
+    // serving metadata nor the manifest is written back into the source card.
+    card.data.meta = {
+      ...card.data.meta,
+      generation: entry.generation,
+      ...(entry.screenshots
+        ? {
+            screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+              realmURL: this.url,
+              instanceLocalPath: this.paths.local(url),
+            }),
+          }
+        : {}),
+    };
+    return card;
+  }
+
+  // Published and generation-fenced input reads bypass the ordinary response
+  // cache. A non-owner returns to main's cache and read-your-writes path.
+  private async latticeCardResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (localPath.endsWith('.json')) return undefined;
+    localPath ||= 'index';
+    let url = this.paths.fileURL(localPath);
+    let latticeInput = request.headers.has(LATTICE_INPUT_GENERATION_HEADER);
+    let stored = !latticeInput
+      ? await this.#realmIndexQueryEngine.lattice?.read({
+          url,
+          have: latticeDisplayHave(request),
+        })
+      : undefined;
+    if (!latticeInput && !stored) return undefined;
+    let entry =
+      stored ??
+      (await this.#realmIndexQueryEngine.cardDocument(url, {
+        latticeInput: true,
+        skipQueryBackedExpansion: true,
+      }));
+    if (!entry)
+      return this.missingInstanceResponse(request, requestContext, localPath);
+    if (entry.type === 'error') {
+      return this.#respondToCardJsonOutcome(
+        {
+          kind: 'error',
+          error: {
+            status: entry.error.errorDetail.status,
+            title: entry.error.errorDetail.title,
+            message: entry.error.errorDetail.message,
+            stack: entry.error.errorDetail.stack,
+            lastKnownGoodHtml: entry.error.lastKnownGoodHtml,
+            cardTitle: entry.error.cardTitle,
+            scopedCssUrls: entry.error.scopedCssUrls,
+          },
+        },
+        request,
+        requestContext,
+        url,
+        localPath,
+      );
+    }
+    let card = this.prepareCardRead(entry, url);
+    let body: string;
+    if (stored?.reuse) {
+      let reply: LatticeDisplayReuse = {
+        lattice: {
+          version: 1,
+          reuse: true,
+          token: stored.token!,
+          id: card.data.id!,
+          state: card.data.meta.publication!.state,
+        },
+      };
+      body = JSON.stringify(reply);
+    } else {
+      body = stored
+        ? latticeStoredDocumentBody(card.data, stored.attributesJSON!)
+        : JSON.stringify(card, null, 2);
+    }
+    let createdAt = await this.getCreatedTime(this.paths.local(url) + '.json');
+    return createResponse({
+      requestContext,
+      body,
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': 'no-store',
+          ...lastModifiedHeader(card),
+          ...(createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {}),
+        },
+      },
+    });
+  }
+
   private async getCard(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    if (this.latticeEnabled) {
+      let published = await this.latticeCardResponse(request, requestContext);
+      if (published) return published;
+    }
     // Read-your-writes: wait (scoped, bounded) on the requester's own
     // in-flight incremental indexing before reading the card from the
     // index. See drainRequestersOwnIndexing.
@@ -7242,9 +7694,17 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let cacheControl = this.cardJsonCacheControl(requestContext);
-      let ifNoneMatch = request.headers.get('if-none-match');
-      let documentCache = this.#cardDocumentCache;
+      let cacheControl = this.latticeEnabled
+        ? 'no-store'
+        : this.cardJsonCacheControl(requestContext);
+      // A nested publication can change without this ordinary root's indexed_at
+      // advancing. Keep main's validator/cache only for non-enabled realms.
+      let ifNoneMatch = this.latticeEnabled
+        ? null
+        : request.headers.get('if-none-match');
+      let documentCache = this.latticeEnabled
+        ? undefined
+        : this.#cardDocumentCache;
       let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
       // A prerender is already asking for less than a live read, and asks for
       // it by the flag above, so the live-read setting reaches only the
@@ -7387,7 +7847,9 @@ export class Realm {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': cacheControl,
-            ...(assembly.etag ? { etag: assembly.etag } : {}),
+            ...(assembly.etag && !this.latticeEnabled
+              ? { etag: assembly.etag }
+              : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
               ? {
@@ -7946,6 +8408,9 @@ export class Realm {
   ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
+      ...(this.latticeEnabled && opts?.latticeInput
+        ? { latticeInput: true }
+        : {}),
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
@@ -8014,6 +8479,9 @@ export class Realm {
       }
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
+          latticeInput:
+            this.latticeEnabled &&
+            request.headers.has(LATTICE_INPUT_GENERATION_HEADER),
           cacheOnlyDefinitions: duringPrerender,
           // Inside a prerender the search skips the `loadLinks`
           // relationship-assembly pass entirely: the host re-resolves every
@@ -8648,10 +9116,28 @@ export class Realm {
     let sourceRealmURL = ensureTrailingSlash(this.url);
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, type, has_error, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
+      // Link-only invalidations re-render consumers without recomputing their
+      // data. A failed/uncaptured visit may retain an earlier complete scan;
+      // compare that capture's generation, not the failed attempt's generation.
+      // Unstamped legacy findings are usable only from a successful render.
+      `WITH entries AS (`,
+      `SELECT i.url, i.type, i.has_error, i.error_doc,`,
+      `CASE WHEN (CASE`,
+      `  WHEN jsonb_typeof(h.diagnostics->'brokenLinksGeneration') = 'number'`,
+      `    THEN (h.diagnostics->>'brokenLinksGeneration')::numeric`,
+      `  WHEN h.error_doc IS NULL AND h.diagnostics->'brokenLinksGeneration' IS NULL`,
+      `    THEN h.generation END) >= i.generation`,
+      `  AND h.is_deleted IS NOT TRUE`,
+      `  AND jsonb_typeof(h.diagnostics->'brokenLinks') = 'array'`,
+      `THEN COALESCE(i.diagnostics, '{}'::jsonb) ||`,
+      `  jsonb_build_object('brokenLinks', h.diagnostics->'brokenLinks')`,
+      `ELSE i.diagnostics END AS diagnostics`,
+      `FROM boxel_index i LEFT JOIN prerendered_html h`,
+      `  ON h.url=i.url AND h.realm_url=i.realm_url AND h.type=i.type`,
+      `WHERE i.realm_url =`,
       param(sourceRealmURL),
-      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-      `AND (`,
+      `AND i.is_deleted IS NOT TRUE`,
+      `) SELECT url, type, has_error, error_doc, diagnostics FROM entries WHERE (`,
       `  has_error = TRUE`,
       `  OR (`,
       `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
@@ -9567,7 +10053,12 @@ export class Realm {
   // Builds a card write's response out of the document just serialized to
   // disk, instead of reading the write back out of the index.
   //
-  // This is what a write from a prerender tab answers with. Such a caller
+  // Enabled realms also use this response for interactive saves: durable
+  // source and queue insertion finish before acknowledgment, while indexed
+  // computation and publication remain downstream. The Store retains its
+  // authored values and applies later confirmed publications in place.
+  //
+  // This is also what a write from a prerender tab answers with. Such a caller
   // holds a prerender render slot for as long as its write is open — and, on
   // the queued-command path, a queue worker as well — while the index read
   // would await the `incremental-index` job the write enqueues, a job that
@@ -9704,16 +10195,29 @@ export class Realm {
     );
   }
 
-  // Public entry point for broadcasting a realm event that does not originate
-  // from a request this Realm handled — a worker-originated event bridged in
-  // through the worker manager. Unlike the private broadcastRealmEvent
-  // (fire-and-forget), this awaits the adapter so the internal /_worker-request
-  // endpoint doesn't leave a dangling promise and can
-  // surface a resolution/dispatch throw. Delivery itself is best-effort — the
-  // adapter swallows per-room send failures the same way web-tier broadcasts do
-  // — so a 200 means "resolved and dispatched," not "received by every host."
-  // The adapter stamps this realm's canonical url on the event, so it reaches
-  // subscribed hosts exactly as a web-tier-originated event does.
+  // The durable dispatcher has checked this recipient and holds an expiring
+  // claim. Return Matrix's acknowledgement or propagate failure; do not use
+  // the best-effort broadcast adapter for publication delivery.
+  async deliverPublicationEvent(
+    roomId: string,
+    event: import('./lattice-publication-outbox.ts').LatticePublicationEvent,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (event.realmURL !== this.url) {
+      throw new Error('Publication event belongs to another realm');
+    }
+    await this.#matrixClient.login();
+    signal.throwIfAborted();
+    return this.#matrixClient.sendEvent(
+      roomId,
+      'app.boxel.realm-event',
+      event,
+      { transactionId: event.publicationId, signal },
+    );
+  }
+
+  // Worker-originated legacy events use the best-effort broadcast adapter.
+  // Awaiting it means "dispatched," not "acknowledged by every recipient."
   async broadcastEvent(event: RealmEventContent): Promise<void> {
     await this.#adapter.broadcastRealmEvent(
       event,

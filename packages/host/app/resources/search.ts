@@ -193,6 +193,12 @@ export class SearchResource<
   // the instances and throw away the resource).
   // Kept private for tests/internal load bookkeeping.
   private loaded: Promise<void> | undefined;
+  // Internal scheduler hint. Consumers must re-read the reactive resource
+  // after this settles: cancellation, supersession, or failure are not proof
+  // that the current query has a complete result.
+  get pendingLoad(): Promise<void> | undefined {
+    return this.isLoading ? this.loaded : undefined;
+  }
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   // The result set as returned by the server. The publicly-exposed
   // `instances` getter derives from this: for an eligible live search it is

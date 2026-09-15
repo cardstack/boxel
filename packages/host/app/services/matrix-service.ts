@@ -1424,6 +1424,8 @@ export default class MatrixService extends Service {
 
         let wasAuthenticated = this.session.isAuthenticated;
         this.setPostLoginCompleted(true, 'start-success');
+        if (this.initialSyncCompleted)
+          this.messageService.latticeConnectionChanged(true);
         loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
         // Symmetric to logout()'s notifySessionEnded(): tell every session
@@ -1563,6 +1565,8 @@ export default class MatrixService extends Service {
     let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
     switch (state) {
       case SlidingSyncState.Complete:
+        if (this.session.isAuthenticated && this.initialSyncCompleted)
+          this.messageService.latticeConnectionChanged(true);
         if (!this.initialSyncCompleted) {
           Promise.allSettled([
             this.drainRoomState(),
@@ -1570,6 +1574,8 @@ export default class MatrixService extends Service {
             this.drainTimeline(),
           ]).then(() => {
             this.initialSyncCompleted = true;
+            if (this.session.isAuthenticated)
+              this.messageService.latticeConnectionChanged(true);
             this.initialSyncCompletedDeferred.fulfill();
             this.slidingSync?.setList(
               SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -1580,6 +1586,7 @@ export default class MatrixService extends Service {
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
       case SlidingSyncState.RequestFinished:
+        if (!resp) this.messageService.latticeConnectionChanged(false);
         roomIds.forEach((id) => this.aiRoomIds.add(id));
         break;
     }

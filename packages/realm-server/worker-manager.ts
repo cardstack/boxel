@@ -1,3 +1,4 @@
+import { LATTICE_PRIORITY } from '@cardstack/runtime-common/jobs/lattice';
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
@@ -133,6 +134,7 @@ let {
   allPriorityCount = 1,
   highPriorityCount = 0,
   userIndexCount = 0,
+  latticeCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -150,6 +152,10 @@ let {
     highPriorityCount: {
       description:
         'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
+      type: 'number',
+    },
+    latticeCount: {
+      description: 'Number of dedicated Lattice secondary workers (default 0)',
       type: 'number',
     },
     userIndexCount: {
@@ -660,7 +666,7 @@ let adapter: PgAdapter;
     `starting ${userIndexCount} user-index ${pluralize(
       'worker',
       userIndexCount,
-    )}, ${highPriorityCount} high-priority ${pluralize(
+    )}, ${latticeCount} Lattice ${pluralize('worker', latticeCount)}, ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
     )} and ${allPriorityCount} all-priority ${pluralize(
@@ -703,6 +709,9 @@ let adapter: PgAdapter;
     await startWorker(userInitiatedPriority, urlMappings, {
       indexJobsOnly: true,
     });
+  }
+  for (let i = 0; i < latticeCount; i++) {
+    await startWorker(LATTICE_PRIORITY, urlMappings, { latticeJobsOnly: true });
   }
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
@@ -808,7 +817,7 @@ async function markFailedIndexEntry({
 async function startWorker(
   priority: number,
   urlMappings: [URL | string, URL][],
-  opts?: { indexJobsOnly?: boolean },
+  opts?: { indexJobsOnly?: boolean; latticeJobsOnly?: boolean },
 ) {
   let worker = spawn(
     'node',
@@ -818,6 +827,7 @@ async function startWorker(
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
       ...(opts?.indexJobsOnly ? [`--indexJobsOnly`] : []),
+      ...(opts?.latticeJobsOnly ? [`--latticeJobsOnly`] : []),
       ...skipPrerenderHtmlRealms.map(
         (realmURL) => `--skipPrerenderHtmlRealm=${realmURL}`,
       ),

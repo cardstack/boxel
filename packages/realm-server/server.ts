@@ -5,6 +5,7 @@ import http2 from 'http2';
 import net from 'net';
 import { readFileSync } from 'fs';
 import type { DefinitionLookup, Realm } from '@cardstack/runtime-common';
+import type { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   logger,
   SupportedMimeType,
@@ -710,6 +711,7 @@ export class RealmServer {
   private searchCache: JobScopedSearchCache;
   private liveSearchCache: LiveSearchCache | undefined;
   private liveReadsResolveLinksOnly: boolean;
+  private lattice: LatticeRealmConfig | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -739,6 +741,7 @@ export class RealmServer {
     searchCache,
     liveSearchCache,
     liveReadsResolveLinksOnly,
+    lattice,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -785,6 +788,7 @@ export class RealmServer {
     // this server mounts are constructed with, since the search fan-out builds
     // its own opts rather than reading them off a realm.
     liveReadsResolveLinksOnly?: boolean;
+    lattice?: LatticeRealmConfig;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -837,6 +841,7 @@ export class RealmServer {
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
     this.liveSearchCache = liveSearchCache;
     this.liveReadsResolveLinksOnly = liveReadsResolveLinksOnly ?? false;
+    this.lattice = lattice;
   }
 
   get app() {
@@ -845,6 +850,7 @@ export class RealmServer {
 
   private buildApp() {
     let { serveIndex, serveHostApp } = createServeIndex({
+      lattice: this.lattice,
       serverURL: this.serverURL,
       assetsURL: this.assetsURL,
       realms: this.realms,
@@ -882,7 +888,7 @@ export class RealmServer {
           // this list the preflight fails and the player errors before any
           // bytes flow.
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
+            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Lattice-Input-Generation, X-Boxel-Lattice-Have, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -937,6 +943,7 @@ export class RealmServer {
       .use(methodOverrideSupport)
       .use(
         createRoutes({
+          lattice: this.lattice,
           dbAdapter: this.dbAdapter,
           definitionLookup: this.definitionLookup,
           mediaCacheAdapter: this.mediaCacheAdapter,

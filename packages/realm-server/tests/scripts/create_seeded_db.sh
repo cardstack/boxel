@@ -35,12 +35,7 @@ docker exec "$TEST_PG_SEED_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_S
   PGPORT="${TEST_PG_SEED_PORT}" \
   PGUSER=postgres \
   PGDATABASE="${TEST_PG_SEED_DB}" \
-  pnpm exec node-pg-migrate \
-    --migrations-table migrations \
-    --check-order false \
-    --ignore-pattern '.*\.eslintrc\.js|package\.json' \
-    --no-verbose \
-    up
+  pnpm exec bash ./scripts/migrate-local.sh up
 )
 
 # Pre-create a template DB in the seed for future test-db cloning paths.

@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -11,10 +12,46 @@ export default class MessageService extends Service {
     new Map();
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
+  // The first completed sync must reconcile views fetched before realm-event
+  // subscriptions were ready. Treating startup as connected drops that edge.
+  private latticeConnected = false;
+  private latticeConnectionListeners = new Set<(connected: boolean) => void>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
     this.session.register(this);
+    let offline = () => this.latticeConnectionChanged(false);
+    let online = () => this.latticeConnectionChanged(true);
+    let visible = () => {
+      if (document.visibilityState === 'visible') {
+        this.latticeConnectionChanged(false);
+        this.latticeConnectionChanged(navigator.onLine);
+      }
+    };
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    document.addEventListener('visibilitychange', visible);
+    registerDestructor(this, () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+      document.removeEventListener('visibilitychange', visible);
+      this.latticeConnectionListeners.clear();
+    });
+  }
+
+  get isLatticeConnected() {
+    return this.latticeConnected;
+  }
+
+  subscribeLatticeConnection(callback: (connected: boolean) => void) {
+    this.latticeConnectionListeners.add(callback);
+    return () => this.latticeConnectionListeners.delete(callback);
+  }
+
+  latticeConnectionChanged(connected: boolean) {
+    if (this.latticeConnected === connected) return;
+    this.latticeConnected = connected;
+    for (let callback of this.latticeConnectionListeners) callback(connected);
   }
 
   register() {
@@ -31,6 +68,7 @@ export default class MessageService extends Service {
     // Re-login re-subscribes fresh (RealmResource.subscribe(), etc.), so a clear
     // here can't strand a live session's wiring.
     this.listenerCallbacks = new Map();
+    this.latticeConnected = false;
     if ((globalThis as any)._CARDSTACK_REALM_SUBSCRIBE === this) {
       delete (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE;
     }

@@ -96,7 +96,21 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
+import type {
+  LatticeApplyResult,
+  LatticeReplica,
+} from '@cardstack/runtime-common/lattice-adapters';
+import {
+  isLatticeDisplayReuse,
+  LATTICE_DISPLAY_HAVE_HEADER,
+} from '@cardstack/runtime-common/lattice-display';
+import { currentLatticeInputSnapshot } from '@cardstack/runtime-common/lattice-materialization';
+
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import LatticeDisplayReader, {
+  LatticeDisplayReadError,
+} from '../lib/lattice-display-reader';
+import LatticePublicationNotices from '../lib/lattice-publication-notices';
 
 import {
   consumingRealmHeader,
@@ -223,6 +237,7 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
+  latticeUseSnapshot?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
 // Opt-in per-field hydration timing, threaded straight through to
@@ -258,7 +273,38 @@ function shedRetryDelayMs(retryAfter: string | null): number {
   return seconds * 1000 + Math.random() * 250;
 }
 
-export default class StoreService extends Service implements StoreInterface {
+// A local read lease, never authority accepted from a publication payload.
+export interface LatticeApplyContext {
+  api: typeof CardAPI;
+  canApply: () => boolean;
+  didApply: () => void;
+}
+
+interface LatticeReload {
+  running: boolean;
+  again: boolean;
+  controller: AbortController;
+}
+
+interface LatticeHydration {
+  store: CardStore;
+  cancelled: boolean;
+  targets: Map<string, { realm: string; pending: boolean; refresh: boolean }>;
+}
+
+class LatticeHydrationCancelledError extends Error {
+  name = 'AbortError';
+  constructor() {
+    super('Publication admission was superseded by a Store reset');
+  }
+}
+
+export default class StoreService
+  extends Service
+  implements
+    StoreInterface,
+    LatticeReplica<CardDef, unknown, LatticeApplyContext>
+{
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
@@ -338,6 +384,22 @@ export default class StoreService extends Service implements StoreInterface {
   // we can't compare against a stored Promise.
   private searchCacheGeneration = 0;
   private store: CardStore;
+  private latticeReadVersions = new WeakMap<CardDef, number>();
+  private latticeReloads = new Map<CardDef, LatticeReload>();
+  private latticeReconciledLoads = new WeakSet<
+    Promise<CardDef | CardErrorJSONAPI>
+  >();
+  private latticeDisplayReader?: LatticeDisplayReader;
+  private latticePublicationNotices?: LatticePublicationNotices;
+  private latticeHydrations = new Set<LatticeHydration>();
+  // A token for the current connection, with weak references to publications
+  // already scheduled for reconciliation on it. No event or body history.
+  private latticeConnection = { refreshed: new WeakSet<CardDef>() };
+  private advanceLatticeRead(instance: CardDef): number {
+    let version = (this.latticeReadVersions.get(instance) ?? 0) + 1;
+    this.latticeReadVersions.set(instance, version);
+    return version;
+  }
   protected isRenderStore = false;
 
   // This is used for tests
@@ -350,8 +412,38 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
     this.session.register(this);
     this.ready = this.setup();
+    let unsubscribeLattice = this.messageService.subscribeLatticeConnection(
+      (connected) => {
+        if (this.isRenderStore || (globalThis as any).__boxelPrerenderApp)
+          return;
+        this.latticeConnection = { refreshed: new WeakSet<CardDef>() };
+        for (let hydration of this.latticeHydrations) {
+          for (let target of hydration.targets.values()) {
+            target.pending = true;
+            target.refresh = connected;
+          }
+        }
+        if (connected) {
+          // These responses are not classified yet. Await the existing first
+          // reads; only admitted publications are reconciled afterwards.
+          // Never enumerate ordinary resident cards to discover candidates.
+          for (let id of this.inflightGetCards.keys())
+            this.reloadAfterInflightLoad.perform(id);
+        }
+        for (let instance of this.store.publicationInstances()) {
+          if (connected) {
+            this.requestPublicationReload(instance);
+          } else {
+            this.advanceLatticeRead(instance);
+            this.cardApiCache!.markLatticePending(instance);
+          }
+        }
+      },
+    );
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
+      unsubscribeLattice();
+      this.clearPublicationReloads();
     });
   }
 
@@ -395,6 +487,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetState() {
+    this.clearPublicationReloads();
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
@@ -478,6 +571,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
+    this.clearPublicationReloads();
     storeLogger.debug('resetting store cache');
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
@@ -506,6 +600,7 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
     let telemetry = this.#clientTelemetry();
     let start = telemetry?.isEnabled ? performance.now() : undefined;
+    this.clearPublicationReloads();
     this.store.reset();
     let refetch = this.reestablishReferences.perform();
     if (telemetry?.isEnabled && start !== undefined) {
@@ -829,6 +924,7 @@ export default class StoreService extends Service implements StoreInterface {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: TrackedAddOptions,
   ): Promise<T | CardErrorJSONAPI> {
+    let admissionStore = this.store;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -837,7 +933,17 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.relativeTo,
         opts?.dependencyTrackingContext,
         opts?.hydrateFieldsMs,
+        opts?.latticeUseSnapshot,
       );
+      if (
+        opts?.latticeUseSnapshot &&
+        this.supersededPublication(
+          admissionStore,
+          instanceOrDoc.data,
+          instanceOrDoc,
+        )
+      )
+        throw new LatticeHydrationCancelledError();
     } else {
       instance = instanceOrDoc;
       let api = await this.cardService.getAPI();
@@ -1459,6 +1565,26 @@ export default class StoreService extends Service implements StoreInterface {
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
     // `included`, reached through the entry's `item` relationship.
     let items = this.itemResourcesFromSearchEntries(collectionDoc);
+    if (currentLatticeInputSnapshot()?.retainLinks) {
+      // A query supplies membership; the pinned input protocol supplies its
+      // complete bodies and receipts. Never hydrate the sparse search items or
+      // silently turn a failed input into a smaller successful result set.
+      if (items.length !== collectionDoc.data.length) {
+        throw new Error('Lattice query response has incomplete item coverage');
+      }
+      items = await Promise.all(
+        items.map(async (resource) => {
+          if (isFileMetaResource(resource) || !resource.id) {
+            throw new Error('Lattice retained query inputs require card data');
+          }
+          let doc = await this.store.loadCardDocument(resource.id, {
+            dependencyTrackingContext,
+          });
+          if (isCardError(doc)) throw doc;
+          return doc.data;
+        }),
+      );
+    }
     let instances = (
       await Promise.all(
         items.map(async (resource) => {
@@ -1530,6 +1656,11 @@ export default class StoreService extends Service implements StoreInterface {
     // the undefined wire default — and so must share one key; keying on the raw
     // `scope` would split them and defeat the dedup.
     let wireScope = this.resolveWireScope(query, scope);
+    // Lattice reads are pinned to a committed generation. Never reuse a raw
+    // source pass's job cache or an in-flight request from an earlier wave.
+    if (currentLatticeInputSnapshot()) {
+      return this.fetchSearchDocUncoalesced(query, realms, wireScope);
+    }
 
     // Resolved-doc cache eligibility: prerender + jobId + same-realm.
     // Cross-realm reads bypass — see field comment.
@@ -1654,7 +1785,9 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<SearchEntryResults> {
     return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, {
-        fields: ['item'],
+        fields: [
+          currentLatticeInputSnapshot()?.retainLinks ? 'item.id' : 'item',
+        ],
         ...(wireScope ? { scope: wireScope } : {}),
       }),
       realms,
@@ -1992,6 +2125,10 @@ export default class StoreService extends Service implements StoreInterface {
         }
         deferred.fulfill();
       } catch (e) {
+        if (e instanceof LatticeHydrationCancelledError) {
+          deferred.fulfill();
+          return;
+        }
         console.error(
           `error encountered wiring up new reference for ${JSON.stringify(url)}`,
           e,
@@ -2035,30 +2172,230 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
     hydrateFieldsMs?: Record<string, number>,
+    latticeUseSnapshot?: true,
+    publicationStore = this.store,
+    readConnection = this.latticeConnection,
   ): Promise<T> {
-    let api = await this.cardService.getAPI();
-    let shouldStubTimers =
-      this.renderContextBlocksPersistence() && !isTesting();
-    let performCreate = async () =>
-      (await api.createFromSerialized(resource, doc, relativeTo, {
-        store: this.store,
-        dependencyTrackingContext,
-        ...(hydrateFieldsMs ? { hydrateFieldsMs } : {}),
-      })) as T;
-    // Time the deserialize and report it (no-op when telemetry is disabled).
-    let telemetry = this.#clientTelemetry();
-    let deserializeStart = telemetry?.isEnabled ? performance.now() : undefined;
-    let card = shouldStubTimers
-      ? await withStubbedRenderTimers(performCreate)
-      : await performCreate();
-    if (telemetry?.isEnabled && deserializeStart !== undefined) {
-      telemetry.recordDeserialize({
-        durationMs: performance.now() - deserializeStart,
-        doc,
-        resource,
+    let hydration =
+      latticeUseSnapshot &&
+      resource.meta.publication &&
+      !this.isRenderStore &&
+      !(globalThis as any).__boxelPrerenderApp
+        ? this.beginLatticeHydration(resource, doc, publicationStore)
+        : undefined;
+    try {
+      if (
+        latticeUseSnapshot &&
+        this.supersededPublication(publicationStore, resource, doc)
+      )
+        throw new LatticeHydrationCancelledError();
+      if (hydration) this.assertLatticeHydrationCurrent(hydration);
+      let api = await this.cardService.getAPI();
+      if (
+        latticeUseSnapshot &&
+        this.supersededPublication(publicationStore, resource, doc)
+      )
+        throw new LatticeHydrationCancelledError();
+      if (hydration) this.assertLatticeHydrationCurrent(hydration);
+      this.cardApiCache = api;
+      let shouldStubTimers =
+        this.renderContextBlocksPersistence() && !isTesting();
+      let performCreate = async () =>
+        (await api.createFromSerialized(resource, doc, relativeTo, {
+          store: hydration?.store ?? this.store,
+          dependencyTrackingContext,
+          ...(hydrateFieldsMs ? { hydrateFieldsMs } : {}),
+          ...(latticeUseSnapshot
+            ? {
+                latticePublication:
+                  this.isRenderStore ||
+                  (globalThis as any).__boxelPrerenderApp === true
+                    ? ('input' as const)
+                    : ('display' as const),
+              }
+            : {}),
+        })) as T;
+      // Time the deserialize and report it (no-op when telemetry is disabled).
+      let telemetry = this.#clientTelemetry();
+      let deserializeStart = telemetry?.isEnabled
+        ? performance.now()
+        : undefined;
+      let card = shouldStubTimers
+        ? await withStubbedRenderTimers(performCreate)
+        : await performCreate();
+      if (
+        latticeUseSnapshot &&
+        this.supersededPublication(publicationStore, resource, doc)
+      )
+        throw new LatticeHydrationCancelledError();
+      if (latticeUseSnapshot) {
+        this.reconcileLatticeConnection(
+          publicationStore,
+          readConnection,
+          resource,
+          doc,
+          api,
+        );
+      }
+      if (hydration) this.finishLatticeHydration(hydration, api);
+      if (telemetry?.isEnabled && deserializeStart !== undefined) {
+        telemetry.recordDeserialize({
+          durationMs: performance.now() - deserializeStart,
+          doc,
+          resource,
+        });
+      }
+      return card;
+    } finally {
+      if (hydration) this.latticeHydrations.delete(hydration);
+    }
+  }
+
+  private reconcileLatticeConnection(
+    store: CardStore,
+    readConnection: { refreshed: WeakSet<CardDef> },
+    resource: LooseCardResource,
+    doc: LooseSingleCardDocument | CardDocument,
+    api: typeof CardAPI,
+  ) {
+    if (
+      readConnection === this.latticeConnection ||
+      store !== this.store ||
+      this.isRenderStore ||
+      (globalThis as any).__boxelPrerenderApp
+    )
+      return;
+    // Only an interrupted read inspects its supplied included metadata. It
+    // never traverses the resident graph or instantiates missing cards. The
+    // parent may be ordinary; admission remains a per-card decision.
+    for (let entry of [resource, ...(doc.included ?? [])]) {
+      if (isFileMetaResource(entry) || !entry.id || !entry.meta.publication)
+        continue;
+      let instance = store.getCard(entry.id);
+      if (!instance || !api.hasLatticeSnapshot(instance)) continue;
+      if (!this.messageService.isLatticeConnected) {
+        api.markLatticePending(instance);
+      } else if (!this.latticeConnection.refreshed.has(instance)) {
+        this.requestPublicationReload(instance);
+      }
+    }
+  }
+
+  private supersededPublication(
+    store: CardStore,
+    resource: LooseCardResource,
+    doc: LooseSingleCardDocument | CardDocument,
+  ): boolean {
+    if (
+      store === this.store ||
+      this.isRenderStore ||
+      (globalThis as any).__boxelPrerenderApp
+    )
+      return false;
+    // Only inspect included metadata on the rare reset path. An ordinary
+    // parent can carry a published child; it must not resurrect that child's
+    // old session data. Ordinary steady reads do no added included scan.
+    return (
+      !!resource.meta.publication ||
+      !!doc.included?.some(
+        (entry) => !isFileMetaResource(entry) && !!entry.meta.publication,
+      )
+    );
+  }
+
+  // Scope only an explicitly supplied publication and its included published
+  // identities. This is temporary assembly bookkeeping, not an event journal
+  // or traversal of resident cards. No ordinary document creates a scope.
+  private beginLatticeHydration(
+    resource: LooseCardResource,
+    doc: LooseSingleCardDocument | CardDocument,
+    store: CardStore,
+  ): LatticeHydration {
+    let hydration: LatticeHydration = {
+      store,
+      cancelled: false,
+      targets: new Map(),
+    };
+    for (let entry of [resource, ...(doc.included ?? [])]) {
+      if (isFileMetaResource(entry) || !entry.id || !entry.meta.publication)
+        continue;
+      let realm = entry.meta.realmURL ?? store.realmForId(entry.id);
+      if (!realm) continue;
+      hydration.targets.set(asURL(entry.id, this.network.virtualNetwork), {
+        realm: asURL(realm, this.network.virtualNetwork),
+        pending: !this.messageService.isLatticeConnected,
+        refresh: false,
       });
     }
-    return card;
+    this.latticeHydrations.add(hydration);
+    return hydration;
+  }
+
+  private assertLatticeHydrationCurrent(hydration: LatticeHydration) {
+    if (hydration.cancelled || hydration.store !== this.store)
+      throw new LatticeHydrationCancelledError();
+  }
+
+  private finishLatticeHydration(
+    hydration: LatticeHydration,
+    api: typeof CardAPI,
+  ) {
+    this.assertLatticeHydrationCurrent(hydration);
+    this.latticeHydrations.delete(hydration);
+    for (let [url, target] of hydration.targets) {
+      if (!target.pending) continue;
+      let instance = hydration.store.getCard(url);
+      if (!instance || !api.hasLatticeSnapshot(instance)) continue;
+      api.markLatticePending(instance);
+      if (target.refresh && this.messageService.isLatticeConnected) {
+        this.requestPublicationReload(instance);
+      }
+    }
+  }
+
+  private noteLatticeHydrationEvent(event: RealmEventContent) {
+    if (
+      !this.latticeHydrations.size ||
+      (event.eventName !== 'update' && event.eventName !== 'index')
+    )
+      return;
+    let realm = asURL(event.realmURL, this.network.virtualNetwork);
+    let ids = new Set(
+      event.eventName === 'index' && event.indexType === 'incremental'
+        ? event.invalidations.map((id) =>
+            asURL(id, this.network.virtualNetwork),
+          )
+        : [],
+    );
+    for (let hydration of this.latticeHydrations) {
+      for (let [url, target] of hydration.targets) {
+        if (target.realm !== realm) continue;
+        if (event.eventName === 'update') target.pending = true;
+        else if (
+          event.eventName === 'index' &&
+          (event.indexType === 'full' ||
+            (event.indexType === 'incremental' &&
+              (target.pending || ids.has(url))))
+        ) {
+          target.pending = true;
+          target.refresh = true;
+        }
+      }
+    }
+  }
+
+  private deferLatticeHydrationRead(id: string): boolean {
+    if (!this.latticeHydrations.size) return false;
+    let url = asURL(id, this.network.virtualNetwork);
+    let deferred = false;
+    for (let hydration of this.latticeHydrations) {
+      let target = hydration.targets.get(url);
+      if (!target) continue;
+      target.pending = true;
+      target.refresh = true;
+      deferred = true;
+    }
+    return deferred;
   }
 
   // Defensive lookup of the telemetry service — never forces the hooked path
@@ -2086,6 +2423,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (isDestroyed(this) || isDestroying(this)) {
       return;
     }
+    this.cardApiCache = api;
     this.gcInterval = setInterval(
       () => this.store.sweep(api),
       2 * 60_000,
@@ -2123,20 +2461,49 @@ export default class StoreService extends Service implements StoreInterface {
     ) {
       subscription.unsubscribe();
       this.subscriptions.delete(realmHref);
+      this.latticePublicationNotices?.forget(realmHref);
     }
   }
 
   private createCardStore(): CardStore {
-    return new CardStore(
+    let store: CardStore = new CardStore(
       this.referenceCount,
       this.network.authedFetch,
       this.network.virtualNetwork,
       {
+        publicationRealm: (instance) => {
+          if (
+            this.isRenderStore ||
+            (globalThis as any).__boxelPrerenderApp ||
+            !instance.id ||
+            !this.cardApiCache?.hasLatticeSnapshot(instance)
+          )
+            return;
+          let realm =
+            instance[realmURLSymbol]?.href ??
+            this.store.realmForId(instance.id);
+          return realm ? asURL(realm, this.network.virtualNetwork) : undefined;
+        },
+        publicationAdded: (instance, realm) => {
+          // Registration runs after every root/included identity finishes
+          // assembly. An old Store must never schedule work in its replacement.
+          if (this.store !== store) return;
+          let stamp = (instance[meta] as CardResourceMeta).publication;
+          if (!stamp || !instance.id) return;
+          if (!this.messageService.isLatticeConnected) {
+            this.cardApiCache!.markLatticePending(instance);
+          } else if (
+            this.latticePublicationNotices?.needsRead(realm, instance.id, stamp)
+          ) {
+            this.requestPublicationReload(instance);
+          }
+        },
         resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
     );
+    return store;
   }
 
   // A query-backed relationship resolves when its owner deserializes here, so a
@@ -2162,6 +2529,22 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
+    if (event.eventName === 'index' && 'publicationId' in event) {
+      this.latticePublicationNotices ??= new LatticePublicationNotices((id) =>
+        asURL(id, this.network.virtualNetwork),
+      );
+      this.latticePublicationNotices.record(event);
+    }
+    this.noteLatticeHydrationEvent(event);
+    if (event.eventName === 'update') {
+      // Before indexing has classified a source change, conservatively mark
+      // this realm's loaded snapshots pending. Keep their inputs unhydrated.
+      for (let instance of this.store.publicationInstances(event.realmURL)) {
+        this.advanceLatticeRead(instance);
+        this.cardApiCache!.markLatticePending(instance);
+      }
+      return;
+    }
     if (event.eventName !== 'index') {
       return;
     }
@@ -2186,6 +2569,10 @@ export default class StoreService extends Service implements StoreInterface {
       // can be the only word a card being held as awaiting-index ever gets
       // that the row it is waiting for now exists.
       let reloadsTriggered = this.reloadAwaitingIndexInstances(event.realmURL);
+      for (let instance of this.store.publicationInstances(event.realmURL)) {
+        this.requestPublicationReload(instance);
+        reloadsTriggered++;
+      }
       // Report the pass as a thin realm-event so the dashboard still sees it.
       telemetry?.recordEvent({
         event_type: 'realm-event',
@@ -2204,7 +2591,15 @@ export default class StoreService extends Service implements StoreInterface {
     if (event.indexType !== 'incremental') {
       return;
     }
-    let invalidations = event.invalidations as string[];
+    let invalidations = [...(event.invalidations as string[])];
+    // An unrelated write can leave the owner revision unchanged. Revalidate
+    // the pending snapshot after the lane settles to clear its pending state.
+    for (let instance of this.store.publicationInstances(event.realmURL)) {
+      if (instance.publicationState === 'pending') {
+        let url = asURL(instance.id!, this.network.virtualNetwork);
+        if (!invalidations.includes(url)) invalidations.push(url);
+      }
+    }
     let ownWrite = event.clientRequestId
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
@@ -2283,6 +2678,12 @@ export default class StoreService extends Service implements StoreInterface {
     invalidations: string[],
   ): number {
     let reloadsTriggered = 0;
+    // Lattice publications can name both the source .json URL and the card
+    // URL. They resolve to the same resident object; fetch it once per event.
+    // Keep the two resource channels separate, and forget this set at the
+    // event boundary so a later publication still refreshes the card.
+    let seenCards = new Set<object>();
+    let seenFileMeta = new Set<object>();
     for (let invalidation of invalidations) {
       if (hasExecutableExtension(invalidation)) {
         // Executable modules have no card instance to reload here; when an
@@ -2292,17 +2693,21 @@ export default class StoreService extends Service implements StoreInterface {
       let fileMetaInstance =
         this.peekError(invalidation, { type: 'file-meta' }) ??
         this.peek(invalidation, { type: 'file-meta' });
-      if (fileMetaInstance) {
+      if (fileMetaInstance && !seenFileMeta.has(fileMetaInstance)) {
+        seenFileMeta.add(fileMetaInstance);
         realmEventsLogger.debug(
           `reloading file-meta resource ${invalidation} because it was previously loaded`,
         );
         this.reloadFileMetaTask.perform(invalidation);
         reloadsTriggered++;
       }
+      if (this.deferLatticeHydrationRead(invalidation)) continue;
       let clientRequestId = event.clientRequestId ?? undefined;
 
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
+        if (seenCards.has(instance)) continue;
+        seenCards.add(instance);
         if (isCardInstance(instance)) {
           // The invalidation id is the canonical remote id for this card. When
           // the server has just assigned a remote id to a locally-created
@@ -2354,8 +2759,17 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
+          // A clean materialized owner may depend on the card this client
+          // edited. Local edits leave snapshot mode, so this exception cannot
+          // overwrite a draft owner while suppressing self-originated events.
+          if (this.cardApiCache?.hasLatticeSnapshot?.(instance))
+            reloadFile = true;
           if (reloadFile) {
-            this.reloadTask.perform(instance);
+            if (this.cardApiCache?.hasLatticeSnapshot?.(instance)) {
+              this.requestPublicationReload(instance);
+            } else {
+              this.reloadTask.perform(instance);
+            }
             reloadsTriggered++;
           } else {
             realmEventsLogger.debug(
@@ -2430,6 +2844,8 @@ export default class StoreService extends Service implements StoreInterface {
         }
         this.setIdentityContext(instanceOrError);
         await this.startAutoSaving(instanceOrError);
+      } catch (error) {
+        if (!(error instanceof LatticeHydrationCancelledError)) throw error;
       } finally {
         this.finishTrackingCardLoad(url, reloadTracker);
       }
@@ -2443,16 +2859,38 @@ export default class StoreService extends Service implements StoreInterface {
     return url ? this.inflightGetCards.has(url) : false;
   }
 
-  // Wait out the in-flight read of `id`, then reload it if what it produced was
-  // an awaiting-index placeholder. That placeholder is the store's promise that
-  // the card will appear on its own, and the event that would have kept the
-  // promise is the one already being handled — it arrived too early to find
-  // anything to reload.
+  // A notice can precede the first read's result: either an awaiting-index
+  // placeholder or a publication that was current when the read began. Once
+  // admitted, reconcile that publication through the normal bounded read/apply
+  // path. Notices received during the same first read need only one repair.
   private reloadAfterInflightLoad = task(async (id: string) => {
     let url = asURL(id, this.network.virtualNetwork);
+    let store = this.store;
     let inflight = url ? this.inflightGetCards.get(url) : undefined;
     if (inflight) {
-      await inflight;
+      let instance: CardDef | CardErrorJSONAPI;
+      try {
+        instance = await inflight;
+      } catch (error) {
+        if (error instanceof LatticeHydrationCancelledError) return;
+        throw error;
+      }
+      if (
+        isCardInstance(instance) &&
+        this.cardApiCache?.hasLatticeSnapshot(instance)
+      ) {
+        if (
+          !this.isRenderStore &&
+          !(globalThis as any).__boxelPrerenderApp &&
+          store === this.store &&
+          store.hasCardInstance(instance) &&
+          !this.latticeReconciledLoads.has(inflight)
+        ) {
+          this.latticeReconciledLoads.add(inflight);
+          this.requestPublicationReload(instance);
+        }
+        return;
+      }
     }
     if (this.peekError(id)?.awaitingIndex) {
       this.loadInstanceTask.perform(id);
@@ -2586,6 +3024,7 @@ export default class StoreService extends Service implements StoreInterface {
     // records against the new loader, so the invalidation still to come for
     // that write finds them.
     this.loaderService.resetLoader();
+    this.clearPublicationReloads();
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {
@@ -2610,14 +3049,86 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
-  private reloadTask = task(async (instance: CardDef) => {
+  private requestPublicationReload(instance: CardDef) {
+    // Fence an active response as soon as the notice arrives, not when the
+    // follow-up finally obtains a slot. Queued notices need only one read.
+    this.advanceLatticeRead(instance);
+    this.cardApiCache!.markLatticePending(instance);
+    if (instance.id && this.deferLatticeHydrationRead(instance.id)) return;
+    this.latticeConnection.refreshed.add(instance);
+    if (instance.id) {
+      let inflight = this.inflightGetCards.get(
+        asURL(instance.id, this.network.virtualNetwork),
+      );
+      if (inflight) this.latticeReconciledLoads.add(inflight);
+    }
+    let existing = this.latticeReloads.get(instance);
+    if (existing) {
+      if (existing.running) existing.again = true;
+      return;
+    }
+    let request: LatticeReload = {
+      running: false,
+      again: false,
+      controller: new AbortController(),
+    };
+    this.latticeReloads.set(instance, request);
+    this.publicationReloadTask.perform(instance, request);
+  }
+
+  private clearPublicationReloads() {
+    this.latticeConnection = { refreshed: new WeakSet<CardDef>() };
+    this.latticePublicationNotices?.clear();
+    for (let hydration of this.latticeHydrations) hydration.cancelled = true;
+    this.latticeHydrations.clear();
+    let requests = this.latticeReloads;
+    this.latticeReloads = new Map();
+    for (let request of requests.values()) request.controller.abort();
+    this.publicationReloadTask.cancelAll();
+    this.latticeDisplayReader?.reset();
+  }
+
+  private publicationReloadTask = task(
+    { maxConcurrency: 4, enqueue: true },
+    async (instance: CardDef, request: LatticeReload) => {
+      try {
+        // Eviction and local editing can make queued work irrelevant. This
+        // check deliberately does not use peek/getCard, which would rescue GC.
+        if (
+          this.latticeReloads.get(instance) !== request ||
+          !this.store.hasCardInstance(instance) ||
+          !this.cardApiCache?.hasLatticeSnapshot(instance)
+        )
+          return;
+        request.running = true;
+        await this.reloadTask.perform(instance, request.controller.signal);
+      } finally {
+        if (this.latticeReloads.get(instance) === request) {
+          this.latticeReloads.delete(instance);
+          if (
+            request.again &&
+            this.store.hasCardInstance(instance) &&
+            this.cardApiCache?.hasLatticeSnapshot(instance)
+          ) {
+            // Join the back of the queue so a noisy card cannot monopolize it.
+            this.requestPublicationReload(instance);
+          }
+        }
+      }
+    },
+  );
+
+  private reloadTask = task(async (instance: CardDef, signal?: AbortSignal) => {
+    let publicationStore = this.cardApiCache?.hasLatticeSnapshot(instance)
+      ? this.store
+      : undefined;
     let reloadTracker = this.startTrackingCardLoad(instance.id);
     let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
     let isDelete = false;
 
     try {
       try {
-        maybeReloadedInstance = await this.reloadInstance(instance);
+        maybeReloadedInstance = await this.reloadInstance(instance, signal);
       } catch (err: any) {
         let cardError = processCardError(instance.id, err).errors[0];
         if (cardError?.awaitingIndex) {
@@ -2633,10 +3144,36 @@ export default class StoreService extends Service implements StoreInterface {
           // in this case the document was invalidated in the index because the
           // file was deleted
           isDelete = true;
+        } else if (
+          publicationStore &&
+          err instanceof LatticeDisplayReadError &&
+          err.status >= 500 &&
+          this.cardApiCache?.hasLatticeSnapshot(instance)
+        ) {
+          // A failed/incomplete read cannot invalidate the last published
+          // body or replace its mounted editor with an error placeholder.
+          // Keep it explicitly pending; a later notice retries the same read.
+          // Auth failures, confirmed deletion and application errors retain
+          // their ordinary handling below/above.
+          this.cardApiCache.markLatticePending(instance);
+          storeLogger.warn(
+            `Lattice read failed for ${instance.id}; retaining pending display: ${err.message}`,
+          );
+          maybeReloadedInstance = instance;
         } else {
           maybeReloadedInstance = cardError;
         }
       }
+      if (
+        publicationStore &&
+        (this.store !== publicationStore ||
+          !publicationStore.hasCardInstance(
+            isCardInstance(maybeReloadedInstance)
+              ? maybeReloadedInstance
+              : instance,
+          ))
+      )
+        return;
       // Detach the original instance's autosave subscription when it's been
       // superseded: either the reload errored, or the card's type changed and
       // reloadInstance built a fresh instance of the new type and swapped it
@@ -2811,6 +3348,7 @@ export default class StoreService extends Service implements StoreInterface {
       doNotPersist: true,
       relativeTo: resource.id,
       dependencyTrackingContext,
+      latticeUseSnapshot: resource.meta.publication ? true : undefined,
     }) as Promise<T>;
   }
 
@@ -2862,6 +3400,8 @@ export default class StoreService extends Service implements StoreInterface {
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
     };
   }): Promise<T | CardErrorJSONAPI> {
+    let readStore = this.store;
+    let readConnection = this.latticeConnection;
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc, this.network.virtualNetwork);
     if (id) {
@@ -2923,6 +3463,7 @@ export default class StoreService extends Service implements StoreInterface {
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
+      let publicationRead: true | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
@@ -2958,6 +3499,7 @@ export default class StoreService extends Service implements StoreInterface {
           }
         } else {
           json = await this.cardService.fetchJSON(url);
+          publicationRead = true;
         }
         if (!isSingleCardDocument(json)) {
           // The URL turned out to be a binary file (e.g. an uploaded
@@ -3014,7 +3556,16 @@ export default class StoreService extends Service implements StoreInterface {
         doc,
         doc.data.id!, // normalized above to a URL/RRI by isResolvableInstanceId
         opts?.dependencyTrackingContext,
+        undefined,
+        publicationRead,
+        readStore,
+        readConnection,
       );
+      if (
+        publicationRead &&
+        this.supersededPublication(readStore, doc.data, doc)
+      )
+        throw new LatticeHydrationCancelledError();
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
       this.store.setCard(url, instance);
@@ -3025,6 +3576,13 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return instance as T;
     } catch (error: any) {
+      if (error instanceof LatticeHydrationCancelledError) {
+        // Coalesced callers share this rejection. An initial caller awaits
+        // this method instead of the deferred, so also observe the latter.
+        deferred?.promise.catch(() => undefined);
+        deferred?.reject(error);
+        throw error;
+      }
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       // A card this tab is already running outranks the realm's report that it
@@ -3587,87 +4145,227 @@ export default class StoreService extends Service implements StoreInterface {
   // Returns the refreshed instance. Usually this is the same object as the
   // one passed in (updated in place), but when the card's type changed it is a
   // freshly-built instance of the new type — see below.
-  private async reloadInstance(instance: CardDef): Promise<CardDef> {
+  private async reloadInstance(
+    instance: CardDef,
+    signal?: AbortSignal,
+  ): Promise<CardDef> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     let waiterLabel = `reloadInstance ${instance.id}`;
     return await this.withTestWaiters(waiterLabel, async () => {
+      let readStore = this.store;
+      let version = this.advanceLatticeRead(instance);
       let api = await this.cardService.getAPI();
-      let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
-        instance.id,
-        undefined,
-      )) as SingleCardDocument;
-
-      if (!isSingleCardDocument(incomingDoc)) {
-        throw new Error(
-          `bug: server returned a non card document for ${instance.id}:
-        ${JSON.stringify(incomingDoc, null, 2)}`,
+      let lattice = api.hasLatticeSnapshot(instance);
+      let have = api.getLatticeDisplayToken?.(instance);
+      let canApply = () =>
+        !lattice ||
+        (this.store === readStore &&
+          readStore.hasCardInstance(instance) &&
+          !signal?.aborted &&
+          this.latticeReadVersions.get(instance) === version &&
+          api.hasLatticeSnapshot(instance));
+      let didApply = () => {
+        // A later invalidation may arrive while contained fields deserialize.
+        if (this.latticeReadVersions.get(instance) !== version)
+          api.markLatticePending(instance);
+      };
+      let readPublication = async (advertiseHave: boolean) => {
+        let realm =
+          instance[realmURLSymbol]?.href ?? readStore.realmForId(instance.id);
+        if (!realm)
+          throw new CardError('Missing publication serving realm', {
+            status: 502,
+          });
+        this.latticeDisplayReader ??= new LatticeDisplayReader(
+          (url, init) => this.network.authedFetch(url, init),
+          (id) => asURL(id, this.network.virtualNetwork),
         );
-      }
-
-      // Scenario: a saved card instance changes its type — its JSON
-      // `meta.adoptsFrom` is edited to point at a different card definition
-      // (e.g. a realm index card re-pointed from CardsGrid to a custom index
-      // card). A card instance's JavaScript class is fixed at construction, so
-      // applying the new JSON to the existing object with `updateFromSerialized`
-      // would leave the old class in place and keep rendering the old type.
-      // Resolve the incoming type and, when it is not exactly the instance's
-      // class, rebuild from the new type. The comparison is exact (not a
-      // subtype check) so that re-pointing from a subclass to one of its
-      // ancestors also rebuilds instead of keeping the subclass instance.
-      let newDef: typeof BaseDef;
-      try {
-        newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
-          loader: this.loaderService.loader,
-          // `instance.id` is canonical RRI for a mapped realm, which `new URL`
-          // cannot parse; `toURL` resolves an RRI to its real URL and passes a
-          // URL-form id through unchanged.
-          relativeTo: this.network.virtualNetwork.toURL(instance.id),
-        });
-      } catch (err: any) {
-        // `loadCardDef` throws a 404 CardError when the resolved module lacks
-        // the export. That's a "this client can't resolve the new type" error
-        // state for the card, not a deletion — `reloadTask` reserves a 404 for
-        // a genuinely removed instance (the 404 that `fetchJSON` throws above).
-        // Keep the error's detail but drop the 404 so it surfaces as an error
-        // state rather than a phantom delete.
-        if (isCardError(err) && err.status === 404) {
-          err.status = 422;
+        try {
+          return await this.latticeDisplayReader.read({
+            realm: asURL(realm, this.network.virtualNetwork),
+            url: asURL(instance.id, this.network.virtualNetwork),
+            have: () =>
+              advertiseHave
+                ? api.getLatticeDisplayToken?.(instance)
+                : undefined,
+            current: canApply,
+            signal,
+          });
+        } catch (error) {
+          if (!canApply()) return;
+          if (isCardError(error) && error.status === 409) {
+            // This identity has source but no available artifact. Keep the
+            // ordinary live read available; never interpret it as deletion.
+            return this.cardService.fetchJSON(
+              instance.id,
+              signal ? { signal } : undefined,
+            );
+          }
+          throw error;
         }
-        throw err;
+      };
+      let incomingDoc;
+      try {
+        incomingDoc = lattice
+          ? await readPublication(true)
+          : await this.cardService.fetchJSON(
+              instance.id,
+              have || signal
+                ? {
+                    ...(have
+                      ? { headers: { [LATTICE_DISPLAY_HAVE_HEADER]: have } }
+                      : {}),
+                    ...(signal ? { signal } : {}),
+                  }
+                : undefined,
+            );
+      } catch (error) {
+        if (!canApply()) return instance;
+        throw error;
       }
-
-      let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
-        | typeof BaseDef
-        | undefined;
-      if (currentDef !== newDef) {
-        // Rebuild as the new type, reusing the existing local id so the
-        // identity map — and everything keyed by it, references included —
-        // keeps resolving this card to the rebuilt instance (the id-resolver
-        // also rejects a second local id for an already-known remote id).
-        // Construct directly rather than via `createFromSerialized`, whose
-        // cached-instance reuse would keep the old object when the new type is
-        // one of its ancestors; `updateFromSerialized` then deserializes into
-        // the new instance and swaps it into the identity map.
-        let rebuilt = new (newDef as typeof CardDef)({
-          id: instance.id,
-          [localIdSymbol]: instance[localIdSymbol],
-        });
-        await api.updateFromSerialized<typeof CardDef>(
-          rebuilt,
+      if (!canApply()) return instance;
+      if (lattice || isLatticeDisplayReuse(incomingDoc)) {
+        let context = { api, canApply, didApply };
+        let applied = await this.applyPublication(
+          instance,
           incomingDoc,
-          this.store,
+          context,
         );
-        return rebuilt;
+        if (applied.status !== 'missing') return applied.instance;
+        // Eviction/replacement during an in-flight request requires one full
+        // repair. Never deserialize a reuse envelope as an empty card.
+        incomingDoc = lattice
+          ? await readPublication(false)
+          : await this.cardService.fetchJSON(
+              instance.id,
+              signal ? { signal } : undefined,
+            );
+        applied = await this.applyPublication(instance, incomingDoc, context);
+        if (applied.status !== 'missing') return applied.instance;
+        throw new Error(
+          `Missing publication body after repair for ${instance.id}`,
+        );
       }
+      return (
+        (await this.applyCardDocument(
+          instance,
+          incomingDoc,
+          api,
+          canApply,
+          didApply,
+        )) ?? instance
+      );
+    });
+  }
 
+  async applyPublication(
+    instance: CardDef,
+    publication: unknown,
+    { api, canApply, didApply }: LatticeApplyContext,
+  ): Promise<LatticeApplyResult<CardDef>> {
+    if (!canApply()) return { status: 'ignored', instance };
+    if (isLatticeDisplayReuse(publication)) {
+      return api.applyLatticeDisplayReuse(instance, publication)
+        ? { status: 'applied', instance }
+        : { status: 'missing' };
+    }
+    let applied = await this.applyCardDocument(
+      instance,
+      publication,
+      api,
+      canApply,
+      didApply,
+    );
+    return applied
+      ? { status: 'applied', instance: applied }
+      : { status: 'ignored', instance };
+  }
+
+  // Ordinary reload and admitted publication application use the same existing
+  // deserialization/type-change behavior. Artifact fetching stays with the reader;
+  // definition loading and incomplete relationship hydration remain adapter work.
+  private async applyCardDocument(
+    instance: CardDef,
+    incomingDoc: unknown,
+    api: typeof CardAPI,
+    canApply: () => boolean,
+    didApply: () => void,
+  ): Promise<CardDef | undefined> {
+    if (!isSingleCardDocument(incomingDoc)) {
+      throw new Error(
+        `bug: server returned a non card document for ${instance.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+      );
+    }
+
+    // Scenario: a saved card instance changes its type — its JSON
+    // `meta.adoptsFrom` is edited to point at a different card definition
+    // (e.g. a realm index card re-pointed from CardsGrid to a custom index
+    // card). A card instance's JavaScript class is fixed at construction, so
+    // applying the new JSON to the existing object with `updateFromSerialized`
+    // would leave the old class in place and keep rendering the old type.
+    // Resolve the incoming type and, when it is not exactly the instance's
+    // class, rebuild from the new type. The comparison is exact (not a
+    // subtype check) so that re-pointing from a subclass to one of its
+    // ancestors also rebuilds instead of keeping the subclass instance.
+    let newDef: typeof BaseDef;
+    try {
+      newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
+        loader: this.loaderService.loader,
+        // `instance.id` is canonical RRI for a mapped realm, which `new URL`
+        // cannot parse; `toURL` resolves an RRI to its real URL and passes a
+        // URL-form id through unchanged.
+        relativeTo: this.network.virtualNetwork.toURL(instance.id),
+      });
+    } catch (err: any) {
+      if (!canApply()) return undefined;
+      // `loadCardDef` throws a 404 CardError when the resolved module lacks
+      // the export. That's a "this client can't resolve the new type" error
+      // state for the card, not a deletion — `reloadTask` reserves a 404 for
+      // a genuinely removed instance (the 404 that `fetchJSON` throws above).
+      // Keep the error's detail but drop the 404 so it surfaces as an error
+      // state rather than a phantom delete.
+      if (isCardError(err) && err.status === 404) {
+        err.status = 422;
+      }
+      throw err;
+    }
+
+    if (!canApply()) return undefined;
+    let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
+      | typeof BaseDef
+      | undefined;
+    if (currentDef !== newDef) {
+      // Rebuild as the new type, reusing the existing local id so the
+      // identity map — and everything keyed by it, references included —
+      // keeps resolving this card to the rebuilt instance (the id-resolver
+      // also rejects a second local id for an already-known remote id).
+      // Construct directly rather than via `createFromSerialized`, whose
+      // cached-instance reuse would keep the old object when the new type is
+      // one of its ancestors; `updateFromSerialized` then deserializes into
+      // the new instance and swaps it into the identity map.
+      let rebuilt = new (newDef as typeof CardDef)({
+        id: instance.id,
+        [localIdSymbol]: instance[localIdSymbol],
+      });
       await api.updateFromSerialized<typeof CardDef>(
-        instance,
+        rebuilt,
         incomingDoc,
         this.store,
+        { latticePublication: 'display' },
       );
-      return instance;
-    });
+      return rebuilt;
+    }
+
+    await api.updateFromSerialized<typeof CardDef>(
+      instance,
+      incomingDoc,
+      this.store,
+      { latticePublication: 'display' },
+    );
+    didApply();
+    return instance;
   }
 
   private subscribeToRealm(url: RealmResourceIdentifier | URL) {

@@ -243,6 +243,7 @@ export async function performCardIndexing({
     fittedHTML,
     iconHTML,
     markdown,
+    validUntil,
   } = renderResult;
 
   let deps = new Set(runtimeDeps ?? []);
@@ -293,5 +294,8 @@ export async function performCardIndexing({
     displayNames: displayNames ?? [],
     deps,
     diagnostics: withBookkeeping(diagnostics),
+    validUntil: validUntil ?? null,
   });
+  if (process.env.LATTICE_NATIVE_ADMISSION_DEBUG && validUntil)
+    console.warn(`index entry ${instanceURL} validUntil=${validUntil}`);
 }

@@ -9,7 +9,7 @@ compute_seed_fingerprint() {
   (
     cd "$ROOT_DIR"
     # Use POSIX cksum + line-based sort for portability across GNU/BSD userlands.
-    find packages/postgres/migrations -type f -exec cksum {} + \
+    find packages/postgres/migrations packages/postgres/migrations-removal -type f -exec cksum {} + \
       | LC_ALL=C sort
     cksum \
       packages/realm-server/tests/scripts/create_seeded_db.sh \

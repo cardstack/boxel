@@ -1,0 +1,826 @@
+import type { DBAdapter } from './db.ts';
+import stringify from 'safe-stable-stringify';
+import type { IndexQueryEngine } from './index-query-engine.ts';
+import type { Query } from './query.ts';
+import { acquireConcurrencyGroupLock } from './queue-concurrency-lock.ts';
+import {
+  latticeOwnerAttemptsSQL,
+  latticeOwnerCodeVersionSQL,
+  latticeOwnerRetryReadySQL,
+} from './jobs/lattice.ts';
+import { indexingConcurrencyGroup } from './jobs/indexing.ts';
+import {
+  latticePublicationDecision,
+  latticeWorkDecision,
+  latticeWorkFrontier,
+  latticeWorkFailureAttempts,
+} from './lattice-kernel.ts';
+import {
+  LatticeWorkSuperseded,
+  latticeWorkReasons,
+  type LatticeScheduledWork,
+} from './lattice-work.ts';
+import type {
+  LatticePublicationStorage,
+  LatticeProducerRegistration,
+} from './lattice-adapters.ts';
+import {
+  dbExpression,
+  every,
+  param,
+  textArrayParam,
+  query,
+  type Expression,
+  type Querier,
+} from './expression.ts';
+
+export interface LatticeWatch {
+  fieldPath: string;
+  query: Query;
+}
+
+export interface LatticePreparedWatch extends LatticeWatch {
+  terms: Array<{ path: string; value: string }>;
+}
+
+export interface LatticeOwnerPublication {
+  realmURL: string;
+  ownerURL: string;
+  generation: number;
+  inputGeneration: number;
+  definitionRevision: string;
+  watches: LatticePreparedWatch[];
+  retired?: boolean;
+  pending?: boolean;
+  retainOutputGeneration?: number;
+}
+
+export type LatticeProducer = Pick<
+  LatticeOwnerPublication,
+  'realmURL' | 'ownerURL' | 'watches' | 'retired'
+>;
+
+// Internal native-producer data. Never accept SQL expressions from card JSON.
+// The enclosing producer's revision check must run in the publication transaction.
+export interface LatticeQueryPreparation {
+  manifest: LatticeWatch[];
+  // Only queries compiled using this producer's reviewed definition scope.
+  // Remaining manifest entries use the ordinary publication compiler.
+  watches: Array<LatticePreparedWatch & { matcher: Expression }>;
+}
+
+export type LatticeDocument = Parameters<
+  IndexQueryEngine['reverseMatchesDocument']
+>[1];
+
+// All mutations take the caller's pinned transaction. Index publication and
+// watch replacement must commit together. A notification is never the queue:
+// dirty_generation survives disconnects and worker restarts.
+export class LatticeQueryRegistry
+  implements
+    LatticePublicationStorage<Querier, LatticeOwnerPublication>,
+    LatticeProducerRegistration<Querier, LatticeProducer>
+{
+  private db: DBAdapter;
+  private engine: IndexQueryEngine;
+  constructor(db: DBAdapter, engine: IndexQueryEngine) {
+    this.db = db;
+    this.engine = engine;
+  }
+
+  async preparePublication(
+    realmURL: string,
+    ownerWatches: Map<string, LatticeWatch[]>,
+    retiringOwners: Set<string>,
+    documents: LatticeDocument[],
+    nativeQueries?: ReadonlyMap<string, LatticeQueryPreparation>,
+  ) {
+    // Routing and exact matching read the same definitions. Share only this
+    // pass's resolved definitions across owners and both phases. The next
+    // publication starts fresh; commit still fences input and code revisions.
+    let compiler = this.engine.reverseCompilationScope();
+    let watches = new Map<string, LatticePreparedWatch[]>();
+    let nativeMatchers = new Map<string, Expression>();
+    for (let [ownerURL, inputs] of ownerWatches) {
+      let native = nativeQueries?.get(ownerURL);
+      if (native) {
+        if (stringify(native.manifest) !== stringify(inputs)) {
+          throw new Error(
+            'Lattice prepared queries do not match the published watches',
+          );
+        }
+        const paths = new Set(inputs.map((watch) => watch.fieldPath));
+        if (paths.has('') || paths.size !== inputs.length)
+          throw new Error('Lattice watch paths must be nonempty and unique');
+        const prepared = new Map<string, LatticePreparedWatch>();
+        for (let watch of native.watches) {
+          const input = inputs.find(
+            (input) => input.fieldPath === watch.fieldPath,
+          );
+          if (
+            !input ||
+            prepared.has(watch.fieldPath) ||
+            stringify(input.query) !== stringify(watch.query)
+          )
+            throw new Error('Lattice prepared query is outside its manifest');
+          const { matcher: _matcher, ...entry } = watch;
+          prepared.set(watch.fieldPath, entry);
+          nativeMatchers.set(
+            stringify(watch.query.filter) ?? '',
+            watch.matcher,
+          );
+        }
+        for (const watch of await this.prepare(
+          inputs.filter((input) => !prepared.has(input.fieldPath)),
+          compiler,
+        ))
+          prepared.set(watch.fieldPath, watch);
+        watches.set(
+          ownerURL,
+          inputs.map((input) => prepared.get(input.fieldPath)!),
+        );
+      } else {
+        watches.set(ownerURL, await this.prepare(inputs, compiler));
+      }
+    }
+    let matchers = await this.prepareMatchers(
+      realmURL,
+      [...watches.values()].flat(),
+      retiringOwners,
+      documents,
+      compiler,
+      nativeMatchers,
+    );
+    return { watches, matchers };
+  }
+
+  // Compile once per publication, outside its transaction. The forward
+  // compiler resolves definitions through the module cache; repeating that
+  // work for every (changed document, watch) pair blocks publication for minutes.
+  async prepareMatchers(
+    realmURL: string,
+    watches: LatticeWatch[],
+    retiringOwners = new Set<string>(),
+    documents?: LatticeDocument[],
+    compiler = this.engine.reverseCompilationScope(),
+    nativeMatchers?: ReadonlyMap<string, Expression>,
+  ) {
+    // Route before compiling. Definitions for watches that cannot match any
+    // old/new input should not delay publication (or occupy a renderer).
+    let existing = documents
+      ? await this.candidatesForDocuments(realmURL, documents)
+      : (
+          await query(
+            this.db,
+            [
+              'SELECT owner_url, query FROM lattice_query_watches WHERE realm_url =',
+              param(realmURL),
+            ],
+            { query: 'JSON' },
+          )
+        ).map((row) => ({
+          ownerURL: row.owner_url as string,
+          query: row.query as Query,
+        }));
+    let matchers = new Map<string, Expression>();
+    for (let watch of [
+      ...existing.filter((row) => !retiringOwners.has(row.ownerURL)),
+      ...watches,
+    ]) {
+      let filter = (watch.query as Query).filter;
+      let key = stringify(filter) ?? '';
+      if (!matchers.has(key)) {
+        matchers.set(
+          key,
+          nativeMatchers?.get(key) ??
+            (await compiler.reverseCompileFilter(filter)),
+        );
+      }
+    }
+    return matchers;
+  }
+
+  async prepareNativeQueries(
+    watches: LatticeWatch[],
+    compiler: IndexQueryEngine,
+    maxBytes = 1_048_576,
+  ): Promise<LatticeQueryPreparation | undefined> {
+    let result: LatticeQueryPreparation = { manifest: watches, watches: [] };
+    let bytes = 0;
+    for (let watch of await this.prepare(watches, compiler)) {
+      let prepared = {
+        ...watch,
+        matcher: await compiler.reverseCompileFilter(watch.query.filter),
+      };
+      bytes += new TextEncoder().encode(JSON.stringify(prepared)).byteLength;
+      // Oversized plans use normal publication preparation; no query is omitted.
+      if (bytes > maxBytes) return undefined;
+      result.watches.push(prepared);
+    }
+    return result;
+  }
+
+  async prepare(
+    watches: LatticeWatch[],
+    compiler = this.engine.reverseCompilationScope(),
+  ): Promise<LatticePreparedWatch[]> {
+    let paths = new Set<string>();
+    let prepared: LatticePreparedWatch[] = [];
+    for (let watch of watches) {
+      if (!watch.fieldPath || paths.has(watch.fieldPath)) {
+        throw new Error('Lattice watch paths must be nonempty and unique');
+      }
+      paths.add(watch.fieldPath);
+      // Page and sort affect the output, but never narrow invalidation. Even a
+      // non-returned match can change an aggregate or displace a page member.
+      let terms = await compiler.reverseRoutingTerms(watch.query.filter);
+      prepared.push({
+        ...watch,
+        terms: terms?.length ? terms : [{ path: '', value: '' }],
+      });
+    }
+    return prepared;
+  }
+
+  async warmOwnerQueries(realmURL: string, ownerURL: string): Promise<void> {
+    // A recovered secondary job may run with a cold module cache. Resolve its
+    // query definitions before occupying a render tab: a cache miss while the
+    // tab waits on a search could otherwise queue a module render behind itself.
+    let watches = await query(
+      this.db,
+      [
+        'SELECT query FROM lattice_query_watches WHERE realm_url =',
+        param(realmURL),
+        'AND owner_url =',
+        param(ownerURL),
+      ],
+      { query: 'JSON' },
+    );
+    let compiler = this.engine.reverseCompilationScope();
+    for (let watch of watches) {
+      await compiler.reverseCompileFilter((watch.query as Query).filter);
+    }
+  }
+
+  async publish(tx: Querier, owner: LatticeOwnerPublication): Promise<boolean> {
+    let { realmURL, ownerURL, generation, inputGeneration } = owner;
+    let window = {
+      publishedAt: generation,
+      validatedThrough: inputGeneration,
+      retainOutputAt: owner.retainOutputGeneration,
+      kind: owner.retired
+        ? ('retire' as const)
+        : owner.pending
+          ? ('register' as const)
+          : ('publish' as const),
+    };
+    if (
+      latticePublicationDecision({ ...window, retainOutputAt: undefined })
+        .status === 'reject'
+    ) {
+      throw new Error(
+        'Lattice publication needs valid input and owner generations',
+      );
+    }
+    this.assertProducerScope(owner);
+    let [previous] = await tx([
+      'SELECT published_generation, dirty_generation FROM lattice_owners WHERE',
+      ...this.ownerCondition(realmURL, ownerURL),
+    ]);
+    if (
+      latticePublicationDecision(
+        window,
+        previous
+          ? {
+              publishedAt: Number(previous.published_generation),
+              dirtyAt:
+                previous.dirty_generation == null
+                  ? null
+                  : Number(previous.dirty_generation),
+            }
+          : undefined,
+      ).status === 'reject'
+    ) {
+      return false;
+    }
+    const outputGeneration = owner.retainOutputGeneration ?? generation;
+    await tx([
+      `INSERT INTO lattice_owners
+       (realm_url, owner_url, published_generation, input_generation,
+        dirty_generation, definition_revision, retired, code_bound) VALUES (`,
+      param(realmURL),
+      ',',
+      param(ownerURL),
+      ',',
+      param(outputGeneration),
+      ',',
+      param(inputGeneration),
+      ',',
+      param(owner.pending ? generation : null),
+      ',',
+      param(owner.definitionRevision),
+      ',',
+      param(owner.retired ?? false),
+      ',',
+      ...(this.db.kind === 'pg' && !owner.retired
+        ? [
+            'EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
+            param(realmURL),
+            'AND owner_url=',
+            param(ownerURL),
+            'AND generation=',
+            param(generation),
+            ')',
+          ]
+        : ['FALSE']),
+      `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET
+       published_generation = EXCLUDED.published_generation,
+       input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
+       definition_revision = EXCLUDED.definition_revision,
+       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound`,
+    ]);
+    if (this.db.kind === 'pg') {
+      if (owner.retainOutputGeneration !== undefined) {
+        await tx([
+          'UPDATE lattice_owner_code SET generation=',
+          param(outputGeneration),
+          'WHERE',
+          ...this.ownerCondition(realmURL, ownerURL),
+          'AND generation=',
+          param(generation),
+        ]);
+      }
+      await tx([
+        'DELETE FROM lattice_work_failures WHERE',
+        ...this.ownerCondition(realmURL, ownerURL),
+      ]);
+      await tx([
+        'DELETE FROM lattice_owner_code WHERE',
+        ...this.ownerCondition(realmURL, ownerURL),
+        ...(owner.retired
+          ? []
+          : ['AND generation <>', param(outputGeneration)]),
+      ]);
+    }
+    await this.registerProducer(tx, owner);
+    return true;
+  }
+
+  private assertProducerScope(owner: LatticeProducer) {
+    let { realmURL } = owner;
+    for (let watch of owner.watches) {
+      let realms =
+        watch.query.realms ??
+        (watch.query.realm ? [watch.query.realm] : [realmURL]);
+      if (realms.length !== 1 || realms[0] !== realmURL) {
+        throw new Error('Lattice watches currently require the owner realm');
+      }
+    }
+  }
+
+  // The caller owns the publication transaction and its revision fences.
+  // Watch replacement must never commit independently of the owner value.
+  async registerProducer(tx: Querier, owner: LatticeProducer): Promise<void> {
+    this.assertProducerScope(owner);
+    let { realmURL, ownerURL } = owner;
+    await tx([
+      'DELETE FROM lattice_query_watches WHERE',
+      ...this.ownerCondition(realmURL, ownerURL),
+    ]);
+    if (owner.retired) {
+      await tx([
+        'UPDATE lattice_owners SET attributes_json = NULL, attributes_generation = NULL WHERE',
+        ...this.ownerCondition(realmURL, ownerURL),
+      ]);
+      return;
+    }
+    for (let watch of owner.watches) {
+      await tx([
+        `INSERT INTO lattice_query_watches
+         (realm_url, owner_url, field_path, query, routing_tokens) VALUES (`,
+        param(realmURL),
+        ',',
+        param(ownerURL),
+        ',',
+        param(watch.fieldPath),
+        ',',
+        param(JSON.stringify(watch.query)),
+        ',',
+        param(
+          JSON.stringify([
+            ...new Set(
+              watch.terms.map(({ path, value }) => routingToken(path, value)),
+            ),
+          ]),
+        ),
+        ')',
+      ]);
+    }
+  }
+
+  async candidates(realmURL: string, document: LatticeDocument, tx?: Querier) {
+    return this.candidatesForDocuments(realmURL, [document], tx);
+  }
+
+  private async candidatesForDocuments(
+    realmURL: string,
+    documents: LatticeDocument[],
+    tx?: Querier,
+  ) {
+    if (!documents.length) return [];
+    // Broad predicates share one sentinel. Ordinary terms encode both path
+    // and value, so equal values on different fields cannot collide.
+    let tokens = new Set([routingToken('', '')]);
+    for (let document of documents) {
+      for (let type of document.types ?? []) {
+        tokens.add(routingToken('$lattice.type', type));
+      }
+      for (let [path, value] of Object.entries(document.search_doc ?? {})) {
+        if (typeof value !== 'string') continue;
+        tokens.add(routingToken(path, value));
+      }
+    }
+    let expression: Expression = [
+      `SELECT w.owner_url, w.field_path, w.query
+       FROM lattice_query_watches w WHERE w.realm_url =`,
+      param(realmURL),
+      'AND',
+      dbExpression({
+        // Keep the indexed column bare so jsonb_ops GIN can serve this test.
+        pg: ['w.routing_tokens ?|', textArrayParam([...tokens]), '::text[]'],
+        sqlite: [
+          'EXISTS (SELECT 1 FROM json_each(w.routing_tokens) token JOIN json_each(',
+          textArrayParam([...tokens]),
+          ') changed ON token.value = changed.value)',
+        ],
+      }),
+    ];
+    let rows = tx
+      ? await tx(expression)
+      : await query(this.db, expression, { query: 'JSON' });
+    return rows.map((row) => ({
+      ownerURL: row.owner_url as string,
+      fieldPath: row.field_path as string,
+      query: (typeof row.query === 'string'
+        ? JSON.parse(row.query)
+        : row.query) as Query,
+    }));
+  }
+
+  async affected(
+    realmURL: string,
+    oldDocument: LatticeDocument | undefined,
+    newDocument: LatticeDocument | undefined,
+    tx?: Querier,
+    matchers?: Map<string, Expression>,
+  ): Promise<string[]> {
+    let owners = new Set<string>();
+    for (let document of [oldDocument, newDocument]) {
+      if (!document) continue;
+      let candidates: Parameters<
+        IndexQueryEngine['reverseMatchingCandidates']
+      >[0] = [];
+      for (let watch of await this.candidates(realmURL, document, tx)) {
+        if (owners.has(watch.ownerURL)) continue;
+        let compiled = matchers?.get(stringify(watch.query.filter) ?? '');
+        if (matchers && !compiled) {
+          throw new Error(
+            'Lattice watch changed after publication preparation',
+          );
+        }
+        candidates.push({
+          ownerURL: watch.ownerURL,
+          filter: watch.query.filter,
+          compiled,
+        });
+      }
+      for (let owner of await this.engine.reverseMatchingCandidates(
+        candidates,
+        document,
+      ))
+        owners.add(owner);
+    }
+    return [...owners].sort();
+  }
+
+  async markDirty(
+    tx: Querier,
+    realmURL: string,
+    owners: string[],
+    generation: number,
+  ) {
+    for (let ownerURL of new Set(owners)) {
+      await tx([
+        `UPDATE lattice_owners SET dirty_generation = CASE
+         WHEN dirty_generation IS NULL OR dirty_generation <`,
+        param(generation),
+        'THEN',
+        param(generation),
+        'ELSE dirty_generation END WHERE',
+        ...(every([
+          this.ownerCondition(realmURL, ownerURL),
+          ['retired = FALSE'],
+          ['input_generation <', param(generation)],
+        ]) as Expression),
+      ]);
+    }
+  }
+
+  async activeOwnerCount(realmURL: string): Promise<number> {
+    let [row] = await query(this.db, [
+      'SELECT COUNT(*) AS total FROM lattice_owners WHERE realm_url =',
+      param(realmURL),
+      'AND retired = FALSE',
+    ]);
+    return Number(row.total);
+  }
+
+  async pending(
+    realmURL: string,
+    opts?: { runnableOnly?: boolean },
+  ): Promise<
+    Array<{ ownerURL: string; generation: number; codeVersion?: string }>
+  > {
+    let rows = await query(this.db, [
+      'SELECT o.owner_url, o.dirty_generation',
+      ...(opts?.runnableOnly && this.db.kind === 'pg'
+        ? [`, ${latticeOwnerCodeVersionSQL} AS code_version`]
+        : []),
+      'FROM lattice_owners o WHERE o.realm_url =',
+      param(realmURL),
+      'AND o.retired = FALSE AND o.dirty_generation IS NOT NULL',
+      ...(opts?.runnableOnly && this.db.kind === 'pg'
+        ? [
+            `AND ${latticeOwnerRetryReadySQL} AND NOT EXISTS (SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c
+          ON c.realm_url=b.realm_url AND c.file_url=b.reference->>'fileURL'
+          WHERE b.realm_url=o.realm_url AND b.owner_url=o.owner_url AND c.dirty)`,
+          ]
+        : []),
+      ...(opts?.runnableOnly && this.db.kind === 'pg'
+        ? [`ORDER BY ${latticeOwnerAttemptsSQL}, o.owner_url`]
+        : ['ORDER BY o.owner_url']),
+    ]);
+    return rows.map((row) => ({
+      ownerURL: row.owner_url as string,
+      generation: Number(row.dirty_generation),
+      ...(row.code_version == null
+        ? {}
+        : { codeVersion: String(row.code_version) }),
+    }));
+  }
+
+  // The caller holds the same realm publication lock as successful work.
+  // A superseded attempt cannot suppress a newer obligation or spend its budget.
+  async recordFailure(tx: Querier, work: LatticeScheduledWork, reason: string) {
+    if (this.db.kind !== 'pg')
+      throw new Error('Lattice work retries require PostgreSQL');
+    await this.assertWorkCurrent(work, tx);
+    const [previous] = await tx([
+      'SELECT obligation,definition_revision,code_version,attempts FROM lattice_work_failures WHERE',
+      ...this.ownerCondition(work.realmURL, work.claim.id),
+    ]);
+    const attempts = latticeWorkFailureAttempts(
+      previous
+        ? {
+            obligation: Number(previous.obligation),
+            definitionRevision: String(previous.definition_revision),
+            codeVersion:
+              previous.code_version == null
+                ? undefined
+                : String(previous.code_version),
+            attempts: Number(previous.attempts),
+          }
+        : undefined,
+      work.claim.obligation,
+      work.definitionRevision,
+      work.codeVersion,
+    );
+    await tx([
+      `INSERT INTO lattice_work_failures(realm_url,owner_url,obligation,definition_revision,code_version,attempts,reason) VALUES (`,
+      param(work.realmURL),
+      ',',
+      param(work.claim.id),
+      ',',
+      param(work.claim.obligation),
+      ',',
+      param(work.definitionRevision),
+      ',',
+      param(work.codeVersion ?? null),
+      ',',
+      param(attempts),
+      ',',
+      param(reason.slice(0, 4096)),
+      `) ON CONFLICT(realm_url,owner_url) DO UPDATE SET obligation=EXCLUDED.obligation,
+       definition_revision=EXCLUDED.definition_revision,code_version=EXCLUDED.code_version,attempts=EXCLUDED.attempts,reason=EXCLUDED.reason`,
+    ]);
+  }
+
+  // Use the selected obligation rather than adopting whatever is dirty now.
+  // At publication the caller supplies the existing pinned transaction. Queue
+  // ownership and the producer's exact input/code receipts remain separate.
+  async assertWorkCurrent(work: LatticeScheduledWork, tx?: Querier) {
+    const execute =
+      tx ?? ((expression: Expression) => query(this.db, expression));
+    if (work.reservation) {
+      if (this.db.kind !== 'pg')
+        throw new Error('Lattice queue reservations require PostgreSQL');
+      const group = indexingConcurrencyGroup(work.realmURL);
+      // Same order as claim/coalescing: group lock before job/reservation rows.
+      // At publication this shares the existing pinned transaction, keeping
+      // replacement claims and finalization outside its validity/commit span.
+      if (tx) await acquireConcurrencyGroupLock(execute, group);
+      const [reservation] = await execute([
+        `SELECT r.id FROM job_reservations r JOIN jobs j ON j.id=r.job_id
+         WHERE r.id=`,
+        param(work.reservation.reservationId),
+        'AND j.id=',
+        param(work.reservation.jobId),
+        `AND j.status='unfulfilled' AND j.job_type='lattice-materialize'
+         AND j.concurrency_group=`,
+        param(group),
+        `AND j.args->>'realmURL'=`,
+        param(work.realmURL),
+        // NOW() is the transaction start, potentially before a lock wait.
+        `AND r.completed_at IS NULL AND r.locked_until > clock_timestamp()`,
+        ...(tx ? ['FOR SHARE OF j,r'] : []),
+      ]);
+      if (!reservation)
+        throw new LatticeWorkSuperseded('queue reservation no longer current');
+    }
+    const [row] = await execute([
+      'SELECT',
+      dbExpression({ pg: [latticeOwnerCodeVersionSQL], sqlite: ['NULL'] }),
+      `AS code_version, g.current_generation,g.loader_epoch,o.retired,o.dirty_generation,
+         p.read,r.archived_at,
+         EXISTS(SELECT 1 FROM jobs j WHERE j.concurrency_group=`,
+      param('indexing:' + work.realmURL),
+      `AND j.status='unfulfilled' AND j.job_type IN
+         ('incremental-index','from-scratch-index','copy-index')) AS source_pending,
+         EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=g.realm_url) AS matching_pending,`,
+      dbExpression({
+        pg: [
+          `NOT EXISTS(SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c
+          ON c.realm_url=b.realm_url AND c.file_url=b.reference->>'fileURL'
+          WHERE b.realm_url=g.realm_url AND b.owner_url=o.owner_url AND c.dirty)`,
+        ],
+        sqlite: ['TRUE'],
+      }),
+      `AS code_ready FROM realm_generations g
+       JOIN realm_user_permissions p ON p.realm_url=g.realm_url
+       JOIN realm_metadata r ON r.url=g.realm_url
+       LEFT JOIN lattice_owners o ON o.realm_url=g.realm_url AND o.owner_url=`,
+      param(work.claim.id),
+      'WHERE g.realm_url=',
+      param(work.realmURL),
+      'AND p.username=',
+      param(work.actor),
+      ...(tx && this.db.kind === 'pg' ? ['FOR SHARE OF g,p,r'] : []),
+    ]);
+    const decision = latticeWorkDecision(
+      {
+        id: work.claim.id,
+        obligation:
+          row?.dirty_generation == null ? null : Number(row.dirty_generation),
+        authorized: Boolean(row?.read) && row?.archived_at == null,
+        active: row?.retired === false || row?.retired === 0,
+        sourcePending: Boolean(row?.source_pending),
+        inputsCurrent:
+          Number(row?.current_generation) === work.inputGeneration &&
+          !row?.matching_pending,
+        codeCurrent:
+          Boolean(row?.code_ready) &&
+          (row?.code_version ?? undefined) === work.codeVersion &&
+          row?.loader_epoch === work.definitionRevision,
+      },
+      work.claim,
+    );
+    if (decision.status === 'withheld')
+      throw new LatticeWorkSuperseded(
+        latticeWorkReasons[decision.reason],
+        decision.reason === 'authority-changed'
+          ? { realmURL: work.realmURL, actor: work.actor }
+          : undefined,
+      );
+  }
+
+  // Scheduling evidence only. The per-realm queue lease, live input checks and
+  // guarded publication still own correctness if any of these rows change.
+  async ready(realmURL: string) {
+    const pending = await this.pending(realmURL);
+    if (!pending.length) return [];
+    const runnableOwners = await this.pending(realmURL, { runnableOnly: true });
+    const runnable = new Set(runnableOwners.map((owner) => owner.ownerURL));
+    const inputs = new Map(
+      pending.map(({ ownerURL }) => [ownerURL, new Set<string>()]),
+    );
+
+    // Retained concrete reads cover declared links and getters that consume an
+    // input without declaring a query. Match card aliases as well as .json URLs;
+    // module/CSS dependencies cannot become work nodes in this owner-only join.
+    const edges = await query(this.db, [
+      `SELECT i.url AS owner_url, d.owner_url AS input_url FROM boxel_index i
+       JOIN lattice_owners o ON o.realm_url=i.realm_url AND o.owner_url=i.url
+       JOIN lattice_owners d ON d.realm_url=o.realm_url
+       WHERE o.realm_url=`,
+      param(realmURL),
+      `AND i.type='instance' AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
+       AND d.retired=FALSE AND d.dirty_generation IS NOT NULL AND (`,
+      dbExpression({
+        pg: [
+          `i.deps ?| ARRAY[d.owner_url,regexp_replace(d.owner_url,'\\.json$','')]`,
+        ],
+        sqlite: [
+          `EXISTS (SELECT 1 FROM json_each(i.deps) dep WHERE dep.value=d.owner_url
+           OR dep.value=substr(d.owner_url,1,length(d.owner_url)-5))`,
+        ],
+      }),
+      ')',
+    ]);
+    for (const edge of edges)
+      inputs.get(String(edge.owner_url))?.add(String(edge.input_url));
+
+    const watches = await query(
+      this.db,
+      [
+        `SELECT w.owner_url,w.field_path,w.query FROM lattice_query_watches w JOIN lattice_owners o
+         ON o.realm_url=w.realm_url AND o.owner_url=w.owner_url
+         WHERE o.realm_url=`,
+        param(realmURL),
+        'AND o.retired=FALSE AND o.dirty_generation IS NOT NULL',
+      ],
+      { query: 'JSON' },
+    );
+    const compiler = this.engine.reverseCompilationScope();
+    const scopes = new Map<string, string[]>();
+    for (const watch of watches) {
+      const ownerURL = String(watch.owner_url);
+      if (!runnable.has(ownerURL)) continue;
+      const filter = (watch.query as Query).filter;
+      // Native input frames already know the concrete identities they read.
+      // This generated watch is for restoring/invalidating those inputs, not
+      // an untyped query that must wait for every dirty owner (including self).
+      // Unexpected shapes retain the conservative ordinary scope below.
+      if (
+        watch.field_path === '@lattice/inputs' &&
+        filter &&
+        Object.keys(filter).length === 1 &&
+        'in' in filter &&
+        Object.keys(filter.in).length === 1 &&
+        Array.isArray(filter.in.id) &&
+        filter.in.id.every((id) => typeof id === 'string')
+      ) {
+        const ids = new Set(filter.in.id);
+        for (const input of pending)
+          if (ids.has(input.ownerURL.replace(/\.json$/, '')))
+            inputs.get(ownerURL)?.add(input.ownerURL);
+        continue;
+      }
+      // Different rooms/dates can share one readiness scope. Their exact
+      // membership predicates remain separate in the reverse-query registry.
+      const scope = await compiler.latticeQueryTypeScope(filter);
+      const key = stringify(scope)!;
+      let candidates = scopes.get(key);
+      if (!candidates) {
+        // Same conservative type scope as native input admission. Old computed
+        // values may be false negatives for exact membership, sort or page.
+        const rows = await query(this.db, [
+          `SELECT o.owner_url FROM lattice_owners o LEFT JOIN boxel_index i
+           ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
+           WHERE o.realm_url=`,
+          param(realmURL),
+          `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
+           AND (i.url IS NULL OR (`,
+          ...scope,
+          '))',
+        ]);
+        candidates = rows.map((row) => String(row.owner_url));
+        scopes.set(key, candidates);
+      }
+      for (const candidate of candidates) inputs.get(ownerURL)?.add(candidate);
+    }
+    const frontier = latticeWorkFrontier(
+      pending.map(({ ownerURL }) => ({
+        id: ownerURL,
+        runnable: runnable.has(ownerURL),
+        pendingInputs: [...inputs.get(ownerURL)!],
+      })),
+    );
+    if (frontier.cycle.length)
+      throw new Error(
+        `Lattice work dependency cycle: ${frontier.cycle.join(' -> ')}`,
+      );
+    const ready = new Set(frontier.ready);
+    return runnableOwners.filter(({ ownerURL }) => ready.has(ownerURL));
+  }
+
+  private ownerCondition(realmURL: string, ownerURL: string) {
+    return every([
+      ['realm_url =', param(realmURL)],
+      ['owner_url =', param(ownerURL)],
+    ]) as Expression;
+  }
+}
+
+function routingToken(path: string, value: string): string {
+  return JSON.stringify([path, value]);
+}

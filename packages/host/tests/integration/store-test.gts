@@ -17,10 +17,14 @@ import { module, test } from 'qunit';
 import {
   isCardInstance,
   localId,
+  meta,
   baseCardRef,
   realmURL,
+  ri,
   Deferred,
+  type LatticeDisplayBatchRequest,
   SupportedMimeType,
+  LATTICE_DISPLAY_HAVE_HEADER,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -29,6 +33,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CardStore from '@cardstack/host/lib/gc-card-store';
+import { LATTICE_NOTICE_IDENTITY_LIMIT } from '@cardstack/host/lib/lattice-publication-notices';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -3281,6 +3286,2265 @@ module('Integration | Store', function (hooks) {
       'Swept Person',
       'and it is the indexed state',
     );
+  });
+
+  function publicationDocument(
+    path: string,
+    realm = testRealmURL,
+  ): SingleCardDocument {
+    return {
+      data: {
+        id: testRRI(path),
+        type: 'card',
+        attributes: { name: path, boom: 'published' },
+        meta: {
+          adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          realmURL: realm,
+          publication: {
+            version: 1,
+            state: 'ready',
+            validatedThrough: 1,
+            outputRevision: 2,
+            definitionRevision: 'reviewed',
+            computedFields: ['boom'],
+            queryFields: [],
+            watches: [],
+            hasPublishedSnapshot: true,
+          },
+        },
+      },
+    };
+  }
+
+  // Existing per-card fixtures retain their held responses, now wrapped in
+  // the actual batch wire shape. The real server adapter is covered separately.
+  function batchExistingDisplayFixtures() {
+    let network = getService('network');
+    let authedFetch = network.authedFetch;
+    let cardService = getService('card-service');
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string | URL, init?: RequestInit) => {
+        if (!String(url).endsWith('/_lattice-read'))
+          return authedFetch(url, init);
+        let request = JSON.parse(
+          String(init?.body),
+        ) as LatticeDisplayBatchRequest;
+        let results = await Promise.all(
+          request.required.map(async (url) => {
+            let token = request.have.find((entry) => entry.url === url)?.token;
+            try {
+              let publication = await cardService.fetchJSON(
+                network.virtualNetwork.unresolveURL(url),
+                {
+                  signal: init?.signal,
+                  headers: token
+                    ? { [LATTICE_DISPLAY_HAVE_HEADER]: token }
+                    : {},
+                },
+              );
+              return { url, publication };
+            } catch (error: any) {
+              return {
+                url,
+                error: { status: error.status ?? 500, message: error.message },
+              };
+            }
+          }),
+        );
+        return new Response(JSON.stringify({ ...request, results }), {
+          headers: {
+            'Content-Type': SupportedMimeType.CardJson,
+            'x-boxel-realm-url': String(url).replace('_lattice-read', ''),
+          },
+        });
+      },
+    });
+    return () => {
+      delete (network as any).authedFetch;
+    };
+  }
+
+  test('Lattice Store batches declare exact required cards and partial Have before applying in place', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let messages = getService('message-service');
+    let relay = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    messages.latticeConnectionChanged(false);
+    let documents = [0, 1, 2].map((i) =>
+      publicationDocument(`Person/batch-${i}`),
+    );
+    let instances: CardDefType[] = [];
+    let token = 'lattice-display-v1:' + 'a'.repeat(64);
+    documents[0].data.meta.publication!.have = token;
+    for (let doc of documents) {
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, doc, cardStore, {
+        latticePublication: 'display',
+      });
+      instances.push(instance);
+    }
+    let network = getService('network');
+    let authedFetch = network.authedFetch;
+    let requests: LatticeDisplayBatchRequest[] = [];
+    let transports: RequestInit[] = [];
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let singleReads = 0;
+    cardService.fetchJSON = async (...args) => {
+      let doc = documents.find((item) => item.data.id === String(args[0]));
+      if (!doc) return fetchJSON(...args);
+      singleReads++;
+      return structuredClone(doc);
+    };
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string | URL, init?: RequestInit) => {
+        if (!String(url).endsWith('/_lattice-read'))
+          return authedFetch(url, init);
+        transports.push(init!);
+        let request = JSON.parse(
+          String(init?.body),
+        ) as LatticeDisplayBatchRequest;
+        requests.push(request);
+        let results = request.required.map((url) => {
+          let doc = documents.find(
+            (item) => network.virtualNetwork.toURL(item.data.id!).href === url,
+          )!;
+          return request.have.some((entry) => entry.url === url)
+            ? {
+                url,
+                publication: {
+                  lattice: {
+                    version: 1,
+                    reuse: true,
+                    token,
+                    id: doc.data.id,
+                    state: 'ready',
+                  },
+                },
+              }
+            : {
+                url,
+                publication: {
+                  ...doc,
+                  data: {
+                    ...doc.data,
+                    attributes: {
+                      ...doc.data.attributes,
+                      boom: 'new publication',
+                    },
+                  },
+                },
+              };
+        });
+        return new Response(
+          JSON.stringify({ ...request, results: results.reverse() }),
+          {
+            headers: {
+              'Content-Type': SupportedMimeType.CardJson,
+              'x-boxel-realm-url': testRealmURL,
+            },
+          },
+        );
+      },
+    });
+    try {
+      messages.latticeConnectionChanged(true);
+      await settled();
+      for (let init of transports) {
+        assert.strictEqual(init.method, 'POST');
+        assert.strictEqual(
+          new Headers(init.headers).get('X-HTTP-Method-Override'),
+          'QUERY',
+        );
+      }
+      assert.strictEqual(
+        requests.length,
+        1,
+        'same-turn admitted identities share one exchange',
+      );
+      assert.strictEqual(
+        singleReads,
+        0,
+        'publication refresh does not issue per-card GETs',
+      );
+      assert.deepEqual(
+        requests[0]?.required,
+        instances.map(
+          (instance) => network.virtualNetwork.toURL(instance.id!).href,
+        ),
+      );
+      assert.deepEqual(
+        requests[0]?.have,
+        [{ url: network.virtualNetwork.toURL(instances[0].id!).href, token }],
+        'only a retained token is advertised',
+      );
+      for (let [i, instance] of instances.entries()) {
+        assert.strictEqual(instance.publicationState, 'ready');
+        assert.strictEqual(cardStore.getCard(instance.id!), instance);
+        assert.strictEqual(
+          (instance as any).boom,
+          i === 0 ? 'published' : 'new publication',
+        );
+      }
+    } finally {
+      delete (network as any).authedFetch;
+      cardService.fetchJSON = fetchJSON;
+      messages.relayRealmEvent = relay;
+    }
+  });
+
+  test('Lattice Store batches repair only lost retained bodies once without Have', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let messages = getService('message-service');
+    let relay = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    messages.latticeConnectionChanged(false);
+    let documents = [0, 1].map((i) =>
+      publicationDocument(`Person/batch-repair-${i}`),
+    );
+    let instances: CardDefType[] = [];
+    let token = 'lattice-display-v1:' + 'a'.repeat(64);
+    for (let doc of documents) {
+      doc.data.meta.publication!.have = token;
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, doc, cardStore, {
+        latticePublication: 'display',
+      });
+      instances.push(instance);
+    }
+    let network = getService('network');
+    let authedFetch = network.authedFetch;
+    let requests: LatticeDisplayBatchRequest[] = [];
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string | URL, init?: RequestInit) => {
+        if (!String(url).endsWith('/_lattice-read'))
+          return authedFetch(url, init);
+        let request = JSON.parse(
+          String(init?.body),
+        ) as LatticeDisplayBatchRequest;
+        requests.push(request);
+        let first = requests.length === 1;
+        if (first) delete instances[0][meta]!.publication!.have;
+        let results = request.required.map((url) => {
+          let doc = documents.find(
+            (item) => network.virtualNetwork.toURL(item.data.id!).href === url,
+          )!;
+          return {
+            url,
+            publication: first
+              ? {
+                  lattice: {
+                    version: 1,
+                    reuse: true,
+                    token,
+                    id: doc.data.id,
+                    state: 'ready',
+                  },
+                }
+              : doc,
+          };
+        });
+        return new Response(JSON.stringify({ ...request, results }), {
+          headers: {
+            'Content-Type': SupportedMimeType.CardJson,
+            'x-boxel-realm-url': testRealmURL,
+          },
+        });
+      },
+    });
+    try {
+      messages.latticeConnectionChanged(true);
+      await settled();
+      assert.strictEqual(requests.length, 2, 'one full repair exchange');
+      assert.deepEqual(
+        requests[1]?.required,
+        [network.virtualNetwork.toURL(instances[0].id!).href],
+        'repair contains only the actual reuse miss',
+      );
+      assert.deepEqual(
+        requests[1]?.have,
+        [],
+        'repair cannot ask to reuse the lost body',
+      );
+      for (let instance of instances) {
+        assert.strictEqual(instance.publicationState, 'ready');
+        assert.strictEqual(cardStore.getCard(instance.id!), instance);
+        assert.strictEqual((instance as any).boom, 'published');
+      }
+    } finally {
+      delete (network as any).authedFetch;
+      messages.relayRealmEvent = relay;
+    }
+  });
+
+  test('Lattice Store batches fall back only for the identity with an unavailable artifact', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let messages = getService('message-service');
+    let relay = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    messages.latticeConnectionChanged(false);
+    let documents = [0, 1].map((i) =>
+      publicationDocument(`Person/batch-unavailable-${i}`),
+    );
+    let instances: CardDefType[] = [];
+    for (let doc of documents) {
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, doc, cardStore, {
+        latticePublication: 'display',
+      });
+      instances.push(instance);
+    }
+    let network = getService('network');
+    let authedFetch = network.authedFetch;
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let fallback: Array<{ id: string; have: string | null }> = [];
+    cardService.fetchJSON = async (...args) => {
+      let doc = documents.find((item) => item.data.id === String(args[0]));
+      if (!doc) return fetchJSON(...args);
+      fallback.push({
+        id: String(args[0]),
+        have: new Headers(args[1]?.headers).get(LATTICE_DISPLAY_HAVE_HEADER),
+      });
+      return structuredClone(doc);
+    };
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string | URL, init?: RequestInit) => {
+        if (!String(url).endsWith('/_lattice-read'))
+          return authedFetch(url, init);
+        let request = JSON.parse(
+          String(init?.body),
+        ) as LatticeDisplayBatchRequest;
+        return new Response(
+          JSON.stringify({
+            ...request,
+            results: request.required.map((url, i) =>
+              i === 0
+                ? {
+                    url,
+                    error: { status: 409, message: 'publication unavailable' },
+                  }
+                : { url, publication: documents[1] },
+            ),
+          }),
+          {
+            headers: {
+              'Content-Type': SupportedMimeType.CardJson,
+              'x-boxel-realm-url': testRealmURL,
+            },
+          },
+        );
+      },
+    });
+    try {
+      messages.latticeConnectionChanged(true);
+      await settled();
+      assert.deepEqual(
+        fallback,
+        [{ id: instances[0].id!, have: null }],
+        'only the unavailable identity takes the ordinary read, without Have',
+      );
+      for (let instance of instances) {
+        assert.strictEqual(cardStore.getCard(instance.id!), instance);
+        assert.strictEqual(instance.publicationState, 'ready');
+        assert.strictEqual((instance as any).boom, 'published');
+      }
+    } finally {
+      delete (network as any).authedFetch;
+      cardService.fetchJSON = fetchJSON;
+      messages.relayRealmEvent = relay;
+    }
+  });
+
+  for (let scenario of [
+    'named notice',
+    'duplicate and out-of-order notices',
+    'full notice',
+    'quiet publication',
+    'unrelated notice',
+    'ordinary card',
+    'render-store publication',
+  ]) {
+    test(`Lattice first GET reconciles ${scenario}`, async function (assert) {
+      let readingStore =
+        scenario === 'render-store publication'
+          ? getService('render-store')
+          : storeService;
+      await readingStore.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let path = 'Person/first-publication';
+      let url = `${testRealmURL}${path}`;
+      let original = publicationDocument(path);
+      original.data.attributes = { name: 'Before', boom: 'old output' };
+      let current = structuredClone(original);
+      current.data.attributes = { name: 'After', boom: 'current output' };
+      current.data.meta.publication!.validatedThrough = 3;
+      current.data.meta.publication!.outputRevision = 3;
+      if (scenario === 'ordinary card') delete original.data.meta.publication;
+      let first = new Deferred<SingleCardDocument>();
+      let entered = new Deferred<void>();
+      let reads = 0;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      cardService.fetchJSON = async (...args) => {
+        if (![url, original.data.id].includes(String(args[0])))
+          return fetchJSON(...args);
+        reads++;
+        if (reads === 1) {
+          entered.fulfill();
+          return first.promise;
+        }
+        return structuredClone(current);
+      };
+      let deliver = (event: RealmEventContent) =>
+        (readingStore as any).handleInvalidations(event);
+      let notice = (generation: number, invalidation = url) =>
+        deliver({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          generation,
+          invalidations: [invalidation],
+        });
+      try {
+        let reading = readingStore.get(url);
+        await entered.promise;
+        assert.strictEqual(
+          readingStore.peek(url),
+          undefined,
+          'not yet resident',
+        );
+        if (scenario === 'full notice') {
+          deliver({
+            eventName: 'index',
+            indexType: 'full',
+            realmURL: testRealmURL,
+          });
+        } else if (scenario === 'duplicate and out-of-order notices') {
+          notice(3);
+          notice(2, `${url}.json`);
+          notice(3, original.data.id!);
+          notice(3);
+        } else if (scenario === 'unrelated notice') {
+          notice(3, `${testRealmURL}Person/other`);
+        } else if (scenario !== 'quiet publication') {
+          notice(3);
+        }
+        assert.strictEqual(
+          reads,
+          1,
+          'no competing read during the initial GET',
+        );
+        first.fulfill(original);
+        let instance = await reading;
+        if (!isCardInstance(instance))
+          throw new Error('The first GET did not admit a card');
+        await settled();
+        let shouldRepair = [
+          'named notice',
+          'duplicate and out-of-order notices',
+          'full notice',
+        ].includes(scenario);
+        assert.strictEqual(
+          reads,
+          shouldRepair ? 2 : 1,
+          'one current read for affected publications; no speculative read',
+        );
+        assert.strictEqual(
+          readingStore.peek(url),
+          instance,
+          'same initial identity',
+        );
+        assert.strictEqual(
+          (instance as any).name,
+          shouldRepair ? 'After' : 'Before',
+        );
+        if (scenario !== 'ordinary card') {
+          assert.strictEqual(
+            (instance as any).boom,
+            shouldRepair ? 'current output' : 'old output',
+            'complete server computed output is applied',
+          );
+          assert.strictEqual(instance.publicationState, 'ready');
+        } else {
+          assert.false(api.hasLatticeSnapshot(instance));
+        }
+      } finally {
+        first.fulfill(original);
+        await settled();
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let scenario of [
+    'search admission',
+    'included child',
+    'reconnect',
+    'offline',
+    'resetCache',
+    'resetState',
+    'quiet admission',
+    'ordinary admission',
+  ] as const) {
+    test(`Lattice hydration retains ${scenario}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let doc = publicationDocument('Person/hydrating');
+      let child = publicationDocument('Person/hydrating-child');
+      if (scenario === 'included child') {
+        doc.data.relationships = {
+          bestFriend: {
+            links: { self: child.data.id! },
+            data: { type: 'card', id: child.data.id! },
+          },
+        };
+        doc.included = [child.data];
+      }
+      if (scenario === 'ordinary admission') delete doc.data.meta.publication;
+      let target = scenario === 'included child' ? child : doc;
+      let latest = structuredClone(target);
+      latest.data.attributes = { name: 'Current', boom: 'current output' };
+      if (latest.data.meta.publication) {
+        latest.data.meta.publication.validatedThrough = 3;
+        latest.data.meta.publication.outputRevision = 3;
+      }
+      let cardService = getService('card-service');
+      let getAPI = cardService.getAPI.bind(cardService);
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let hold = true;
+      let reads: string[] = [];
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.getAPI = async () => {
+        if (hold) {
+          hold = false;
+          entered.fulfill();
+          await release.promise;
+        }
+        return getAPI();
+      };
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) !== target.data.id) return fetchJSON(...args);
+        reads.push(String(args[0]));
+        return structuredClone(latest);
+      };
+      let deliver = (event: RealmEventContent) =>
+        (storeService as any).handleInvalidations(event);
+      try {
+        let reading: Promise<CardDefType> =
+          scenario === 'search admission'
+            ? (storeService as any).addResourceFromSearchData(doc.data)
+            : storeService.add(doc, {
+                doNotPersist: true,
+                relativeTo: doc.data.id,
+                latticeUseSnapshot: true,
+              });
+        // Observe both outcomes immediately; a cancelled read is an expected
+        // result of replacing the Store, not an unhandled promise rejection.
+        let outcome = reading.then(
+          (value) => ({ value, error: undefined }),
+          (error: Error) => ({ value: undefined, error }),
+        );
+        await entered.promise;
+        if (scenario === 'resetCache' || scenario === 'resetState') {
+          storeService[scenario]();
+        } else if (scenario === 'reconnect' || scenario === 'offline') {
+          messages.latticeConnectionChanged(false);
+          if (scenario === 'reconnect') messages.latticeConnectionChanged(true);
+        } else if (scenario !== 'quiet admission') {
+          if (scenario !== 'included child') {
+            deliver({
+              eventName: 'update',
+              realmURL: testRealmURL,
+            } as RealmEventContent);
+          }
+          deliver({
+            eventName: 'index',
+            indexType: 'incremental',
+            realmURL: testRealmURL,
+            invalidations: [target.data.id!],
+            generation: 3,
+          });
+        }
+        assert.deepEqual(reads, [], 'no refresh before assembly is admitted');
+        release.fulfill();
+        let { value, error } = await outcome;
+        await settled();
+        if (scenario === 'resetCache' || scenario === 'resetState') {
+          assert.strictEqual(
+            error?.name,
+            'AbortError',
+            'obsolete admission is cancelled',
+          );
+          assert.strictEqual(storeService.peek(doc.data.id!), undefined);
+          assert.strictEqual(storeService.peekError(doc.data.id!), undefined);
+          assert.deepEqual(
+            reads,
+            [],
+            'reset does not trigger an obsolete repair',
+          );
+        } else {
+          if (!value || error) throw error ?? new Error('No hydrated card');
+          let instance =
+            scenario === 'included child'
+              ? cardStore.getCard(child.data.id!)!
+              : value;
+          if (scenario === 'offline') {
+            assert.strictEqual(instance.publicationState, 'pending');
+            assert.deepEqual(
+              reads,
+              [],
+              'offline admission waits for connectivity',
+            );
+            messages.latticeConnectionChanged(true);
+            await settled();
+          }
+          let repairs = !['quiet admission', 'ordinary admission'].includes(
+            scenario,
+          );
+          assert.deepEqual(reads, repairs ? [target.data.id!] : []);
+          assert.strictEqual(
+            (instance as any).name,
+            repairs ? 'Current' : target.data.attributes!.name,
+          );
+          assert.strictEqual(
+            cardStore.getCard(doc.data.id!),
+            value,
+            'root identity stays stable',
+          );
+          if (scenario !== 'ordinary admission') {
+            assert.strictEqual(instance.publicationState, 'ready');
+            assert.strictEqual(
+              (instance as any).boom,
+              repairs ? 'current output' : 'published',
+            );
+          }
+          if (scenario === 'included child') {
+            assert.strictEqual(
+              (value as any).bestFriend,
+              instance,
+              'the existing link keeps the refreshed child',
+            );
+            assert.strictEqual(
+              (value as any).name,
+              doc.data.attributes!.name,
+              'the root was not refetched',
+            );
+          }
+        }
+      } finally {
+        release.fulfill();
+        await settled();
+        cardService.getAPI = getAPI;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let reset of [false, true]) {
+    test(`Lattice hydration fences partial field assembly${reset ? ' across reset' : ''}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let doc = publicationDocument('Person/field-assembly');
+      let latest = structuredClone(doc);
+      latest.data.attributes = { name: 'Current', boom: 'current output' };
+      latest.data.meta.publication!.validatedThrough = 3;
+      latest.data.meta.publication!.outputRevision = 3;
+      let { Person } = await loader.import<{ Person: typeof CardDefType }>(
+        testRRI('person'),
+      );
+      let field = api.getFields(Person).name!;
+      let deserialize = field.deserialize;
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      field.deserialize = async (...args) => {
+        if (args[0] === doc.data.attributes!.name) {
+          entered.fulfill();
+          await release.promise;
+        }
+        return deserialize.apply(field, args);
+      };
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let reads = 0;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) !== doc.data.id) return fetchJSON(...args);
+        reads++;
+        return structuredClone(latest);
+      };
+      try {
+        let outcome = storeService
+          .add(doc, {
+            doNotPersist: true,
+            latticeUseSnapshot: true,
+            relativeTo: doc.data.id,
+          })
+          .then(
+            (value) => ({ value, error: undefined }),
+            (error: Error) => ({ value: undefined, error }),
+          );
+        await entered.promise;
+        let partial = cardStore.getCard(doc.data.id!);
+        assert.true(
+          isCardInstance(partial),
+          'the identity exists before all fields finish',
+        );
+        assert.false(
+          api.hasLatticeSnapshot(partial!),
+          'the partial instance is not an admitted snapshot',
+        );
+        if (reset) storeService.resetCache();
+        else
+          (storeService as any).handleInvalidations({
+            eventName: 'index',
+            indexType: 'incremental',
+            realmURL: testRealmURL,
+            invalidations: [doc.data.id!],
+            generation: 3,
+          });
+        // Let any incorrect eager reload actually reach the transport.
+        await Promise.resolve();
+        await Promise.resolve();
+        assert.strictEqual(reads, 0, 'no competing read of a partial instance');
+        release.fulfill();
+        let { value, error } = await outcome;
+        await settled();
+        if (reset) {
+          assert.strictEqual(error?.name, 'AbortError');
+          assert.strictEqual(storeService.peek(doc.data.id!), undefined);
+          assert.strictEqual(storeService.peekError(doc.data.id!), undefined);
+          assert.strictEqual(reads, 0);
+        } else {
+          if (!value || error) throw error ?? new Error('No hydrated card');
+          assert.strictEqual(reads, 1);
+          assert.strictEqual(value, partial, 'the first identity survives');
+          assert.strictEqual((value as any).boom, 'current output');
+          assert.strictEqual(value.publicationState, 'ready');
+        }
+      } finally {
+        release.fulfill();
+        await settled();
+        field.deserialize = deserialize;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let scenario of [
+    'reconnect',
+    'resetCache',
+    'resetState',
+    'notices across both waits',
+    'reconnect after admission',
+  ] as const) {
+    test(`Lattice hydration fences first GET ${scenario}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let doc = publicationDocument('Person/request-assembly');
+      let latest = structuredClone(doc);
+      latest.data.attributes = { name: 'Current', boom: 'current output' };
+      latest.data.meta.publication!.validatedThrough = 3;
+      latest.data.meta.publication!.outputRevision = 3;
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let apiEntered = new Deferred<void>();
+      let releaseAPI = new Deferred<void>();
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let getAPI = cardService.getAPI.bind(cardService);
+      let reads = 0;
+      let holdAPI =
+        scenario === 'notices across both waits' ||
+        scenario === 'reconnect after admission';
+      let apiCalls = 0;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) !== doc.data.id) return fetchJSON(...args);
+        reads++;
+        if (reads === 1) {
+          entered.fulfill();
+          await release.promise;
+          return structuredClone(doc);
+        }
+        return structuredClone(latest);
+      };
+      cardService.getAPI = async () => {
+        if (
+          holdAPI &&
+          ++apiCalls === (scenario === 'reconnect after admission' ? 2 : 1)
+        ) {
+          holdAPI = false;
+          apiEntered.fulfill();
+          await releaseAPI.promise;
+        }
+        return getAPI();
+      };
+      let notice = () =>
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          invalidations: [doc.data.id!],
+          generation: 3,
+        });
+      try {
+        let reading = storeService.get(doc.data.id!);
+        let coalesced = storeService.get(doc.data.id!);
+        let outcomes = Promise.allSettled([reading, coalesced]);
+        await entered.promise;
+        if (scenario === 'resetCache' || scenario === 'resetState')
+          storeService[scenario]();
+        else if (scenario === 'reconnect') {
+          messages.latticeConnectionChanged(false);
+          messages.latticeConnectionChanged(true);
+        } else if (scenario === 'notices across both waits') notice();
+        release.fulfill();
+        if (
+          scenario === 'notices across both waits' ||
+          scenario === 'reconnect after admission'
+        ) {
+          await apiEntered.promise;
+          if (scenario === 'reconnect after admission') {
+            messages.latticeConnectionChanged(false);
+            messages.latticeConnectionChanged(true);
+          } else notice();
+          releaseAPI.fulfill();
+        }
+        let results = await outcomes;
+        await settled();
+        if (scenario === 'resetCache' || scenario === 'resetState') {
+          assert.true(
+            results.every(
+              (result) =>
+                result.status === 'rejected' &&
+                result.reason.name === 'AbortError',
+            ),
+          );
+          assert.strictEqual(storeService.peek(doc.data.id!), undefined);
+          assert.strictEqual(storeService.peekError(doc.data.id!), undefined);
+          assert.strictEqual(
+            reads,
+            1,
+            'obsolete GET does not repopulate or retry',
+          );
+          let fresh = await storeService.get(doc.data.id!);
+          assert.strictEqual(
+            (fresh as any).boom,
+            'current output',
+            'a new request uses the new Store',
+          );
+          assert.strictEqual(reads, 2);
+        } else {
+          assert.true(results.every((result) => result.status === 'fulfilled'));
+          assert.strictEqual(
+            reads,
+            2,
+            'one current read covers all earlier notices',
+          );
+          let instance = storeService.peek(doc.data.id!);
+          assert.strictEqual((instance as any).boom, 'current output');
+          for (let result of results) {
+            if (result.status === 'fulfilled')
+              assert.strictEqual(result.value, instance);
+          }
+        }
+      } finally {
+        release.fulfill();
+        releaseAPI.fulfill();
+        await settled();
+        cardService.fetchJSON = fetchJSON;
+        cardService.getAPI = getAPI;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let scenario of [
+    'notice before root GET',
+    'notice during ordinary parent admission',
+    'quiet ordinary parent',
+    'older notice',
+    'already current input',
+    'unrelated identity',
+    'different realm',
+    'pending equal generation',
+    'overflow with lost child',
+    'overflow with uncertain child',
+  ] as const) {
+    test(`Lattice unknown child repairs ${scenario}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let parent = publicationDocument('Person/unknown-parent');
+      let child = publicationDocument('Person/unknown-child');
+      if (scenario !== 'notice before root GET')
+        delete parent.data.meta.publication;
+      if (scenario === 'already current input')
+        child.data.meta.publication!.validatedThrough = 3;
+      if (scenario === 'pending equal generation') {
+        child.data.meta.publication!.validatedThrough = 3;
+        child.data.meta.publication!.state = 'pending';
+      }
+      parent.data.relationships = {
+        bestFriend: {
+          links: { self: child.data.id! },
+          data: { type: 'card', id: child.data.id! },
+        },
+      };
+      parent.included = [child.data];
+      let current = structuredClone(child);
+      current.data.attributes = {
+        name: 'Current child',
+        boom: 'current child output',
+      };
+      current.data.meta.publication!.state = 'ready';
+      current.data.meta.publication!.validatedThrough = 3;
+      current.data.meta.publication!.outputRevision = 3;
+      if (scenario === 'overflow with uncertain child')
+        current = structuredClone(child);
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let cardService = getService('card-service');
+      let getAPI = cardService.getAPI.bind(cardService);
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let holdAPI = scenario !== 'notice before root GET';
+      let repairs: string[] = [];
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.getAPI = async () => {
+        if (holdAPI) {
+          holdAPI = false;
+          entered.fulfill();
+          await release.promise;
+        }
+        return getAPI();
+      };
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) === parent.data.id) {
+          entered.fulfill();
+          await release.promise;
+          return structuredClone(parent);
+        }
+        if (String(args[0]) !== child.data.id) return fetchJSON(...args);
+        repairs.push(String(args[0]));
+        return structuredClone(current);
+      };
+      try {
+        let reading =
+          scenario === 'notice before root GET'
+            ? storeService.get(parent.data.id!)
+            : storeService.add(parent, {
+                doNotPersist: true,
+                latticeUseSnapshot: true,
+                relativeTo: parent.data.id,
+              });
+        await entered.promise;
+        if (scenario.startsWith('overflow')) {
+          let target =
+            scenario === 'overflow with lost child'
+              ? child.data.id!
+              : `${testRealmURL}Unrelated/first`;
+          (storeService as any).handleInvalidations({
+            eventName: 'index',
+            indexType: 'incremental',
+            realmURL: testRealmURL,
+            invalidations: [target],
+            generation: 3,
+            publicationId: 'synthetic-first',
+          });
+          for (let i = 0; i < LATTICE_NOTICE_IDENTITY_LIMIT; i++) {
+            (storeService as any).handleInvalidations({
+              eventName: 'index',
+              indexType: 'incremental',
+              realmURL: testRealmURL,
+              invalidations: [`${testRealmURL}Unrelated/${i}`],
+              generation: i + 4,
+              publicationId: `synthetic-overflow-${i}`,
+            });
+          }
+        } else if (scenario !== 'quiet ordinary parent') {
+          (storeService as any).handleInvalidations({
+            eventName: 'index',
+            indexType: 'incremental',
+            realmURL:
+              scenario === 'different realm'
+                ? `${testRealmURL}nested/`
+                : testRealmURL,
+            invalidations: [
+              scenario === 'unrelated identity'
+                ? `${testRealmURL}Person/other`
+                : scenario === 'different realm'
+                  ? `${testRealmURL}nested/Person/other`
+                  : `${child.data.id}.json`,
+            ],
+            generation: scenario === 'older notice' ? 1 : 3,
+            publicationId: 'synthetic-child-publication-3',
+          });
+        }
+        assert.deepEqual(
+          repairs,
+          [],
+          'no speculative child read before admission',
+        );
+        release.fulfill();
+        let instance = await reading;
+        if (!isCardInstance(instance)) throw new Error('Expected parent card');
+        let admittedChild = (instance as any).bestFriend as CardDefType;
+        await settled();
+        let shouldRepair = [
+          'notice before root GET',
+          'notice during ordinary parent admission',
+          'pending equal generation',
+          'overflow with lost child',
+          'overflow with uncertain child',
+        ].includes(scenario);
+        assert.deepEqual(
+          repairs,
+          shouldRepair ? [child.data.id!] : [],
+          'only a missed publication needs a repair',
+        );
+        assert.strictEqual(
+          cardStore.getCard(parent.data.id!),
+          instance,
+          'parent identity stays',
+        );
+        assert.strictEqual(
+          cardStore.getCard(child.data.id!),
+          admittedChild,
+          'child identity stays',
+        );
+        assert.strictEqual(
+          (instance as any).bestFriend,
+          admittedChild,
+          'the existing link stays',
+        );
+        assert.strictEqual(
+          (instance as any).name,
+          parent.data.attributes!.name,
+        );
+        assert.strictEqual(
+          (admittedChild as any).boom,
+          shouldRepair && scenario !== 'overflow with uncertain child'
+            ? 'current child output'
+            : 'published',
+        );
+        assert.strictEqual(admittedChild.publicationState, 'ready');
+        if (scenario !== 'notice before root GET')
+          assert.false(
+            api.hasLatticeSnapshot(instance),
+            'the ordinary parent stays ordinary',
+          );
+      } finally {
+        release.fulfill();
+        await settled();
+        cardService.getAPI = getAPI;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let boundary of ['GET', 'API'] as const) {
+    test(`Lattice unknown child cancels an ordinary parent across reset during ${boundary}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let parent = publicationDocument('Person/reset-parent');
+      delete parent.data.meta.publication;
+      let child = publicationDocument('Person/reset-child');
+      parent.data.relationships = {
+        bestFriend: {
+          links: { self: child.data.id! },
+          data: { type: 'card', id: child.data.id! },
+        },
+      };
+      parent.included = [child.data];
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let holdAPI = boundary === 'API';
+      let cardService = getService('card-service');
+      let getAPI = cardService.getAPI.bind(cardService);
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let repairs = 0;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.getAPI = async () => {
+        if (holdAPI) {
+          holdAPI = false;
+          entered.fulfill();
+          await release.promise;
+        }
+        return getAPI();
+      };
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) === parent.data.id) {
+          entered.fulfill();
+          await release.promise;
+          return structuredClone(parent);
+        }
+        if (String(args[0]) === child.data.id) {
+          repairs++;
+          return structuredClone(child);
+        }
+        return fetchJSON(...args);
+      };
+      try {
+        let reading =
+          boundary === 'GET'
+            ? storeService.get(parent.data.id!)
+            : storeService.add(parent, {
+                doNotPersist: true,
+                latticeUseSnapshot: true,
+                relativeTo: parent.data.id,
+              });
+        let outcome = Promise.allSettled([reading]);
+        await entered.promise;
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          invalidations: [child.data.id!],
+          generation: 3,
+          publicationId: 'synthetic-before-reset',
+        });
+        storeService.resetCache();
+        release.fulfill();
+        let [result] = await outcome;
+        await settled();
+        assert.strictEqual(result.status, 'rejected');
+        if (result.status === 'rejected') {
+          assert.strictEqual(result.reason.name, 'AbortError');
+        }
+        for (let id of [parent.data.id!, child.data.id!]) {
+          assert.strictEqual(
+            storeService.peek(id),
+            undefined,
+            'neither old identity enters the new Store',
+          );
+          assert.strictEqual(storeService.peekError(id), undefined);
+        }
+        assert.strictEqual(repairs, 0);
+        // A new read is allowed to admit the serving realm's current body.
+        // Prior-session notice evidence must not independently trigger repair.
+        child.data.attributes!.boom = 'new session output';
+        child.data.meta.publication!.validatedThrough = 3;
+        child.data.meta.publication!.outputRevision = 3;
+        let fresh = await storeService.get(parent.data.id!);
+        assert.strictEqual(
+          (fresh as any).bestFriend.boom,
+          'new session output',
+        );
+        await settled();
+        assert.strictEqual(repairs, 0);
+      } finally {
+        release.fulfill();
+        await settled();
+        cardService.getAPI = getAPI;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let scenario of [
+    'ordinary GET',
+    'published GET',
+    'ordinary API',
+    'quiet ordinary API',
+  ] as const) {
+    test(`Lattice convergence repairs undiscovered child after ${scenario}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let parent = publicationDocument('Person/reconnect-parent');
+      if (scenario !== 'published GET') delete parent.data.meta.publication;
+      let child = publicationDocument('Person/reconnect-child');
+      parent.data.relationships = {
+        bestFriend: {
+          links: { self: child.data.id! },
+          data: { type: 'card', id: child.data.id! },
+        },
+      };
+      parent.included = [child.data];
+      let latest = structuredClone(child);
+      latest.data.attributes = {
+        name: 'Current child',
+        boom: 'missed publication',
+      };
+      latest.data.meta.publication!.validatedThrough = 3;
+      latest.data.meta.publication!.outputRevision = 3;
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let holdAPI = scenario.endsWith('API');
+      let cardService = getService('card-service');
+      let getAPI = cardService.getAPI.bind(cardService);
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let reads: string[] = [];
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.getAPI = async () => {
+        if (holdAPI) {
+          holdAPI = false;
+          entered.fulfill();
+          await release.promise;
+        }
+        return getAPI();
+      };
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) === parent.data.id) {
+          reads.push(parent.data.id!);
+          entered.fulfill();
+          await release.promise;
+          return structuredClone(parent);
+        }
+        if (String(args[0]) === child.data.id) {
+          reads.push(child.data.id!);
+          return structuredClone(latest);
+        }
+        return fetchJSON(...args);
+      };
+      try {
+        let reading = scenario.endsWith('GET')
+          ? storeService.get(parent.data.id!)
+          : storeService.add(parent, {
+              doNotPersist: true,
+              latticeUseSnapshot: true,
+              relativeTo: parent.data.id,
+            });
+        await entered.promise;
+        if (scenario !== 'quiet ordinary API') {
+          messages.latticeConnectionChanged(false);
+          // The serving realm published while disconnected. There is no
+          // notice to replay and the response was captured before that write.
+          messages.latticeConnectionChanged(true);
+        }
+        assert.false(
+          reads.includes(child.data.id!),
+          'no speculative child read',
+        );
+        release.fulfill();
+        let instance = await reading;
+        await settled();
+        let admitted = cardStore.getCard(child.data.id!)!;
+        assert.strictEqual((instance as any).bestFriend, admitted);
+        assert.strictEqual(cardStore.getCard(parent.data.id!), instance);
+        assert.strictEqual(admitted.publicationState, 'ready');
+        assert.strictEqual(
+          (admitted as any).boom,
+          scenario === 'quiet ordinary API'
+            ? 'published'
+            : 'missed publication',
+          'complete current child output survives missed delivery',
+        );
+        assert.strictEqual(
+          reads.filter((id) => id === child.data.id).length,
+          scenario === 'quiet ordinary API' ? 0 : 1,
+          'only the missed child needs one confirming read',
+        );
+        if (scenario !== 'published GET') {
+          assert.false(api.hasLatticeSnapshot(instance as CardDefType));
+          assert.strictEqual(
+            reads.filter((id) => id === parent.data.id).length,
+            scenario.endsWith('GET') ? 1 : 0,
+            'ordinary parent is never refreshed',
+          );
+        }
+      } finally {
+        release.fulfill();
+        await settled();
+        cardService.getAPI = getAPI;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let childAdmitted of [false, true]) {
+    test(`Lattice convergence reconnects while child is ${childAdmitted ? 'admitted' : 'partially assembled'}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let parent = publicationDocument('Person/reconnect-field-parent');
+      delete parent.data.meta.publication;
+      let child = publicationDocument('Person/reconnect-field-child');
+      parent.data.relationships = {
+        bestFriend: {
+          links: { self: child.data.id! },
+          data: { type: 'card', id: child.data.id! },
+        },
+      };
+      parent.included = [child.data];
+      let latest = structuredClone(child);
+      latest.data.attributes = {
+        name: 'Current child',
+        boom: 'current field value',
+      };
+      latest.data.meta.publication!.validatedThrough = 3;
+      latest.data.meta.publication!.outputRevision = 3;
+      let { Person } = await loader.import<{ Person: typeof CardDefType }>(
+        testRRI('person'),
+      );
+      let field = api.getFields(Person).name!;
+      let deserialize = field.deserialize;
+      let entered = new Deferred<void>();
+      let release = new Deferred<void>();
+      let heldName = (childAdmitted ? parent : child).data.attributes!.name;
+      field.deserialize = async (...args) => {
+        if (args[0] === heldName) {
+          entered.fulfill();
+          await release.promise;
+        }
+        return deserialize.apply(field, args);
+      };
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let reads = 0;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) !== child.data.id) return fetchJSON(...args);
+        reads++;
+        return structuredClone(latest);
+      };
+      try {
+        let reading = storeService.add(parent, {
+          doNotPersist: true,
+          latticeUseSnapshot: true,
+          relativeTo: parent.data.id,
+        });
+        await entered.promise;
+        if (childAdmitted) {
+          await waitUntil(() => {
+            let instance = cardStore.getCard(child.data.id!);
+            return !!instance && api.hasLatticeSnapshot(instance);
+          });
+        }
+        messages.latticeConnectionChanged(false);
+        messages.latticeConnectionChanged(true);
+        if (childAdmitted) {
+          await waitUntil(
+            () =>
+              (cardStore.getCard(child.data.id!) as any).boom ===
+              'current field value',
+          );
+          assert.strictEqual(
+            reads,
+            1,
+            'resident child can recover while the ordinary parent is assembling',
+          );
+        } else {
+          assert.strictEqual(reads, 0, 'never refresh a partial child');
+        }
+        release.fulfill();
+        let instance = await reading;
+        await settled();
+        let admitted = cardStore.getCard(child.data.id!)!;
+        assert.strictEqual((instance as any).bestFriend, admitted);
+        assert.strictEqual((admitted as any).boom, 'current field value');
+        assert.strictEqual(admitted.publicationState, 'ready');
+        assert.strictEqual(
+          reads,
+          1,
+          'completed parent assembly does not repeat a repair',
+        );
+        assert.false(api.hasLatticeSnapshot(instance));
+      } finally {
+        release.fulfill();
+        await settled();
+        field.deserialize = deserialize;
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  for (let failure of [false, true]) {
+    test(`Lattice convergence reconnects after ${failure ? 'failed' : 'missed'} delivery and orders notices`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent;
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(true);
+      let doc = publicationDocument('Person/converging');
+      let instance = await storeService.add(doc, {
+        doNotPersist: true,
+        latticeUseSnapshot: true,
+      });
+      let current = structuredClone(doc);
+      current.data.attributes = {
+        name: 'Confirmed',
+        boom: 'complete current value',
+      };
+      current.data.meta.publication!.validatedThrough = 3;
+      current.data.meta.publication!.outputRevision = 3;
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      let reads = 0;
+      let fail = failure;
+      let held: Deferred<SingleCardDocument> | undefined;
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      cardService.fetchJSON = async (...args) => {
+        if (String(args[0]) !== instance.id) return fetchJSON(...args);
+        reads++;
+        if (fail) throw new Error('synthetic temporary transport failure');
+        if (held) return held.promise;
+        return structuredClone(current);
+      };
+      let notice = (generation: number) =>
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          invalidations: [instance.id!],
+          generation,
+          publicationId: `synthetic-${generation}`,
+        });
+      try {
+        if (failure) {
+          notice(3);
+          await settled();
+          assert.strictEqual(storeService.peek(instance.id!), instance);
+          assert.strictEqual(storeService.peekError(instance.id!), undefined);
+          assert.strictEqual(instance.publicationState, 'pending');
+          assert.strictEqual((instance as any).boom, 'published');
+        }
+        fail = false;
+        messages.latticeConnectionChanged(false);
+        messages.latticeConnectionChanged(true);
+        await settled();
+        assert.strictEqual((instance as any).boom, 'complete current value');
+        assert.strictEqual(instance.publicationState, 'ready');
+        assert.strictEqual(reads, failure ? 2 : 1);
+        // Delay one response, then deliver a newer notice, an older one and
+        // a duplicate. The in-flight older body cannot clear pending state.
+        held = new Deferred<SingleCardDocument>();
+        let readStart = reads;
+        notice(4);
+        await waitUntil(() => reads === readStart + 1);
+        notice(5);
+        notice(4);
+        notice(5);
+        current.data.attributes = {
+          name: 'Newest',
+          boom: 'newest complete value',
+        };
+        current.data.meta.publication!.validatedThrough = 5;
+        current.data.meta.publication!.outputRevision = 5;
+        let oldReply = held;
+        held = undefined;
+        oldReply.fulfill(structuredClone(doc));
+        await settled();
+        assert.strictEqual(
+          reads,
+          readStart + 2,
+          'one guarded follow-up covers all notices',
+        );
+        assert.strictEqual(storeService.peek(instance.id!), instance);
+        assert.strictEqual((instance as any).name, 'Newest');
+        assert.strictEqual((instance as any).boom, 'newest complete value');
+        assert.strictEqual(instance.publicationState, 'ready');
+        messages.latticeConnectionChanged(true);
+        await settled();
+        assert.strictEqual(
+          reads,
+          readStart + 2,
+          'routine connected sync does not repeat work',
+        );
+      } finally {
+        held?.fulfill(structuredClone(current));
+        await settled();
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  test('Lattice reconciliation bounds reconnect and coalesces queued and in-flight notices', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let messages = getService('message-service');
+    let relay = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    messages.latticeConnectionChanged(false);
+    let documents = new Map<string, SingleCardDocument>();
+    let instances: CardDefType[] = [];
+    for (let i = 0; i < 6; i++) {
+      let doc = publicationDocument(`Person/reconcile-${i}`);
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, doc, cardStore, {
+        latticePublication: 'display',
+      });
+      documents.set(instance.id!, doc);
+      instances.push(instance);
+    }
+    let restoreBatchTransport = batchExistingDisplayFixtures();
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let reads: Array<{ id: string; result: Deferred<any> }> = [];
+    let active = 0;
+    let peak = 0;
+    let hold = true;
+    cardService.fetchJSON = async (...args) => {
+      let id = String(args[0]);
+      let doc = documents.get(id);
+      if (!doc) return fetchJSON(...args);
+      let result = new Deferred<any>();
+      reads.push({ id, result });
+      peak = Math.max(peak, ++active);
+      if (!hold) result.fulfill(structuredClone(doc));
+      try {
+        return await result.promise;
+      } finally {
+        active--;
+      }
+    };
+    try {
+      messages.latticeConnectionChanged(true);
+      await waitUntil(() => reads.length >= 4);
+      assert.strictEqual(reads.length, 4, 'reconnect admits four reads');
+      let started = new Set(reads.map((read) => read.id));
+      for (let i = 0; i < 3; i++) {
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: instances.map((instance) => instance.id!),
+          realmURL: testRealmURL,
+        });
+      }
+      assert.strictEqual(active, 4, 'notices do not start parallel reads');
+      for (let read of reads.slice(0, 4))
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      await waitUntil(() => reads.length > started.size);
+      assert.strictEqual(
+        instances[0].publicationState,
+        'pending',
+        'the invalidated first response cannot mark the card current',
+      );
+      hold = false;
+      for (let read of reads) {
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      }
+      await settled();
+      assert.strictEqual(peak, 4, 'all reconciliation respects the bound');
+      for (let instance of instances) {
+        assert.strictEqual(
+          reads.filter((read) => read.id === instance.id).length,
+          started.has(instance.id!) ? 2 : 1,
+          'active reads get one follow-up; queued notices collapse',
+        );
+        assert.strictEqual(instance.publicationState, 'ready');
+        assert.strictEqual(cardStore.getCard(instance.id!), instance);
+        assert.strictEqual((instance as any).boom, 'published');
+      }
+    } finally {
+      hold = false;
+      for (let read of reads) {
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      }
+      await settled();
+      cardService.fetchJSON = fetchJSON;
+      restoreBatchTransport();
+      messages.relayRealmEvent = relay;
+    }
+  });
+
+  test('Lattice reconciliation releases capacity on failure and skips evicted or locally edited cards', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let ordinary = await storeService.get(`${testRealmURL}Person/hassan`);
+    let messages = getService('message-service');
+    let relay = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    messages.latticeConnectionChanged(false);
+    let documents = new Map<string, SingleCardDocument>();
+    let instances: CardDefType[] = [];
+    for (let i = 0; i < 7; i++) {
+      let doc = publicationDocument(`Person/reconcile-lifetime-${i}`);
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, doc, cardStore, {
+        latticePublication: 'display',
+      });
+      documents.set(instance.id!, doc);
+      instances.push(instance);
+    }
+    let reads: Array<{ id: string; result: Deferred<any> }> = [];
+    let restoreBatchTransport = batchExistingDisplayFixtures();
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let ordinaryReads = 0;
+    let hold = true;
+    cardService.fetchJSON = async (...args) => {
+      let id = String(args[0]);
+      if (id === ordinary.id) {
+        ordinaryReads++;
+        return fetchJSON(...args);
+      }
+      let doc = documents.get(id);
+      if (!doc) return fetchJSON(...args);
+      let result = new Deferred<any>();
+      reads.push({ id, result });
+      if (!hold) result.fulfill(structuredClone(doc));
+      return result.promise;
+    };
+    try {
+      messages.latticeConnectionChanged(true);
+      await waitUntil(() => reads.length >= 4);
+      cardStore.delete(instances[1].id!);
+      cardStore.delete(instances[4].id!);
+      (instances[5] as any).name = 'keep this local draft';
+      await (storeService as any).reloadTask.perform(ordinary);
+      assert.strictEqual(
+        ordinaryReads,
+        1,
+        'ordinary reload does not wait for publication capacity',
+      );
+      let error = Object.assign(new Error('temporary read failure'), {
+        status: 503,
+      });
+      reads[0].result.reject(error);
+      for (let read of reads.slice(1, 4))
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      await waitUntil(() => reads.some((read) => read.id === instances[6].id));
+      hold = false;
+      for (let read of reads)
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      await settled();
+      assert.deepEqual(
+        reads.map((read) => read.id),
+        [
+          instances[0],
+          instances[1],
+          instances[2],
+          instances[3],
+          instances[6],
+        ].map((instance) => instance.id),
+        'failure releases a slot and queued eviction/edit skip their reads',
+      );
+      assert.strictEqual(
+        cardStore.getCard(instances[1].id!),
+        undefined,
+        'an in-flight read cannot resurrect an evicted card',
+      );
+      assert.strictEqual(cardStore.getCard(instances[4].id!), undefined);
+      assert.strictEqual((instances[5] as any).name, 'keep this local draft');
+      assert.false(api.hasLatticeSnapshot(instances[5]));
+      assert.strictEqual(
+        instances[6].publicationState,
+        'ready',
+        'the queued current card converges after a failed read',
+      );
+    } finally {
+      hold = false;
+      for (let read of reads)
+        read.result.fulfill(structuredClone(documents.get(read.id)));
+      await settled();
+      cardService.fetchJSON = fetchJSON;
+      restoreBatchTransport();
+      messages.relayRealmEvent = relay;
+    }
+  });
+
+  for (let reset of ['resetCache', 'resetState'] as const) {
+    test(`Lattice reconciliation cancels queued and in-flight reads on ${reset}`, async function (assert) {
+      await storeService.ensureSetupComplete();
+      let messages = getService('message-service');
+      let relay = messages.relayRealmEvent.bind(messages);
+      messages.relayRealmEvent = () => {};
+      messages.latticeConnectionChanged(false);
+      let documents = new Map<string, SingleCardDocument>();
+      let instances: CardDefType[] = [];
+      for (let i = 0; i < 5; i++) {
+        let doc = publicationDocument(`Person/reconcile-reset-${i}`);
+        let instance = new PersonDef();
+        await api.updateFromSerialized(instance, doc, cardStore, {
+          latticePublication: 'display',
+        });
+        documents.set(instance.id!, doc);
+        instances.push(instance);
+      }
+      let reads: Array<{
+        id: string;
+        result: Deferred<any>;
+        signal?: AbortSignal | null;
+      }> = [];
+      let restoreBatchTransport = batchExistingDisplayFixtures();
+      let cardService = getService('card-service');
+      let fetchJSON = cardService.fetchJSON.bind(cardService);
+      cardService.fetchJSON = async (...args) => {
+        let id = String(args[0]);
+        if (!documents.has(id)) return fetchJSON(...args);
+        let result = new Deferred<any>();
+        reads.push({ id, result, signal: args[1]?.signal });
+        return result.promise;
+      };
+      try {
+        messages.latticeConnectionChanged(true);
+        await waitUntil(() => reads.length >= 4);
+        storeService[reset]();
+        for (let read of reads) {
+          assert.true(
+            read.signal?.aborted,
+            'reset aborts the old session transport',
+          );
+          let doc = structuredClone(documents.get(read.id)!);
+          doc.data.attributes!.name = 'obsolete response';
+          read.result.fulfill(doc);
+        }
+        await settled();
+        assert.strictEqual(
+          reads.length,
+          4,
+          'the queued fifth request is cancelled',
+        );
+        for (let instance of instances) {
+          assert.strictEqual(
+            storeService.peek(instance.id!),
+            undefined,
+            'old identity is not planted in the new Store',
+          );
+          assert.notStrictEqual((instance as any).name, 'obsolete response');
+        }
+      } finally {
+        for (let read of reads)
+          read.result.fulfill(structuredClone(documents.get(read.id)));
+        await settled();
+        cardService.fetchJSON = fetchJSON;
+        restoreBatchTransport();
+        messages.relayRealmEvent = relay;
+      }
+    });
+  }
+
+  test('Lattice publication residency limits events to admitted exact realms including linked children', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let ordinary = await storeService.get(`${testRealmURL}Person/hassan`);
+    let doc = publicationDocument('Person/published');
+    let childDoc = publicationDocument(
+      'nested/Person/child',
+      ri(`${testRealmURL}nested/`),
+    );
+    doc.data.relationships = {
+      bestFriend: {
+        links: { self: childDoc.data.id! },
+        data: { type: 'card', id: childDoc.data.id! },
+      },
+    };
+    doc.included = [childDoc.data];
+    let published = new PersonDef();
+    await api.updateFromSerialized(published, doc, cardStore, {
+      latticePublication: 'display',
+    });
+    let child = cardStore.getCard(childDoc.data.id!)!;
+    assert.true(
+      api.hasLatticeSnapshot(child),
+      'included identity is admitted separately',
+    );
+    let documents = new Map<string, SingleCardDocument>([
+      [doc.data.id!, doc],
+      [childDoc.data.id!, childDoc],
+    ]);
+    let reads: string[] = [];
+    let restoreBatchTransport = batchExistingDisplayFixtures();
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    cardService.fetchJSON = async (...args) => {
+      let incoming = documents.get(String(args[0]));
+      if (!incoming) return fetchJSON(...args);
+      reads.push(String(args[0]));
+      return structuredClone(incoming);
+    };
+    let scans = 0;
+    let allCards = cardStore.allCardInstances.bind(cardStore);
+    cardStore.allCardInstances = () => {
+      scans++;
+      return allCards();
+    };
+    let messages = getService('message-service');
+    let deliver = (event: RealmEventContent) =>
+      (storeService as any).handleInvalidations(event);
+    try {
+      // Establish a connected session, then count only the events under test.
+      messages.latticeConnectionChanged(true);
+      await settled();
+      reads.length = 0;
+      scans = 0;
+      deliver({
+        eventName: 'update',
+        realmURL: testRealmURL,
+      } as RealmEventContent);
+      assert.strictEqual(published.publicationState, 'pending');
+      assert.strictEqual(
+        child.publicationState,
+        'ready',
+        'a nested realm is not the parent realm',
+      );
+      assert.false(api.hasLatticeSnapshot(ordinary as CardDefType));
+      deliver({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL: testRealmURL,
+      });
+      await settled();
+      assert.deepEqual(
+        reads,
+        [published.id!],
+        'unchanged owner is revalidated once after routing settles',
+      );
+      assert.strictEqual(published.publicationState, 'ready');
+      reads.length = 0;
+      deliver({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: testRealmURL,
+      });
+      await settled();
+      assert.deepEqual(
+        reads,
+        [published.id!],
+        'full indexing touches only the exact published realm',
+      );
+      reads.length = 0;
+      messages.latticeConnectionChanged(false);
+      assert.strictEqual(published.publicationState, 'pending');
+      assert.strictEqual(child.publicationState, 'pending');
+      messages.latticeConnectionChanged(true);
+      await settled();
+      assert.deepEqual(
+        reads.sort(),
+        [published.id!, child.id!].sort(),
+        'reconnect repairs both admitted identities once',
+      );
+      messages.latticeConnectionChanged(true);
+      await settled();
+      assert.strictEqual(
+        reads.length,
+        2,
+        'routine sync does not repeat repair',
+      );
+      assert.strictEqual(
+        scans,
+        0,
+        'publication events never enumerate ordinary card instances',
+      );
+      assert.strictEqual(cardStore.getCard(published.id!), published);
+      assert.strictEqual(cardStore.getCard(child.id!), child);
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+      restoreBatchTransport();
+      cardStore.allCardInstances = allCards;
+    }
+  });
+
+  test('Lattice publication residency follows edits, deletion, GC and Store resets', async function (assert) {
+    await storeService.ensureSetupComplete();
+    let incoming = publicationDocument('Person/lifetime');
+    let publish = async () => {
+      let instance = new PersonDef();
+      await api.updateFromSerialized(instance, incoming, cardStore, {
+        latticePublication: 'display',
+      });
+      return instance;
+    };
+    let event = {
+      eventName: 'index',
+      indexType: 'full',
+      realmURL: testRealmURL,
+    } as RealmEventContent;
+    let refreshes = 0;
+    let task = (storeService as any).reloadTask;
+    let perform = task.perform;
+    task.perform = () => {
+      refreshes++;
+    };
+    let check = async (expected: number, message: string) => {
+      refreshes = 0;
+      (storeService as any).handleInvalidations(event);
+      await settled();
+      assert.strictEqual(refreshes, expected, message);
+    };
+    try {
+      let instance = await publish();
+      await check(1, 'admitted identity is registered once');
+      (instance as any).name = 'local draft';
+      await check(0, 'a local edit is no longer a publication consumer');
+      assert.strictEqual((instance as any).name, 'local draft');
+      await api.updateFromSerialized(instance, incoming, cardStore, {
+        latticePublication: 'display',
+      });
+      await check(
+        1,
+        'a later admitted publication registers the existing identity again',
+      );
+      cardStore.delete(`${testRealmURL}Person/lifetime.json`);
+      await check(1, 'file-meta deletion leaves the card identity registered');
+      cardStore.delete(incoming.data.id!);
+      await check(0, 'card deletion removes its registration');
+      await publish();
+      cardStore.sweep(api);
+      await check(
+        1,
+        'publication bookkeeping does not rescue a first-sweep GC candidate',
+      );
+      cardStore.sweep(api);
+      await check(0, 'second sweep evicts the publication with its identity');
+      await publish();
+      cardStore.reset();
+      await check(0, 'code reset forgets registrations');
+      await publish();
+      storeService.resetCache();
+      await check(0, 'cache replacement cannot retain the old registrations');
+      cardStore = (storeService as any).store;
+      await storeService.add(incoming, {
+        doNotPersist: true,
+        latticeUseSnapshot: true,
+      });
+      await check(
+        1,
+        'the next admitted read registers in the replacement Store',
+      );
+      storeService.resetState();
+      await storeService.ensureSetupComplete();
+      await check(0, 'session reset cannot retain old publications');
+    } finally {
+      task.perform = perform;
+    }
+  });
+
+  test('Lattice aliases reload one resident card per event and subsequent events still refresh it', async function (assert) {
+    let url = `${testRealmURL}Person/hassan`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let original = storeService.peek(url);
+    assert.true(isCardInstance(original));
+
+    let messages = getService('message-service');
+    let deliver = messages.relayRealmEvent.bind(messages);
+    messages.relayRealmEvent = () => {};
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let reads = 0;
+    cardService.fetchJSON = async (...args) => {
+      if (String(args[0]) === url) reads++;
+      return fetchJSON(...args);
+    };
+    try {
+      for (let name of ['First publication', 'Next publication']) {
+        await testRealm.write(
+          'Person/hassan.json',
+          JSON.stringify({
+            data: {
+              attributes: { name },
+              meta: {
+                adoptsFrom: { module: testRRI('person'), name: 'Person' },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+        reads = 0;
+        deliver({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${url}.json`, url, `${url}.json`],
+          realmURL: testRealmURL,
+        });
+        await settled();
+        assert.strictEqual(reads, 1, `${name} fetches the card once`);
+        assert.strictEqual(
+          storeService.peek(url),
+          original,
+          'resident identity survives',
+        );
+        assert.strictEqual(
+          (original as any).name,
+          name,
+          'the published value arrives',
+        );
+      }
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+      messages.relayRealmEvent = deliver;
+    }
+  });
+
+  test('Lattice applyPublication reports applied, ignored and missing without reading a body', async function (assert) {
+    let instance = new PersonDef() as CardDefType & {
+      name: string;
+      boom: string;
+    };
+    let doc: SingleCardDocument = {
+      data: {
+        id: testRRI('Person/hassan'),
+        type: 'card',
+        attributes: { name: 'Hassan', boom: 'stored computation' },
+        meta: {
+          adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          realmURL: testRealmURL,
+          generation: 2,
+          publication: {
+            have: 'lattice-display-v1:' + 'a'.repeat(64),
+            version: 1,
+            state: 'ready',
+            validatedThrough: 1,
+            outputRevision: 2,
+            definitionRevision: 'reviewed',
+            computedFields: ['boom'],
+            queryFields: [],
+            watches: [],
+            hasPublishedSnapshot: true,
+          },
+        },
+      },
+    };
+    await api.updateFromSerialized(instance, doc, cardStore, {
+      latticePublication: 'display',
+    });
+    await storeService.add(instance, { doNotPersist: true });
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON;
+    let reads = 0;
+    cardService.fetchJSON = async () => {
+      reads++;
+      throw new Error('Publication application must not read its body');
+    };
+    let current = true;
+    let appliedBodies = 0;
+    let context = {
+      api,
+      canApply: () => current,
+      didApply: () => appliedBodies++,
+    };
+    let reuse = {
+      lattice: {
+        version: 1,
+        reuse: true,
+        token: doc.data.meta.publication!.have!,
+        id: instance.id,
+        state: 'pending',
+      },
+    };
+    try {
+      let result = await storeService.applyPublication(
+        instance,
+        reuse,
+        context,
+      );
+      assert.strictEqual(result.status, 'applied');
+      if (result.status !== 'missing')
+        assert.strictEqual(result.instance, instance);
+      assert.strictEqual(instance.publicationState, 'pending');
+      result = await storeService.applyPublication(instance, doc, context);
+      assert.strictEqual(result.status, 'applied');
+      if (result.status !== 'missing')
+        assert.strictEqual(result.instance, instance);
+      assert.strictEqual(
+        instance.boom,
+        'stored computation',
+        'uses the covered value',
+      );
+      assert.strictEqual(instance.publicationState, 'ready');
+      assert.strictEqual(appliedBodies, 1);
+
+      result = await storeService.applyPublication(
+        instance,
+        {
+          lattice: {
+            ...reuse.lattice,
+            token: 'lattice-display-v1:' + 'b'.repeat(64),
+          },
+        },
+        context,
+      );
+      assert.deepEqual(
+        result,
+        { status: 'missing' },
+        'reader owns bounded repair',
+      );
+      assert.strictEqual(
+        instance.publicationState,
+        'ready',
+        'miss cannot erase the current body',
+      );
+      current = false;
+      instance.name = 'Unsaved local draft';
+      result = await storeService.applyPublication(instance, doc, context);
+      assert.deepEqual(result, { status: 'ignored', instance });
+      assert.strictEqual(instance.name, 'Unsaved local draft');
+      assert.strictEqual(appliedBodies, 1, 'obsolete read cannot apply a body');
+      assert.strictEqual(reads, 0);
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
+  });
+
+  test('Lattice display reuse preserves Store identity and fences reordered freshness replies', async function (assert) {
+    let url = `${testRealmURL}Person/hassan`;
+    let instance = new PersonDef();
+    let doc: SingleCardDocument = {
+      data: {
+        id: testRRI('Person/hassan'),
+        type: 'card',
+        attributes: { name: 'Hassan', boom: 'boom' },
+        meta: {
+          adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          realmURL: testRealmURL,
+        },
+      },
+    };
+    let token = 'lattice-display-v1:' + 'a'.repeat(64);
+    Object.assign(doc.data.meta, {
+      generation: 2,
+      publication: {
+        have: token,
+        version: 1,
+        state: 'ready',
+        validatedThrough: 1,
+        outputRevision: 2,
+        definitionRevision: 'reviewed',
+        computedFields: ['boom'],
+        queryFields: [],
+        watches: [],
+        hasPublishedSnapshot: true,
+      },
+    });
+    await api.updateFromSerialized(instance, doc, cardStore, {
+      latticePublication: 'display',
+    });
+    await storeService.add(instance, { doNotPersist: true });
+    storeService.addReference(url);
+    await storeService.flush();
+    let messages = getService('message-service');
+    let deliver = messages.relayRealmEvent.bind(messages);
+    // This test supplies its publication sequence explicitly, just like the
+    // alias test above. Do not interleave fixture setup's background events.
+    messages.relayRealmEvent = () => {};
+    let restoreBatchTransport = batchExistingDisplayFixtures();
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let reads: Array<{ result: Deferred<any>; token: string | null }> = [];
+    cardService.fetchJSON = async (...args) => {
+      if (String(args[0]) !== instance.id) return fetchJSON(...args);
+      let result = new Deferred<any>();
+      reads.push({
+        result,
+        token: new Headers(args[1]?.headers).get(LATTICE_DISPLAY_HAVE_HEADER),
+      });
+      return result.promise;
+    };
+    let invalidate = () =>
+      deliver({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+    let reply = (pending: boolean) => ({
+      lattice: {
+        version: 1,
+        reuse: true,
+        token,
+        id: instance.id,
+        state: pending ? 'pending' : 'ready',
+      },
+    });
+    try {
+      invalidate();
+      await waitUntil(() => reads.length === 1);
+      assert.strictEqual(
+        reads[0].token,
+        token,
+        'Store advertises applied inventory',
+      );
+      deliver({
+        eventName: 'update',
+        realmURL: testRealmURL,
+      } as RealmEventContent);
+      reads[0].result.fulfill(reply(false));
+      await settled();
+      assert.strictEqual(
+        instance.publicationState,
+        'pending',
+        'earlier ready response cannot clear a later invalidation',
+      );
+      invalidate();
+      await waitUntil(() => reads.length === 2);
+      reads[1].result.fulfill(reply(false));
+      await settled();
+      assert.strictEqual(
+        instance.publicationState,
+        'ready',
+        'current validation clears pending',
+      );
+      invalidate();
+      await waitUntil(() => reads.length === 3);
+      invalidate();
+      assert.strictEqual(
+        reads.length,
+        3,
+        'same-card notices wait for the active read',
+      );
+      reads[2].result.fulfill(reply(false));
+      await waitUntil(() => reads.length === 4);
+      assert.strictEqual(
+        instance.publicationState,
+        'pending',
+        'the older reply cannot clear the new notice',
+      );
+      reads[3].result.fulfill(reply(false));
+      await settled();
+      assert.strictEqual(
+        instance.publicationState,
+        'ready',
+        'the current follow-up clears pending after the older reply is discarded',
+      );
+      assert.strictEqual(storeService.peek(url), instance);
+      assert.strictEqual((instance as any).name, 'Hassan');
+      assert.strictEqual((instance as any).boom, 'boom');
+      assert.strictEqual(
+        reads.length,
+        4,
+        'no full repair needed for matching inventory',
+      );
+    } finally {
+      for (let read of reads) read.result.fulfill(reply(false));
+      cardService.fetchJSON = fetchJSON;
+      restoreBatchTransport();
+      messages.relayRealmEvent = deliver;
+    }
   });
 
   test('a reload that 404s while the row is being rebuilt keeps the card instead of deleting it', async function (assert) {

@@ -394,7 +394,6 @@ A `reduce` fold for portfolio coverage bitmasks — record-local data, determini
 
 Restrictions:
 
-- no user-defined `def` helpers
 - no recursive descent
 - no jq assignment operators
 - no jq `try` / `catch`
@@ -404,9 +403,11 @@ Restrictions:
 - no request-context calls — `params`, `actor`, `instance` — which belong to the `mutation` profile
 - no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
 - no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
-- record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, aggregate calls, **and explicit `reduce`/`foreach` folds** are allowed
+- record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, aggregate calls, explicit `reduce`/`foreach` folds, **and user-defined `def` helpers** are allowed
 
 > **Why `reduce` and `foreach` are allowed in `derive` (and not in `policy` or `predicate`).** A fold over a record-local array is structurally identical to library aggregates like `add`, `min/0`, and `max/0` — those builtins are themselves reduces under the hood. The actual derivation hazards (non-determinism, environment coupling, volatile calls) are addressed by the bans above and stay in place. Termination is guaranteed by the BXL runtime budget. Banning `reduce` would force a one-off built-in for every fold pattern users care about (BITOR aggregate, custom statistics, etc.); allowing it gives ergonomic record-local aggregation without weakening the determinism contract. `policy` and `predicate` keep the ban because they must reduce to bounded request-time decisions and portable query predicates respectively, where arbitrary fold bodies fall outside the contract.
+
+> **Why `def` is allowed in `derive`.** A helper is a named piece of the same expression, not a module import, so it cannot reach anything the expression itself could not. Profile validation walks helper bodies and arguments like any other node, so `def stamp: now; stamp` and `def apply(f): f; apply(now)` are still refused with `derive-call-banned`. Termination, including recursive helpers, is bounded by the runtime budget, the same guarantee that makes folds safe. Without helpers, a shared derivation (a display name, a date label) has to be pasted into every field that uses it.
 
 Representative diagnostic:
 

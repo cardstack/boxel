@@ -24,7 +24,10 @@ import {
   type PrerenderMetaDiagnostics,
   type RenderError,
 } from '@cardstack/runtime-common';
+import { latticeBrowserInputCapture } from '@cardstack/runtime-common/lattice-browser-inputs';
+import { currentLatticeInputSnapshot } from '@cardstack/runtime-common/lattice-materialization';
 
+import { captureLatticeComputeTurn } from '@cardstack/host/lib/lattice-compute-turn';
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -123,6 +126,11 @@ export default class RenderMetaRoute extends Route<Model> {
     // a job reaches this first and is ~0 for every card after it — timed so
     // that first card's outsized `meta` bucket has a name.
     let searchableLoadStart = performance.now();
+    let lattice = (instance.constructor as typeof CardDef).materialized;
+    let latticeInput = currentLatticeInputSnapshot();
+    let queryPreparationStart = performance.now();
+    if (lattice && latticeInput) await api.preparePublicationQueries(instance);
+    let latticeQueryPreparationMs = performance.now() - queryPreparationStart;
     let searchable = await this.cardService.getSearchable();
     let searchableLoadMs = performance.now() - searchableLoadStart;
 
@@ -169,7 +177,8 @@ export default class RenderMetaRoute extends Route<Model> {
       searchDocMs,
       settleMs: searchDocSettleMs,
       settlePasses,
-    } = await this.#searchDocUntilSettled(instance, searchable);
+      passes: searchDocPasses,
+    } = await this.#searchDocUntilSettled(instance, searchable, api);
     let getterFiredLoads = newLoadEntries(recentLoadsBefore, [
       ...this.store.recentCardDocLoads(),
       ...this.store.recentFileMetaLoads(),
@@ -194,7 +203,7 @@ export default class RenderMetaRoute extends Route<Model> {
       ...new Set([
         SEARCHABLE_MODULE_URL,
         ...(renderModel?.capturedDeps ?? []),
-        ...snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+        ...snapshotRuntimeDependencies({ excludeQueryOnly: !lattice }).deps,
         ...searchableDeps,
       ]),
     ];
@@ -229,6 +238,10 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        // Publish only this card identity. Its computeds may consume linked
+        // inputs, but serialization must not evaluate neighboring cards merely
+        // to construct included resources that this route discards below.
+        ...(lattice && latticeInput ? { includeLinkedResources: false } : {}),
         // A query-backed field is resolved live and the index can't invalidate
         // it, so its serialized value would always be stale — and deep-
         // serializing the query closure into `included[]` is what wedges a
@@ -257,6 +270,15 @@ export default class RenderMetaRoute extends Route<Model> {
         delete relationship.data;
       }
       delete serialized.included;
+      let latticeManifest = lattice
+        ? api.publicationManifest(
+            instance,
+            serialized,
+            latticeInput?.generation,
+          )
+        : undefined;
+      delete serialized.data.meta.publication;
+      if (latticeManifest) serialized.data.meta.publication = latticeManifest;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
@@ -306,6 +328,10 @@ export default class RenderMetaRoute extends Route<Model> {
       searchDocMs: roundMs(searchDocMs),
       searchDocSettleMs: roundMs(searchDocSettleMs),
       searchDocSettlePasses: settlePasses,
+      ...(lattice && latticeInput ? { searchDocPasses } : {}),
+      ...(lattice && latticeInput
+        ? { latticeQueryPreparationMs: roundMs(latticeQueryPreparationMs) }
+        : {}),
       ...(searchDocFieldsMs ? { searchDocFieldsMs } : {}),
       ...(searchDocLinkLoads ? { searchDocLinkLoads } : {}),
     };
@@ -326,6 +352,21 @@ export default class RenderMetaRoute extends Route<Model> {
     if (typeof api.getBrokenLinks === 'function') {
       let brokenLinks = api.getBrokenLinks(instance);
       if (brokenLinks.length > 0) {
+        if (
+          lattice &&
+          latticeInput &&
+          brokenLinks.some(
+            ({ kind, errorDoc }) =>
+              kind !== 'not-found' || errorDoc.status !== 404,
+          )
+        ) {
+          throw new Error(
+            'Lattice cannot publish with failed input dependencies',
+          );
+        }
+        // A confirmed 404 is a settled missing slot. Keep its reference in
+        // diagnostics and dependencies so restoration can invalidate the owner.
+        // A message containing "not found" alone is not evidence of absence.
         diagnostics.brokenLinks = brokenLinks.map(
           ({ fieldName, reference, kind }) => ({ fieldName, reference, kind }),
         );
@@ -344,6 +385,18 @@ export default class RenderMetaRoute extends Route<Model> {
       searchDoc,
       deps: this.network.virtualNetwork.unresolveURLs(deps),
       diagnostics,
+      moduleSources: this.loaderService.loader.moduleSourceInventory,
+      ...(latticeInput?.retainLinks
+        ? {
+            retainedInputs: latticeBrowserInputCapture(
+              latticeInput,
+              this.network.virtualNetwork
+                .toURLHref(instance.id)
+                .replace(/\.json$/, ''),
+              api.latticeLoadedLinks(instance),
+            ),
+          }
+        : {}),
     };
 
     let parsedOptions = renderModel.renderOptions;
@@ -391,6 +444,7 @@ export default class RenderMetaRoute extends Route<Model> {
     diagnostics.fileExtractMs = roundMs(performance.now() - extractStart);
     return {
       ...metaPayload,
+      moduleSources: this.loaderService.loader.moduleSourceInventory,
       fileExtract: {
         id: fileURL,
         nonce: renderModel.nonce,
@@ -435,6 +489,7 @@ export default class RenderMetaRoute extends Route<Model> {
   async #searchDocUntilSettled(
     instance: CardDef,
     searchable: Awaited<ReturnType<CardService['getSearchable']>>,
+    api: Awaited<ReturnType<CardService['getAPI']>>,
   ): Promise<{
     searchDoc: Record<string, any>;
     searchableDeps: Set<string>;
@@ -443,8 +498,14 @@ export default class RenderMetaRoute extends Route<Model> {
     searchDocMs: number;
     settleMs: number;
     settlePasses: number;
+    passes: NonNullable<PrerenderMetaDiagnostics['searchDocPasses']>;
   }> {
     let linkLoads: SearchDocLinkLoad[] = [];
+    let passes: NonNullable<PrerenderMetaDiagnostics['searchDocPasses']> = [];
+    let inMaterialization = Boolean(
+      (instance.constructor as typeof CardDef).materialized &&
+      currentLatticeInputSnapshot(),
+    );
     let loopStart = performance.now();
     // Up to SEARCHABLE_SETTLE_MAX_PASSES discarded walks, plus one forced
     // final walk at the cap. The forced walk runs AFTER the capped pass's
@@ -460,23 +521,46 @@ export default class RenderMetaRoute extends Route<Model> {
       let searchDoc: Record<string, any> | undefined;
       let thrown: unknown;
       let threw = false;
+      let metrics: ComputePassSnapshot | undefined;
       try {
-        searchDoc = await searchable.searchDocFromFields(
-          instance,
-          searchableDeps,
-          timings,
-        );
+        let walk = () =>
+          searchable.searchDocFromFields(instance, searchableDeps, timings);
+        // Repeated computed reads within the initiating turn can share work.
+        // Close the memo BEFORE awaiting targeted links, never after: inputs
+        // arriving during the walk must be visible to its continuations.
+        let capture = inMaterialization
+          ? captureLatticeComputeTurn(api, walk)
+          : { value: walk(), metrics: undefined };
+        metrics = capture.metrics;
+        searchDoc = await capture.value;
       } catch (e) {
         threw = true;
         thrown = e;
       }
       let searchDocMs = performance.now() - walkStart;
+      let loadWaitStart = performance.now();
       await this.store.loaded();
       let stable = this.store.loadGeneration === observedGeneration;
+      passes.push({
+        walkMs: roundMs(searchDocMs),
+        loadWaitMs: roundMs(performance.now() - loadWaitStart),
+        stable,
+        ...(metrics
+          ? {
+              computedCalls: metrics.calls,
+              computedCacheHits: metrics.cacheHits,
+            }
+          : {}),
+      });
       if (!stable && !forcedFinalPass) {
         continue;
       }
       if (!stable) {
+        if ((instance.constructor as typeof CardDef).materialized) {
+          throw new Error(
+            'Lattice materialization did not reach a stable input graph',
+          );
+        }
         computePerfLog.warn(
           `render.meta searchable walk for ${instance.id} did not reach a stable load generation within ${SEARCHABLE_SETTLE_MAX_PASSES} passes; using the current store state`,
         );
@@ -492,6 +576,7 @@ export default class RenderMetaRoute extends Route<Model> {
         searchDocMs,
         settleMs: performance.now() - loopStart - searchDocMs,
         settlePasses: pass,
+        passes,
       };
     }
     // Unreachable: the forced final pass always returns or throws.

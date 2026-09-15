@@ -73,6 +73,8 @@ export interface IncrementalIndexOptions {
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
   initiatedBy?: string | null;
+  // Source revisions fence distinct writes to the same URL.
+  revisions?: Map<string, string>;
 }
 
 export class RealmIndexUpdater {
@@ -328,6 +330,15 @@ export class RealmIndexUpdater {
           url: url.href,
           operation,
         })),
+        revisions: opts?.revisions
+          ? Object.fromEntries(
+              changes.flatMap(({ url, operation }) => {
+                if (operation === 'delete') return [];
+                let revision = opts.revisions!.get(url.href);
+                return revision === undefined ? [] : [[url.href, revision]];
+              }),
+            )
+          : {},
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         ignoreData: { ...this.#ignoreData },
@@ -396,7 +407,7 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: Pick<
       IncrementalIndexOptions,
-      'onInvalidation' | 'clientRequestId' | 'initiatedBy'
+      'onInvalidation' | 'clientRequestId' | 'initiatedBy' | 'revisions'
     > & { delete?: true },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
@@ -409,7 +420,7 @@ export class RealmIndexUpdater {
     changes: IndexChange[],
     opts?: Pick<
       IncrementalIndexOptions,
-      'onInvalidation' | 'clientRequestId' | 'initiatedBy'
+      'onInvalidation' | 'clientRequestId' | 'initiatedBy' | 'revisions'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);

@@ -1,3 +1,4 @@
+import { param, query } from '../expression.ts';
 import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index.ts';
 import {
@@ -19,6 +20,9 @@ import {
   type IncrementalChange,
 } from './indexer.ts';
 import type { Stats } from '../worker.ts';
+import { LATTICE_PRIORITY } from '../jobs/lattice.ts';
+import { userInitiatedPriority } from '../queue.ts';
+import { enqueueLatticeRenderRetry } from '../jobs/lattice-render.ts';
 
 export { prerenderHtml };
 
@@ -143,8 +147,15 @@ function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  // Never merge a per-owner retry with a normal dependency-expanding job or
+  // piggyback on an attempt that may already have rejected its captured input.
+  if (isObjectLike(incoming.args) && incoming.args.latticeRenderRetryOwner) {
+    return { type: 'insert' };
+  }
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      !(isObjectLike(candidate.args) && candidate.args.latticeRenderRetryOwner),
   );
   if (sameTypeCandidate) {
     let existingArgs = parsePrerenderHtmlArgsForCoalesce(
@@ -204,7 +215,10 @@ function choosePrerenderHtmlCoalesceDecision(
   let incomingArgs = parsePrerenderHtmlArgsForCoalesce(incoming.args);
   if (incomingArgs) {
     for (let candidate of inFlightCandidates) {
-      if (candidate.jobType !== incoming.jobType) {
+      if (
+        candidate.jobType !== incoming.jobType ||
+        (isObjectLike(candidate.args) && candidate.args.latticeRenderRetryOwner)
+      ) {
         continue;
       }
       let existingArgs = parsePrerenderHtmlArgsForCoalesce(candidate.args);
@@ -270,9 +284,40 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     let auth = createPrerenderAuth(userId, prerenderPermissions);
 
+    // Pending owners lower background renderer admission priority. The pass
+    // below records their durable render obligations rather than dropping them.
+    let latticeEnabled = indexWriter.isLatticeEnabled(realmURL);
+    let deferred = new Set(
+      (latticeEnabled
+        ? await query(dbAdapter, [
+            'SELECT owner_url FROM lattice_owners WHERE realm_url =',
+            param(realmURL),
+            `AND retired = FALSE AND (dirty_generation IS NOT NULL
+        OR EXISTS (SELECT 1 FROM lattice_pending_generations g WHERE g.realm_url = lattice_owners.realm_url)
+        OR EXISTS (SELECT 1 FROM jobs j WHERE j.concurrency_group =`,
+            param(`indexing:${realmURL}`),
+            `AND j.status = 'unfulfilled' AND j.job_type <> 'lattice-materialize'))`,
+          ])
+        : []
+      ).map((row) => row.owner_url as string),
+    );
+    // The pass retains pending owners as durable retry jobs. Do not filter
+    // them away: a later data publication may not change this owner's value.
+    // Background HTML shares renderer capacity with materialization. Keep it
+    // below pending data work; explicit publish-awaited renders retain priority.
+    let renderPriority = jobInfo?.priority ?? 0;
+    if (deferred.size && renderPriority < userInitiatedPriority) {
+      renderPriority = Math.min(renderPriority, LATTICE_PRIORITY - 1);
+    }
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
-    let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
+    let {
+      invalidations,
+      notificationInvalidations,
+      stats,
+      preWarmMs,
+      generation: renderedGeneration,
+    } = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
       generation,
@@ -299,23 +344,46 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         priority: 0,
         queueWaitMs: null,
       },
-      jobPriority: jobInfo?.priority,
+      jobPriority: renderPriority,
       onProgress: reportProgress,
       // Declared-screenshot persistence. Optional: a worker without a
       // MediaCache configured still renders HTML, it just captures nothing.
       dbAdapter,
       mediaCacheAdapter,
+      expandDependencies: latticeEnabled && !args.latticeRenderRetryOwner,
+      onLatticeDeferred: latticeEnabled
+        ? async (ownerURL) => {
+            await dbAdapter.withWriteLock(
+              `lattice:index:${realmURL}`,
+              async (tx) => {
+                if (!tx)
+                  throw new Error(
+                    'Lattice retry requires a pinned transaction',
+                  );
+                await enqueueLatticeRenderRetry(
+                  tx,
+                  args,
+                  ownerURL,
+                  jobInfo?.jobId ?? -1,
+                  renderPriority,
+                );
+              },
+            );
+          }
+        : undefined,
     });
 
     // Fresh HTML is live — tell subscribed hosts so open live searches
     // re-run and pick up the new renderings / corrected full-text
     // membership. Rides the worker→manager→realm-server event bridge.
-    reportRealmEvent?.({
-      eventName: 'prerender_html',
-      realmURL,
-      generation,
-      invalidations,
-    });
+    if (notificationInvalidations.length) {
+      reportRealmEvent?.({
+        eventName: 'prerender_html',
+        realmURL,
+        generation: renderedGeneration,
+        invalidations: notificationInvalidations,
+      });
+    }
 
     reportStatus(jobInfo, 'finish');
     log.debug(
@@ -323,7 +391,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     return {
       invalidations,
-      generation,
+      generation: renderedGeneration,
       stats,
       phaseTimings: preWarmMs !== undefined ? { preWarmMs } : null,
     };

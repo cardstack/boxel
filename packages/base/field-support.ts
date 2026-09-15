@@ -23,6 +23,7 @@ import {
 } from './card-serialization';
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
+import { isReadingLatticeQueryInputs } from './lattice-query-inputs';
 import { flatMap } from 'lodash-es';
 import { TrackedMap, TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
@@ -57,6 +58,81 @@ const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+
+// Lattice's reader overlay is separate from authored/default values. The caller
+// must validate the indexed revision before requesting snapshot deserialization.
+// A contained edit leaves snapshot mode for the entire owner graph.
+export interface LatticeSnapshotScope {
+  active: boolean;
+  pending?: boolean;
+}
+const latticeSnapshots = initSharedState(
+  'latticeSnapshots',
+  () =>
+    new WeakMap<
+      BaseDef,
+      {
+        scope: LatticeSnapshotScope;
+        values: Map<string, unknown>;
+        queryFields: Set<string>;
+      }
+    >(),
+);
+
+export function setLatticeSnapshot(
+  instance: BaseDef,
+  snapshot?: {
+    scope: LatticeSnapshotScope;
+    values: Map<string, unknown>;
+    queryFields: Set<string>;
+  },
+): void {
+  let previous = latticeSnapshots.get(instance);
+  if (previous && previous.scope !== snapshot?.scope)
+    previous.scope.active = false;
+  if (snapshot) latticeSnapshots.set(instance, snapshot);
+  else latticeSnapshots.delete(instance);
+}
+
+export function leaveLatticeSnapshot(instance: BaseDef): void {
+  let snapshot = latticeSnapshots.get(instance);
+  if (snapshot) snapshot.scope.active = false;
+}
+
+export function hasLatticeSnapshot(instance: BaseDef): boolean {
+  return Boolean(latticeSnapshots.get(instance)?.scope.active);
+}
+
+export function latticeSnapshotState(
+  instance: BaseDef,
+): 'live' | 'ready' | 'pending' {
+  entangleWithCardTracking(instance);
+  let scope = latticeSnapshots.get(instance)?.scope;
+  return scope?.active ? (scope.pending ? 'pending' : 'ready') : 'live';
+}
+
+export function markLatticePending(instance: BaseDef): void {
+  setLatticeSnapshotPending(instance, true);
+}
+
+export function setLatticeSnapshotPending(
+  instance: BaseDef,
+  pending: boolean,
+): void {
+  let scope = latticeSnapshots.get(instance)?.scope;
+  if (scope?.active && Boolean(scope.pending) !== pending) {
+    scope.pending = pending;
+    notifyCardTracking(instance);
+  }
+}
+
+export function hasLatticeQueryMembership(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let snapshot = latticeSnapshots.get(instance);
+  return Boolean(snapshot?.scope.active && snapshot.queryFields.has(fieldName));
+}
 // Cache for resolved field configurations per instance/field
 const fieldConfigurationCache = initSharedState(
   'fieldConfigurationCache',
@@ -162,11 +238,15 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
+    let snapshot = latticeSnapshots.get(instance);
+    if (snapshot?.scope.active && snapshot.values.has(field.name)) {
+      return snapshot.values.get(field.name) as BaseInstanceType<CardT>;
+    }
     // Fast path when no pass is open: skip the counter + memo entirely
     // so production reads pay only one branch on the module-local null
     // check. JIT branch-predicts this and the original behaviour is
     // unchanged.
-    if (passComputeMemo === null) {
+    if (passComputeMemo === null || isReadingLatticeQueryInputs()) {
       let value = field.computeVia.bind(instance)();
       if (value === undefined) {
         value = field.emptyValue(instance);

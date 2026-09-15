@@ -167,6 +167,10 @@ export class PgAdapter implements DBAdapter {
   #notificationClient?: Client;
   #notificationClientStarting?: Promise<Client>;
   #channels = new Map<string, ChannelState>();
+  // Same-realm writers wait in memory before acquiring a pooled connection.
+  // Only the head waits on Postgres; the advisory lock still coordinates
+  // writers using other adapters or server replicas.
+  #writeQueue = new Map<string, Promise<void>>();
   // In-process coalescer for the per-user cost-barrier. Multiple concurrent
   // same-user callers in this process chain on the same in-memory promise so
   // only ONE of them is actively waiting on the cross-replica advisory lock
@@ -488,18 +492,13 @@ export class PgAdapter implements DBAdapter {
   // The lock there serves only to serialize concurrent same-URL writers
   // across replicas, not to group DB statements into a single tx.
   //
-  // Pool-exhaustion caveat: when the callback opts into the pinned querier
-  // for all of its DB work, only one client is checked out for the entire
-  // critical section. If the callback also issues queries through the
-  // shared dbAdapter (e.g. existence-check SELECTs), each of those checks
-  // out an additional pool client briefly. Under N concurrent same-URL
-  // writers, N-1 block on the advisory lock before doing anything — so
-  // this method does not itself amplify pool pressure. Under N concurrent
-  // different-URL writers, each pins one client; if the pool ceiling is
-  // less than realistic write concurrency, callbacks that need additional
-  // pool clients could deadlock waiting on the pool. For current scope
-  // (low realistic write concurrency, pool size >= concurrent writers +
-  // headroom) this is acceptable.
+  // Same-realm waiters must not each hold a pool client: enough waiters
+  // would exhaust the pool while the lock holder needs another connection
+  // for its callback's DB work, preventing it from ever releasing the lock.
+  // Queue them before checkout, as withUserCostLock already does. Concurrent
+  // different-URL writers still each pin one client; their callbacks need
+  // pool headroom too. This queue bounds same-realm bursts only, not the
+  // number of distinct realms admitted at once.
   //
   // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
   // already holding it — a second `pg_advisory_xact_lock` on the same key
@@ -511,8 +510,25 @@ export class PgAdapter implements DBAdapter {
     realmUrl: string,
     fn: (txQuerier: Querier | undefined) => Promise<T>,
   ): Promise<T> {
+    const previous = this.#writeQueue.get(realmUrl) ?? Promise.resolve();
     const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
-    return await this.#runWithAdvisoryXactLock(lockKey, realmUrl, fn);
+    const work = previous.then(() =>
+      this.#runWithAdvisoryXactLock(lockKey, realmUrl, fn),
+    );
+    // A failed writer still releases the next caller; each caller receives
+    // its own result/error, not its predecessor's outcome.
+    const completion = work.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#writeQueue.set(realmUrl, completion);
+    try {
+      return await work;
+    } finally {
+      if (this.#writeQueue.get(realmUrl) === completion) {
+        this.#writeQueue.delete(realmUrl);
+      }
+    }
   }
 
   // Per-matrix-user serialization barrier for billable upstream proxy calls.
