@@ -183,6 +183,10 @@ module('Integration | shared link target reuse', function (hooks) {
     };
   }
 
+  function hasInflightCardLoad(id: string): boolean {
+    return (storeService as any).hasInflightCardLoad(id) as boolean;
+  }
+
   async function read(id: string): Promise<CardDefType> {
     storeService.addReference(id);
     await storeService.flush();
@@ -292,6 +296,48 @@ module('Integration | shared link target reuse', function (hooks) {
     assert.true(
       answersFor(FOREIGN_PET),
       'the same target is covered once its realm is subscribed',
+    );
+  });
+
+  // Reuse is only as good as the reload that keeps a held instance current, and
+  // there is one moment when the store could be told nothing: the target's very
+  // first read is the link resolution itself, so at the instant the event
+  // arrives there is no instance to reload and the read that would produce one
+  // is not the kind the invalidation path used to watch. Left unhandled, the
+  // document already in flight — fetched before the write — becomes what every
+  // later edge is handed.
+  // Reuse is only as good as the reload that keeps a held instance current,
+  // and there is one moment the store could be told nothing: a target whose
+  // very first read is the link resolution itself. At the instant an
+  // invalidation for it arrives there is no instance to reload, so whether the
+  // event survives comes down to the store recognising that a read is
+  // outstanding — and a link edge fetches through a different path than a
+  // direct read. Answering "nothing is loading" here is what drops the event,
+  // leaving the document already in flight, fetched before the write, as what
+  // every later edge is handed.
+  test('a link resolution counts as a read in flight while it is outstanding', async function (assert) {
+    assert.false(
+      hasInflightCardLoad(LOCAL_PET),
+      'nothing is outstanding before the resolution starts',
+    );
+
+    // Deliberately not awaited: the assertion is about the window in which the
+    // document is still on its way.
+    let resolution = cardStore.loadCardDocument(LOCAL_PET);
+    assert.true(
+      hasInflightCardLoad(LOCAL_PET),
+      'a link resolution is a read in flight, so an invalidation naming its target defers rather than being dropped',
+    );
+    assert.true(
+      hasInflightCardLoad(rri(LOCAL_PET)),
+      'and is found under whichever spelling of the id the event carries',
+    );
+
+    await resolution;
+    await settled();
+    assert.false(
+      hasInflightCardLoad(LOCAL_PET),
+      'and stops counting once it settles',
     );
   });
 
