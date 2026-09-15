@@ -133,6 +133,7 @@ export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard 
 
 type CardAPI = typeof import('@cardstack/base/card-api');
 type ModuleHooks = {
+  beforeEach: (callback: () => void | Promise<void>) => void;
   after: (callback: () => void | Promise<void>) => void;
 };
 
@@ -232,9 +233,16 @@ export function setupRealmCacheTeardown(
     return;
   }
   registrations.add(snapshotPrefix);
+  let snapshotPrefixes = new Set([snapshotPrefix]);
+  hooks.beforeEach(() => {
+    // An inherited setup hook caches under the executing child's module name.
+    snapshotPrefixes.add(snapshotPrefixForModule(getCurrentModuleCacheKey()));
+  });
   hooks.after(async () => {
     let dbAdapter = await getDbAdapter();
-    await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+    for (let prefix of snapshotPrefixes) {
+      await dbAdapter.deleteSnapshotsByPrefix(prefix);
+    }
   });
 }
 
