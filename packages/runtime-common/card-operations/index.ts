@@ -26,20 +26,37 @@ export type {
   BatchEntryResult,
   CommitBatchOptions,
 } from './coordinator.ts';
-export { stageCreate, stageDelete, stageUpdate } from './executors.ts';
+export {
+  stageAppendContainsMany,
+  stageCreate,
+  stageDelete,
+  stageUpdate,
+} from './executors.ts';
 export type {
+  AppendContainsManyEntry,
   BatchDocument,
   BatchEntry,
   CreateEntry,
   DeleteEntry,
   LidIndex,
+  SourceBytes,
   StagedChange,
+  StagedContent,
   StagedIdentity,
   StagedWrite,
   StagingContext,
   StoredFile,
   UpdateEntry,
 } from './executors.ts';
+export {
+  MalformedCardSourceError,
+  appendMembers,
+  indentsFor,
+  renderMember,
+  renderValue,
+  scanCardSource,
+} from './json-splice.ts';
+export type { CardSourceLayout, StoredContainer } from './json-splice.ts';
 export { readSourceOperation } from './read-source.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';

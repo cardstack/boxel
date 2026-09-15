@@ -78,6 +78,7 @@ export const BASE_OPERATIONS = [
   'delete',
   'query',
   'transform',
+  'appendContainsMany',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -477,6 +478,10 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // operations, so a new one has to say what it accepts.
   readSource: [],
   query: ['query'],
+  // Appending to a `containsMany` is reached as a base operation, whose
+  // invocation names the field and the items it appends. It takes no
+  // declarative clause, so an author writes none.
+  appendContainsMany: [],
 };
 
 // Clauses without which an authored declaration names no work at all: a
