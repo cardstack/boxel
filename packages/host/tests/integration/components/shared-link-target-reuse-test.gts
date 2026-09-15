@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import {
   PermissionsContextName,
+  rri,
   type LooseSingleCardDocument,
   type Permissions,
   type SingleCardDocument,
@@ -20,7 +21,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  testRRI,
 } from '../../helpers';
 import {
   CardDef,
@@ -42,13 +42,18 @@ const testRealm2URL = 'http://test-realm/test2/';
 // mistakable for an off-by-one.
 const PARENT_COUNT = 5;
 
-// Local paths, each distinct enough that a substring match against a load's
-// url picks out one card: a load is asked for by whichever spelling of an id
-// the link carried, so matching on a whole id would miss its aliases.
+// The card definitions live in the realm that mounts first, so the other
+// realm's cards and the links that cross between them all resolve while it
+// indexes. Which realm owns them is immaterial to what is under test.
+const CARDS_MODULE = rri(`${testRealm2URL}test-cards`);
+
+// Local paths, each distinct enough that a substring match against a load's url
+// picks out one card: a load is asked for under whichever spelling of an id the
+// link carried, so matching a whole id would miss its aliases.
 const LOCAL_PET_PATH = 'Pet/mango';
 const FOREIGN_PET_PATH = 'Pet/ghost';
-// Lives in the second realm and is read directly, which is what puts that
-// realm under a subscription.
+// Lives in the second realm and is read directly, which is what puts that realm
+// under a subscription.
 const FOREIGN_NEIGHBOR_PATH = 'Pet/casper';
 
 const LOCAL_PET = `${testRealmURL}${LOCAL_PET_PATH}`;
@@ -60,15 +65,15 @@ let storeService: StoreService;
 let cardStore: CardStore;
 
 // A parent whose link carries only its target's location, the way a realm
-// serving links-only live reads answers: the target is named, never inlined,
-// so each parent has to resolve it for itself.
+// serving links-only live reads answers: the target is named, never inlined, so
+// each parent has to resolve it for itself.
 function ownerDoc(name: string, petId: string): LooseSingleCardDocument {
   return {
     data: {
       type: 'card',
       attributes: { firstName: name },
       relationships: { pet: { links: { self: petId } } },
-      meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Owner' } },
+      meta: { adoptsFrom: { module: CARDS_MODULE, name: 'Owner' } },
     },
   };
 }
@@ -78,7 +83,7 @@ function petDoc(name: string): LooseSingleCardDocument {
     data: {
       type: 'card',
       attributes: { firstName: name },
-      meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' } },
+      meta: { adoptsFrom: { module: CARDS_MODULE, name: 'Pet' } },
     },
   };
 }
@@ -134,33 +139,33 @@ module('Integration | shared link target reuse', function (hooks) {
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
-      realmURL: testRealmURL,
-      liveReadsResolveLinksOnly: true,
-      contents: {
-        'test-cards.gts': { Owner, Pet },
-        [`${LOCAL_PET_PATH}.json`]: petDoc('Mango') as SingleCardDocument,
-        ...ownerContents('local', LOCAL_PET),
-        ...ownerContents('foreign', FOREIGN_PET),
-      },
-    });
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
       realmURL: testRealm2URL,
       liveReadsResolveLinksOnly: true,
       contents: {
+        'test-cards.gts': { Owner, Pet },
         [`${FOREIGN_PET_PATH}.json`]: petDoc('Ghost') as SingleCardDocument,
         [`${FOREIGN_NEIGHBOR_PATH}.json`]: petDoc(
           'Casper',
         ) as SingleCardDocument,
       },
     });
-    await getService('realm').login(testRealmURL);
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: testRealmURL,
+      liveReadsResolveLinksOnly: true,
+      contents: {
+        [`${LOCAL_PET_PATH}.json`]: petDoc('Mango') as SingleCardDocument,
+        ...ownerContents('local', LOCAL_PET),
+        ...ownerContents('foreign', FOREIGN_PET),
+      },
+    });
     await getService('realm').login(testRealm2URL);
+    await getService('realm').login(testRealmURL);
   });
 
   // Every card document the link loader asks the store for, in order. A reused
   // instance never reaches the store, so this is the per-edge cost the reuse
-  // removes — and counting calls rather than network requests keeps the
+  // removes — and counting calls rather than network requests keeps the store's
   // per-URL in-flight map, which only collapses edges asking at the same
   // moment, from standing in for reuse across time.
   function trackCardDocLoads(): { urls: () => string[]; restore: () => void } {
@@ -184,12 +189,20 @@ module('Integration | shared link target reuse', function (hooks) {
     return storeService.peek(id) as CardDefType;
   }
 
-  // One parent at a time, each fully settled before the next is read, so
-  // nothing here overlaps and every load after the first is one reuse could
-  // have avoided.
-  async function renderEachOwner(ids: string[]) {
+  // The shape a page of results arrives in. Every parent is read first, so each
+  // one deserializes while the shared target is still absent from the store and
+  // leaves a placeholder of its own behind — the deserializer resolves a
+  // relationship straight from the store when the target is already held, so a
+  // parent read after the target had loaded would never reach the link loader
+  // at all. Only then are the links read, one parent at a time and settled in
+  // between, so nothing overlaps and every read after the first is one an
+  // instance already in hand could answer.
+  async function readThenRenderEach(ids: string[]) {
+    let owners: CardDefType[] = [];
     for (let id of ids) {
-      let owner = await read(id);
+      owners.push(await read(id));
+    }
+    for (let owner of owners) {
       await renderCard(loader, owner, 'isolated');
       // The link the rendered template reads, read here as well so the edge is
       // driven whatever the default template chooses to show.
@@ -206,7 +219,7 @@ module('Integration | shared link target reuse', function (hooks) {
   test('a target shared by many parents loads once, not once per parent', async function (assert) {
     let tracker = trackCardDocLoads();
     try {
-      await renderEachOwner(ownerIds('local'));
+      await readThenRenderEach(ownerIds('local'));
       let urls = tracker.urls();
       assert.strictEqual(
         countFor(urls, LOCAL_PET_PATH),
@@ -230,7 +243,7 @@ module('Integration | shared link target reuse', function (hooks) {
   test('a target in a realm nothing else references loads once per parent', async function (assert) {
     let tracker = trackCardDocLoads();
     try {
-      await renderEachOwner(ownerIds('foreign'));
+      await readThenRenderEach(ownerIds('foreign'));
       // The other end of the same guardrail figure: one load per edge rather
       // than one per card, which is what a target no reuse covers costs.
       assert.strictEqual(
@@ -244,12 +257,12 @@ module('Integration | shared link target reuse', function (hooks) {
   });
 
   test('a target in a second realm the page also reads loads once', async function (assert) {
-    // Reading any card in that realm is what subscribes this store to its
-    // index events, which is the whole of what the target has to be covered by.
+    // Reading any card in that realm is what subscribes this store to its index
+    // events, which is the whole of what the target has to be covered by.
     await read(FOREIGN_NEIGHBOR);
     let tracker = trackCardDocLoads();
     try {
-      await renderEachOwner(ownerIds('foreign'));
+      await readThenRenderEach(ownerIds('foreign'));
       assert.strictEqual(
         countFor(tracker.urls(), FOREIGN_PET_PATH),
         1,
