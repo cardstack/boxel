@@ -29,6 +29,7 @@ import fsExtra from 'fs-extra';
 const {
   existsSync,
   writeFileSync,
+  appendFileSync,
   statSync,
   ensureDirSync,
   ensureFileSync,
@@ -42,6 +43,7 @@ import { Duplex } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type {
   RequestContext,
+  AdapterAppendResult,
   AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
@@ -232,6 +234,29 @@ export class NodeAdapter implements RealmAdapter {
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
+    };
+  }
+
+  // Opened in append mode, so the file system positions the write at the end
+  // of the file and nothing here reads or rewrites what is already stored
+  // there — which is what keeps the cost the added content's rather than the
+  // file's, and what makes the write safe to hand a path holding hundreds of
+  // megabytes.
+  //
+  // The length comes from the stat the modification time already needs, so it
+  // costs nothing beyond it and describes the same state.
+  async append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult> {
+    let absolutePath = join(this.realmDir, path);
+    ensureFileSync(absolutePath);
+    appendFileSync(absolutePath, contents);
+    let { mtime, size } = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: unixTime(mtime.getTime()),
+      size,
     };
   }
 

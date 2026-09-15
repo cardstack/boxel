@@ -8,6 +8,13 @@ import {
   type FieldDefinition,
 } from '../definitions.ts';
 import { getCardDirectoryName } from '../helpers/card-directory-name.ts';
+import { isSingleCardDocument } from '../document-types.ts';
+import { hasExecutableExtension } from '../index.ts';
+import {
+  inferContentType,
+  isBinaryContentType,
+  isJSONContentType,
+} from '../infer-content-type.ts';
 import { mergeRelationships } from '../merge-relationships.ts';
 import type { RealmPaths } from '../paths.ts';
 import { ensureTrailingSlash, type LocalPath } from '../paths.ts';
@@ -102,6 +109,24 @@ export interface StoredFile {
   contentHash: string;
 }
 
+// What the batch knows about a stored file it never read: that it is there,
+// and which version it holds. Kept apart from `StoredFile` rather than folded
+// into it as an optional member, because the difference is the point — a
+// change that replaces a file's content wholesale has no merge base, so an
+// executor working from one of these has nothing to merge over and cannot
+// quietly come to depend on bytes that are not there. There is no modification
+// time here for the same reason there are no bytes: the one a result reports
+// is the one the commit produced, so the one the file carried before it is of
+// no use to anything.
+//
+// The fingerprint is the same value hashing the whole file would produce,
+// assembled from bounded reads instead (`computeContentHashFromRanges` states
+// why the two agree), so a caller can compare a `baseVersion` against it
+// whatever the file's size.
+export interface StoredMeta {
+  contentHash: string;
+}
+
 // What the index can say about a card, narrowed to the values a program reads
 // from it.
 //
@@ -171,11 +196,42 @@ export interface CreateEntry extends EntryCommon {
   directory?: string;
 }
 
+// Replace what is stored at the target. Two targets take an update and they
+// take different payloads: a card is patched with a JSON:API `document`, which
+// is merged over its stored document; a file's content is replaced wholesale
+// by `content`, since a file's metadata is derived from its bytes and there is
+// no document to merge. Which one an entry means is read off which of the two
+// it carries, so a caller never has to name the target's kind and the realm
+// never has to guess it from a URL.
 export interface UpdateEntry extends EntryCommon {
   op: 'update';
-  // The card being patched, as an absolute URL.
+  // The card being patched, or the file being replaced, as an absolute URL.
   href: string;
-  document: BatchDocument;
+  document?: BatchDocument;
+  // The file's new content. Text through the operations envelope; raw bytes
+  // when the facade dispatches an upload, which is why the two spellings are
+  // one member rather than a text one and a binary one.
+  content?: string | Uint8Array;
+  // Replace the bytes stored at the target verbatim, whatever they are — the
+  // one way an update reaches a module's source or a card's stored `.json`.
+  //
+  // It exists for the `card+source` `POST`, which writes exactly those and has
+  // to keep doing so once it dispatches through this operation. Nothing on the
+  // envelope path sets it: through the envelope an update on a card is the
+  // JSON:API merge above, and one on a module is refused — a client that could
+  // ask for a verbatim replacement of a card's source could write bytes that
+  // are no longer a card and leave the realm to find out at index time.
+  rawSource?: true;
+}
+
+// Add one line to the end of a text file, without reading what is already
+// there. The line arrives under `params.line`, which is where a declaration's
+// `line` param and an `input` program that shapes one both put it.
+export interface AppendLineEntry extends EntryCommon {
+  op: 'appendLine';
+  // The file being appended to, as an absolute URL. A file's URL is its path:
+  // nothing is appended to it to find the file, the way a card's `.json` is.
+  href: string;
 }
 
 export interface DeleteEntry extends EntryCommon {
@@ -219,7 +275,8 @@ export type BatchEntry =
   | UpdateEntry
   | DeleteEntry
   | TransformEntry
-  | AppendContainsManyEntry;
+  | AppendContainsManyEntry
+  | AppendLineEntry;
 
 // One file the batch will write, and the content it will hold — either the
 // bytes themselves, or a description of them for a change that never
@@ -229,11 +286,26 @@ export interface StagedWrite {
   content: StagedContent;
 }
 
-export type StagedContent = string | SplicedSource;
+export type StagedContent = string | Uint8Array | SplicedSource;
+
+// Content one entry adds to the end of a file. Distinct from a write because
+// what it names is not the file's next content but an addition to it: the
+// entry that staged one never read the file and could not say what its content
+// will be, and two of them aimed at one file both land rather than the second
+// standing in for the first.
+//
+// Text, where the adapter primitive underneath takes bytes as well: the one
+// behavior that stages an append appends a line to a text file, and refuses
+// anything whose content type says otherwise.
+export interface StagedAppend {
+  path: LocalPath;
+  content: string;
+}
 
 // What one executor stages.
 export interface StagedChange {
   writes: StagedWrite[];
+  appends: StagedAppend[];
   deletes: LocalPath[];
   // The files this entry brings into existence, as opposed to the ones it
   // rewrites. A card already stored at one of these is not this entry's to
@@ -249,6 +321,13 @@ export interface StagedChange {
   // The file whose post-commit version and modification time the entry's
   // result reports. Absent on a delete — there is no file left to version.
   primaryPath?: LocalPath;
+  // Whether this entry's content replaces the file wholesale rather than
+  // composing over what is stored there. Two entries changing one card
+  // compose, because the later one merges over the bytes the earlier staged;
+  // a replacement reads nothing and merges nothing, so a second one on the
+  // same path is not a later step in one story — it is the earlier entry's
+  // content never landing while that entry reports success.
+  replacesContent?: true;
   // Every card this entry records an edge to, as the identity the realm
   // resolved it to. The coordinator holds the batch to not removing one of
   // them, which is the half of "a link points at something" that no single
@@ -276,6 +355,10 @@ export interface StagingContext {
   // Every target's stored file, keyed by local path, read inside the write
   // lock before any executor runs.
   stored: ReadonlyMap<LocalPath, StoredFile>;
+  // What the batch knows about the targets it read the version of rather than
+  // the bytes of — a file whose content an entry replaces wholesale. Read
+  // inside the same lock and, like `stored`, kept in step as entries compose.
+  storedMeta: ReadonlyMap<LocalPath, StoredMeta>;
   // What an earlier entry staged for a file it described rather than read. An
   // append composes over this so two appends to one card both land, and it is
   // what tells an executor that needs the bytes whole that it cannot have
@@ -284,9 +367,12 @@ export interface StagingContext {
   // A stored file as a size and a bounded reader, for an executor that edits
   // bytes it must not hold. Undefined when nothing is stored at the path.
   openSourceBytes(localPath: LocalPath): Promise<SourceBytes | undefined>;
-  // Whether anything is stored at this path. This is what makes a card exist
-  // for a link to point at: the file is the card, and its index row is only
-  // the realm's reading of it.
+  // Whether anything is stored at a path, which two executors ask for
+  // different reasons. It is what makes a card exist for a link to point at —
+  // the file is the card, and its index row is only the realm's reading of it
+  // — and it is the only question an append may ask about its own target,
+  // since establishing that a file is there costs a stat while opening it is
+  // the cost an append exists without.
   fileExists(localPath: LocalPath): Promise<boolean>;
   // The index's view of a card in this realm, narrowed to the two documents a
   // program reads values from. Undefined where the index holds no clean row
@@ -379,6 +465,7 @@ export async function stageCreate(
   let lid = localIdOf(entry);
   return {
     writes,
+    appends: [],
     deletes: [],
     mints: writes.map((write) => write.path),
     id: identity.id,
@@ -501,6 +588,31 @@ export async function stageUpdate(
   ctx: StagingContext,
 ): Promise<StagedChange> {
   let url = targetURL(entry.href);
+  if (entry.content !== undefined) {
+    if (entry.document !== undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid document',
+        detail:
+          `an update carries the patch to apply to a card or the content to ` +
+          `replace a file with, and this one carries both`,
+      });
+    }
+    return await stageFileUpdate(entry, entry.content, url, ctx);
+  }
+  if (entry.rawSource) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid document',
+      detail:
+        `an update that replaces the stored bytes verbatim carries the ` +
+        `content to replace them with, and this one carries none`,
+    });
+  }
   let localPath = localPathIn(url, ctx);
   let sourcePath = `${localPath}.json` as LocalPath;
   if (ctx.splices.has(sourcePath)) {
@@ -655,6 +767,7 @@ export async function stageUpdate(
   }
   return {
     writes,
+    appends: [],
     deletes: [],
     // Nothing here is a mint. The primary rewrites a card that is already
     // there, and a side-load addressed by a local id the caller chose may
@@ -664,6 +777,240 @@ export async function stageUpdate(
     mints: [],
     id: url.href,
     primaryPath: sourcePath,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `update` on a file
+// ---------------------------------------------------------------------------
+
+// Replace a file's content wholesale.
+//
+// A file's URL is its path — nothing is appended to it to find the bytes, the
+// way a card's `.json` is — and its metadata is derived from those bytes and
+// read-only, so there is no document to merge and nothing to serialize: what
+// the caller sends is what the file holds.
+//
+// Two stored things are addressed by their own path and are not files in this
+// sense: a module's source, and a card's stored `.json`. Both are refused,
+// because a caller replacing either wholesale through the operations envelope
+// would be writing bytes the realm serves as code or as a card while saying it
+// was changing a file — a card's update is the JSON:API merge, and a module's
+// source has no update at all. `rawSource` is how the one caller that must
+// reach them says so: the `card+source` `POST`, which writes exactly those
+// today and keeps writing them once it dispatches through here.
+async function stageFileUpdate(
+  entry: UpdateEntry,
+  content: string | Uint8Array,
+  url: URL,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let path = localPathIn(url, ctx);
+  let refuse = (detail: string): never => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail,
+    });
+  };
+  if (ctx.splices.has(path)) {
+    // An earlier entry edited this file without reading it, staging bytes that
+    // exist only as a description. Replacing them wholesale would drop that
+    // entry's change while it still reported success, so the pair is refused
+    // and the two changes are sent as separate batches.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Conflicting entries',
+      detail:
+        `an earlier entry changes ${url.href} without reading it, so its ` +
+        `change would be lost by a replacement in the same batch`,
+    });
+  }
+  let stored = ctx.stored.get(path);
+  let meta = stored ?? ctx.storedMeta.get(path);
+  if (!entry.rawSource) {
+    if (hasExecutableExtension(path)) {
+      refuse(
+        `${url.href} is a module; its source is replaced through the ` +
+          `card source endpoint, not by an update on a file`,
+      );
+    }
+    if (stored && isSingleCardDocument(parsed(stored.content))) {
+      // A single card document and nothing wider. A `.json` holding a JSON:API
+      // *collection* is stored and served as a file and never becomes an
+      // instance row — the realm says so itself where it decides whether a
+      // path is a card awaiting its first index — so refusing a replacement of
+      // one as "a card's source" would contradict what the realm does with it
+      // everywhere else. The write ceiling classifies the two together, which
+      // is a different question: how many bytes the realm will store.
+      refuse(
+        `${url.href} holds a card's stored source; an update on a card is ` +
+          `the merge its document describes, not a replacement of its bytes`,
+      );
+    }
+    if (!meta && (await ctx.fileExists(`${path}.json` as LocalPath))) {
+      // The URL names a card rather than a file, so there are no bytes at it
+      // to replace. Said as a refusal rather than as "nothing is there",
+      // because something is: the caller reached a card with a file's payload
+      // and its remedy is to send the patch, not to look elsewhere.
+      refuse(
+        `${url.href} names a card; an update on one carries the patch to ` +
+          `apply rather than the content to replace it with`,
+      );
+    }
+  }
+  if (!meta && !entry.rawSource) {
+    // Creating a file is not an operation — the realm's upload routes own
+    // that — so an update has a file to replace or it has nothing to do. A
+    // verbatim source replacement is the exception, since the endpoint it
+    // stands in for creates the file it writes.
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  return {
+    writes: [{ path, content }],
+    appends: [],
+    deletes: [],
+    // A file already stored here is being replaced, and one that is not is
+    // being written by the endpoint that creates files. Neither is a mint in
+    // the sense the batch refuses — that is a create claiming a path a card
+    // already answers to.
+    mints: [],
+    id: url.href,
+    primaryPath: path,
+    replacesContent: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `appendLine`
+// ---------------------------------------------------------------------------
+
+// Add one newline-terminated line to the end of a text file.
+//
+// Nothing here reads the target. That is the whole of why the behavior exists:
+// a log, a ledger, an audit trail is appended to far more often than it is
+// read, and expressing that as an update means holding the file's content to
+// produce the content it should hold next — so adding a line to a file of a
+// hundred megabytes costs a hundred megabytes. What is staged is the line, and
+// the realm's adapter adds it at the end of the file without reading it.
+//
+// So every check below is one that can be made without the bytes: what the
+// file's name says it holds, and whether anything is stored at the path, which
+// is a stat rather than a read.
+export async function stageAppendLine(
+  entry: AppendLineEntry,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let url = targetURL(entry.href);
+  let path = localPathIn(url, ctx);
+  let line = entry.params?.line;
+  if (typeof line !== 'string') {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid line',
+      detail:
+        `an appendLine appends the line its payload carries under \`line\`, ` +
+        `and this one carries ${line === undefined ? 'none' : 'something that is not a string'}`,
+    });
+  }
+  if (/[\n\r]/.test(line)) {
+    // The terminator is the operation's to add, so a line carrying one of its
+    // own would append two lines under one call — and the result's version
+    // would describe a file the caller did not ask for. One call, one line.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid line',
+      detail:
+        `the line to append contains a line break; one call appends one ` +
+        `line, and the terminator is added for it`,
+    });
+  }
+  let refuse = (detail: string): never => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail,
+    });
+  };
+  // Asked first, ahead of the checks the name alone settles, because a card's
+  // URL carries no extension and would otherwise be turned away as binary
+  // content — which is the right answer given in terms that describe nothing
+  // the caller sent.
+  if (await ctx.fileExists(`${path}.json` as LocalPath)) {
+    refuse(
+      `${url.href} names a card, whose stored source is a JSON document; a ` +
+        `line appended to one leaves bytes that are no longer a card`,
+    );
+  }
+  // Classified by name, which is what the realm serves the file's content type
+  // from, so the operation refuses exactly what a reader of the file would be
+  // told it is getting. An unknown extension resolves to a binary type and is
+  // refused with them, which is the byte-preserving side to be wrong on.
+  let contentType = inferContentType(path);
+  if (isBinaryContentType(contentType)) {
+    refuse(
+      `${url.href} holds ${contentType}, and a line of text appended to ` +
+        `binary content is not a line of anything`,
+    );
+  }
+  if (isJSONContentType(contentType)) {
+    // Text, but text whose shape a trailing line destroys: what follows a JSON
+    // document's closing brace is no longer a JSON document. A card's stored
+    // source addressed by its own path is the case that matters most, and it
+    // is the same objection for every other stored JSON, so the content type
+    // answers for all of them.
+    refuse(
+      `${url.href} holds ${contentType}, and a line appended after a JSON ` +
+        `document leaves bytes that are no longer one`,
+    );
+  }
+  if (hasExecutableExtension(path)) {
+    // Text as well, and appendable without breaking it — but a module is
+    // source the realm evaluates, and an operation meant for a log line is not
+    // how code is edited.
+    refuse(
+      `${url.href} is a module; its source is changed through the card ` +
+        `source endpoint, not by appending a line`,
+    );
+  }
+  // An earlier entry may have staged this file's content without it being on
+  // disk yet — a verbatim source write creates the file it writes — which is
+  // as good as stored for an append that lands after it in the same commit.
+  let staged = ctx.stored.has(path) || ctx.storedMeta.has(path);
+  if (!staged && !(await ctx.fileExists(path))) {
+    // Appending to a path holding nothing would create the file, and creating
+    // a file is not an operation.
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  return {
+    writes: [],
+    appends: [{ path, content: `${line}\n` }],
+    deletes: [],
+    mints: [],
+    id: url.href,
+    primaryPath: path,
   };
 }
 
@@ -712,7 +1059,13 @@ export function stageDelete(
       detail: `${url.href} is not a card in realm ${ctx.realmURL}`,
     });
   }
-  return { writes: [], deletes: [sourcePath], mints: [], id: url.href };
+  return {
+    writes: [],
+    appends: [],
+    deletes: [sourcePath],
+    mints: [],
+    id: url.href,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1002,6 +1355,7 @@ async function transform(
     return {
       change: {
         writes: [{ path: sourcePath, content: stored.content }],
+        appends: [],
         deletes: [],
         mints: [],
         links,
@@ -1025,6 +1379,7 @@ async function transform(
           ),
         },
       ],
+      appends: [],
       deletes: [],
       // Nothing here is a mint: a transform changes a card that is already
       // stored, and it stages no resource of its own.
@@ -2144,6 +2499,17 @@ function localPathIn(url: URL, ctx: StagingContext): LocalPath {
   }
 }
 
+// A stored file's content as JSON, or undefined when it is not JSON at all.
+// What the predicates above are asked about is the document a file holds, and
+// a file that holds no document answers none of them.
+function parsed(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+}
+
 // Read a record by a key that arrived over the wire. A plain object answers
 // `toString` and `constructor` with something that is not a param, and reading
 // one of those as a declaration gets as far as staging a value nobody sent.
@@ -2400,6 +2766,7 @@ export async function stageAppendContainsMany(
   }
   return {
     writes: [{ path: sourcePath, content: splice(base, edits) }],
+    appends: [],
     deletes: [],
     // Nothing here is a mint: an append changes a card that is already stored.
     mints: [],

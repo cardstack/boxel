@@ -28,6 +28,7 @@ export type {
 } from './coordinator.ts';
 export {
   stageAppendContainsMany,
+  stageAppendLine,
   stageCreate,
   stageDelete,
   stageTransform,
@@ -35,6 +36,7 @@ export {
 } from './executors.ts';
 export type {
   AppendContainsManyEntry,
+  AppendLineEntry,
   BatchDocument,
   BatchEntry,
   CreateEntry,
@@ -42,12 +44,14 @@ export type {
   IndexedCardValues,
   LidIndex,
   SourceBytes,
+  StagedAppend,
   StagedChange,
   StagedContent,
   StagedIdentity,
   StagedWrite,
   StagingContext,
   StoredFile,
+  StoredMeta,
   TransformEntry,
   UpdateEntry,
 } from './executors.ts';

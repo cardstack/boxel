@@ -24,6 +24,7 @@ import type {
   FileRef,
   Kind,
   RequestContext,
+  AdapterAppendResult,
   AdapterWriteResult,
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
@@ -351,6 +352,42 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       lastModified,
     };
+  }
+
+  // This adapter holds a file's bytes in memory, so there is no file system
+  // position to append at: the content is joined onto what is already held and
+  // written back. The bound an append promises against a real file system is
+  // therefore not one this adapter keeps, which is the same trade every other
+  // method here makes — an in-memory realm is the wrong place to measure the
+  // cost of reaching a disk.
+  async append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult> {
+    let file = await this.openFile(path);
+    let existing =
+      file?.content instanceof Uint8Array
+        ? file.content
+        : new TextEncoder().encode(
+            file?.content === undefined ? '' : String(file.content),
+          );
+    let added =
+      contents instanceof Uint8Array
+        ? contents
+        : new TextEncoder().encode(contents);
+    let bytes = new Uint8Array(existing.length + added.length);
+    bytes.set(existing);
+    bytes.set(added, existing.length);
+    // Written back as text when that is what the file held, so a realm whose
+    // files are strings keeps holding strings — an appended log read back as
+    // bytes would serve differently than the same file written whole.
+    let written = await this.write(
+      path,
+      file?.content instanceof Uint8Array
+        ? bytes
+        : new TextDecoder().decode(bytes),
+    );
+    return { ...written, size: bytes.length };
   }
 
   // This adapter holds a file's bytes in memory, so the aliasing a splice has
