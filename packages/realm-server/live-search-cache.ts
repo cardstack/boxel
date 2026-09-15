@@ -39,14 +39,16 @@ export type LiveSearchCacheSummary = ResponseCacheSummary;
 //
 // That fingerprint is scoped to the card types the query's filter is anchored
 // on (`search-type-watermarks.ts`), which is what stops one write from
-// unreaching every cached search in the realm — and it is why the TTL is not
-// purely a retention bound. A change the anchors do not cover moves no key,
-// and the side-loaded `included` closure is that case: its link targets are
-// cards of other types, so the body keeps serving them as they stood until
-// the entry ages out. `DEFAULT_TTL_MS` is therefore the staleness bound for
-// that closure and has to stay short; raising it, here or through
-// `LIVE_SEARCH_CACHE_TTL_MS`, widens the window in which a linked card is
-// served stale.
+// unreaching every cached search in the realm.
+//
+// A side-loaded link target is covered by that key even though its own type
+// is not anchored: a `linksTo` / `linksToMany` target is a dependency edge, so
+// writing it invalidates every row that links to it, those rows are
+// re-indexed in the same pass, and the pass stamps their adoption chains.
+// What is not covered is a relationship backed by a query field, which the
+// dependency extractor deliberately leaves out of `deps`. For that one edge
+// the TTL is the staleness bound rather than a retention bound, so it has to
+// stay short — here and through `LIVE_SEARCH_CACHE_TTL_MS`.
 //
 // Sharing across users is safe: the body is a pure function of
 // `(realms, query, opts)` — permissions are realm-scoped and

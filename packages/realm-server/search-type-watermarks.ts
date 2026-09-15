@@ -216,12 +216,18 @@ function warmAnchors(args: {
 // that are still in memory and still correct, and that nothing can look up
 // any more.
 //
-// What it costs is that retention becomes the staleness bound for a change
-// the query's own type anchors do not cover. The side-loaded `included`
-// closure is that case: its link targets are cards of other types, so a write
-// to one of them leaves the key where it is and the cached body keeps serving
-// the target as it stood. That is bounded by the cache's TTL and nothing
-// else, which is why the TTL has to stay short.
+// A side-loaded link target is covered by this key even though its own type is
+// not anchored: a `linksTo` / `linksToMany` target is a dependency edge, so
+// writing it invalidates every row that links to it, those rows are
+// re-indexed in the same pass, and the pass stamps their adoption chains — so
+// the anchored type's watermark moves. The fan-out is transitive, so a card
+// several hops away is covered too.
+//
+// The edge that is not covered is a relationship backed by a query field:
+// `RelationshipDependencyExtractor` deliberately keeps those paths out of
+// `deps`, so writing such a target moves no key of a query that side-loads
+// it. For that one case the cache's TTL is the staleness bound rather than
+// merely a retention bound, which is why it has to stay short.
 //
 // Membership itself is covered, because the anchors are an over-approximation
 // in the sound direction: every entry the filter matches adopts from at least
