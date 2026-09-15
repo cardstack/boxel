@@ -848,7 +848,12 @@ module(`Integration | search resource`, function (hooks) {
     // Nothing in this realm adopts from it — the stand-in for "somebody else's
     // unrelated write".
     const unrelatedType = `${testRealmURL}observation/Observation`;
-    const unrelatedURL = `${testRealmURL}observations/1.json`;
+    // One row, spelled the way each channel spells it: an index event names
+    // the instance, a prerender_html event names the file it is stored in.
+    // The relays below keep them apart so the gate's correlation is exercised
+    // across that difference rather than against one spelling.
+    const unrelatedURL = `${testRealmURL}observations/1`;
+    const unrelatedFileURL = `${unrelatedURL}.json`;
 
     // Spelled out rather than derived through `internalKeyFor`: the gate
     // resolves its anchors with that same function, so deriving the expected
@@ -872,7 +877,7 @@ module(`Integration | search resource`, function (hooks) {
     }
 
     function relayPrerenderHtmlEvent(
-      invalidations: string[] = [unrelatedURL],
+      invalidations: string[] = [unrelatedFileURL],
       generation = 1,
     ) {
       getService('message-service').relayRealmEvent({
@@ -1019,7 +1024,7 @@ module(`Integration | search resource`, function (hooks) {
         // and that pass named their types. The event spells the underlying
         // file; the index event spelled the same rows, so the two reach each
         // other.
-        relayPrerenderHtmlEvent([unrelatedURL]);
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
         await settled();
         assert.strictEqual(
           fetch.count(),
@@ -1054,7 +1059,7 @@ module(`Integration | search resource`, function (hooks) {
         await settled();
         relayIndexEvent([unrelatedType]);
         await settled();
-        relayPrerenderHtmlEvent([unrelatedURL]);
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
         await settled();
         assert.strictEqual(
           fetch.count(),
@@ -1073,7 +1078,7 @@ module(`Integration | search resource`, function (hooks) {
           'the re-typed row re-runs the query on the index channel',
         );
 
-        relayPrerenderHtmlEvent([unrelatedURL]);
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
         await settled();
         assert.strictEqual(
           fetch.count(),
@@ -1104,7 +1109,7 @@ module(`Integration | search resource`, function (hooks) {
           'an unanchored filter can gain a member of any type, so nothing is skipped',
         );
 
-        relayPrerenderHtmlEvent([unrelatedURL]);
+        relayPrerenderHtmlEvent([unrelatedFileURL]);
         await settled();
         assert.strictEqual(
           fetch.count(),

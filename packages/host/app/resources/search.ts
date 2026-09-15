@@ -723,12 +723,20 @@ export class SearchResource<
     this.trackStoreLoad(this.search.perform(query, floors), 'search');
   }
 
-  // Take `query` as the one this resource is running. The type gate's resolved
-  // keys describe the anchors of the query they came from, so they are dropped
+  // Take `query` as the one this resource is running.
+  //
+  // Snapshot, don't alias: everything derived from this query — the signature
+  // it is compared by, the floors stamped on its results, and the type gate's
+  // resolved anchor keys — describes the query as it stood here. A caller that
+  // mutates a long-lived query object in place would otherwise move the filter
+  // out from under all three, leaving the gate skipping events for an anchor
+  // the searches are no longer running.
+  //
+  // The gate's keys describe the anchors they came from, so they are dropped
   // here rather than at each call site — a key set that outlived its query
   // would gate the new one against the old one's anchors.
   #adoptQuery(query: Query): void {
-    this.#previousQuery = query;
+    this.#previousQuery = structuredClone(query);
     this.#typeGate.forget();
   }
 

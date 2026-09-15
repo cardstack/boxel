@@ -25,26 +25,31 @@ import type {
 // that event asked for being ready.
 const typeKeysWaiter = buildWaiter('live-search-type-gate:type-keys-waiter');
 
-// A realm event names the underlying file (`books/1.json`), which backs two
-// index rows: the card instance (`books/1` — instance ids never carry the
-// extension) and the file-meta row (`books/1.json` — every file gets one).
-// Reducing both spellings to the extension-free one lets the two channels'
-// invalidation lists be compared without knowing which row kind produced
-// either. For every other file kind (`notes.md`, `book.gts`) the strip is a
-// no-op and the comparison is exact.
+// The extension-free spelling of a card's URL, which is the only form the two
+// realm event channels agree on. An incremental index event names the instance
+// (`books/1`): `RealmIndexUpdater` strips the extension off every invalidation
+// before the event goes out. A prerender_html event names the underlying file
+// (`books/1.json`), the spelling `boxel_index` stores — which is also the
+// spelling of the file-meta row that sits alongside the instance row for the
+// same file. So the strip does double duty: it bridges the two channels, and
+// it reaches both rows a card's file backs without knowing which kind a given
+// id names. For every other file kind (`notes.md`, `book.gts`) it is a no-op
+// and the comparison is exact.
 export function stripJsonSuffix(url: string): string {
   return url.replace(/\.json$/, '');
 }
 
-// Past this many remembered URLs the prerender correlation has stopped being
-// a correlation and become a copy of the realm: a realm-wide module rewrite
-// fans out to every row, and holding that list per live query — a dashboard
-// holds several — costs more than the re-runs it saves. The realm write
-// cadence this bridges is a handful of URLs per event over the seconds
-// between an index pass and the render pass it spawns, so a burst reaches the
-// ceiling only when the fan-out is realm-scale. Overflow clears the record
-// rather than freezing it, so the gate refills from the next events instead
-// of wedging on whatever filled it.
+// The ceiling on the remembered verdicts. A verdict has no expiry — it stands
+// until the query changes or an event that could move a member withdraws it —
+// so the record grows with every distinct URL written to the realm while the
+// query is mounted, and a long-lived dashboard on a busy realm reaches this
+// ceiling through ordinary write cadence, not only through a realm-wide
+// module rewrite. That is what the bound is for: the record is a per-query
+// cache of a cheap answer, and a page holding several queries should not
+// accumulate a copy of the realm's URL list in each of them. Overflow clears
+// the record rather than freezing it, so the gate refills from the next
+// events instead of wedging on whatever filled it; what that costs is a
+// window of unconditional re-runs, never a missed one.
 const MAX_CORRELATED_URLS = 256;
 
 // The skip rule a live search applies to a realm's index events: a query
