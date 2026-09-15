@@ -4,7 +4,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import type { Realm } from '@cardstack/runtime-common';
+import { rri, type Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   closeServer,
@@ -122,10 +122,10 @@ module(basename(import.meta.filename), function () {
         let engine = testRealm.realmIndexQueryEngine;
         let original = engine.cardDocument;
         let calls = 0;
-        engine.cardDocument = function (...args: Parameters<typeof original>) {
+        engine.cardDocument = ((...args: Parameters<typeof original>) => {
           calls++;
-          return original.apply(this, args);
-        } as typeof original;
+          return original.apply(engine, args);
+        }) as typeof original;
         try {
           let response = await request
             .head('/person-1')
@@ -161,6 +161,28 @@ module(basename(import.meta.filename), function () {
           etag,
           'the 304 repeats the validator that matched',
         );
+      });
+
+      test('a path the realm serves no card at answers in step with its GET', async function (assert) {
+        // The stub answered 200 for any path; a permitted caller now gets a
+        // read, so what it answers is whatever the GET of the same URL
+        // answers. That includes paths that are not cards at all — a realm
+        // endpoint the card+json bucket has no route for reaches the card read
+        // the same way a missing card does.
+        for (let path of ['/no-such-card', '/_search', '/some/nested/path']) {
+          let getResponse = await request
+            .get(path)
+            .set('Accept', 'application/vnd.card+json');
+          let response = await request
+            .head(path)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            getResponse.status,
+            `HEAD ${path} answers the status its GET answers`,
+          );
+        }
       });
 
       test('a path that names nothing answers 404', async function (assert) {
@@ -249,6 +271,106 @@ module(basename(import.meta.filename), function () {
           response.get('etag'),
           undefined,
           'and reports nothing about the card',
+        );
+      });
+    });
+
+    // A card's id normally comes from a UUID and carries no extension, but
+    // nothing enforces that: a source write names the path it writes, and the
+    // indexer makes an instance row out of any `.json` holding a card
+    // resource. `notes.md.json` is therefore a card at `notes.md`, whose id
+    // ends in an extension the realm also registers for files. The index is
+    // what decides whether a path is a card, and every read has to reach that
+    // answer the same way — the plain GET, the conditional GET that peeks the
+    // row directly, and the HEAD.
+    module('a card whose id carries a file extension', function (hooks) {
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: {
+          '*': ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        fileSystem: {
+          'notes.md.json': {
+            data: {
+              type: 'card',
+              attributes: { title: 'Release notes' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('@cardstack/base/card-api'),
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          'reference.md': '# a file that is really a file',
+        },
+        onRealmSetup,
+      });
+
+      test('the plain GET, the conditional GET and the HEAD all serve it as a card', async function (assert) {
+        let getResponse = await request
+          .get('/notes.md')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          getResponse.status,
+          200,
+          `the GET serves the card: ${getResponse.text}`,
+        );
+        assert.strictEqual(
+          getResponse.body?.data?.type,
+          'card',
+          'as a card, not as file metadata',
+        );
+        assert.strictEqual(
+          getResponse.body?.data?.attributes?.title,
+          'Release notes',
+          'with the stored attributes',
+        );
+        let etag = getResponse.get('etag') ?? '';
+        assert.ok(etag, 'and a validator');
+
+        let conditional = await request
+          .get('/notes.md')
+          .set('Accept', 'application/vnd.card+json')
+          .set('If-None-Match', etag);
+        assert.strictEqual(
+          conditional.status,
+          304,
+          'the conditional GET agrees the card is there and unchanged',
+        );
+
+        let response = await request
+          .head('/notes.md')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 200, 'so does the HEAD');
+        assert.strictEqual(
+          response.get('etag'),
+          etag,
+          'reporting the same validator',
+        );
+      });
+
+      test('a path that really does hold bytes still reads as file metadata', async function (assert) {
+        let getResponse = await request
+          .get('/reference.md')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(getResponse.status, 200, 'the GET succeeds');
+        assert.strictEqual(
+          getResponse.body?.data?.type,
+          'file-meta',
+          'a file with no index row behind it reads as its metadata',
+        );
+
+        let response = await request
+          .head('/reference.md')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.get('etag'),
+          undefined,
+          'and carries no validator, as its GET does not',
         );
       });
     });

@@ -10349,16 +10349,33 @@ function cardJsonAssemblyFromFailure(
   // underlying title, message and salvage rather than the sentence the refusal
   // renders from them.
   let row = erroredTargetRow(failure);
+  if (!row) {
+    return {
+      kind: 'error',
+      error: {
+        status: error.status,
+        title: error.title,
+        message: error.detail,
+        stack: undefined,
+        lastKnownGoodHtml: null,
+        cardTitle: null,
+        scopedCssUrls: [],
+      },
+    };
+  }
+  // Read whole rather than member by member: a row that recorded no title is
+  // reporting that it has none, and coalescing that absence away would put the
+  // refusal's own default in a body the row is supposed to describe.
   return {
     kind: 'error',
     error: {
-      status: row?.status ?? error.status,
-      title: row?.title ?? error.title,
-      message: row?.message ?? error.detail,
-      stack: row?.stack,
-      lastKnownGoodHtml: row?.lastKnownGoodHtml ?? null,
-      cardTitle: row?.cardTitle ?? null,
-      scopedCssUrls: row?.scopedCssUrls ?? [],
+      status: row.status,
+      title: row.title,
+      message: row.message,
+      stack: row.stack,
+      lastKnownGoodHtml: row.lastKnownGoodHtml,
+      cardTitle: row.cardTitle,
+      scopedCssUrls: row.scopedCssUrls,
     },
   };
 }

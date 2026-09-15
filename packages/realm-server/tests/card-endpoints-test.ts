@@ -1290,6 +1290,42 @@ module(basename(import.meta.filename), function () {
             );
           }
         });
+
+        test('an errored row that recorded no title reports none', async function (assert) {
+          // The row's own account is what the body carries. A failure that was
+          // not a card error records no title, and reporting one anyway would
+          // put a value in the body that describes nothing on the row.
+          let cardURL = `${testRealmHref}person-1`;
+          let errorDoc = {
+            message: 'boom',
+            status: 500,
+            additionalErrors: null,
+          };
+          for (let table of ['boxel_index', 'boxel_index_working']) {
+            await dbAdapter.execute(
+              `UPDATE ${table}
+                 SET has_error = TRUE, error_doc = $1::jsonb
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+              { bind: [JSON.stringify(errorDoc), cardURL] },
+            );
+          }
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 500, 'HTTP 500 status');
+          assert.strictEqual(
+            response.body.errors?.[0]?.title,
+            undefined,
+            'the body carries no title, because the row recorded none',
+          );
+          assert.strictEqual(
+            response.body.errors?.[0]?.message,
+            'boom',
+            'and carries the message the row did record',
+          );
+        });
       });
 
       // Assembling a card+json body reads the index row and then expands the

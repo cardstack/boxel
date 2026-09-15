@@ -1,5 +1,4 @@
 import { screenshotsMetaFromManifest } from '../capture-spec.ts';
-import { urlNamesFile } from '../file-def-code-ref.ts';
 import { isSingleCardDocument } from '../document-types.ts';
 import {
   canonicalizeTarget,
@@ -33,11 +32,15 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 // point of having two:
 //
 //   * document — the full body, link expansion included.
-//   * headers  — the four values the card+json response headers are computed
-//                from, via the index-row peek alone. No card document is
-//                assembled and no link is expanded, because the caller is
-//                answering a HEAD or a conditional GET and would throw the
-//                body away.
+//   * headers  — the values the card+json response headers are computed from,
+//                reached by a row peek. No card document is assembled and no
+//                link is expanded, because the caller is answering a HEAD or a
+//                conditional GET and would throw the body away.
+//
+// Both modes ask the same question in the same order — is there an instance
+// row for this URL, and failing that does the path hold bytes — so the two can
+// never disagree about what a path is. What separates them is how much they
+// then read, not what they decide.
 //
 // The document mode's *body* is held to byte-for-byte agreement with what the
 // card+json GET handler serves: the same canonical URL, the same `links.self`,
@@ -53,10 +56,12 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 //     serves whatever the index currently holds rather than waiting for a
 //     write that has landed on disk to be indexed.
 //   * It answers the redirects, and for the `.json` spelling it redirects to
-//     the card. A read has no redirect to give, and treats that spelling as
-//     what it literally names — the card's stored source, a file-def target —
-//     so the two diverge there by intent rather than by omission. A path that
-//     merely normalizes to a different one is served, not redirected.
+//     the card. A read has no redirect to give, and a `.json` names a card's
+//     stored source rather than the card: no instance row answers to that
+//     spelling and the bytes behind it are a card's source rather than a
+//     file's, so a read of one finds nothing. The two diverge there by intent
+//     rather than by omission. A path that merely normalizes to a different
+//     one is served, not redirected.
 //
 // What the handler does not have to reconstruct is the row behind the answer.
 // Both modes report it: the headers mode is nothing else, and the document
@@ -118,9 +123,11 @@ async function readDocument(
   localPath: LocalPath,
   opts: RunOperationOptions,
 ): Promise<OperationDocumentResult> {
-  if (urlNamesFile(url)) {
-    return fileMetaResult(await fileMetaOrMissing(core, url, localPath));
-  }
+  // The index decides first, and the bytes on disk are the fallback — not the
+  // other way round. Classifying by the URL's extension before asking would be
+  // cheaper, and would be wrong for a card whose id happens to end in a
+  // registered one: the card has an index row, and reading its extension
+  // instead answers about a file that is not there.
   let result = await core.indexQueryEngine.cardDocument(url, {
     loadLinks: true,
     skipQueryBackedExpansion: opts.skipQueryBackedExpansion ?? false,
@@ -196,30 +203,24 @@ async function readHeaders(
   localPath: LocalPath,
   scope: OperationScope,
 ): Promise<OperationHeadResult> {
-  if (urlNamesFile(url)) {
-    let file = await core.indexQueryEngine.file(url);
-    if (!file) {
-      // Fall back to the bytes on disk the same way the document mode does —
-      // a file the realm serves but has not indexed still has a modification
-      // time to report.
-      return headersFromDisk(await fileMetaOrMissing(core, url, localPath));
-    }
-    return {
-      type: 'file-meta',
-      indexedAt: file.indexedAt,
-      lastModified: file.lastModified,
-      generation: file.generation,
-      screenshots: file.screenshots,
-      deps: file.deps,
-    };
-  }
   let row = await scope.peekInstance(url);
   if (row === undefined) {
-    // A path with no instance row may still hold bytes, and the extension test
-    // does not catch a file whose extension is not a registered one. The
-    // document mode falls back for exactly that case, so this one has to as
-    // well — otherwise the same path answers with a body and refuses its own
-    // headers.
+    // No instance row, so the path may hold bytes instead. The indexed file
+    // row answers that without touching the disk; a file the realm serves but
+    // has not indexed still has a modification time to report, and a file
+    // whose extension is not a registered one never gets a row at all, so the
+    // disk is the fallback behind it.
+    let file = await core.indexQueryEngine.file(url);
+    if (file) {
+      return {
+        type: 'file-meta',
+        indexedAt: file.indexedAt,
+        lastModified: file.lastModified,
+        generation: file.generation,
+        screenshots: file.screenshots,
+        deps: file.deps,
+      };
+    }
     let fileMeta = await core.fileMetaDocument(localPath);
     if (fileMeta) {
       return headersFromDisk(fileMeta);
@@ -266,18 +267,6 @@ function headersFromDisk(
     screenshots: null,
     deps: null,
   };
-}
-
-async function fileMetaOrMissing(
-  core: OperationCore,
-  url: URL,
-  localPath: LocalPath,
-) {
-  let document = await core.fileMetaDocument(localPath);
-  if (!document) {
-    throw await missingTarget(core, url, localPath);
-  }
-  return document;
 }
 
 // The errored index row behind a `target-errored` refusal, exactly as the row
