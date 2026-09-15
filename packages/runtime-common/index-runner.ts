@@ -417,6 +417,7 @@ export class IndexRunner {
             type: 'file-visited',
             realmURL: current.realmURL.href,
             jobId: current.#jobInfo.jobId,
+            reservationId: current.#jobInfo.reservationId,
             url: url.href,
             filesCompleted,
             totalFiles,
@@ -645,6 +646,7 @@ export class IndexRunner {
             type: 'file-visited',
             realmURL: current.realmURL.href,
             jobId: current.#jobInfo.jobId,
+            reservationId: current.#jobInfo.reservationId,
             url: url.href,
             filesCompleted,
             totalFiles,
@@ -692,6 +694,7 @@ export class IndexRunner {
     );
     return {
       invalidations: [...invalidations].map((url) => url.href),
+      invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,

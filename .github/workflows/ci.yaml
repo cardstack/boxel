@@ -510,9 +510,17 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # blob report further down stays fatal on purpose: the merge and
+      # shard-timings jobs consume it, and a report that did not upload would
+      # publish a smaller build as a complete one rather than show as a failed
+      # shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
@@ -520,6 +528,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
@@ -527,6 +536,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
@@ -534,6 +544,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
@@ -541,6 +552,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
@@ -548,6 +560,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
           path: /tmp/host-dist.log
@@ -561,9 +574,12 @@ jobs:
           path: packages/matrix/blob-report
           retention-days: 1
 
+      # Traces are evidence for a human reading a failed spec. Nothing
+      # downstream consumes them, so a failed upload does not fail the shard.
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        continue-on-error: true
         with:
           name: playwright-traces-${{ matrix.shardIndex }}
           path: packages/matrix/test-results/**/trace.zip
@@ -829,9 +845,16 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # junit report above stays fatal on purpose: the merge job consumes it,
+      # and a report that did not upload would publish a smaller build as a
+      # complete one rather than show as a failed shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
@@ -839,6 +862,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/worker-manager.log
@@ -846,6 +870,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-server.log
@@ -853,6 +878,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
@@ -860,6 +886,7 @@ jobs:
       - name: Upload start:development log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/start-development.log
@@ -867,6 +894,7 @@ jobs:
       - name: Upload test-realms log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
@@ -874,6 +902,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/icon-server.log
@@ -881,6 +910,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
@@ -1365,9 +1395,14 @@ jobs:
         # mise-tasks/ci/cache-index means raising this and the job's ceiling
         # with it.
         timeout-minutes: 60
+      # Evidence for reading this job after the fact; the index caches below
+      # are what it exists to publish and every consumer reads those. A failed
+      # log upload therefore does not fail the job, and leaves the caches to be
+      # verified and published.
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: cache-index-log
           path: /tmp/cache-index.log

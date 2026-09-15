@@ -1,5 +1,6 @@
 // Isomorphic UUID — matches IndexRunner's batch-id minting.
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { heartbeatJob } from '../queue.ts';
 
 import {
   delay,
@@ -202,6 +203,7 @@ export async function runPrerenderHtmlPass({
     type: 'indexing-started',
     realmURL: realmURL.href,
     jobId: jobInfo.jobId,
+    reservationId: jobInfo.reservationId,
     jobType: 'prerender_html',
     totalFiles,
     files: [],
@@ -271,6 +273,7 @@ export async function runPrerenderHtmlPass({
             type: 'file-visited',
             realmURL: realmURL.href,
             jobId: jobInfo.jobId,
+            reservationId: jobInfo.reservationId,
             url: moduleUrl,
             filesCompleted,
             totalFiles,
@@ -341,6 +344,14 @@ export async function runPrerenderHtmlPass({
           finalRow != null && Number(finalRow.current_generation) >= generation;
         break;
       }
+      // Waiting on the spawning pass is progress, and on a realm whose index
+      // pass runs long this wait can reach its own ceiling — which is the same
+      // ten minutes as the deadline an incremental-spawned pass is given. A
+      // job that never rendered a file would otherwise be cut off here, in the
+      // exact case a progress-bounded deadline exists to protect. Counting a
+      // poll as proof of life costs the watchdog nothing: the loop is bounded
+      // independently by `SPAWNING_GENERATION_WAIT_MS`.
+      heartbeatJob(jobInfo.reservationId);
       await delay(250);
     }
     let gateMs = Date.now() - gateStart;
@@ -426,6 +437,7 @@ export async function runPrerenderHtmlPass({
         type: 'file-visited',
         realmURL: realmURL.href,
         jobId: jobInfo.jobId,
+        reservationId: jobInfo.reservationId,
         url: href,
         filesCompleted,
         totalFiles,

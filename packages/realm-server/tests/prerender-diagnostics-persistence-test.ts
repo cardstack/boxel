@@ -245,6 +245,122 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('unattributedMs reports the render time no step bucket claims', function (assert) {
+      // The runner records one bucket per step it runs; what is left of
+      // `renderElapsedMs` is the plumbing between them. Emitting it as a
+      // field is what makes a regression in the plumbing visible — as
+      // arithmetic a reader has to do, it is invisible.
+      let response: FakeVisitResponse = {
+        meta: {
+          diagnostics: {
+            indexRoutesMs: { card: { meta: 210, icon: 34 }, file: { icon: 6 } },
+            renderFormatsMs: { card: { isolated: 100 } },
+          },
+        },
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 5, renderMs: 400, waits: {} },
+        405,
+      );
+
+      assert.strictEqual(
+        response.meta?.diagnostics?.unattributedMs,
+        50,
+        '400 render ms less the 350 ms of recorded step buckets',
+      );
+    });
+
+    test('unattributedMs is absent when the visit recorded no step buckets', function (assert) {
+      // A screenshot capture's components are the `screenshot*` fields, not
+      // step buckets — reporting its whole elapsed time as unattributed
+      // would read as plumbing that isn't there.
+      let response = buildFakeSuccessVisitResponse();
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 900, waits: {} },
+        901,
+      );
+
+      assert.notOk(
+        'unattributedMs' in (response.meta?.diagnostics ?? {}),
+        'no step buckets, so no residual is claimed',
+      );
+    });
+
+    test('unattributedMs clamps at zero', function (assert) {
+      // Each bucket is measured around its own step and the total around all
+      // of them, so rounding at the edges can put the sum a hair past the
+      // total. A negative residual is noise, not a finding.
+      let response: FakeVisitResponse = {
+        meta: { diagnostics: { indexRoutesMs: { card: { meta: 51 } } } },
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 50, waits: {} },
+        51,
+      );
+
+      assert.strictEqual(response.meta?.diagnostics?.unattributedMs, 0);
+    });
+
+    test('the model build breakdown is lifted off the success-path card diagnostics', function (assert) {
+      // `buildModelMs` and its per-stage detail are produced by the host's
+      // render route and ride out on the render.meta payload, so they reach
+      // the indexer through the same lift as the computed counters.
+      let response: FakeVisitResponse = {
+        card: {
+          diagnostics: {
+            buildModelMs: {
+              fetchSource: 12,
+              deriveType: 340,
+              hydrate: 88,
+              storeSettle: 26,
+            },
+            moduleEvaluationsMs: [
+              { url: 'https://realm.example/product.gts', ms: 210.5 },
+            ],
+            hydrateFieldsMs: { lineItems: 61.4 },
+            storeSettleWaits: [
+              { kind: 'card', target: 'https://realm.example/a', ms: 18.2 },
+            ],
+          },
+        } as FakeVisitResponse['card'],
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 500, waits: {} },
+        501,
+      );
+
+      let diagnostics = response.meta?.diagnostics;
+      assert.deepEqual(
+        diagnostics?.buildModelMs,
+        { fetchSource: 12, deriveType: 340, hydrate: 88, storeSettle: 26 },
+        'the four stage buckets lifted onto response.meta.diagnostics',
+      );
+      assert.deepEqual(
+        diagnostics?.moduleEvaluationsMs,
+        [{ url: 'https://realm.example/product.gts', ms: 210.5 }],
+        'per-module evaluation cost lifted alongside the stages',
+      );
+      assert.deepEqual(
+        diagnostics?.hydrateFieldsMs,
+        { lineItems: 61.4 },
+        'per-field hydration cost lifted alongside the stages',
+      );
+      assert.deepEqual(
+        diagnostics?.storeSettleWaits,
+        [{ kind: 'card', target: 'https://realm.example/a', ms: 18.2 }],
+        'settle waits lifted alongside the stages',
+      );
+      assert.strictEqual(
+        response.card?.diagnostics,
+        undefined,
+        'card success-path diagnostics cleared after lift',
+      );
+    });
+
     test('module-prerender searchablePathIssues on response.meta.diagnostics survive the timing stamp', function (assert) {
       // The module-prerender route records definition-build findings on
       // meta.diagnostics before the Prerenderer stamps timings. The timing

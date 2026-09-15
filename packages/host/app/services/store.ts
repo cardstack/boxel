@@ -54,6 +54,7 @@ import {
   assertRealmsBound,
   isJsonContentType,
   SEARCH_CONCURRENCY_CAP,
+  SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
@@ -225,8 +226,19 @@ type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
-type TrackedCreateOptions = CreateOptions & DependencyTrackingOptions;
-type TrackedAddOptions = AddOptions & DependencyTrackingOptions;
+// Opt-in per-field hydration timing, threaded straight through to
+// `card-api.createFromSerialized`. The prerender's render route supplies the
+// collector so a visit can attribute its `buildModelMs.hydrate` stage across
+// the card's fields; every other caller omits it and pays nothing.
+type HydrateTimingOptions = {
+  hydrateFieldsMs?: Record<string, number>;
+};
+type TrackedCreateOptions = CreateOptions &
+  DependencyTrackingOptions &
+  HydrateTimingOptions;
+type TrackedAddOptions = AddOptions &
+  DependencyTrackingOptions &
+  HydrateTimingOptions;
 
 // How many times a search the realm-server shed (a 429 from its search
 // admission gate) is retried before the shed surfaces as an error. Three
@@ -825,6 +837,7 @@ export default class StoreService extends Service implements StoreInterface {
         instanceOrDoc,
         opts?.relativeTo,
         opts?.dependencyTrackingContext,
+        opts?.hydrateFieldsMs,
       );
     } else {
       instance = instanceOrDoc;
@@ -897,6 +910,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.persistAndUpdate(instance, {
         realm: opts?.realm,
         localDir: opts?.localDir,
+        skipIndexWait: opts?.skipIndexWait,
       });
     } else if (!opts?.doNotPersist) {
       // An existing card in a realm the user cannot write to is left alone:
@@ -928,6 +942,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.persistAndUpdate(instance, {
           realm: opts?.realm,
           localDir: opts?.localDir,
+          skipIndexWait: opts?.skipIndexWait,
         }),
       )) as T | CardErrorJSONAPI;
     }
@@ -2022,6 +2037,7 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    hydrateFieldsMs?: Record<string, number>,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
     let shouldStubTimers =
@@ -2030,6 +2046,7 @@ export default class StoreService extends Service implements StoreInterface {
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
         dependencyTrackingContext,
+        ...(hydrateFieldsMs ? { hydrateFieldsMs } : {}),
       })) as T;
     // Time the deserialize and report it (no-op when telemetry is disabled).
     let telemetry = this.#clientTelemetry();
@@ -3359,6 +3376,14 @@ export default class StoreService extends Service implements StoreInterface {
         // until it returns, and the index read the realm would otherwise do
         // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
         ...headlessCommandWriteHeaders(),
+        // Caller opted out of blocking this save on the realm's in-flight
+        // incremental indexing (see SKIP_INDEX_WAIT_HEADER). Same deferred-
+        // index + serialized-echo response the header above asks for, but
+        // driven by an explicit per-save option rather than the prerender
+        // context. Defaults to waiting when unset.
+        ...(opts?.skipIndexWait === true
+          ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
+          : {}),
       },
       clientRequestId: opts?.clientRequestId,
     });
@@ -3449,6 +3474,7 @@ export default class StoreService extends Service implements StoreInterface {
               realm: realmURL.href,
               localDir: opts?.localDir,
               clientRequestId: opts?.clientRequestId,
+              skipIndexWait: opts?.skipIndexWait,
             });
 
             let api = await this.cardService.getAPI();

@@ -190,6 +190,39 @@ export interface RenderSettlementMeta {
   tabReused?: boolean;
 }
 
+// The part of a visit's render wall-clock that no step bucket claims. The
+// runner records one bucket per step it runs — `indexRoutesMs` for the index
+// half, `renderFormatsMs` for the html half — and what is left over is the
+// render plumbing between them: tab setup, the per-step CDP round trips, the
+// terminal-error probes, response assembly.
+//
+// Emitted only when the visit recorded at least one step bucket, so a
+// screenshot-capture visit (whose components are the `screenshot*` fields,
+// not these) reports nothing rather than reporting its whole elapsed time as
+// unattributed. Clamped at zero: the buckets are wall-clock spans measured
+// around each step and the total is measured around all of them, so
+// rounding at the edges can push the sum a millisecond past the total.
+function unattributedRenderMs(
+  diagnostics: RenderTimeoutDiagnostics | undefined,
+  renderMs: number,
+): { unattributedMs?: number } {
+  let buckets = [
+    diagnostics?.indexRoutesMs?.card,
+    diagnostics?.indexRoutesMs?.file,
+    diagnostics?.renderFormatsMs?.card,
+    diagnostics?.renderFormatsMs?.file,
+  ].filter((bucket): bucket is Record<string, number> => bucket != null);
+  if (buckets.length === 0) {
+    return {};
+  }
+  let recorded = buckets.reduce(
+    (total, bucket) =>
+      total + Object.values(bucket).reduce((sum, ms) => sum + ms, 0),
+    0,
+  );
+  return { unattributedMs: Math.max(0, renderMs - recorded) };
+}
+
 export function decorateRenderErrorsWithTimings(
   response: unknown,
   timings: {
@@ -233,17 +266,18 @@ export function decorateRenderErrorsWithTimings(
     }
   }
   let { affinitySnapshot, priority, tabReused } = meta;
+  let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
   let diagnostics: RenderTimeoutDiagnostics = {
     ...lifted,
     launchMs: timings.launchMs,
     waits: timings.waits,
     renderElapsedMs: timings.renderMs,
     totalElapsedMs: totalMs,
+    ...unattributedRenderMs(existingMeta.diagnostics, timings.renderMs),
     ...(affinitySnapshot ? { affinitySnapshot } : {}),
     ...(priority !== undefined ? { priority } : {}),
     ...(tabReused !== undefined ? { tabReused } : {}),
   };
-  let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
   // Merge onto any diagnostics the response already carries rather than
   // replacing them: the module-prerender route records definition-build
   // findings (`searchablePathIssues`) on `meta.diagnostics`, and those must

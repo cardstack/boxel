@@ -308,6 +308,13 @@ function verdictCoversRow(
 // so even a forced flush lands in a render's shadow.
 const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 
+// One `boxel_index` row as `existingIndexTypes` reads it back.
+interface ExistingIndexRowType {
+  type: BoxelIndexTable['type'];
+  isDeleted: boolean;
+  cardTypes: string[] | null;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -321,6 +328,15 @@ export class Batch {
   // changed mid-attempt is re-visited rather than silently resumed
   // with stale content.
   #resumedRows = new Map<string, number | null>();
+  // The card types whose membership in a query this pass could have moved:
+  // the adoption chains the invalidated rows held before the pass (so a
+  // deletion, or a card that changed what it adopts from, still names the
+  // type it is leaving) unioned with the chains of every row the pass wrote.
+  // A row with no chain — a plain file, a module — contributes nothing, and
+  // it cannot satisfy a type-anchored filter in either state, so it needs no
+  // representation here. Keys are `internalKeyFor` spellings, the same form
+  // `boxel_index.types` stores and a type filter compiles to.
+  #touchedTypes = new Set<string>();
   #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
   #prerenderedHtmlTombstonedLiveTypes = new Map<
     string,
@@ -539,15 +555,26 @@ export class Batch {
     // similarly excluded so the deletion intent flows through to
     // `applyBatchUpdates` instead of being skipped as resumed work.
     let rows = (await this.#query([
-      `SELECT url, last_modified FROM boxel_index_working WHERE`,
+      `SELECT url, last_modified, types FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['job_id =', param(this.jobInfo.jobId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'last_modified'>[];
-    for (let { url, last_modified } of rows) {
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'last_modified' | 'types'
+    >[];
+    for (let { url, last_modified, types } of rows) {
+      // The chain the previous attempt wrote is this row's post-pass state:
+      // the visit loop skips a resumed URL, so it never reaches the write
+      // path that would otherwise record it. Without this a card the crashed
+      // attempt created — which has no production row for the pre-pass read
+      // to find either — would be absent from the pass's reported types
+      // entirely, and a query anchored on its type would sit out the very
+      // pass that published it.
+      this.#recordTouchedTypes(types);
       this.#resumedRows.set(
         url,
         last_modified == null ? null : parseInt(last_modified),
@@ -679,6 +706,22 @@ export class Batch {
 
   get invalidations() {
     return [...this.#invalidations];
+  }
+
+  /**
+   * The deduped adoption-chain keys this pass touched — see `#touchedTypes`.
+   * Bounded by the realm's type count rather than its row count, which is
+   * what makes it safe to put on a broadcast event whose `invalidations`
+   * list can run to thousands of URLs.
+   */
+  get touchedTypes(): string[] {
+    return [...this.#touchedTypes];
+  }
+
+  #recordTouchedTypes(types: string[] | null | undefined): void {
+    for (let type of types ?? []) {
+      this.#touchedTypes.add(type);
+    }
   }
 
   get currentInvalidationId(): string {
@@ -1489,6 +1532,10 @@ export class Batch {
       last_modified: number;
       indexed_at: number;
     };
+    // The post-pass half of `#touchedTypes`. Taken from the prepared row
+    // rather than from `entry`, so an error row that fell back to its last
+    // known good chain is recorded under the chain it actually persists.
+    this.#recordTouchedTypes(preparedEntry.types);
 
     if (isErrorEntry(entry)) {
       // merge the last known good deps with the error deps so we can invalidate
@@ -2338,11 +2385,24 @@ export class Batch {
     let toTombstone = invalidations.filter(
       (url) => !this.#resumedRows.has(url),
     );
+    // Read over every invalidated URL, not just the ones being tombstoned:
+    // the pre-pass adoption chain is what a live query anchored on the type a
+    // row is leaving needs to hear about, and a resumed row is skipped below
+    // while still being promoted by this attempt — so the attempt that
+    // broadcasts is not always the one that tombstoned it.
+    let existingTypes = await this.existingIndexTypes(invalidations);
+    for (let entries of existingTypes.values()) {
+      for (let { cardTypes } of entries) {
+        this.#recordTouchedTypes(cardTypes);
+      }
+    }
     if (toTombstone.length === 0) {
       return;
     }
-    let existingTypes = await this.existingIndexTypes(toTombstone);
     for (let [url, entries] of existingTypes) {
+      if (this.#resumedRows.has(url)) {
+        continue;
+      }
       let liveTypes = entries
         .filter((entry) => !entry.isDeleted)
         .map((entry) => entry.type);
@@ -2501,11 +2561,13 @@ export class Batch {
     ]);
   }
 
+  // Each invalidated URL's rows as the production index still holds them:
+  // the row type (`instance` / `file`) and whether it is already a tombstone,
+  // plus `cardTypes` — the row's adoption chain, which is the pre-pass half of
+  // `#touchedTypes`.
   private async existingIndexTypes(
     invalidations: string[],
-  ): Promise<
-    Map<string, { type: BoxelIndexTable['type']; isDeleted: boolean }[]>
-  > {
+  ): Promise<Map<string, ExistingIndexRowType[]>> {
     if (invalidations.length === 0) {
       return new Map();
     }
@@ -2513,7 +2575,7 @@ export class Batch {
     // One row per (url, type) — the table's primary key is
     // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT url, type, is_deleted FROM boxel_index WHERE',
+      'SELECT url, type, is_deleted, types FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -2523,13 +2585,17 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'is_deleted'>[];
-    let typesByUrl = new Map<
-      string,
-      { type: BoxelIndexTable['type']; isDeleted: boolean }[]
-    >();
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'is_deleted' | 'types'
+    >[];
+    let typesByUrl = new Map<string, ExistingIndexRowType[]>();
     for (let row of rows) {
-      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
+      let entry = {
+        type: row.type,
+        isDeleted: Boolean(row.is_deleted),
+        cardTypes: row.types,
+      };
       let existing = typesByUrl.get(row.url);
       if (existing) {
         existing.push(entry);
