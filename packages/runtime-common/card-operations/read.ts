@@ -281,11 +281,12 @@ async function fileMetaOrMissing(
 }
 
 // The errored index row behind a `target-errored` refusal, exactly as the row
-// itself reported it. The refusal renders one sentence out of these; a surface
-// that builds its own error body needs the parts instead — its own sentence
-// names the URL the caller asked for rather than the one the read resolved —
-// along with the row's unmapped status and the salvage a client shows in place
-// of the card it could not get.
+// itself reported it. The refusal's own `status`, `title` and `detail` are
+// computed from these — the status mapped to one the realm serves, the detail
+// rendered into a sentence naming the URL the read resolved — so a surface
+// that builds its own error body reads the row rather than picking those
+// apart. The salvage a client shows in place of the card it could not get
+// travels here too.
 export interface ErroredTargetRow {
   status: number;
   title: string | undefined;
@@ -341,13 +342,7 @@ function errorRowFailure(
     code: 'target-errored',
     title: errorDetail.title ?? 'Error',
     detail: `cannot read ${url.href} from index: ${errorDetail.title} - ${errorDetail.message}`,
-    meta: {
-      lastKnownGoodHtml: result.error.lastKnownGoodHtml,
-      cardTitle: result.error.cardTitle,
-      scopedCssUrls: result.error.scopedCssUrls,
-      stack: errorDetail.stack,
-      [ERRORED_ROW]: row,
-    },
+    meta: { [ERRORED_ROW]: row },
   });
 }
 
