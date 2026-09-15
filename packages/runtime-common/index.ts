@@ -194,12 +194,129 @@ export interface SearchDocTimings {
   linkLoads?: SearchDocLinkLoad[];
 }
 
+// Wall-clock of the four phases the host's `render` route runs to build the
+// render model, before any child route (`render.meta`, `render.html`) does
+// its own work. The route sets a `renderStage` breadcrumb at each of these
+// transitions for the timeout path; these are the same boundaries, stamped
+// with elapsed time so a SUCCESSFUL visit accounts for them too.
+//
+// They matter because the model build is charged to whichever route step
+// happened to trigger the parent transition. On an index visit that is the
+// `render.meta` step, so `indexRoutesMs.card.meta` contains the whole model
+// build on top of the search doc and serialization it measures — which is
+// why a `meta` bucket can dwarf `searchDocMs + serializeMs` with nothing to
+// show for the difference. On a fused visit the isolated HTML render
+// triggers it instead, and the build lands in
+// `renderFormatsMs.card.isolated`.
+//
+// A model is built once per visit and shared by every route step in it, so
+// these four numbers are per-visit, not per-step. A stage is absent when it
+// did not complete — the model build that a render timeout interrupts
+// reports the stages it finished, and `renderStage` / `stageAgeMs` name the
+// one it was in.
+export interface BuildModelStagesMs {
+  // Fetching the card's source document from the realm.
+  fetchSource?: number;
+  // Resolving `adoptsFrom` — loading and evaluating the card's module graph
+  // — plus the realm-meta and declared-screenshot lookups that follow it.
+  // The dominant stage on a cold module graph; `moduleEvaluationsMs` names
+  // the individual modules.
+  deriveType?: number;
+  // Instantiating the card from the document: `store.add`, i.e. the
+  // recursive field deserialization. `hydrateFieldsMs` breaks it down per
+  // field.
+  hydrate?: number;
+  // Draining the loads hydration fired — `store.loaded()`.
+  // `storeSettleWaits` names what was awaited.
+  storeSettle?: number;
+}
+
+// One module the Loader evaluated during a visit's model build, with the
+// wall-clock of its synchronous body (Glimmer template compilation and
+// other top-level side effects). Attributed to the visit by diffing the
+// Loader's rolling evaluation history across the build, so a warm tab
+// reports only the modules THIS visit paid for — a second visit of the same
+// card type reports none, which is itself the reading that says the graph
+// was already warm.
+export interface ModuleEvaluation {
+  url: string;
+  ms: number;
+}
+
+// One thing `store.loaded()` waited on during the model build's settle
+// stage. `card` and `file` targets are the loaded URL; a `query` target is
+// the query load's `source` label, qualified by the owning field when the
+// load names one. Loads run concurrently, so entries overlap in time and do
+// not sum to `buildModelMs.storeSettle`.
+export interface StoreSettleWait {
+  kind: 'card' | 'file' | 'query';
+  target: string;
+  ms: number;
+}
+
+// The host render route's account of building the render model. Shared by
+// both diagnostic shapes that carry it, so a reader queries one set of keys
+// whichever path produced the row.
+//
+// The success path reports all of it on the `render.meta` payload
+// (`PrerenderMetaDiagnostics`). The timeout path reads what a stalled page
+// can still answer through `__boxelRenderDiagnostics`
+// (`RenderTimeoutDiagnostics`): the stage buckets that closed, and the
+// hydration breakdown collected so far — the two a stall inside the build
+// is diagnosed from. The module and settle-wait lists are assembled only
+// when the build completes, so a timed-out row carries neither.
+export interface BuildModelDiagnostics {
+  buildModelMs?: BuildModelStagesMs;
+  // The slowest modules evaluated during the model build. Bounded the same
+  // way as `searchDocFieldsMs`: only entries at/over a floor, slowest first,
+  // capped.
+  //
+  // Attributed to the visit by diffing the Loader's rolling slowest-N
+  // history, which is kept for the loader's whole life, not per render. That
+  // history SATURATES: one cold card can fill every slot, and a later card's
+  // modest evaluations are then dropped on insert and never show up in the
+  // diff. So an empty list does NOT mean "this visit evaluated nothing" —
+  // read `moduleEvaluationCount` for that, which cannot be evicted.
+  moduleEvaluationsMs?: ModuleEvaluation[];
+  // How many modules the visit's model build evaluated, and their summed
+  // wall-clock, from the Loader's monotonic counters. Unlike
+  // `moduleEvaluationsMs` these are complete: a count of zero is the only
+  // thing that means the module graph was already warm, and a large count
+  // with an empty list means the evaluations lost the slowest-N race to an
+  // earlier card in the same job rather than not happening.
+  moduleEvaluationCount?: number;
+  moduleEvaluationTotalMs?: number;
+  // Per-field hydration wall-clock, keyed by dotted field path from the
+  // card's root — the deserialization sibling of `searchDocFieldsMs`, and
+  // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
+  // records nothing.
+  //
+  // The keys are a naming scheme, NOT a tree with an inclusive invariant,
+  // and two things break the "parent covers its children" reading:
+  //
+  //   - Sibling fields deserialize concurrently under one `Promise.all`, so
+  //     their spans overlap and do not sum to `hydrate`.
+  //   - A plural field's items all report under the OWNING field's path, so
+  //     a nested key accumulates across items while the owning field's own
+  //     key is a single span over those (concurrent) items. A child key can
+  //     therefore exceed its parent's, and the floor can keep a child while
+  //     pruning the parent out.
+  //
+  // So read each value as that key's own measured cost and use the path to
+  // locate the field, not to reconstruct a hierarchy.
+  hydrateFieldsMs?: Record<string, number>;
+  // The slowest loads the settle stage drained, same bounding again.
+  // Separates "hydration fired a slow link load" from "hydration itself was
+  // expensive" (a hot `hydrateFieldsMs` path with no matching wait).
+  storeSettleWaits?: StoreSettleWait[];
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
 // `boxel_index.diagnostics`. All fields optional — older host
 // builds that predate the counters omit the block entirely.
-export interface PrerenderMetaDiagnostics {
+export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // Number of `computeVia` invocations that ran during the
   // serializeCard + searchDoc traversal for this card. After the
   // pass-scoped memo lands this is one call per distinct computed read
@@ -210,6 +327,23 @@ export interface PrerenderMetaDiagnostics {
   // computedCacheHits` is the total computed-read pressure of the
   // pass; the ratio tells you how much duplicate work the memo elided.
   computedCacheHits?: number;
+  // Wall-clock loading the `card-api` base module, the render.meta route's
+  // first await. Per-loader cached like `searchableLoadMs`, so the first
+  // card a tab renders pays the module load and the rest read ~0 — which is
+  // what makes a first-in-tab card's `meta` bucket an outlier.
+  cardApiLoadMs?: number;
+  // Wall-clock the render.meta route spent awaiting the render model's ready
+  // settle — the parent `render` route's load-stability loop, which it kicks
+  // off and returns from, so this await is where the settle is paid for. A
+  // serial phase of the `meta` route step and often the largest one after
+  // the model build itself. On a visit whose html render already drove the
+  // settle this is ~0 and the cost sits in that render's format bucket.
+  readySettleMs?: number;
+  // Wall-clock loading the `searchable` base module the search-doc generator
+  // lives in. Per-loader cached, so the first card in a job to reach it pays
+  // the whole module load and every card after it reads ~0 — which is what
+  // makes an otherwise unremarkable card's `meta` bucket an outlier.
+  searchableLoadMs?: number;
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
   // Wall-clock of the searchable walk that produced the doc — the first
@@ -370,7 +504,7 @@ export type { ErrorEntry } from './error.ts';
 // error document tells operators *where* the time went. All fields
 // are optional — this is a best-effort diagnostic payload and older
 // code paths that don't populate them still work.
-export interface RenderTimeoutDiagnostics {
+export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   // Correlation ID threaded from the client-side remote-prerenderer
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
@@ -468,6 +602,17 @@ export interface RenderTimeoutDiagnostics {
     card?: Record<string, number>;
     file?: Record<string, number>;
   };
+  // `renderElapsedMs` minus every step bucket the visit recorded
+  // (`indexRoutesMs` + `renderFormatsMs`) — the render plumbing that sits
+  // between the steps: the tab's own setup, the per-step CDP round trips,
+  // the terminal-error probes and the response assembly. Emitted as a
+  // measured field rather than left as arithmetic, so a reader accounting
+  // for a visit's wall-clock sees a complete set of buckets and a
+  // regression in the plumbing shows up on its own. Clamped at zero and
+  // omitted when the visit recorded no step buckets at all (a
+  // screenshot-capture visit, whose components are the `screenshot*`
+  // fields).
+  unattributedMs?: number;
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
