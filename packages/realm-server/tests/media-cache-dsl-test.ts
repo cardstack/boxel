@@ -29,6 +29,7 @@ import {
   captureSpecHash,
   countPdfPages,
   findMediaCacheEntry,
+  pdfFilenameFor,
   insert,
   logger,
   parseCaptureSpecParams,
@@ -62,6 +63,8 @@ const REALM_URL = 'http://test-dsl-realm/';
 const OWNER = '@node-test_realm:localhost';
 const PNG_BYTES = new TextEncoder().encode('stub-png-bytes');
 const PNG_BASE64 = Buffer.from(PNG_BYTES).toString('base64');
+const PDF_BYTES = new TextEncoder().encode('%PDF-stub-bytes');
+const PDF_BASE64 = Buffer.from(PDF_BYTES).toString('base64');
 // Long enough that a healthy queue round-trip never times out; short enough
 // that the deliberately-stalled timeout test doesn't drag the suite.
 const SYNC_WAIT_MS = 2000;
@@ -176,6 +179,9 @@ module(basename(import.meta.filename), function () {
           deviceScaleFactor: 1,
           fullPage: false,
         },
+        // A pdf spec's served URL must reparse on the GET surface, since the
+        // ledger serves it there.
+        { format: 'isolated', type: 'pdf' },
       ];
       for (let spec of specs) {
         let queryString = canonicalCaptureSpecQuery(spec);
@@ -325,13 +331,6 @@ module(basename(import.meta.filename), function () {
     test('not-yet-supported output types and media are refused naming the param', function (assert) {
       for (let [qs, field, message] of [
         [
-          // pdf output exists but is capture-only: the GET surface refuses
-          // what it could never serve, with its own wording.
-          'type=pdf',
-          'type',
-          'type "pdf" is not supported by this serving surface',
-        ],
-        [
           'type=jpeg',
           'type',
           'captureSpec.type "jpeg" is not supported by this capture engine',
@@ -429,11 +428,28 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('pdfFilenameFor names the download after the source card', function (assert) {
+      assert.strictEqual(
+        pdfFilenameFor('http://realm.test/demo/Person/fadhlan'),
+        'fadhlan.pdf',
+      );
+      assert.strictEqual(
+        pdfFilenameFor('http://realm.test/demo/docs/report.pdf'),
+        'report.pdf',
+        'an existing pdf extension is not doubled',
+      );
+      assert.strictEqual(
+        pdfFilenameFor('http://realm.test/demo/Meeting%20Notes'),
+        'Meeting-20Notes.pdf',
+        'quoted-string-unsafe characters are collapsed',
+      );
+    });
+
     test('output type and media are identity axes: each non-default value is its own cache key', async function (assert) {
-      // Constructed directly rather than parsed: media=print (and the GET
-      // DSL's type=pdf) are still gated at parse, but the identity beneath
-      // is fully wired, so unlocking a value never re-keys existing
-      // captures.
+      // `media: 'print'` is constructed directly rather than parsed — it is
+      // still gated at parse until the engine emulates print media — but the
+      // identity beneath is fully wired, so unlocking it never re-keys
+      // existing captures.
       let png: CaptureSpec = { format: 'isolated' };
       let pdf: CaptureSpec = { format: 'isolated', type: 'pdf' };
       let print: CaptureSpec = { format: 'isolated', media: 'print' };
@@ -544,6 +560,26 @@ module(basename(import.meta.filename), function () {
           }
           if (prerenderResult) {
             return prerenderResult();
+          }
+          // Echo the requested encoding the way the real engine does: a pdf
+          // spec produces paged bytes with no pixel dimensions.
+          if (
+            (args.captureSpec as { type?: string } | undefined)?.type === 'pdf'
+          ) {
+            return {
+              status: 'ready',
+              base64: PDF_BASE64,
+              contentType: 'application/pdf',
+              captures: [
+                {
+                  name: 'default',
+                  base64: PDF_BASE64,
+                  deviceScaleFactor: 1,
+                  pageCount: 1,
+                },
+              ],
+              meta: { requestId: 'stub-prerender-req' },
+            };
           }
           return {
             status: 'ready',
@@ -974,11 +1010,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('the task refuses to persist a pdf render under any claimed identity', async function (assert) {
-      // pdf output is capture-only: the task hashes a pdf render to null and
-      // refuses whatever identity the producer claimed — even the pdf spec's
-      // own honest hash — so no paged document lands in a ledger the serving
-      // surfaces cannot yet serve it from.
+    test('the task persists a pdf render under the pdf spec identity', async function (assert) {
       await seedInstanceRow('card-1');
       await startWorker();
 
@@ -1009,21 +1041,69 @@ module(basename(import.meta.filename), function () {
         0,
       );
       let result = await job.done;
+      assert.strictEqual(result.status, 'ready');
+      let entry = await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: pdfSpecHash,
+        sourceGeneration: 1,
+      });
       assert.strictEqual(
-        result.status,
-        'ready',
-        'the capture itself still succeeds',
+        entry?.contentType,
+        'application/pdf',
+        'the ledger row carries the paged content type',
       );
+      assert.strictEqual(
+        entry?.width,
+        null,
+        'a paged capture records no pixel dimensions',
+      );
+    });
+
+    test('a pdf GET captures on demand, persists as application/pdf, and serves inline with a filename', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_screenshot/card-1?type=pdf');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.headers.get('content-type'),
+        'application/pdf',
+      );
+      assert.strictEqual(
+        response.headers.get('content-disposition'),
+        'inline; filename="card-1.pdf"',
+      );
+      assert.strictEqual(captureCalls, 1);
+
+      // The pdf keys its own ledger entry; the same card's canonical png
+      // identity stays uncaptured.
+      let pdfEntry = await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: await captureSpecHash({
+          format: 'isolated',
+          type: 'pdf',
+        }),
+        sourceGeneration: 1,
+      });
+      assert.strictEqual(pdfEntry?.contentType, 'application/pdf');
       assert.strictEqual(
         await findMediaCacheEntry(dbAdapter, {
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
-          captureSpecHash: pdfSpecHash,
+          captureSpecHash: await captureSpecHash({ format: 'isolated' }),
           sourceGeneration: 1,
         }),
         undefined,
-        'no pdf bytes land in the ledger',
+        'the png identity is untouched',
       );
+
+      // The repeat is a pure ledger hit: zero new Chrome work.
+      let hit = await get('_screenshot/card-1?type=pdf');
+      assert.strictEqual(hit.status, 200);
+      assert.strictEqual(captureCalls, 1, 'no re-render on the hit');
     });
 
     test('concurrent misses for one spec coalesce onto one capture', async function (assert) {

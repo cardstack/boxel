@@ -81,7 +81,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A"
           }
@@ -127,7 +127,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [5m])) or vector(0)",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" [5m])) or vector(0)",
             "queryType": "range",
             "refId": "A"
           }
@@ -180,7 +180,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [$__interval]))",
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" [$__interval]))",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "{{outcome}}"
@@ -234,7 +234,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "p50"
@@ -244,7 +244,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "p95"
@@ -254,7 +254,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "C",
             "legendFormat": "p99"
@@ -320,7 +320,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap queueWaitMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap queueWaitMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "queueWaitMs"
@@ -330,7 +330,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap permissionsMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap permissionsMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "permissionsMs"
@@ -340,7 +340,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap launchMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap launchMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "C",
             "legendFormat": "launchMs"
@@ -350,7 +350,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap renderMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap renderMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "D",
             "legendFormat": "renderMs"
@@ -360,7 +360,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap navMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap navMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "E",
             "legendFormat": "navMs"
@@ -370,7 +370,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap settleMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap settleMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "F",
             "legendFormat": "settleMs"
@@ -380,7 +380,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap imagePaintMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap imagePaintMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "G",
             "legendFormat": "imagePaintMs"
@@ -390,7 +390,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap screenshotMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap screenshotMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "H",
             "legendFormat": "screenshotMs"
@@ -400,7 +400,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap decodeMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap decodeMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "I",
             "legendFormat": "decodeMs"
@@ -410,7 +410,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap persistMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap persistMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "J",
             "legendFormat": "persistMs"
@@ -464,7 +464,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap queueWaitMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap queueWaitMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "queueWaitMs"
@@ -474,7 +474,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap prerenderMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap prerenderMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "prerenderMs (incl. transport)"
@@ -484,7 +484,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap renderMs [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap renderMs [$__interval]) by ()",
             "queryType": "range",
             "refId": "C",
             "legendFormat": "renderMs (server-observed)"
@@ -538,7 +538,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap launchMs [$__interval]) by (tabReused)",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap launchMs [$__interval]) by (tabReused)",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "tabReused={{tabReused}}"
@@ -592,7 +592,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum by (persistOutcome) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [$__interval]))",
+            "expr": "sum by (persistOutcome) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" [$__interval]))",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "{{persistOutcome}}"
@@ -658,7 +658,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by (realmURL)",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__interval]) by (realmURL)",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "{{realmURL}}"
@@ -711,7 +711,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by (surface)",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__interval]) by (surface)",
             "queryType": "range",
             "refId": "A",
             "legendFormat": "{{surface}}"
@@ -753,7 +753,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "topk(20, max by (sourceURL) (max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__range])))",
+            "expr": "topk(20, max by (sourceURL) (max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | contentType=~\"$contentType\" | unwrap totalMs [$__range])))",
             "queryType": "instant",
             "refId": "A",
             "instant": true
@@ -1168,6 +1168,38 @@
             }
           ],
           "query": "get-dsl,post",
+          "type": "custom"
+        },
+        {
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "description": "The capture's output encoding; events from before the field existed match All.",
+          "hide": 0,
+          "includeAll": true,
+          "allValue": ".*",
+          "multi": false,
+          "name": "contentType",
+          "options": [
+            {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            {
+              "selected": false,
+              "text": "image/png",
+              "value": "image/png"
+            },
+            {
+              "selected": false,
+              "text": "application/pdf",
+              "value": "application/pdf"
+            }
+          ],
+          "query": "image/png,application/pdf",
           "type": "custom"
         }
       ]

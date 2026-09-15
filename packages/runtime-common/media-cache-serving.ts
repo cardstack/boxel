@@ -98,11 +98,19 @@ export async function serveMediaCacheEntry({
   dbAdapter: DBAdapter;
 }): Promise<ResponseWithNodeStream> {
   let etag = `"${entry.objectKey}"`;
-  let headers = {
+  let headers: Record<string, string> = {
     'content-type': entry.contentType,
     etag,
     'cache-control': hitCacheControl(requestContext),
   };
+  // A PDF opens in the browser's viewer (or downloads), where the filename
+  // shown is otherwise the URL's last segment plus its query string. Name it
+  // after the source card instead; images stay bare — an <img> never reads
+  // the header.
+  if (entry.contentType === 'application/pdf') {
+    headers['content-disposition'] =
+      `inline; filename="${pdfFilenameFor(entry.sourceURL)}"`;
+  }
 
   let ifNoneMatch = request.headers.get('if-none-match');
   if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
@@ -136,6 +144,19 @@ export async function serveMediaCacheEntry({
   });
   response.nodeStream = toNodeStream(stream) as Readable;
   return response;
+}
+
+// The source URL's last path segment, reduced to the quoted-string-safe
+// charset (instance ids and file names are URL path segments already, so
+// this rarely rewrites anything), with the pdf extension appended.
+export function pdfFilenameFor(sourceURL: string): string {
+  let segments = sourceURL.split('/').filter((s) => s.length > 0);
+  let base = segments[segments.length - 1] ?? 'card';
+  let safe = base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '');
+  if (!safe) {
+    safe = 'card';
+  }
+  return safe.toLowerCase().endsWith('.pdf') ? safe : `${safe}.pdf`;
 }
 
 // A bump within this window of the entry's own stamp is skipped: the
