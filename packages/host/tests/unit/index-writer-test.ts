@@ -1132,92 +1132,104 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('render link recovery translates copied capture provenance into the destination realm', async function (assert) {
-    let variants = [
-      { name: 'current', generation: 4, error: false, valid: true },
-      { name: 'stale', generation: 3, error: false, valid: false },
-      { name: 'failed-current', generation: 4, error: true, valid: true },
-      { name: 'legacy', generation: undefined, error: false, valid: true },
-      {
-        name: 'failed-legacy',
-        generation: undefined,
-        error: true,
-        valid: false,
-      },
-      { name: 'unvalidated', generation: null, error: false, valid: false },
-    ];
-    await setupIndex(
-      adapter,
-      [
-        { realm_url: testRealmURL, current_generation: 8 },
-        { realm_url: testRealmURL2, current_generation: 100 },
-      ],
-      variants.map(({ name, generation, error }) => ({
-        url: `${testRealmURL}${name}.json`,
-        realm_url: testRealmURL,
-        generation: 4,
-        type: 'instance' as const,
-        pristine_doc: makeCardResource(name, name, {
-          module: rri('./person'),
-          name: 'Person',
-        }),
-        search_doc: { name },
-        types: [],
-        deps: [],
-        isolated_html: '<div>Retained</div>',
-        diagnostics: {
-          brokenLinks: [
-            {
-              fieldName: 'wall',
-              reference: `${testRealmURL}missing`,
-              kind: 'not-found',
-            },
-          ],
-          ...(generation === undefined
-            ? {}
-            : { brokenLinksGeneration: generation }),
+  for (let enabled of [false, true]) {
+    test(`render link recovery translates copied capture provenance only when enabled=${enabled}`, async function (assert) {
+      indexWriter = new IndexWriter(adapter, {
+        lattice: new LatticeRealmConfig(enabled ? [testRealmURL2] : []),
+      });
+      let variants = [
+        { name: 'current', generation: 4, error: false, valid: true },
+        { name: 'stale', generation: 3, error: false, valid: false },
+        { name: 'failed-current', generation: 4, error: true, valid: true },
+        { name: 'legacy', generation: undefined, error: false, valid: true },
+        {
+          name: 'failed-legacy',
+          generation: undefined,
+          error: true,
+          valid: false,
         },
-        error_doc: error
-          ? { message: 'Interrupted', status: 500, additionalErrors: [] }
-          : null,
-      })),
-    );
-    await adapter.execute(
-      'UPDATE prerendered_html SET generation=8 WHERE realm_url=$1',
-      { bind: [testRealmURL] },
-    );
-    let batch = await indexWriter.createBatch(
-      new URL(testRealmURL2),
-      virtualNetwork,
-    );
-    await batch.copyFrom(new URL(testRealmURL));
-    await batch.done();
-    let rows = await adapter.execute(
-      'SELECT url,generation,diagnostics FROM prerendered_html WHERE realm_url=$1',
-      { bind: [testRealmURL2], coerceTypes: { diagnostics: 'JSON' } },
-    );
-    for (let variant of variants) {
-      let row = rows.find(
-        (entry) => entry.url === `${testRealmURL2}${variant.name}.json`,
-      )!;
-      let diagnostics = row.diagnostics as {
-        brokenLinksGeneration: number | null;
-        brokenLinks: { reference: string }[];
-      };
-      assert.strictEqual(
-        diagnostics.brokenLinksGeneration,
-        variant.valid ? row.generation : null,
-        `${variant.name}: validation transfers only when it covers the copied data`,
+        { name: 'unvalidated', generation: null, error: false, valid: false },
+      ];
+      await setupIndex(
+        adapter,
+        [
+          { realm_url: testRealmURL, current_generation: 8 },
+          { realm_url: testRealmURL2, current_generation: 100 },
+        ],
+        variants.map(({ name, generation, error }) => ({
+          url: `${testRealmURL}${name}.json`,
+          realm_url: testRealmURL,
+          generation: 4,
+          type: 'instance' as const,
+          pristine_doc: makeCardResource(name, name, {
+            module: rri('./person'),
+            name: 'Person',
+          }),
+          search_doc: { name },
+          types: [],
+          deps: [],
+          isolated_html: '<div>Retained</div>',
+          diagnostics: {
+            brokenLinks: [
+              {
+                fieldName: 'wall',
+                reference: `${testRealmURL}missing`,
+                kind: 'not-found',
+              },
+            ],
+            ...(generation === undefined
+              ? {}
+              : { brokenLinksGeneration: generation }),
+          },
+          error_doc: error
+            ? { message: 'Interrupted', status: 500, additionalErrors: [] }
+            : null,
+        })),
       );
-      assert.strictEqual(
-        diagnostics.brokenLinks[0].reference,
-        `${testRealmURL2}missing`,
-        `${variant.name}: the finding refers to the copied target`,
+      await adapter.execute(
+        'UPDATE prerendered_html SET generation=8 WHERE realm_url=$1',
+        { bind: [testRealmURL] },
       );
-    }
-  });
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL2),
+        virtualNetwork,
+      );
+      await batch.copyFrom(new URL(testRealmURL));
+      await batch.done();
+      let rows = await adapter.execute(
+        'SELECT url,generation,diagnostics FROM prerendered_html WHERE realm_url=$1',
+        { bind: [testRealmURL2], coerceTypes: { diagnostics: 'JSON' } },
+      );
+      for (let variant of variants) {
+        let row = rows.find(
+          (entry) => entry.url === `${testRealmURL2}${variant.name}.json`,
+        )!;
+        let diagnostics = row.diagnostics as {
+          brokenLinksGeneration: number | null;
+          brokenLinks: { reference: string }[];
+        };
+        assert.strictEqual(
+          diagnostics.brokenLinksGeneration,
+          enabled
+            ? variant.valid
+              ? row.generation
+              : null
+            : variant.generation,
+          `${variant.name}: validation transfers only when it covers the copied data`,
+        );
+        assert.strictEqual(
+          diagnostics.brokenLinks[0].reference,
+          `${enabled ? testRealmURL2 : testRealmURL}missing`,
+          `${variant.name}: only enabled destinations translate the target`,
+        );
+      }
+    });
+  }
 
   test('render link recovery retains SQLite findings through failed and uncaptured visits', async function (assert) {
+    indexWriter = new IndexWriter(adapter, {
+      lattice: new LatticeRealmConfig([testRealmURL]),
+    });
     let url = `${testRealmURL}recovery.json`;
     let missing = [
       {
@@ -1251,13 +1263,23 @@ module('Unit | index-writer', function (hooks) {
       diagnostics: { brokenLinks: [] },
     });
     await failure.done();
-    let read = async () =>
-      (
+    let read = async () => {
+      let diagnostics = (
         await adapter.execute(
           'SELECT diagnostics FROM prerendered_html WHERE url=$1',
           { bind: [url], coerceTypes: { diagnostics: 'JSON' } },
         )
-      )[0].diagnostics;
+      )[0].diagnostics as Record<string, unknown>;
+      // The retained capture keeps its generation; main's write-side stamps
+      // describe the current attempt, including a failed or uncaptured visit.
+      assert.strictEqual(typeof diagnostics.invalidationId, 'string');
+      assert.strictEqual(typeof diagnostics.indexedAt, 'number');
+      assert.strictEqual(diagnostics.writeSeq, 0);
+      return {
+        brokenLinks: diagnostics.brokenLinks,
+        brokenLinksGeneration: diagnostics.brokenLinksGeneration,
+      };
+    };
     assert.deepEqual(
       await read(),
       { brokenLinks: missing, brokenLinksGeneration: 5 },

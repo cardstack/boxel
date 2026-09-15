@@ -1174,7 +1174,10 @@ export class Batch {
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.file_alias = copyURL(entry.file_alias);
-      if (Array.isArray(entry.diagnostics?.brokenLinks)) {
+      if (
+        this.latticeEnabled &&
+        Array.isArray(entry.diagnostics?.brokenLinks)
+      ) {
         let capture = entry.diagnostics.brokenLinksGeneration;
         if (capture === undefined && !entry.error_doc)
           capture = entry.generation;
