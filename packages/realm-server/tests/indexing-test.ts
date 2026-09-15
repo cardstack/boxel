@@ -2225,6 +2225,18 @@ module(basename(import.meta.filename), function () {
             },
           );
 
+          // Both enqueues coalesce into a single pending job, but they land in
+          // two steps: `mixed-update` publishes the job (changes carry
+          // operation `update`), then `mixed-delete` joins and merges its
+          // delete in. Waiting for `rows.length === 1` alone races that second
+          // step — the poll can observe the update-only job before the delete
+          // has been folded in and read a spurious `update`. The job's
+          // `coalescedCallers` records one entry per joined caller, so gate on
+          // both clientRequestIds being present: that proves the delete has
+          // coalesced before we assert which operation won. Dominance stays
+          // under test — were it broken, `mixed-delete` would still merge (both
+          // callers present) yet leave the change as `update`, failing the
+          // assertion below rather than the wait.
           let row = (await waitUntil(
             async () => {
               let rows = (await testDbAdapter.execute(
@@ -2237,15 +2249,27 @@ module(basename(import.meta.filename), function () {
               )) as {
                 args: {
                   changes: { url: string; operation: 'update' | 'delete' }[];
+                  coalescedCallers?: { clientRequestId: string | null }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              let clientRequestIds = new Set(
+                (rows[0].args.coalescedCallers ?? []).map(
+                  (caller) => caller.clientRequestId,
+                ),
+              );
+              let bothCoalesced =
+                clientRequestIds.has('mixed-update') &&
+                clientRequestIds.has('mixed-delete');
+              return bothCoalesced ? rows[0] : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected one pending incremental job during mixed-op burst',
+                'expected one pending incremental job carrying both the update and delete callers during mixed-op burst',
             },
           )) as {
             args: {
