@@ -8,6 +8,7 @@ import type {
   CodePatchCorrectnessFile,
   PromptParts,
   TextContent,
+  RoomReasoningEffort,
 } from './types.ts';
 import { constructHistory } from './history.ts';
 import {
@@ -65,7 +66,6 @@ import {
   decodeToolRequest,
 } from '../commands.ts';
 import type { ToolRequest } from '../commands.ts';
-import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
   LooseCardResource,
@@ -2560,7 +2560,7 @@ export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;
   toolsSupported?: boolean;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: RoomReasoningEffort;
   inputModalities?: string[];
 } {
   let activeLLMEvent = findLast(
@@ -2595,7 +2595,8 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   };
 }
 
-const VALID_REASONING_EFFORTS: (ReasoningEffort | 'xhigh')[] = [
+const VALID_REASONING_EFFORTS: RoomReasoningEffort[] = [
+  'none',
   'minimal',
   'low',
   'medium',
@@ -2606,7 +2607,7 @@ const VALID_REASONING_EFFORTS: (ReasoningEffort | 'xhigh')[] = [
 
 function normalizeReasoningEffort(
   value?: string | null,
-): ReasoningEffort | undefined {
+): RoomReasoningEffort | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -2614,10 +2615,10 @@ function normalizeReasoningEffort(
     return null;
   }
   if (
-    VALID_REASONING_EFFORTS.includes(value as ReasoningEffort) &&
+    VALID_REASONING_EFFORTS.includes(value as RoomReasoningEffort) &&
     value !== null
   ) {
-    return value as ReasoningEffort;
+    return value as RoomReasoningEffort;
   }
   return undefined;
 }

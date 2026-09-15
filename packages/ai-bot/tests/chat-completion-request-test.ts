@@ -38,23 +38,32 @@ function toolNames(request: ChatCompletionRequest) {
 }
 
 module('chat completion request', () => {
-  test('sends no reasoning effort when the room has none', () => {
+  test('sends no reasoning parameter when the room has no setting', () => {
     let request = buildChatCompletionRequest(promptParts());
+    assert.false('reasoning' in request);
     assert.false('reasoning_effort' in request);
   });
 
-  test("forwards the room's reasoning effort", () => {
+  test("sends the room's effort level as the unified reasoning parameter", () => {
     let request = buildChatCompletionRequest(
       promptParts({ reasoningEffort: 'low' }),
     );
-    assert.strictEqual(request.reasoning_effort, 'low');
+    assert.deepEqual(request.reasoning, { effort: 'low' });
+    assert.false('reasoning_effort' in request);
   });
 
-  test('forwards an explicit null reasoning effort as-is', () => {
+  test('treats a null effort as no setting, since an unset card serializes as null', () => {
     let request = buildChatCompletionRequest(
       promptParts({ reasoningEffort: null }),
     );
-    assert.strictEqual(request.reasoning_effort, null);
+    assert.false('reasoning' in request);
+  });
+
+  test("turns thinking off for 'none'", () => {
+    let request = buildChatCompletionRequest(
+      promptParts({ reasoningEffort: 'none' }),
+    );
+    assert.deepEqual(request.reasoning, { enabled: false });
   });
 
   test('requires a model', () => {

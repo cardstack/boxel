@@ -8,6 +8,7 @@ import { readRealmFileTool } from './read-realm-file.ts';
 export type ChatCompletionRequest = ChatCompletionStreamParams & {
   usage?: { include: boolean };
   provider?: { order: string[]; allow_fallbacks: boolean };
+  reasoning?: { effort?: string; enabled?: boolean };
 };
 
 // Builds the OpenRouter chat-completion request for one turn from the
@@ -54,13 +55,19 @@ export function buildChatCompletionRequest(
     };
   }
 
-  // Forward whatever reasoning effort the room's active-llm event carries
-  // (sourced from the model's ModelConfiguration card). Nothing is invented
-  // here: when the room carries no effort the parameter is omitted and the
-  // model runs at the provider's default, which for a thinking model means
-  // thinking. Only an explicit null turns reasoning off at the provider.
-  if (prompt.reasoningEffort !== undefined) {
-    request.reasoning_effort = prompt.reasoningEffort;
+  // The room's reasoning setting comes from the model's ModelConfiguration
+  // card and goes out as OpenRouter's unified `reasoning` parameter, which
+  // the router translates for each provider. The OpenAI-style
+  // `reasoning_effort` field did not reach every provider: Moonshot's Kimi
+  // advertises `reasoning` and not `reasoning_effort`, and a Kimi card set
+  // to medium left its thinking unchanged. A card with no setting serializes
+  // as null, so null and undefined both mean "not specified": the parameter
+  // is left out and the model runs at the provider's default, which for a
+  // thinking model means thinking. 'none' is the explicit off switch.
+  if (prompt.reasoningEffort === 'none') {
+    request.reasoning = { enabled: false };
+  } else if (prompt.reasoningEffort) {
+    request.reasoning = { effort: prompt.reasoningEffort };
   }
 
   if (
