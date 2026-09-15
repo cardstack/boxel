@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  ALL_TYPES_KEY,
   internalKeyFor,
+  param,
+  query,
   rri,
   SupportedMimeType,
   Deferred,
@@ -15,6 +18,7 @@ import {
 import type {
   DBAdapter,
   DefinitionLookup,
+  Expression,
   LooseSingleCardDocument,
   Prerenderer,
   Realm,
@@ -1866,6 +1870,85 @@ module(basename(import.meta.filename), function () {
           touched.includes(keyFor('post', 'Post')),
           'a second untouched type is absent',
         );
+      });
+
+      // The read side of these watermarks is the live-search cache key: a
+      // query anchored on a type reads that type's row, so a write only
+      // unreaches the cached searches whose types it could have moved.
+      test('an incremental pass stamps a watermark for the chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+
+        let before = await watermarks();
+        await realm.write(
+          'vangogh.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Van Gogh' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          }),
+        );
+        let after = await watermarks();
+
+        let petKey = keyFor('pet', 'Pet');
+        assert.notStrictEqual(
+          after.get(petKey),
+          before.get(petKey),
+          `the written card's own type moves: ${after.get(petKey)}`,
+        );
+        assert.strictEqual(
+          after.get(keyFor('person', 'Person')),
+          before.get(keyFor('person', 'Person')),
+          'a type the pass never touched keeps its watermark, so a query anchored on it stays cached',
+        );
+        assert.strictEqual(
+          after.get(ALL_TYPES_KEY),
+          before.get(ALL_TYPES_KEY),
+          'a pass that can name its types leaves the catch-all key alone',
+        );
+      });
+
+      test('a from-scratch rebuild moves the catch-all key', async function (assert) {
+        // A rebuild names the types it wrote, but not a type whose last row it
+        // dropped — nothing is left to name it. Absence has to read as
+        // "unknown", so the key every scoped query folds in moves instead.
+        let catchAll = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+            ` AND type_key =`,
+            param(ALL_TYPES_KEY),
+          ] as Expression)) as { index_generation: number }[];
+          return rows[0] ? Number(rows[0].index_generation) : undefined;
+        };
+
+        let before = await catchAll();
+        await realm.realmIndexUpdater.fullIndex();
+
+        assert.notStrictEqual(await catchAll(), before, 'the catch-all moved');
       });
 
       // A batch reads the realm's loader epoch when it starts, and with no

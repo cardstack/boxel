@@ -78,6 +78,23 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           }
         }
       `,
+      'pet.gts': `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Pet extends CardDef {
+          @field nickname = contains(StringField);
+        }
+      `,
+      'employee.gts': `
+        import { contains, field } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+        import { Person } from './person';
+
+        export class Employee extends Person {
+          @field title = contains(StringField);
+        }
+      `,
       'john.json': {
         data: {
           type: 'card',
@@ -840,6 +857,156 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         5,
         'the new instance is in the fresh result',
       );
+    });
+
+    // The live-search cache key is scoped to the types a query's filter is
+    // anchored on, so one person's save stops unreaching every other reader's
+    // cached search. These pin both directions of that: what survives a write,
+    // and what must not.
+    module('the type-scoped cache key', function (hooks) {
+      let personRef = () => ({
+        module: rri(`${testRealm.url}person`),
+        name: 'Person',
+      });
+
+      hooks.beforeEach(async function () {
+        // Retention long enough that a `hit` can only mean the key still
+        // addresses the entry. Under the production TTL the entry would age
+        // out while the write indexes, and every case below would read as a
+        // miss for the wrong reason.
+        await stopSearchRealmServer();
+        await startSearchRealmServer({
+          dbAdapter,
+          publisher,
+          runner,
+          liveSearchCache: new LiveSearchCache({
+            ttlMs: 60_000,
+            telemetryIntervalMs: 0,
+          }),
+        });
+        await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+        await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+      });
+
+      // Prime an entry and confirm it is there, so a later `miss` is
+      // attributable to the write rather than to the entry never existing.
+      async function primed(assert: Assert, body: Record<string, unknown>) {
+        await postSearch(body);
+        let hit = await postSearch(body);
+        assert.strictEqual(
+          hit.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'the entry is cached before the write',
+        );
+      }
+
+      async function write(localPath: string, adoptsFrom: string) {
+        await testRealm.write(
+          localPath,
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: rri(`./${adoptsFrom.toLowerCase()}`),
+                  name: adoptsFrom,
+                },
+              },
+            },
+          }),
+        );
+      }
+
+      test('a write to a type the query cannot match leaves the entry hittable', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        // A Pet stamps its own chain — Pet, CardDef — and never Person, so
+        // the Person-anchored key does not move.
+        await write('ringo.json', 'Pet');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'a write the query provably cannot have gained or lost a member from',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          2,
+          'the cached body is the one the query still matches',
+        );
+      });
+
+      test('a write to a type the query does select still invalidates it', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        await write('mark.json', 'Person');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'the matching-type write moves the key',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          3,
+          'the new instance is in the fresh result',
+        );
+      });
+
+      test('a write to a subtype invalidates a query anchored on the ancestor', async function (assert) {
+        let searchBody = {
+          filter: { 'item.on': personRef() },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        // The write side stamps the full adoption chain, so an Employee write
+        // stamps Person — which is what makes the ancestor-anchored query,
+        // whose result set the Employee genuinely joins, recompute.
+        await write('alice.json', 'Employee');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'the subtype write moves the ancestor key',
+        );
+        assert.strictEqual(
+          afterWrite.body.meta.page.total,
+          3,
+          'the subtype instance is a member of the ancestor query',
+        );
+      });
+
+      test('a query with no type anchor still invalidates on any write', async function (assert) {
+        // A query with no filter matches anything, so no type can be ruled
+        // out and the key falls back to the realm-wide generation.
+        let searchBody = {
+          fields: { entry: ['item'] },
+          realms: [testRealm.url],
+        };
+        await primed(assert, searchBody);
+
+        await write('ringo.json', 'Pet');
+
+        let afterWrite = await postSearch(searchBody);
+        assert.strictEqual(
+          afterWrite.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          'an unanchored query recomputes on any write in the realm',
+        );
+      });
     });
   });
 });
