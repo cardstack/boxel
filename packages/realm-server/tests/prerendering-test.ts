@@ -248,6 +248,26 @@ function decodePng(base64: string): {
   };
 }
 
+// The paper size of a PDF's first page, read from its first `/MediaBox`
+// (PDF user-space points, 1/72 inch). Chromium writes the MediaBox
+// uncompressed, so a byte scan reads it without a PDF library — enough to
+// assert a CSS-driven `@page { size: … }` reached the print job.
+function firstMediaBox(
+  bytes: Buffer,
+): { width: number; height: number } | undefined {
+  let text = bytes.toString('latin1');
+  let m = text.match(
+    /\/MediaBox\s*\[\s*([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)\s*\]/,
+  );
+  if (!m) {
+    return undefined;
+  }
+  return {
+    width: Number(m[3]) - Number(m[1]),
+    height: Number(m[4]) - Number(m[2]),
+  };
+}
+
 interface RgbaImage {
   width: number;
   height: number;
@@ -1027,6 +1047,40 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
+            // Drives the print-CSS acceptance: an `@page { size: A4 }` rule
+            // (honored by preferCSSPageSize) sets the paper size, and three
+            // `break-after: page` sheets paginate to three A4 pages — but only
+            // under print media, where `@page` and `break-*` apply. `@page` is
+            // an at-rule with no selector, so it passes through scoped-css
+            // untouched into the document stylesheet the print job reads.
+            'paged.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Paged extends CardDef {
+                static displayName = "Paged";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <section class="sheet">{{@model.name}} — sheet one</section>
+                    <section class="sheet">sheet two</section>
+                    <section class="sheet">sheet three</section>
+                    <style scoped>
+                      @page { size: A4; margin: 0; }
+                      .sheet { break-after: page; height: 120px; }
+                    </style>
+                  </template>
+                }
+              }
+            `,
+            // Named `paged-card`, not `paged`, for the same extensionless-id
+            // reason as `disco`/`tall` above.
+            'paged-card.json': {
+              data: {
+                attributes: { name: 'Paged' },
+                meta: {
+                  adoptsFrom: { module: rri('./paged'), name: 'Paged' },
+                },
+              },
+            },
           },
         },
       ],
@@ -1408,6 +1462,77 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         (first?.pageCount ?? 0) <= 5,
         `paginates as a short screen render, not the tall print one (got ${first?.pageCount} pages)`,
+      );
+    });
+
+    test('a media=print pdf paginates to the CSS paper size', async function (assert) {
+      // The acceptance: print media engages the card's `@page`/`break-*` CSS,
+      // so the paged card's `@page { size: A4 }` sets the paper and its three
+      // `break-after: page` sheets produce a multi-page A4 document.
+      let { response } = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `print pdf succeeded (got ${response.status}: ${response.error ?? ''})`,
+      );
+      assert.strictEqual(response.contentType, 'application/pdf');
+      let bytes = Buffer.from(response.base64!, 'base64');
+      let first = response.captures?.[0];
+      assert.ok(
+        (first?.pageCount ?? 0) >= 2,
+        `break-after: page paginates to multiple pages (got ${first?.pageCount})`,
+      );
+      let box = firstMediaBox(bytes);
+      assert.ok(box, 'the PDF declares a page box');
+      // A4 portrait is 210×297mm = 595.28×841.89pt; allow a couple points for
+      // Chromium's rounding. A Letter fallback (612×792) — the paper a render
+      // that ignored `@page` would use — is well outside this window.
+      let isA4 =
+        box != null &&
+        Math.abs(box.width - 595) <= 3 &&
+        Math.abs(box.height - 842) <= 3;
+      assert.ok(
+        isA4,
+        `paper size is A4, not the Letter fallback (got ${box?.width}×${box?.height}pt)`,
+      );
+    });
+
+    test('print media does not bleed into the next pooled capture', async function (assert) {
+      // Media emulation is sticky per pooled page, so a print capture must
+      // restore screen media in its `finally`. Engage print on the page…
+      let printed = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(printed.response.status, 'ready', 'print capture ran');
+
+      // …then a default (screen) pdf of the print-probe must settle under
+      // screen again — 200px, a page or two — not the 60000px print layout a
+      // leaked emulation would render and page past the cap on.
+      let probe = await screenshot(`${realmURL}print-probe-card`, {
+        type: 'pdf',
+      });
+      assert.strictEqual(
+        probe.response.status,
+        'ready',
+        `screen pdf after a print capture stays within the cap (got ${probe.response.status}: ${probe.response.error ?? ''})`,
+      );
+      assert.ok(
+        (probe.response.captures?.[0]?.pageCount ?? 0) <= 5,
+        `the next render is the short screen layout (got ${probe.response.captures?.[0]?.pageCount} pages)`,
+      );
+
+      // …and a plain raster still renders at the canonical viewport.
+      let raster = await screenshot(`${realmURL}1`);
+      assert.strictEqual(raster.response.status, 'ready');
+      let png = decodePng(raster.response.base64!);
+      assert.deepEqual(
+        { width: png.width, height: png.height },
+        { width: 800, height: 600 },
+        'the next raster capture still renders at the default viewport',
       );
     });
 

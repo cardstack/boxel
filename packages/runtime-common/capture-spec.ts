@@ -148,11 +148,11 @@ export function isCaptureMedia(value: unknown): value is CaptureMedia {
 // honor yet — refused by name at parse (never ignored, per the module
 // contract), so no request can reach the engine asking for an output it
 // cannot produce. Unlocking a value here means teaching the engine the
-// corresponding leg: a jpeg/webp encode on the on-demand path, or
-// print-media emulation.
+// corresponding leg: a jpeg/webp encode on the on-demand path. (The `print`
+// media value is now honored — the engine emulates print media across the
+// settle — so both `CaptureMedia` values are supported and none is gated.)
 const UNSUPPORTED_CAPTURE_OUTPUT_TYPES: ReadonlySet<CaptureOutputType> =
   new Set(['jpeg', 'webp']);
-const UNSUPPORTED_CAPTURE_MEDIA: ReadonlySet<CaptureMedia> = new Set(['print']);
 
 // Bounds for pdf output. Neither is knowable at parse time — page count and
 // byte size exist only once Chrome has paginated the settled render — so the
@@ -520,11 +520,6 @@ function parseOverrideFields(
         error: `${path}.media must be one of ${CAPTURE_MEDIA.join('/')}`,
       };
     }
-    if (UNSUPPORTED_CAPTURE_MEDIA.has(raw.media)) {
-      return {
-        error: `${path}.media "${raw.media}" is not supported by this capture engine`,
-      };
-    }
     overrides.media = raw.media;
   }
 
@@ -838,6 +833,21 @@ export function parseScreenshotCaptureSpec(
       return { error: crossError };
     }
     entries.push({ name, ...elideDefaults(merged) });
+  }
+
+  // Media emulation is page-level and a batch shares one settled render, so
+  // every entry paginates/rasterizes under the same CSS media. A batch that
+  // mixed media would settle its later entries under the wrong one — refused
+  // rather than silently rendered wrong, per the module contract. (An
+  // all-default `screen` batch, the only shape reachable before this axis was
+  // honored, is uniform and unaffected.)
+  let mediaValues = new Set(
+    entries.map((entry) => entry.media ?? DEFAULT_CAPTURE_MEDIA),
+  );
+  if (mediaValues.size > 1) {
+    return {
+      error: 'captureSpec.captures may not mix media values',
+    };
   }
 
   return { captureSpec: { captures: entries } };

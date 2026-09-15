@@ -1585,13 +1585,17 @@ async function captureOneEntry(
         { title: 'Invalid screenshot capture spec' },
       );
     }
-    // `page.pdf()` renders under `print` media by default, whatever media the
-    // page settled under. The `media` axis is the caller's control over that,
-    // so pin the emulated media to what the spec asks — `screen` today (the
-    // default, and the only value the shared parse admits), which keeps the
-    // paged document the same render the raster path would capture. Cleared in
+    // The render already settled under the spec's media (emulated in
+    // `captureScreenshot` so the layout and image-paint wait ran under it).
+    // `page.pdf()`, though, forces `print` media for the print job whatever
+    // the page currently emulates — so a `media=screen` pdf would still
+    // paginate the print layout unless screen is emulated first. Pin the
+    // emulated media to the spec's own value: `print` re-asserts what the
+    // settle already used, `screen` overrides `page.pdf()`'s print default so
+    // the paged document matches the raster path's render. Cleared in
     // `finally` so a reused pooled page carries no media override into the
-    // next capture.
+    // next capture (the outer `captureScreenshot` restore is idempotent with
+    // this one).
     let media = entry.media ?? 'screen';
     await page.emulateMediaType(media);
     try {
@@ -1831,6 +1835,21 @@ export async function captureScreenshot(
     }
   }
 
+  // A batch settles once and every entry captures that one render, so a
+  // batch's entries must all render under the same CSS media — media emulation
+  // is page-level and the settle can't be replayed per-entry. The shared parse
+  // refuses a mixed-media batch; this guards direct prerender-server callers.
+  let firstMedia = entries[0].media ?? 'screen';
+  for (let entry of entries) {
+    if ((entry.media ?? 'screen') !== firstMedia) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture batch mixes media values (${firstMedia} and ${entry.media}); a batch renders under one media`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+  }
+
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
   // at a caller-specified size (or 2× scale) would silently change subsequent
   // index prerenders. Snapshot the current viewport before overriding and
@@ -1867,6 +1886,19 @@ export async function captureScreenshot(
   let viewportOverridden = false;
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
+
+  // The CSS media the whole render settles under. A batch is uniform (guarded
+  // above), so the first entry's media is the render's. `print` engages the
+  // card's print CSS — `@page`, `@media print`, `break-*` — across the settle
+  // and the image-paint wait, so the capture (a paged pdf or a raster of the
+  // print layout) is of the print render, not a print veneer over a screen
+  // one. `screen`, the default, needs no emulation: it is the media every
+  // capture and the indexing HTML path have always rendered under, so the
+  // common path never touches the pooled page's media state. Emulation is
+  // sticky per-page, so a non-default media is restored in `finally`, the same
+  // save/restore discipline the viewport gets.
+  let renderMedia = firstMedia;
+  let mediaEmulated = false;
 
   // Per-stage wall-clock accumulators for the capture's stepTimings.
   // `renderFor` can run more than once per batch (once per distinct
@@ -1946,6 +1978,14 @@ export async function captureScreenshot(
       viewportOverridden = true;
       currentViewport = firstViewport;
     }
+    // Emulate the render's media BEFORE the transition so the card settles —
+    // and the image-paint wait probes resources — under it, not after. Only a
+    // non-default media touches the pooled page's state; `screen` renders as
+    // it always has.
+    if (renderMedia !== 'screen') {
+      await page.emulateMediaType(renderMedia);
+      mediaEmulated = true;
+    }
     currentEnvelope = entries[0].envelope;
 
     let firstError = await renderFor(currentEnvelope);
@@ -2024,6 +2064,16 @@ export async function captureScreenshot(
       // HTML-capture path) sees the original viewport, not the caller's.
       try {
         await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+    if (mediaEmulated) {
+      // Clear the media override so the next reuse of this pooled page (the
+      // indexing HTML-capture path, a screen-media screenshot) renders under
+      // screen media, not this capture's print emulation.
+      try {
+        await page.emulateMediaType();
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }

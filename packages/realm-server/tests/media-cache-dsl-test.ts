@@ -341,11 +341,6 @@ module(basename(import.meta.filename), function () {
           'captureSpec.type must be one of png/jpeg/webp/pdf',
         ],
         [
-          'media=print',
-          'media',
-          'captureSpec.media "print" is not supported by this capture engine',
-        ],
-        [
           'media=braille',
           'media',
           'captureSpec.media must be one of screen/print',
@@ -364,6 +359,60 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         viaPost.error,
         'captureSpec.type "jpeg" is not supported by this capture engine',
+      );
+    });
+
+    test('media=print parses and round-trips on both surfaces', function (assert) {
+      // The engine now emulates print media across the settle, so `print` is
+      // no longer gated — it parses, carries into the identity, and round-trips
+      // back to the same canonical query. It is servable (a print-media raster
+      // is still an image), so the GET surface admits it, unlike type=pdf.
+      let viaGet = parseCaptureSpecParams(params('media=print'));
+      assert.true('spec' in viaGet, 'media=print parses on the GET surface');
+      if ('spec' in viaGet) {
+        assert.strictEqual(
+          canonicalCaptureSpecString(viaGet.spec),
+          '{"media":"print"}',
+        );
+        assert.strictEqual(
+          canonicalCaptureSpecQuery(viaGet.spec),
+          '?media=print',
+        );
+      }
+
+      let viaPost = parseScreenshotCaptureSpec({ media: 'print' }, 'isolated');
+      assert.deepEqual(
+        viaPost.captureSpec,
+        { media: 'print' },
+        'media=print parses on the POST surface, carrying the axis',
+      );
+    });
+
+    test('a batch may not mix media values', function (assert) {
+      // Media emulation is page-level and a batch settles once, so every entry
+      // renders under one media — a mixed-media batch is refused, not silently
+      // rendered with the later entries under the wrong media.
+      let mixed = parseScreenshotCaptureSpec(
+        {
+          media: 'print',
+          captures: [{ name: 'a' }, { name: 'b', media: 'screen' }],
+        },
+        'isolated',
+      );
+      assert.strictEqual(
+        mixed.error,
+        'captureSpec.captures may not mix media values',
+      );
+
+      // A uniform batch (the batch-wide default alone) is fine.
+      let uniform = parseScreenshotCaptureSpec(
+        { media: 'print', captures: [{ name: 'a' }, { name: 'b' }] },
+        'isolated',
+      );
+      assert.strictEqual(
+        uniform.error,
+        undefined,
+        'a uniform-media batch parses',
       );
     });
 
@@ -446,10 +495,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('output type and media are identity axes: each non-default value is its own cache key', async function (assert) {
-      // `media: 'print'` is constructed directly rather than parsed — it is
-      // still gated at parse until the engine emulates print media — but the
-      // identity beneath is fully wired, so unlocking it never re-keys
-      // existing captures.
+      // Constructed directly rather than parsed: this pins the identity layer
+      // itself — each non-default axis value keys its own capture —
+      // independently of which parse surfaces admit a value, so gating or
+      // unlocking a value at a surface never re-keys existing captures.
       let png: CaptureSpec = { format: 'isolated' };
       let pdf: CaptureSpec = { format: 'isolated', type: 'pdf' };
       let print: CaptureSpec = { format: 'isolated', media: 'print' };
