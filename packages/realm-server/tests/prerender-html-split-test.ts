@@ -31,6 +31,7 @@ import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/pre
 import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerender-html';
 import type { PgAdapter } from '@cardstack/postgres';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   createTestPgAdapter,
   prepareTestDB,
@@ -868,7 +869,41 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('only enabled realms retain render link captures across an uncaptured render', async function (assert) {
+      for (let enabled of [false, true]) {
+        indexWriter = new IndexWriter(adapter, {
+          lattice: new LatticeRealmConfig(enabled ? [testRealm] : []),
+        });
+        let url = `${testRealm}capture-${enabled}.json`;
+        let missing = [
+          {
+            fieldName: 'wall',
+            reference: `${testRealm}missing`,
+            kind: 'not-found' as const,
+          },
+        ];
+        await writeInstance(5, url, '<div>Missing</div>', {
+          diagnostics: { brokenLinks: missing },
+        });
+        await writeInstance(6, url, '<div>No capture</div>');
+        let row = await productionRow(url);
+        assert.deepEqual(
+          row.diagnostics?.brokenLinks,
+          enabled ? missing : undefined,
+          `retained findings require enabled=${enabled}`,
+        );
+        assert.strictEqual(
+          row.diagnostics?.brokenLinksGeneration,
+          enabled ? 5 : undefined,
+          `capture provenance requires enabled=${enabled}`,
+        );
+      }
+    });
+
     test('render link recovery retains a complete capture without advancing its generation', async function (assert) {
+      indexWriter = new IndexWriter(adapter, {
+        lattice: new LatticeRealmConfig([testRealm]),
+      });
       let url = `${testRealm}1.json`;
       let missing = [
         {
@@ -943,6 +978,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('render link recovery merges against the capture current at publication', async function (assert) {
+      indexWriter = new IndexWriter(adapter, {
+        lattice: new LatticeRealmConfig([testRealm]),
+      });
       let url = `${testRealm}1.json`;
       await writeInstance(5, url, '<div>Initial</div>', {
         diagnostics: { brokenLinks: [] },

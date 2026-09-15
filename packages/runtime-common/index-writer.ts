@@ -2922,7 +2922,7 @@ export class Batch {
       'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
       ...separatedByCommas(
         prerenderedNames.map((name) =>
-          name === 'diagnostics'
+          this.latticeEnabled && name === 'diagnostics'
             ? [
                 'diagnostics =',
                 // Merge inside the existing row upsert: an attempt prepared
