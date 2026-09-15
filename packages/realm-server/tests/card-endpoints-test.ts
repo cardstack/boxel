@@ -4459,10 +4459,20 @@ module(basename(import.meta.filename), function () {
           }
         });
 
-        test('a read issued straight after a write serves the written state', async function (assert) {
-          // Reads drain any in-flight incremental indexing before consulting
-          // the index, so a client never has to poll for its own write to
-          // become visible.
+        test('a read issued straight after a deferred write serves the written state', async function (assert) {
+          // A read drains the requester's own in-flight incremental indexing
+          // before consulting the index, so a client never has to poll for its
+          // own write to become visible.
+          //
+          // Two things this has to set up, or it passes whether or not the
+          // drain exists. The write must defer its indexing —
+          // `X-Boxel-Skip-Index-Wait` returns once the bytes are durable,
+          // where the default path waits for the index and leaves nothing in
+          // flight to drain. And both requests must carry the same identity:
+          // the gate waits on indexing *that requester initiated*, so an
+          // anonymous read is excused from waiting and a different user's read
+          // finds nothing of its own pending.
+          let jwt = createJWT(testRealm, 'john', ['read', 'write']);
           let patchResponse = await request
             .patch('/person-1')
             .send({
@@ -4479,12 +4489,15 @@ module(basename(import.meta.filename), function () {
                 },
               },
             })
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .set('X-Boxel-Skip-Index-Wait', 'true');
           assert.strictEqual(patchResponse.status, 200, 'the PATCH succeeds');
 
           let response = await request
             .get('/person-1')
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${jwt}`);
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
