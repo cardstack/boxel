@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
+  CaptureSpec,
   DefinitionLookup,
   IndexWriter,
   Prerenderer,
@@ -305,6 +306,90 @@ module(basename(import.meta.filename), function () {
           `"${qs}" is refused with the shared-validator wording`,
         );
       }
+    });
+
+    test('explicit default type and media elide like the other engine defaults', async function (assert) {
+      let explicit = parseCaptureSpecParams(params('type=png&media=screen'));
+      assert.true('spec' in explicit, 'the explicit-default spelling parses');
+      if ('spec' in explicit) {
+        assert.strictEqual(canonicalCaptureSpecString(explicit.spec), '{}');
+        assert.strictEqual(
+          await captureSpecHash(explicit.spec),
+          await captureSpecHash({ format: 'isolated' }),
+          'type=png&media=screen means the bare canonical capture',
+        );
+      }
+    });
+
+    test('not-yet-supported output types and media are refused naming the param', function (assert) {
+      for (let [qs, field, message] of [
+        [
+          'type=pdf',
+          'type',
+          'captureSpec.type "pdf" is not supported by this capture engine',
+        ],
+        [
+          'type=jpeg',
+          'type',
+          'captureSpec.type "jpeg" is not supported by this capture engine',
+        ],
+        [
+          'type=gif',
+          'type',
+          'captureSpec.type must be one of png/jpeg/webp/pdf',
+        ],
+        [
+          'media=print',
+          'media',
+          'captureSpec.media "print" is not supported by this capture engine',
+        ],
+        [
+          'media=braille',
+          'media',
+          'captureSpec.media must be one of screen/print',
+        ],
+      ] as const) {
+        let parsed = parseCaptureSpecParams(params(qs));
+        assert.deepEqual(
+          'error' in parsed ? parsed.error : undefined,
+          { field, message },
+          `"${qs}" is refused naming ${field}`,
+        );
+      }
+
+      // The POST body runs the same gate with the same wording.
+      let viaPost = parseScreenshotCaptureSpec({ type: 'pdf' }, 'isolated');
+      assert.strictEqual(
+        viaPost.error,
+        'captureSpec.type "pdf" is not supported by this capture engine',
+      );
+    });
+
+    test('output type and media are identity axes: each non-default value is its own cache key', async function (assert) {
+      // Constructed directly rather than parsed: the parse gates these values
+      // until the engine grows the corresponding leg, but the identity
+      // beneath is already wired, so unlocking a value later never re-keys
+      // existing captures.
+      let png: CaptureSpec = { format: 'isolated' };
+      let pdf: CaptureSpec = { format: 'isolated', type: 'pdf' };
+      let print: CaptureSpec = { format: 'isolated', media: 'print' };
+      assert.strictEqual(canonicalCaptureSpecString(pdf), '{"type":"pdf"}');
+      assert.strictEqual(
+        canonicalCaptureSpecString(print),
+        '{"media":"print"}',
+      );
+      assert.strictEqual(canonicalCaptureSpecQuery(pdf), '?type=pdf');
+      assert.strictEqual(canonicalCaptureSpecQuery(print), '?media=print');
+      let hashes = await Promise.all([
+        captureSpecHash(png),
+        captureSpecHash(pdf),
+        captureSpecHash(print),
+      ]);
+      assert.strictEqual(
+        new Set(hashes).size,
+        3,
+        'png, pdf, and print-media captures are three distinct cache keys',
+      );
     });
   });
 

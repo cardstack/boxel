@@ -134,6 +134,8 @@ function sameCaptureSpec(
     (a.clip?.height ?? null) === (b.clip?.height ?? null) &&
     (a.envelope?.width ?? null) === (b.envelope?.width ?? null) &&
     (a.envelope?.height ?? null) === (b.envelope?.height ?? null) &&
+    (a.type ?? null) === (b.type ?? null) &&
+    (a.media ?? null) === (b.media ?? null) &&
     a.captures === undefined &&
     b.captures === undefined
   );

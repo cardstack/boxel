@@ -1841,5 +1841,28 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(decision, { type: 'insert' });
     });
+
+    test('an output-encoding or media mismatch is never a twin', function (assert) {
+      // Directly-constructed args: the wire parse still gates non-default
+      // type/media values, but the comparator must already refuse them so
+      // that unlocking a value cannot silently join a pdf request onto a
+      // png render (or a print-media render onto a screen one).
+      for (let extra of [{ type: 'pdf' }, { media: 'print' }]) {
+        let base = customSpecArgs();
+        let decision = chooseScreenshotCardCoalesceDecision({
+          incoming: jobSpec({
+            ...base,
+            captureSpec: { ...(base.captureSpec as object), ...extra },
+          }),
+          candidates: [{ ...jobSpec(customSpecArgs()), id: 7 }],
+          inFlightCandidates: [],
+        });
+        assert.deepEqual(
+          decision,
+          { type: 'insert' },
+          `a spec differing only in ${Object.keys(extra)[0]} does not join`,
+        );
+      }
+    });
   });
 });
