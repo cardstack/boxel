@@ -923,6 +923,65 @@ module(basename(import.meta.filename), function () {
           assert.ok(response.get('etag'), '200 response still carries an ETag');
         });
 
+        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept, so caches key on the negotiated type',
+          );
+        });
+
+        test('a 304 answers with no body and still varies on Accept', async function (assert) {
+          let firstResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(firstResponse.status, 200, 'first GET succeeds');
+          let etag = firstResponse.get('etag') ?? '';
+          assert.ok(etag, 'first response carries an ETag');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(response.status, 304, 'HTTP 304 status');
+          // `response.body` can be `{}` when supertest cannot decode an empty
+          // buffer, so the body check reads `response.text`.
+          assert.notOk(response.text, 'the 304 carries no body');
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the 304 varies on Accept',
+          );
+        });
+
+        test('an Accept the realm serves no route for falls through to the module/file fallback and 404s', async function (assert) {
+          // Content negotiation has no 406 arm: an unmatched Accept leaves the
+          // router with no route, and the request lands on the fallback that
+          // serves modules and raw files. `person-1` names a card, and neither
+          // that name nor any executable-extension form of it is a file on
+          // disk, so the fallback reports it missing.
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/x-unknown');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `an unsupported Accept 404s rather than 406ing: ${response.text}`,
+          );
+        });
+
         // A write lands on the realm's file system before it is indexed, so
         // "no index row" and "no card" are different situations. Writing
         // straight to disk (rather than through `realm.write`) leaves a file
@@ -4364,6 +4423,40 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('a read issued straight after a write serves the written state', async function (assert) {
+          // Reads drain any in-flight incremental indexing before consulting
+          // the index, so a client never has to poll for its own write to
+          // become visible.
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patchResponse.status, 200, 'the PATCH succeeds');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Van Gogh',
+            'the read serves the state the write just produced',
+          );
+        });
         test('broadcasts realm events', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -4980,6 +5073,126 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    // `HEAD` is how a client discovers which realm serves a URL. A discovery
+    // probe reads `X-Boxel-Realm-Url` and `X-Boxel-Realm-Public-Readable` off
+    // the response and looks at nothing else — not the body, not the status —
+    // so what it rests on is that every response the realm builds carries
+    // those headers, for any path and without the caller proving it may read
+    // anything.
+    module('card HEAD request', function (_hooks) {
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('a probe that sends no Accept names the realm whatever the path', async function (assert) {
+          // What the realm-discovery callers send: no `Accept` of their own,
+          // which matches no route, so the request lands on the module/file
+          // fallback and the realm identity comes off whatever that answers.
+          for (let path of [
+            '/person-1',
+            '/no-such-card',
+            '/some/nested/path',
+          ]) {
+            let response = await request.head(path);
+
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              `the response for ${path} names the realm serving the URL`,
+            );
+            assert.strictEqual(
+              response.get('X-boxel-realm-public-readable'),
+              'true',
+              `the response for ${path} reports the realm as public readable`,
+            );
+          }
+        });
+
+        test('an Accept the realm has no read route for answers 200 whatever the path', async function (assert) {
+          for (let path of [
+            '/person-1',
+            '/no-such-card',
+            '/',
+            '/some/nested/path',
+          ]) {
+            let response = await request
+              .head(path)
+              .set('Accept', 'application/vnd.api+json');
+
+            assert.strictEqual(response.status, 200, `HTTP 200 for ${path}`);
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              `the response for ${path} names the realm serving the URL`,
+            );
+            assert.strictEqual(
+              response.get('X-boxel-realm-public-readable'),
+              'true',
+              `the response for ${path} reports the realm as public readable`,
+            );
+          }
+        });
+
+        test('answers 200 with the realm-identity headers for a card that exists', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'the response reports the realm as public readable',
+          );
+        });
+      });
+
+      module('permissioned realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('answers 200 without a JWT, and reports the realm as not public readable', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'discovery does not require authentication',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            undefined,
+            'the realm is not public readable',
+          );
+        });
+      });
+    });
     module('file URLs', function (hooks) {
       setupPermissionedRealmCached(hooks, {
         realmURL,
