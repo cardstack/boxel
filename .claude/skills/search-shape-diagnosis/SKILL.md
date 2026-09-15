@@ -1,80 +1,92 @@
 ---
 name: search-shape-diagnosis
-description: Read the per-request query-shape telemetry the federated search emits — one JSON log line per `_federated-search` request on the `boxel:search-shape` channel (the same `| json` convention as `boxel:client-perf` and `boxel:screenshot-perf`), carrying the query's *shape* with every caller-supplied value elided, plus which cache answered, the result counts, and the wall-clock. Use it to answer what a search load was actually made of, which the request rate alone cannot show: (1) what a burst of searches asked for — the filter trees, type anchors, page sizes and fieldsets behind a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2) which shapes dominate a window by volume, by latency, or by rows returned; (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's job-scoped cache — and therefore how much of it reached the index at all; (4) separating prerender search load from live browser load via `linkMode`, since a prerender skips the `loadLinks` relationship-assembly pass and so costs a different amount for the same query; (5) attributing live search load to a person or a tab session, by joining `correlationId` to the `server-request` event on `boxel:client-perf`; (6) attributing in-render search load to the indexing job that caused it via `jobId` and `consumingRealm`; and (7) authoring a replay that exercises the same index paths a real load did. Carries the null-semantics traps that make naive aggregates silently wrong (a cache hit reports no counts; an incomplete merge reports no total; `correlationId` is minted per search and is not a per-render key). Joins to `realm:requests` and the `realm:search-timing` stage breakdown on `correlationId`. For staging/prod this layers on `aws-access` (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off to `indexing-diagnostics` when the cost is inside the indexer rather than in what was asked for, and to the `search` skill when the task is authoring a query rather than reading one. Use when someone asks what a search spike was made of, which queries a realm is issuing, why search load is high, what a representative query looks like, or wants to replay a real load.
+description: Read the per-request query-shape telemetry the federated search emits — one JSON log line per `_federated-search` request on the `boxel:search-shape` channel (the same `| json` convention as `boxel:client-perf` and `boxel:screenshot-perf`), carrying the query's *shape* with every caller-supplied value elided, plus which cache answered, the result counts, and the wall-clock. Use it to answer what a search load was actually made of, which the request rate alone cannot show: (1) what a burst of searches asked for — the filter trees, type anchors, page sizes and fieldsets behind a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2) which shapes dominate a window by volume, by latency, or by rows returned; (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's job-scoped cache — and therefore how much of it reached the index at all; (4) separating prerender search load from live browser load via `linkMode`, since a prerender skips the `loadLinks` relationship-assembly pass and so costs a different amount for the same query; (5) attributing live search load to a person or a tab session, by joining `correlationId` to the `server-request` event on `boxel:client-perf`; (6) attributing in-render search load to the indexing job that caused it via `jobId` and `consumingRealm`; and (7) authoring a replay that exercises the same index paths a real load did. Carries the traps that make naive aggregates silently wrong: a cache hit reports no counts, an incomplete merge reports no total, `correlationId` is minted per search so nothing on the line groups one render (`jobId` is a whole index pass), and a search the admission gate sheds emits no line at all — so under saturation this counts admitted searches rather than arriving ones. Joins to `realm:requests` and the `realm:search-timing` stage breakdown on `correlationId`. For staging/prod this layers on `aws-access` (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off to `indexing-diagnostics` when the cost is inside the indexer rather than in what was asked for, and to the `search` skill when the task is authoring a query rather than reading one. Use when someone asks what a search spike was made of, which queries a realm is issuing, why search load is high, what a representative query looks like, or wants to replay a real load.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
 # Federated search query-shape diagnosis
 
-A federated search is a `QUERY` whose query travels in the request body. Access logs carry method, URL, status and timing and never bodies — so without this channel a search load is legible only as a rate: how many ran and how long each took, with nothing about what any of them asked for.
+A federated search is a `QUERY` (or `POST`) whose query travels in the request body. Access logs carry method, URL, status and timing and never bodies — so without this channel a search load is legible only as a rate: how many ran and how long each took, with nothing about what any of them asked for.
 
 `boxel:search-shape` closes that. One flat JSON line per `_federated-search` request, emitted from the single call site in `packages/realm-server/handlers/handle-search.ts`, defined in `packages/runtime-common/search-shape.ts`. It is the search sibling of `client-perf-diagnosis` (browser telemetry) and `screenshot-perf-diagnosis` (capture telemetry), and shares their emit convention.
 
-Read `search-shape.ts`'s module header for the field semantics — it is the source of truth and this skill deliberately does not restate it. What follows is what the code cannot tell you: how to query it, and the ways a reasonable-looking query is wrong.
+The module header in `search-shape.ts` defines what each member means. This skill is about querying the channel and the ways a reasonable query returns a wrong number; where it touches a field's meaning it does so only far enough to explain the consequence, and points at the header for the rest.
 
 ## Where the lines come from
 
-Every line is emitted by the realm-server, so `service="realm-server"` is complete — there is no worker-side emission. One line per request that got far enough to parse a query, on **every** path that answers: a fresh compute, each cache outcome, a 304, the time-budget 408, and an escaping 500. A request rejected before its query parsed (a malformed body, a bad field path) emits nothing — absence of a line for a request means it never became a search.
+Every line is emitted by the realm-server, so `service="realm-server"` is complete — there is no worker-side emission. One line per request that reaches the handler and parses a query, on **every** path that answers: a fresh compute, each cache outcome, a 304, the time-budget 408, and an escaping 500.
+
+Three things emit nothing at all, and the third is the one that bites:
+
+- a request whose query fails to parse (a malformed body, a bad field path) — it never became a search;
+- a request `multiRealmAuthorization` rejects;
+- **a search the admission gate sheds.** `searchAdmission` (`packages/realm-server/middleware/index.ts`) answers an over-ceiling search with a 429 _before_ the handler runs, and logs it on `realm:search-admission` instead.
+
+That last one means this channel counts **admitted** searches, not arriving ones. Under exactly the saturation it exists to explain, the missing lines are the excess — so pair any spike with the shed count or you will read a ceiling as a plateau.
 
 ## The traps
 
-These are the reason this skill exists. Each one produces a plausible number that is quietly wrong.
+Each of these produces a believable wrong number.
 
 ### 1. The counts are null whenever a cache answered
 
-`results`, `total` and `incomplete` are populated **only** when the handler built a document — that is, `cache` of `none`, `miss` or `job-miss`. On `hit`, `join`, `job-hit` and `not-modified` the response came from a body some other request computed, and all three are null rather than re-derived.
+`results`, `total` and `incomplete` are populated only where the handler built a document. On `hit`, `join`, `job-hit` and `not-modified` the response came from a body some other request computed, and all three are null rather than re-derived.
 
-So `avg(results)` over a window is the average **over cache misses only**, and during a load event that is exactly the unrepresentative subset. Always constrain the outcome before aggregating a count:
+So `avg(results)` over a window is the average **over cache misses only** — during a load event, the unrepresentative subset. Constrain the outcome before aggregating a count:
 
 ```logql
 | cache=~"none|miss|job-miss" | unwrap results
 ```
 
+That filter is necessary but not sufficient: the live-search cache records its outcome the moment it decides, before the populate runs, so a 408 or an escaping 500 also reports `miss` with no counts. Unwrapping is unaffected (Loki drops the empty values); if you are _counting lines_ rather than unwrapping, add `| status=200`.
+
 `totalMs` and `status` are populated on every line, cache hits included — a hit is a real request with a real latency. Only the counts are conditional.
 
 ### 2. `total` has two null causes
 
-Null because a cache answered (above), **or** null because the merge was incomplete: a realm the query fanned out to failed to answer, so the count would sum only the realms that did and be a floor rather than a match count. `incomplete: true` distinguishes the second; `incomplete: null` means no document was built at all.
+Null because a cache answered, **or** null because the merge was incomplete — a realm the query fanned out to failed to answer, so the count would sum only the realms that did. `incomplete: true` distinguishes the second; `incomplete: null` means no document was built at all.
 
-A window where `incomplete` is ever true is a window where some realm was failing — worth noticing in its own right, independent of whatever you came to measure.
+A window where `incomplete` is ever true is a window where some realm was failing, which is worth noticing whatever you came to measure.
 
-### 3. `correlationId` is per search, not per render
+### 3. Nothing on this line groups one render
 
-It is minted fresh for each `_federated-search` fetch (`newCorrelationId()` in `packages/host/app/lib/prerender-fetch-headers.ts`, and the client-telemetry middleware does the same for live traffic). Every line has its own. Counting distinct `shapeHash` within one `correlationId` therefore always returns 1.
+`correlationId` is minted per search, so every line that carries one carries its own — and a live request whose client-telemetry instrument is dormant carries none, so those lines share the _absence_ of an id rather than each having one. Counting distinct `shapeHash` within a `correlationId` therefore returns 1, or silently lumps together every uninstrumented line in the range.
 
-To group the searches of one render:
+What the other candidates actually group:
 
-| traffic              | grouping key                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prerender / indexing | `jobId` — per prerender visit; `consumingRealm` names the realm whose render issued it                                                            |
-| live browser         | none on this channel — join `correlationId` to the `server-request` event on `boxel:client-perf`, which carries `session_id` and `matrix_user_id` |
+| key                                                    | groups                                                                                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jobId`                                                | one **indexing job** (queue job + reservation), held across the job's whole file sweep — every file it visited, both visit types. Not one render. |
+| `consumingRealm`                                       | the realm whose render issued the search, for the life of that job                                                                                |
+| `correlationId` → `boxel:client-perf` `server-request` | a live browser **tab session** (`session_id`) and the person driving it (`matrix_user_id`)                                                        |
 
-The live-traffic join only works while the client telemetry instrument is armed; when it is dormant the request carries no correlation id at all and `correlationId` is null.
+There is no per-render key. "Searches per page render" is not answerable from this channel as posed; per index pass and per tab session are.
 
-### 4. `linkMode` splits the same query into different costs
+### 4. `linkMode` splits one query into different costs
 
-`prerender` means the `loadLinks` relationship-assembly pass was skipped outright — the largest per-result cost there is. `links-only` runs the pass and drops the closure; `full` assembles it. A latency panel that mixes modes is averaging two different amounts of work for identical queries. Split by `linkMode` before comparing anything.
+`prerender` means the `loadLinks` relationship-assembly pass was skipped outright — the largest per-result cost there is. A panel that mixes modes averages two different amounts of work for identical queries, so split by `linkMode` before comparing anything.
+
+`prerender` is **not** a synonym for indexing. It derives from `x-boxel-during-prerender`, which the module, file-extract and command-runner routes raise alongside the indexing render route — so the bucket is all headless traffic. Indexing is the subset with a non-null `jobId`, which only the render route's visit carries.
 
 ### 5. `shapeHash` groups across realms and pages on purpose
 
-It folds only what changes the work: filter, sort, htmlQuery, page size, fieldset (including `itemAsFallback`), `linkMode`, scope, and whether a `cardUrls` subset applies. It deliberately excludes the realm list, page number, pinned generation, and request identity.
+The members it folds are the list built in `describeSearchShape`. What matters for reading it: the realm list, page number, pinned generation and request identity are deliberately **out**. A shared hash means the same query _shape_ — not the same request, and not the same realm. Two hits on one hash are often two realms being asked the same thing, which is usually what you want to know but not if you assumed otherwise.
 
-So a shared hash means _the same query shape_, not the same request and not the same realm. Two hits on one hash may be two different realms being asked the same thing — which is usually what you want to know, but not if you assumed otherwise.
+### 6. Truncated `filter` text can hide two shapes
 
-### 6. A truncated line is not a distinct shape
-
-`truncated: true` means a rendered member hit `MAX_MEMBER_CHARS` and was cut with a `…[+N]` marker. The hash is taken **before** the cap, so two shapes differing only past the cut still hash differently even though their `filter` text is identical. Group by `shapeHash`, not by the `filter` string, or you will merge shapes the cap made look alike.
+`truncated: true` means a rendered member hit the cap and was cut with a `…[+N]` marker. The hash is taken **before** the cap, so two shapes differing only past the cut hash differently while their rendered `filter` can be indistinguishable. Group by `shapeHash`, never by the `filter` string.
 
 ## Querying it
 
 For staging/prod, read **`aws-access`** first (the AWS session and Loki auth). The `|=` line filter must come **ahead of** `| json` — without it the parser reads every realm-server line in the range and the query times out. Deployed lines are firelens-wrapped, so unwrap before the real parse, exactly as the sibling channels do.
 
 ```logql
-# the base selector every recipe below builds on
 {service="realm-server", env="$env"} |= "boxel:search-shape" | json
   | line_format "{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}" | json
   | channel="boxel:search-shape"
 ```
+
+The recipes below write `<base>` for that selector — substitute it inline before pasting into Grafana Explore.
 
 ### What is this spike made of?
 
@@ -106,23 +118,23 @@ sum by (cache) (count_over_time(<base> [5m]))
 
 `hit` + `join` + `job-hit` + `not-modified` is the share that cost no index read. A spike that is mostly `hit` is a spike in _requests_, not in index work — the fix for it is upstream in the client, not in the query engine.
 
-### Prerender load vs live user load
+### Headless load vs live user load
 
 ```logql
 sum by (linkMode) (count_over_time(<base> [5m]))
 ```
 
-`prerender` lines are indexing traffic; pair them with `jobId` and hand off to `indexing-diagnostics`. `full` / `links-only` are live user traffic.
+`full` and `links-only` are live user traffic. `prerender` is headless traffic of every kind; narrow to indexing with `| jobId != ""` and hand those off to `indexing-diagnostics`.
 
-### Searches per render, by card type
+### Searches per index pass, by card type
 
-Prerender only (trap 3). `filter` carries the type anchor, so the anchor is the card type:
+Indexing only (trap 3). `filter` carries the type anchor, so the anchor is the card type:
 
 ```logql
-# searches per prerender visit
-topk(20, sum by (jobId) (count_over_time(<base> | linkMode="prerender" [5m])))
+# searches per indexing job — one job sweeps many files, so this is a pass total
+topk(20, sum by (jobId) (count_over_time(<base> | linkMode="prerender" | jobId != "" [5m])))
 
-# then the shapes within one visit
+# then the shapes within one pass
 <base> | jobId="<jobId>" | line_format "{{.shapeHash}} {{.filter}}"
 ```
 
@@ -148,10 +160,10 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
 
 ## Authoring a replay
 
-The line is designed so a load can be reproduced without ever having held the user data that produced it. `filter` gives the operator tree and the field paths; `sort`, `pageSize`, the fieldset members, `scope` and `linkMode` give the rest of the request. What it deliberately does not give is the bound values — so a replay substitutes its own, and exercises the same index paths at the same cardinality without the originals.
+The line is designed so a load can be reproduced without ever having held the user data that produced it. `filter` gives the operator tree and the field paths; `sort`, `pageSize`, the fieldset members, `scope` and `linkMode` give the rest of the request. What it deliberately withholds is the bound values — so a replay substitutes its own and exercises the same index paths at the same cardinality without the originals.
 
 Reconstruct the request body from the shape (see the `search` skill for the wire grammar), then drive it at the observed rate: `count_over_time` by `shapeHash` gives the per-shape rate to reproduce, and the `cache` distribution tells you how much of it must be distinct to avoid being absorbed by the live-search cache — a replay that issues one query repeatedly measures the cache, not the index.
 
-## No dashboard yet
+## Where to run these
 
-`boxel:client-perf`, `boxel:screenshot-perf` and `boxel:actions-queue` each ship one under `packages/observability/grafanactl/resources/dashboards/boxel-status/`. This channel does not, so the recipes above are written to be pasted into Grafana Explore. Anyone building the dashboard should start from them, and the traps above are the panel definitions that matter: split by `linkMode`, constrain counts to the miss outcomes, group by `shapeHash` rather than `filter`.
+`boxel:client-perf`, `boxel:screenshot-perf` and `boxel:actions-queue` each have a dashboard under `packages/observability/grafanactl/resources/dashboards/boxel-status/`; this channel is read from Grafana Explore with the recipes above. The traps are what any panel set has to respect: split by `linkMode`, constrain counts to the miss outcomes, group by `shapeHash` rather than `filter`, and show the `realm:search-admission` shed count beside any request rate.

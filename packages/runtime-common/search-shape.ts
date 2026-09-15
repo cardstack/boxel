@@ -50,11 +50,13 @@
 // text, so a capped line still groups with its own shape.
 //
 // Counting distinct hashes answers "how many shapes is this load made of", but
-// the set of lines to count them over is not `correlationId`: that id is minted
-// per search, so every line has its own. Grouping a render's searches means
-// `jobId`, which is per prerender visit. Live browser traffic carries no render
-// key of its own — its lines reach a tab session only by joining
-// `correlationId` to the `server-request` event on `boxel:client-perf`.
+// no member of this line groups one render. `correlationId` is minted per
+// search, so every line carrying one carries its own — and a live request whose
+// client-telemetry instrument is dormant carries none at all. `jobId` is the
+// indexing job the search ran under (queue job + reservation), held across the
+// whole file sweep, so it groups an entire index pass rather than one visit.
+// Live browser traffic reaches a tab session only by joining `correlationId` to
+// the `server-request` event on `boxel:client-perf`.
 //
 // The hash folds what the handler's cache key folds, for the same reason: a
 // member that changes the response body is a member two requests differ by.
