@@ -56,6 +56,62 @@ import type { TestContextWithSave } from '../helpers';
 
 let mockedFileContent = 'Hello, world!';
 
+// A code patch's apply button lands at the end of a chain no test helper can be
+// awaited on: the mock homeserver hands a simulated event to the client on a
+// macrotask, the matrix service flushes it — unmounting the room for the
+// duration of the flush — the room-changes task reconciles the timeline, and
+// only then does the message body parse its fenced code block and mount a diff
+// editor carrying the button. `settled()` returns before any of that starts, so
+// the button can only be polled for, and the poll has to be budgeted for the
+// whole chain. A CI shard shares its runner with the realm servers, the worker
+// and the prerender pool, which puts that chain well past the one-second
+// default @ember/test-helpers applies to `waitFor`.
+const APPLY_CODE_BUTTON_TIMEOUT_MS = 10_000;
+
+// The room mounts this marker only once its timeline has loaded and no
+// room-changes task is in flight. Simulated events injected before that point
+// are reconciled as part of the initial load rather than on their own, which
+// puts the message render behind whatever the load still owes.
+const ROOM_SETTLED_TIMEOUT_MS = 10_000;
+
+// Reports how far the render chain above got, so a timeout in CI distinguishes
+// an event that never reached the room from a room still flushing, a message
+// that rendered without its code block, or a diff editor missing only its
+// button.
+function describeCodePatchRenderState() {
+  return [
+    `room mounted: ${Boolean(find('[data-test-room]'))}`,
+    `room settled: ${Boolean(find('[data-room-settled]'))}`,
+    `loading timeline: ${getService('matrix-service').isLoadingTimeline}`,
+    `messages: ${findAll('[data-test-ai-assistant-message]').length}`,
+    `code blocks: ${findAll('.code-block-diff').length}`,
+    `diff editors: ${findAll('[data-test-code-diff-editor]').length}`,
+    `apply buttons: ${findAll('[data-test-apply-code-button]').length}`,
+  ].join(', ');
+}
+
+async function waitForApplyCodeButton() {
+  try {
+    await waitFor('[data-test-apply-code-button]', {
+      timeout: APPLY_CODE_BUTTON_TIMEOUT_MS,
+    });
+  } catch (err) {
+    throw new Error(
+      `${(err as Error).message} (${describeCodePatchRenderState()})`,
+    );
+  }
+}
+
+async function waitForRoomSettled() {
+  try {
+    await waitFor('[data-room-settled]', { timeout: ROOM_SETTLED_TIMEOUT_MS });
+  } catch (err) {
+    throw new Error(
+      `${(err as Error).message} (${describeCodePatchRenderState()})`,
+    );
+  }
+}
+
 const testCardContent = `
 import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
@@ -174,6 +230,7 @@ module('Acceptance | Code patches tests', function (hooks) {
       codePath: `${testRealmURL}hello.txt`,
     });
     await click('[data-test-open-ai-assistant]');
+    await waitForRoomSettled();
     let roomId = getRoomIds().pop()!;
 
     let codeBlock = `\`\`\`
@@ -208,7 +265,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     });
     let originalContent = getMonacoContent();
     assert.strictEqual(originalContent, 'Hello, world!');
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
 
@@ -521,7 +578,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     });
     let originalContent = getMonacoContent();
     assert.strictEqual(originalContent, 'Hello, world!');
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     await click('[data-test-apply-code-button]');
     await waitFor(
       '[data-test-apply-code-button][data-test-apply-state="failed"]',
@@ -1310,7 +1367,7 @@ ${REPLACE_MARKER}
       );
 
     // User applies the code patch
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     assert.dom('[data-test-code-diff-editor]').exists();
     await click('[data-test-apply-code-button]');
     await waitFor('[data-test-apply-state="applied"]');
@@ -1426,7 +1483,7 @@ ${REPLACE_MARKER}
       isStreamingFinished: true,
     });
 
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     await click('[data-test-apply-code-button]');
     await waitFor('[data-test-apply-state="applied"]');
 
@@ -1488,7 +1545,7 @@ ${REPLACE_MARKER}
       },
     });
 
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     assert
       .dom('[data-test-apply-code-button]')
       .exists('Apply button is shown in ask mode');
@@ -1559,7 +1616,7 @@ ${REPLACE_MARKER}
         },
       },
     });
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
       .doesNotExist('Code patch sent before act mode is not auto-applied');
@@ -1964,7 +2021,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     });
 
     // Apply the code patch
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     await click('[data-test-apply-code-button]');
 
     // Wait for the schema editor to refresh and verify the new field appears
@@ -2054,7 +2111,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     });
 
     // Apply the code patch
-    await waitFor('[data-test-apply-code-button]');
+    await waitForApplyCodeButton();
     await click('[data-test-apply-code-button]');
 
     // Wait for the schema editor to refresh and verify the new field appears
