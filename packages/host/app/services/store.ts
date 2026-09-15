@@ -2182,7 +2182,12 @@ export default class StoreService extends Service implements StoreInterface {
     if (isLocalId(id)) {
       return false;
     }
-    let realmURL = this.realm.realmOf(rri(id));
+    // Folded to the same spelling `addReference` subscribed under, so a
+    // reference arriving as one of an id's other aliases still finds the
+    // subscription taken out for it.
+    let realmURL = this.realm.realmOf(
+      rri(asURL(id, this.network.virtualNetwork)),
+    );
     return realmURL != null && this.subscriptions.has(realmURL);
   }
 
