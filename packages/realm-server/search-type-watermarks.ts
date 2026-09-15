@@ -134,7 +134,29 @@ function anchorOwnKey(
 // searched realm the request itself is about to read from, never a mount this
 // warm-up forces. A search whose realms are all cold simply stays unscoped
 // until one of them is mounted by the miss it is already paying for.
+//
+// Nothing this does can fail the search it rides along with. The whole body
+// is guarded, not just the resolution promise: every step before it — reading
+// a ref's module, resolving a mounted realm, reaching that realm's query
+// engine — runs synchronously on the request's stack, so a throw there would
+// surface as a failed search rather than as an unscoped one. The worst
+// outcome available to it is that the key stays keyed on the realm
+// generation, which is what it was before any of this.
 export function warmSearchTypeWatermarkKeys(args: {
+  anchors: CodeRef[] | undefined;
+  virtualNetwork: VirtualNetwork;
+  mountedRealm: () => Realm | undefined;
+}): void {
+  try {
+    warmAnchors(args);
+  } catch (err: unknown) {
+    log.info(
+      `could not start resolving this query's type keys; it stays keyed on the realm generation: ${String(err)}`,
+    );
+  }
+}
+
+function warmAnchors(args: {
   anchors: CodeRef[] | undefined;
   virtualNetwork: VirtualNetwork;
   mountedRealm: () => Realm | undefined;
@@ -152,12 +174,15 @@ export function warmSearchTypeWatermarkKeys(args: {
     if (resolved && resolved.expiresAt > now) {
       continue;
     }
-    let realm = args.mountedRealm();
-    if (!realm) {
+    // A realm this process holds but has not finished starting has no query
+    // engine yet, and reading through one that isn't there would throw on the
+    // request's own stack.
+    let engine = args.mountedRealm()?.realmIndexQueryEngine;
+    if (!engine) {
       return;
     }
     resolving.add(ownKey);
-    void realm.realmIndexQueryEngine
+    void engine
       .typeKeysFor(anchor)
       .then((keys) => {
         anchorKeys.set(ownKey, {
