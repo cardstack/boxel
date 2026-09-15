@@ -329,6 +329,60 @@ module(basename(import.meta.filename), function () {
       releaseHandler();
     });
 
+    test('a phase that waits rather than renders still counts as progress', async function (assert) {
+      // The contract this file pins is "bounded by silence, not by elapsed
+      // time". A phase that makes real progress while emitting no per-file
+      // events has to say so itself, or the job is cut off in exactly the case
+      // the contract exists for — the prerender pass's wait for its spawning
+      // generation is one such phase, and its own ceiling equals the deadline
+      // an incremental-spawned pass is given.
+      let beats = 0;
+      let releaseHandler!: () => void;
+      let handlerStarted = new Promise<void>((resolveStarted) => {
+        runner.register(
+          'waiting-phase-job',
+          async (args: { jobInfo?: { reservationId: number } }) => {
+            resolveStarted();
+            // Stands in for a poll loop: no work reported, but alive and
+            // bounded elsewhere.
+            let polling = setInterval(() => {
+              beats++;
+              heartbeatJob(args.jobInfo?.reservationId);
+            }, 250);
+            try {
+              await new Promise<void>((res) => (releaseHandler = res));
+            } finally {
+              clearInterval(polling);
+            }
+            return { waited: true };
+          },
+        );
+      });
+
+      let job = await publisher.publish<{ waited: boolean }>({
+        jobType: 'waiting-phase-job',
+        concurrencyGroup: 'waiting-phase-group',
+        timeout: 600, // clamped to the runner's maxTimeoutSec: 2
+        args: { n: 1 },
+      });
+      await handlerStarted;
+      await new Promise((res) => setTimeout(res, 5000));
+
+      assert.true(beats > 0, 'the waiting phase reported progress');
+      let [row] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        row.status,
+        'unfulfilled',
+        'a job that only waits, but says so, keeps its worker past the deadline',
+      );
+
+      releaseHandler();
+      assert.deepEqual(await job.done, { waited: true });
+    });
+
     test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {
       await runner.destroy();
 
@@ -1912,9 +1966,13 @@ module(basename(import.meta.filename), function () {
         await job.done;
         throw new Error(`expected timeout to be thrown`);
       } catch (error: any) {
-        assert.strictEqual(
-          error.message,
-          'Timed-out after 1s waiting for job 1 to complete',
+        // The elapsed figure is real wall clock, so match the shape rather
+        // than pinning a number that can drift by a tick.
+        assert.true(
+          /^Timed-out after 1s without progress from job 1 \(ran \d+s\)$/.test(
+            error.message,
+          ),
+          `the timeout names the silence window and the elapsed time (got: ${error.message})`,
         );
       }
     });
@@ -2064,10 +2122,11 @@ module(basename(import.meta.filename), function () {
           await job.done;
           throw new Error('expected the timed-out job to be rejected');
         } catch (error: any) {
-          assert.strictEqual(
-            error.message,
-            'Timed-out after 1s waiting for job 1 to complete',
-            'the attempt that ran owns the failure',
+          assert.true(
+            /^Timed-out after 1s without progress from job 1 \(ran \d+s\)$/.test(
+              error.message,
+            ),
+            `the attempt that ran owns the failure (got: ${error.message})`,
           );
         }
 

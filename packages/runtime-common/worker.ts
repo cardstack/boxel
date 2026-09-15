@@ -30,6 +30,7 @@ import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import { heartbeatJob } from './queue.ts';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -120,8 +121,6 @@ export interface StatusArgs {
   url?: string;
   deps?: string[];
 }
-
-import { heartbeatJob } from './queue.ts';
 
 export interface IndexingProgressEvent {
   type: 'indexing-started' | 'file-visited' | 'indexing-finished';

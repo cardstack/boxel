@@ -82,7 +82,11 @@ const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 //
 // The window only has to cover a `finalizeJobVerdict` transaction against a
 // database that answered the rest of the pass in milliseconds, so 30s is
-// generous. Its price is how long a genuinely dead worker delays a retry.
+// generous. Its price is how long a genuinely dead worker delays a retry —
+// and because a progressing job extends its lease, that delay is measured
+// from the job's last heartbeat rather than from its claim: a worker lost
+// mid-pass holds its job for one deadline plus this window, however long the
+// pass had already been running.
 const LEASE_GRACE_SEC = 30;
 
 interface CoalesceCandidateRow extends Pick<
@@ -709,15 +713,18 @@ export class PgQueueRunner implements QueueRunner {
               deadlineTimer.unref();
             };
             // Pushing `locked_until` out is a write, and progress arrives per
-            // file — thousands of times on a large pass. Extend at most once
-            // per grace window: often enough that the lease never lapses under
-            // a progressing job, rare enough to cost nothing.
+            // file — thousands of times on a large pass. Throttle it, but at a
+            // fraction of the grace window rather than the whole of it: two
+            // heartbeats can be a full deadline apart, so throttling on the
+            // grace itself would let the gap between extensions reach exactly
+            // the lease being written, leaving no margin at all. Half buys real
+            // headroom at the same negligible write rate.
+            let leaseExtensionIntervalMs = (LEASE_GRACE_SEC / 2) * 1000;
             let lastLeaseExtension = Date.now();
             let extendLease = () => {
-              if (Date.now() - lastLeaseExtension < LEASE_GRACE_SEC * 1000) {
+              if (Date.now() - lastLeaseExtension < leaseExtensionIntervalMs) {
                 return;
               }
-              lastLeaseExtension = Date.now();
               // Fire-and-forget on the pool rather than this loop's
               // connection, which is mid-transaction for the next claim. A
               // failed extension only costs the job its lease, which is the
@@ -729,6 +736,12 @@ export class PgQueueRunner implements QueueRunner {
                      WHERE id = $2 AND completed_at IS NULL`,
                   { bind: [String(leaseSec), jobReservationId] },
                 )
+                .then(() => {
+                  // Stamped on completion rather than on the decision, so a
+                  // slow write does not also suppress the next attempt for a
+                  // further interval.
+                  lastLeaseExtension = Date.now();
+                })
                 .catch((e: unknown) => {
                   log.warn(
                     `%s: could not extend lease for job %s: %s`,
@@ -738,6 +751,7 @@ export class PgQueueRunner implements QueueRunner {
                   );
                 });
             };
+            let jobStartedAt = Date.now();
             registerJobHeartbeat(jobReservationId, () => {
               armDeadline();
               extendLease();
@@ -773,10 +787,14 @@ export class PgQueueRunner implements QueueRunner {
               clearTimeout(deadlineTimer);
             });
             if (result === 'timeout') {
+              // The number is the silence window, not the elapsed time: a job
+              // that keeps reporting progress can run far past it. Say so, and
+              // carry the elapsed time, so a reader triaging this against the
+              // job's `created_at` is not misled.
               throw new Error(
-                `Timed-out after ${effectiveTimeoutSec}s waiting for job ${
+                `Timed-out after ${effectiveTimeoutSec}s without progress from job ${
                   jobToRun.id
-                } to complete`,
+                } (ran ${Math.round((Date.now() - jobStartedAt) / 1000)}s)`,
               );
             }
             newStatus = 'resolved';
