@@ -14,6 +14,12 @@ import {
 } from '../scripts/load-harness/lib/common.ts';
 import { eventCannotMatch } from '../scripts/load-harness/lib/realm-events.ts';
 import {
+  DEFAULT_FIELDSET,
+  describeFieldset,
+  fieldsetWireMembers,
+  isFieldsetName,
+} from '../scripts/load-harness/lib/fieldset.ts';
+import {
   describeConnectionSetup,
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
@@ -370,6 +376,36 @@ module(basename(import.meta.filename), function () {
           module: `${realm}schema/report`,
           name: 'Report',
         });
+      });
+    });
+
+    test('an arbitrary wire filter passes through whole', function (assert) {
+      // The mitigation under investigation is "add a predicate to a query that
+      // has none", so a workload has to be able to carry eq / contains / range
+      // alongside the type anchor for a run to A/B it.
+      withTempDir((dir) => {
+        let filter = {
+          'item.on': { module: '${realm}schema/widget', name: 'Widget' },
+          eq: { 'item.category': 'active', 'item.isActive': true },
+          contains: { 'item.title': 'draft' },
+          range: { 'item.updatedAt': { gt: '2026-01-01' } },
+          any: [{ eq: { 'item.status': 'open' } }],
+        };
+        let path = writeWorkload(dir, {
+          queries: [{ label: 'Widget', filter }],
+          write: {
+            adoptsFrom: { module: '${realm}schema/report', name: 'Report' },
+          },
+        });
+        let [spec] = loadWorkload(path, realm).queries;
+        assert.deepEqual(
+          spec.query.filter,
+          {
+            ...filter,
+            'item.on': { module: `${realm}schema/widget`, name: 'Widget' },
+          },
+          'nothing is stripped; only ${realm} is expanded',
+        );
       });
     });
 
@@ -837,6 +873,89 @@ module(basename(import.meta.filename), function () {
         /No instance types found/,
         'an id with no module part names no type',
       );
+    });
+  });
+
+  module('fieldset — which code path a run measures', function () {
+    test('entries sends no fieldset, which is what selects the renderings', function (assert) {
+      // The default resolution policy is chosen by the ABSENCE of the member,
+      // so this has to stay an empty object rather than any explicit value.
+      assert.deepEqual(fieldsetWireMembers('entries'), {});
+      assert.strictEqual(DEFAULT_FIELDSET, 'entries');
+    });
+
+    test('item sends the card-data-only fieldset store.search uses', function (assert) {
+      assert.deepEqual(fieldsetWireMembers('item'), {
+        fields: { entry: ['item'] },
+      });
+    });
+
+    test('item-html is its own value, not a combination of flags', function (assert) {
+      assert.deepEqual(fieldsetWireMembers('item-html'), {
+        fields: { entry: ['item', 'html'] },
+      });
+    });
+
+    test('only the three known names are accepted', function (assert) {
+      for (let name of ['entries', 'item', 'item-html']) {
+        assert.true(isFieldsetName(name), `${name} is a fieldset`);
+      }
+      for (let bad of ['items', 'html', '', 'item,html', undefined, 3]) {
+        assert.false(isFieldsetName(bad), `${String(bad)} is not`);
+      }
+    });
+
+    test('every fieldset describes the client behaviour it stands for', function (assert) {
+      assert.true(describeFieldset('entries').includes('grid'));
+      assert.true(
+        describeFieldset('item').includes('store.search'),
+        'names the call site, so the claim is checkable',
+      );
+      assert.true(describeFieldset('item-html').includes('renderings'));
+    });
+
+    test('a workload can pin the fieldset, and a bad one is rejected', function (assert) {
+      withTempDir((dir) => {
+        let write = (fieldset: unknown) => {
+          let path = join(dir, 'workload.json');
+          writeFileSync(
+            path,
+            JSON.stringify({
+              fieldset,
+              queries: [
+                {
+                  label: 'W',
+                  filter: { 'item.on': { module: 'm', name: 'N' } },
+                },
+              ],
+            }),
+          );
+          return loadWorkload(path, 'https://example.test/o/r/');
+        };
+        assert.strictEqual(write('item').fieldset, 'item');
+        assert.strictEqual(
+          write(undefined).fieldset,
+          undefined,
+          'absent means the driver decides',
+        );
+        assert.throws(
+          () => write('items'),
+          /"fieldset" must be "entries", "item", or "item-html"/,
+        );
+      });
+    });
+
+    test('both committed workloads pin a fieldset rather than leaving it implicit', function (assert) {
+      for (let name of ['workload.example.json', 'workload.experiments.json']) {
+        let workload = loadWorkload(
+          join(import.meta.dirname, '..', 'scripts', 'load-harness', name),
+          'https://example.test/o/r/',
+        );
+        assert.true(
+          isFieldsetName(workload.fieldset),
+          `${name} says which path it measures`,
+        );
+      }
     });
   });
 

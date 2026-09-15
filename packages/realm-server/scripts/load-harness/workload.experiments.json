@@ -31,6 +31,15 @@
     "Re-derive against whatever you are testing with --derive-workload when the",
     "realm has moved on.",
     "",
+    "\"fieldset\": \"entries\" pins which of the two documents _federated-search",
+    "returns, and so which code path this measures: the prerendered renderings a",
+    "grid or the search panel fetches. The other path, \"item\", is card data",
+    "only and is what store.search sends for a query-backed field; on a deployed",
+    "realm the same filter costs four to six times as much on this path as on",
+    "that one. It is pinned rather than left to the default so a number from",
+    "this file is never ambiguous about which path produced it. A workload",
+    "modelling query-backed fields should set \"item\" instead.",
+    "",
     "The queries are unbounded: every instance of the type, with its included[]",
     "closure assembled. That is the shape this harness exists to measure.",
     "--derive-workload bounds its queries at 20 by default, so a derived run and",
@@ -54,6 +63,8 @@
     "read only, so against those --writers 0 is not a convenience, it is the",
     "only run that works."
   ],
+
+  "fieldset": "entries",
 
   "queries": [
     {

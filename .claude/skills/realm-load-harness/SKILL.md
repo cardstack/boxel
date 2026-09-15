@@ -1,6 +1,6 @@
 ---
 name: realm-load-harness
-description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms — itself about one handshake above the server's own number, since `fetch` resolves only after any TCP+TLS setup, which is why the driver primes each batch's connections outside the timed window and why `--prime-connections=false` relabels `headers` as including setup); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
+description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms — itself about one handshake above the server's own number, since `fetch` resolves only after any TCP+TLS setup, which is why the driver primes each batch's connections outside the timed window and why `--prime-connections=false` relabels `headers` as including setup); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); (6) choosing which of the two documents `_federated-search` returns a run measures, via `--fieldset` or a workload's `fieldset` member — `item` sends `fields: { entry: ['item'] }` and is the card-data-only path `store.search` takes for a query-backed field, while the default `entries` sends no fieldset and gets the prerendered renderings a grid or the search panel displays, four to six times the bytes for the same filter (94 KB against 405–537 KB measured on a deployed realm), so a figure quoted without its path is not interpretable and every run prints the path it modelled; and (7) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -15,6 +15,33 @@ are.
 
 The harness is dependency-free by design — global `fetch` and `node:` built-ins
 only — because where it runs decides what it measures.
+
+## Which path a run measures — decide this before the queries
+
+`_federated-search` serves two documents from the same filter, selected by the
+`fields[entry]` sparse fieldset, and they differ by four to six times in bytes.
+Choosing wrongly measures a different code path from the one under
+investigation, and no amount of care about _which types_ get queried fixes that.
+
+| `--fieldset`        | on the wire                          | comes back                              | models                          |
+| ------------------- | ------------------------------------ | --------------------------------------- | ------------------------------- |
+| `entries` (default) | no fieldset                          | prerendered renderings (`html` + `css`) | a grid, card list, search panel |
+| `item`              | `fields: { entry: ['item'] }`        | card serializations only                | a query-backed field            |
+| `item-html`         | `fields: { entry: ['item','html'] }` | both                                    | —                               |
+
+Measured on a deployed realm, same filter and page size: 94 KB on the item path
+against 405 KB and 537 KB on the entries path for two types.
+
+**`store.search` sends `fields: { entry: ['item'] }`** and instantiates cards
+live from the result, so **`item` is the path a query-backed field takes** — and
+the path a search-saturation investigation is usually about. Grids and the
+search panel send no fieldset and get the renderings, which is right for them
+because they display prerendered HTML.
+
+A workload file pins the choice with a `"fieldset"` member and `--fieldset`
+overrides it; both committed workloads pin one. Every run prints the path it
+modelled in its header and summary. **Never quote a payload or latency figure
+from this harness without saying which path produced it.**
 
 ## Where the queries come from
 
@@ -79,6 +106,16 @@ Both id spellings in circulation split correctly: the prefix form
 `--derive-page-size` (default 20) bounds every derived query; `0` leaves them
 unbounded. The standard workload is unbounded, so **a derived run and a standard
 run are not comparable to each other**.
+
+**A derived workload is the unmitigated shape by construction**, and that bounds
+what it can be used for. The type summary carries names and counts, so every
+derived query is type-only with no predicate — a whole-table read per type. That
+is a faithful reproduction of the problem and useless as a measurement of a fix:
+when the change under test is "push a client-side predicate into the query", a
+derived workload cannot express the mitigated side. Emit it, add predicates by
+hand, and A/B the two files. A workload's filter is passed through whole, so
+`eq` / `contains` / `range` / `any` sit alongside the `item.on` anchor;
+`workload.example.json` has committed examples.
 
 To make a derived workload shared, emit it and commit it:
 
@@ -361,16 +398,20 @@ state with `aws-access`.
 2. `setup-realm.ts` to clone the realm under test, then grant the other users
    read access. Skip this when pointing at an existing experiments realm you are
    willing to dirty, or run with `--writers 0`.
-3. Pick the workload: `workload.experiments.json` for a comparable number,
+3. Pick the path: `--fieldset item` for a query-backed-field investigation,
+   the default `entries` for a grid. Getting this wrong measures the other code
+   path and is off by four to six times.
+4. Pick the workload: `workload.experiments.json` for a comparable number,
    `--derive-workload` for the realm you actually care about, a hand-written
-   file for a specific card's query pattern.
-4. Get the driver in-region, with the credential file.
-5. Run. Start without `--subscribe` for server-load questions; add it when the
+   file for a specific card's query pattern. A derived one cannot express a
+   predicate, so it cannot measure a mitigation that adds one.
+5. Get the driver in-region, with the credential file.
+6. Run. Start without `--subscribe` for server-load questions; add it when the
    question is about re-run volume.
-6. Read the per-shape KB column first, `headers` second, and the health-sampler
+7. Read the per-shape KB column first, `headers` second, and the health-sampler
    signals over the same window third. If the body-transfer warning printed, the
    latency numbers are about your connection.
-7. Delete the credential file from wherever you uploaded it.
+8. Delete the credential file from wherever you uploaded it.
 
 ## Safety
 

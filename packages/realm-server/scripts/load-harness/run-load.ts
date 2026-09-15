@@ -52,6 +52,14 @@ import {
   type ConnectionSetup,
 } from './lib/connection.ts';
 import {
+  DEFAULT_FIELDSET,
+  describeFieldset,
+  fieldsetOptionsHelp,
+  fieldsetWireMembers,
+  isFieldsetName,
+  type FieldsetName,
+} from './lib/fieldset.ts';
+import {
   fetchCardTypeSummary,
   readOnlyReason,
   workloadFromCardTypeSummary,
@@ -83,6 +91,10 @@ let args = parseArgsOrExit(process.argv.slice(2), {
   // Every Nth reader also opens the workload's secondary screen.
   secondaryEvery: 3,
   extraQueries: false,
+  // Which document the searches ask for, and so which code path is measured.
+  // Empty means "whatever the workload file says, else the default" — the
+  // distinction matters because an explicit flag has to beat a committed file.
+  fieldset: '',
   // Build the workload from the realm under test instead of from a file, by
   // ranking its own `_types` summary by instance count. This is how two people
   // run the same test without exchanging a config: the target defines it.
@@ -120,7 +132,17 @@ if (!args.csv || !args.realm || (!args.workload && !args.deriveWorkload)) {
       `  --derive-workload  rank the realm's own /_types by instance count and\n` +
       `                     query the top --derive-top (${args.deriveTop}) types\n` +
       `  --emit-workload P  write the derived workload to P ('-' for stdout) and\n` +
-      `                     exit, so it can be committed and re-run verbatim`,
+      `                     exit, so it can be committed and re-run verbatim\n` +
+      `  --fieldset F       which path to measure: ${fieldsetOptionsHelp()}.\n` +
+      `                     'item' is the query-backed-field path; the default\n` +
+      `                     'entries' is what a grid fetches and costs several\n` +
+      `                     times as much for the same filter`,
+  );
+  process.exit(1);
+}
+if (args.fieldset && !isFieldsetName(args.fieldset)) {
+  console.error(
+    `--fieldset must be one of: ${fieldsetOptionsHelp()} (got "${args.fieldset}")`,
   );
   process.exit(1);
 }
@@ -146,6 +168,8 @@ let creds = readCredentials(args.csv);
 // derived one cannot be: reading `_types` needs a realm token, so it waits
 // until the first session is up.
 let workload!: Workload;
+// Resolved once the workload is known, since a committed file can pin it.
+let fieldset!: FieldsetName;
 if (!args.deriveWorkload) {
   workload = loadWorkload(args.workload, realmUrl);
 }
@@ -277,7 +301,13 @@ async function search(session: Session, spec: QuerySpec): Promise<void> {
         Authorization: realmAuthHeader(session, realmUrl),
         'x-boxel-logging-correlation-id': correlationId(),
       },
-      body: JSON.stringify({ ...spec.query, realms: [realmUrl] }),
+      // Fieldset members first, so a query that carries its own `fields` — the
+      // escape hatch for a shape neither named value covers — wins for itself.
+      body: JSON.stringify({
+        ...fieldsetWireMembers(fieldset),
+        ...spec.query,
+        realms: [realmUrl],
+      }),
     });
     // Headers are in hand: everything up to here is the server deciding what to
     // send, plus one round trip.
@@ -673,6 +703,12 @@ if (args.deriveWorkload) {
   );
 }
 
+// An explicit flag beats a committed workload, which beats the default.
+fieldset = isFieldsetName(args.fieldset)
+  ? args.fieldset
+  : (workload.fieldset ?? DEFAULT_FIELDSET);
+console.log(`Modelling the ${describeFieldset(fieldset)}.`);
+
 // Each simulated user authenticates as itself. Searches authorize per realm and
 // realm events are broadcast into each user's own session room, so one shared
 // account would reproduce neither the authorization work nor the event volume.
@@ -720,6 +756,10 @@ function finish() {
   subscribeAbort.abort();
   announceInvalidation();
   console.log(`\n───── run summary ─────`);
+  // Which path these numbers describe. The same filter costs several times as
+  // much on the entries path as on the item path, so a figure quoted without
+  // its path is not interpretable.
+  console.log(`path:     ${describeFieldset(fieldset)}`);
   console.log(`searches: ${stats.searches} (${stats.searchErrors} errors)`);
   console.log(`writes:   ${stats.writes} (${stats.writeErrors} errors)`);
   console.log(summarize('end-to-end ', stats.search));

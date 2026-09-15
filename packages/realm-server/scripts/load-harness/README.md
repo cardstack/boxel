@@ -52,6 +52,32 @@ API call. Each session authenticates as its own user: searches authorize per
 realm and realm events are broadcast into each user's own session room, so a
 single shared account reproduces neither.
 
+## Choosing a path: which document the searches ask for
+
+This is the most consequential choice in a run, and it is not the one about
+which types get queried. `_federated-search` serves two shapes from the same
+filter, selected by the `fields[entry]` sparse fieldset:
+
+| `--fieldset`        | on the wire                          | what comes back                         | models                                 |
+| ------------------- | ------------------------------------ | --------------------------------------- | -------------------------------------- |
+| `entries` (default) | no fieldset                          | prerendered renderings (`html` + `css`) | a grid, card list, or the search panel |
+| `item`              | `fields: { entry: ['item'] }`        | card serializations only                | a query-backed field                   |
+| `item-html`         | `fields: { entry: ['item','html'] }` | both                                    | —                                      |
+
+They are not close in cost. Measured against a deployed realm at the same filter
+and page size, the renderings run four to six times the card data — 94 KB
+against 405 KB and 537 KB for two types.
+
+**`item` is the query-backed-field path.** `store.search` sends
+`fields: { entry: ['item'] }` and instantiates cards live from the result, so a
+workload modelling query-backed fields has to pin `item`. The default measures a
+grid instead, whatever the workload's queries say.
+
+A workload file pins it with a `"fieldset"` member; `--fieldset` overrides the
+file. Both committed workloads pin one rather than leaving it implicit, and every
+run states the path it modelled in its header and its summary — a figure quoted
+without its path is not interpretable.
+
 ## Choosing a workload
 
 Which queries the readers issue, and what the writers write, is data rather than
@@ -109,6 +135,13 @@ node run-load.ts --csv ./accounts.csv --realm <url> --derive-workload
 unbounded. Because the standard workload above is unbounded, a derived run and a
 standard run are not comparable to each other.
 
+**A derived workload is the unmitigated shape, by construction.** It produces
+type-only queries with no predicate — a whole-table read per type — because the
+type summary is all it has to go on. That makes it a faithful reproduction of
+the problem and useless as a measurement of a fix: if the change under test is
+"push a client-side predicate into the query", a derived workload cannot express
+it. Emit one, add the predicates by hand, and A/B the two files.
+
 To turn a derived workload into a shared one, emit it and commit the file:
 
 ```sh
@@ -145,6 +178,11 @@ query-backed fields — rather than inventing a plausible set. What a run measur
 is the cost of the queries a real screen issues; a workload that asks for less
 than the screen does measures nothing.
 
+A filter is passed through whole, so `eq` / `contains` / `range` / `any` sit
+alongside the `item.on` anchor untouched — which is how a run A/Bs adding a
+predicate to a query that has none. `workload.example.json` carries committed
+examples of all three.
+
 ### The wire grammar
 
 Queries are written in the `_federated-search` **entry wire grammar**, not the
@@ -180,6 +218,7 @@ node run-load.ts --csv ./accounts.csv \
 | `--derive-top`        |       8 | How many types a derived workload queries.                                      |
 | `--derive-page-size`  |      20 | Page size for derived queries; `0` leaves them unbounded.                       |
 | `--emit-workload`     |       — | Write the derived workload here and exit. `-` is stdout.                        |
+| `--fieldset`          | entries | Which path to measure: `entries` \| `item` \| `item-html`.                      |
 | `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
 | `--model-calls`       |     off | A forwarded request before each write (see below).                              |
 | `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |

@@ -32,6 +32,8 @@
 
 import { readFileSync } from 'node:fs';
 
+import { isFieldsetName, type FieldsetName } from './fieldset.ts';
+
 export interface QuerySpec {
   label: string;
   // The wire query body, minus `realms`. Everything the workload file put
@@ -61,6 +63,11 @@ export interface Workload {
   // to one of the unbounded shapes above, so a single run measures the same
   // question asked both ways.
   extraQueries: QuerySpec[];
+  // Which document the searches ask for, and therefore which code path the run
+  // measures. Absent means the driver's default; see `fieldset.ts`. A workload
+  // that models a query-backed field has to pin this to `item`, because the
+  // default measures a grid instead and costs several times as much.
+  fieldset?: FieldsetName;
   // Absent on a read-only workload. A realm can be worth measuring and still
   // offer no type this run may write — the shared realms on a deployment are
   // granted read-only, and a derived workload omits the block rather than
@@ -74,6 +81,7 @@ export interface Workload {
 // same object validated by the same code — which is what makes an emitted file
 // reproduce the run it was emitted from.
 export interface RawWorkload {
+  fieldset?: unknown;
   queries?: unknown;
   secondaryQueries?: unknown;
   extraQueries?: unknown;
@@ -98,6 +106,7 @@ export function parseWorkload(
   source: string,
 ): Workload {
   let workload: Workload = {
+    fieldset: parseFieldset(raw.fieldset, source),
     queries: parseQueries(raw.queries, 'queries', realmUrl),
     secondaryQueries: parseQueries(
       raw.secondaryQueries,
@@ -112,6 +121,22 @@ export function parseWorkload(
     throw new Error(`${source}: "queries" must list at least one query`);
   }
   return workload;
+}
+
+function parseFieldset(
+  value: unknown,
+  source: string,
+): FieldsetName | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isFieldsetName(value)) {
+    throw new Error(
+      `${source}: "fieldset" must be "entries", "item", or "item-html" ` +
+        `(got ${JSON.stringify(value)})`,
+    );
+  }
+  return value;
 }
 
 function parseQueries(
