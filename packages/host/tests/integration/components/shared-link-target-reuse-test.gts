@@ -224,6 +224,8 @@ module('Integration | shared link target reuse', function (hooks) {
     let tracker = trackCardDocLoads();
     try {
       await renderEachOwner(ownerIds('foreign'));
+      // The other end of the same guardrail figure: one load per edge rather
+      // than one per card, which is what a target no reuse covers costs.
       assert.strictEqual(
         countFor(tracker.urls(), FOREIGN_PET),
         PARENT_COUNT,
