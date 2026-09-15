@@ -1658,6 +1658,7 @@ export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';

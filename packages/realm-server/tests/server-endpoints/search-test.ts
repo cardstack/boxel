@@ -18,7 +18,9 @@ import {
   param,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
+  setSearchShapeSink,
   type Expression,
+  type SearchShapeEvent,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
@@ -839,6 +841,305 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         afterWrite.body.meta.page.total,
         5,
         'the new instance is in the fresh result',
+      );
+    });
+
+    // Capture the query-shape lines a block of requests emits. The sink is
+    // process-global, so anything else the process searches inside the block
+    // lands in the same array — an in-render search from a background
+    // prerender job would. Each request below therefore carries its own
+    // correlation id and the assertions read only the lines stamped with it,
+    // which is also what makes "one line per search" an assertion about that
+    // request rather than about the process being quiet.
+    async function captureSearchShapes(
+      run: () => Promise<void>,
+    ): Promise<SearchShapeEvent[]> {
+      let events: SearchShapeEvent[] = [];
+      setSearchShapeSink((event) => events.push(event));
+      try {
+        await run();
+      } finally {
+        setSearchShapeSink(undefined);
+      }
+      return events;
+    }
+
+    function shapesFor(events: SearchShapeEvent[], correlationId: string) {
+      return events.filter((event) => event.correlationId === correlationId);
+    }
+
+    // A search the emitted line can be attributed to. The correlation id is
+    // deliberately out of both cache keys, so two requests differing only in
+    // it still share a cached body — which is what lets the cache-outcome
+    // assertions below tell two otherwise identical requests apart.
+    function postSearchCorrelated(
+      correlationId: string,
+      body: Record<string, unknown>,
+    ) {
+      return postSearch(body).set(
+        'x-boxel-logging-correlation-id',
+        correlationId,
+      );
+    }
+
+    test('a federated search emits one query-shape line describing what it asked for', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-basic', {
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+          sort: [{ by: 'item.createdAt', direction: 'desc' }],
+          page: { size: 10 },
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let lines = shapesFor(events, 'shape-basic');
+      assert.strictEqual(lines.length, 1, 'exactly one line for this search');
+      let [event] = lines;
+      assert.strictEqual(
+        event.filter,
+        `type(${baseCardRef.module}/${baseCardRef.name})`,
+        'a filter carrying only the type anchor is a pure card-type filter',
+      );
+      assert.strictEqual(
+        event.sort,
+        'createdAt:desc',
+        'the sort renders its field and direction',
+      );
+      assert.strictEqual(event.pageSize, 10);
+      assert.strictEqual(
+        event.realms,
+        `${testRealm.url},${secondaryRealm.url}`,
+        'the realms the request named',
+      );
+      assert.strictEqual(event.realmCount, 2);
+      assert.strictEqual(
+        event.linkMode,
+        'full',
+        'live traffic assembles the whole link closure',
+      );
+      assert.true(
+        event.itemAsFallback,
+        'naming no fieldset selects the default resolution policy',
+      );
+      assert.false(event.truncated, 'nothing here approaches the member cap');
+      assert.strictEqual(event.results, 4, 'the entries the response carried');
+      assert.strictEqual(event.total, 4, 'the entries the query matched');
+      assert.false(event.incomplete, 'both realms answered');
+      assert.strictEqual(event.status, 200);
+      assert.strictEqual(event.cache, 'miss', 'this request did the computing');
+      assert.true(event.totalMs >= 0, 'the request is timed');
+      assert.true(event.shapeHash.length > 0, 'the shape is hashed');
+    });
+
+    test('the query-shape line carries no filter value', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-elision', {
+          filter: {
+            'item.on': baseCardRef,
+            every: [
+              { eq: { 'item.cardTitle': 'Jane' } },
+              { contains: { 'item.cardDescription': 'a private substring' } },
+            ],
+          },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let lines = shapesFor(events, 'shape-elision');
+      assert.strictEqual(lines.length, 1, 'exactly one line for this search');
+      let [event] = lines;
+      assert.strictEqual(
+        event.filter,
+        `on(${baseCardRef.module}/${baseCardRef.name}):every(contains(cardDescription),eq(cardTitle))`,
+        'the operators and the field paths they address, and nothing else',
+      );
+      let line = JSON.stringify(event);
+      assert.false(line.includes('Jane'), 'no eq value reaches the line');
+      assert.false(
+        line.includes('a private substring'),
+        'no contains value reaches the line',
+      );
+    });
+
+    test('a live-cache hit reports the outcome and claims no counts', async function (assert) {
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let events = await captureSearchShapes(async () => {
+        await postSearchCorrelated('shape-live-miss', searchBody);
+        let second = await postSearchCorrelated('shape-live-hit', searchBody);
+        assert.strictEqual(
+          second.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'the follow-up is served from the live cache',
+        );
+      });
+      let [first] = shapesFor(events, 'shape-live-miss');
+      let [second] = shapesFor(events, 'shape-live-hit');
+      assert.strictEqual(first.cache, 'miss');
+      assert.strictEqual(first.results, 4, 'the computing request counted');
+      assert.strictEqual(second.cache, 'hit');
+      assert.strictEqual(
+        second.results,
+        null,
+        'a hit answers from a body it never built, so it counts nothing',
+      );
+      assert.strictEqual(second.total, null);
+      assert.strictEqual(second.incomplete, null);
+      assert.strictEqual(
+        first.shapeHash,
+        second.shapeHash,
+        'the same query hashes the same however it was answered',
+      );
+    });
+
+    test('the job-scoped cache reports populate, hit and revalidation separately', async function (assert) {
+      // The indexer's protocol: the job headers make a request cacheable, and
+      // an If-None-Match against the entry it populated revalidates into a 304.
+      let searchBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let asJob = (correlationId: string) =>
+        postSearchCorrelated(correlationId, searchBody)
+          .set('x-boxel-job-id', '42.1')
+          .set('x-boxel-consuming-realm', testRealm.url);
+
+      let etag: string | undefined;
+      let events = await captureSearchShapes(async () => {
+        let populated = await asJob('shape-job-miss');
+        assert.strictEqual(populated.status, 200);
+        etag = populated.headers['etag'];
+        assert.true(Boolean(etag), 'a cacheable request carries an ETag');
+
+        let repeated = await asJob('shape-job-hit');
+        assert.strictEqual(repeated.status, 200);
+
+        let revalidated = await asJob('shape-job-304').set(
+          'If-None-Match',
+          etag!,
+        );
+        assert.strictEqual(revalidated.status, 304);
+      });
+
+      let [populate] = shapesFor(events, 'shape-job-miss');
+      let [hit] = shapesFor(events, 'shape-job-hit');
+      let [notModified] = shapesFor(events, 'shape-job-304');
+      assert.strictEqual(
+        populate.cache,
+        'job-miss',
+        'the request that computed reports the populate',
+      );
+      assert.strictEqual(populate.results, 4);
+      assert.strictEqual(hit.cache, 'job-hit', 'the repeat reports the hit');
+      assert.strictEqual(
+        hit.results,
+        null,
+        'a job-cache hit builds no document of its own',
+      );
+      assert.strictEqual(notModified.cache, 'not-modified');
+      assert.strictEqual(
+        notModified.status,
+        304,
+        'the revalidated status is reported',
+      );
+      assert.strictEqual(
+        populate.shapeHash,
+        hit.shapeHash,
+        'one query, one shape, across all three outcomes',
+      );
+      assert.strictEqual(populate.shapeHash, notModified.shapeHash);
+    });
+
+    test('a search cut off by the time budget reports its 408', async function (assert) {
+      // The 408 and the 500 override are the only two paths whose reported
+      // status does not come from `ctxt.status`. The 408 is drivable here by
+      // collapsing the budget on an item-leg search; an escaping throw is not
+      // drivable from this suite without stubbing the search itself, so that
+      // one path's status override is covered by inspection only.
+      setSearchBoundsForTests({ timeBudgetMs: 0 });
+      try {
+        let events = await captureSearchShapes(async () => {
+          let response = await postSearchCorrelated('shape-budget', {
+            filter: personFilter(),
+            fields: { entry: ['item'] },
+            realms: [testRealm.url, secondaryRealm.url],
+          });
+          assert.strictEqual(
+            response.status,
+            408,
+            'the over-budget item-leg search is cut off',
+          );
+        });
+        let lines = shapesFor(events, 'shape-budget');
+        assert.strictEqual(lines.length, 1, 'the cutoff still emits one line');
+        let [event] = lines;
+        assert.strictEqual(event.status, 408, 'the cutoff status is reported');
+        assert.strictEqual(
+          event.results,
+          null,
+          'a search that never finished counts nothing',
+        );
+        assert.strictEqual(
+          event.cache,
+          'miss',
+          'the cache reported its decision before the populate was cut off',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('searches of the same shape share a hash across realms and pages', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        await postSearchCorrelated('shape-a', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        });
+        await postSearchCorrelated('shape-b', {
+          filter: personFilter(),
+          realms: [secondaryRealm.url],
+          page: { number: 1, size: 10 },
+        });
+        await postSearchCorrelated('shape-c', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 3 },
+        });
+      });
+      let [a] = shapesFor(events, 'shape-a');
+      let [b] = shapesFor(events, 'shape-b');
+      let [c] = shapesFor(events, 'shape-c');
+      assert.strictEqual(
+        a.shapeHash,
+        b.shapeHash,
+        'a different realm and page number is the same shape',
+      );
+      assert.notStrictEqual(
+        a.shapeHash,
+        c.shapeHash,
+        'a different page size is a different shape',
+      );
+    });
+
+    test('a rejected query emits no query-shape line', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-rejected', {
+          filter: { eq: { title: 'Jane' } },
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(
+          response.status,
+          400,
+          'a field path not addressed through item. is rejected',
+        );
+      });
+      assert.deepEqual(
+        shapesFor(events, 'shape-rejected'),
+        [],
+        'a request that never parsed has no shape to report',
       );
     });
   });
