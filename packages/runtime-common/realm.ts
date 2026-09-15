@@ -5219,6 +5219,15 @@ export class Realm {
   // realm's stylesheet bytes exist by guessing hashes. The body is a pure
   // function of the URL, so it caches as immutable; visibility follows realm
   // readability like the sibling capture-serving route.
+  //
+  // A `.css` URL served as `text/javascript` is deliberate, not a mixup: the
+  // consumer is `loader.import`, so like any bundler's CSS import the URL
+  // must resolve to a JS module whose evaluation injects the `<style>` tag,
+  // and the content-type describes that body truthfully. The
+  // `.glimmer-scoped.css` suffix is the upstream `glimmer-scoped-css` naming
+  // that every scoped-CSS choke point keys on — in particular the Node-side
+  // loader answers such URLs with an empty module instead of fetching, so an
+  // injector that touches `document` never evaluates where none exists.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
