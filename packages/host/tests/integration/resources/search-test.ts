@@ -17,6 +17,7 @@ import {
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { buildQuerySearchURL } from '@cardstack/runtime-common/query-field-utils';
 
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
@@ -1588,12 +1589,14 @@ module(`Integration | search resource`, function (hooks) {
         // search doesn't count against the in-test fetch budget.
         releaseFetch.fulfill();
         let result = await storeService.search(bookQuery, [testRealmURL]);
-        let url = `${testRealmURL}_federated-search?${new URLSearchParams({
-          query: JSON.stringify(bookQuery),
-        }).toString()}`;
+        // Built by the same function the indexer writes `links.search` with,
+        // so the seed carries a URL the resource can actually parse back into
+        // the query it names. Spelling one by hand here would make the seed
+        // describe a query nothing matches, and the resource would re-run a
+        // search the seed was supposed to answer.
         return {
           cards: result as any[],
-          searchURL: url,
+          searchURL: buildQuerySearchURL([testRealmURL], bookQuery),
         };
       }
 
