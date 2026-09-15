@@ -13,9 +13,9 @@ import {
 const { module, test } = QUnit;
 const realmURL = 'https://adversarial-bxl.example/';
 
-// The limits the native BXL worker applies to every formula. Chrome applies
-// the engine defaults (250k steps, 2 s, 5 MB), so a formula that passes here
-// passes everywhere; one that fails here is the native tier's refusal.
+// Small explicit budgets for these adversarial fixtures. The worker test sets
+// its step budget before spawning the worker; production defaults leave more
+// room for compositional cards and are not the refusal threshold tested here.
 const WORKER_LIMITS = {
   maxSteps: 100_000,
   maxMillis: 100,
@@ -242,6 +242,8 @@ module('Lattice | adversarial BXL execution', function () {
   });
 
   test('the worker enforces its batch bounds and survives a refused formula', async function (assert) {
+    const previousSteps = process.env.LATTICE_NATIVE_BXL_MAX_STEPS;
+    process.env.LATTICE_NATIVE_BXL_MAX_STEPS = String(WORKER_LIMITS.maxSteps);
     const worker = new LatticeBxlWorker();
     const manifest = (expression: string): LatticeBxlManifest => ({
       version: 1,
@@ -296,13 +298,15 @@ module('Lattice | adversarial BXL execution', function () {
       );
       await assert.rejects(
         worker.evaluate(manifest('.xs | length'), [
-          input(
-            'big',
-            Array.from({ length: 200_000 }, (_, i) => i),
-          ),
+          {
+            ...input('big', [1]),
+            // Trailing whitespace is valid JSON. Exercise the wire-byte cap
+            // without allocating millions of array elements in the test runner.
+            json: JSON.stringify({ xs: [1] }) + ' '.repeat(16 * 1_048_576),
+          },
         ]),
-        /exceeds 1 MiB/,
-        'an input batch over 1 MiB is refused',
+        /exceeds 16 MiB/,
+        'an input batch over 16 MiB is refused',
       );
       await assert.rejects(
         worker.evaluate(manifest('.xs | length'), [
@@ -316,6 +320,9 @@ module('Lattice | adversarial BXL execution', function () {
       );
     } finally {
       await worker.close();
+      if (previousSteps === undefined)
+        delete process.env.LATTICE_NATIVE_BXL_MAX_STEPS;
+      else process.env.LATTICE_NATIVE_BXL_MAX_STEPS = previousSteps;
     }
   });
 });
