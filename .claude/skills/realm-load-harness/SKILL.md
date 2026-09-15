@@ -1,6 +1,6 @@
 ---
 name: realm-load-harness
-description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) exercising the per-user cost lock with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent while the `withUserCostLock` contention is real (a `400` in the response tally is expected); and (6) writing a workload file — the query shapes and write card, transcribed from the realm's card source into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
+description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); and (6) writing a workload file — the query shapes and write card, transcribed from the realm's card source into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -101,15 +101,23 @@ reads the host's own telemetry.
 
 ## `--model-calls`
 
-Each writer generates before it saves, the way a card that calls a model does.
-The call goes to `_request-forward` with a destination the realm server refuses,
-so **no tokens are spent** — but it passes auth and takes the per-user cost
-lock, held for the whole upstream call, which is the contended resource. A `400`
-(or `403`) in the response tally is the expected shape, not a failure: the
-request reached the handler and was rejected at the destination allowlist.
+Each writer issues a `_request-forward` call before it saves — the position a
+card that generates before saving occupies. The destination is one the realm
+server refuses, so **no tokens are spent**. A `400` in the response tally is the
+expected shape, not a failure.
 
-Without this flag a driver never sees the queueing where one user's second write
-waits out their first.
+**Know the boundary before you quote this flag.** `handleRequestForward`
+verifies the JWT, parses the body, and looks the destination up in
+`AllowedProxyDestinations` (a `proxy_endpoints` read, cached five seconds per
+replica) — and rejects there. That lookup sits **in front of**
+`withUserCostLock`, so a refused destination never takes the per-user cost lock.
+This flag therefore does **not** reproduce the serialization where one user's
+second generation waits out their first; reaching the lock takes an allowlisted
+destination, which means real spend and real upstream latency.
+
+What it does add is a second authenticated round trip per write, at the realm
+server and at the database, with its latency sitting between that writer's
+writes.
 
 ## Credentials
 
@@ -119,8 +127,8 @@ refuses `*.csv` — and never log a password; the harness reports login failures
 by status and error code only.
 
 Each simulated session authenticates as its own user. Searches authorize per
-realm and the cost lock is keyed by Matrix user, so a single shared account
-reproduces neither.
+realm and realm events are broadcast into each user's own session room, so a
+single shared account reproduces neither.
 
 **Readers must join their invited Matrix session room.** `_realm-auth` creates
 each user's DM session room and _invites_ them to it; an invited-but-not-joined

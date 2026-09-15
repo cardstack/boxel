@@ -49,8 +49,8 @@ from the in-region box that runs the driver.
 **One manual step remains.** The other users need read access to the realm.
 Granting it is not a `boxel realm` subcommand, so it is a UI action or a direct
 API call. Each session authenticates as its own user: searches authorize per
-realm, and the per-user cost lock that serializes model calls is keyed by Matrix
-user, so a single shared account reproduces neither.
+realm and realm events are broadcast into each user's own session room, so a
+single shared account reproduces neither.
 
 ## The workload file
 
@@ -93,15 +93,23 @@ node run-load.ts --csv ./accounts.csv \
 | `--idle-re-run-ms`  |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
 | `--secondary-every` |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
 | `--extra-queries`   |     off | Also issue the workload's `extraQueries`.                                       |
-| `--model-calls`     |     off | Generate before each write (see below).                                         |
+| `--model-calls`     |     off | A forwarded request before each write (see below).                              |
 | `--subscribe`       |     off | React to real realm events instead of modelling them (see below).               |
 
-`--model-calls` makes each writer generate before it saves, the way a card that
-calls a model does. The call goes to `_request-forward` with a destination the
-realm server refuses, so it costs no tokens — but it still passes auth and takes
-the **per-user cost lock**, which is held for the whole upstream call. That lock
-is why a user's second write waits out their first, and a write-only driver
-never sees it. A `400` in the response tally is the expected shape.
+`--model-calls` puts a `_request-forward` call before each write, the position a
+card that generates before saving occupies. The destination is one the realm
+server refuses, so it costs no tokens.
+
+**Know how far it gets.** `handleRequestForward` verifies the JWT, parses the
+body, and looks the destination up in `AllowedProxyDestinations` — a
+`proxy_endpoints` read cached for five seconds per replica — and rejects there.
+That lookup sits in front of `withUserCostLock`, so a refused destination never
+takes the per-user cost lock, and this flag does **not** reproduce the
+serialization where one user's second generation waits out their first. Reaching
+the lock takes an allowlisted destination, which means real spend and real
+upstream latency. What the flag does add is a second authenticated round trip
+per write, at the realm server and at the database. A `400` in the response
+tally is the expected shape.
 
 `extraQueries` is the place for a narrowed counterpart to one of the unbounded
 shapes, so a single run measures the same question asked both ways — the

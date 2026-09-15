@@ -67,10 +67,10 @@ let args = parseArgs(process.argv.slice(2), {
   // Every Nth reader also opens the workload's secondary screen.
   secondaryEvery: 3,
   extraQueries: false,
-  // Generate before saving, the way a card that calls a model does. The call
-  // goes through `_request-forward`, which holds a per-user lock for its whole
-  // duration, so two calls from one user serialize and the second waits out
-  // the first. That queueing is invisible to a driver that only writes.
+  // Precede each write with a `_request-forward` call, the way a card that
+  // generates before saving does. It adds a second authenticated round trip
+  // per write without spending tokens; see `modelCall` for exactly how far
+  // into the handler it reaches, which is less far than the name suggests.
   modelCalls: false,
   // Re-run on the realm's own invalidation events, the way a browser does,
   // rather than on every write this driver happens to make. Without it the
@@ -231,15 +231,21 @@ async function writeCard(session: Session, n: number): Promise<boolean> {
   }
 }
 
-// One model call, as a card that generates before saving makes it. The
-// destination is one the realm server refuses, because the contended resource
-// is the lock and not the generation, and a real call would cost tokens and
-// minutes per run.
+// One forwarded request, as a card that generates before saving makes it. The
+// destination is one the realm server refuses, because a real generation would
+// cost tokens and minutes per run.
 //
-// A 400 or 403 here is the expected shape: the request reached the handler,
-// passed auth, and was rejected at the destination allowlist. Everything before
-// that point still ran — including `withUserCostLock`, which is where a user's
-// second write waits out their first.
+// HOW FAR THIS ACTUALLY GETS, which bounds what it can show. A 400 is the
+// expected shape: `handleRequestForward` verifies the JWT, parses the body, and
+// looks the destination up in `AllowedProxyDestinations` — a `proxy_endpoints`
+// read, cached for five seconds per replica — and rejects there. That lookup
+// precedes `withUserCostLock`, so a refused destination never takes the
+// per-user cost lock and this flag does NOT reproduce the serialization where
+// one user's second generation waits out their first. Reaching the lock takes
+// an allowlisted destination, which means real spend; the harness declines.
+//
+// What it does add is a second authenticated round trip per write, at the
+// realm server and at the database, in the position a generation occupies.
 async function modelCall(session: Session): Promise<void> {
   let started = Date.now();
   try {
@@ -441,10 +447,8 @@ async function writerLoop(session: Session, index: number): Promise<void> {
     if (!running) {
       break;
     }
-    // The generation runs before the save and holds this user's cost lock for
-    // its duration. Ordering them this way is what puts a user's own next write
-    // behind their current one, which is the queueing a write-only driver never
-    // sees.
+    // A card that generates does so before it saves, so the forwarded request
+    // goes first and its latency lands between this writer's writes.
     if (args.modelCalls) {
       await modelCall(session);
     }
@@ -487,9 +491,9 @@ if (sessions.length < 2) {
   process.exit(1);
 }
 
-// Each simulated user authenticates as itself. Searches authorize per realm,
-// and the per-user cost lock is keyed by Matrix user, so one shared account
-// would reproduce neither the authorization work nor the lock contention.
+// Each simulated user authenticates as itself. Searches authorize per realm and
+// realm events are broadcast into each user's own session room, so one shared
+// account would reproduce neither the authorization work nor the event volume.
 let writerSessions = sessions.slice(
   0,
   Math.min(args.writers, sessions.length - 1),
@@ -530,18 +534,19 @@ function finish() {
   console.log(summarize('write      ', stats.write));
   if (stats.modelCalls || stats.modelErrors) {
     console.log(
-      summarize('model call ', stats.model) + '   ← incl. per-user cost lock',
+      summarize('forwarded  ', stats.model) + '   ← auth + allowlist lookup',
     );
     let statuses = [...stats.modelStatuses]
       .sort((a, b) => b[1] - a[1])
       .map(([code, n]) => `${code}×${n}`)
       .join(' ');
     console.log(
-      `  model responses: ${statuses}${stats.modelErrors ? `  (${stats.modelErrors} failed)` : ''}`,
+      `  forward responses: ${statuses}${stats.modelErrors ? `  (${stats.modelErrors} failed)` : ''}`,
     );
     console.log(
-      `  a rejected destination is the expected shape — the call still passes\n` +
-        `  auth and takes the per-user cost lock, which is the contended resource.`,
+      `  400 is the expected shape: the request passed auth and was rejected at\n` +
+        `  the destination allowlist, which sits in front of the per-user cost\n` +
+        `  lock. These calls do not reproduce that lock's contention.`,
     );
   }
 

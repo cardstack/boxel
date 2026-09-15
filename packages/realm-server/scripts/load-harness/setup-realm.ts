@@ -163,6 +163,6 @@ Next: grant the other ${creds.length - 1} users read access to this realm, then
 
 Read access is not exposed as a 'boxel realm' subcommand, so it is a UI step or
 a direct API call. Each simulated session authenticates as its own user:
-searches authorize per realm, and the per-user cost lock that serializes model
-calls is keyed by Matrix user, so one shared account reproduces neither.
+searches authorize per realm and realm events are broadcast into each user's own
+session room, so one shared account reproduces neither.
 `);
