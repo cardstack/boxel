@@ -122,6 +122,10 @@ import {
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  scopedCSSInjectorSource,
+  SCOPED_CSS_SERVING_PREFIX,
   authorizationMiddleware,
   internalKeyFor,
   unixTime,
@@ -4176,6 +4180,25 @@ export class Realm {
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
+      // Hashed scoped-CSS serving also dispatches on the path rather than
+      // the router table: the request is a module load (`loader.import` of a
+      // `css` resource's href from search results), whose Accept header
+      // matches no supported mime type. The URL carries only a content hash —
+      // the stylesheet bytes live in the `scoped_css` table — so unlike the
+      // inline form (which `maybeHandleScopedCSSRequest` answers locally with
+      // no network hop) this form must be answered here. Gated on the
+      // `_scoped-css/` prefix, not just the filename shape, so a realm file
+      // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
+      // is the only producer of these hrefs and always roots them under the
+      // prefix. Placed after checkPermission so it inherits realm-read auth;
+      // GET only for the same HEAD-oracle reason as screenshot serving above.
+      if (
+        request.method === 'GET' &&
+        localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+        isHashedScopedCSSRequest(localPath)
+      ) {
+        return await this.serveHashedScopedCSS(request, requestContext);
+      }
       // A file the realm is part-way through assembling, or one a write that
       // died left behind. It is never indexed, so serving it would hand back
       // content the realm does not otherwise acknowledge exists.
@@ -5211,6 +5234,57 @@ export class Realm {
       parsed.spec,
       perf,
     );
+  }
+
+  // Serve a hashed scoped-CSS module request (the `_scoped-css/` serving
+  // space `scopedCSSServingHref` roots under this realm): look the stylesheet
+  // up by content hash among THIS realm's interned rows and answer with the
+  // same style-injecting JS module the inline form produces locally. The
+  // realm-scoped lookup is always satisfiable — indexing interned every
+  // stylesheet this realm's rows reference under this realm's own
+  // `realm_url` — and it keeps a caller from probing whether some other
+  // realm's stylesheet bytes exist by guessing hashes. The body is a pure
+  // function of the URL, so it caches as immutable; visibility follows realm
+  // readability like the sibling capture-serving route.
+  //
+  // A `.css` URL served as `text/javascript` is deliberate, not a mixup: the
+  // consumer is `loader.import`, so like any bundler's CSS import the URL
+  // must resolve to a JS module whose evaluation injects the `<style>` tag,
+  // and the content-type describes that body truthfully. The
+  // `.glimmer-scoped.css` suffix is the upstream `glimmer-scoped-css` naming
+  // that every scoped-CSS choke point keys on — in particular the Node-side
+  // loader answers such URLs with an empty module instead of fetching, so an
+  // injector that touches `document` never evaluates where none exists.
+  private async serveHashedScopedCSS(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<ResponseWithNodeStream> {
+    let pathname = new URL(request.url).pathname;
+    let parsed = parseScopedCSSRequest(pathname);
+    if (parsed.form !== 'hashed') {
+      return notFound(request, requestContext);
+    }
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT css FROM scoped_css WHERE hash =`,
+      param(parsed.cssHash),
+      `AND realm_url =`,
+      param(this.url),
+      `LIMIT 1`,
+    ])) as { css: string }[];
+    if (rows.length === 0 || typeof rows[0].css !== 'string') {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: scopedCSSInjectorSource(pathname, rows[0].css),
+      init: {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=31536000, immutable`,
+        },
+      },
+      requestContext,
+    });
   }
 
   // The stage clocks `serveScreenshot` accumulates before the hit/miss

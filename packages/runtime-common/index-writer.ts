@@ -56,6 +56,13 @@ import {
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { md5 } from 'super-fast-md5';
+import {
+  isScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  encodeHashedScopedCSSRequest,
+} from './scoped-css.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -301,6 +308,9 @@ interface ExistingIndexRowType {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // CSS content hashes this batch has already interned into the `scoped_css`
+  // table, so a stylesheet shared by many rows in one pass is written once.
+  #internedScopedCSSHashes = new Set<string>();
   #nodeResolvedInvalidations: string[] | undefined;
   // URLs already written to boxel_index_working by an earlier attempt
   // of *this same job*, with the last_modified value the previous
@@ -1538,13 +1548,18 @@ export class Batch {
     // form. Normalizing here keeps one canonical form on disk; dependency
     // invalidation already searches both the real and prefix forms.
     if (preparedEntry.deps) {
-      preparedEntry.deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.deps,
+      preparedEntry.deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.deps),
       );
     }
     if (preparedEntry.last_known_good_deps) {
-      preparedEntry.last_known_good_deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.last_known_good_deps,
+      preparedEntry.last_known_good_deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.last_known_good_deps),
+      );
+    }
+    if (preparedEntry.error_doc?.deps) {
+      preparedEntry.error_doc.deps = await this.internScopedCSSDeps(
+        preparedEntry.error_doc.deps,
       );
     }
 
@@ -1795,6 +1810,17 @@ export class Batch {
         throw new Error(
           `Unsupported prerendered-html entry type: ${(entry as { type: string }).type}`,
         );
+    }
+    for (let key of ['deps', 'last_known_good_deps'] as const) {
+      if (Array.isArray(payload[key])) {
+        payload[key] = await this.internScopedCSSDeps(payload[key] as string[]);
+      }
+    }
+    let payloadErrorDoc = payload.error_doc as SerializedError | null;
+    if (payloadErrorDoc?.deps) {
+      payloadErrorDoc.deps = await this.internScopedCSSDeps(
+        payloadErrorDoc.deps,
+      );
     }
     let preparedEntry = {
       url: url.href,
@@ -3153,6 +3179,70 @@ export class Batch {
     } catch (_err) {
       return dep;
     }
+  }
+
+  // Rewrite inline scoped-CSS deps (the `glimmer-scoped-css` form that
+  // base64-embeds the entire stylesheet in the URL) to their hashed form,
+  // interning the CSS bytes into the content-addressed `scoped_css` table.
+  // The stylesheet text was by far the largest share of `deps` storage; the
+  // hashed form keeps the dependency identity (and the realm's ability to
+  // serve the stylesheet — by hash lookup) without carrying the bytes in
+  // every referencing row. Non-scoped-CSS deps, already-hashed deps, and
+  // unparseable entries pass through verbatim.
+  private async internScopedCSSDeps(deps: string[]): Promise<string[]> {
+    let toInsert: { hash: string; css: string }[] = [];
+    let rewritten = deps.map((dep) => {
+      if (
+        typeof dep !== 'string' ||
+        !isScopedCSSRequest(dep) ||
+        isHashedScopedCSSRequest(dep)
+      ) {
+        return dep;
+      }
+      let parsed: ReturnType<typeof parseScopedCSSRequest>;
+      try {
+        parsed = parseScopedCSSRequest(dep);
+      } catch (_err) {
+        return dep;
+      }
+      if (parsed.form !== 'inline') {
+        return dep;
+      }
+      let hash = md5(parsed.css);
+      if (!this.#internedScopedCSSHashes.has(hash)) {
+        this.#internedScopedCSSHashes.add(hash);
+        toInsert.push({ hash, css: parsed.css });
+      }
+      return encodeHashedScopedCSSRequest(parsed.fromFile, hash);
+    });
+    // Modest chunks: each value carries a whole stylesheet, and a from-scratch
+    // pass interns at most one row per distinct stylesheet in the realm.
+    // The upsert refreshing `last_interned_at` on conflict is load-bearing:
+    // the scheduled GC's grace window (see `sweepUnreferencedScopedCSS`)
+    // relies on every intern — including one whose bytes were already
+    // stored — marking the row recently touched, so a pass that re-interns a
+    // currently-unreferenced row protects it until the pass promotes.
+    const rowsPerUpsert = 20;
+    for (let i = 0; i < toInsert.length; i += rowsPerUpsert) {
+      let slice = toInsert.slice(i, i + rowsPerUpsert);
+      let expressions = slice.map(({ hash, css }) =>
+        asExpressions({
+          realm_url: this.realmURL.href,
+          hash,
+          css,
+          last_interned_at: Date.now(),
+        }),
+      );
+      await this.#query([
+        ...upsertMultipleRows(
+          'scoped_css',
+          'scoped_css_pkey',
+          expressions[0].nameExpressions,
+          expressions.map((e) => e.valueExpressions),
+        ),
+      ]);
+    }
+    return rewritten;
   }
 
   private updateIds(obj: any, fromRealm: URL) {
