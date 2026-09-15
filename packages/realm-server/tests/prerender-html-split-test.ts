@@ -1958,11 +1958,12 @@ module(basename(import.meta.filename), function () {
             type: 'indexing-started',
             realmURL: testRealm,
             jobId: info.jobId,
+            reservationId: info.reservationId,
             jobType: 'prerender_html',
             totalFiles: 4,
             files: [],
           },
-          'started carries the deduped total and the queue job-type label',
+          'started carries the deduped total, the job-type label, and the reservation a heartbeat is keyed by',
         );
         assert.deepEqual(
           rest.map((e) => [e.type, e.url, e.filesCompleted, e.totalFiles]),
