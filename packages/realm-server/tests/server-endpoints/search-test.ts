@@ -897,8 +897,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       let [event] = lines;
       assert.strictEqual(
         event.filter,
-        `on(${baseCardRef.module}/${baseCardRef.name})`,
-        'the filter renders its type anchor',
+        `type(${baseCardRef.module}/${baseCardRef.name})`,
+        'a filter carrying only the type anchor is a pure card-type filter',
       );
       assert.strictEqual(
         event.sort,
@@ -937,8 +937,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           filter: {
             'item.on': baseCardRef,
             every: [
-              { eq: { 'item.title': 'Jane' } },
-              { contains: { 'item.description': 'a private description' } },
+              { eq: { 'item.cardTitle': 'Jane' } },
+              { contains: { 'item.cardDescription': 'a private substring' } },
             ],
           },
           realms: [testRealm.url],
@@ -950,13 +950,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       let [event] = lines;
       assert.strictEqual(
         event.filter,
-        `on(${baseCardRef.module}/${baseCardRef.name}):every(contains(description),eq(title))`,
+        `on(${baseCardRef.module}/${baseCardRef.name}):every(contains(cardDescription),eq(cardTitle))`,
         'the operators and the field paths they address, and nothing else',
       );
       let line = JSON.stringify(event);
       assert.false(line.includes('Jane'), 'no eq value reaches the line');
       assert.false(
-        line.includes('a private description'),
+        line.includes('a private substring'),
         'no contains value reaches the line',
       );
     });
