@@ -4,6 +4,7 @@ import type {
   LooseSingleCardDocument,
   QueuePublisher,
   RealmPermissions,
+  Prerenderer,
   QueueRunner,
   Realm,
   VirtualNetwork,
@@ -34,6 +35,7 @@ export type ServerEndpointsTestContext = {
 };
 
 type ServerEndpointsTestOptions = {
+  prerenderer?: Prerenderer;
   // CS-10009: pick the realm fixture that backs this test's testRealm.
   // Default is 'blank' — most server-level endpoint tests
   // (bot-commands, webhooks, realm lifecycle, etc.) don't read card
@@ -90,6 +92,7 @@ export function setupServerEndpointsTest(
   }
 
   setupPermissionedRealmCached(hooks, {
+    prerenderer: options.prerenderer,
     ...(options.fileSystem
       ? { fileSystem: options.fileSystem }
       : { fixture: options.fixture ?? 'blank' }),

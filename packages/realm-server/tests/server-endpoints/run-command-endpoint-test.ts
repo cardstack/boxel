@@ -1,8 +1,18 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { readFileSync } from 'fs';
+import {
+  Deferred,
+  type Prerenderer as Renderer,
+} from '@cardstack/runtime-common';
+import type { Prerenderer } from '../../prerender/prerenderer.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { realmSecretSeed, insertUser } from '../helpers/index.ts';
+import {
+  realmSecretSeed,
+  insertUser,
+  getPrerendererForTesting,
+} from '../helpers/index.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 
 // A realm-defined command that persists a card through SaveCardCommand and
@@ -82,7 +92,49 @@ const commandWriterUserId = '@cmd-writer:localhost';
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('/_run-command endpoint', function (hooks) {
+    let render: Prerenderer;
+    let indexBarrier:
+      | { entered: Deferred<void>; release: Deferred<void> }
+      | undefined;
+    const renderer: Renderer = {
+      async prerenderVisit(args) {
+        if (
+          indexBarrier &&
+          args.visitType === 'index' &&
+          args.url.startsWith(`${testRealmURL}Note/`)
+        ) {
+          indexBarrier.entered.fulfill();
+          await indexBarrier.release.promise;
+        }
+        return (await render.prerenderVisit(args)).response;
+      },
+      async prerenderModule(args) {
+        return (await render.prerenderModule(args)).response;
+      },
+      async runCommand(args) {
+        return (await render.runCommand(args)).response;
+      },
+      async releaseBatch(args) {
+        await render.releaseBatch(args);
+      },
+    };
+    hooks.before(() => {
+      // A command's cold base-definition lookup needs its own renderer slot.
+      // The write/index ordering assertion below uses an explicit job barrier.
+      render = getPrerendererForTesting({
+        serverURL: testRealmURL.origin,
+        maxPages: 2,
+      });
+    });
+    hooks.afterEach(() => {
+      indexBarrier?.release.fulfill();
+      indexBarrier = undefined;
+    });
+    hooks.after(async () => {
+      await render?.stop();
+    });
     let context = setupServerEndpointsTest(hooks, {
+      prerenderer: renderer,
       fileSystem: {
         'save-note-command.gts': saveNoteCommandSource,
         'throwing-command.gts': throwingCommandSource,
@@ -217,10 +269,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     // Pins that a command can persist a card and that the card is durable
-    // afterwards. The harness runs a single worker and a single prerender
-    // pool, so a write that waited on indexing would have nothing left to
-    // run it and the invocation would fail at its timeout.
+    // afterwards. Hold its actual index job until the command returns, so an
+    // accidental index wait fails even when Chrome has spare capacity for
+    // a cold definition lookup.
     test('a command that saves a card completes and the card is durable', async function (assert) {
+      indexBarrier = {
+        entered: new Deferred<void>(),
+        release: new Deferred<void>(),
+      };
       let matrixUserId = commandWriterUserId;
 
       let response = await context.request
@@ -271,8 +327,24 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       )) as { count: number }[];
       assert.strictEqual(count, 0, 'no run-command job was published');
 
-      // The write indexed deferred, so the read-back has to wait for that
-      // enqueued job rather than assume the POST already covered it.
+      try {
+        await indexBarrier.entered.promise;
+        const savedPath =
+          decodeURIComponent(
+            new URL(savedId).pathname.slice(testRealmURL.pathname.length),
+          ) + '.json';
+        const source = JSON.parse(
+          readFileSync(join(context.testRealmDir, savedPath), 'utf8'),
+        );
+        assert.strictEqual(
+          source.data.attributes.body,
+          'saved from a headless command',
+          'source is durable while its index job is held',
+        );
+      } finally {
+        indexBarrier.release.fulfill();
+      }
+      // Only the subsequent indexed read waits for the released job.
       await context.testRealm.incrementalIndexing();
       let saved = await context.request
         .get(new URL(savedId).pathname)
