@@ -14,7 +14,7 @@ import {
   type RealmRequest,
 } from './helpers/index.ts';
 
-// CS-12968: a JSON-API card POST / PATCH normally blocks on the realm's
+// A JSON-API card POST / PATCH normally blocks on the realm's
 // in-flight incremental indexing before responding — `createCard` /
 // `patchCardInstance` await `incrementalIndexing()`, which settles only once
 // EVERY incremental/copy job for the realm drains. A caller can now opt out

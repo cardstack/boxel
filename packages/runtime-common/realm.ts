@@ -399,14 +399,21 @@ function isDuringPrerenderRequest(request: Request): boolean {
 // Definitions, skipQueryBackedExpansion) that header also triggers, so an
 // ordinary interactive save can take it safely.
 //
-// Motivation (CS-12968): the default synchronous-indexing contract makes a
-// single-card save await `incrementalIndexing()`, which resolves only once
-// EVERY in-flight incremental/copy job for the realm settles — so an unrelated
-// reindex draining in the worker pool can stall (and time out) the save. A
-// caller that consumes the returned instance directly (e.g. SaveCardCommand)
-// doesn't need the freshly-indexed read-back and can opt out. The tradeoff is
-// eventual consistency: the caller's own immediately-following index-backed
-// reads/searches may not see the write until its deferred index job lands.
+// Motivation: the default synchronous-indexing contract makes a single-card
+// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
+// incremental/copy job for the realm settles — so an unrelated reindex
+// draining in the worker pool can stall (and time out) the save. A caller that
+// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
+// the freshly-indexed read-back and can opt out.
+//
+// The tradeoff is narrower than full read-your-write loss. The writer's own
+// next card read still waits: the deferred job is tagged with the writer
+// (`initiatedBy`), and card/file reads drain the requester's own indexing
+// (`drainRequestersOwnIndexing`, bounded by READ_INDEX_DRAIN_BUDGET_MS). What
+// goes eventually-consistent is search — `searchEntriesResponse` has no drain,
+// so _search/_federated-search can miss the write until the job lands — plus
+// anonymous readers, other users' sessions, and any read that exhausts the
+// drain budget.
 export const SKIP_INDEX_WAIT_HEADER = 'x-boxel-skip-index-wait';
 function isSkipIndexWaitRequest(request: Request): boolean {
   return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
@@ -6362,23 +6369,26 @@ export class Realm {
     // echoing it) and nothing prerender-specific beyond them.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
-    // card. fileSerialization runs lookupDefinition on the card's
-    // adoptsFrom module, and with CS-11003's deferred +source POST a
-    // module that was just uploaded may not be indexed yet —
-    // serialization would then throw FilterRefersToNonexistentTypeError
-    // and the +json POST would fail. Draining here makes the JSON-API
-    // path tolerant of an immediately-preceding +source POST without
-    // disturbing the +json POST's own synchronous-indexing contract.
+    // card, so the JSON-API path tolerates an immediately-preceding deferred
+    // +source POST without disturbing the +json POST's own
+    // synchronous-indexing contract.
     //
-    // A prerender-originated write skips the drain: the job it would wait on
-    // needs the render slot (and, on the queued-command path, the worker) the
-    // caller is holding, so waiting deadlocks. Serialization still resolves a
-    // definition it has never seen — `lookupDefinition` reads through to
-    // `prerenderModule`, which serves the module off disk rather than out of
-    // the index. A module the same caller just rewrote reads through for the
-    // same reason: `_batchWriteUnlocked` drops that module's cached
-    // definition as it writes the bytes, so no indexing-dependent step
-    // stands between a module rewrite and the serialization that follows it.
+    // Why any caller may skip it: serialization's only cross-file dependency
+    // is `fileSerialization` → `lookupDefinition`, and that lookup is
+    // caller-agnostic — the definition service never sees this request, and a
+    // cache miss reads the module through `prerenderModule`, off disk rather
+    // than out of the index. A module the caller just rewrote reads through
+    // the same way: `_batchWriteUnlocked` drops the module's cached
+    // definition and mints a loader epoch as it writes the bytes. So no
+    // indexing-dependent step stands between a module write and the
+    // serialization that follows it, for prerender and skip-index-wait
+    // callers alike — which likely makes this drain vestigial for the default
+    // path too; removing it is a separate change that must re-prove the
+    // module-POST-then-card-POST race it guards.
+    //
+    // A prerender-originated write additionally MUST skip it: the job it
+    // would wait on needs the render slot (and, on the queued-command path,
+    // the worker) the caller is holding, so waiting deadlocks.
     if (!answerFromEcho) {
       let pending = this.incrementalIndexing();
       if (pending) {

@@ -19,9 +19,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 // Guards the polarity of SaveCardInput.skipIndexWait against the field it rides
 // on. It is a BooleanField, whose unset value is `false`, so a save that does
 // not opt in must NOT stamp SKIP_INDEX_WAIT_HEADER — only an explicit
-// `skipIndexWait: true` may. (An earlier `waitForIndex` spelling defaulted the
-// unset field to the opt-out, silently flipping every SaveCard to the deferred-
-// index echo path — see CS-12968.)
+// `skipIndexWait: true` may.
 //
 // The realm-side handling of the header is covered in the realm-server suite
 // (card-save-skip-index-wait-test.ts); this pins the host end — that the option

@@ -1757,9 +1757,10 @@ export interface CreateOptions {
   // deferred and answers from the serialized document instead of reading it
   // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to false
   // (wait), which is the synchronous-indexing contract every existing caller
-  // relies on. Opt in only when the caller consumes the returned instance
-  // directly and can tolerate its own immediately-following reads/searches
-  // lagging until the deferred index job lands (CS-12968). Only the save path
+  // relies on. The writer's own next card read still waits on the deferred
+  // job (card reads drain the requester's own writes); what goes eventually-
+  // consistent is search — _search/_federated-search have no such drain —
+  // plus other users' sessions and anonymous readers. Only the save path
   // (store.add → persistAndUpdate) honors this; create()/copy ignore it.
   skipIndexWait?: boolean;
 }
