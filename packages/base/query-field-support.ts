@@ -286,23 +286,43 @@ export function ensureQueryFieldSearchResource(
 // document answers immediately, and the resource arms its realm-event
 // subscription so later writes to matching cards refresh it.
 //
-// Two opt-outs. A store that must render as a pure function of the document it
+// Three opt-outs. A store that must render as a pure function of the document it
 // was handed reports `resolvesQueryFieldsEagerly: false`, which keeps indexing
 // and prerender resolving lazily through the field getter exactly as they do
 // without this call. A field whose query is expensive or rarely read declares
-// `eager: false` and resolves on first access instead.
+// `eager: false` and resolves on first access instead. And a card that arrived
+// as link context rather than as the subject of its document waits for a read,
+// for the reason below.
 //
-// Failure degrades to the lazy path rather than propagating: this runs for
-// every query field on every deserialized card, including cards nothing will
-// ever render, so a resource that can't be built must not take the owner's
-// deserialization down with it. The field getter builds the resource again on
-// first read, where the same failure surfaces to the render that depends on it.
+// What resolution costs is not one request but a standing subscription: the
+// resource it builds is live, and a live resource subscribes to every realm its
+// query targets whether or not the document already answered it, then re-runs
+// that query on each realm's index and prerendered-HTML events for as long as
+// the owning instance lives. One document can carry a query field per card it
+// references, so resolving them all turns a single read into a lasting
+// per-field subscriber set that every subsequent write to those realms wakes.
+// Scoping this to the document's own subject keeps that set proportional to the
+// card a consumer asked for.
+//
+// Waiting costs the field nothing it was holding. `captureQueryFieldSeedData`
+// records the document's answer in field state whether or not a resource is
+// built, and the resource takes that seed whenever it is eventually built — so a
+// field the document answered still resolves without a request, just later.
+//
+// Failure degrades to the lazy path rather than propagating: a resource that
+// can't be built must not take the owner's deserialization down with it. The
+// field getter builds it again on first read, where the same failure surfaces to
+// the render that depends on it.
 export function resolveQueryFieldEagerly(
   store: CardStore,
   instance: BaseDef,
   field: Field,
+  isDocumentSubject: boolean,
 ): void {
   if (!field.queryDefinition || field.eager === false) {
+    return;
+  }
+  if (!isDocumentSubject) {
     return;
   }
   if (!store?.resolvesQueryFieldsEagerly) {
@@ -336,10 +356,10 @@ export function resolveQueryFieldEagerly(
 }
 
 // Peek at the search resource already created for a query field, without
-// triggering creation. Returns `undefined` when the resource hasn't been
-// instantiated yet (no consumer has read the field). Pure read — useful for
-// callers that want to inspect resolved state without registering as
-// reactive consumers of the field.
+// triggering creation. Returns `undefined` while nothing has resolved the field
+// — neither a read of its value nor a read of its state, both of which build the
+// resource. Pure read, so it answers whether a field has been resolved at all
+// without becoming the thing that resolves it.
 export function peekQueryFieldSearchResource(
   instance: BaseDef,
   fieldName: string,
