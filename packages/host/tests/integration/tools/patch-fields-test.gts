@@ -1,5 +1,3 @@
-import { waitUntil } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -12,7 +10,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  withSlowSave,
+  withHeldSave,
   type TestContextWithSave,
 } from '../../helpers';
 import {
@@ -159,7 +157,7 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Optimistic persistence behavior', function () {
     test<TestContextWithSave>('patches do not await persistence', async function (assert) {
-      assert.expect(6);
+      assert.expect(7);
 
       let patchFieldsCommand = new PatchFieldsTool(toolService.toolContext, {
         cardType: AuthorDef,
@@ -191,7 +189,7 @@ module('Integration | Command | patch-fields', function (hooks) {
       };
 
       try {
-        await withSlowSave(100, async () => {
+        await withHeldSave(async () => {
           let result = await patchFieldsCommand.execute({
             cardId,
             fieldUpdates: {
@@ -224,7 +222,16 @@ module('Integration | Command | patch-fields', function (hooks) {
         'store.patch receives doNotWaitForPersist option',
       );
 
-      await waitUntil(() => saves > 0);
+      // `withHeldSave` releases the save it held and waits for it, so the
+      // background persist is already complete — there is nothing left to poll
+      // for. The store's save state rides along in the message so a save that
+      // failed rather than completed says so on the spot.
+      assert.true(
+        saves > 0,
+        `the background save completed (store save state: ${JSON.stringify(
+          store.getSaveState(cardId),
+        )})`,
+      );
 
       let persistedCard = await store.get(cardId);
       if (isCard(persistedCard)) {
