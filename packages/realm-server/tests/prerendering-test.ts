@@ -918,7 +918,7 @@ module(basename(import.meta.filename), function () {
                 @field name = contains(StringField);
                 static isolated = class extends Component<typeof this> {
                   <template>
-                    <div style="height: 1500px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                    <div style="height: 1500px; background: repeating-linear-gradient(#fff 0px, #fff 1px, #000 1px, #000 2px);">{{@model.name}}</div>
                   </template>
                 }
               }
@@ -1068,17 +1068,18 @@ module(basename(import.meta.filename), function () {
       // independently-hydrated renders. Neither entry changes the viewport:
       // both reduce to a single Page.captureScreenshot with
       // captureBeyondViewport, so nothing reflows between entries. The `tall`
-      // card is a top-anchored 1500px vertical gradient with its name at the
-      // top-left: the gradient makes a 1px *vertical* shift change every
-      // sampled color, and the name's text glyphs make a 1px *horizontal*
-      // shift detectable (the gradient alone is horizontally uniform).
+      // card has 1500px of alternating one-pixel bands and its name at the
+      // top-left: the bands detect a 1px vertical shift and the text detects
+      // a horizontal shift. Smooth gradients are unsuitable here: Chromium
+      // can rasterize them with different one-channel rounding for a clip,
+      // even with the same DOM and capture origin.
       let { response } = await screenshot(`${realmURL}tall`, {
         captures: [
           { name: 'full', fullPage: true },
           // Top-left region including the card name; kept clear of the
           // right-edge scrollbar column.
           { name: 'topLeft', clip: { x: 0, y: 0, width: 400, height: 300 } },
-          // Non-origin region deep in the gradient: pins that a clip with a
+          // Non-origin region deep in the bands: pins that a clip with a
           // non-zero offset maps to the same rows of the fullPage capture.
           { name: 'deep', clip: { x: 100, y: 500, width: 300, height: 200 } },
         ],
@@ -1111,6 +1112,10 @@ module(basename(import.meta.filename), function () {
         100,
         500,
         'offset clip equals the fullPage crop at (100,500) exactly',
+      );
+      assert.true(
+        regionMismatch(deepPng, full, 100, 500, 0, 1) > 0,
+        'the fixture detects a one-pixel vertical crop error',
       );
     });
 
