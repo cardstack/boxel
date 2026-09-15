@@ -314,17 +314,48 @@ module('Integration | nested query-field rendering', function (hooks) {
   });
 
   test('a side-loaded card holds no realm subscription until its field is read', async function (this: RenderingTestContext, assert) {
+    let { peekQueryFieldSearchResource } = queryFieldSupport;
     let searches = countSearches();
     try {
-      await getService('store').get(PARENT_URL);
+      let parent = (await getService('store').get(
+        PARENT_URL,
+      )) as CardDefType & {
+        child: CardDefType & { matches: unknown[] };
+      };
       await settled();
+      let child = parent.child;
+
+      // The state the absence below is only meaningful in. This card reached
+      // the store through the document's `included`, so nothing has resolved
+      // its field — and a card that had been resolved by some other route
+      // would satisfy the next assertion for a reason that has nothing to do
+      // with subscriptions.
+      assert.strictEqual(
+        peekQueryFieldSearchResource(child, 'matches'),
+        undefined,
+        'nothing has resolved the side-loaded field',
+      );
 
       await announceIncrementalIndex();
-
       assert.strictEqual(
         searches.count,
         0,
         'a write to the realm wakes no search for a field nothing has read',
+      );
+
+      // The same announcement, against the same field, once it has been read.
+      // Without this the assertion above would hold just as well if the
+      // announcement never arrived anywhere — which is the way a test for an
+      // absence usually stops being a test.
+      child.matches;
+      await settled();
+      let afterRead = searches.count;
+      assert.ok(afterRead > 0, 'reading the field asks for its members');
+
+      await announceIncrementalIndex();
+      assert.ok(
+        searches.count > afterRead,
+        'and the subscription that read armed does answer a write',
       );
     } finally {
       searches.restore();
