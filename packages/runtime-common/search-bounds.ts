@@ -31,9 +31,13 @@ const log = logger('search-bounds');
 //     clamping, because there the author who wrote the number is the one who
 //     sees the error. The true match count rides `meta.page.total` either way,
 //     so a caller can paginate — and can see that it got a short page.
-//   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) and concurrency
-//     (SEARCH_CONCURRENCY_CAP) — client-side only, on the card `@context`
-//     surface: the host federates widely and runs its own searches freely.
+//   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) — client-side only, on the
+//     card `@context` surface: the host federates widely.
+//   - Concurrency (SEARCH_CONCURRENCY_CAP) — client-side only, and a ceiling on
+//     the tab rather than on a caller: the card `@context` surface and
+//     query-field resolution share it, so a page's whole search fan-out is
+//     bounded however it is spread across cards. The host runs its own searches
+//     freely.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
@@ -143,9 +147,11 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
-// Max concurrent card-initiated item-leg searches. Enforced client-side on the
-// `@context` surface (see host StoreService); exported here so the client and
-// the shared contract agree on one number.
+// Max item-leg searches one tab may have in flight at once, across the card
+// `@context` surface and query-field resolution together. Enforced client-side
+// (see host StoreService); exported here so the client and the shared contract
+// agree on one number. Excess searches queue rather than fail, so this bounds
+// the concurrency and never the count.
 export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
   env.SEARCH_CONCURRENCY_CAP,
   DEFAULT_SEARCH_CONCURRENCY_CAP,

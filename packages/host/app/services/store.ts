@@ -1250,6 +1250,7 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta?: false;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
+      throttled?: boolean;
       scope?: SearchEntryScope;
     },
   ): Promise<T[]>;
@@ -1260,6 +1261,7 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
+      throttled?: boolean;
       scope?: SearchEntryScope;
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
@@ -1274,6 +1276,11 @@ export default class StoreService extends Service implements StoreInterface {
       // page size, realms fan-out, and the concurrency throttle — none of which
       // constrain the host app's own direct search calls.
       cardInitiated?: boolean;
+      // Run under the concurrency throttle without the other card caps, for a
+      // caller whose result set must not be reshaped but whose volume still has
+      // to be bounded — query-field resolution, which fires a search per query
+      // field per deserialized card. Implied by `cardInitiated`.
+      throttled?: boolean;
       // Pin which index rows the search returns: 'cards' (instance rows),
       // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
       // inferred from the filter — an untyped query defaults to 'cards'. Prefer
@@ -1317,9 +1324,10 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.dependencyTrackingContext,
         opts?.scope,
       );
-    let result = opts?.cardInitiated
-      ? await this.performThrottledSearch(run)
-      : await run();
+    let result =
+      opts?.cardInitiated || opts?.throttled
+        ? await this.performThrottledSearch(run)
+        : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1385,16 +1393,22 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
-  // Client-side concurrency throttle for card-initiated (`@context`) item-leg
-  // searches. `getSearchResource` — the function bound as `getCards` on the
-  // card `@context` — routes its search through this task; the host app's own
-  // direct `store.search` / `getSearch` callers do not, so the trusted host is
-  // never throttled. `enqueue` + `maxConcurrency` queues (never drops) excess
-  // card searches, so a card firing many searches at once (e.g. a per-keystroke
-  // grid) can't fan a burst of concurrent `_federated-search` requests at the
-  // realm-server. The server's per-request bounds (page / realms / time) are
-  // the un-overridable backstop; this keeps well-behaved cards from tripping
-  // them in the first place.
+  // The tab's ceiling on concurrent item-leg searches. One task on one store
+  // service, so it bounds the tab and not a single card: every search routed
+  // through it competes for the same slots. Two callers route: the card
+  // `@context` surface (`getCards` and the card-facing store, via
+  // `cardInitiated`), and query-field resolution (via `throttled`), which fires
+  // a search per query field per deserialized card and is the larger fan-out of
+  // the two. The host app's own direct `store.search` / `getSearch` calls do
+  // not, so the trusted host is never throttled.
+  //
+  // `enqueue` + `maxConcurrency` queues excess searches rather than dropping
+  // them, so nothing a card asked for goes unanswered — a burst becomes a
+  // queue. The request count is unchanged; what is bounded is how many of them
+  // are in flight, which is what a connection, a round trip, and the
+  // realm-server's per-request heap all scale with. The server's per-request
+  // bounds (page / realms / time) are the un-overridable backstop; this keeps
+  // well-behaved cards from tripping them in the first place.
   private searchThrottle = task(
     { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
     async (run: () => Promise<unknown>): Promise<unknown> => {
@@ -1402,11 +1416,11 @@ export default class StoreService extends Service implements StoreInterface {
     },
   );
 
-  // Run `run` under the card-search concurrency throttle (`enqueue` +
-  // maxConcurrency), so no more than the cap of card-initiated searches hit the
-  // realm-server at once and the rest queue. Called from `search` when
-  // `cardInitiated`. Typed as a plain Promise since the caller only awaits the
-  // result. Public so a test can exercise the throttle with controllable work.
+  // Run `run` under the tab's search concurrency ceiling (`enqueue` +
+  // maxConcurrency), so no more than the cap hit the realm-server at once and
+  // the rest queue. Called from `search` when `cardInitiated` or `throttled`.
+  // Typed as a plain Promise since the caller only awaits the result. Public so
+  // a test can exercise the throttle with controllable work.
   performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
     return this.searchThrottle.perform(run) as unknown as Promise<R>;
   }
@@ -1835,8 +1849,12 @@ export default class StoreService extends Service implements StoreInterface {
       // Set by the `@context` providers (the card-facing `getCards`): run the
       // search under the card caps and default a no-realm search to
       // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
-      // support, the render-store hook), which stay unconstrained.
+      // support, the render-store hook), which are not subject to the caps.
       cardInitiated?: boolean;
+      // Set by query-field resolution: take a slot in the tab's search
+      // concurrency ceiling, leaving the rest of the card caps off. See
+      // `searchThrottle`.
+      throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
       seed?: {
         cards: T[];
@@ -1871,9 +1889,10 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    // `cardInitiated` + `getDefaultRealm` ride through `opts`: the `@context`
-    // providers pass them (card-facing `getCards`); other callers don't and stay
-    // unconstrained.
+    // `cardInitiated` + `getDefaultRealm` + `throttled` ride through `opts`:
+    // the `@context` providers pass the first two (card-facing `getCards`),
+    // query-field resolution passes the third, and a host-internal caller
+    // passes none of them and stays unconstrained.
     return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
       ...opts,
       storeService: this,

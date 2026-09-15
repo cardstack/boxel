@@ -2653,6 +2653,67 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    // The throttle is the tab's ceiling rather than the card `@context`'s. A
+    // caller whose result set must not be reshaped — query-field resolution,
+    // whose membership a clamped page or realm list would silently truncate —
+    // takes a slot without the other card caps, while the host's own searches
+    // stay outside it entirely.
+    test('a throttled search waits for a slot before it reaches the network; a host search does not', async function (assert) {
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        });
+      });
+      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
+        timeout: 5_000,
+      });
+      fetchCalls = 0;
+
+      let throttledDone = false;
+      let throttled = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          throttledDone = true;
+        });
+      let hostDone = false;
+      let host = storeService
+        .search(abdelRahmanQuery, [testRealmURL])
+        .then(() => {
+          hostDone = true;
+        });
+
+      try {
+        await waitUntil(() => hostDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the host search reached the network while every slot was taken',
+        );
+        assert.false(
+          throttledDone,
+          'the throttled search is still queued behind the full cap',
+        );
+      } finally {
+        for (let gate of gates) {
+          gate.fulfill();
+        }
+        await Promise.all(occupying);
+      }
+      await throttled;
+      await host;
+      assert.true(throttledDone, 'the throttled search ran once a slot freed');
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'it reached the network only after it had a slot',
+      );
+    });
+
     // A card-initiated search is capped; the same call from the host (no
     // cardInitiated flag) is not. The caps throw before any network round-trip,
     // so these assertions are self-contained.
