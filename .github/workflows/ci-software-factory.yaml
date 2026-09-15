@@ -123,9 +123,12 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
         working-directory: packages/software-factory
+      # Traces are evidence for a human reading a failed spec. Nothing
+      # downstream consumes them, so a failed upload does not fail the shard.
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        continue-on-error: true
         with:
           name: software-factory-playwright-traces-shard-${{ matrix.shard.index }}
           path: packages/software-factory/test-results/**/trace.zip
