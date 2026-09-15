@@ -3,18 +3,6 @@ import { v4 as uuidV4 } from 'uuid';
 
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
 import {
-  isBxlMutationError,
-  mutateBxlCardSource,
-  mutationSchemaForCardSource,
-  type BxlCardSourceDocument,
-  type BxlMutationContext,
-  type BxlMutationJson,
-  type BxlMutationJsonObject,
-  type BxlMutationOverlays,
-  type BxlMutationUnavailableOverlay,
-} from '@cardstack/bxl/mutation';
-
-import {
   getImmediateFieldDef,
   type Definition,
   type FieldDefinition,
@@ -149,12 +137,17 @@ export interface StoredMeta {
 // answer, and that is fine: an overlay answers only where the stored document
 // holds nothing.
 export interface IndexedCardValues {
-  // `pristine_doc`'s attributes: the card's fields with its computed ones
-  // filled in.
-  computeds: Record<string, unknown> | undefined;
+  // `pristine_doc`: the card's own document with its computed fields filled
+  // in, as the JSON:API resource the index stores. Handed over whole rather
+  // than as its attributes, because a computed *link* is a relationship — it
+  // is never in `attributes`, and every card has one in `cardTheme`. The
+  // executor projects it into the shape a program reads before laying it
+  // over, using the same projection the stored document goes through, so the
+  // two describe a path the same way.
+  pristine: CardResource | undefined;
   // `search_doc`: the card's searchable fields, with each `searchable` link's
   // target expanded in place.
-  linked: Record<string, unknown> | undefined;
+  searchDoc: Record<string, unknown> | undefined;
 }
 
 // A stored file read in bounded pieces rather than whole: its byte length, and
@@ -335,6 +328,11 @@ export interface StagedChange {
   // same path is not a later step in one story — it is the earlier entry's
   // content never landing while that entry reports success.
   replacesContent?: true;
+  // Every card this entry records an edge to, as the identity the realm
+  // resolved it to. The coordinator holds the batch to not removing one of
+  // them, which is the half of "a link points at something" that no single
+  // entry can see.
+  links?: string[];
   // What running this entry read and how long it took, for the entries that
   // run a program. Reported back on the result so a caller can see which layer
   // answered each of its program's reads without going to the logs.
@@ -1074,6 +1072,99 @@ export function stageDelete(
 // `transform`
 // ---------------------------------------------------------------------------
 
+// BXL, and the shape of what this module asks of it.
+//
+// Stated here rather than imported, and loaded through a specifier TypeScript
+// cannot follow, because reaching for `@cardstack/bxl` at all — for a value or
+// for a type — pulls its sources into the typecheck program of every package
+// that reaches an executor. `packages/postgres` gets here through
+// `runtime-common/realm`, and compiles those sources under an older `lib` than
+// they are written for. Keeping BXL out of the static graph keeps a dependency
+// of this one behavior from becoming a dependency of everything upstream of
+// it.
+//
+// `bxl-mirror-check.ts` holds these shapes against the real ones. It imports
+// bxl and nothing imports it, so the check runs in this package's own
+// typecheck and reaches no consumer.
+export type OverlayTier = 'computed' | 'linked';
+
+export interface UnavailableOverlay {
+  path: string;
+  tier: OverlayTier;
+  reason: OperationMissingReason;
+}
+
+export interface ProgramOverlays {
+  computeds?: unknown;
+  linked?: unknown;
+  unavailable: UnavailableOverlay[];
+}
+
+export interface ProgramReadEvent {
+  path: string;
+  tier: 'source' | OverlayTier;
+  outcome: 'value' | 'null' | 'unavailable';
+}
+
+export interface ProgramError extends Error {
+  phase: string;
+  code: string;
+  statement: number;
+  details?: Record<string, unknown>;
+}
+
+export interface ProgramContext {
+  params?: Record<string, unknown>;
+  actor?: string;
+  instance?: Record<string, unknown>;
+}
+
+export interface BxlMutationModule {
+  isBxlMutationError(err: unknown): err is ProgramError;
+  mutationSchemaForCardSource(
+    definition: Definition,
+    options: {
+      lookupDefinition(codeRef: CodeRef): Promise<Definition | undefined>;
+    },
+  ): Promise<unknown>;
+  snapshotBxlCardSource(
+    document: { data: CardResource },
+    schema: unknown,
+    options: {
+      targetId?: string;
+      resolveReference?: (reference: string) => string;
+    },
+  ): unknown;
+  mutateBxlCardSource(
+    document: { data: CardResource },
+    source: string,
+    options: {
+      schema: unknown;
+      syntax: 'readable' | 'solidified';
+      programId: string;
+      targetId?: string;
+      context?: ProgramContext;
+      overlays?: ProgramOverlays;
+      resolveReference?: (reference: string) => string;
+      resolveCard?: (id: string) => unknown;
+      onRead?: (event: ProgramReadEvent) => void;
+    },
+  ): { document: { data: CardResource } };
+}
+
+// Resolved once per process. The module is pure and stateless, so holding it
+// costs one resolution rather than one per program.
+let bxlMutation: Promise<BxlMutationModule> | undefined;
+
+function loadBxlMutation(): Promise<BxlMutationModule> {
+  // The cast is what keeps the specifier opaque to TypeScript; see above.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+  bxlMutation ??= import('@cardstack/bxl/mutation' as string).then(
+    (module) => module as BxlMutationModule,
+  );
+  return bxlMutation;
+}
+
 // Change a card by running a BXL program over its stored JSON:API document.
 //
 // `update` is declarative — here are new values for these fields — and every
@@ -1108,9 +1199,11 @@ export async function stageTransform(
   let startedAt = Date.now();
   // Built once and handed to both readers, so what the caller is told and what
   // the channel carries cannot describe the same run differently.
-  let diagnostics: OperationDiagnostics | undefined;
-  let describe = (outcome: OperationOutcome, code?: OperationErrorCode) => {
-    diagnostics = {
+  let describe = (
+    outcome: OperationOutcome,
+    code?: OperationErrorCode,
+  ): OperationDiagnostics => {
+    return {
       operation: name,
       base: 'transform',
       target: url.href,
@@ -1123,31 +1216,33 @@ export async function stageTransform(
       missingCount: tally.missing.length,
       missing: [...tally.missing],
     };
-    return diagnostics;
   };
   try {
     let staged = await transform(entry, ctx, url, name, tally);
+    // Not emitted here. Staging only decides what the bytes would be — the
+    // batch can still be abandoned by a later entry, by one of the commit's
+    // own checks, or by the write itself, and a line saying `applied` for a
+    // file nothing wrote is a line a dashboard cannot correct for. The
+    // coordinator emits this record once the commit has landed, which is also
+    // what puts the channel and the caller's `meta.diagnostics` on the same
+    // population.
     return {
       ...staged.change,
       diagnostics: describe(staged.changed ? 'applied' : 'unchanged'),
     };
   } catch (err: unknown) {
-    describe(
-      'refused',
-      isOperationFailure(err) ? err.error.code : 'internal-error',
-    );
-    throw err;
-  } finally {
-    // Emitted whatever happened, refusals included: a program that was refused
-    // read whatever it read before it was, and the missing values it reports
-    // are usually why it was refused at all.
+    // A refusal is emitted here, because it is final: this entry produced no
+    // staged change, so nothing downstream carries a record for it, and what
+    // the program managed to read before it was refused is usually why.
     emitOperationPerf({
       realmURL: ctx.realmURL,
       actor: ctx.actor || null,
-      // Set by whichever of the two paths above ran; the fallback is there so
-      // a line is still emitted if neither did.
-      ...(diagnostics ?? describe('refused')),
+      ...describe(
+        'refused',
+        isOperationFailure(err) ? err.error.code : 'internal-error',
+      ),
     });
+    throw err;
   }
 }
 
@@ -1190,13 +1285,27 @@ async function transform(
   let params = resolvedParams(entry, ctx, url);
   let resource = storedResource(stored.content, url);
   let definition = await transformTargetDefinition(resource, url, ctx);
-  let schema = await mutationSchemaForCardSource<CodeRef>(definition, {
+  let bxl = await loadBxlMutation();
+  let schema = await bxl.mutationSchemaForCardSource(definition, {
     lookupDefinition: async (codeRef) =>
       await ctx.lookupDefinition(codeRef, url),
   });
-  let overlays = await gatherOverlays(definition, url, ctx);
-  let declaredMissing = overlays.unavailable ?? [];
   let fileURL = ctx.paths.fileURL(sourcePath);
+  // The index's rendering goes through the same projection the stored document
+  // does, so a path means the same thing in both and the overlay lands where
+  // the stored document leaves a gap rather than beside it.
+  let overlays = await gatherOverlays(
+    definition,
+    url,
+    schema,
+    (resource, against) =>
+      bxl.snapshotBxlCardSource({ data: resource }, against, {
+        targetId: url.href,
+        resolveReference: (reference) => ctx.resolvedLink(reference, fileURL),
+      }),
+    ctx,
+  );
+  let declaredMissing = overlays.unavailable ?? [];
   // Every card the program says to link to, collected as the planner asks for
   // them. Whether each one is there to link to is a question about this
   // realm's stored state rather than about the program, so it is asked once
@@ -1205,41 +1314,37 @@ async function transform(
   let linked = new Set<string>();
   let mutated: CardResource;
   try {
-    let result = mutateBxlCardSource(
-      cardSourceDocument(resource),
-      program.source,
-      {
-        schema,
-        syntax: program.syntax,
-        programId: `${name}:${uuidV4()}`,
-        targetId: url.href,
-        context: contextFor(params, resource, url, ctx),
-        overlays,
-        // A relationship is stored relative to the file that holds it, and a
-        // program compares and rewrites card identities, so the stored spelling
-        // is resolved on the way in. The way out is the realm's own
-        // serialization, which spells every link it writes the same way however
-        // the write arrived.
-        resolveReference: (reference) => ctx.resolvedLink(reference, fileURL),
-        resolveCard: (id) => {
-          linked.add(id);
-          return { id };
-        },
-        onRead: (event) =>
-          tally.record(
-            event.path,
-            event.tier === 'source' ? 'stored' : event.tier,
-            event.outcome === 'unavailable'
-              ? reasonFor(event.path, declaredMissing)
-              : undefined,
-          ),
+    let result = bxl.mutateBxlCardSource({ data: resource }, program.source, {
+      schema,
+      syntax: program.syntax,
+      programId: `${name}:${uuidV4()}`,
+      targetId: url.href,
+      context: contextFor(params, resource, url, ctx),
+      overlays,
+      // A relationship is stored relative to the file that holds it, and a
+      // program compares and rewrites card identities, so the stored spelling
+      // is resolved on the way in. The way out is the realm's own
+      // serialization, which spells every link it writes the same way however
+      // the write arrived.
+      resolveReference: (reference) => ctx.resolvedLink(reference, fileURL),
+      resolveCard: (id) => {
+        linked.add(id);
+        return { id };
       },
-    );
-    mutated = result.document.data as unknown as CardResource;
+      onRead: (event) =>
+        tally.record(
+          event.path,
+          event.tier === 'source' ? 'stored' : event.tier,
+          event.outcome === 'unavailable'
+            ? reasonFor(event.path, declaredMissing)
+            : undefined,
+        ),
+    });
+    mutated = result.document.data;
   } catch (err: unknown) {
-    throw programFailure(err, url, entry);
+    throw programFailure(err, url, entry, bxl);
   }
-  await assertLinksExist(linked, ctx, url);
+  let links = await assertLinksExist(linked, ctx, url, fileURL);
   if (isEqual(mutated, resource)) {
     // The program ran and asked for nothing the card does not already hold, so
     // the file is left exactly as it is — staging the bytes it already holds
@@ -1253,6 +1358,7 @@ async function transform(
         appends: [],
         deletes: [],
         mints: [],
+        links,
         id: url.href,
         primaryPath: sourcePath,
       },
@@ -1278,22 +1384,12 @@ async function transform(
       // Nothing here is a mint: a transform changes a card that is already
       // stored, and it stages no resource of its own.
       mints: [],
+      links,
       id: url.href,
       primaryPath: sourcePath,
     },
     changed: true,
   };
-}
-
-// The stored resource as the card-source adapter takes it.
-//
-// The adapter describes a JSON:API card document in its own terms — it is a
-// package with no Boxel types — and the two descriptions agree on everything
-// the adapter reads and writes without being assignable to each other, since
-// each states a relationship's `data` with the vocabulary of the side it came
-// from. The cast is the seam, in one place, rather than at each use.
-function cardSourceDocument(resource: CardResource): BxlCardSourceDocument {
-  return { data: resource } as unknown as BxlCardSourceDocument;
 }
 
 // The program this entry runs.
@@ -1365,14 +1461,14 @@ function contextFor(
   resource: CardResource,
   url: URL,
   ctx: StagingContext,
-): BxlMutationContext {
+): ProgramContext {
   return {
-    ...(params ? { params: params as BxlMutationJsonObject } : {}),
+    ...(params ? { params } : {}),
     ...(ctx.actor ? { actor: ctx.actor } : {}),
     instance: {
       id: url.href,
       ...(resource.attributes ?? {}),
-    } as BxlMutationJsonObject,
+    },
   };
 }
 
@@ -1511,7 +1607,7 @@ function jsonParam(value: unknown, key: string, url: URL): unknown {
 // them in, so the reason reported is the one that actually refused the read.
 function reasonFor(
   path: string,
-  declared: readonly BxlMutationUnavailableOverlay[],
+  declared: readonly UnavailableOverlay[],
 ): OperationMissingReason {
   let exact = declared.find((entry) => entry.path === path);
   let under = declared.find((entry) => entry.path.startsWith(`${path}.`));
@@ -1541,30 +1637,41 @@ function reasonFor(
 // program that inserts or reorders renumbers everything after it — so the
 // values behind a `linksToMany` are not overlay territory, and claiming they
 // are unavailable would speak for a place no overlay speaks for.
+//
+// Two more are absent because this walk cannot reach them, which is a bound
+// rather than a decision. `Definition.fields` is the immediate field map —
+// dotted paths are resolved by chasing `fieldOrCard` at lookup time, never
+// pre-materialized — so a `linksTo` nested inside a contained value gets no
+// marker, and `linkedMembers` stops at the link's own immediate fields, so
+// `owner.friend.name` gets none either. A program reading one of those reads
+// it as empty rather than being refused. Reaching them means walking the
+// definition graph with a cycle guard, at a definition lookup per hop, on
+// every transform; the depth that earns that is worth measuring against real
+// declarations rather than guessing at here.
 async function gatherOverlays(
   definition: Definition,
   url: URL,
+  schema: unknown,
+  project: (resource: CardResource, schema: unknown) => unknown,
   ctx: StagingContext,
-): Promise<BxlMutationOverlays> {
+): Promise<ProgramOverlays> {
   let row = await ctx.indexedCardValues(url);
-  let unavailable: BxlMutationUnavailableOverlay[] = [];
+  let unavailable: UnavailableOverlay[] = [];
   for (let [field, defId] of Object.entries(definition.fields)) {
     let fieldDef = definition.fieldDefs[defId];
     if (!fieldDef) {
       continue;
     }
     if (fieldDef.isComputed) {
+      // A clean row means the indexer rendered this card, so every computed
+      // field holds whatever it computed to — including nothing, which is a
+      // value rather than an absence. Only the row's absence makes one
+      // unavailable.
       if (!row) {
         unavailable.push({
           path: field,
           tier: 'computed',
           reason: 'not-indexed',
-        });
-      } else if (own(row.computeds, field) === undefined) {
-        unavailable.push({
-          path: field,
-          tier: 'computed',
-          reason: 'key-absent',
         });
       }
       continue;
@@ -1583,7 +1690,7 @@ async function gatherOverlays(
           // whose type has since dropped the annotation.
           'not-searchable'
         : undefined;
-    let expanded = own(row?.linked, field);
+    let expanded = own(row?.searchDoc, field);
     for (let member of await linkedMembers(fieldDef, url, ctx)) {
       let missing: OperationMissingReason | undefined =
         reason ??
@@ -1600,8 +1707,8 @@ async function gatherOverlays(
     }
   }
   return {
-    ...(row?.computeds ? { computeds: row.computeds as BxlMutationJson } : {}),
-    ...(row?.linked ? { linked: row.linked as BxlMutationJson } : {}),
+    ...(row?.pristine ? { computeds: project(row.pristine, schema) } : {}),
+    ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
     unavailable,
   };
 }
@@ -1622,7 +1729,8 @@ async function linkedMembers(
   return Object.keys(definition.fields).filter((field) => field !== 'id');
 }
 
-// Hold every card the program links to to being there to link to.
+// Hold every card the program links to to being there to link to, and report
+// the identities it settled on.
 //
 // A relationship the realm stores is an edge to a card, and an edge to a URL
 // nothing answers is a card that will not load for anyone who follows it. The
@@ -1631,15 +1739,26 @@ async function linkedMembers(
 // realm — that realm's index is not this one's to read and no operation
 // reaches the network — so a foreign link is recorded as sent, which is what
 // every other write path does with one.
+//
+// Which of those a card id is has to be decided the way the realm decides it,
+// not by asking whether the string parses as a URL. The planner hands over
+// whatever the program wrote, and the serializer resolves a relative
+// `links.self` against the file that holds it — so `./ghost` is not a URL here
+// and *is* a URL inside this realm by the time the write lands. Resolving
+// first is what puts both spellings in front of the same check; a genuinely
+// foreign reference still falls out of `paths.local`, since an unregistered
+// scoped reference comes back from `resolvedLink` unchanged.
 async function assertLinksExist(
   linked: ReadonlySet<string>,
   ctx: StagingContext,
   url: URL,
-): Promise<void> {
+  fileURL: URL,
+): Promise<string[]> {
   let minted = new Set([...ctx.lids.values()].map((identity) => identity.id));
+  let resolved = [...linked].map((id) => ctx.resolvedLink(id, fileURL));
   let dangling = (
     await Promise.all(
-      [...linked].map(async (id) => {
+      resolved.map(async (id) => {
         if (minted.has(id)) {
           return undefined;
         }
@@ -1647,7 +1766,7 @@ async function assertLinksExist(
         try {
           localPath = ctx.paths.local(new URL(id));
         } catch {
-          // Not a URL this realm contains, so not a card it can answer for.
+          // Not a card this realm holds, so not one it can answer for.
           return undefined;
         }
         return (await ctx.fileExists(`${localPath}.json` as LocalPath))
@@ -1667,6 +1786,7 @@ async function assertLinksExist(
         `no card there`,
     });
   }
+  return resolved;
 }
 
 // What the caller is told when a program will not run or will not hold.
@@ -1682,8 +1802,9 @@ function programFailure(
   err: unknown,
   url: URL,
   entry: TransformEntry,
+  bxl: BxlMutationModule,
 ): unknown {
-  if (!isBxlMutationError(err)) {
+  if (!bxl.isBxlMutationError(err)) {
     return err;
   }
   if (err.code === 'assertion-failed') {

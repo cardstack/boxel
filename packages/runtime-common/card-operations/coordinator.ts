@@ -35,6 +35,7 @@ import {
   type StoredMeta,
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
+import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -245,6 +246,7 @@ export async function commitBatch(
       staged.push(change);
     }
     assertWritesAllowed(staged);
+    assertLinkedCardsSurvive(staged, paths);
     assertWritesFit(core, staged);
     await assertRemovalsAllowed(core, paths, staged);
     await assertDestinationsFree(core, staged);
@@ -649,7 +651,7 @@ function targetRead(
     return undefined;
   }
   if (entry.op !== 'update' || entry.content === undefined) {
-    return { path: `${localPath}.json` as LocalPath, form: 'text' };
+    return { path: cardSourcePath(localPath), form: 'text' };
   }
   // A `.json` at a file's own path is either a card's stored source or a data
   // file the realm merely holds, and only the bytes tell them apart — so this
@@ -660,6 +662,33 @@ function targetRead(
     path: localPath,
     form: localPath.endsWith('.json') ? 'text' : 'meta',
   };
+}
+
+// Where a card's bytes are stored: its own path plus `.json`. A card's URL
+// carries no extension, so the two are never the same path, which is what
+// lets a file be addressed by the URL a card would be addressed by.
+function cardSourcePath(localPath: LocalPath): LocalPath {
+  return `${localPath}.json` as LocalPath;
+}
+
+// The stored-source path a card's id names, or undefined when the id is not a
+// URL this realm contains. A link always names a card, so this is the card
+// mapping rather than the per-entry one above.
+function cardSourcePathOf(
+  id: string,
+  paths: RealmPaths,
+): LocalPath | undefined {
+  let url: URL;
+  try {
+    url = new URL(id);
+  } catch {
+    return undefined;
+  }
+  try {
+    return cardSourcePath(paths.local(url));
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -688,6 +717,57 @@ function assertWritesAllowed(staged: StagedChange[]): void {
             code: 'invalid-params',
             title: 'Reserved path',
             detail: `cannot write "${write.path}": ${reserved}`,
+          }),
+          index,
+        );
+      }
+    }
+  }
+}
+
+// A batch that both records an edge to a card and removes that card commits a
+// link to nothing, whichever order the two entries are sent in.
+//
+// No executor can see this. One stages against the realm as it stands, where
+// the card is still on disk — nothing is written until every entry has staged
+// — and it cannot see a removal a later entry has not reached yet. The batch
+// is the only thing that holds both halves, so this is where the two are put
+// together.
+//
+// A card removed and re-minted under the same path in one batch is not this
+// check's business: what the edge points at is there when the commit settles.
+function assertLinkedCardsSurvive(
+  staged: StagedChange[],
+  paths: RealmPaths,
+): void {
+  let removed = new Set<LocalPath>();
+  for (let change of staged) {
+    for (let path of change.deletes) {
+      removed.add(path);
+    }
+  }
+  if (removed.size === 0) {
+    return;
+  }
+  let written = new Set<LocalPath>();
+  for (let change of staged) {
+    for (let write of change.writes) {
+      written.add(write.path);
+    }
+  }
+  for (let [index, change] of staged.entries()) {
+    for (let id of change.links ?? []) {
+      let localPath = cardSourcePathOf(id, paths);
+      if (localPath && removed.has(localPath) && !written.has(localPath)) {
+        throw atEntry(
+          new OperationFailure({
+            id: change.id,
+            status: 400,
+            code: 'invalid-params',
+            title: 'Conflicting entries',
+            detail:
+              `entry ${index} links to ${id}, which this batch removes; the ` +
+              `edge would point at nothing once the batch commits`,
           }),
           index,
         );
@@ -961,6 +1041,19 @@ async function commitStaged(
       initiatingUser: opts.actor ?? null,
     },
   );
+  // Emitted here rather than where the record was built: a staged entry is not
+  // a write yet, and until the commit returns there is nothing to say a program
+  // did. Every entry that carries a record is one the commit landed, so the
+  // channel and the caller's `meta.diagnostics` describe the same population.
+  for (let change of staged) {
+    if (change.diagnostics) {
+      emitOperationPerf({
+        realmURL: core.realmURL,
+        actor: opts.actor || null,
+        ...change.diagnostics,
+      });
+    }
+  }
   let byPath = new Map(committed.writes.map((write) => [write.path, write]));
   return staged.map((change, index) => {
     if (!change.primaryPath) {

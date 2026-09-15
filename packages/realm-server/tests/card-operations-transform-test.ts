@@ -13,7 +13,11 @@ import {
   type OperationPerfEvent,
 } from '@cardstack/runtime-common/card-operations';
 import { maybeRelativeReference } from '@cardstack/runtime-common';
-import type { CodeRef, Definition } from '@cardstack/runtime-common';
+import type {
+  CardResource,
+  CodeRef,
+  Definition,
+} from '@cardstack/runtime-common';
 
 // ============================================================================
 // What a transform decides before anything is written.
@@ -171,6 +175,7 @@ function reportDefinition(): Definition {
       owner: 'f2',
       auditor: 'f3',
       reviewers: 'f4',
+      curator: 'f5',
     },
     fieldDefs: {
       f0: {
@@ -204,6 +209,14 @@ function reportDefinition(): Definition {
         isComputed: false,
         fieldOrCard: PERSON,
       },
+      // A computed link — the shape every card has in `cardTheme`. Its value
+      // is a relationship in the indexed resource, never an attribute.
+      f5: {
+        type: 'linksTo',
+        isPrimitive: false,
+        isComputed: true,
+        fieldOrCard: PERSON,
+      },
     },
   } as Definition;
 }
@@ -225,17 +238,28 @@ function personDefinition(): Definition {
   } as Definition;
 }
 
-// The row the index holds for that card: `pristine_doc`'s attributes carry the
-// computed value the card never stores, and `search_doc` carries the fields of
-// the card behind the link the author marked `searchable` — and only that one.
+// The row the index holds for that card. `pristine_doc` is the card as the
+// indexer rendered it — a JSON:API resource, so the computed scalar is in
+// `attributes` and the computed *link* is a relationship, which is the half a
+// projection has to reach. `search_doc` carries the fields of the card behind
+// the link the author marked `searchable`, and only that one.
 function indexedReport(): IndexedCardValues {
   return {
-    computeds: {
-      headline: 'Quarterly Review',
-      status: 'open',
-      summary: 'quarterly-review',
-    },
-    linked: {
+    pristine: {
+      type: 'card',
+      attributes: {
+        headline: 'Quarterly Review',
+        status: 'open',
+        summary: 'quarterly-review',
+      },
+      relationships: {
+        owner: { links: { self: `${REALM}reviewer` } },
+        auditor: { links: { self: `${REALM}reviewer` } },
+        curator: { links: { self: `${REALM}reviewer` } },
+      },
+      meta: { adoptsFrom: REPORT },
+    } as CardResource,
+    searchDoc: {
       headline: 'Quarterly Review',
       owner: { id: `${REALM}reviewer`, firstName: 'Reviewer' },
     },
@@ -509,6 +533,155 @@ module(basename(import.meta.filename), function () {
         entry: 0,
       });
       assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a stored link still answers when its fields are unavailable', async function (assert) {
+      // `auditor` is not `searchable`, so every member of the card behind it is
+      // declared unavailable. The edge itself is the card's own value, so the
+      // program reads it and reads its id; only the members are refused.
+      let { core, commits } = stub(openReport());
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'noteAuditor',
+          href: `${REALM}report-1`,
+          definition: transformOperation(
+            'assert(.auditor != null;"needs an auditor");.status=.auditor.id;',
+          ),
+        },
+      ]);
+      assert.strictEqual(
+        attributesOf(commits[0], 'report-1.json').status,
+        `${REALM}reviewer`,
+        'the stored edge answers both the assert and the read of its id',
+      );
+
+      let refused = stub(openReport());
+      assert.deepEqual(
+        await refusal(refused.core, [
+          {
+            op: 'transform',
+            name: 'stampAuditor',
+            href: `${REALM}report-1`,
+            definition: transformOperation('.status=.auditor.firstName;'),
+          },
+        ]),
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'the member nothing denormalized is still refused',
+      );
+      assert.strictEqual(refused.commits.length, 0, 'nothing is committed');
+    });
+
+    test('a computed link is supplied from the index', async function (assert) {
+      // A computed link's value is a relationship in the indexed resource, so
+      // it only reaches a program if the projection reads that half.
+      let { core, commits } = stub(openReport());
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'stampCurator',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status=.curator.id;'),
+        },
+      ]);
+
+      assert.strictEqual(
+        attributesOf(commits[0], 'report-1.json').status,
+        `${REALM}reviewer`,
+        'the computed link the card never stores is read from the index',
+      );
+    });
+
+    test('a link written in a relative spelling is held to existing', async function (assert) {
+      // `./ghost` is not a URL, but the serializer resolves it against the file
+      // that holds it — landing it inside this realm. Deciding what it names
+      // has to go through the realm's own resolution, not `new URL`.
+      let { core, commits } = stub(openReport());
+
+      let failed = await refusal(core, [
+        {
+          op: 'transform',
+          name: 'addReviewer',
+          href: `${REALM}report-1`,
+          definition: transformOperation('append(.reviewers;card("./ghost"));'),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a batch cannot link to a card it also removes', async function (assert) {
+      // Neither entry can see this on its own: the transform stages against a
+      // realm that still holds the card, and the delete stages no link.
+      for (let order of ['delete-first', 'transform-first'] as const) {
+        let { core, commits } = stub({
+          stored: {
+            'report-1.json': report({ status: 'open' }),
+            'reviewer.json': JSON.stringify({
+              data: { type: 'card', meta: { adoptsFrom: PERSON } },
+            }),
+          },
+          indexed: { [`${REALM}report-1`]: indexedReport() },
+        });
+        let remove = { op: 'delete' as const, href: `${REALM}reviewer` };
+        let link = {
+          op: 'transform' as const,
+          name: 'addReviewer',
+          href: `${REALM}report-1`,
+          definition: transformOperation(
+            `append(.reviewers;card("${REALM}reviewer"));`,
+          ),
+        };
+        // Reported against the entry holding the link rather than the one
+        // holding the removal: the link is what would be left pointing at
+        // nothing, and it is the half the sender has to change.
+        assert.deepEqual(
+          await refusal(
+            core,
+            order === 'delete-first' ? [remove, link] : [link, remove],
+          ),
+          {
+            status: 400,
+            code: 'invalid-params',
+            entry: order === 'delete-first' ? 1 : 0,
+          },
+          `refused with the ${order} ordering`,
+        );
+        assert.strictEqual(commits.length, 0, 'nothing is committed');
+      }
+    });
+
+    test('a run the batch abandons is reported as refused, never as applied', async function (assert) {
+      // Staging is not writing. A later entry can abandon the batch, and a line
+      // saying `applied` for a file nothing wrote is one nothing can correct.
+      let events: OperationPerfEvent[] = [];
+      setOperationPerfSink((event) => events.push(event));
+      try {
+        let { core, commits } = stub(openReport());
+        await refusal(core, [
+          {
+            op: 'transform',
+            name: 'escalate',
+            href: `${REALM}report-1`,
+            definition: transformOperation('.status="escalated";'),
+          },
+          { op: 'delete', href: `${REALM}missing` },
+        ]);
+
+        assert.strictEqual(commits.length, 0, 'nothing is committed');
+        assert.deepEqual(
+          events.map((event) => event.outcome),
+          [],
+          'the entry that staged cleanly reports nothing, since it never ran',
+        );
+      } finally {
+        setOperationPerfSink(undefined);
+      }
     });
 
     test('an execution reports the layer that answered each of its reads', async function (assert) {
