@@ -1803,6 +1803,16 @@ export class Realm {
     // card+json is the one bucket where a `HEAD` is a read: a caller permitted
     // to read gets the headers its `GET` would carry, and everyone else the
     // discovery answer above.
+    //
+    // A `HEAD` is a read exactly where the `GET` is the card read, which is
+    // every card+json path but this one: `_search` answers a query rather than
+    // a card, so a `HEAD` of it keeps the discovery answer instead of
+    // reporting that the realm has no card there. Registered first, since the
+    // catch-all below would otherwise claim it.
+    this.#router.head('/_search', SupportedMimeType.CardJson, async () => {
+      let requestContext = await this.createRequestContext('read');
+      return this.realmIdentityResponse(requestContext);
+    });
     this.#router.head(
       '/.*',
       SupportedMimeType.CardJson,

@@ -169,7 +169,7 @@ module(basename(import.meta.filename), function () {
         // answers. That includes paths that are not cards at all — a realm
         // endpoint the card+json bucket has no route for reaches the card read
         // the same way a missing card does.
-        for (let path of ['/no-such-card', '/_search', '/some/nested/path']) {
+        for (let path of ['/no-such-card', '/some/nested/path']) {
           let getResponse = await request
             .get(path)
             .set('Accept', 'application/vnd.card+json');
@@ -183,6 +183,27 @@ module(basename(import.meta.filename), function () {
             `HEAD ${path} answers the status its GET answers`,
           );
         }
+      });
+
+      test('a card+json path whose GET is not the card read keeps the discovery answer', async function (assert) {
+        // `_search` answers a query, not a card, so a HEAD of it is not a read
+        // either — it stays the realm-identity answer rather than reporting
+        // that the realm has no card at that path.
+        let response = await request
+          .head('/_search')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmHref,
+          'the response names the realm serving the URL',
+        );
+        assert.strictEqual(
+          response.get('etag'),
+          undefined,
+          'and reports nothing about a card',
+        );
       });
 
       test('a path that names nothing answers 404', async function (assert) {
@@ -294,7 +315,7 @@ module(basename(import.meta.filename), function () {
           'notes.md.json': {
             data: {
               type: 'card',
-              attributes: { title: 'Release notes' },
+              attributes: { cardInfo: { name: 'Release notes' } },
               meta: {
                 adoptsFrom: {
                   module: rri('@cardstack/base/card-api'),
@@ -324,7 +345,7 @@ module(basename(import.meta.filename), function () {
           'as a card, not as file metadata',
         );
         assert.strictEqual(
-          getResponse.body?.data?.attributes?.title,
+          getResponse.body?.data?.attributes?.cardInfo?.name,
           'Release notes',
           'with the stored attributes',
         );
