@@ -17,8 +17,10 @@ import {
   stageCreate,
   stageDelete,
   stagedIdentity,
+  stageTransform,
   stageUpdate,
   type BatchEntry,
+  type IndexedCardValues,
   type LidIndex,
   type SourceBytes,
   type StagedChange,
@@ -104,6 +106,19 @@ export interface BatchCore {
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
   isIgnored(url: URL): Promise<boolean>;
+  // The index's view of a card in this realm: the computed values its
+  // `pristine_doc` holds and the linked-card values denormalized into its
+  // `search_doc`. Undefined where the index holds no clean row for the URL —
+  // the card is not indexed yet, or its row is an error row, which are the
+  // same answer to the question asked here: the index cannot speak for this
+  // card.
+  //
+  // This is the one read a batch makes of the index, and it is not a network
+  // capability: the engine is the realm's own, handed down narrowed to the
+  // single row a program's reads are layered from. Called only inside the
+  // lock, after the drain, so what it reports is the realm as the batch is
+  // about to change it.
+  indexedCardValues(url: URL): Promise<IndexedCardValues | undefined>;
 
   // The realm's unlocked commit: writes and removals under one index job and
   // one index event. Assumes the write lock is held, which it is.
@@ -133,6 +148,8 @@ export interface BatchCore {
   // A relationship's `links.self` as the realm stores it — relative to the
   // file that holds it when the link points inside this realm.
   storedLink(selfLink: string, relativeTo: URL): string;
+  // The inverse: the card a stored `links.self` names.
+  resolvedLink(selfLink: string, relativeTo: URL): string;
   lookupDefinition(
     codeRef: CodeRef,
     relativeTo: URL,
@@ -200,11 +217,14 @@ export async function commitBatch(
         stored,
         splices,
         openSourceBytes: core.openSourceBytes,
+        fileExists: core.fileExists,
+        indexedCardValues: core.indexedCardValues,
         actor: opts.actor ?? '',
         serializeCard: core.serializeCard,
         codeRefKey: core.codeRefKey,
         resolveModuleId: core.resolveModuleId,
         storedLink: core.storedLink,
+        resolvedLink: core.resolvedLink,
         lookupDefinition: core.lookupDefinition,
       });
       baseHashes.push(
@@ -289,6 +309,8 @@ async function stageEntry(
         return await stageUpdate(entry, ctx);
       case 'delete':
         return stageDelete(entry, ctx);
+      case 'transform':
+        return await stageTransform(entry, ctx);
       case 'appendContainsMany':
         return await stageAppendContainsMany(entry, ctx);
       default:
@@ -305,12 +327,17 @@ async function stageEntry(
 }
 
 // A `baseVersion` names the state a write is computed on top of, and the
-// result reports whether the target was still at it. Only an update has both:
-// a create has no prior state to name, a delete's result carries no state to
-// report a match on, and an append never reads the state it edits, so it has
-// nothing to compare one against.
+// result reports whether the target was still at it. Only the two entries that
+// compute over the stored document have both — an update merges over it and a
+// transform plans a program against it. A create has no prior state to name, a
+// delete's result carries no state to report a match on, and an append never
+// reads the state it edits, so it has nothing to compare one against.
 function assertVersionable(entry: BatchEntry, index: number): void {
-  if (entry.baseVersion === undefined || entry.op === 'update') {
+  if (
+    entry.baseVersion === undefined ||
+    entry.op === 'update' ||
+    entry.op === 'transform'
+  ) {
     return;
   }
   throw new OperationFailure({
@@ -370,9 +397,13 @@ function indexLids(
     lids.set(lid, identity);
   };
   for (let [index, entry] of entries.entries()) {
-    // Neither mints a card nor side-loads one, so neither claims an identity
+    // None of them mints a card or side-loads one, so none claims an identity
     // anything else in the batch could link to.
-    if (entry.op === 'delete' || entry.op === 'appendContainsMany') {
+    if (
+      entry.op === 'delete' ||
+      entry.op === 'transform' ||
+      entry.op === 'appendContainsMany'
+    ) {
       continue;
     }
     // Labelled with the entry's position like every other refusal: a caller
@@ -753,6 +784,7 @@ async function commitStaged(
         version: written.contentHash,
         generation: committed.generation,
         lastModified: written.lastModified,
+        ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write
         // happened, and what a moved base means is the caller's to decide.

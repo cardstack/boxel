@@ -220,6 +220,15 @@ function stub(opts: StubOptions = {}): Stub {
         new URL(REALM),
       );
     },
+    resolvedLink(selfLink: string, relativeTo: URL) {
+      return new URL(selfLink, relativeTo).href;
+    },
+    // No index behind this stub. Nothing here stages an entry that reads one,
+    // and a row invented for a card the stub never indexed would describe
+    // values no test put there.
+    async indexedCardValues() {
+      return undefined;
+    },
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
