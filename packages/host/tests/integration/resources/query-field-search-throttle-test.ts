@@ -12,6 +12,7 @@ import type {
 import {
   baseRealm,
   Deferred,
+  realmURL as realmURLSymbol,
   SEARCH_CONCURRENCY_CAP,
 } from '@cardstack/runtime-common';
 
@@ -101,6 +102,8 @@ module(`Integration | query field search throttle`, function (hooks) {
       },
     });
 
+    await getService('realm').login(testRealmURL);
+
     fetchCalls = 0;
     let realmServer = getService('realm-server') as RealmServerService;
     let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
@@ -175,31 +178,50 @@ module(`Integration | query field search throttle`, function (hooks) {
             attributes: { cardTitle: 'Anchor' },
             meta: {
               adoptsFrom: { module: testRRI('test-cards'), name: 'Parent' },
+              // A query interpolates against the owner's realm, and the realm
+              // is read off the document — an instance without it resolves no
+              // query and builds no search resource at all, which is a silent
+              // way for this test to pass by testing nothing.
+              realmURL: testRealmURL,
             },
           },
         } as LooseSingleCardDocument,
         { doNotPersist: true },
       );
+      assert.ok(
+        parent?.[realmURLSymbol],
+        'the fixture knows its realm, so its query field is resolvable',
+      );
       // Either path builds the field's search resource through the same call —
       // eager resolution as the card deserializes, or this read.
       void parent.items;
 
-      await waitUntil(() => enqueued > 0, { timeout: 5_000 });
-      assert.strictEqual(
-        started,
-        0,
-        `the field's search is queued behind the full cap`,
+      let reachedThrottle = await waitUntil(() => enqueued > 0, {
+        timeout: 5_000,
+      })
+        .then(() => true)
+        .catch(() => false);
+      assert.ok(
+        reachedThrottle,
+        `the field's search reached the throttle (enqueued=${enqueued}, started=${started}, fetchCalls=${fetchCalls})`,
       );
-      assert.strictEqual(
-        fetchCalls,
-        0,
-        'nothing reached the network while it waited',
-      );
+      if (reachedThrottle) {
+        assert.strictEqual(
+          started,
+          0,
+          `the field's search is queued behind the full cap`,
+        );
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'nothing reached the network while it waited',
+        );
 
-      releaseGates();
-      await Promise.all(occupying);
-      await waitUntil(() => fetchCalls > 0, { timeout: 5_000 });
-      assert.ok(started > 0, 'the search ran once a slot freed');
+        releaseGates();
+        await Promise.all(occupying);
+        await waitUntil(() => fetchCalls > 0, { timeout: 5_000 });
+        assert.ok(started > 0, 'the search ran once a slot freed');
+      }
     } finally {
       releaseGates();
       delete (storeService as any).performThrottledSearch;
