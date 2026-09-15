@@ -144,9 +144,11 @@ export class SearchEntriesResource extends Resource<Args> {
   // `realmsNeedingRefresh`.
   private pendingSelectiveRefresh: Map<string, number> | undefined;
 
-  // The `types` keys the current query's filter anchors on, in the spelling
-  // `boxel_index.types` stores and an incremental index event carries.
-  // Resolved once per (query, loader) pair, and only once an event has shown
+  // Decides which incremental index events are worth a re-run, by comparing
+  // the types an event names against the ones this query's filter anchors on.
+  // The prerender_html channel is not routed through it: that channel is
+  // handled below by refreshing the members the event carries newer HTML for,
+  // which already costs nothing when it names none of them.
   #typeGate = new LiveSearchTypeGate({
     anchors: () => wireFilterTypeAnchors(this.#previousQuery?.filter),
     loader: () => this.loaderService.loader,
