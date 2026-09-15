@@ -2918,9 +2918,22 @@ export class Realm {
       this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
-        let existingFile = await readFileAsText(path, (p) =>
-          this.#adapter.openFile(p),
-        );
+        // The stored file is opened before it is read, so its length can rule
+        // the comparison out without any of it being held. Only a file of
+        // exactly the staged content's length can be the staged content, and
+        // a replacement almost never is — so this is what keeps replacing a
+        // file that is large from costing its size. `openFile` reports the
+        // length from a stat it already performs, and reading the body stays
+        // a separate step because the body is a lazy, single-use stream on
+        // every streaming adapter.
+        let stored = await this.#adapter.openFile(path);
+        let couldMatch =
+          stored !== undefined &&
+          (stored.size === undefined ||
+            stored.size === computeContentSize(content));
+        let existingFile = couldMatch
+          ? await readFileAsText(path, (p) => this.#adapter.openFile(p))
+          : undefined;
         if (existingFile?.content === content) {
           // Identical bytes: the file is left alone, so its modification time
           // stands and nothing is queued for indexing. The content hash is
@@ -2949,7 +2962,9 @@ export class Realm {
           });
           continue;
         }
-        isNewFile = !existingFile;
+        // From the open above rather than from the read, which a file whose
+        // length already settled the comparison never had.
+        isNewFile = stored === undefined;
       } else {
         isNewFile = !(await this.#adapter.exists(path));
       }
@@ -3099,11 +3114,21 @@ export class Realm {
       if (written === -1) {
         results.push({ path, lastModified, contentHash });
         fileMetaRows.push({ path, contentHash, contentSize: size });
-        (existed ? updatedFiles : addedFiles).push(path);
       } else {
         results[written] = { path, lastModified, contentHash };
         let row = fileMetaRows.findIndex((meta) => meta.path === path);
         fileMetaRows[row] = { path, contentHash, contentSize: size };
+      }
+      // Asked separately from the readings above, because recording a result
+      // and announcing a change are not the same question. A write that found
+      // the file already holding the bytes it staged records a result and
+      // announces nothing — it left the file alone. This leg did not: the
+      // append changed the file whatever the write before it did, so the
+      // announcement is made here unless one of the earlier legs already made
+      // it. Without this, a batch that replaces a file with its own content
+      // and then appends to it broadcasts no file change at all.
+      if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
+        (existed ? updatedFiles : addedFiles).push(path);
       }
       // Pushed unless it is already pending, which is a different question
       // from whether the write leg handled it: a mid-loop flush empties this,

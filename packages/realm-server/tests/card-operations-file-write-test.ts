@@ -286,6 +286,21 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a collection document is stored json, not a card', async function (assert) {
+      let { core, commits } = stub({ 'feed.json': '{"data": []}' });
+      await commitBatch(
+        core,
+        [{ op: 'update', href: `${REALM}feed.json`, content: '{"data": [1]}' }],
+        {},
+      );
+      assert.deepEqual(
+        commits[0].writes,
+        { 'feed.json': '{"data": [1]}' },
+        'a JSON:API collection never becomes a card instance, so the realm ' +
+          'holds it as a file and a replacement of it is a file write',
+      );
+    });
+
     test("a module's source is not a file an update replaces", async function (assert) {
       let { core } = stub({ 'person.gts': 'export class Person {}' });
       let failed = await refusal(core, [
@@ -456,6 +471,35 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(commits[0].appends, {
         'telemetry.log': 'first line after the rotation\n',
       });
+    });
+
+    test('two entries cannot both replace one file', async function (assert) {
+      let { core, commits } = stub({ 'notes.md': '# Notes\n' });
+      let failed = await refusal(core, [
+        { op: 'update', href: `${REALM}notes.md`, content: 'first' },
+        { op: 'update', href: `${REALM}notes.md`, content: 'second' },
+      ]);
+      assert.deepEqual(
+        failed,
+        { status: 400, code: 'invalid-params', entry: 1 },
+        "a replacement composes over nothing, so the first entry's content " +
+          'could only be dropped while it reported success',
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a file replaced twice is refused even when the two agree', async function (assert) {
+      let { core } = stub({ 'notes.md': '# Notes\n' });
+      let failed = await refusal(core, [
+        { op: 'update', href: `${REALM}notes.md`, content: 'same' },
+        { op: 'update', href: `${REALM}notes.md`, content: 'same' },
+      ]);
+      assert.deepEqual(
+        failed,
+        { status: 400, code: 'invalid-params', entry: 1 },
+        'the pair is refused on what it asks for rather than on what it ' +
+          'happens to produce',
+      );
     });
 
     test('a batch appends to a file after it writes one, not before', async function (assert) {

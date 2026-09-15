@@ -8,7 +8,7 @@ import {
   type FieldDefinition,
 } from '../definitions.ts';
 import { getCardDirectoryName } from '../helpers/card-directory-name.ts';
-import { isCardDocumentString } from '../document-types.ts';
+import { isSingleCardDocument } from '../document-types.ts';
 import { hasExecutableExtension } from '../index.ts';
 import {
   inferContentType,
@@ -268,6 +268,13 @@ export interface StagedChange {
   // The file whose post-commit version and modification time the entry's
   // result reports. Absent on a delete — there is no file left to version.
   primaryPath?: LocalPath;
+  // Whether this entry's content replaces the file wholesale rather than
+  // composing over what is stored there. Two entries changing one card
+  // compose, because the later one merges over the bytes the earlier staged;
+  // a replacement reads nothing and merges nothing, so a second one on the
+  // same path is not a later step in one story — it is the earlier entry's
+  // content never landing while that entry reports success.
+  replacesContent?: true;
 }
 
 // What the executors are given. Everything the realm owns arrives already
@@ -758,7 +765,14 @@ async function stageFileUpdate(
           `card source endpoint, not by an update on a file`,
       );
     }
-    if (stored && isCardDocumentString(stored.content)) {
+    if (stored && isSingleCardDocument(parsed(stored.content))) {
+      // A single card document and nothing wider. A `.json` holding a JSON:API
+      // *collection* is stored and served as a file and never becomes an
+      // instance row — the realm says so itself where it decides whether a
+      // path is a card awaiting its first index — so refusing a replacement of
+      // one as "a card's source" would contradict what the realm does with it
+      // everywhere else. The write ceiling classifies the two together, which
+      // is a different question: how many bytes the realm will store.
       refuse(
         `${url.href} holds a card's stored source; an update on a card is ` +
           `the merge its document describes, not a replacement of its bytes`,
@@ -799,6 +813,7 @@ async function stageFileUpdate(
     mints: [],
     id: url.href,
     primaryPath: path,
+    replacesContent: true,
   };
 }
 
@@ -1642,6 +1657,17 @@ function localPathIn(url: URL, ctx: StagingContext): LocalPath {
       title: 'Not found',
       detail: `realm ${ctx.realmURL} does not contain ${url.href}`,
     });
+  }
+}
+
+// A stored file's content as JSON, or undefined when it is not JSON at all.
+// What the predicates above are asked about is the document a file holds, and
+// a file that holds no document answers none of them.
+function parsed(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return undefined;
   }
 }
 

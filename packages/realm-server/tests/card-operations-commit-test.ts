@@ -9,9 +9,9 @@ import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import {
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
   computeContentHash,
   computeContentHashFromRanges,
-  isSampledContentHash,
   rri,
 } from '@cardstack/runtime-common';
 import {
@@ -25,6 +25,7 @@ import type {
   LocalPath,
   LooseSingleCardDocument,
   Realm,
+  RealmAdapter,
 } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
@@ -142,6 +143,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
     'rollback.log': 'boot\n',
     'mixed.log': 'boot\n',
     'untouched.log': 'boot\n',
+    'noop-then-append.log': 'boot\n',
     'chart.png': '\u0089PNG\r\n\u001a\n',
     ...Object.fromEntries(
       ['append-legs', 'append-visible', 'append-mixed', 'append-rollback'].map(
@@ -189,6 +191,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
+  let realmAdapter: RealmAdapter;
   let testDbAdapter: DBAdapter;
   let request: RealmRequest;
   let serverRequest: SuperTest<Test>;
@@ -206,6 +209,7 @@ module(basename(import.meta.filename), function (hooks) {
     fileSystem: makeFileSystem(),
     onRealmSetup(args) {
       realm = args.testRealm;
+      realmAdapter = args.testRealmAdapter;
       testDbAdapter = args.dbAdapter;
       request = withRealmPath(args.request, testRealm);
       serverRequest = args.request;
@@ -1481,48 +1485,98 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a file replaced with its own content and then appended to is announced', async function (assert) {
+    let since = Date.now();
+    let before = readFileSync(realmFile('noop-then-append.log'), 'utf8');
+
+    await commit(
+      [
+        {
+          op: 'update',
+          href: `${testRealmHref}noop-then-append.log`,
+          content: before,
+        },
+        {
+          op: 'appendLine',
+          href: `${testRealmHref}noop-then-append.log`,
+          params: { line: 'appended' },
+        },
+      ],
+      'noop-then-append',
+    );
+
+    assert.strictEqual(
+      readFileSync(realmFile('noop-then-append.log'), 'utf8'),
+      `${before}appended\n`,
+      'the line lands on the content the replacement left',
+    );
+    // The replacement found the file already holding its bytes, so it wrote
+    // nothing and announced nothing — which is correct for it, and is exactly
+    // what would leave the append's own change unannounced if the two legs
+    // shared one answer to "has this path been announced yet".
+    await waitUntil(async () => {
+      let seen = eventsNaming(
+        await realmEventsSince(since),
+        'noop-then-append.log',
+      );
+      return seen.some((event) => event.eventName === 'update');
+    });
+    let announced = eventsNaming(
+      await realmEventsSince(since),
+      'noop-then-append.log',
+    ).filter((event) => event.eventName === 'update');
+    assert.ok(
+      announced.length > 0,
+      'the file change reaches subscribers, though the write leg had nothing ' +
+        'to announce',
+    );
+  });
+
   test('appending to a file costs the line rather than the file', async function (assert) {
-    // Large enough that an implementation reading it whole could not hide in
-    // the noise, and large enough for the fingerprint's sampled form, which is
-    // where the bound lives: above `CONTENT_HASH_WHOLE_LIMIT_BYTES` a version
-    // is the byte length plus a hash of the head and the tail, so producing
-    // one costs a fixed read however large the file is.
-    const SIZE = 64 * 1024 * 1024;
+    // Large enough to be well past `CONTENT_HASH_WHOLE_LIMIT_BYTES`, which is
+    // where the bound lives: above it a version is the byte length plus a hash
+    // of the head and the tail, so producing one costs a fixed read however
+    // large the file is.
+    const SIZE = 32 * 1024 * 1024;
     const LINE = 'the last one';
     let filler = `${'x'.repeat(63)}\n`;
     writeFileSync(realmFile('bulk.log'), filler.repeat(SIZE / filler.length));
     let stored = statSync(realmFile('bulk.log')).size;
     // Anything the realm's watcher made of a file appearing under it settles
-    // before the reading below, so what is measured is the append.
+    // before the count below, so what is counted is the append.
     await realm.incrementalIndexing();
 
-    let collect = (globalThis as { gc?: () => void }).gc;
-    assert.strictEqual(
-      typeof collect,
-      'function',
-      'the test runner exposes a collector, without which a heap reading ' +
-        'cannot tell what an append held from what was already garbage',
-    );
-    collect?.();
-    let before = process.memoryUsage().heapUsed;
-    let [result] = await commitBatch(
-      realm.batchCore,
-      [
-        {
-          op: 'appendLine',
-          href: `${testRealmHref}bulk.log`,
-          params: { line: LINE },
-        },
-      ],
-      // The index job is the realm's own work over a file this size, and
-      // waiting for it inside the reading would measure that instead. It is
-      // drained below.
-      { actor: '@tester:localhost', waitForIndex: false },
-    );
-    // Deliberately not collected first: what is being looked for is a copy of
-    // the file, and a reading taken after a collection would miss one that was
-    // made and released.
-    let growth = process.memoryUsage().heapUsed - before;
+    // What the commit asks the adapter for, in bytes. This is the measurement
+    // the claim needs, and a heap reading is not: every read on this path
+    // yields `Uint8Array`s, whose backing stores `heapUsed` does not count, so
+    // a version computed by reading the whole file end to end would register
+    // as no growth at all.
+    let read = 0;
+    let readRange = realmAdapter.readRange.bind(realmAdapter);
+    realmAdapter.readRange = async function* (path, start, end) {
+      for await (let chunk of readRange(path, start, end)) {
+        read += chunk.length;
+        yield chunk;
+      }
+    };
+    let result: Awaited<ReturnType<typeof commit>>[number];
+    try {
+      [result] = await commitBatch(
+        realm.batchCore,
+        [
+          {
+            op: 'appendLine',
+            href: `${testRealmHref}bulk.log`,
+            params: { line: LINE },
+          },
+        ],
+        // The index job is the realm's own work over a file this size, and
+        // its reads are not this operation's. It is drained below.
+        { actor: '@tester:localhost', waitForIndex: false },
+      );
+    } finally {
+      realmAdapter.readRange = readRange;
+    }
     await realm.incrementalIndexing();
 
     assert.strictEqual(
@@ -1545,18 +1599,13 @@ module(basename(import.meta.filename), function (hooks) {
           }
         },
       ),
-      'and the version reported is the fingerprint of the file it left, ' +
-        'assembled from the head and the tail rather than from all of it',
-    );
-    assert.true(
-      isSampledContentHash(result?.meta.version ?? ''),
-      'which is the sampled form, so producing it read a bounded prefix and ' +
-        'suffix rather than the whole file',
+      'the version reported is the fingerprint of the file it left',
     );
     assert.ok(
-      growth < SIZE / 4,
-      `appending held ${Math.round(growth / 1024 / 1024)}MB, which does not ` +
-        `scale with the ${Math.round(SIZE / 1024 / 1024)}MB already stored`,
+      read <= CONTENT_HASH_WHOLE_LIMIT_BYTES,
+      `producing it read ${Math.round(read / 1024 / 1024)}MB of the ` +
+        `${Math.round(stored / 1024 / 1024)}MB stored, which is within the ` +
+        `ceiling a fingerprint is assembled under however large the file is`,
     );
   });
 });

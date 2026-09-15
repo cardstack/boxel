@@ -536,7 +536,7 @@ async function readPreState(
           contentHash: await computeContentHashFromRanges(
             bytes.size,
             async (start, length) =>
-              await collect(bytes.read(start, start + length)),
+              await collect(bytes.read(start, start + length), length),
           ),
         });
       }),
@@ -546,12 +546,27 @@ async function readPreState(
 
 // One range of a stored file, as bytes. Bounded by whatever the caller asked
 // for, which for a fingerprint is bounded by the fingerprint's own shape.
-async function collect(chunks: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+//
+// A short read is a failure rather than fewer bytes. The value assembled from
+// these ranges is what a caller's `baseVersion` is compared against, and a
+// fingerprint built from a file that moved under the read describes neither
+// version of it — so it would report a file the caller is still current with
+// as having moved on, with nothing said.
+async function collect(
+  chunks: AsyncIterable<Uint8Array>,
+  length: number,
+): Promise<Uint8Array> {
   let read: Uint8Array[] = [];
   let total = 0;
   for await (let chunk of chunks) {
     read.push(chunk);
     total += chunk.length;
+  }
+  if (total !== length) {
+    throw new Error(
+      `read ${total} of ${length} bytes while fingerprinting: the file ` +
+        `changed while it was being read`,
+    );
   }
   let bytes = new Uint8Array(total);
   let at = 0;
@@ -610,10 +625,10 @@ function targetRead(
     return { path: `${localPath}.json` as LocalPath, form: 'text' };
   }
   // A `.json` at a file's own path is either a card's stored source or a data
-  // file the realm merely holds, and only the bytes tell them apart — the same
-  // question, answered the same way, that the realm's own size classification
-  // asks before it decides which ceiling a write is held to. Everything else
-  // is a file, and its version is all the batch needs.
+  // file the realm merely holds, and only the bytes tell them apart — so this
+  // is the one file target whose content the batch reads, and it reads it to
+  // answer that. Everything else is a file, and its version is all the batch
+  // needs.
   return {
     path: localPath,
     form: localPath.endsWith('.json') ? 'text' : 'meta',
@@ -835,6 +850,25 @@ async function commitStaged(
         });
       }
       let owner = writtenBy.get(write.path);
+      if (owner !== undefined && change.replacesContent) {
+        // Two entries changing one card compose because the later one merges
+        // over what the earlier staged. A replacement of a file's content
+        // merges over nothing — it never read the file — so letting it land
+        // last would drop the earlier entry's content with nothing said,
+        // while that entry still reported success and carried this entry's
+        // version as its own. The same objection as the append-then-write
+        // pair above, and the same answer.
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Conflicting entries',
+          detail:
+            `entries ${owner} and ${index} both replace the content of ` +
+            `${write.path}; a replacement composes over nothing, so only ` +
+            `one of them could land`,
+          meta: { entry: index, conflictsWith: owner },
+        });
+      }
       if (owner !== undefined && write.path !== change.primaryPath) {
         // Two entries changing one card compose because the later one merges
         // over what the earlier staged. A side-loaded resource is serialized
@@ -856,6 +890,23 @@ async function commitStaged(
       writtenBy.set(write.path, index);
     }
     for (let append of change.appends) {
+      if (deleted.has(append.path)) {
+        // The same two-entries-asking-for-opposite-things the write leg
+        // refuses. Nothing reaches this today — a removal always names a
+        // card's `.json` and an append refuses every JSON content type — but
+        // that is an invariant held in the executors rather than here, and
+        // without this the commit would recreate the path, append to it,
+        // announce it as added, and then unlink it.
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Conflicting entries',
+          detail:
+            `entry ${index} appends to ${append.path}, which an earlier ` +
+            `entry removes; a batch cannot both remove a file and add to it`,
+          meta: { entry: index },
+        });
+      }
       appends.set(
         append.path,
         `${appends.get(append.path) ?? ''}${append.content}`,
