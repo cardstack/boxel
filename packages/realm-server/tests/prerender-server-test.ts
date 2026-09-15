@@ -1458,6 +1458,7 @@ module(basename(import.meta.filename), function () {
           ['instance'],
           'marked, and scoped to the row whose fetch hit the balancer',
         );
+        await built.prerenderer.stop();
       });
 
       test('a gateway failure withholds only its row, not one that failed for its own reasons', async function (assert) {
@@ -1500,6 +1501,7 @@ module(basename(import.meta.filename), function () {
           ['instance'],
           "only the card's row is withheld; the file's own 500 stays visible",
         );
+        await built.prerenderer.stop();
       });
 
       test('a genuine card error carrying no gateway marker is not marked', async function (assert) {
@@ -1532,6 +1534,7 @@ module(basename(import.meta.filename), function () {
           res.body.data.attributes.meta.diagnostics.gatewayFailure,
           'a 500 is the card, not the network — the break stays visible',
         );
+        await built.prerenderer.stop();
       });
 
       // The status alone would misclassify this: a render timeout is a 504,
@@ -1581,6 +1584,7 @@ module(basename(import.meta.filename), function () {
           res.body.data.attributes.meta.diagnostics.gatewayFailure,
           'a 504 the card render produced stays visible — only a marked fetch failure is withheld',
         );
+        await built.prerenderer.stop();
       });
 
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
