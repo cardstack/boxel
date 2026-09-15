@@ -362,37 +362,34 @@ module('Integration | nested query-field rendering', function (hooks) {
     }
   });
 
-  test('a snapshot of a side-loaded card records its rollup once loads settle', async function (this: RenderingTestContext, assert) {
-    let store = getService('store');
+  test('a snapshot of a side-loaded card records its rollup, not a zero', async function (this: RenderingTestContext, assert) {
     let cardService = getService('card-service');
-    let parent = (await store.get(PARENT_URL)) as CardDefType & {
-      child: CardDefType;
+    let parent = (await getService('store').get(PARENT_URL)) as CardDefType & {
+      child: CardDefType & { matchCount: number };
     };
     await settled();
     let child = parent.child;
 
-    // Serializing computed fields reads the rollup, which reads the field,
-    // which is what sends its search — so the first read answers with nothing.
-    // A render survives this by re-rendering when the answer lands; a snapshot
-    // is written once, so this is the shape that would record a wrong number.
-    let firstPass = await cardService.serializeCard(child, {
-      includeComputeds: true,
-    });
+    // The hazard the settling exists for, read straight off the instance: a
+    // rollup reduces over whatever its query-backed field holds at that moment,
+    // and nothing has resolved this one, so it reduces over nothing. A render
+    // recovers by re-rendering when the answer lands; a document is written
+    // once, and a rollup of zero reads exactly like a card that has none.
     assert.strictEqual(
-      (firstPass.data.attributes as Record<string, unknown>)?.matchCount,
+      child.matchCount,
       0,
       'a rollup read before its field answers reduces over nothing',
     );
 
-    await store.loaded();
-
-    let settledPass = await cardService.serializeCard(child, {
+    // One call, because asking for computeds settles the query-backed fields
+    // before writing any of them.
+    let doc = await cardService.serializeCard(child, {
       includeComputeds: true,
     });
     assert.strictEqual(
-      (settledPass.data.attributes as Record<string, unknown>)?.matchCount,
+      (doc.data.attributes as Record<string, unknown>)?.matchCount,
       2,
-      'and once the loads it started have settled it records the true count',
+      'the serialized snapshot records the count the field actually has',
     );
   });
 
