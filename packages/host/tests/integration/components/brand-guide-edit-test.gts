@@ -1,9 +1,12 @@
-import { click, type RenderingTestContext } from '@ember/test-helpers';
+import { click, fillIn, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
+import { PermissionsContextName } from '@cardstack/runtime-common';
+
+import { provideConsumeContext } from '../../helpers';
 
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
@@ -88,13 +91,84 @@ module('Integration | brand-guide | edit view', function (hooks) {
       .exists('brand color palette entries are editable');
     assert
       .dom('[data-test-brand-guide-section="custom-css"] input')
-      .exists('custom CSS variables are editable');
+      .exists(
+        { count: 3 },
+        'custom CSS variables expose name, light value and dark value inputs',
+      );
     assert
       .dom('[data-test-brand-guide-css-var]')
       .doesNotExist('read-only custom CSS listing is not rendered in edit');
     assert
       .dom('[data-test-brand-image-attachment-var]')
       .doesNotExist('read-only attachment listing is not rendered in edit');
+  });
+
+  test('custom CSS variable editor shows the value column for the previewed color scheme', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+      customCssVariables: [
+        new CustomCssVariable({ name: 'spacing-sm', value: '0.5rem' }),
+      ],
+    });
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-custom-css-variable-value="light"]')
+      .isVisible('light value is edited by default');
+    assert
+      .dom('[data-test-custom-css-variable-value="dark"]')
+      .isNotVisible('dark value stays out of the way in light mode');
+
+    await click('[data-test-mode="toggle-dark"]');
+    assert
+      .dom('[data-test-custom-css-variable-value="dark"]')
+      .isVisible('dark mode edits the optional dark value');
+    assert
+      .dom('[data-test-custom-css-variable-value="light"]')
+      .isNotVisible('light value is hidden in dark mode');
+
+    await click('[data-test-mode="toggle-light"]');
+    assert
+      .dom('[data-test-custom-css-variable-value="light"]')
+      .isVisible('toggling back restores the light value column');
+  });
+
+  test('a custom CSS variable typed in the editor appears in the generated CSS', async function (this: RenderingTestContext, assert) {
+    provideConsumeContext(PermissionsContextName, { canWrite: true });
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await click(
+      '[data-test-brand-guide-section="custom-css"] [data-test-add-new]',
+    );
+    let inputs = document.querySelectorAll<HTMLInputElement>(
+      '[data-test-brand-guide-section="custom-css"] input',
+    );
+    await fillIn(inputs[0], 'ikea main');
+    await fillIn(
+      '[data-test-custom-css-variable-value="light"] input',
+      '#0051ba',
+    );
+
+    assert
+      .dom('[data-test-brand-guide-section="view-code"] [data-test-css-field]')
+      .includesText(
+        '--ikea-main: #0051ba;',
+        'the new variable shows up under View Code without saving',
+      );
+
+    await click('[data-test-mode="toggle-dark"]');
+    await fillIn(
+      '[data-test-custom-css-variable-value="dark"] input',
+      'lightblue',
+    );
+    let css = card.cssVariables ?? '';
+    assert.ok(
+      css.slice(css.indexOf('.dark')).includes('--ikea-main: lightblue;'),
+      'the dark value is emitted under .dark',
+    );
   });
 
   test('theme-less edit view leads with the import and generated css sections', async function (this: RenderingTestContext, assert) {

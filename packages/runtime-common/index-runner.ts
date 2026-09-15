@@ -694,6 +694,7 @@ export class IndexRunner {
     );
     return {
       invalidations: [...invalidations].map((url) => url.href),
+      invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,

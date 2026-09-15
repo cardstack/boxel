@@ -5,6 +5,7 @@ import { writeSync } from 'node:fs';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { createServer } from 'http';
+import { withLoadBalancerKeepAlive } from '../server.ts';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app.ts';
 import {
@@ -54,7 +55,11 @@ let { app } = buildPrerenderManagerApp({
   isDraining: () => draining,
 });
 let _webServerInstance: Server | undefined;
-_webServerInstance = createServer(app.callback()).listen(port);
+// Reached through a load balancer in the hosted deployments, and its callers
+// pool connections, so the same patience the realm-server needs applies here.
+_webServerInstance = withLoadBalancerKeepAlive(
+  createServer(app.callback()),
+).listen(port);
 _webServerInstance.on('listening', () => {
   let actualPort =
     (_webServerInstance!.address() as import('net').AddressInfo).port ?? port;

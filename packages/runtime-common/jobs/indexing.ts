@@ -291,10 +291,8 @@ function parseIncrementalResult(
   if (!isObjectLike(result) || Array.isArray(result)) {
     return undefined;
   }
-  let { invalidations, ignoreData, stats, generation } = result as Record<
-    string,
-    PgPrimitive
-  >;
+  let { invalidations, invalidatedTypes, ignoreData, stats, generation } =
+    result as Record<string, PgPrimitive>;
   if (
     !Array.isArray(invalidations) ||
     !invalidations.every((value) => typeof value === 'string') ||
@@ -305,8 +303,17 @@ function parseIncrementalResult(
   ) {
     return undefined;
   }
+  // A result from a worker predating the type-carrying event simply has no
+  // `invalidatedTypes`; dropping a malformed one has the same effect, which is
+  // that subscribers re-run unconditionally the way they always did.
+  let parsedTypes =
+    Array.isArray(invalidatedTypes) &&
+    invalidatedTypes.every((value) => typeof value === 'string')
+      ? (invalidatedTypes as string[])
+      : undefined;
   return {
     invalidations,
+    ...(parsedTypes !== undefined ? { invalidatedTypes: parsedTypes } : {}),
     ignoreData: ignoreData as Record<string, string>,
     stats: stats as IncrementalResult['stats'],
     ...(typeof generation === 'number' ? { generation } : {}),

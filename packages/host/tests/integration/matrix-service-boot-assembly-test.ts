@@ -470,3 +470,112 @@ module(
     });
   },
 );
+
+// An account registered straight on Synapse (shared-secret batch creation)
+// never goes through host sign-up, so it has neither account-data key — yet it
+// may already hold realm permissions. Boot seeds the trusted-servers key with
+// the host's own realm server so the permissions-driven assembly (`_realm-auth`)
+// runs on the very first login, instead of assembling an empty chooser.
+module(
+  'Integration | matrix-service | boot seeds own realm server for a keyless account',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    // Neither `app.boxel.realms` nor `app.boxel.realm-servers` is set — the
+    // shape a Synapse-registered account boots with.
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      // `setupIntegrationTestRealm` advertises testRealmURL through `_realm-auth`
+      // (i.e. the account holds permissions on it) independent of account data.
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('boot assembles the permissioned realm from `_realm-auth`', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'testRealmURL from _realm-auth appears despite no account-data keys',
+      );
+    });
+
+    test('boot persists the own realm server into `app.boxel.realm-servers`', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(
+        await matrixService.getRealmServersFromAccountData(),
+        [testRealmServerURL],
+        'the trusted-servers key is seeded with the host’s own realm server',
+      );
+    });
+
+    test('boot takes the authoritative trusted-servers path', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(
+        matrixService.bootAssemblyDebug,
+        {
+          trustedRealmServersAuthoritative: true,
+          bootedFromLegacyRealmsList: false,
+        },
+        'permissions are the source of truth — no legacy-list dependency',
+      );
+    });
+  },
+);
+
+// The conservative-scope guard: an account that already has a legacy
+// `app.boxel.realms` list must NOT be seeded onto the trusted path by the new
+// code — it keeps its existing legacy assembly + lazy-migration behavior. (The
+// migration outcome itself is covered by the lazy-migration module above; this
+// asserts the seed specifically stays out of the way.)
+module(
+  'Integration | matrix-service | boot seed leaves a legacy account alone',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    // Legacy `app.boxel.realms` set, no `app.boxel.realm-servers`.
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('the account stays on the legacy path (the seed does not fire)', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(
+        matrixService.bootAssemblyDebug,
+        {
+          trustedRealmServersAuthoritative: false,
+          bootedFromLegacyRealmsList: true,
+        },
+        'a legacy-list account is untouched by the keyless seed',
+      );
+    });
+  },
+);

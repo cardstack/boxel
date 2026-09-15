@@ -1164,7 +1164,7 @@ module(basename(import.meta.filename), function () {
               );
             }
             assert.deepEqual(
-              withoutGeneration(actualEvent?.content),
+              withoutFixtureVaryingMembers(actualEvent?.content),
               expectedEvent.content,
               'expected event was broadcast',
             );
@@ -1725,20 +1725,22 @@ function matchRealmEvent(events: MatrixEvent[], event: any) {
   return events.find(
     (m) =>
       m.type === event.type &&
-      isEqual(event.content, withoutGeneration(m.content)),
+      isEqual(event.content, withoutFixtureVaryingMembers(m.content)),
   );
 }
 
-// Incremental index events carry the committed realm generation, whose
-// value varies with the fixture's indexing history — matching and content
-// comparison ignore it; its shape is asserted separately.
-function withoutGeneration(content: any) {
-  if (
-    content &&
-    typeof content === 'object' &&
-    content.generation !== undefined
-  ) {
-    let { generation: _generation, ...rest } = content;
+// Incremental index events carry two members whose values follow the
+// fixture's card content and indexing history rather than the behavior under
+// test: the committed realm generation, and the adoption chains the pass
+// touched. Matching and content comparison ignore both; the generation's
+// shape is asserted separately, and the chains have their own coverage.
+function withoutFixtureVaryingMembers(content: any) {
+  if (content && typeof content === 'object') {
+    let {
+      generation: _generation,
+      invalidatedTypes: _invalidatedTypes,
+      ...rest
+    } = content;
     return rest;
   }
   return content;

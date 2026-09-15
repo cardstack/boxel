@@ -162,6 +162,15 @@ export async function expectIncrementalIndexEvent(
     );
     delete actualContent.generation;
   }
+  // Which adoption chains a pass touches depends on the fixture's card
+  // content, so assert that the pass reported them at all — a subscriber
+  // falls back to an unconditional re-run without them — and let the callers
+  // that know their fixture's types check the membership.
+  assert.true(
+    Array.isArray(actualContent.invalidatedTypes),
+    'incremental event carries the types its pass touched',
+  );
+  delete actualContent.invalidatedTypes;
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;

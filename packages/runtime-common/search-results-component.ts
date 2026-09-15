@@ -102,6 +102,11 @@ export interface SearchResultsComponentSignature {
     // pass `false` for a card that lays results out in its own UI and wants
     // them rendered plainly, with no overlay even inside operator mode.
     overlays?: boolean;
+    // Whether each result renders inside its card container chrome (the
+    // boundary ring), the same switch `<@fields.x @displayContainer={{false}} />`
+    // offers. Defaults to `true`; pass `false` for a consumer that frames
+    // results itself.
+    displayContainer?: boolean;
   };
   Blocks: {
     default: [SearchResultsYield];

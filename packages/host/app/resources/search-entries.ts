@@ -18,22 +18,31 @@ import {
   subscribeToRealm,
   Deferred,
   htmlQueryRenderingSelection,
+  identifyCard,
+  internalKeyFor,
   isCardResource,
   isCssResource,
   isFileMetaResource,
   isHtmlResource,
   isIconResource,
+  isRelativePath,
+  loadCardDef,
   logger as runtimeLogger,
+  moduleFrom,
   resourceIdentity,
   ri,
   rri,
+  trimExecutableExtension,
   wireFilterHasMatches,
+  wireFilterTypeAnchors,
   RealmPaths,
   type CardResource,
+  type CodeRef,
   type ErrorEntry,
   type FileMetaResource,
   type HtmlResource,
   type IconResource,
+  type Loader,
   type ResolvedCodeRef,
   type Saved,
   type StoreReadType,
@@ -52,11 +61,16 @@ import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type {
+  IncrementalIndexEventContent,
   RealmEventContent,
   PrerenderHtmlEventContent,
 } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
+// The anchor resolution is async and nothing else awaits it, so without its
+// own waiter a `settled()` could land between an event arriving and the keys
+// that event asked for being ready.
+const typeKeysWaiter = buildWaiter('search-entries-resource:type-keys-waiter');
 
 // `SearchEntryRendering` is the card-facing rendering view-model (it rides the
 // `@context` search surface), so it lives in runtime-common; re-exported
@@ -140,6 +154,36 @@ export class SearchEntriesResource extends Resource<Args> {
   // `realmsNeedingRefresh`.
   private pendingSelectiveRefresh: Map<string, number> | undefined;
 
+  // The `types` keys the current query's filter anchors on, in the spelling
+  // `boxel_index.types` stores and an incremental index event carries.
+  // Resolved once per (query, loader) pair, and only once an event has shown
+  // there is something to decide — a query that never sees one (a prerender, a
+  // chooser opened and dismissed) resolves nothing, and the event that starts
+  // the resolution takes the unconditional re-run it would have taken anyway.
+  // Stays undefined for a filter that admits an entry of any type and for one
+  // whose anchors don't resolve, which keeps the query on that re-run until
+  // one of the two it is keyed on changes.
+  #queryTypeKeys: Set<string> | undefined;
+  #queryTypeKeysResolved = false;
+  // The loader the keys were resolved against. What canonical spelling an
+  // anchor resolves to is a property of that loader — a module rewrite
+  // replaces the loader, and a module that re-exports a type can name a
+  // different one on the far side of that boundary — so keys are only good for
+  // as long as the loader that produced them is the live one.
+  #queryTypeKeysLoader: Loader | undefined;
+  // The modules the anchors resolved through — the ref's own and its
+  // canonical's. An index event naming one of them is a rewrite of the very
+  // module whose exports decided these keys, so the keys are dropped and
+  // re-resolved rather than trusted. The loader check above cannot stand in
+  // for this: the loader is replaced by the store's rebuild, which only
+  // subscribes to realms it holds a card reference in, while a live search
+  // subscribes to its realms itself — so an event can arrive here for a realm
+  // whose module rewrite replaces no loader at all.
+  #queryTypeKeyModules = new Set<string>();
+  // Bumped whenever the query changes (and on teardown) so a resolution
+  // in flight for the previous query can't install its keys over the new one.
+  #queryTypeKeysEpoch = 0;
+
   // Bumped by every search-task run (and on teardown) so an in-flight
   // `#computeSelectiveRefresh` from a superseded run stops issuing GETs: the
   // task body's awaits are cancellable, but a plain async method keeps
@@ -197,6 +241,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
       this.#refreshEpoch++;
+      this.#forgetQueryTypeKeys();
     });
   }
 
@@ -263,6 +308,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.#previousRealms = undefined;
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
+      this.#forgetQueryTypeKeys();
       this.#refreshScheduler.cancel();
       // An in-flight selective refresh must stop issuing GETs for the
       // cleared query, same as on teardown.
@@ -333,6 +379,17 @@ export class SearchEntriesResource extends Resource<Args> {
             return;
           }
 
+          // An incremental index event that provably can't have moved this
+          // query's membership costs nothing: without the test, a write to a
+          // type this query isn't anchored on re-runs it in full — on every
+          // client holding it, for every such query each of them holds.
+          if (isIncrementalIndex && this.#indexEventCannotMatch(event)) {
+            this.#log.info(
+              `incremental index event on ${realm} touched no type this query is anchored on; skipping refresh`,
+            );
+            return;
+          }
+
           // A prerender_html event can't change a structured query's
           // membership — only its members' renderings. So for a structured,
           // refreshable query, refresh just the members the event carries
@@ -372,6 +429,9 @@ export class SearchEntriesResource extends Resource<Args> {
     // in place would otherwise be compared against itself and never re-run.
     this.#previousQuery = structuredClone(query);
     this.#previousRealms = realms;
+    if (queryChanged) {
+      this.#forgetQueryTypeKeys();
+    }
     // A query/realm change owns the whole result set again — including any
     // event-triggered refresh still waiting in the scheduler's window, whose
     // accumulated state was just cleared.
@@ -606,6 +666,174 @@ export class SearchEntriesResource extends Resource<Args> {
       waiter.endAsync(token);
     }
   });
+
+  // Whether an incremental index event provably left this query's membership
+  // alone. A row can only enter or leave a type-anchored result set by being
+  // one of the anchored types, and a row the pass touched named its whole
+  // adoption chain in the event — so anchors disjoint from the event's types
+  // mean no row moved. Everything else answers false: an event that carries
+  // no types (an older realm-server, a failed pass, a full reindex), a filter
+  // that admits an entry of any type, and a query whose keys aren't resolved
+  // yet all take the unconditional re-run.
+  //
+  // Note what this deliberately does NOT test. "None of my current members
+  // were invalidated" is not a sound skip — a newly created card enters a
+  // result set without touching any existing member. And a matching-type
+  // write must force the re-run even when the query also filters on a field
+  // value, because the event carries no values to judge against.
+  #indexEventCannotMatch(event: RealmEventContent): boolean {
+    let { invalidatedTypes, invalidations } =
+      event as IncrementalIndexEventContent;
+    if (!Array.isArray(invalidatedTypes)) {
+      return false;
+    }
+    this.#forgetTypeKeysInvalidatedBy(invalidations);
+    let keys = this.#typeKeysForQuery();
+    if (!keys) {
+      return false;
+    }
+    return !invalidatedTypes.some((type) => keys.has(type));
+  }
+
+  // The resolved keys for the current query, kicking off the resolution the
+  // first time they're asked for. Synchronous by design — the subscription
+  // callback is — so the call that starts the resolution reads `undefined`
+  // and falls through to the re-run.
+  #typeKeysForQuery(): Set<string> | undefined {
+    let loader = this.loaderService.loader;
+    if (this.#queryTypeKeysResolved && this.#queryTypeKeysLoader !== loader) {
+      this.#forgetQueryTypeKeys();
+    }
+    if (this.#queryTypeKeysResolved) {
+      return this.#queryTypeKeys;
+    }
+    this.#queryTypeKeysResolved = true;
+    this.#queryTypeKeysLoader = loader;
+    let anchors = wireFilterTypeAnchors(this.#previousQuery?.filter);
+    if (!anchors?.length) {
+      return undefined;
+    }
+    void this.#resolveQueryTypeKeys(anchors, this.#queryTypeKeysEpoch, loader);
+    return undefined;
+  }
+
+  // Resolve each anchor to the keys a row of that type could have been
+  // stamped with, mirroring the server's own `typeKeysFor`: the ref's own
+  // spelling, plus the canonical (defining-module) spelling the indexer
+  // writes. Both are needed — a filter naming a type through a re-exporting
+  // module shares no key with the rows unless the canonical one is resolved,
+  // and skipping on that comparison would drop a real membership change.
+  // Any anchor that can't be resolved abandons the whole set, leaving the
+  // query on the unconditional re-run.
+  async #resolveQueryTypeKeys(
+    anchors: CodeRef[],
+    epoch: number,
+    loader: Loader,
+  ) {
+    let token = typeKeysWaiter.beginAsync();
+    try {
+      let resolved = await this.#typeKeysFor(anchors, loader);
+      if (
+        resolved &&
+        epoch === this.#queryTypeKeysEpoch &&
+        !isDestroyed(this)
+      ) {
+        this.#queryTypeKeys = resolved.keys;
+        this.#queryTypeKeyModules = resolved.modules;
+      }
+    } catch (err) {
+      // Nothing awaits this resolution, so an escaping throw would be an
+      // unhandled rejection rather than a decision. A malformed `item.on` can
+      // produce one from the ref helpers themselves, not just from the module
+      // load — and every failure here means the same thing: no keys, so the
+      // query keeps re-running unconditionally.
+      this.#log.info(
+        `could not resolve the type anchors for this query; it stays on the unconditional refresh: ${String(err)}`,
+      );
+    } finally {
+      typeKeysWaiter.endAsync(token);
+    }
+  }
+
+  async #typeKeysFor(
+    anchors: CodeRef[],
+    loader: Loader,
+  ): Promise<{ keys: Set<string>; modules: Set<string> } | undefined> {
+    let { virtualNetwork } = this.network;
+    let keys = new Set<string>();
+    let modules = new Set<string>();
+    for (let ref of anchors) {
+      // A relative module spelling is resolved server-side against the
+      // document that issued the query; the client has no basis to resolve it
+      // to the same place, so it isn't comparable to what the index stamped.
+      if (isRelativePath(moduleFrom(ref))) {
+        return undefined;
+      }
+      keys.add(internalKeyFor(ref, undefined, virtualNetwork));
+      modules.add(this.#moduleKey(moduleFrom(ref)));
+      let canonical: CodeRef | undefined;
+      try {
+        canonical = identifyCard(await loadCardDef(ref, { loader }));
+      } catch (_e) {
+        // A ref that names no loadable type is the same uncertainty as one
+        // that names a type we can't canonicalize.
+        return undefined;
+      }
+      if (!canonical) {
+        return undefined;
+      }
+      keys.add(internalKeyFor(canonical, undefined, virtualNetwork));
+      modules.add(this.#moduleKey(moduleFrom(canonical)));
+    }
+    return { keys, modules };
+  }
+
+  // Drop the keys when an event rewrites a module they were resolved
+  // through. The keys name what that module's exports resolved to, so the
+  // event carrying the rewrite is the last one that may be judged by them —
+  // and it isn't: dropping them here, before the gate reads them, puts this
+  // event on the unconditional refresh too.
+  #forgetTypeKeysInvalidatedBy(invalidations: string[] | undefined): void {
+    if (!this.#queryTypeKeys || this.#queryTypeKeyModules.size === 0) {
+      return;
+    }
+    for (let invalidation of invalidations ?? []) {
+      if (this.#queryTypeKeyModules.has(this.#moduleKey(invalidation))) {
+        this.#forgetQueryTypeKeys();
+        return;
+      }
+    }
+  }
+
+  // A module URL reduced to the spelling the anchors are recorded under: the
+  // same normalization `internalKeyFor` applies to a ref's module half, so an
+  // invalidation and an anchor naming one module agree however each was
+  // spelled.
+  #moduleKey(moduleHref: string): string {
+    let { virtualNetwork } = this.network;
+    try {
+      return virtualNetwork.unresolveURL(
+        trimExecutableExtension(
+          rri(virtualNetwork.resolveURL(moduleHref, undefined).href),
+        ),
+      );
+    } catch (_e) {
+      // A URL this resource can't reduce can't match an anchor's module
+      // either — it is some other realm's spelling, not a rewrite of what
+      // these keys were resolved through.
+      return moduleHref;
+    }
+  }
+
+  // Drop the resolved keys and orphan any resolution still in flight for
+  // them. Called wherever the query stops being the one they describe.
+  #forgetQueryTypeKeys(): void {
+    this.#queryTypeKeys = undefined;
+    this.#queryTypeKeysResolved = false;
+    this.#queryTypeKeysLoader = undefined;
+    this.#queryTypeKeyModules.clear();
+    this.#queryTypeKeysEpoch++;
+  }
 
   // Whether the current query supports a selective per-member refresh on a
   // prerender_html event, rather than a whole-search re-query. Requires a

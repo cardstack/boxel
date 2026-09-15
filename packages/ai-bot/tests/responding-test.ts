@@ -3,7 +3,11 @@ const { module, test, assert } = QUnit;
 import { Responder } from '../lib/responder.ts';
 import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
-import { maxOutputTokensErrorMessage, thinkingMessage } from '../constants.ts';
+import {
+  maxOutputTokensDuringFileReadErrorMessage,
+  maxOutputTokensErrorMessage,
+  thinkingMessage,
+} from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -632,6 +636,79 @@ module('Responding', (hooks) => {
       'partial answer',
       'the partial answer is kept, not replaced by the error',
     );
+    assert.equal(
+      last.errorMessage,
+      maxOutputTokensErrorMessage,
+      'the final event carries the output-limit error',
+    );
+    assert.true(last.isStreamingFinished, 'the answer is marked finished');
+  });
+
+  test('a readRealmFile call cut off at the output-token limit reports that the files it named are being read', async () => {
+    await responder.ensureThinkingMessageSent();
+    let toolRequest = {
+      id: 'c1',
+      name: 'readRealmFile',
+      arguments: { urls: ['https://localhost:4201/user/jane/a.md'] },
+    };
+    await responder.onChunk({} as any, snapshotWithToolCall(toolRequest));
+    await clock.tickAsync(300);
+    // OpenRouter normalizes the upstream stop reason: a generation that hit
+    // its output limit mid tool call arrives as finish_reason 'tool_calls',
+    // and only native_finish_reason tells that it was cut.
+    await responder.onChunk(
+      {
+        choices: [
+          {
+            delta: {},
+            finish_reason: 'tool_calls',
+            native_finish_reason: 'max_output_tokens',
+            index: 0,
+          },
+        ],
+      } as any,
+      snapshotWithToolCall(toolRequest),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      last.errorMessage,
+      maxOutputTokensDuringFileReadErrorMessage,
+      'the final event says the read list was trimmed and continues on its own',
+    );
+    assert.true(last.isStreamingFinished, 'the answer is marked finished');
+  });
+
+  test('a host tool call cut off at the output-token limit surfaces the generic error even though the router reports tool_calls', async () => {
+    await responder.ensureThinkingMessageSent();
+    let toolRequest = {
+      id: 'c1',
+      name: 'patchCardInstance',
+      arguments: { description: 'Update the title' },
+    };
+    await responder.onChunk({} as any, snapshotWithToolCall(toolRequest));
+    await clock.tickAsync(300);
+    await responder.onChunk(
+      {
+        choices: [
+          {
+            delta: {},
+            finish_reason: 'tool_calls',
+            native_finish_reason: 'max_output_tokens',
+            index: 0,
+          },
+        ],
+      } as any,
+      snapshotWithToolCall(toolRequest),
+    );
+    await clock.tickAsync(300);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let last = sentEvents[sentEvents.length - 1].content;
     assert.equal(
       last.errorMessage,
       maxOutputTokensErrorMessage,

@@ -109,8 +109,7 @@ const lookupDefinition = async (codeRef: CodeRef) => graph.get(refKey(codeRef));
 const StringFieldClass = function StringField() {} as unknown as never;
 
 const params = (key: string) => ({ $ref: 'params', key }) as never;
-const actor = (key?: string) =>
-  (key === undefined ? { $ref: 'actor' } : { $ref: 'actor', key }) as never;
+const actor = () => ({ $ref: 'actor' }) as never;
 const card = (value: unknown) => ({ $ref: 'card', value }) as never;
 
 async function lower(declarations: Record<string, unknown>) {
@@ -139,7 +138,12 @@ const SNAPSHOT = {
   featured: null,
 };
 
-const ACTOR_ID = 'http://example.com/cards/author/1';
+const LINKED_CARD_ID = 'http://example.com/cards/author/1';
+
+// A Matrix user id, which is what the realm authenticates a caller as — and
+// deliberately not a card URL, so a program that treats the caller as a card
+// fails here the way it would in a realm rather than resolving by accident.
+const ACTOR_ID = '@tester:localhost';
 
 const PLAN_CONTEXT = {
   programId: 'operation-lowering-test',
@@ -147,12 +151,12 @@ const PLAN_CONTEXT = {
   context: {
     params: {
       value: 'a value',
-      who: ACTOR_ID,
+      who: LINKED_CARD_ID,
     },
-    actor: { id: ACTOR_ID },
+    actor: ACTOR_ID,
   },
   cards: {
-    [ACTOR_ID]: { id: ACTOR_ID },
+    [LINKED_CARD_ID]: { id: LINKED_CARD_ID },
   },
 };
 
@@ -201,7 +205,16 @@ const EXECUTABLE_DECLARATIONS: {
   {
     name: 'setLink',
     writes: true,
-    declaration: { base: 'transform', set: { owner: actor() } },
+    declaration: {
+      base: 'transform',
+      params: { who: StringFieldClass },
+      set: { owner: params('who') },
+    },
+  },
+  {
+    name: 'setScalarFromActor',
+    writes: true,
+    declaration: { base: 'transform', set: { status: actor() } },
   },
   {
     name: 'appendScalarItem',
@@ -241,18 +254,23 @@ const EXECUTABLE_DECLARATIONS: {
   },
   {
     // The explicit spelling of a link identity. `card(…)` says "this is a
-    // card", so the marker inside it has to be narrowed to an id just as it
-    // is when written bare — the constructor takes exactly one id string.
+    // card", which the link slot already says, so it has to lower to the same
+    // program as naming the identity bare.
     name: 'setLinkViaCardMarker',
     writes: true,
-    declaration: { base: 'transform', set: { owner: card(actor()) } },
+    declaration: {
+      base: 'transform',
+      params: { who: StringFieldClass },
+      set: { owner: card(params('who')) },
+    },
   },
   {
     name: 'appendLinkViaCardMarker',
     writes: true,
     declaration: {
       base: 'transform',
-      append: { to: 'reviewers', value: card(actor()) },
+      params: { who: StringFieldClass },
+      append: { to: 'reviewers', value: card(params('who')) },
     },
   },
   {
@@ -272,11 +290,11 @@ const EXECUTABLE_DECLARATIONS: {
     },
   },
   {
-    name: 'assertLinkedByActor',
+    name: 'assertContainedByActor',
     writes: false,
     declaration: {
       base: 'transform',
-      assert: { unique: 'reviewers', by: actor(), snapshot: true },
+      assert: { unique: 'tags', by: actor() },
     },
   },
 ];
@@ -318,8 +336,12 @@ const REFUSED_DECLARATIONS: {
     name: 'set on a query-backed field',
     executor: 'rejects',
     code: 'read-only-write',
-    declaration: { base: 'transform', set: { featured: actor() } },
-    wouldBe: '.featured=card(actor("id"));',
+    declaration: {
+      base: 'transform',
+      params: { who: StringFieldClass },
+      set: { featured: params('who') },
+    },
+    wouldBe: '.featured=card(params("who"));',
   },
   {
     name: 'set on id',
@@ -337,6 +359,28 @@ const REFUSED_DECLARATIONS: {
     code: 'path-crosses-collection',
     declaration: { base: 'transform', set: { 'comments.body': 'z' } },
     wouldBe: '.comments.body="z";',
+  },
+  {
+    // The caller in a link position. `actor()` is a user id, so the program
+    // would ask the executor to link a card at a URL no card is stored at.
+    name: 'set on a link from the caller',
+    executor: 'rejects',
+    code: 'actor-not-a-card',
+    emitsProgram: true,
+    declaration: { base: 'transform', set: { owner: actor() } },
+    wouldBe: '.owner=actor();',
+  },
+  {
+    // The same thing said explicitly. The declaration API refuses
+    // `card(actor())` outright, so this shape only reaches lowering from a
+    // caller that assembled the declaration itself — which is the case this
+    // pass stays exported to guard.
+    name: 'set on a link from the caller, wrapped in card()',
+    executor: 'rejects',
+    code: 'actor-not-a-card',
+    emitsProgram: true,
+    declaration: { base: 'transform', set: { owner: card(actor()) } },
+    wouldBe: '.owner=card(actor());',
   },
   {
     name: 'set on a computed field',
@@ -485,24 +529,32 @@ const tests = Object.freeze({
     }
   },
   // `card(…)` is how a declaration says "this value is a card identity"
-  // explicitly, and it is the spelling the docs point at. It has to lower to
-  // the same thing as naming the identity bare: when it did not, the explicit
-  // form emitted `card(actor())` — the whole actor record handed to a
-  // constructor that takes one id string — so being precise was the thing
-  // that broke the operation, and nothing reported it.
+  // explicitly, and it is the spelling the docs point at. A link slot says the
+  // same thing on its own, so the two have to reach the executor as one
+  // program — otherwise being precise is what breaks the operation.
   'naming a link identity explicitly lowers the same as naming it bare': async (
     assert,
   ) => {
     let { operations, issues } = await lower({
-      bare: { base: 'transform', set: { owner: actor() } },
-      explicit: { base: 'transform', set: { owner: card(actor()) } },
+      bare: {
+        base: 'transform',
+        params: { who: StringFieldClass },
+        set: { owner: params('who') },
+      },
+      explicit: {
+        base: 'transform',
+        params: { who: StringFieldClass },
+        set: { owner: card(params('who')) },
+      },
       bareAppend: {
         base: 'transform',
-        append: { to: 'reviewers', value: actor() },
+        params: { who: StringFieldClass },
+        append: { to: 'reviewers', value: params('who') },
       },
       explicitAppend: {
         base: 'transform',
-        append: { to: 'reviewers', value: card(actor()) },
+        params: { who: StringFieldClass },
+        append: { to: 'reviewers', value: card(params('who')) },
       },
     });
     assert.deepEqual(issues, [], 'both spellings lower with no findings');
@@ -527,17 +579,17 @@ const tests = Object.freeze({
 
   // Planning without error proves only that a program is runnable. An
   // assertion that compares a value which can never equal what it is compared
-  // against — a whole actor record against the id string `.id` holds — plans
-  // just as cleanly, holds for every item, and lets the duplicate it exists
-  // to reject go straight in. So the precondition is checked both ways round:
-  // it has to fire on a duplicate and it has to stay out of the way when
-  // there is none.
+  // against — anything but the id string `.id` holds — plans just as cleanly,
+  // holds for every item, and lets the duplicate it exists to reject go
+  // straight in. So the precondition is checked both ways round: it has to
+  // fire on a duplicate and it has to stay out of the way when there is none.
   'an assert over a link collection fires on a duplicate and not otherwise':
     async (assert) => {
       let { operations, issues } = await lower({
         addReviewer: {
           base: 'transform',
-          assert: { unique: 'reviewers', by: actor(), snapshot: true },
+          params: { who: StringFieldClass },
+          assert: { unique: 'reviewers', by: params('who'), snapshot: true },
         },
       });
       assert.deepEqual(issues, [], 'the declaration lowers with no findings');
@@ -545,12 +597,12 @@ const tests = Object.freeze({
 
       let onDuplicate = await planOutcome(source, {
         ...SNAPSHOT,
-        reviewers: [{ id: ACTOR_ID }],
+        reviewers: [{ id: LINKED_CARD_ID }],
       });
       assert.ok(
         'rejected' in onDuplicate &&
           onDuplicate.rejected.includes('assertion-failed'),
-        `the assertion fires when the actor is already linked: ${source}`,
+        `the assertion fires when the param names a linked card: ${source}`,
       );
       assert.deepEqual(
         await planOutcome(source, {
