@@ -1,3 +1,4 @@
+import { urlNamesFile } from '../file-def-code-ref.ts';
 import {
   isDocumentResult,
   isHeadResult,
@@ -94,12 +95,17 @@ interface Stub {
 // fragment, a trailing slash, or the `.json` source spelling. The stub holds
 // itself to the same rule so a target that reaches the index uncanonicalized
 // misses, the way it would against Postgres.
+// The keys the index answers to. A spelling that is not canonical never
+// reaches a row, and neither does a path naming a file: a file's bytes get a
+// file row, never an instance row and never a card document, which is what
+// makes the index the thing that decides whether a path is a card.
 function isCanonicalKey(url: URL): boolean {
   return (
     url.search === '' &&
     url.hash === '' &&
     !url.pathname.endsWith('.json') &&
-    !url.pathname.endsWith('/')
+    !url.pathname.endsWith('/') &&
+    !urlNamesFile(url)
   );
 }
 
@@ -778,6 +784,7 @@ const tests = Object.freeze({
       headersOnly: true,
     });
     assert.deepEqual(fromRow, {
+      type: 'file-meta',
       indexedAt: 1700,
       lastModified: 1699,
       generation: 4,
@@ -797,6 +804,7 @@ const tests = Object.freeze({
       headersOnly: true,
     });
     assert.deepEqual(fromDisk, {
+      type: 'file-meta',
       indexedAt: null,
       lastModified: 42,
       generation: null,

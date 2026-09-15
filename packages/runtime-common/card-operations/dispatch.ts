@@ -161,7 +161,11 @@ export interface OperationDefinitionLookup {
 export interface OperationIndexQueryEngine {
   cardDocument(
     url: URL,
-    opts?: { loadLinks?: boolean; skipQueryBackedExpansion?: boolean },
+    opts?: {
+      loadLinks?: boolean;
+      skipQueryBackedExpansion?: boolean;
+      resolveLinksOnly?: boolean;
+    },
   ): Promise<SearchResult | undefined>;
   instance(
     url: URL,
@@ -181,6 +185,12 @@ export interface RunOperationOptions {
   // serving that request says so here — the same control the card+json GET
   // applies from `isDuringPrerenderRequest`.
   skipQueryBackedExpansion?: boolean;
+  // Answer a card's links rather than side-loading them: the document names
+  // what it points at and `included` stays empty. A read serving a request
+  // that only needs the card's own fields says so here, and the validator the
+  // caller emits has to fold it in, since it distinguishes two documents
+  // assembled from the same index row.
+  resolveLinksOnly?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
