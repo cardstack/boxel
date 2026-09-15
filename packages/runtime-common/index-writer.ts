@@ -2417,7 +2417,13 @@ export class Batch {
       'FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['types IS NOT NULL'],
+        // Only rows whose chain is actually an array. `jsonb_array_elements_text`
+        // raises on anything else, and this runs inside the swap transaction —
+        // a row holding a JSON `null` or a scalar would take the whole
+        // publish down with it, and the HTML it was publishing with it. The
+        // SQL-NULL case falls out of the same test, since `jsonb_typeof`
+        // returns NULL there.
+        [`jsonb_typeof(types) = 'array'`],
         [
           'url IN',
           ...addExplicitParens(
