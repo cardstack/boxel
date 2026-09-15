@@ -733,6 +733,21 @@ async function stageFileUpdate(
       detail,
     });
   };
+  if (ctx.splices.has(path)) {
+    // An earlier entry edited this file without reading it, staging bytes that
+    // exist only as a description. Replacing them wholesale would drop that
+    // entry's change while it still reported success, so the pair is refused
+    // and the two changes are sent as separate batches.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Conflicting entries',
+      detail:
+        `an earlier entry changes ${url.href} without reading it, so its ` +
+        `change would be lost by a replacement in the same batch`,
+    });
+  }
   let stored = ctx.stored.get(path);
   let meta = stored ?? ctx.storedMeta.get(path);
   if (!entry.rawSource) {

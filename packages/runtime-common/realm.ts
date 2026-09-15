@@ -3081,7 +3081,6 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified, size } = await this.#adapter.append(path, content);
-      (existed ? updatedFiles : addedFiles).push(path);
       this.invalidateCache(path);
       await this.#notifyFileChange(path);
       let contentHash = await computeContentHashFromRanges(
@@ -3089,9 +3088,29 @@ export class Realm {
         async (start, length) =>
           await readRangeBytes(this.#adapter, path, start, length),
       );
-      results.push({ path, lastModified, contentHash });
-      fileMetaRows.push({ path, contentHash, contentSize: size });
-      urls.push(url);
+      // The write leg may have reached this file already, which is one file
+      // changing twice rather than two files changing — a caller that replaces
+      // a log and then adds a line to it. Everything the write recorded
+      // describes bytes the file no longer holds, so the readings here replace
+      // them rather than joining them: one result, one `realm_file_meta` row
+      // (two rows for one path in the same statement is an error Postgres
+      // raises outright), one entry in the announcement, and one index change.
+      let written = results.findIndex((result) => result.path === path);
+      if (written === -1) {
+        results.push({ path, lastModified, contentHash });
+        fileMetaRows.push({ path, contentHash, contentSize: size });
+        (existed ? updatedFiles : addedFiles).push(path);
+      } else {
+        results[written] = { path, lastModified, contentHash };
+        let row = fileMetaRows.findIndex((meta) => meta.path === path);
+        fileMetaRows[row] = { path, contentHash, contentSize: size };
+      }
+      // Pushed unless it is already pending, which is a different question
+      // from whether the write leg handled it: a mid-loop flush empties this,
+      // and a file indexed from its pre-append state needs indexing again.
+      if (!urls.some((pending) => pending.href === url.href)) {
+        urls.push(url);
+      }
     }
 
     // The removal leg. Each path gets the same per-file treatment a write
