@@ -42,11 +42,18 @@ const testRealm2URL = 'http://test-realm/test2/';
 // mistakable for an off-by-one.
 const PARENT_COUNT = 5;
 
-const LOCAL_PET = `${testRealmURL}Pet/mango`;
-const FOREIGN_PET = `${testRealm2URL}Pet/ghost`;
+// Local paths, each distinct enough that a substring match against a load's
+// url picks out one card: a load is asked for by whichever spelling of an id
+// the link carried, so matching on a whole id would miss its aliases.
+const LOCAL_PET_PATH = 'Pet/mango';
+const FOREIGN_PET_PATH = 'Pet/ghost';
 // Lives in the second realm and is read directly, which is what puts that
 // realm under a subscription.
-const FOREIGN_NEIGHBOR = `${testRealm2URL}Pet/ghost-neighbor`;
+const FOREIGN_NEIGHBOR_PATH = 'Pet/casper';
+
+const LOCAL_PET = `${testRealmURL}${LOCAL_PET_PATH}`;
+const FOREIGN_PET = `${testRealm2URL}${FOREIGN_PET_PATH}`;
+const FOREIGN_NEIGHBOR = `${testRealm2URL}${FOREIGN_NEIGHBOR_PATH}`;
 
 let loader: Loader;
 let storeService: StoreService;
@@ -131,7 +138,7 @@ module('Integration | shared link target reuse', function (hooks) {
       liveReadsResolveLinksOnly: true,
       contents: {
         'test-cards.gts': { Owner, Pet },
-        'Pet/mango.json': petDoc('Mango') as SingleCardDocument,
+        [`${LOCAL_PET_PATH}.json`]: petDoc('Mango') as SingleCardDocument,
         ...ownerContents('local', LOCAL_PET),
         ...ownerContents('foreign', FOREIGN_PET),
       },
@@ -141,9 +148,9 @@ module('Integration | shared link target reuse', function (hooks) {
       realmURL: testRealm2URL,
       liveReadsResolveLinksOnly: true,
       contents: {
-        'Pet/ghost.json': petDoc('Ghost') as SingleCardDocument,
-        'Pet/ghost-neighbor.json': petDoc(
-          'Ghost Neighbor',
+        [`${FOREIGN_PET_PATH}.json`]: petDoc('Ghost') as SingleCardDocument,
+        [`${FOREIGN_NEIGHBOR_PATH}.json`]: petDoc(
+          'Casper',
         ) as SingleCardDocument,
       },
     });
@@ -192,8 +199,8 @@ module('Integration | shared link target reuse', function (hooks) {
     }
   }
 
-  function countFor(urls: string[], target: string): number {
-    return urls.filter((url) => url.startsWith(target)).length;
+  function countFor(urls: string[], targetPath: string): number {
+    return urls.filter((url) => url.includes(targetPath)).length;
   }
 
   test('a target shared by many parents loads once, not once per parent', async function (assert) {
@@ -202,7 +209,7 @@ module('Integration | shared link target reuse', function (hooks) {
       await renderEachOwner(ownerIds('local'));
       let urls = tracker.urls();
       assert.strictEqual(
-        countFor(urls, LOCAL_PET),
+        countFor(urls, LOCAL_PET_PATH),
         1,
         `the shared target loaded once across ${PARENT_COUNT} parents`,
       );
@@ -227,7 +234,7 @@ module('Integration | shared link target reuse', function (hooks) {
       // The other end of the same guardrail figure: one load per edge rather
       // than one per card, which is what a target no reuse covers costs.
       assert.strictEqual(
-        countFor(tracker.urls(), FOREIGN_PET),
+        countFor(tracker.urls(), FOREIGN_PET_PATH),
         PARENT_COUNT,
         'a target whose realm sends this store no index events is never reused',
       );
@@ -244,7 +251,7 @@ module('Integration | shared link target reuse', function (hooks) {
     try {
       await renderEachOwner(ownerIds('foreign'));
       assert.strictEqual(
-        countFor(tracker.urls(), FOREIGN_PET),
+        countFor(tracker.urls(), FOREIGN_PET_PATH),
         1,
         'the subscription, not the realm boundary, is what qualifies a target',
       );
