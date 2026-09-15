@@ -308,7 +308,10 @@ test.describe('Publish realm', () => {
     // reporting the assertion's stale value as the defect.
     const PUBLISH_READY_TIMEOUT = 90_000;
     const SETUP_BUDGET = 60_000;
+    // Held back from each wait's budget for the tab assertions that follow it.
+    const TAB_ASSERTION_RESERVE = 30_000;
     test.setTimeout(SETUP_BUDGET + 2 * PUBLISH_READY_TIMEOUT);
+    let testStartedAt = Date.now();
     // The regression net: a republish can report success server-side while
     // the published URL keeps serving the previous publish's rendered HTML.
     // Every other publish-realm test does exactly one publish, so only this
@@ -346,13 +349,23 @@ test.describe('Publish realm', () => {
       previousSentinel?: string,
     ) {
       let startedAt = Date.now();
-      try {
-        await waitForPublishedMarker(
-          page,
-          publishedRealmURL,
-          sentinel,
+      // Never ask for more than the test has left. Whichever deadline is
+      // nearer, this wait has to be the one that fires: its message names
+      // what the published URL was serving, where the enclosing test
+      // deadline reports only whichever assertion it happened to interrupt.
+      // The floor keeps at least one poll — and so the diagnostic below —
+      // reachable even when nothing is left.
+      let budget = Math.max(
+        1_000,
+        Math.min(
           PUBLISH_READY_TIMEOUT,
-        );
+          test.info().timeout -
+            (startedAt - testStartedAt) -
+            TAB_ASSERTION_RESERVE,
+        ),
+      );
+      try {
+        await waitForPublishedMarker(page, publishedRealmURL, sentinel, budget);
       } catch (e) {
         let body = await page.request
           .get(publishedRealmURL, { headers: { Accept: 'text/html' } })
