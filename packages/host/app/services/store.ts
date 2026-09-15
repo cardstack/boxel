@@ -1251,6 +1251,7 @@ export default class StoreService extends Service implements StoreInterface {
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
       throttled?: boolean;
+      isObsolete?: () => boolean;
       scope?: SearchEntryScope;
     },
   ): Promise<T[]>;
@@ -1262,6 +1263,7 @@ export default class StoreService extends Service implements StoreInterface {
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
       throttled?: boolean;
+      isObsolete?: () => boolean;
       scope?: SearchEntryScope;
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
@@ -1281,6 +1283,14 @@ export default class StoreService extends Service implements StoreInterface {
       // to be bounded — query-field resolution, which fires a search per query
       // field per deserialized card. Implied by `cardInitiated`.
       throttled?: boolean;
+      // Asked once, when a queued search reaches the front of the throttle.
+      // Waiting is where a consumer can go away — the resource that wanted this
+      // result restarts on a new query, or is torn down — and a search that
+      // answers nobody should hand its slot to the live ones behind it rather
+      // than spend it on a fetch and a hydration. Only the queued path consults
+      // it; an unthrottled search never waits long enough for the answer to
+      // change.
+      isObsolete?: () => boolean;
       // Pin which index rows the search returns: 'cards' (instance rows),
       // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
       // inferred from the filter — an untyped query defaults to 'cards'. Prefer
@@ -1326,7 +1336,12 @@ export default class StoreService extends Service implements StoreInterface {
       );
     let result =
       opts?.cardInitiated || opts?.throttled
-        ? await this.performThrottledSearch(run)
+        ? await this.performThrottledSearch(async () => {
+            if (opts?.isObsolete?.()) {
+              return { instances: [] as T[], meta: { page: { total: 0 } } };
+            }
+            return await run();
+          })
         : await run();
     return opts?.includeMeta ? result : result.instances;
   }

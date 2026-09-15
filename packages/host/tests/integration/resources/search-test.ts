@@ -2714,6 +2714,58 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    // Queueing introduces a window the unqueued path never had: a search can
+    // sit in the queue until the consumer that wanted it is gone. Spending a
+    // slot on it then would delay the live searches behind it, so a run that
+    // reports itself obsolete when its turn comes never reaches the network.
+    test('a queued search whose consumer has gone away gives back its slot instead of fetching', async function (assert) {
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        });
+      });
+      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
+        timeout: 5_000,
+      });
+      fetchCalls = 0;
+
+      let obsolete = false;
+      let queued = storeService.search(abdelRahmanQuery, [testRealmURL], {
+        includeMeta: true,
+        throttled: true,
+        isObsolete: () => obsolete,
+      });
+      // The consumer goes away while the search is still waiting its turn.
+      obsolete = true;
+
+      for (let gate of gates) {
+        gate.fulfill();
+      }
+      await Promise.all(occupying);
+      let result = await queued;
+
+      assert.strictEqual(
+        fetchCalls,
+        0,
+        'the abandoned search never reached the network',
+      );
+      assert.deepEqual(
+        result.instances,
+        [],
+        'it resolves empty for the caller that is no longer listening',
+      );
+      assert.strictEqual(
+        result.meta.page?.total,
+        0,
+        'and reports no count rather than a stale one',
+      );
+    });
+
     // A card-initiated search is capped; the same call from the host (no
     // cardInitiated flag) is not. The caps throw before any network round-trip,
     // so these assertions are self-contained.
