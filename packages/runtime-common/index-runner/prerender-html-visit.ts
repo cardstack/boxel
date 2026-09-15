@@ -1,5 +1,6 @@
 // Isomorphic UUID — matches IndexRunner's batch-id minting.
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { recordLatticePublication } from '../lattice-publication-outbox.ts';
 import { heartbeatJob } from '../queue.ts';
 
 import {
@@ -11,6 +12,7 @@ import {
   jobIdentity,
   logger,
   param,
+  textArrayParam,
   query,
   modulesConsumedInMeta,
   RealmPaths,
@@ -27,6 +29,8 @@ import {
   type LooseCardResource,
   type Prerenderer,
   type PrerenderedHtmlChange,
+  type PrerenderedHtmlEntry,
+  type PrerenderedHtmlErrorEntry,
   type PriorScreenshotState,
   type Reader,
   type RenderRouteOptions,
@@ -50,6 +54,11 @@ import {
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
+import {
+  captureLatticeRenderInput,
+  withLatticeRenderAuthority,
+} from '../lattice-render-authority.ts';
+import type { LatticeRenderCheckpoint } from '../lattice-render-checkpoint.ts';
 
 // Ceiling on holding a prerender-html job's visits for its spawning pass's
 // commit. Incremental commits land in well under a second of the enqueue; a
@@ -63,10 +72,11 @@ import {
 } from './prewarm-modules.ts';
 
 export interface PrerenderHtmlPassArgs {
+  expandDependencies?: boolean;
+  onLatticeDeferred?: (ownerURL: string) => Promise<void>;
   realmURL: URL;
-  // The invalidation set the spawning index pass computed, tagged per URL:
-  // dependents/re-renders as 'update', genuine deletions as 'delete'. The
-  // fan-out is never recomputed here.
+  // The data invalidation set, tagged per URL. Render-only dependents are
+  // discovered on this pass's independent HTML dependency graph.
   changes: PrerenderedHtmlChange[];
   // The realm generation the spawning index pass anticipated. Stamped on
   // every row this pass writes; the monotonic swap guard uses it to reject
@@ -113,6 +123,7 @@ export interface PrerenderHtmlPassArgs {
 
 export interface PrerenderHtmlPassResult {
   invalidations: string[];
+  notificationInvalidations: string[];
   generation: number;
   stats: Stats;
   // The pre-warm sweep's wall-clock, present only when it ran (a from-scratch-
@@ -124,8 +135,10 @@ export interface PrerenderHtmlPassResult {
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
 // incremental index loop in `IndexRunner`. Tombstones the whole invalidation
 // set up front, then visits each 'update' URL with a standalone
-// 'prerender-html' visit that renders from card+source (it never reads
-// `boxel_index`), writing HTML or render-error rows into
+// 'prerender-html' visit. Ordinary cards render from source; materialized
+// owners consume committed checkpoints and publish per identity under their
+// authority fence, retaining durable retry work when pending or superseded.
+// Ordinary visits write HTML or render-error rows into
 // `prerendered_html_working`; 'delete' URLs are never visited so their
 // tombstones survive. A visit that fails without producing a response
 // document at all (its prerender request aborting/timing out, a reader
@@ -153,6 +166,8 @@ export async function runPrerenderHtmlPass({
   onProgress,
   dbAdapter,
   mediaCacheAdapter,
+  expandDependencies = true,
+  onLatticeDeferred,
 }: PrerenderHtmlPassArgs): Promise<PrerenderHtmlPassResult> {
   let log = logger('prerender-html-runner');
   let perfLog = logger('index-perf');
@@ -211,7 +226,35 @@ export async function runPrerenderHtmlPass({
 
   await batch.seedPrerenderedHtmlInvalidations(
     [...operations].map(([url, operation]) => ({ url, operation })),
+    { expandDependencies },
   );
+  for (let url of batch.invalidations) {
+    if (!operations.has(url)) operations.set(url, 'update');
+  }
+  totalFiles = operations.size;
+  // Discover managed identities once; capture each complete document only
+  // when its turn to render arrives. Ordinary file visits keep their path.
+  let managedOwners = new Set<string>();
+  if (batch.latticeEnabled && dbAdapter?.kind === 'pg' && operations.size) {
+    let rows = await query(dbAdapter, [
+      `SELECT owner_url FROM lattice_owners WHERE realm_url =`,
+      param(realmURL.href),
+      `AND retired = FALSE AND NOT EXISTS (
+        SELECT 1 FROM boxel_index i WHERE i.realm_url = lattice_owners.realm_url
+          AND i.url = lattice_owners.owner_url AND i.type = 'instance' AND i.is_deleted = TRUE
+      ) AND owner_url = ANY(`,
+      textArrayParam([...operations.keys()]),
+      `::text[])`,
+    ]);
+    managedOwners = new Set(rows.map((row) => row.owner_url as string));
+    for (let ownerURL of managedOwners) {
+      if (operations.get(ownerURL) === 'update') {
+        batch.excludePrerenderedHtmlInvalidation(ownerURL);
+      }
+    }
+  }
+  let latticePublished: string[] = [];
+  let renderedGeneration = generation;
   let filesCompleted = 0;
 
   // Pre-warm the module definition cache before the format renders fire. The
@@ -394,6 +437,82 @@ export async function runPrerenderHtmlPass({
         // Deletion is the explicit threaded operation: never visited, the
         // up-front tombstone survives to the swap.
         tombstoned++;
+      } else if (managedOwners.has(href) && dbAdapter) {
+        let input = await captureLatticeRenderInput(
+          dbAdapter,
+          realmURL.href,
+          href,
+        );
+        let published = false;
+        if (input.status === 'ready') {
+          let entries: (PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry)[] =
+            [];
+          let response = await visitForPrerenderedHtml({
+            url: new URL(href),
+            realmURL,
+            spawningJobId,
+            realmPaths,
+            reader,
+            batch,
+            prerenderer,
+            virtualNetwork,
+            auth,
+            batchId,
+            jobInfo,
+            jobPriority,
+            loaderEpoch: input.authority.loaderEpoch,
+            stats,
+            log,
+            dbAdapter,
+            mediaCacheAdapter,
+            latticeRenderCheckpoint: input.checkpoint,
+            renderGeneration: input.authority.realmGeneration,
+            // Keep the candidate private until the publication transaction.
+            writeEntry: async (_url, entry) => {
+              entries.push(entry);
+            },
+          });
+          if (!response?.latticeRenderReceipt) {
+            let renderError =
+              response?.card?.error ?? response?.pageUnusableError;
+            if (renderError) {
+              throw new Error(
+                `Lattice HTML render failed for ${href}: ${coerceErrorMessage(renderError.error, 'unknown render failure')}`,
+                { cause: renderError },
+              );
+            }
+            throw new Error(
+              `Native renderer supplied no Lattice receipt for ${href}`,
+            );
+          }
+          let outcome = await withLatticeRenderAuthority(
+            dbAdapter,
+            input,
+            response.latticeRenderReceipt,
+            async (tx) => {
+              await batch.publishLatticePrerenderedHtml(
+                new URL(href),
+                entries,
+                input.authority.realmGeneration,
+                tx,
+              );
+              await recordLatticePublication(tx, input.authority);
+            },
+          );
+          published = outcome.published;
+          if (published) {
+            latticePublished.push(href);
+            renderedGeneration = Math.max(
+              renderedGeneration,
+              input.authority.realmGeneration,
+            );
+          }
+        }
+        if (!published) {
+          if (!onLatticeDeferred)
+            throw new Error(`No durable Lattice retry handler for ${href}`);
+          await onLatticeDeferred(href);
+        }
       } else if (resumedRows.has(href)) {
         // A previous attempt of this job already rendered this URL.
         // `args.changes` is the deterministic seed, so the resumed row is
@@ -450,7 +569,7 @@ export async function runPrerenderHtmlPass({
     }
     let swapStart = Date.now();
     let { totalIndexEntries } = await batch.done();
-    stats.totalIndexEntries = totalIndexEntries;
+    stats.totalIndexEntries = totalIndexEntries + latticePublished.length;
     perfLog.debug(
       `${jobTag} completed prerendered-html swap in ${Date.now() - swapStart} ms`,
     );
@@ -482,8 +601,9 @@ export async function runPrerenderHtmlPass({
     } errors, ${tombstoned} tombstoned) in ${Date.now() - start} ms`,
   );
   return {
-    invalidations: batch.invalidations,
-    generation,
+    invalidations: [...batch.invalidations, ...latticePublished],
+    notificationInvalidations: [...batch.invalidations],
+    generation: renderedGeneration,
     stats,
     ...(preWarmMs !== undefined ? { preWarmMs } : {}),
   };
@@ -680,6 +800,9 @@ async function visitForPrerenderedHtml({
   log,
   dbAdapter,
   mediaCacheAdapter,
+  latticeRenderCheckpoint,
+  renderGeneration = batch.currentGeneration,
+  writeEntry = (url, entry) => batch.updatePrerenderedHtmlEntry(url, entry),
 }: {
   url: URL;
   realmURL: URL;
@@ -698,7 +821,13 @@ async function visitForPrerenderedHtml({
   log: ReturnType<typeof logger>;
   dbAdapter?: DBAdapter;
   mediaCacheAdapter?: MediaCacheAdapter;
-}): Promise<void> {
+  latticeRenderCheckpoint?: LatticeRenderCheckpoint;
+  renderGeneration?: number;
+  writeEntry?: (
+    url: URL,
+    entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
+  ) => Promise<void>;
+}): Promise<RenderVisitResponse | undefined> {
   let localPath: string;
   try {
     localPath = realmPaths.local(url);
@@ -726,8 +855,9 @@ async function visitForPrerenderedHtml({
     return;
   }
 
-  let parsedCardResource: LooseCardResource | undefined;
-  if (url.href.endsWith('.json')) {
+  let parsedCardResource: LooseCardResource | undefined =
+    latticeRenderCheckpoint?.document.data;
+  if (!parsedCardResource && url.href.endsWith('.json')) {
     try {
       let { data } = JSON.parse(fileRef.content);
       if (data && isCardResource(data)) {
@@ -754,6 +884,8 @@ async function visitForPrerenderedHtml({
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
+    // Authored definitions cannot opt ordinary realms into snapshot rendering.
+    ...(batch.latticeEnabled ? { latticeUseSnapshot: true } : {}),
     ...(parsedCardResource ? { cardRender: true } : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source
@@ -835,6 +967,7 @@ async function visitForPrerenderedHtml({
       : {}),
     visitType: 'prerender-html',
     renderOptions,
+    ...(latticeRenderCheckpoint ? { latticeRenderCheckpoint } : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
     ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),
@@ -864,7 +997,7 @@ async function visitForPrerenderedHtml({
             canonicalURL(m, fileURL, virtualNetwork),
           )
         : undefined;
-      await batch.updatePrerenderedHtmlEntry(url, {
+      await writeEntry(url, {
         type: 'instance-error',
         error: {
           ...error,
@@ -886,7 +1019,7 @@ async function visitForPrerenderedHtml({
               mediaCacheAdapter,
               realmURL,
               sourceURL: screenshotLedgerSourceURL(fileURL, 'instance'),
-              sourceGeneration: batch.currentGeneration,
+              sourceGeneration: renderGeneration,
               contentHash,
               jobInfo,
               log,
@@ -908,7 +1041,7 @@ async function visitForPrerenderedHtml({
               ...(screenshotTimingsMs ? { screenshotTimingsMs } : {}),
             }
           : diagnostics;
-      await batch.updatePrerenderedHtmlEntry(url, {
+      await writeEntry(url, {
         type: 'instance',
         isolatedHtml: card.isolatedHTML,
         headHtml: card.headHTML,
@@ -936,7 +1069,7 @@ async function visitForPrerenderedHtml({
       status: 500,
       additionalErrors: null,
     };
-    await batch.updatePrerenderedHtmlEntry(url, {
+    await writeEntry(url, {
       type: 'file-error',
       error: {
         ...error,
@@ -958,7 +1091,7 @@ async function visitForPrerenderedHtml({
             mediaCacheAdapter,
             realmURL,
             sourceURL: screenshotLedgerSourceURL(fileURL, 'file'),
-            sourceGeneration: batch.currentGeneration,
+            sourceGeneration: renderGeneration,
             contentHash,
             jobInfo,
             log,
@@ -984,7 +1117,7 @@ async function visitForPrerenderedHtml({
               : {}),
           }
         : diagnostics;
-    await batch.updatePrerenderedHtmlEntry(url, {
+    await writeEntry(url, {
       type: 'file',
       isolatedHtml: fileRender.isolatedHTML,
       headHtml: fileRender.headHTML,
@@ -998,6 +1131,7 @@ async function visitForPrerenderedHtml({
     });
     stats.filesIndexed++;
   }
+  return response;
 }
 
 // Per-URL failure isolation, mirroring the index visit loop's

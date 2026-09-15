@@ -21,6 +21,13 @@ import {
   tokenizeNativeJq,
 } from './bxl/bridge/native.ts';
 import { materializeCardInput, safeFieldMap } from './bxl/bridge/card-input.ts';
+export {
+  bxlClock,
+  bxlClockTimeZone,
+  setBxlClockTimeZone,
+  calendarDate as bxlCalendarDate,
+  type BxlClock,
+} from './bxl/bridge/clock.ts';
 import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
@@ -427,6 +434,15 @@ export interface BxlOptions {
   /** Per-call runtime caps (output count, wall-clock, …). */
   runtimeLimits?: NativeRuntimeLimits;
   /**
+   * Time grain for a computed that reads `.__clock` (see `bxlClock`): a
+   * second derive-profile program over the same input that yields the
+   * `YYYY-MM-DD` date or ISO instant at which the computed's value next
+   * changes, or `null` when it never does. The engine stores the earliest
+   * grain per indexed row and re-derives the row when it passes; the
+   * browser ignores it (it recomputes live).
+   */
+  validUntil?: string | BxlTaggedSource;
+  /**
    * Materialize the raw output as an instance of `Class`. When the
    * expression yields:
    * - a plain object → `new Class(); Object.assign(instance, raw)`
@@ -467,11 +483,45 @@ export interface BxlComputeMetadata {
   warnings: ReadableSyntaxWarning[];
   deps: string[];
   memoize: BxlComputeMemoizationMode;
+  validUntil?: string;
 }
 
 export interface BxlComputeFunction {
   (this: object): unknown;
   readonly bxl: BxlComputeMetadata;
+}
+
+/** Data needed to evaluate a genuine BXL computeVia outside a card runtime.
+ * This is program metadata, not proof of complete inputs or coercion parity.
+ */
+export interface BxlComputeDefinition {
+  version: 1;
+  expression: string;
+  libraries: BuiltinLibraryName[];
+  deps: string[];
+  materializesClass: boolean;
+  customRuntimeLimits: boolean;
+  // Compiled time-grain program; see BxlOptions.validUntil.
+  validUntil?: string;
+}
+
+const computeDefinitions = new WeakMap<Function, BxlComputeDefinition>();
+
+/** Read a detached definition without invoking a function or trusting a public
+ * `.bxl` property. Wrappers and ordinary JavaScript functions are not admitted.
+ */
+export function getBxlComputeDefinition(
+  value: unknown,
+): BxlComputeDefinition | undefined {
+  if (typeof value !== 'function') return undefined;
+  const definition = computeDefinitions.get(value);
+  return definition
+    ? {
+        ...definition,
+        libraries: [...definition.libraries],
+        deps: [...definition.deps],
+      }
+    : undefined;
 }
 
 let bxlComputeCycle = 0;
@@ -1035,6 +1085,31 @@ export function bxl(
   });
   assertComputeViaDeriveProfile(source, merged, preparedNative);
   const prepared = preparedBxlFromNative(preparedNative, merged);
+  // The grain is compiled and profile-checked like the value program; its
+  // roots join the definition's dependencies so a native plan admits them.
+  let grain: PreparedNativeJq | undefined;
+  if (merged.validUntil !== undefined) {
+    const grainTagged = isTaggedSource(merged.validUntil)
+      ? merged.validUntil
+      : null;
+    const grainSource = grainTagged
+      ? grainTagged.source
+      : (merged.validUntil as string);
+    const grainOptions: BxlOptions = {
+      ...merged,
+      validUntil: undefined,
+      readableSyntax:
+        options.readableSyntax ??
+        (grainTagged?.[BXL_MODE] === 'jq' ? false : defaultReadable),
+    };
+    grain = prepareNativeJqForRuntime(grainSource, {
+      schema: grainOptions.schema,
+      readableSyntax: grainOptions.readableSyntax,
+      libraries: grainOptions.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+      runtimeLimits: grainOptions.runtimeLimits,
+    });
+    assertComputeViaDeriveProfile(grainSource, grainOptions, grain);
+  }
   const ShapeClass = options.as;
   const memoize = normalizeMemoizationMode(merged.memoize);
   const memoCache =
@@ -1099,15 +1174,27 @@ export function bxl(
     return value;
   } as BxlComputeFunction;
 
+  const deps = [...new Set([...prepared.deps, ...(grain?.deps ?? [])])];
   Object.defineProperty(computeViaBxl, 'bxl', {
     value: Object.freeze({
       source: prepared.source,
       compiledSource: prepared.compiledSource,
       warnings: prepared.warnings,
-      deps: prepared.deps,
+      deps,
       memoize,
+      ...(grain ? { validUntil: grain.compiledSource } : {}),
     } satisfies BxlComputeMetadata),
     enumerable: false,
+  });
+
+  computeDefinitions.set(computeViaBxl, {
+    version: 1,
+    expression: prepared.compiledSource,
+    libraries: [...(merged.libraries ?? DEFAULT_BUILTIN_LIBRARIES)],
+    deps,
+    materializesClass: Boolean(ShapeClass),
+    customRuntimeLimits: merged.runtimeLimits !== undefined,
+    ...(grain ? { validUntil: grain.compiledSource } : {}),
   });
 
   return computeViaBxl;

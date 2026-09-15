@@ -72,7 +72,8 @@ The derive profile applies to all three source forms. It allows deterministic
 record-local computation, including arrays, filters, optional access, Excel
 helpers, and object shaping. It rejects volatile calls (`NOW`, `RAND`, `now`),
 request/mutation context (`@User`, `$new`, `$old`), authored jq `try` /
-`catch`, `def`, `error`, and runtime metadata helpers.
+`catch`, `error`, and runtime metadata helpers. User-defined `def` helpers are
+allowed; their bodies are screened by the same rules.
 
 ## The decision tree
 

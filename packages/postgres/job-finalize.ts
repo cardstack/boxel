@@ -176,6 +176,10 @@ export async function attemptJobFinalize(
     // NOTIFY takes effect when the transaction actually commits. If it
     // doesn't commit, no notification goes out.
     await query([`NOTIFY jobs_finished`]);
+    // Lattice and source workers may have tried to claim while this job held
+    // their concurrency group. Wake them when its reservation is released;
+    // an enqueue notification alone leaves them waiting for the polling timer.
+    await query([`NOTIFY jobs`]);
     await query(['COMMIT']);
     return { type: 'committed' };
   } catch (e: any) {

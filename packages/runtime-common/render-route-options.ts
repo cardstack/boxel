@@ -9,7 +9,15 @@ export interface RenderRouteOptions {
   // loader + store when this differs from the epoch the tab last cleared
   // for, then records it — one reset per tab per module change.
   loaderEpoch?: string;
+  // Explicit inventory capture for Lattice module admission experiments. This
+  // does not change cache-reuse or publication policy.
+  captureModuleSources?: true;
   cardRender?: true;
+  // HTML-only Lattice visits consume the published output, never recompute it.
+  latticeUseSnapshot?: true;
+  // An explicit producer pass. A pooled tab may retain the input global, but
+  // ordinary card, module and file renders must never consume it implicitly.
+  latticeRenderCheckpoint?: true;
   fileExtract?: true;
   fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
@@ -39,6 +47,15 @@ export function parseRenderRouteOptions(
     }
     if (typeof parsed.loaderEpoch === 'string') {
       options.loaderEpoch = parsed.loaderEpoch;
+    }
+    if (parsed.captureModuleSources === true) {
+      options.captureModuleSources = true;
+    }
+    if (parsed.latticeUseSnapshot === true) {
+      options.latticeUseSnapshot = true;
+    }
+    if (parsed.latticeRenderCheckpoint === true) {
+      options.latticeRenderCheckpoint = true;
     }
     if (parsed.cardRender) {
       options.cardRender = true;
@@ -82,6 +99,15 @@ export function serializeRenderRouteOptions(
   }
   if (options.loaderEpoch !== undefined) {
     serialized.loaderEpoch = options.loaderEpoch;
+  }
+  if (options.captureModuleSources === true) {
+    serialized.captureModuleSources = true;
+  }
+  if (options.latticeUseSnapshot) {
+    serialized.latticeUseSnapshot = true;
+  }
+  if (options.latticeRenderCheckpoint) {
+    serialized.latticeRenderCheckpoint = true;
   }
   if (options.cardRender) {
     serialized.cardRender = true;

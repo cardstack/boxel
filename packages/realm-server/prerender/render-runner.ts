@@ -1,8 +1,10 @@
+import { validateLatticeRenderCheckpoint } from '@cardstack/runtime-common/lattice-render-checkpoint';
 import {
   type DeclaredScreenshotVisitArgs,
   type DeclaredScreenshotVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
+  type BrokenLinkSummary,
   type PrerenderTypes,
   type RenderError,
   type RenderResponse,
@@ -887,6 +889,8 @@ export class RenderRunner {
     jobId,
     screenshots,
     renderScope,
+    inputSnapshot,
+    latticeRenderCheckpoint,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -906,6 +910,23 @@ export class RenderRunner {
     timings: Timings;
     pool: PoolInfo;
   }> {
+    if (
+      latticeRenderCheckpoint &&
+      (visitType !== 'prerender-html' ||
+        inputSnapshot ||
+        !renderOptions?.cardRender)
+    ) {
+      throw new Error(
+        'Lattice checkpoints are only inputs to native HTML production',
+      );
+    }
+    let expectedLatticeReceipt = latticeRenderCheckpoint
+      ? await validateLatticeRenderCheckpoint(latticeRenderCheckpoint, {
+          id: url,
+          realmURL: realm,
+          loaderEpoch: renderOptions?.loaderEpoch,
+        })
+      : undefined;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     // Which halves of the bifurcated visit run. The fused visit (no
     // visitType) runs both.
@@ -1030,6 +1051,8 @@ export class RenderRunner {
             id: string | undefined,
             jobPriority: number | undefined,
             scope: string | undefined,
+            inputFrame: PrerenderVisitArgs['inputSnapshot'],
+            lattice: PrerenderVisitArgs['latticeRenderCheckpoint'],
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
             (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
@@ -1044,6 +1067,16 @@ export class RenderRunner {
             (
               globalThis as unknown as { __boxelRenderScope?: string }
             ).__boxelRenderScope = scope;
+            (
+              globalThis as unknown as {
+                __latticeInputSnapshot?: PrerenderVisitArgs['inputSnapshot'];
+              }
+            ).__latticeInputSnapshot = inputFrame;
+            (
+              globalThis as unknown as {
+                __latticeRenderCheckpoint?: PrerenderVisitArgs['latticeRenderCheckpoint'];
+              }
+            ).__latticeRenderCheckpoint = lattice;
             return (
               (
                 globalThis as unknown as {
@@ -1056,8 +1089,18 @@ export class RenderRunner {
           jobId,
           priority,
           renderScope,
+          inputSnapshot,
+          latticeRenderCheckpoint,
         ),
       );
+      if (
+        latticeRenderCheckpoint &&
+        !hostCapabilities?.latticeRenderCheckpoint
+      ) {
+        throw new Error(
+          'The loaded host does not support Lattice render checkpoints',
+        );
+      }
       // A card-instance index visit fuses the file extract into the
       // render.meta transition — one transition + settle for both the
       // instance row and the file row — when the page's host build supports
@@ -1099,6 +1142,14 @@ export class RenderRunner {
       ) => {
         let optionsForThisPass: RenderRouteOptions = {
           ...baseOptions,
+          latticeRenderCheckpoint:
+            latticeRenderCheckpoint && pass === 'cardRender' ? true : undefined,
+          latticeUseSnapshot:
+            baseOptions.latticeUseSnapshot &&
+            visitType === 'prerender-html' &&
+            pass === 'cardRender'
+              ? true
+              : undefined,
           // Set only the flag(s) for the current pass so the host route
           // picks the right branch in #buildModel regardless of what other
           // passes are part of this visit. The fused index pass carries both
@@ -1686,6 +1737,18 @@ export class RenderRunner {
           }
         }
 
+        if (!cardShortCircuit && runHtmlSteps && !runIndexSteps) {
+          let brokenLinks = await abortable(signal, () =>
+            this.#readBrokenLinks(page),
+          );
+          if (brokenLinks) {
+            meta = {
+              ...meta,
+              diagnostics: { ...meta?.diagnostics, brokenLinks },
+            };
+          }
+        }
+
         let cardResponse: RenderResponse = {
           ...(meta as PrerenderMeta),
           ...(capturedDeps ? { deps: capturedDeps } : {}),
@@ -1704,6 +1767,25 @@ export class RenderRunner {
           cardResponse.error,
         );
         response.card = cardResponse;
+        if (
+          expectedLatticeReceipt &&
+          !cardResponse.error &&
+          !poolInfo.evicted
+        ) {
+          let receipt = await abortable(signal, () =>
+            page.evaluate(
+              () => (globalThis as any).__renderModel?.latticeRenderReceipt,
+            ),
+          );
+          if (
+            JSON.stringify(receipt) !== JSON.stringify(expectedLatticeReceipt)
+          ) {
+            throw new Error(
+              'Native HTML did not acknowledge the supplied Lattice checkpoint',
+            );
+          }
+          response.latticeRenderReceipt = receipt;
+        }
         if (poolInfo.evicted) {
           response.pageUnusableError =
             cardResponse.error ?? response.pageUnusableError;
@@ -1825,12 +1907,19 @@ export class RenderRunner {
             ? undefined
             : this.#iconMemoFor(affinityKey, jobId, baseOptions.loaderEpoch);
           let iconTypeKey = effectiveTypes?.[0];
+          // The normal extraction already resolved this type and its code
+          // dependencies. A generated SVG needs neither a FileDef instance nor
+          // an icon route, including the first visit of a new indexing job.
+          let staticIconHTML =
+            !runHtmlSteps && !fileData
+              ? response.fileExtract?.staticIcon?.svg
+              : undefined;
           let memoizedIconHTML =
             iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
               ? iconMemo.icons.get(iconTypeKey)
               : undefined;
 
-          if (memoizedIconHTML === undefined) {
+          if (staticIconHTML === undefined && memoizedIconHTML === undefined) {
             // stash file data for the render route model hook to consume,
             // with the visit's realm alongside — a file render has no
             // response header to learn its realm from (the card branch reads
@@ -1914,6 +2003,9 @@ export class RenderRunner {
                 }
               }
             }
+          } else if (staticIconHTML !== undefined) {
+            iconHTML = staticIconHTML;
+            recordIndexRouteMs('file', 'icon', 0);
           } else if (memoizedIconHTML !== undefined) {
             iconMemo!.hits++;
             iconHTML = memoizedIconHTML;
@@ -2255,6 +2347,32 @@ export class RenderRunner {
       return deps.filter((dep): dep is string => typeof dep === 'string');
     } catch (_e) {
       return null;
+    }
+  }
+
+  // Missing capture is not an empty result: readers must not interpret an
+  // older host or failed read as confirmed restoration. Read after all formats.
+  async #readBrokenLinks(page: Page): Promise<BrokenLinkSummary[] | undefined> {
+    try {
+      let links = await page.evaluate(() => {
+        let reader = (globalThis as { __boxelRenderReadBrokenLinks?: unknown })
+          .__boxelRenderReadBrokenLinks;
+        return typeof reader === 'function' ? reader() : null;
+      });
+      if (
+        !Array.isArray(links) ||
+        links.some(
+          (link) =>
+            !link ||
+            typeof link.fieldName !== 'string' ||
+            typeof link.reference !== 'string' ||
+            (link.kind !== 'not-found' && link.kind !== 'error'),
+        )
+      )
+        return undefined;
+      return links;
+    } catch (_error) {
+      return undefined;
     }
   }
 

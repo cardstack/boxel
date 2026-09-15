@@ -387,7 +387,12 @@ function validateSandboxProfileNode(
   profile: BxlProfile,
   issues: BxlProfileIssue[],
 ) {
-  if (node.type === 'def') {
+  // `derive` allows user-defined helpers for the same reason it allows folds:
+  // a helper body is walked like any other node, so a volatile, context or
+  // side-effect call inside it is still banned, and termination (including
+  // recursion) is bounded by the runtime budget. Keeping a shared helper in
+  // one place is what lets a real app's derivations stay readable.
+  if (node.type === 'def' && profile !== 'derive') {
     issues.push({
       code: `${profile}-def-banned`,
       severity: 'error',

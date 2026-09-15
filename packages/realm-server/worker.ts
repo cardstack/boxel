@@ -2,6 +2,7 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
 // SIGKILL'd or its dev-log-tee dead during dev-all Ctrl-C) doesn't make
@@ -85,6 +86,7 @@ let {
   migrateDB,
   prerendererUrl,
   indexJobsOnly = false,
+  latticeJobsOnly = false,
   skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
@@ -118,6 +120,10 @@ let {
       description: 'URL of the prerender server to invoke',
       demandOption: true,
       type: 'string',
+    },
+    latticeJobsOnly: {
+      description: 'Claim only Lattice secondary materialization jobs',
+      type: 'boolean',
     },
     indexJobsOnly: {
       description:
@@ -210,9 +216,34 @@ let autoMigrate = migrateDB || undefined;
   }
 
   let dbAdapter = new PgAdapter({ autoMigrate });
-  let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
+  let lattice = LatticeRealmConfig.parse(process.env.LATTICE_ENABLED_REALMS);
+  let queue = new PgQueueRunner({
+    adapter: dbAdapter,
+    workerId,
+    priority,
+    lattice,
+  });
+  // Explicit operator opt-in for the local native-computation experiment.
+  // Authored cards cannot install a review policy or enable Node execution.
+  let nativeComputation:
+    | Awaited<
+        ReturnType<
+          typeof import('./lib/lattice-native-worker.ts').createLatticeNativeWorker
+        >
+      >
+    | undefined;
+  if (process.env.LATTICE_NATIVE_REVIEW_FILE) {
+    const { createLatticeNativeWorker } =
+      await import('./lib/lattice-native-worker.ts');
+    nativeComputation = await createLatticeNativeWorker({
+      db: dbAdapter,
+      network: virtualNetwork,
+      reviewFile: process.env.LATTICE_NATIVE_REVIEW_FILE,
+      runtimeRevision: process.env.LATTICE_NATIVE_RUNTIME_REVISION,
+    });
+  }
   let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
+    indexWriter: new IndexWriter(dbAdapter, { lattice }),
     queue,
     virtualNetwork,
     matrixURL: new URL(matrixURL),
@@ -226,8 +257,12 @@ let autoMigrate = migrateDB || undefined;
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    latticeJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
+    nativeCardIndexer: nativeComputation?.indexer,
+    nativeFileIndexer: nativeComputation?.fileIndexer,
+    codeLinker: nativeComputation?.codeLinker,
   });
 
   await worker.run();
@@ -252,6 +287,7 @@ let autoMigrate = migrateDB || undefined;
     log.info(`Shutting down worker ${workerId}...`);
     try {
       await queue.destroy();
+      await nativeComputation?.close();
       await dbAdapter.close();
       log.info(`Worker ${workerId} shut down gracefully`);
       process.exit(0);

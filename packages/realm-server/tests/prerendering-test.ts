@@ -918,7 +918,7 @@ module(basename(import.meta.filename), function () {
                 @field name = contains(StringField);
                 static isolated = class extends Component<typeof this> {
                   <template>
-                    <div style="height: 1500px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                    <div style="height: 1500px; background: repeating-linear-gradient(#fff 0px, #fff 1px, #000 1px, #000 2px);">{{@model.name}}</div>
                   </template>
                 }
               }
@@ -1068,17 +1068,18 @@ module(basename(import.meta.filename), function () {
       // independently-hydrated renders. Neither entry changes the viewport:
       // both reduce to a single Page.captureScreenshot with
       // captureBeyondViewport, so nothing reflows between entries. The `tall`
-      // card is a top-anchored 1500px vertical gradient with its name at the
-      // top-left: the gradient makes a 1px *vertical* shift change every
-      // sampled color, and the name's text glyphs make a 1px *horizontal*
-      // shift detectable (the gradient alone is horizontally uniform).
+      // card has 1500px of alternating one-pixel bands and its name at the
+      // top-left: the bands detect a 1px vertical shift and the text detects
+      // a horizontal shift. Smooth gradients are unsuitable here: Chromium
+      // can rasterize them with different one-channel rounding for a clip,
+      // even with the same DOM and capture origin.
       let { response } = await screenshot(`${realmURL}tall`, {
         captures: [
           { name: 'full', fullPage: true },
           // Top-left region including the card name; kept clear of the
           // right-edge scrollbar column.
           { name: 'topLeft', clip: { x: 0, y: 0, width: 400, height: 300 } },
-          // Non-origin region deep in the gradient: pins that a clip with a
+          // Non-origin region deep in the bands: pins that a clip with a
           // non-zero offset maps to the same rows of the fullPage capture.
           { name: 'deep', clip: { x: 100, y: 500, width: 300, height: 200 } },
         ],
@@ -1111,6 +1112,10 @@ module(basename(import.meta.filename), function () {
         100,
         500,
         'offset clip equals the fullPage crop at (100,500) exactly',
+      );
+      assert.true(
+        regionMismatch(deepPng, full, 100, 500, 0, 1) > 0,
+        'the fixture detects a one-pixel vertical crop error',
       );
     });
 
@@ -9196,11 +9201,15 @@ module(basename(import.meta.filename), function () {
         let memo = prerenderer.getIconMemo(affinityKey);
         assert.strictEqual(
           memo?.misses,
-          2,
-          'card + file icons each rendered once',
+          1,
+          'only the custom card icon needs rendering',
         );
         assert.strictEqual(memo?.hits, 0, 'nothing reused yet');
-        assert.strictEqual(memo?.types.length, 2, 'two type keys memoized');
+        assert.strictEqual(
+          memo?.types.length,
+          1,
+          'only the rendered type is memoized',
+        );
 
         let second = (await indexVisit('willow.json', { jobId })).response;
         assert.notOk(second.card?.error, 'second visit completes cleanly');
@@ -9215,8 +9224,8 @@ module(basename(import.meta.filename), function () {
           'same-type file icon is reused byte-identically',
         );
         memo = prerenderer.getIconMemo(affinityKey);
-        assert.strictEqual(memo?.hits, 2, 'card + file icons each reused');
-        assert.strictEqual(memo?.misses, 2, 'no additional renders');
+        assert.strictEqual(memo?.hits, 1, 'the rendered card icon is reused');
+        assert.strictEqual(memo?.misses, 1, 'no additional renders');
 
         let third = (await indexVisit('rex.json', { jobId })).response;
         assert.notOk(third.card?.error, 'third visit completes cleanly');
@@ -9230,20 +9239,48 @@ module(basename(import.meta.filename), function () {
           'the two card types have distinct icons',
         );
         memo = prerenderer.getIconMemo(affinityKey);
-        assert.strictEqual(memo?.misses, 3, 'the new card type rendered once');
-        assert.strictEqual(memo?.hits, 3, 'its file icon was reused');
-        assert.strictEqual(memo?.types.length, 3, 'three type keys memoized');
+        assert.strictEqual(memo?.misses, 2, 'the new card type rendered once');
+        assert.strictEqual(
+          memo?.hits,
+          1,
+          'its generated file icon does not use the job memo',
+        );
+        assert.strictEqual(
+          memo?.types.length,
+          2,
+          'two rendered type keys memoized',
+        );
       });
 
-      test('a different job renders icons afresh', async function (assert) {
-        await indexVisit('maple.json', { jobId: 'icon-memo-job-a.1' });
+      test('a different job renders custom icons and reuses generated SVG', async function (assert) {
+        const first = (
+          await indexVisit('maple.json', { jobId: 'icon-memo-job-a.1' })
+        ).response;
         let memoA = prerenderer.getIconMemo(affinityKey);
-        assert.strictEqual(memoA?.misses, 2, 'first job rendered its icons');
+        assert.strictEqual(
+          memoA?.misses,
+          1,
+          'first job rendered its custom icon',
+        );
 
         let result = (
           await indexVisit('willow.json', { jobId: 'icon-memo-job-b.1' })
         ).response;
         assert.ok(result.card?.iconHTML, 'card icon rendered');
+        assert.strictEqual(
+          result.fileRender?.iconHTML,
+          first.fileRender?.iconHTML,
+          'the same SVG survives a new job',
+        );
+        assert.strictEqual(
+          result.meta?.diagnostics?.indexRoutesMs?.file?.icon,
+          0,
+          'a new job performs no file icon rendering',
+        );
+        assert.ok(
+          result.fileExtract?.staticIcon?.contentHash,
+          'the generated icon has a content revision',
+        );
         let memoB = prerenderer.getIconMemo(affinityKey);
         assert.notStrictEqual(
           memoB?.jobKey,
@@ -9252,8 +9289,8 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(
           memoB?.misses,
-          2,
-          'the new job rendered the icons itself',
+          1,
+          'the new job rendered only its custom icon',
         );
         assert.strictEqual(memoB?.hits, 0, 'nothing carried over');
       });
@@ -9261,7 +9298,7 @@ module(basename(import.meta.filename), function () {
       test('a visit without a jobId never touches the memo', async function (assert) {
         await indexVisit('maple.json', { jobId: 'icon-memo-anon.1' });
         let before = prerenderer.getIconMemo(affinityKey);
-        assert.strictEqual(before?.misses, 2, 'job memo established');
+        assert.strictEqual(before?.misses, 1, 'job memo established');
 
         let result = (await indexVisit('willow.json')).response;
         assert.ok(
@@ -9358,8 +9395,8 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(
           memo?.misses,
-          4,
-          'the clearCache visit re-rendered and re-stored both icons',
+          2,
+          'the clearCache visit re-rendered only the custom icon',
         );
 
         await prerenderer.releaseBatch({

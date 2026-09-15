@@ -29,6 +29,8 @@ export interface BoxelIndexTable {
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
+  // Earliest time-grain boundary of the row's computeds (timestamptz), or null.
+  valid_until: string | null;
   is_deleted: boolean | null;
   // Per-row render diagnostics. Carries the render timing breakdown
   // (launch/waits, render elapsed, host-side renderStage, top-N module
@@ -80,7 +82,9 @@ export interface PrerenderedHtmlTable {
   // `boxel_index.diagnostics`, so a row's indexing cost and its prerendering
   // cost are independently queryable. For render-error rows the same payload
   // is mirrored onto `error_doc.diagnostics`, matching the `boxel_index`
-  // pattern. See `Diagnostics` in `index.ts`.
+  // pattern. The column may also retain a preceding complete link scan with
+  // its own brokenLinksGeneration; the error document remains attempt-only.
+  // See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
   // The declared-screenshot manifest: {name → {specHash, objectKey,
   // contentType, dims, …}} for every `static screenshots` slot the
@@ -167,6 +171,7 @@ export const coerceTypes = Object.freeze({
   has_error: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',
+  valid_until: 'VARCHAR',
   indexed_at: 'VARCHAR',
   rendered_at: 'VARCHAR',
   value: 'JSON',

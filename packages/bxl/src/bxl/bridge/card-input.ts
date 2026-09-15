@@ -22,6 +22,7 @@
 //
 // The Boxel field metadata itself arrives out-of-band. This module does
 // not import `https://cardstack.com/base/card-api`, because Node's ESM
+import { bxlClock } from './clock.ts';
 // loader rejects `https:` schemes at module-load time — a static import
 // would break every consumer that runs outside a realm (tests, tooling,
 // the realm-server). Two bridges exist, tried in order:
@@ -57,6 +58,7 @@ export type GetFieldsFn = (
 export const GET_FIELDS_KEY = '__cardstackGetFields' as const;
 const GET_FIELDS_BRIDGE = Symbol.for('cardstack.getFields');
 const IS_BASE_INSTANCE = Symbol.for('isBaseInstance');
+const FIELD_SERIALIZER = Symbol.for('cardstack-field-serializer');
 
 function getCardstackGetFields(): GetFieldsFn | undefined {
   const fn = (globalThis as unknown as Record<string, unknown>)[GET_FIELDS_KEY];
@@ -268,13 +270,12 @@ function commonTraps(
   | 'defineProperty'
   | 'deleteProperty'
   | 'preventExtensions'
-> & { readChild(prop: string | symbol): unknown } {
+> & { readChild(prop: string | symbol, raw?: unknown): unknown } {
   return {
-    readChild(prop: string | symbol) {
-      // `Reflect.get` without a receiver binds getters to the raw
-      // target — card-api getters key internal state by instance
-      // identity, so they must never see the facade as `this`.
-      const raw = Reflect.get(target, prop);
+    // `Reflect.get` without a receiver binds getters to the raw
+    // target — card-api getters key internal state by instance
+    // identity, so they must never see the facade as `this`.
+    readChild(prop: string | symbol, raw = Reflect.get(target, prop)) {
       if (typeof prop === 'symbol') {
         return raw;
       }
@@ -368,11 +369,26 @@ function wrapCard(
   // Resolved on first enumeration only — pure path access never pays
   // for the field map. Computeds are included: an expression aggregating
   // over another card sees that card as its search doc would.
+  let fieldMap: ReturnType<typeof safeFieldMap> | undefined;
+  const resolveFieldMap = () => {
+    if (fieldMap === undefined) {
+      fieldMap = safeFieldMap(target, { includeComputeds: true });
+    }
+    return fieldMap;
+  };
+  // A contained field value enumerates as its stored JSON does: its
+  // contains/containsMany subfields (computeds included), not its links or
+  // the instance's own bookkeeping properties. Links stay reachable by path.
+  const fieldDef = isFieldDefInstance(target);
   let fieldKeys: string[] | null | undefined;
   const resolveFieldKeys = () => {
     if (fieldKeys === undefined) {
-      const map = safeFieldMap(target, { includeComputeds: true });
-      const keys = map ? Object.keys(map) : [];
+      const map = resolveFieldMap();
+      const keys = map
+        ? Object.entries(map)
+            .filter(([, field]) => !fieldDef || !isLinkField(field))
+            .map(([key]) => key)
+        : [];
       fieldKeys = keys.length > 0 ? keys : null;
     }
     return fieldKeys;
@@ -386,9 +402,24 @@ function wrapCard(
         if (prop === MATERIALIZED_TARGET) {
           return target;
         }
-        return readChild(prop);
+        // The engine-supplied clock (see ./clock.ts): a program reads
+        // `.__clock.today` instead of calling a volatile `now`.
+        if (prop === '__clock') {
+          return bxlClock();
+        }
+        const raw = Reflect.get(target, prop);
+        if (typeof prop === 'string' && holdsDate(raw)) {
+          const presented = presentDateField(raw, resolveFieldMap()?.[prop]);
+          if (presented !== undefined) {
+            return presented;
+          }
+        }
+        return readChild(prop, raw);
       },
       has(_facade, prop) {
+        if (prop === '__clock') {
+          return true;
+        }
         if (typeof prop === 'string' && resolveFieldKeys()?.includes(prop)) {
           return true;
         }
@@ -399,6 +430,9 @@ function wrapCard(
         // keys ride along to satisfy anyone introspecting the raw shape.
         const own = Reflect.ownKeys(target);
         const keys = resolveFieldKeys();
+        if (fieldDef && keys) {
+          return keys;
+        }
         if (!keys) {
           return own;
         }
@@ -409,6 +443,9 @@ function wrapCard(
         const desc = Reflect.getOwnPropertyDescriptor(target, prop);
         const isField =
           typeof prop === 'string' && !!resolveFieldKeys()?.includes(prop);
+        if (fieldDef && resolveFieldKeys() && !isField) {
+          return undefined;
+        }
         if (!desc && !isField) {
           return undefined;
         }
@@ -420,6 +457,100 @@ function wrapCard(
       },
     },
   );
+}
+
+function isFieldDefInstance(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || !isCard(value)) return false;
+  const ctor = (value as { constructor?: { isFieldDef?: unknown } })
+    .constructor;
+  return ctor?.isFieldDef === true;
+}
+
+function isLinkField(field: { fieldType?: string }): boolean {
+  return field.fieldType === 'linksTo' || field.fieldType === 'linksToMany';
+}
+
+/**
+ * The JSON a card stores for a contained field value: every contains /
+ * containsMany subfield (computeds included) with unset values as null,
+ * nested field values recursively, dates as their serialized strings, links
+ * omitted. Mirrors the attributes Lattice's Node derivation reads, so an
+ * expression copying a contained value produces the same output in both.
+ */
+function storedFieldValue(
+  value: unknown,
+  field: { card?: unknown } | undefined,
+  seen: Set<object>,
+): unknown {
+  if (value === undefined || value === null) return null;
+  if (holdsDate(value)) {
+    const presented = presentDateField(value, field);
+    if (presented !== undefined) return presented;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => storedFieldValue(entry, field, seen));
+  }
+  if (typeof value !== 'object') return value;
+  const raw =
+    ((value as Record<symbol, unknown>)[MATERIALIZED_TARGET] as object) ??
+    value;
+  if (!isFieldDefInstance(raw)) return raw;
+  if (seen.has(raw)) return null;
+  seen.add(raw);
+  const map = safeFieldMap(raw, { includeComputeds: true }) ?? {};
+  const out: Record<string, unknown> = {};
+  for (const [key, subfield] of Object.entries(map)) {
+    if (isLinkField(subfield)) continue;
+    let child: unknown;
+    try {
+      child = Reflect.get(raw, key);
+    } catch {
+      child = null;
+    }
+    out[key] = storedFieldValue(child, subfield, seen);
+  }
+  seen.delete(raw);
+  return out;
+}
+
+function holdsDate(value: unknown): boolean {
+  return (
+    value instanceof Date ||
+    (Array.isArray(value) && value.some((entry) => entry instanceof Date))
+  );
+}
+
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, '0');
+}
+
+/**
+ * A card-api date or datetime field holds a `Date`, which jq would see as
+ * the UTC instant — for a date-only field, local midnight shifted by the
+ * viewer's offset. Present what the field serializes instead, the same string
+ * a stored card, a search doc and a Node-side derivation read: `yyyy-MM-dd`
+ * from the local calendar date (how the date serializer parsed it), or the
+ * ISO instant for a datetime. Anything else stays raw.
+ */
+function presentDateField(
+  value: unknown,
+  field: { card?: unknown } | undefined,
+): unknown {
+  const kind = (field?.card as Record<symbol, unknown> | undefined)?.[
+    FIELD_SERIALIZER
+  ];
+  if (kind !== 'date' && kind !== 'datetime') {
+    return undefined;
+  }
+  const present = (entry: unknown) => {
+    if (!(entry instanceof Date) || Number.isNaN(entry.getTime())) {
+      return entry;
+    }
+    return kind === 'date'
+      ? `${pad(entry.getFullYear(), 4)}-${pad(entry.getMonth() + 1)}-${pad(entry.getDate())}`
+      : entry.toISOString();
+  };
+  return Array.isArray(value) ? value.map(present) : present(value);
 }
 
 function wrapPlainObject(
@@ -469,17 +600,31 @@ function wrapPlainObject(
  * this is a no-op for programs evaluated over plain JSON.
  */
 export function unwrapMaterializedCardInput(value: unknown): unknown {
-  return unwrap(value, new Map());
+  return unwrap(value, [new Map(), new Map()], false);
 }
 
-function unwrap(value: unknown, memo: Map<object, unknown>): unknown {
+// `insideObject` is true below a jq-built plain object. A contained field
+// value there is part of a JSON value, so it comes out as the JSON the card
+// stores rather than as a live field instance, whose own serialization omits
+// unset subfields. Arrays are transparent: a top-level field instance, or an
+// array of them, stays raw so a FieldDef-typed computed still receives
+// instances. Each context keeps its own memo because the same container can
+// resolve differently in each.
+function unwrap(
+  value: unknown,
+  memos: [Map<object, unknown>, Map<object, unknown>],
+  insideObject: boolean,
+): unknown {
   if (value === null || typeof value !== 'object') {
     return value;
   }
   const target = (value as Record<symbol, unknown>)[MATERIALIZED_TARGET];
   if (target !== undefined) {
-    return target;
+    return insideObject && isFieldDefInstance(target)
+      ? storedFieldValue(target, undefined, new Set())
+      : target;
   }
+  const memo = memos[insideObject ? 1 : 0];
   // Aliasing: a container jq binds once and embeds several times must
   // resolve to ONE unwrapped result, or later occurrences would keep
   // their lazy views.
@@ -496,7 +641,7 @@ function unwrap(value: unknown, memo: Map<object, unknown>): unknown {
   if (Array.isArray(value)) {
     let changed = false;
     const out = value.map((entry) => {
-      const unwrapped = unwrap(entry, memo);
+      const unwrapped = unwrap(entry, memos, insideObject);
       changed ||= unwrapped !== entry;
       return unwrapped;
     });
@@ -509,7 +654,7 @@ function unwrap(value: unknown, memo: Map<object, unknown>): unknown {
     let changed = false;
     const out: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
-      const unwrapped = unwrap(entry, memo);
+      const unwrapped = unwrap(entry, memos, true);
       changed ||= unwrapped !== entry;
       out[key] = unwrapped;
     }

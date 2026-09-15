@@ -108,6 +108,12 @@ export class ModuleSyntax {
     this.declarations = moduleAnalysis.declarations;
   }
 
+  // Analysis consumers inspect source syntax without importing the module.
+  // As with declaration NodePaths, callers must not retain this in index artifacts.
+  get program(): t.Program {
+    return this.ast.program;
+  }
+
   code(): string {
     let preprocessedSrc: string = print(this.ast).code;
     return placeholderJSToGJS(preprocessedSrc);

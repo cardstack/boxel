@@ -31,6 +31,10 @@ import {
   unregisterJobHeartbeat,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
+import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
+import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
+import { latticeCodeReadySQL } from '@cardstack/runtime-common/jobs/lattice-code';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
 // load time, so any process that constructs a PgQueuePublisher gets the
 // coalesce handlers registered before publish() is called.
@@ -454,6 +458,7 @@ export class PgQueueRunner implements QueueRunner {
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
   #priority: number;
+  readonly #latticeRealms: readonly string[];
 
   constructor({
     adapter,
@@ -461,10 +466,12 @@ export class PgQueueRunner implements QueueRunner {
     maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
     maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
     priority = 0,
+    lattice = new LatticeRealmConfig(),
   }: {
     adapter: PgAdapter;
     workerId: string;
     priority?: number;
+    lattice?: LatticeRealmConfig;
     maxTimeoutSec?: number;
     maxReservationCount?: number;
   }) {
@@ -473,6 +480,7 @@ export class PgQueueRunner implements QueueRunner {
     this.#maxTimeoutSec = maxTimeoutSec;
     this.#maxReservationCount = maxReservationCount;
     this.#priority = priority;
+    this.#latticeRealms = lattice.enabledRealms;
   }
 
   get priority() {
@@ -492,12 +500,31 @@ export class PgQueueRunner implements QueueRunner {
     if (!this.#jobRunner && !this.#isDestroyed) {
       this.#jobRunner = new WorkLoop('jobRunner', this.#pollInterval);
       this.#jobRunner.run(async (loop) => {
-        await this.#pgClient.listen('jobs', loop.wake.bind(loop), async () => {
-          while (!loop.shuttingDown) {
-            await this.processJobs(loop);
-            await loop.sleep();
-          }
-        });
+        // Permission PATCHes already broadcast on realm_index_updated.
+        // Wake deferred materializations promptly; the ordinary polling loop
+        // still recovers missed events and direct database permission changes.
+        // Capacity is operator-owned. Subscribe even if handlers are registered
+        // after start; registering a handler alone never enables the feature.
+        const readScopeChanges =
+          this.#latticeRealms.length > 0
+            ? await this.#pgClient.subscribe('realm_index_updated', () =>
+                loop.wake(),
+              )
+            : undefined;
+        try {
+          await this.#pgClient.listen(
+            'jobs',
+            loop.wake.bind(loop),
+            async () => {
+              while (!loop.shuttingDown) {
+                await this.processJobs(loop);
+                await loop.sleep();
+              }
+            },
+          );
+        } finally {
+          await readScopeChanges?.unsubscribe();
+        }
       });
     }
   }
@@ -520,7 +547,12 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   private async processJobs(workLoop: WorkLoop) {
-    if (this.#handlers.size === 0) {
+    const jobTypes = [...this.#handlers.keys()].filter(
+      (type) =>
+        this.#latticeRealms.length > 0 ||
+        !['lattice-materialize', 'lattice-link-code'].includes(type),
+    );
+    if (jobTypes.length === 0) {
       // nothing this runner could execute — and the claim query's
       // job-type filter would be malformed with an empty IN list
       return;
@@ -550,7 +582,7 @@ export class PgQueueRunner implements QueueRunner {
             // worker (e.g. a newer version mid rolling-deploy) could have
             // completed.
             `AND job_type IN (`,
-            ...[...this.#handlers.keys()].flatMap((jobType, i) =>
+            ...jobTypes.flatMap((jobType, i) =>
               i === 0 ? [param(jobType)] : [',', param(jobType)],
             ),
             `)),
@@ -566,8 +598,9 @@ export class PgQueueRunner implements QueueRunner {
               )
               AND j.concurrency_group NOT IN (
                 SELECT concurrency_group FROM active_concurrency_groups
-              )
-              ORDER BY j.created_at, j.id
+              )`,
+            ...this.latticeEligibility(),
+            `ORDER BY j.created_at, j.id
               LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
@@ -867,18 +900,48 @@ export class PgQueueRunner implements QueueRunner {
         // Reachable for the claim transaction only — `finalizeJob` handles
         // its own serialization failures, because bailing out there loses a
         // verdict the handler already produced. A conflict while claiming
-        // costs nothing: no handler has run, and the next poll re-claims.
+        // has not run a handler. Only explicitly enabled capacity retries
+        // promptly; ordinary workers retain their existing wake/poll policy.
         if (e.code === '40001') {
           log.debug(
             `%s: detected concurrency conflict, rolling back`,
             this.#workerId,
           );
           await query(['ROLLBACK']);
+          if (this.#latticeRealms.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            workLoop.wake();
+          }
           return;
         }
         throw e;
       }
     });
+  }
+
+  private latticeEligibility(): Expression {
+    if (this.#latticeRealms.length === 0) return [];
+    // Lattice-only jobs for other realms remain durable and unreserved. Shared
+    // job types (including ordinary HTML) retain ordinary eligibility there.
+    // CASE keeps readiness probes out of disabled realms. These are admission
+    // hints only: execution and publication must still validate authority.
+    return [
+      `AND CASE WHEN j.args->>'realmURL' IN (`,
+      ...this.#latticeRealms.flatMap((realm, i) =>
+        i === 0 ? [param(realm)] : [',', param(realm)],
+      ),
+      `) THEN (
+        (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
+          SELECT 1 FROM jobs source
+          WHERE source.concurrency_group = j.concurrency_group
+            AND source.status = 'unfulfilled'
+            AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
+        ))
+        AND ${latticeRenderRetryReadySQL}
+        AND ${latticeMaterializationReadySQL}
+        AND ${latticeCodeReadySQL}
+      ) ELSE j.job_type NOT IN ('lattice-materialize', 'lattice-link-code') END`,
+    ];
   }
 
   async destroy() {

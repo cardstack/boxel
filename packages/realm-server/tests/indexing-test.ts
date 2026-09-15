@@ -2237,15 +2237,28 @@ module(basename(import.meta.filename), function () {
               )) as {
                 args: {
                   changes: { url: string; operation: 'update' | 'delete' }[];
+                  coalescedCallers: { clientRequestId: string | null }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              // The first enqueue already creates one row. Both callers must
+              // have joined before we assert how their operations were merged.
+              let callers = new Set(
+                rows[0].args.coalescedCallers.map(
+                  (caller) => caller.clientRequestId,
+                ),
+              );
+              return callers.has('mixed-update') && callers.has('mixed-delete')
+                ? rows[0]
+                : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected one pending incremental job during mixed-op burst',
+                'expected one pending incremental job containing both mixed-op callers',
             },
           )) as {
             args: {

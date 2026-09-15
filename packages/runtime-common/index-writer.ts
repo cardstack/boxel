@@ -1,4 +1,24 @@
+import {
+  assertLatticeInputAuthority,
+  type LatticeBrowserInputCapture,
+} from './lattice-browser-inputs.ts';
+import {
+  LatticeRetainedSnapshots,
+  type LatticeIndexedSnapshotCapture,
+} from './lattice-retained-snapshots.ts';
 import { flatten } from 'lodash-es';
+import { captureLatticeCodeChanges } from './jobs/lattice-code.ts';
+import { LatticeRealmConfig } from './lattice-config.ts';
+import { captureLatticeInputArtifacts } from './lattice-input-artifacts.ts';
+import type { LatticeCodeReference } from './lattice-code-reference.ts';
+import { LatticeIndexPublication } from './lattice-index-publication.ts';
+import {
+  LatticeQueryRegistry,
+  type LatticeQueryPreparation,
+} from './lattice-query-registry.ts';
+import { IndexQueryEngine } from './index-query-engine.ts';
+import type { DefinitionLookup } from './definition-lookup.ts';
+import type { Querier } from './expression.ts';
 import { flattenDeep } from 'lodash-es';
 import {
   type CardResource,
@@ -20,11 +40,13 @@ import {
   getCreatedTime,
   ensureFileCreatedAt,
   getContentMeta,
+  persistFileMeta,
   getFileMetaForPaths,
 } from './file-meta.ts';
 import {
   type Expression,
   param,
+  textArrayParam,
   separatedByCommas,
   addExplicitParens,
   asExpressions,
@@ -56,11 +78,33 @@ import {
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { computeContentHash } from './content-hash.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
-  constructor(dbAdapter: DBAdapter) {
+  readonly #lattice: LatticeRealmConfig;
+  readonly #retainedSnapshots: LatticeRetainedSnapshots;
+  constructor(dbAdapter: DBAdapter, opts?: { lattice?: LatticeRealmConfig }) {
     this.#dbAdapter = dbAdapter;
+    this.#lattice = opts?.lattice ?? new LatticeRealmConfig();
+    this.#retainedSnapshots = new LatticeRetainedSnapshots(
+      this.#lattice,
+      (expr) => this.#query(expr),
+    );
+  }
+
+  isLatticeEnabled(realmURL: URL | string): boolean {
+    return this.#lattice.isEnabled(realmURL);
+  }
+
+  latticePublication(definitions: DefinitionLookup, network: VirtualNetwork) {
+    return new LatticeIndexPublication(
+      this.#dbAdapter,
+      new LatticeQueryRegistry(
+        this.#dbAdapter,
+        new IndexQueryEngine(this.#dbAdapter, definitions, network),
+      ),
+    );
   }
 
   async createBatch(
@@ -73,13 +117,11 @@ export class IndexWriter {
       generation?: number;
     },
   ) {
-    let batch = new Batch(
-      this.#dbAdapter,
-      realmURL,
-      virtualNetwork,
-      jobInfo,
-      opts,
-    );
+    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo, {
+      ...opts,
+      latticeEnabled: this.isLatticeEnabled(realmURL),
+      retainedSnapshots: this.#retainedSnapshots,
+    });
     await batch.ready;
     return batch;
   }
@@ -90,7 +132,14 @@ export class IndexWriter {
 
   async isNewIndex(realm: URL): Promise<boolean> {
     let [row] = (await this.#query([
-      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      // The clock is durable; the derived summary is committed with the
+      // UNLOGGED index and disappears with it after crash recovery. Testing
+      // the clock alone would skip the required rebuild. The summary also
+      // distinguishes a successfully indexed empty realm from a lost index.
+      `SELECT rg.current_generation FROM realm_generations rg
+       JOIN realm_meta rm ON rm.realm_url = rg.realm_url
+         AND rm.generation = rg.current_generation
+       WHERE rg.realm_url =`,
       param(realm.href),
     ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     return !row;
@@ -124,6 +173,9 @@ export interface InstanceEntry {
   types: string[];
   displayNames: string[];
   deps: Set<string>;
+  // See PrerenderMeta.validUntil; stored as boxel_index.valid_until so the
+  // clock sweep can re-index the row when it passes.
+  validUntil?: string | null;
   // Per-row render timing diagnostics (launch/waits/render timings
   // plus host-side breadcrumbs). Populated from the Prerenderer's
   // `response.meta` and persisted onto `boxel_index.diagnostics`.
@@ -298,7 +350,122 @@ interface ExistingIndexRowType {
   cardTypes: string[] | null;
 }
 
+interface BatchDoneOptions {
+  lattice?: LatticeIndexPublication;
+  latticeInputGeneration?: number;
+  latticeRealmUsername?: string;
+  latticeFollowup?: { realmUsername: string; wave: number };
+  // Setup-failure recovery must preserve the last committed catalogue:
+  // failed working-table tombstones would otherwise undercount live cards.
+  carryForwardRealmMeta?: true;
+}
+
 export class Batch {
+  readonly latticeEnabled: boolean;
+  #retainedSnapshots?: LatticeRetainedSnapshots;
+  #retainedInputs = new Map<string, LatticeIndexedSnapshotCapture>();
+  #latticePublicationChecks = new Map<
+    string,
+    Array<(tx: Querier) => Promise<void>>
+  >();
+  #latticeCodeReferences = new Map<string, LatticeCodeReference>();
+  #latticeRetainedOutputs = new Set<string>();
+  get latticeRetainedOutputs(): ReadonlySet<string> {
+    return this.#latticeRetainedOutputs;
+  }
+
+  #latticeQueryPreparations = new Map<string, LatticeQueryPreparation>();
+
+  registerLatticeNativeCard(
+    url: string,
+    check: (tx: Querier) => Promise<void>,
+    codeReference?: LatticeCodeReference,
+    queryPreparation?: LatticeQueryPreparation,
+    retainedInputs?: LatticeIndexedSnapshotCapture,
+  ) {
+    this.registerLatticeNativeResult(url, check);
+    if (retainedInputs) {
+      if (
+        !this.#retainedSnapshots ||
+        retainedInputs.realmURL !== this.realmURL.href ||
+        retainedInputs.ownerURL !== url.replace(/\.json$/, '') ||
+        retainedInputs.consumerGeneration !== this.generation
+      )
+        throw new Error(
+          'Retained input capture belongs to another publication',
+        );
+      this.#retainedInputs.set(url, structuredClone(retainedInputs));
+    } else this.#retainedInputs.delete(url);
+    if (codeReference)
+      this.#latticeCodeReferences.set(url, structuredClone(codeReference));
+    if (queryPreparation)
+      this.#latticeQueryPreparations.set(
+        url,
+        structuredClone(queryPreparation),
+      );
+    else this.#latticeQueryPreparations.delete(url);
+  }
+
+  registerLatticeNativeResult(
+    url: string,
+    check: (tx: Querier) => Promise<void>,
+  ) {
+    this.registerLatticePublicationCheck(url, check);
+  }
+
+  registerLatticeBrowserInputs(
+    url: string,
+    capture: LatticeBrowserInputCapture,
+  ) {
+    if (!this.latticeEnabled)
+      throw new Error('Lattice is disabled for this realm');
+    if (
+      capture.version !== 1 ||
+      !Array.isArray(capture.inputs) ||
+      capture.inputs.length > 16384
+    )
+      throw new Error('Invalid Chrome retained input capture');
+    if (!capture.inputs.length) {
+      this.#retainedInputs.delete(url);
+      return;
+    }
+    const authority = structuredClone(capture.authority);
+    if (
+      !authority ||
+      authority.realmURL !== this.realmURL.href ||
+      authority.generation !== this.generation - 1 ||
+      authority.loaderEpoch !== this.loaderEpoch
+    )
+      throw new Error('Chrome retained inputs belong to another publication');
+    const inputs = structuredClone(capture.inputs);
+    this.registerLatticePublicationCheck(url, (tx) =>
+      assertLatticeInputAuthority(tx, authority),
+    );
+    this.#retainedInputs.set(url, {
+      kind: 'capture-index',
+      realmURL: this.realmURL.href,
+      ownerURL: url.replace(/\.json$/, ''),
+      consumerGeneration: this.generation,
+      inputs,
+    });
+  }
+
+  registerLatticePublicationCheck(
+    url: string,
+    check: (tx: Querier) => Promise<void>,
+  ) {
+    if (!this.latticeEnabled)
+      throw new Error('Lattice is disabled for this realm');
+    if (this.#dbAdapter.kind !== 'pg' || !this.#splitPrerenderHtml)
+      throw new Error(
+        'Lattice publication checks require the PostgreSQL split path',
+      );
+    const checks = this.#latticePublicationChecks.get(url) ?? [];
+    checks.push(check);
+    this.#latticePublicationChecks.set(url, checks);
+  }
+
+  #latticeTransaction: Querier | undefined;
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
   #nodeResolvedInvalidations: string[] | undefined;
@@ -432,12 +599,16 @@ export class Batch {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
       generation?: number;
+      latticeEnabled?: boolean;
+      retainedSnapshots?: LatticeRetainedSnapshots;
     },
   ) {
     this.realmURL = realmURL;
     this.virtualNetwork = virtualNetwork;
     this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
+    this.latticeEnabled = opts?.latticeEnabled ?? false;
+    this.#retainedSnapshots = opts?.retainedSnapshots;
     this.#splitPrerenderHtml =
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
@@ -522,6 +693,17 @@ export class Batch {
       await this.loadResumedPrerenderedHtmlRows();
       return;
     }
+    if (this.latticeEnabled && this.#dbAdapter.kind === 'pg') {
+      // Static realms may never have passed through create-realm. Lattice's
+      // publication/input guards need an existing row to lock archive state;
+      // absence cannot be row-locked. Preserve any existing archive and flags.
+      // This establishes the lock target, never a grant of read permission.
+      await this.#query([
+        'INSERT INTO realm_metadata (url) VALUES (',
+        param(this.realmURL.href),
+        ') ON CONFLICT (url) DO NOTHING',
+      ]);
+    }
     await this.setNextGeneration();
     await this.loadResumedRows();
   }
@@ -538,25 +720,34 @@ export class Batch {
     // similarly excluded so the deletion intent flows through to
     // `applyBatchUpdates` instead of being skipped as resumed work.
     let rows = (await this.#query([
-      `SELECT url, last_modified, types FROM boxel_index_working WHERE`,
+      `SELECT url, last_modified, types${this.latticeEnabled ? ", diagnostics ->> 'latticeNative' AS lattice_native" : ''}
+       FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['job_id =', param(this.jobInfo.jobId)],
+        ...(this.latticeEnabled
+          ? [['generation =', param(this.generation)]]
+          : []),
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
       ]),
-    ] as Expression)) as Pick<
+    ] as Expression)) as (Pick<
       BoxelIndexTable,
       'url' | 'last_modified' | 'types'
-    >[];
+    > & {
+      lattice_native: string | boolean | null;
+    })[];
+    // Native checks are process-local closures. A retry must regenerate these
+    // rows and their receipts; resuming just their bytes would lose the fence.
+    let nativeURLs = new Set(
+      rows
+        .filter(
+          (row) => row.lattice_native === true || row.lattice_native === 'true',
+        )
+        .map((row) => row.url),
+    );
     for (let { url, last_modified, types } of rows) {
-      // The chain the previous attempt wrote is this row's post-pass state:
-      // the visit loop skips a resumed URL, so it never reaches the write
-      // path that would otherwise record it. Without this a card the crashed
-      // attempt created — which has no production row for the pre-pass read
-      // to find either — would be absent from the pass's reported types
-      // entirely, and a query anchored on its type would sit out the very
-      // pass that published it.
+      if (nativeURLs.has(url)) continue;
       this.#recordTouchedTypes(types);
       this.#resumedRows.set(
         url,
@@ -770,10 +961,48 @@ export class Batch {
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
+  // A realm indexed from disk (from-scratch index, no write through the realm)
+  // has no recorded hash for its files; native admission pins a file's bytes
+  // by that hash, so such files would never leave the browser path. The visit
+  // holds the bytes, so record the hash once when the realm has none. A later
+  // realm write overwrites it (persistFileMeta keeps the newer non-null value).
+  async ensureContentMeta(
+    localPath: string,
+    content: string | Uint8Array,
+  ): Promise<{ contentHash: string; contentSize: number }> {
+    let existing = await this.getContentMeta(localPath);
+    if (
+      existing.contentHash !== undefined &&
+      existing.contentSize !== undefined
+    ) {
+      return {
+        contentHash: existing.contentHash,
+        contentSize: existing.contentSize,
+      };
+    }
+    let bytes =
+      content instanceof Uint8Array
+        ? content
+        : new TextEncoder().encode(content);
+    let meta = {
+      contentHash: computeContentHash(bytes),
+      contentSize: bytes.length,
+    };
+    await persistFileMeta(this.#dbAdapter, this.realmURL.href, [
+      { path: localPath, ...meta },
+    ]);
+    let cached = this.#fileMetaCache.get(localPath);
+    if (cached) this.#fileMetaCache.set(localPath, { ...cached, ...meta });
+    return meta;
+  }
+
   private get nodeResolvedInvalidations() {
-    return (this.#nodeResolvedInvalidations ??= [...this.invalidations].map(
-      (href) => trimExecutableExtension(rri(href)),
-    ));
+    // A resumed row proves only that its own output was written. Its
+    // downstream walk may still be unfinished. Treating it as traversed
+    // would skip that work and leave the prior attempt's tombstones behind.
+    return (this.#nodeResolvedInvalidations ??= [...this.invalidations]
+      .filter((href) => !this.#resumedRows.has(href))
+      .map((href) => trimExecutableExtension(rri(href))));
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
@@ -794,6 +1023,25 @@ export class Batch {
         lastModified: lastModified == null ? null : parseInt(lastModified),
         hasError: Boolean(has_error),
       });
+    }
+    // Lattice's durable owner registry can outlive the UNLOGGED index after
+    // a database crash. Include missing owners in discovery so absent files
+    // are retired and present files are rebuilt, without compiling deleted
+    // definitions merely to remove their old watches.
+    if (!this.latticeEnabled) return result;
+    let owners = await this.#query([
+      'SELECT owner_url FROM lattice_owners WHERE realm_url =',
+      param(this.realmURL.href),
+      'AND retired = FALSE',
+    ]);
+    for (let { owner_url: url } of owners) {
+      if (!result.has(url as string)) {
+        result.set(url as string, {
+          type: 'instance',
+          lastModified: null,
+          hasError: true,
+        });
+      }
     }
     return result;
   }
@@ -888,12 +1136,16 @@ export class Batch {
   private async copyPrerenderedHtmlFrom(sourceRealmURL: URL): Promise<void> {
     let now = String(Date.now());
     let sources = (await this.#query([
-      `SELECT * FROM prerendered_html WHERE`,
+      `SELECT h.*, i.generation AS source_index_generation FROM prerendered_html h`,
+      `LEFT JOIN boxel_index i ON i.url=h.url AND i.realm_url=h.realm_url AND i.type=h.type`,
+      `WHERE`,
       ...every([
-        any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [`realm_url =`, param(sourceRealmURL.href)],
+        any([['h.is_deleted = false'], ['h.is_deleted IS NULL']]),
+        [`h.realm_url =`, param(sourceRealmURL.href)],
       ]),
-    ] as Expression)) as unknown as PrerenderedHtmlTable[];
+    ] as Expression)) as unknown as (PrerenderedHtmlTable & {
+      source_index_generation: number | null;
+    })[];
     let copyURL = (value: string) =>
       this.isRegisteredPrefix(value)
         ? value
@@ -904,7 +1156,7 @@ export class Batch {
       destLedgerURL: string;
       manifest: ScreenshotManifest;
     }[] = [];
-    let values = sources.map((entry) => {
+    let values = sources.map(({ source_index_generation, ...entry }) => {
       let destURL = copyURL(entry.url);
       // The source's `prerendered_html` rows are a subset of its `boxel_index`
       // rows, so `copyFrom` already seeded these into `#invalidations`; add
@@ -922,6 +1174,34 @@ export class Batch {
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.file_alias = copyURL(entry.file_alias);
+      if (
+        this.latticeEnabled &&
+        Array.isArray(entry.diagnostics?.brokenLinks)
+      ) {
+        let capture = entry.diagnostics.brokenLinksGeneration;
+        if (capture === undefined && !entry.error_doc)
+          capture = entry.generation;
+        entry.diagnostics = {
+          ...entry.diagnostics,
+          brokenLinks: entry.diagnostics.brokenLinks.map((link) => ({
+            ...link,
+            reference:
+              typeof link.reference === 'string' &&
+              link.reference.startsWith(sourceRealmURL.href)
+                ? copyURL(link.reference)
+                : link.reference,
+          })),
+          // Source and destination generations are unrelated. Transfer only
+          // validation covering the copied data; retain older findings as
+          // explicitly unvalidated, not accidentally fresh destination scans.
+          brokenLinksGeneration:
+            typeof capture === 'number' &&
+            source_index_generation !== null &&
+            capture >= source_index_generation
+              ? this.generation
+              : null,
+        };
+      }
       entry.generation = this.generation;
       entry.rendered_at = now;
       entry.job_id = this.jobInfo?.jobId ?? null;
@@ -1397,6 +1677,7 @@ export class Batch {
           display_names: entry.displayNames,
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
+          valid_until: entry.validUntil ?? null,
           error_doc: null,
           has_error: false,
           diagnostics: diagnostics,
@@ -1564,9 +1845,9 @@ export class Batch {
     };
   }
 
-  // Seed a prerenderHtmlOnly batch's invalidation set from the changes the
-  // spawning index pass computed — the dependency fan-out already ran there
-  // and is not recomputed here — and tombstone the whole set up front in
+  // Seed the HTML channel from the source-data changes. Lattice keeps HTML
+  // dependency traversal on this independently scheduled pass; it must not
+  // pull render-only consumers into source-data indexing. Tombstone the set in
   // `prerendered_html_working` (the `prerendered_html` analog of
   // `tombstoneEntries`). The visit loop then overwrites survivors, exactly
   // as the index visit loop does on its channel: an `'update'` URL whose
@@ -1576,6 +1857,7 @@ export class Batch {
   // through the swap.
   async seedPrerenderedHtmlInvalidations(
     changes: PrerenderedHtmlChange[],
+    opts?: { expandDependencies?: boolean },
   ): Promise<void> {
     if (!this.#prerenderHtmlOnly) {
       throw new Error(
@@ -1584,6 +1866,25 @@ export class Batch {
     }
     await this.ready;
     let urls = [...new Set(changes.map((change) => change.url))];
+    // The ordinary spawning index pass already supplied its full fan-out.
+    // A renderer argument alone cannot enable the separate Lattice HTML graph.
+    if (this.latticeEnabled && opts?.expandDependencies) {
+      let visited = new Set<string>();
+      let expanded = new Set(urls);
+      for (let url of urls) {
+        for (let seed of await this.invalidationSeeds(new URL(url))) {
+          let alias = trimExecutableExtension(rri(seed));
+          if (!alias) continue;
+          for (let dependent of await this.calculateInvalidations(
+            alias,
+            visited,
+          )) {
+            expanded.add(dependent);
+          }
+        }
+      }
+      urls = [...expanded];
+    }
     for (let url of urls) {
       this.#invalidations.add(url);
     }
@@ -1623,6 +1924,51 @@ export class Batch {
     );
   }
 
+  // A materialized owner publishes independently of the ordinary HTML swap.
+  // Exclude it before rendering, including resumed working rows: a successful
+  // publication must never be promoted again later without its input fence.
+  excludePrerenderedHtmlInvalidation(url: string): void {
+    if (!this.#prerenderHtmlOnly)
+      throw new Error('Expected an HTML-only batch');
+    this.#invalidations.delete(url);
+    this.#resumedRows.delete(url);
+  }
+
+  async publishLatticePrerenderedHtml(
+    url: URL,
+    entries: (PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry)[],
+    generation: number,
+    tx: Querier,
+  ): Promise<void> {
+    if (!this.latticeEnabled)
+      throw new Error('Lattice is disabled for this realm');
+    if (!this.#prerenderHtmlOnly || this.#latticeTransaction)
+      throw new Error(
+        'Lattice HTML requires an independent publication transaction',
+      );
+    // Candidate rows are kept out of the shared working table until the
+    // caller holds the authority fence. An expired renderer cannot replace
+    // this candidate between validation and promotion.
+    this.#latticeTransaction = tx;
+    try {
+      for (let entry of entries) {
+        await this.writePrerenderedHtmlRow(
+          url,
+          entry,
+          this.#positionOf(url, prerenderedRowType(entry)),
+          generation,
+        );
+      }
+      await this.promotePrerenderedHtmlWorking({
+        monotonicGuard: true,
+        urls: [url.href],
+      });
+    } finally {
+      this.#latticeTransaction = undefined;
+      this.excludePrerenderedHtmlInvalidation(url.href);
+    }
+  }
+
   // The prerendered_html row write shared by the two producers of renderings:
   // a `prerenderHtmlOnly` batch (via `updatePrerenderedHtmlEntry`) and a fused
   // batch (via `updateEntry`, which lands each visit's HTML half here inline).
@@ -1639,6 +1985,7 @@ export class Batch {
     url: URL,
     entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
     seq: number,
+    generation = this.generation,
   ): Promise<void> {
     if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       return;
@@ -1663,6 +2010,9 @@ export class Batch {
     let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       ...this.#writeSideStamps(seq),
+      ...(this.latticeEnabled && Array.isArray(entry.diagnostics?.brokenLinks)
+        ? { brokenLinksGeneration: generation }
+        : {}),
     };
     let payload: Record<string, unknown>;
     switch (entry.type) {
@@ -1800,7 +2150,7 @@ export class Batch {
       url: url.href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_url: this.realmURL.href,
-      generation: this.generation,
+      generation,
       is_deleted: false,
       rendered_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
@@ -1940,18 +2290,31 @@ export class Batch {
     return typesByUrl;
   }
 
-  async done(opts?: {
-    // Write the previous generation's realm_meta value at this batch's
-    // generation instead of recomputing it from `boxel_index_working`. The
-    // setup-phase failure recovery finalizes while the working table still
-    // holds the failed pass's un-promoted fan-out tombstones; a recompute
-    // over that state would undercount live dependents in the type summary
-    // until the next successful pass. Its error rows don't change the
-    // realm's type counts, so the prior summary is the accurate one — and a
-    // row must exist at this generation, because reads join realm_meta to
-    // realm_generations.current_generation.
-    carryForwardRealmMeta?: true;
-  }): Promise<{ totalIndexEntries: number }> {
+  done(opts: BatchDoneOptions & { countIndexEntries: false }): Promise<void>;
+  done(opts?: BatchDoneOptions): Promise<{ totalIndexEntries: number }>;
+  async done(
+    opts?: BatchDoneOptions & { countIndexEntries?: false },
+  ): Promise<{ totalIndexEntries: number } | void> {
+    if (
+      !this.latticeEnabled &&
+      (opts?.lattice ||
+        opts?.latticeRealmUsername ||
+        opts?.latticeFollowup ||
+        opts?.latticeInputGeneration !== undefined)
+    ) {
+      throw new Error('Lattice is disabled for this realm');
+    }
+    let publicationStartedAt = Date.now();
+    let publicationTimings = {
+      prepareMs: 0,
+      lockWaitMs: 0,
+      registryMs: 0,
+      catalogueMs: 0,
+      promoteMs: 0,
+      pruneMs: 0,
+      countMs: 0,
+      catalogueReuseEligible: false,
+    };
     // Drain any rows the visit loop left buffered before the swap reads the
     // working table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
@@ -1964,20 +2327,224 @@ export class Batch {
       await this.#query(['BEGIN']);
       await this.promotePrerenderedHtmlWorking({ monotonicGuard: true });
       await this.#query(['COMMIT']);
+      if (opts?.countIndexEntries === false) return;
       return { totalIndexEntries: this.#invalidations.size };
     }
-    await this.#query(['BEGIN']);
-    if (opts?.carryForwardRealmMeta) {
-      await this.carryForwardRealmMeta();
+    let latticePrepared = opts?.latticeRealmUsername
+      ? undefined
+      : await opts?.lattice?.prepare(
+          this.realmURL.href,
+          this.generation,
+          undefined,
+          undefined,
+          this.#latticeQueryPreparations,
+          // An owner publication reads only the document envelope; see
+          // LatticeIndexPublication.prepare.
+          { envelope: opts?.latticeInputGeneration !== undefined },
+        );
+    publicationTimings.prepareMs = Date.now() - publicationStartedAt;
+    let latticeCardOnly =
+      Boolean(opts?.lattice) &&
+      opts?.latticeInputGeneration !== undefined &&
+      this.#splitPrerenderHtml;
+    let lockRequestedAt = Date.now();
+    let publish = async (tx?: Querier) => {
+      publicationTimings.lockWaitMs = Date.now() - lockRequestedAt;
+      // Pg pins this connection and owns BEGIN/COMMIT/ROLLBACK. SQLite's
+      // adapter has one connection, so explicitly bracket that fallback.
+      this.#latticeTransaction = tx;
+      if (!tx) await this.#query(['BEGIN']);
+      try {
+        for (let checks of this.#latticePublicationChecks.values()) {
+          if (!tx)
+            throw new Error('Lattice publication requires a transaction');
+          for (let check of checks) await check(tx);
+        }
+        const retainedOwners = new Set<string>();
+        if (tx && this.#retainedInputs.size) {
+          for (const row of await tx([
+            'SELECT url FROM boxel_index_working WHERE realm_url=',
+            param(this.realmURL.href),
+            'AND generation=',
+            param(this.generation),
+            "AND type='instance' AND has_error IS NOT TRUE AND is_deleted IS NOT TRUE",
+            'AND pristine_doc IS NOT NULL AND url = ANY(',
+            textArrayParam([...this.#retainedInputs.keys()]),
+            ')',
+          ]))
+            retainedOwners.add(String(row.url));
+        }
+        const changedCode = new Set<string>();
+        if (this.latticeEnabled && tx) {
+          if (opts?.latticeInputGeneration !== undefined) {
+            for (const row of latticePrepared?.rows ?? []) {
+              if (row.type !== 'instance') continue;
+              const reference = this.#latticeCodeReferences.get(row.url);
+              const [same] = await tx([
+                'SELECT NOT EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
+                param(this.realmURL.href),
+                'AND owner_url=',
+                param(row.url),
+                ') AS unbound, EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
+                param(this.realmURL.href),
+                'AND owner_url=',
+                param(row.url),
+                'AND reference=',
+                param(JSON.stringify(reference ?? null)),
+                '::jsonb) AS matches',
+              ]);
+              if (reference ? !same?.matches : !same?.unbound)
+                changedCode.add(row.url);
+            }
+          }
+          // A new output must acquire its own authority, even after an index
+          // reset reuses a generation number. Compatibility/error outputs
+          // cannot inherit a previous native binding from the same URL.
+          await tx([
+            `DELETE FROM lattice_owner_code b USING boxel_index_working w
+               WHERE b.realm_url=w.realm_url AND b.owner_url=w.url AND w.type='instance'
+                 AND w.realm_url=`,
+            param(this.realmURL.href),
+            'AND w.generation=',
+            param(this.generation),
+          ]);
+          // Only native capability registration supplies these bindings.
+          // Never recover one from authored JSON or a previous working row.
+          for (const [url, reference] of this.#latticeCodeReferences) {
+            if (reference.realmURL !== this.realmURL.href)
+              throw new Error('Code reference belongs to another realm');
+            const [valid] = await tx([
+              'SELECT lattice_lock_code_reference(',
+              param(JSON.stringify(reference)),
+              '::jsonb) AS current',
+            ]);
+            if (!valid?.current)
+              throw new Error(
+                'Native code reference changed before publication',
+              );
+            await tx([
+              'INSERT INTO lattice_owner_code (realm_url,owner_url,generation,reference) VALUES (',
+              param(this.realmURL.href),
+              ',',
+              param(url.endsWith('.json') ? url : `${url}.json`),
+              ',',
+              param(this.generation),
+              ',',
+              param(JSON.stringify(reference)),
+              '::jsonb) ON CONFLICT (realm_url,owner_url) DO UPDATE SET generation=EXCLUDED.generation,reference=EXCLUDED.reference',
+            ]);
+          }
+        }
+        if (tx && opts?.latticeRealmUsername) {
+          await captureLatticeCodeChanges(
+            tx,
+            this.realmURL.href,
+            this.generation,
+            opts.latticeRealmUsername,
+          );
+        }
+        let phaseStartedAt = Date.now();
+        if (opts?.lattice && opts.latticeRealmUsername) {
+          await opts.lattice.recordChange(tx ?? ((expr) => this.#query(expr)), {
+            realmURL: this.realmURL.href,
+            generation: this.generation,
+            definitionRevision: this.loaderEpoch,
+            realmUsername: opts.latticeRealmUsername,
+          });
+        } else if (opts?.lattice && latticePrepared) {
+          this.#latticeRetainedOutputs = await opts.lattice.commit(
+            tx ?? ((expr) => this.#query(expr)),
+            {
+              realmURL: this.realmURL.href,
+              generation: this.generation,
+              definitionRevision: this.loaderEpoch,
+              prepared: latticePrepared,
+              inputGeneration: opts.latticeInputGeneration,
+              changedCode,
+            },
+          );
+        }
+        if (opts?.lattice && opts.latticeFollowup) {
+          await opts.lattice.enqueuePending(
+            tx ?? ((expr) => this.#query(expr)),
+            this.realmURL.href,
+            opts.latticeFollowup.realmUsername,
+            opts.latticeFollowup.wave,
+          );
+        }
+        publicationTimings.registryMs = Date.now() - phaseStartedAt;
+        phaseStartedAt = Date.now();
+        if (
+          opts?.carryForwardRealmMeta ||
+          (opts?.lattice &&
+            opts.latticeInputGeneration !== undefined &&
+            (await this.canCarryLatticeRealmMeta({ latticeCardOnly })))
+        ) {
+          publicationTimings.catalogueReuseEligible = true;
+          await this.carryForwardRealmMeta({ latticeCardOnly });
+        } else {
+          await this.updateRealmMeta({ latticeCardOnly });
+        }
+        publicationTimings.catalogueMs = Date.now() - phaseStartedAt;
+        phaseStartedAt = Date.now();
+        // Copy only the exact inputs checked above, before promotion can replace
+        // their source rows. Any subsequent failure rolls back both copies and owner.
+        if (tx)
+          for (const [url, change] of this.#retainedInputs)
+            if (retainedOwners.has(url))
+              await this.#retainedSnapshots!.recordChange(tx, change);
+        await this.applyBatchUpdates({ latticeCardOnly });
+        if (this.latticeEnabled && this.#dbAdapter.kind === 'pg' && tx) {
+          await captureLatticeInputArtifacts(tx, this.realmURL.href, [
+            ...this.#invalidations,
+          ]);
+        }
+        publicationTimings.promoteMs = Date.now() - phaseStartedAt;
+        phaseStartedAt = Date.now();
+        await this.pruneObsoleteEntries();
+        publicationTimings.pruneMs = Date.now() - phaseStartedAt;
+        if (!tx) await this.#query(['COMMIT']);
+      } catch (error) {
+        if (!tx) await this.#query(['ROLLBACK']);
+        throw error;
+      } finally {
+        this.#latticeTransaction = undefined;
+      }
+    };
+    if (this.latticeEnabled) {
+      // Source writes hold the realm's write lock while awaiting indexing.
+      // Publication needs its own namespace or that wait deadlocks the worker.
+      await this.#dbAdapter.withWriteLock(
+        `lattice:index:${this.realmURL.href}`,
+        publish,
+      );
     } else {
-      await this.updateRealmMeta();
+      // Preserve the ordinary transaction path without a Lattice lock or
+      // registry work. Both paths share the same index promotion and rollback.
+      await publish();
     }
-    await this.applyBatchUpdates();
-    await this.pruneObsoleteEntries();
-    await this.#query(['COMMIT']);
 
-    let totalIndexEntries = await this.numberOfIndexEntries();
-    return { totalIndexEntries };
+    let countStartedAt = Date.now();
+    // Reactive publication callers need no whole-realm statistics. Preserve
+    // the existing count for indexing callers that consume the return value.
+    let totalIndexEntries =
+      opts?.countIndexEntries === false
+        ? undefined
+        : await this.numberOfIndexEntries();
+    publicationTimings.countMs = Date.now() - countStartedAt;
+    if (opts?.lattice && opts.latticeInputGeneration !== undefined) {
+      this.#perfLog.debug(
+        `${jobIdentity(this.jobInfo)} Lattice card publication ${JSON.stringify(
+          {
+            ...publicationTimings,
+            totalMs: Date.now() - publicationStartedAt,
+            cards: this.#invalidations.size,
+            generation: this.generation,
+          },
+        )}`,
+      );
+    }
+    if (totalIndexEntries !== undefined) return { totalIndexEntries };
   }
 
   // Re-stamp the current committed generation's realm_meta value at this
@@ -1985,7 +2552,9 @@ export class Batch {
   // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
   // still resolves the prior row here. Falls back to a fresh compute when no
   // prior row exists (a realm that has never completed a pass).
-  private async carryForwardRealmMeta(): Promise<void> {
+  private async carryForwardRealmMeta(opts?: {
+    latticeCardOnly?: boolean;
+  }): Promise<void> {
     let [row] = (await this.#query([
       `SELECT rm.value
        FROM realm_meta rm
@@ -1997,7 +2566,7 @@ export class Batch {
       `LIMIT 1`,
     ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
     if (!row) {
-      await this.updateRealmMeta();
+      await this.updateRealmMeta(opts);
       return;
     }
     let { nameExpressions, valueExpressions } = asExpressions(
@@ -2024,7 +2593,9 @@ export class Batch {
   }
 
   #query(expression: Expression) {
-    return query(this.#dbAdapter, expression, coerceTypes);
+    return this.#latticeTransaction
+      ? this.#latticeTransaction(expression)
+      : query(this.#dbAdapter, expression, coerceTypes);
   }
 
   private async getProductionVersion(
@@ -2097,9 +2668,73 @@ export class Batch {
     return parseInt(total);
   }
 
-  private async updateRealmMeta() {
+  // A materialized card's value change usually leaves the realm's type
+  // catalogue unchanged. Compare only the published cards' contributions to
+  // #fetchTypeSummary before reusing that catalogue. Checking inside the
+  // publication transaction preserves the same input-generation guard as the
+  // card values. New/deleted types, display names and icons still recalculate.
+  private async canCarryLatticeRealmMeta(opts?: {
+    latticeCardOnly?: boolean;
+  }): Promise<boolean> {
+    // Keep the comparison bounded, including SQLite's bind-parameter budget.
+    // Larger initial materialization waves use the existing realm-wide path.
+    if (this.#invalidations.size > 200) return false;
+    if (!this.#invalidations.size) return true;
+    let contribution = (
+      table: 'boxel_index' | 'boxel_index_working',
+    ): Expression =>
+      [
+        `SELECT i.url, i.type, i.types->>0 AS code_ref,
+        i.display_names->>0 AS display_name, i.icon_html
+       FROM ${table} i WHERE`,
+        ...every([
+          ['i.realm_url =', param(this.realmURL.href)],
+          [
+            'i.url IN',
+            ...addExplicitParens(
+              separatedByCommas(
+                [...this.#invalidations].map((url) => [param(url)]),
+              ),
+            ),
+          ],
+          [
+            opts?.latticeCardOnly
+              ? "i.type = 'instance'"
+              : "i.type IN ('instance', 'file')",
+          ],
+          ['i.types IS NOT NULL'],
+          [
+            dbExpression({
+              pg: '(i.types->>0) IS NOT NULL',
+              sqlite: "json_extract(i.types, '$[0]') IS NOT NULL",
+            }),
+          ],
+          any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+        ]),
+      ] as Expression;
+    let [row] = await this.#query([
+      'WITH lattice_previous AS (',
+      ...contribution('boxel_index'),
+      '), lattice_next AS (',
+      ...contribution('boxel_index_working'),
+      `) SELECT EXISTS (
+        SELECT * FROM lattice_previous EXCEPT SELECT * FROM lattice_next
+      ) OR EXISTS (
+        SELECT * FROM lattice_next EXCEPT SELECT * FROM lattice_previous
+      ) AS changed`,
+    ]);
+    return row?.changed === false || row?.changed === 0;
+  }
+
+  private async updateRealmMeta(opts?: { latticeCardOnly?: boolean }) {
     let instances = await this.#fetchTypeSummary('instance');
-    let files = await this.#fetchTypeSummary('file');
+    // A card-only computation cannot publish FileDef working rows. Its file
+    // catalogue must describe the still-published file channel, including
+    // when changed card types require recomputing the catalogue.
+    let files = await this.#fetchTypeSummary(
+      'file',
+      opts?.latticeCardOnly ? 'boxel_index' : 'boxel_index_working',
+    );
 
     let value = { instances, files };
 
@@ -2144,10 +2779,11 @@ export class Batch {
   // searches and confuse users during the transition window.
   async #fetchTypeSummary(
     indexType: BoxelIndexTable['type'],
+    table: 'boxel_index' | 'boxel_index_working' = 'boxel_index_working',
   ): Promise<CardTypeSummary[]> {
     let results = await this.#query([
       `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index_working as i
+       FROM ${table} as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
@@ -2167,7 +2803,7 @@ export class Batch {
     return results as unknown as CardTypeSummary[];
   }
 
-  private async applyBatchUpdates() {
+  private async applyBatchUpdates(opts?: { latticeCardOnly?: boolean }) {
     // Reading the getter is what mints, so read it before asking whether it
     // did. `loader_epoch` joins the upsert only when this batch minted one:
     // the getter otherwise returns the token read at batch start, and writing
@@ -2208,6 +2844,7 @@ export class Batch {
         'WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
+          ...(opts?.latticeCardOnly ? [["type = 'instance'"]] : []),
           [
             'url in',
             ...addExplicitParens(
@@ -2228,7 +2865,10 @@ export class Batch {
       // visit's HTML half in `prerendered_html_working` via `updateEntry`
       // (tombstones via `tombstoneEntries`); a copy fills the channel from
       // the source realm's rows below.
-      if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
+      if (
+        !opts?.latticeCardOnly &&
+        (!this.#splitPrerenderHtml || this.#copyFromSourceRealm)
+      ) {
         // For a copy, overlay the source realm's `prerendered_html` rows onto
         // the destination's working table. A destination URL whose source has
         // no `prerendered_html` row gets none either — it reads as unrendered
@@ -2258,8 +2898,10 @@ export class Batch {
   // bumped, so the guard would always pass anyway.
   private async promotePrerenderedHtmlWorking(opts?: {
     monotonicGuard?: boolean;
+    urls?: string[];
   }): Promise<void> {
-    if (this.#invalidations.size === 0) {
+    let urls = opts?.urls ?? [...this.#invalidations];
+    if (urls.length === 0) {
       return;
     }
     let prerenderedColumns = (
@@ -2277,14 +2919,46 @@ export class Batch {
         ['realm_url =', param(this.realmURL.href)],
         [
           'url in',
-          ...addExplicitParens(
-            separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
-          ),
+          ...addExplicitParens(separatedByCommas(urls.map((i) => [param(i)]))),
         ],
       ]),
       'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
       ...separatedByCommas(
-        prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
+        prerenderedNames.map((name) =>
+          this.latticeEnabled && name === 'diagnostics'
+            ? [
+                'diagnostics =',
+                // Merge inside the existing row upsert: an attempt prepared
+                // before another capture published must retain that capture,
+                // not an earlier JS snapshot. All other diagnostics describe
+                // this attempt. Tombstones end the retained capture lifetime.
+                dbExpression({
+                  pg: `CASE
+                    WHEN EXCLUDED.is_deleted IS TRUE OR
+                      (EXCLUDED.error_doc IS NULL AND jsonb_typeof(EXCLUDED.diagnostics->'brokenLinks') = 'array')
+                    THEN EXCLUDED.diagnostics
+                    WHEN prerendered_html.is_deleted IS NOT TRUE
+                      AND jsonb_typeof(prerendered_html.diagnostics->'brokenLinks') = 'array'
+                      AND (jsonb_typeof(prerendered_html.diagnostics->'brokenLinksGeneration') = 'number' OR prerendered_html.error_doc IS NULL)
+                    THEN COALESCE(EXCLUDED.diagnostics, '{}'::jsonb) || jsonb_build_object(
+                      'brokenLinks', prerendered_html.diagnostics->'brokenLinks',
+                      'brokenLinksGeneration', COALESCE(prerendered_html.diagnostics->'brokenLinksGeneration', to_jsonb(prerendered_html.generation)))
+                    ELSE EXCLUDED.diagnostics END`,
+                  sqlite: `CASE
+                    WHEN EXCLUDED.is_deleted IS TRUE OR
+                      (EXCLUDED.error_doc IS NULL AND json_type(EXCLUDED.diagnostics, '$.brokenLinks') = 'array')
+                    THEN EXCLUDED.diagnostics
+                    WHEN prerendered_html.is_deleted IS NOT TRUE
+                      AND json_type(prerendered_html.diagnostics, '$.brokenLinks') = 'array'
+                      AND (json_type(prerendered_html.diagnostics, '$.brokenLinksGeneration') IN ('integer','real') OR prerendered_html.error_doc IS NULL)
+                    THEN json_patch(COALESCE(EXCLUDED.diagnostics, '{}'), json_object(
+                      'brokenLinks', json_extract(prerendered_html.diagnostics, '$.brokenLinks'),
+                      'brokenLinksGeneration', COALESCE(json_extract(prerendered_html.diagnostics, '$.brokenLinksGeneration'), prerendered_html.generation)))
+                    ELSE EXCLUDED.diagnostics END`,
+                }),
+              ]
+            : [`${name}=EXCLUDED.${name}`],
+        ),
       ),
       ...(opts?.monotonicGuard
         ? ['WHERE prerendered_html.generation <= EXCLUDED.generation']
@@ -2444,14 +3118,19 @@ export class Batch {
       return;
     }
 
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    // Lattice: a full-realm invalidation can exceed the driver's bind limit.
+    // Keep every row in this batch's working generation, but bound each SQL
+    // statement (ten values per row) for both Postgres and SQLite.
+    for (let offset = 0; offset < rows.length; offset += 1000) {
+      await this.#query([
+        ...upsertMultipleRows(
+          'boxel_index_working',
+          'boxel_index_working_pkey',
+          columns,
+          rows.slice(offset, offset + 1000),
+        ),
+      ]);
+    }
 
     // On the fused path this batch owns the prerendered_html channel too, so
     // the deletion must tombstone both. (A split-mode batch leaves the
@@ -2524,14 +3203,16 @@ export class Batch {
     if (rows.length === 0) {
       return;
     }
-    await this.#query([
-      ...upsertMultipleRows(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    for (let offset = 0; offset < rows.length; offset += 1000) {
+      await this.#query([
+        ...upsertMultipleRows(
+          'prerendered_html_working',
+          'prerendered_html_working_pkey',
+          columns,
+          rows.slice(offset, offset + 1000),
+        ),
+      ]);
+    }
   }
 
   // Each invalidated URL's rows as the production index still holds them:
@@ -2574,6 +3255,26 @@ export class Batch {
         existing.push(entry);
       } else {
         typesByUrl.set(row.url, [entry]);
+      }
+    }
+    // A surviving Lattice watch is also evidence of an instance to retire,
+    // even when crash recovery has erased its old source-index row.
+    if (!this.latticeEnabled) return typesByUrl;
+    let owners = await this.#query([
+      'SELECT owner_url FROM lattice_owners WHERE realm_url =',
+      param(this.realmURL.href),
+      'AND retired = FALSE',
+    ]);
+    let requested = new Set(uniqueInvalidations);
+    for (let { owner_url: url } of owners) {
+      let ownerURL = url as string;
+      if (
+        requested.has(ownerURL) &&
+        !typesByUrl.get(ownerURL)?.some((entry) => entry.type === 'instance')
+      ) {
+        let entries = typesByUrl.get(ownerURL) ?? [];
+        entries.push({ type: 'instance', isDeleted: false, cardTypes: null });
+        typesByUrl.set(ownerURL, entries);
       }
     }
     return typesByUrl;
@@ -2629,7 +3330,10 @@ export class Batch {
     return [...new Set([url.href, ...matchedURLs])];
   }
 
-  async invalidate(urls: URL[]): Promise<void> {
+  async invalidate(
+    urls: URL[],
+    opts?: { latticeDeferOwners?: boolean },
+  ): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       // The dependency fan-out already ran once in the spawning index pass
       // and is threaded in as `changes` — seed it, don't recompute it.
@@ -2661,19 +3365,40 @@ export class Batch {
     );
     let visited = new Set<string>();
     let invalidations: string[] = [];
-    for (let url of urls) {
-      for (let seed of await this.invalidationSeeds(url)) {
-        let alias = trimExecutableExtension(rri(seed));
-        let workingInvalidations = [
-          ...new Set([
-            ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
-            ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-          ]),
-        ];
-        invalidations = [
-          ...new Set([...invalidations, ...workingInvalidations]),
-        ];
-      }
+    let seeds = (
+      await Promise.all(urls.map((url) => this.invalidationSeeds(url)))
+    ).flat();
+    let deferredOwners = new Set<string>();
+    if (
+      this.latticeEnabled &&
+      opts?.latticeDeferOwners &&
+      this.#splitPrerenderHtml &&
+      urls.every((url) => url.href.endsWith('.json'))
+    ) {
+      // Dependency-only updates belong to Lattice's durable secondary job.
+      // Leaving the published row intact avoids replacing its completed
+      // computed output with discovery's nulls. Explicit owner writes and
+      // definition edits must still discover the owner's current schema.
+      let owners = await this.#query([
+        'SELECT o.owner_url FROM lattice_owners o JOIN boxel_index i ON i.realm_url = o.realm_url AND i.url = o.owner_url',
+        "AND i.type = 'instance' WHERE o.realm_url =",
+        param(this.realmURL.href),
+        "AND o.retired = FALSE AND i.is_deleted = FALSE AND i.pristine_doc->'meta'->'publication' IS NOT NULL",
+      ]);
+      deferredOwners = new Set(owners.map((row) => row.owner_url as string));
+      for (let seed of seeds) deferredOwners.delete(seed);
+    }
+    for (let seed of seeds) {
+      let alias = trimExecutableExtension(rri(seed));
+      let workingInvalidations = [
+        ...new Set([
+          ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
+          ...(alias
+            ? await this.calculateInvalidations(alias, visited, deferredOwners)
+            : []),
+        ]),
+      ];
+      invalidations = [...new Set([...invalidations, ...workingInvalidations])];
     }
 
     if (invalidations.length === 0) {
@@ -2780,7 +3505,10 @@ export class Batch {
     }));
   }
 
-  async getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]> {
+  async getDependencyRows(
+    urls: string[],
+    opts?: { includeDeps?: boolean },
+  ): Promise<DependencyIndexRow[]> {
     await this.ready;
     if (urls.length === 0) {
       return [];
@@ -2807,8 +3535,8 @@ export class Batch {
     for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
       let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
       let [workingBatchRows, productionBatchRows] = await Promise.all([
-        this.queryDependencyRows('boxel_index_working', urlBatch),
-        this.queryDependencyRows('boxel_index', urlBatch),
+        this.queryDependencyRows('boxel_index_working', urlBatch, opts),
+        this.queryDependencyRows('boxel_index', urlBatch, opts),
       ]);
       workingRows.push(...workingBatchRows);
       productionRows.push(...productionBatchRows);
@@ -2861,13 +3589,14 @@ export class Batch {
   private async queryDependencyRows(
     tableName: 'boxel_index' | 'boxel_index_working',
     urls: string[],
+    opts?: { includeDeps?: boolean },
   ): Promise<DependencyIndexRow[]> {
     if (urls.length === 0) {
       return [];
     }
 
     let rows = (await this.#query([
-      `SELECT url, type, deps, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
+      `SELECT url, type, ${opts?.includeDeps === false ? 'NULL AS deps' : 'deps'}, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -2991,36 +3720,28 @@ export class Batch {
       } while (rows.length === pageSize);
       return { results, pageNumber };
     };
-    // The reference graph spans both channels: `boxel_index_working.deps`
-    // carries the index visit's edges (the search-doc walk), while
-    // `prerendered_html.deps` carries edges only the format renders discover
-    // — a rendered non-searchable link, the scoped-CSS artifacts of linked
-    // instances. Both edge sets must feed the fan-out or a change to a
-    // render-only dependency would never re-render its consumers.
-    //
-    // Production `boxel_index` is scanned as well because the working table
-    // is a staging area whose coverage is not guaranteed: a row only exists
-    // there once a visit has written it in this deployment's lifetime, so
-    // promoted rows can lack a working counterpart (an index imported from a
-    // dump that carries only the production tables, or rows staged under a
-    // since-changed schema). Without the production scan, a module edit
-    // never reaches such dependents — their indexed computed values sit
-    // stale until each file is touched individually. Rows present in both
-    // tables collapse in the (url, type) dedup below.
-    let [workingScan, prerenderedScan, productionScan] = await Promise.all([
-      scanTable('boxel_index_working'),
-      scanTable('prerendered_html'),
-      scanTable('boxel_index'),
+    // Ordinary source indexing retains the complete data + render fan-out:
+    // its HTML job receives that set without another dependency expansion.
+    // Only enabled split-mode indexing separates the channels. Data indexing
+    // follows data edges; its HTML job follows render edges from each changed
+    // data URL. Fused indexing still owns both channels and traverses the union.
+    // Include production data rows: the working table need not contain a
+    // counterpart after an index import or staging-table cleanup.
+    let includeData = !this.latticeEnabled || !this.#prerenderHtmlOnly;
+    let includeHTML =
+      !this.latticeEnabled ||
+      this.#prerenderHtmlOnly ||
+      !this.#splitPrerenderHtml;
+    let scans = await Promise.all([
+      ...(includeData ? [scanTable('boxel_index_working')] : []),
+      ...(includeHTML ? [scanTable('prerendered_html')] : []),
+      ...(includeData ? [scanTable('boxel_index')] : []),
     ]);
     let seen = new Set<string>();
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: BoxelIndexTable['type'];
     })[] = [];
-    for (let row of [
-      ...workingScan.results,
-      ...prerenderedScan.results,
-      ...productionScan.results,
-    ]) {
+    for (let row of scans.flatMap((scan) => scan.results)) {
       let key = `${row.url}|${row.type}`;
       if (seen.has(key)) {
         continue;
@@ -3031,11 +3752,10 @@ export class Batch {
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms (page count=${
-        workingScan.pageNumber +
-        prerenderedScan.pageNumber +
-        productionScan.pageNumber
-      })`,
+      } ms (page count=${scans.reduce(
+        (total, scan) => total + scan.pageNumber,
+        0,
+      )})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
@@ -3047,6 +3767,7 @@ export class Batch {
   private async calculateInvalidations(
     resolvedPath: string,
     visited: Set<string>,
+    deferredOwners?: Set<string>,
   ): Promise<string[]> {
     if (
       visited.has(resolvedPath) ||
@@ -3055,7 +3776,9 @@ export class Batch {
       return [];
     }
     visited.add(resolvedPath);
-    let items = await this.itemsThatReference(resolvedPath);
+    let items = (await this.itemsThatReference(resolvedPath)).filter(
+      ({ url }) => !deferredOwners?.has(url),
+    );
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias, type, url }) =>
       this.invalidationTraversalAlias({ alias, type, url }),
@@ -3066,7 +3789,9 @@ export class Batch {
         await Promise.all(
           aliases
             .filter((a): a is string => Boolean(a))
-            .map((a) => this.calculateInvalidations(a, visited)),
+            .map((a) =>
+              this.calculateInvalidations(a, visited, deferredOwners),
+            ),
         ),
       ),
     ];

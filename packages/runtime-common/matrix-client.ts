@@ -277,16 +277,21 @@ export class MatrixClient {
     return await fetchMatrixProfile(this.matrixURL, userId);
   }
 
-  async sendEvent<T>(roomId: string, type: string, content: T) {
+  async sendEvent<T>(
+    roomId: string,
+    type: string,
+    content: T,
+    options: { transactionId?: string; signal?: AbortSignal } = {},
+  ) {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let txnId = this.nextTxnId();
+    let txnId = options.transactionId ?? this.nextTxnId();
 
     let response = await this.request(
-      `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
+      `_matrix/client/v3/rooms/${roomId}/send/${type}/${encodeURIComponent(txnId)}`,
       'PUT',
-      { body: JSON.stringify(content) },
+      { body: JSON.stringify(content), signal: options.signal },
     );
 
     let json = (await response.json()) as { event_id: string };
@@ -296,6 +301,9 @@ export class MatrixClient {
           response.status
         } - ${JSON.stringify(json)}`,
       );
+    }
+    if (typeof json.event_id !== 'string' || !json.event_id) {
+      throw new Error('Matrix send response has no event_id');
     }
     return json.event_id;
   }

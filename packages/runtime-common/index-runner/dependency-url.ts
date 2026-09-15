@@ -1,14 +1,14 @@
 import type { VirtualNetwork } from '../virtual-network.ts';
 
-// Pass-scoped cache for `canonicalURL`, keyed on the two string inputs
-// `(relativeTo, url)`. A hit returns the cached canonical string and skips
-// `resolveURL` (and its transient `URL` allocation) entirely. Across one index
-// pass the same `(base, dep)` pairs recur on nearly every card, so almost all
-// calls are duplicates. The set of registered realm prefixes is stable within a
-// pass, so `(relativeTo, url)` fully determines the result; the owner clears the
-// map at each pass boundary. It is a string → string map — every consumer uses
-// the returned string — so no `URL` instances are ever retained.
+// Realm mappings remain stable for this pass; the owner clears the memo at
+// each pass boundary. Only relative references need the consuming card's base.
+// Lattice's full-app workload exposed millions of redundant keys containing
+// encoded CSS payloads. Bound both entry count and retained string lengths;
+// eviction/bypass recomputes the result without discarding any dependency.
 export type CanonicalURLMemo = Map<string, string>;
+const MAX_MEMO_ENTRIES = 20_000;
+const MAX_MEMO_ENTRY_CHARS = 4096;
+const ABSOLUTE_HTTP_URL = /^https?:\/\//i;
 
 export function canonicalURL(
   url: string,
@@ -19,15 +19,26 @@ export function canonicalURL(
   if (!memo) {
     return computeCanonicalURL(url, relativeTo, virtualNetwork);
   }
-  // `relativeTo` and `url` are URL strings that never contain a newline, so a
-  // newline-joined key cannot collide across distinct input pairs.
-  let key = `${relativeTo ?? ''}\n${url}`;
+  let base =
+    virtualNetwork.isRegisteredPrefix(url) || ABSOLUTE_HTTP_URL.test(url)
+      ? ''
+      : (relativeTo ?? '');
+  if (base.length + url.length + 1 > MAX_MEMO_ENTRY_CHARS) {
+    return computeCanonicalURL(url, relativeTo, virtualNetwork);
+  }
+  // URL strings do not contain newlines, so the pair remains unambiguous.
+  let key = `${base}\n${url}`;
   let cached = memo.get(key);
   if (cached !== undefined) {
     return cached;
   }
   let result = computeCanonicalURL(url, relativeTo, virtualNetwork);
-  memo.set(key, result);
+  if (key.length + result.length <= MAX_MEMO_ENTRY_CHARS) {
+    if (memo.size >= MAX_MEMO_ENTRIES) {
+      memo.delete(memo.keys().next().value!);
+    }
+    memo.set(key, result);
+  }
   return result;
 }
 

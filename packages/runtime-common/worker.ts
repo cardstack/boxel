@@ -1,4 +1,8 @@
 import type * as JSONTypes from 'json-typescript';
+import {
+  LATTICE_CODE_JOB_TYPE,
+  type LatticeCodeLinker,
+} from './jobs/lattice-code.ts';
 import type { Readable as NodeReadable } from 'stream';
 import { parse } from 'date-fns';
 import {
@@ -30,6 +34,10 @@ import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type {
+  LatticeNativeCardIndexer,
+  LatticeNativeFileIndexer,
+} from './lattice-native-index.ts';
 import { heartbeatJob } from './queue.ts';
 
 export interface Stats extends JSONTypes.Object {
@@ -77,6 +85,12 @@ export interface IndexPhaseTimings {
   // The final atomic swap: `batch.done()` (realm-meta update, working → main
   // promotion, obsolete-row prune) in one transaction.
   swapMs?: number;
+  // Lattice follow-up waves are separate from the source visit/swap timings.
+  latticeMaterializationMs?: number;
+  latticeWriteMs?: number;
+  latticeSwapMs?: number;
+  latticeWaves?: number;
+  latticeOwnersRendered?: number;
 }
 
 export interface StreamFileRef {
@@ -156,6 +170,9 @@ export class Worker {
   #queue: QueueRunner;
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
+  #nativeCardIndexer?: LatticeNativeCardIndexer;
+  #nativeFileIndexer?: LatticeNativeFileIndexer;
+  #codeLinker?: LatticeCodeLinker;
   #queuePublisher: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
@@ -167,6 +184,7 @@ export class Worker {
   #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #indexJobsOnly: boolean;
+  #latticeJobsOnly: boolean;
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: (
@@ -187,8 +205,12 @@ export class Worker {
     reportProgress,
     reportRealmEvent,
     prerenderer,
+    nativeCardIndexer,
+    nativeFileIndexer,
     createPrerenderAuth,
     indexJobsOnly,
+    latticeJobsOnly,
+    codeLinker,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
   }: {
@@ -201,12 +223,16 @@ export class Worker {
     realmServerMatrixUsername: string;
     secretSeed: string;
     prerenderer: Prerenderer;
+    nativeCardIndexer?: LatticeNativeCardIndexer;
+    nativeFileIndexer?: LatticeNativeFileIndexer;
     reportStatus?: (args: StatusArgs) => void;
     reportProgress?: (event: IndexingProgressEvent) => void;
     reportRealmEvent?: (event: RealmEventContent) => void;
     // When true, register handlers only for INDEX_JOB_TYPES so this worker
     // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
     indexJobsOnly?: boolean;
+    latticeJobsOnly?: boolean;
+    codeLinker?: LatticeCodeLinker;
     skipPrerenderHtmlRealms?: string[];
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
@@ -228,8 +254,12 @@ export class Worker {
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
+    this.#nativeCardIndexer = nativeCardIndexer;
+    this.#nativeFileIndexer = nativeFileIndexer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#indexJobsOnly = indexJobsOnly ?? false;
+    this.#latticeJobsOnly = latticeJobsOnly ?? false;
+    this.#codeLinker = codeLinker;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
   }
@@ -248,6 +278,8 @@ export class Worker {
       dbAdapter: this.#dbAdapter,
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
+      nativeCardIndexer: this.#nativeCardIndexer,
+      nativeFileIndexer: this.#nativeFileIndexer,
       definitionLookup,
       virtualNetwork: this.#virtualNetwork,
       queuePublisher: this.#queuePublisher,
@@ -261,6 +293,11 @@ export class Worker {
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
+      'lattice-materialize': () =>
+        this.#queue.register(
+          'lattice-materialize',
+          Tasks.latticeMaterialize(taskArgs),
+        ),
       'from-scratch-index': () =>
         this.#queue.register(
           `from-scratch-index`,
@@ -294,6 +331,11 @@ export class Worker {
           `daily-credit-grant`,
           Tasks['dailyCreditGrant'](taskArgs),
         ),
+      'lattice-clock-sweep': () =>
+        this.#queue.register(
+          `lattice-clock-sweep`,
+          Tasks['latticeClockSweep'](taskArgs),
+        ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
       'screenshot-card': () =>
@@ -302,9 +344,16 @@ export class Worker {
           Tasks['screenshotCard'](taskArgs),
         ),
     };
-    let jobTypes = this.#indexJobsOnly
-      ? (INDEX_JOB_TYPES as readonly string[])
-      : Object.keys(registrations);
+    let jobTypes = this.#latticeJobsOnly
+      ? ['lattice-materialize']
+      : this.#indexJobsOnly
+        ? (INDEX_JOB_TYPES as readonly string[])
+        : Object.keys(registrations);
+    // Only an explicitly configured Node processor claims linking work. The
+    // source-index and materialization lanes keep their own capacity.
+    if (this.#codeLinker && !this.#latticeJobsOnly && !this.#indexJobsOnly) {
+      await this.#queue.register(LATTICE_CODE_JOB_TYPE, this.#codeLinker);
+    }
     await Promise.all(jobTypes.map((jobType) => registrations[jobType]()));
     await this.#queue.start();
   }

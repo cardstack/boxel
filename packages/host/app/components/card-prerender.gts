@@ -263,6 +263,12 @@ export default class CardPrerender extends Component {
       ): RenderRouteOptions => {
         let out: RenderRouteOptions = {
           ...baseOptions,
+          latticeUseSnapshot:
+            baseOptions.latticeUseSnapshot &&
+            visitType === 'prerender-html' &&
+            pass === 'cardRender'
+              ? true
+              : undefined,
           // The fused index pass carries both flags — the render route
           // serves it from the card branch and folds the file extract into
           // the render.meta payload.

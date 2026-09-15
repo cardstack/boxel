@@ -14,6 +14,44 @@ import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { Query } from './query.ts';
 
+export interface BxlComputeDefinition {
+  version: 1;
+  expression: string;
+  libraries: string[];
+  deps: string[];
+  materializesClass: boolean;
+  customRuntimeLimits: boolean;
+  // Compiled time-grain program (BxlOptions.validUntil): yields the date or
+  // instant at which the value next changes, or null.
+  validUntil?: string;
+}
+
+export type BaseCardComputeName =
+  | 'cardTitle'
+  | 'cardDescription'
+  | 'cardTheme'
+  | 'cardThumbnailURL';
+
+export type NativeValueCodec =
+  | { kind: 'compound'; resourceType?: 'card' | 'file-meta' }
+  | { kind: 'json'; empty?: string | number | boolean | null }
+  | {
+      kind: 'primitive';
+      scalar?: 'string';
+      serializer?: SerializerName;
+      empty?: string | number | boolean | null;
+    };
+
+// A data projection preserves published attributes and explicitly selects the
+// linked data a computation consumes. "id" never loads a target card. This is
+// cached definition data, not a callback that can run application modules.
+export interface LatticeDataProjection {
+  links?: Record<
+    string,
+    { many: boolean; projection: 'id' | LatticeDataProjection }
+  >;
+}
+
 export interface FieldDefinition {
   type: FieldType;
   isPrimitive: boolean;
@@ -21,11 +59,23 @@ export interface FieldDefinition {
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
   query?: Query;
+  // Relationship retention opt-out, captured from the field declaration.
+  // Absence preserves automatic retention in enabled consuming realms.
+  snapshot?: false;
   // Raw `searchable` annotation mirrored from the field descriptor (the source
   // of truth in `card-api.gts`). Carried here for the loaderless query compiler
   // and definition-build validation — not a pre-resolved plan. Persisted as
   // plain JSON in `modules.definitions`; omitted when the field declares none.
   searchable?: Searchable;
+  // Produced only by the official BXL factory. Persist with the existing
+  // definition cache so record workers can read the program without GTS.
+  // A computed field without either bxl or baseCompute still needs the card
+  // runtime. Trusted base bodies can run directly in Node.
+  bxl?: BxlComputeDefinition;
+  baseCompute?: BaseCardComputeName;
+  // Standard base hooks only. Absence means a value hook was overridden or
+  // its default cannot be represented as data. This does not attest constructors.
+  nativeCodec?: NativeValueCodec;
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
@@ -71,6 +121,11 @@ export interface Definition {
   displayName: string | null;
   fields: { [fieldName: string]: string };
   fieldDefs: { [defId: string]: FieldDefinition };
+  nativeCodec?: NativeValueCodec;
+  nativeQueryInputs?: Record<string, LatticeDataProjection>;
+  // Projections for declared links a native computation reads through. See
+  // CardDef.linkInputs.
+  nativeLinkInputs?: Record<string, LatticeDataProjection>;
   // The type's `@operation` declarations, lowered to base-operation data plus
   // BXL and keyed by operation name. This is what makes an operation
   // resolvable from a card's `adoptsFrom` alone: a card's JSON names its
@@ -79,6 +134,19 @@ export interface Definition {
   // Omitted when the type declares no operations, which keeps the entry for
   // every other type unchanged.
   operations?: { [operationName: string]: OperationDefinition };
+  // Index metadata captured from the actual constructor ancestry. These facts
+  // do not themselves authorize native execution of application constructors.
+  nativeFileIndex?: {
+    types: CodeRef[];
+    displayNames: string[];
+    staticIcon?: import('./static-icon.ts').StaticIconSvg;
+  };
+  nativeIndex?: {
+    types: CodeRef[];
+    displayNames: string[];
+    cardType: string;
+    materialized?: true;
+  };
 }
 
 // Stable JSON serialization for content-keyed interning. Keys sorted at
@@ -105,6 +173,10 @@ function stableStringify(value: unknown): string {
 export function getFieldDefinitions(
   api: typeof CardAPI,
   cardDef: typeof BaseDef,
+  computeMetadata?: (
+    compute: unknown,
+    valueType: typeof BaseDef,
+  ) => Pick<FieldDefinition, 'bxl' | 'baseCompute' | 'nativeCodec'>,
 ): { fields: Definition['fields']; fieldDefs: Definition['fieldDefs'] } {
   let fields: Definition['fields'] = {};
   let fieldDefs: Definition['fieldDefs'] = {};
@@ -128,6 +200,7 @@ export function getFieldDefinitions(
     let queryDefinition = field.queryDefinition
       ? (JSON.parse(JSON.stringify(field.queryDefinition)) as Query) // ensure this is a plain object
       : undefined;
+    let compute = computeMetadata?.(field.computeVia, field.card);
     let def: FieldDefinition = {
       type: field.fieldType,
       isPrimitive,
@@ -139,6 +212,8 @@ export function getFieldDefinitions(
           : undefined,
       query: queryDefinition,
       searchable: field.searchable,
+      ...(field.snapshot === false ? { snapshot: false as const } : {}),
+      ...compute,
     };
     fields[fieldName] = intern(def);
   }

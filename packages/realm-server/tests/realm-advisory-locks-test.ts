@@ -4,9 +4,9 @@ import { basename } from 'path';
 import {
   hashRealmUrlForAdvisoryLock,
   hashUserIdForCostLock,
-  type PgAdapter,
+  PgAdapter,
 } from '@cardstack/postgres';
-import { setupDB } from './helpers/index.ts';
+import { setupDB, waitUntil } from './helpers/index.ts';
 
 // Records each event with a relative timestamp so a failed ordering assertion
 // can tell us *when* each entry happened, not just the final order. The
@@ -169,6 +169,123 @@ module(basename(import.meta.filename), function () {
       const result = await dbAdapter.withWriteLock(url, async () => 'ok');
       assert.strictEqual(result, 'ok', 'lock released after prior failure');
     });
+
+    test('a queued writer still runs after the holder throws', async function (assert) {
+      const url = 'http://localhost:4201/queued-failure/';
+      const first = dbAdapter.withWriteLock(url, async () => {
+        throw new Error('first writer failed');
+      });
+      const second = dbAdapter.withWriteLock(url, async () => {
+        await dbAdapter.execute('SELECT 1');
+        return 'saved';
+      });
+      await assert.rejects(first, /first writer failed/);
+      assert.strictEqual(await second, 'saved');
+      assert.strictEqual(
+        await dbAdapter.withWriteLock(url, async () => 'again'),
+        'again',
+      );
+    });
+
+    test('independent adapters still serialize through the database lock', async function (assert) {
+      const replica = new PgAdapter();
+      const url = 'http://localhost:4201/replica-writers/';
+      let enter!: () => void;
+      const entered = new Promise<void>((r) => {
+        enter = r;
+      });
+      let release!: () => void;
+      const held = new Promise<void>((r) => {
+        release = r;
+      });
+      const order: string[] = [];
+      const first = dbAdapter.withWriteLock(url, async () => {
+        enter();
+        await held;
+        order.push('first');
+      });
+      let second: Promise<void> | undefined;
+      try {
+        await Promise.race([first, entered]);
+        second = replica.withWriteLock(url, async () => {
+          order.push('second');
+        });
+        await waitUntil(async () => {
+          const rows = await replica.execute(
+            `SELECT 1 FROM pg_stat_activity
+             WHERE datname=current_database() AND wait_event='advisory'`,
+          );
+          return rows.length > 0;
+        });
+        assert.deepEqual(
+          order,
+          [],
+          'the other adapter waits on the database, not a shared JS queue',
+        );
+      } finally {
+        release();
+        await Promise.all([first, second]);
+        await replica.close();
+      }
+      assert.deepEqual(order, ['first', 'second']);
+    });
+
+    for (const count of (process.env.LATTICE_LOCK_BURSTS ?? '48')
+      .split(',')
+      .map(Number)) {
+      test(`${count} same-realm writers leave capacity for the holder's database work`, async function (assert) {
+        // A separate adapter gives diagnostics their own pool, including in
+        // the broken version where every request-pool client is lock-blocked.
+        const writers = new PgAdapter();
+        let completed = false;
+        let recovered = false;
+        let recover: Promise<unknown> | undefined;
+        const watchdog = setTimeout(() => {
+          recovered = true;
+          recover = dbAdapter.execute(
+            `SELECT pg_cancel_backend(pid) FROM pg_stat_activity
+             WHERE datname=current_database() AND wait_event='advisory'`,
+          );
+        }, 5_000);
+        try {
+          const outcomes = await Promise.allSettled(
+            Array.from({ length: count }, (_, i) =>
+              writers.withWriteLock(
+                'http://localhost:4201/classroom-burst/',
+                async () => {
+                  // Let the concurrent lock requests arrive while the holder
+                  // performs non-DB work (e.g. a module load), then use the
+                  // ordinary adapter, as the realm write/index path does.
+                  if (i === 0) await new Promise((r) => setTimeout(r, 150));
+                  await writers.execute('SELECT 1');
+                  return i;
+                },
+              ),
+            ),
+          );
+          completed = outcomes.every((r) => r.status === 'fulfilled');
+          console.log(
+            'LATTICE_WRITE_POOL',
+            JSON.stringify({ count, completed, recovered }),
+          );
+          assert.false(
+            recovered,
+            'no cancellation was needed to release database capacity',
+          );
+          assert.deepEqual(
+            outcomes.map((r) =>
+              r.status === 'fulfilled' ? r.value : 'failed',
+            ),
+            Array.from({ length: count }, (_, i) => i),
+            'all callbacks finish',
+          );
+        } finally {
+          clearTimeout(watchdog);
+          await recover;
+          await writers.close();
+        }
+      });
+    }
   });
 
   module('hashUserIdForCostLock', function () {

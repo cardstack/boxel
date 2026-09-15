@@ -1,4 +1,6 @@
 import { ignore, type Ignore } from './ignore.ts';
+import type { LatticeIndexPublication } from './lattice-index-publication.ts';
+import type { LatticeInputSnapshot } from './lattice-materialization.ts';
 // Isomorphic UUID — works in both Node and the browser (host tests
 // instantiate IndexRunner inside a Chrome tab, so Node's built-in
 // `crypto.randomUUID` is not available).
@@ -42,6 +44,13 @@ import {
 } from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
+import {
+  LatticeWorkSuperseded,
+  LatticeWorkFailed,
+  type LatticeReadScope,
+  type LatticeScheduledWork,
+} from './lattice-work.ts';
+import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
   discoverInvalidations,
@@ -54,6 +63,10 @@ import {
 } from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
+import type {
+  LatticeNativeCardIndexer,
+  LatticeNativeFileIndexer,
+} from './lattice-native-index.ts';
 
 // The result of a prefetched render, with any thrown error captured rather
 // than rejected so an un-awaited prefetch can't surface as an unhandled
@@ -148,6 +161,22 @@ export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
 }
 
 export class IndexRunner {
+  #lattice?: LatticeIndexPublication;
+  #latticeRealmUsername?: string;
+  #inputSnapshot: LatticeInputSnapshot | undefined;
+  #latticeTimings = {
+    latticeMatchingMs: 0,
+    latticeMaterializationMs: 0,
+    latticeBatchSetupMs: 0,
+    latticeQueryWarmMs: 0,
+    latticeRenderMs: 0,
+    latticeFinishVisitMs: 0,
+    latticeWriteMs: 0,
+    latticeSwapMs: 0,
+    latticeWaves: 0,
+    latticeOwnersRendered: 0,
+  };
+  #latticeSourceWriteMs: number | undefined;
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #indexWriter: IndexWriter;
@@ -159,6 +188,8 @@ export class IndexRunner {
   #ignoreData: Record<string, string>;
   #ignoreMap: Map<string, Ignore> | undefined;
   #prerenderer: Prerenderer;
+  #nativeCardIndexer?: LatticeNativeCardIndexer;
+  #nativeFileIndexer?: LatticeNativeFileIndexer;
   #auth: string;
   #realmURL: URL;
   #virtualNetwork: VirtualNetwork;
@@ -199,6 +230,8 @@ export class IndexRunner {
     fileErrors: 0,
     totalIndexEntries: 0,
   };
+  // Keep the conservative reset until loader reuse validates imported realms
+  // too. This realm's epoch alone does not identify all loaded module code.
   #shouldClearCacheForNextRender = true;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
@@ -226,6 +259,9 @@ export class IndexRunner {
     fetch,
     realmOwnerUserId,
     idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+    latticeRealmUsername,
+    nativeCardIndexer,
+    nativeFileIndexer,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -240,6 +276,9 @@ export class IndexRunner {
     // Consecutive idle render timeouts after which a from-scratch pass gives
     // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
     idleRenderTimeoutAbortAfter?: number;
+    latticeRealmUsername?: string;
+    nativeCardIndexer?: LatticeNativeCardIndexer;
+    nativeFileIndexer?: LatticeNativeFileIndexer;
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -258,6 +297,23 @@ export class IndexRunner {
     }): void;
   }) {
     this.#indexWriter = indexWriter;
+    let latticeEnabled = indexWriter.isLatticeEnabled(realmURL);
+    this.#latticeRealmUsername = latticeEnabled
+      ? latticeRealmUsername
+      : undefined;
+    this.#lattice = latticeEnabled
+      ? indexWriter.latticePublication(
+          definitionLookup.forRealm({
+            url: realmURL.href,
+            getRealmOwnerUserId: async () => realmOwnerUserId,
+            visibility: async () =>
+              (await this.getModuleCacheContext()).cacheScope === 'public'
+                ? 'public'
+                : 'private',
+          }),
+          virtualNetwork,
+        )
+      : undefined;
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -275,6 +331,8 @@ export class IndexRunner {
     this.#onProgress = onProgress;
     this.#onInvalidationsReady = onInvalidationsReady;
     this.#prerenderer = prerenderer;
+    this.#nativeCardIndexer = latticeEnabled ? nativeCardIndexer : undefined;
+    this.#nativeFileIndexer = latticeEnabled ? nativeFileIndexer : undefined;
     this.#auth = auth;
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
@@ -298,6 +356,8 @@ export class IndexRunner {
       },
       getDependencyRows: async (urls) =>
         await this.batch.getDependencyRows(urls),
+      getDirectDependencyErrorRows: async (urls) =>
+        await this.batch.getDependencyRows(urls, { includeDeps: false }),
       getOrderingDependencyRows: async (urls) =>
         await this.batch.getOrderingDependencyRows(urls),
       getInvalidations: () => this.#batch?.invalidations ?? [],
@@ -434,8 +494,15 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries } = await current.batch.done({
+        lattice: current.#lattice,
+        latticeRealmUsername: current.#latticeRealmUsername,
+      });
+      await current.#lattice?.analyzeAfterFullIndex();
       swapMs = Date.now() - finalizeStart;
+      current.#latticeSourceWriteMs = current.batch.writeMs;
+      if (!current.#latticeRealmUsername)
+        invalidations.push(...(await current.#drainLattice()));
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -482,7 +549,10 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.batch.writeMs,
+        writeMs: current.#latticeSourceWriteMs ?? current.batch.writeMs,
+        ...(current.#latticeTimings.latticeWaves
+          ? current.#latticeTimings
+          : {}),
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
@@ -565,7 +635,9 @@ export class IndexRunner {
     // prerender-server affinity rather than leaking them.
     try {
       try {
-        await current.batch.invalidate(urls);
+        await current.batch.invalidate(urls, {
+          latticeDeferOwners: Boolean(current.#latticeRealmUsername),
+        });
         discoverMs = Date.now() - discoverStart;
         current.#notifyInvalidationsReady(
           current.batch.invalidations,
@@ -661,8 +733,14 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries } = await current.batch.done({
+        lattice: current.#lattice,
+        latticeRealmUsername: current.#latticeRealmUsername,
+      });
       swapMs = Date.now() - finalizeStart;
+      current.#latticeSourceWriteMs = current.batch.writeMs;
+      if (!current.#latticeRealmUsername)
+        invalidations.push(...(await current.#drainLattice()));
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -704,10 +782,249 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.batch.writeMs,
+        writeMs: current.#latticeSourceWriteMs ?? current.batch.writeMs,
+        ...(current.#latticeTimings.latticeWaves
+          ? current.#latticeTimings
+          : {}),
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
+  }
+
+  // One outbox chunk or one owner per job. A successor is committed with
+  // the checkpoint/output, allowing queued source jobs to run between chunks.
+  static async materialize(
+    current: IndexRunner,
+    realmUsername: string,
+    wave: number,
+  ) {
+    if (!current.#lattice)
+      throw new Error('Lattice is disabled for this realm');
+    let start = Date.now();
+    let matched = await current.#lattice.matchPending(
+      current.realmURL.href,
+      realmUsername,
+    );
+    current.#latticeTimings.latticeMatchingMs += Date.now() - start;
+    let invalidations: string[] = [];
+    try {
+      if (!matched) {
+        invalidations = (
+          await current.#drainLattice({ realmUsername, wave: wave + 1 })
+        ).map((u) => u.href);
+      }
+      return {
+        invalidations,
+        matchingComplete:
+          matched &&
+          !(await current.#lattice.hasUnmatched(current.realmURL.href)),
+        generation: current.#batch?.currentGeneration,
+        loaderEpoch: current.#batch?.loaderEpoch,
+        phaseTimings: {
+          ...current.#latticeTimings,
+          totalMs: Date.now() - start,
+        },
+        superseded: undefined as string | undefined,
+        waitForRead: undefined as LatticeReadScope | undefined,
+      };
+    } catch (error) {
+      if (!(error instanceof LatticeWorkSuperseded)) throw error;
+      return {
+        invalidations: [],
+        matchingComplete: false,
+        generation: undefined,
+        loaderEpoch: undefined,
+        phaseTimings: {
+          ...current.#latticeTimings,
+          totalMs: Date.now() - start,
+        },
+        superseded: error.reason,
+        waitForRead: error.waitForRead,
+      };
+    } finally {
+      await current.#prerenderer.releaseBatch?.({
+        batchId: current.#batchId,
+        affinityType: 'realm',
+        affinityValue: current.realmURL.href,
+      });
+    }
+  }
+
+  // Drain the durable registry inside the existing per-realm indexing job.
+  // A crash retries that queue job and discovers pending work again. Failed
+  // waves remain pending and fail the job; they never publish partial output.
+  async #drainLattice(followup?: {
+    realmUsername: string;
+    wave: number;
+  }): Promise<URL[]> {
+    let publication = this.#lattice;
+    if (!publication) return [];
+    let startedAt = Date.now();
+    let published = new Set<string>();
+    let pending = followup
+      ? await publication.registry.ready(this.realmURL.href)
+      : await publication.registry.pending(this.realmURL.href);
+    // A queued wake-up is an obligation to inspect current work, not a frozen
+    // owner list. Publication or retirement may already have satisfied it.
+    // An old wave number must not reject an empty current work set.
+    if (followup && pending.length) {
+      let owners = await publication.registry.activeOwnerCount(
+        this.realmURL.href,
+      );
+      if (followup.wave - 1 > owners * (owners + 1))
+        throw new Error('Lattice feeder graph did not converge');
+    }
+    // A leaf write can activate one new downstream owner per wave. Bound an
+    // acyclic chain by all owners, not only the initially dirty subset.
+    if (followup) pending = pending.slice(0, 1);
+    let maxWaves = followup
+      ? 1
+      : pending.length
+        ? (await publication.registry.activeOwnerCount(this.realmURL.href)) + 1
+        : 0;
+    try {
+      for (let wave = 0; pending.length && wave < maxWaves; wave++) {
+        this.#latticeTimings.latticeWaves++;
+        // No job resume seed: previous source-pass working rows have the same
+        // job id, but must never be re-promoted by a materialization wave.
+        let setupStartedAt = Date.now();
+        this.#batch = await this.#indexWriter.createBatch(
+          this.realmURL,
+          this.#virtualNetwork,
+        );
+        this.#latticeTimings.latticeBatchSetupMs += Date.now() - setupStartedAt;
+        this.#inputSnapshot = {
+          realmURL: this.realmURL.href,
+          generation: this.batch.currentGeneration - 1,
+        };
+        this.#dependencyResolver.reset();
+        this.#indexingInstances.clear();
+        let succeeded = 0;
+        const completedOwners: string[] = [];
+        let failures: string[] = [];
+        for (let { ownerURL, generation, codeVersion } of pending) {
+          const work: LatticeScheduledWork = {
+            realmURL: this.realmURL.href,
+            actor: this.#realmOwnerUserId,
+            claim: { id: ownerURL, obligation: generation },
+            inputGeneration: this.#inputSnapshot.generation,
+            definitionRevision: this.batch.loaderEpoch,
+            codeVersion,
+            // Non-queued calls use the existing negative job-ID sentinel.
+            ...(this.#jobInfo.jobId > 0
+              ? {
+                  reservation: {
+                    jobId: this.#jobInfo.jobId,
+                    reservationId: this.#jobInfo.reservationId,
+                  },
+                }
+              : {}),
+          };
+          const check = followup
+            ? (tx?: Querier) => publication.registry.assertWorkCurrent(work, tx)
+            : undefined;
+          if (check) {
+            await check();
+            this.batch.registerLatticePublicationCheck(ownerURL, check);
+          }
+          let renderStartedAt = Date.now();
+          let warmMs = 0;
+          let outcome = await this.#renderVisit(
+            new URL(ownerURL),
+            check
+              ? async (runtime) => {
+                  await check();
+                  if (runtime !== 'browser') return;
+                  let warmStartedAt = Date.now();
+                  await publication.registry.warmOwnerQueries(
+                    this.realmURL.href,
+                    ownerURL,
+                  );
+                  warmMs = Date.now() - warmStartedAt;
+                  this.#latticeTimings.latticeQueryWarmMs += warmMs;
+                  await check();
+                }
+              : undefined,
+          );
+          if (check) await check();
+          this.#latticeTimings.latticeRenderMs +=
+            Date.now() - renderStartedAt - warmMs;
+          if (
+            outcome.status === 'error' &&
+            outcome.error instanceof LatticeWorkSuperseded
+          )
+            throw outcome.error;
+          if (
+            outcome.status !== 'rendered' ||
+            outcome.result.card?.error ||
+            !outcome.result.card?.serialized?.data.meta.publication
+          ) {
+            let error =
+              outcome.status === 'error'
+                ? outcome.error
+                : outcome.status === 'rendered'
+                  ? (outcome.result.card?.error ??
+                    outcome.result.pageUnusableError)
+                  : undefined;
+            failures.push(
+              `${ownerURL}: ${coerceErrorMessage(
+                error,
+                outcome.status === 'rendered'
+                  ? `incomplete Lattice materialization (card fields: ${Object.keys(outcome.result.card ?? {}).join(', ')}; metadata: ${Object.keys(outcome.result.card?.serialized?.data.meta ?? {}).join(', ')})`
+                  : `Lattice visit ${outcome.status}`,
+              )}`,
+            );
+            if (followup) {
+              const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
+              if (
+                await publication.failWork(
+                  work,
+                  message,
+                  followup.realmUsername,
+                  followup.wave - 1,
+                )
+              )
+                throw new LatticeWorkFailed(message);
+            }
+            continue;
+          }
+          let finishStartedAt = Date.now();
+          await this.#finishVisit(outcome.result);
+          this.#latticeTimings.latticeFinishVisitMs +=
+            Date.now() - finishStartedAt;
+          completedOwners.push(ownerURL);
+          succeeded++;
+          this.#latticeTimings.latticeOwnersRendered++;
+        }
+        if (!succeeded)
+          throw new Error(
+            `Lattice could not materialize pending owners: ${failures.join(', ')}`,
+          );
+        let swapStartedAt = Date.now();
+        await this.batch.done({
+          lattice: publication,
+          latticeInputGeneration: this.#inputSnapshot.generation,
+          latticeFollowup: followup,
+          countIndexEntries: false,
+        });
+        for (const ownerURL of completedOwners)
+          if (!this.batch.latticeRetainedOutputs.has(ownerURL))
+            published.add(ownerURL);
+        this.#latticeTimings.latticeSwapMs += Date.now() - swapStartedAt;
+        this.#latticeTimings.latticeWriteMs += this.batch.writeMs;
+        pending = await publication.registry.pending(this.realmURL.href, {
+          runnableOnly: Boolean(followup),
+        });
+      }
+      if (pending.length && !followup)
+        throw new Error(
+          'Lattice feeder graph did not converge; owners remain pending',
+        );
+      return [...published].map((url) => new URL(url));
+    } finally {
+      this.#inputSnapshot = undefined;
+      this.#latticeTimings.latticeMaterializationMs += Date.now() - startedAt;
+    }
   }
 
   // Announce this pass's now-fixed invalidation set, tagged per URL:
@@ -755,9 +1072,16 @@ export class IndexRunner {
   // render sits un-awaited for a tick, and an escaping rejection there would
   // be an unhandled-rejection rather than something the loop can route to a
   // file-error row.
-  async #renderVisit(url: URL): Promise<VisitRenderOutcome> {
+  async #renderVisit(
+    url: URL,
+    beforeIndex?: (runtime: 'native' | 'browser') => Promise<void>,
+  ): Promise<VisitRenderOutcome> {
     try {
       let result = await renderFileForIndexing({
+        nativeCardIndexer: this.#nativeCardIndexer,
+        nativeFileIndexer: this.#nativeFileIndexer,
+        beforeIndex,
+        inputSnapshot: this.#inputSnapshot,
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,

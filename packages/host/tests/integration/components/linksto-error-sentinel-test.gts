@@ -1,4 +1,4 @@
-import { render, waitUntil } from '@ember/test-helpers';
+import { render, settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -143,6 +143,127 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     });
   }
 
+  for (let failure of [
+    { name: 'network not found', status: 500, transport: 'network' },
+    { name: 'timeout', status: 500, transport: 'timeout' },
+    {
+      name: 'missing batch endpoint',
+      status: 502,
+      transport: 'missing-endpoint',
+    },
+    { name: 'permission not found', status: 403 },
+    { name: 'upstream not found', status: 503 },
+    { name: 'awaiting index', status: 404, awaitingIndex: true },
+  ]) {
+    test(`indexed-input ${failure.name} stays an error for singular and plural links`, async function (assert) {
+      await setupRealm();
+      const target = `${testRealmURL}Pet/ghost`;
+      const person = await createPerson({
+        pet: { links: { self: target } },
+        'pets.0': { links: { self: target } },
+      });
+      const network = getService('network').virtualNetwork;
+      let requests = 0;
+      const responder = async (request: Request) => {
+        if (request.url !== `${testRealmURL}_lattice-inputs`) return null;
+        requests++;
+        if (failure.transport === 'network')
+          throw new TypeError('DNS address not found');
+        if (failure.transport === 'timeout')
+          throw new DOMException('Input request timed out', 'TimeoutError');
+        if (failure.transport === 'missing-endpoint')
+          return Response.json(
+            {
+              errors: [
+                {
+                  status: 404,
+                  message: 'Input endpoint not found',
+                  additionalErrors: null,
+                },
+              ],
+            },
+            { status: 404 },
+          );
+        const { urls } = await request.json();
+        return Response.json({
+          results: urls.map((url: string) => ({
+            url,
+            error: {
+              status: failure.status,
+              message: failure.name,
+              additionalErrors: null,
+              ...(failure.awaitingIndex ? { awaitingIndex: true } : {}),
+            },
+          })),
+        });
+      };
+      const globals = globalThis as any;
+      const context = globals.__boxelRenderContext;
+      const snapshot = globals.__latticeInputSnapshot;
+      network.mount(responder, { prepend: true });
+      try {
+        globals.__boxelRenderContext = true;
+        globals.__latticeInputSnapshot = {
+          realmURL: testRealmURL,
+          generation: 1,
+        };
+        person.pet;
+        person.pets;
+        const array = getDataBucket(person).get('pets');
+        await waitUntil(() => {
+          const pet = bucketEntry(person, 'pet');
+          const pets = getRelationshipMembershipState(
+            person,
+            'pets',
+          ).membership;
+          return (
+            (isLinkError(pet) || isLinkNotFound(pet)) &&
+            pets?.every(({ kind }) => kind === 'error' || kind === 'not-found')
+          );
+        });
+        await settled();
+        assert.true(
+          requests > 0,
+          'the real indexed-input transport was reached',
+        );
+        assert.true(
+          isLinkError(bucketEntry(person, 'pet')),
+          'singular failure is not absence',
+        );
+        assert.strictEqual(
+          bucketEntry(person, 'pet').errorDoc.status,
+          failure.status,
+          'upstream status is retained',
+        );
+        assert.strictEqual(bucketEntry(person, 'pet').reference, target);
+        assert.deepEqual(
+          getRelationshipMembershipState(person, 'pets').membership?.map(
+            ({ kind }) => kind,
+          ),
+          ['error'],
+          'plural failure is not absence',
+        );
+        assert.strictEqual(
+          getDataBucket(person).get('pets'),
+          array,
+          'plural identity is preserved',
+        );
+        assert.throws(
+          () => person.pet,
+          /cannot materialize failed relationship input/,
+        );
+        assert.throws(
+          () => person.pets,
+          /cannot materialize failed relationship input/,
+        );
+      } finally {
+        globals.__boxelRenderContext = context;
+        globals.__latticeInputSnapshot = snapshot;
+        network.unmount(responder);
+      }
+    });
+  }
+
   test('a 404 lazy-load failure plants a link-not-found sentinel in the data bucket', async function (assert) {
     await setupRealm();
 
@@ -248,6 +369,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
 
     await render(
       <template>
+        {{! template-lint-configure no-curly-component-invocation { "allow": ["bump", "petKind"] } }}
         <span>{{bump}}</span>
         <span data-test-kind>{{petKind}}</span>
       </template>,

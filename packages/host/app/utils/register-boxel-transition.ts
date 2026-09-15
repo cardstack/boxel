@@ -14,6 +14,7 @@ import type RouterService from '@ember/routing/router-service';
 (globalThis as any).__boxelHostCapabilities = {
   ...(globalThis as any).__boxelHostCapabilities,
   fusedIndexMeta: true,
+  latticeRenderCheckpoint: true,
 };
 
 // The card id of the most recent render transition requested through

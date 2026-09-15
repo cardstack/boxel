@@ -1,4 +1,5 @@
 import { query, param, type DBAdapter, type Expression } from './index.ts';
+import { invalidateLatticeFileChanges } from './jobs/lattice-code.ts';
 
 // Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(
@@ -158,6 +159,7 @@ export async function persistFileMeta(
   db: DBAdapter,
   realmURL: string,
   rows: { path: string; contentHash?: string; contentSize?: number }[],
+  latticeEnabled = false,
 ): Promise<
   Map<string, { createdAt: number; contentHash?: string; contentSize?: number }>
 > {
@@ -196,7 +198,15 @@ export async function persistFileMeta(
     ', content_size =',
     'COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',
   );
-  await query(db, expr);
+  if (latticeEnabled && db.kind === 'pg') {
+    expr.push(
+      'WHERE realm_file_meta.content_hash IS DISTINCT FROM COALESCE(EXCLUDED.content_hash, realm_file_meta.content_hash)',
+      'OR realm_file_meta.content_size IS DISTINCT FROM COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',
+    );
+    await query(db, invalidateLatticeFileChanges(expr));
+  } else {
+    await query(db, expr);
+  }
 
   // Fetch created_at for all affected paths (both pre-existing and new)
   let uniquePaths = Array.from(new Set(rows.map((row) => row.path)));
@@ -238,6 +248,7 @@ export async function removeFileMeta(
   db: DBAdapter,
   realmURL: string,
   paths: string[],
+  latticeEnabled = false,
 ): Promise<void> {
   if (!db || paths.length === 0) return;
   let expr: Expression = [
@@ -251,5 +262,10 @@ export async function removeFileMeta(
     expr.push(param(p));
   });
   expr.push(')');
-  await query(db, expr);
+  await query(
+    db,
+    latticeEnabled && db.kind === 'pg'
+      ? invalidateLatticeFileChanges(expr)
+      : expr,
+  );
 }

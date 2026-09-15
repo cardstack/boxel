@@ -75,6 +75,12 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
+  // Lattice publication owns one persisted card resource. When false, keep
+  // relationship identities without invoking linked cards' serializers or
+  // building included resources. Contained values still serialize normally.
+  // Unsaved links are rejected because an identity-only document cannot carry
+  // the new card's values. Ordinary serialization retains its existing default.
+  includeLinkedResources?: boolean;
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
@@ -94,6 +100,18 @@ export interface DeserializeOpts {
   // the prefix the next level down qualifies its own field names with. Set
   // only alongside `hydrateFieldsMs`; the root call leaves it unset.
   hydrateFieldPath?: string;
+  // The caller obtained this compound document through a validated publication
+  // read. Each linked resource still validates its own stamp and coverage.
+  // Authoring/source reads must omit this, even if their JSON contains stamps.
+  latticePublication?: 'display' | 'input';
+  // Internal Lattice read mode, supplied only after the caller verifies server
+  // provenance/completeness. Never inferred from authored attributes. Contained
+  // paths use dots and '*' for containsMany entries; links remain lazy.
+  latticeSnapshot?: {
+    computedFields: string[];
+    queryFields: string[];
+    scope?: { active: boolean; pending?: boolean };
+  };
 }
 
 // --- Serialization Symbols ---

@@ -1,6 +1,9 @@
 import type * as JSONTypes from 'json-typescript';
 import { flatten } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
+import { LATTICE_PRIORITY } from './jobs/lattice.ts';
+import { LATTICE_DISPLAY_TOKEN_PREFIX } from './lattice-display.ts';
+import { latticeInputArtifactReceipt } from './lattice-input-artifacts.ts';
 import {
   type CardResource,
   type CodeRef,
@@ -79,7 +82,8 @@ import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
 } from './definition-lookup.ts';
-import type { FileMetaResource } from './resource-types.ts';
+import type { FileMetaResource, LooseCardResource } from './resource-types.ts';
+import { LATTICE_INPUT_TOKEN_PREFIX } from './lattice-input-residency.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
 
@@ -251,8 +255,32 @@ interface InstanceError extends Partial<
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 
-type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions & {
+// Lattice JSON assembly needs the linked resource and its error/screenshot
+// state, not the large dependency arrays or rendered HTML on a full index row.
+export type LatticeLinkedInstance =
+  | Pick<IndexedInstance, 'type' | 'instance' | 'canonicalURL' | 'screenshots'>
+  | Pick<InstanceError, 'type' | 'canonicalURL' | 'error'>;
+
+type LatticeLinkedRow = Pick<
+  IndexRowWithHtml,
+  | 'url'
+  | 'file_alias'
+  | 'is_deleted'
+  | 'pristine_doc'
+  | 'last_modified'
+  | 'resource_created_at'
+  | 'has_error'
+  | 'error_doc'
+  | 'screenshots'
+>;
+
+type GetEntryOptions = WIPOptions & {
+  // Lattice JSON snapshots consume indexed data independently of the optional
+  // HTML channel. A failed HTML render must not prevent rebuilding its data.
+  latticeData?: boolean;
+  latticeInput?: boolean;
+};
+export type QueryOptions = GetEntryOptions & {
   includeErrors?: true;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
   // instance rows by their `.json` file URL, file rows by their canonical URL.
@@ -340,12 +368,12 @@ function flipPolarity(polarity: FilterPolarity): FilterPolarity {
 // queries compile or adding a filter operator / synthetic search-doc key.
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
-  #definitionLookup: DefinitionLookup;
+  #definitionLookup: Pick<DefinitionLookup, 'lookupDefinition'>;
   #virtualNetwork: VirtualNetwork;
 
   constructor(
     dbAdapter: DBAdapter,
-    definitionLookup: DefinitionLookup,
+    definitionLookup: Pick<DefinitionLookup, 'lookupDefinition'>,
     virtualNetwork: VirtualNetwork,
   ) {
     this.#dbAdapter = dbAdapter;
@@ -373,12 +401,353 @@ export class IndexQueryEngine {
       : this.#query(expression);
   }
 
+  // Lattice reverse-query verification uses the forward query compiler against
+  // one effective indexed document. No second JavaScript predicate evaluator:
+  // type ancestry, nulls, plural paths and reference normalization are shared.
+  // Sort/page never restrict invalidation membership.
+  reverseCompilationScope(): IndexQueryEngine {
+    return this.compilationScope(LATTICE_PRIORITY);
+  }
+
+  // Each request owns its lookup context. A shared mutable priority would let
+  // concurrent searches steal one another's renderer admission priority.
+  compilationScope(priority?: number): IndexQueryEngine {
+    // One publication may contain hundreds of parameterized watches over the
+    // same handful of definitions. Retain only their resolved definitions for
+    // this preparation pass, not the module rows and their dependency payloads.
+    // A new publication gets a new scope; definition changes cannot reuse it.
+    let definitions = new Map<
+      string,
+      ReturnType<DefinitionLookup['lookupDefinition']>
+    >();
+    let source = this.#definitionLookup;
+    let lookup: DefinitionLookup['lookupDefinition'] = (ref, opts) => {
+      let key = stringify([ref, opts])!;
+      let definition = definitions.get(key);
+      if (!definition) {
+        definition = source.lookupDefinition(ref, {
+          ...opts,
+          priority: opts?.priority ?? priority,
+        });
+        definitions.set(key, definition);
+      }
+      return definition;
+    };
+    return new IndexQueryEngine(
+      this.#dbAdapter,
+      new Proxy(source, {
+        get(target, property) {
+          if (property === 'lookupDefinition') return lookup;
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }),
+      this.#virtualNetwork,
+    );
+  }
+
+  async reverseCompileFilter(filter: Filter | undefined): Promise<Expression> {
+    assertLatticeFilter(filter);
+    return this.makeExpression([
+      'SELECT 1 AS matched FROM lattice_input AS i',
+      tableValuedFunctionsPlaceholder,
+      'WHERE',
+      ...(filter
+        ? this.filterCondition(filter, baseCardRef, 'positive')
+        : ['TRUE']),
+      'LIMIT 1',
+    ]);
+  }
+
+  async reverseMatchesDocument(
+    filter: Filter | undefined,
+    document: Pick<BoxelIndexTable, 'url' | 'search_doc' | 'types'> &
+      Partial<
+        Pick<
+          BoxelIndexTable,
+          'file_alias' | 'type' | 'last_modified' | 'resource_created_at'
+        >
+      >,
+    compiledFilter?: Expression,
+  ): Promise<boolean> {
+    assertLatticeFilter(filter);
+    let json = (value: unknown): Expression => [
+      dbExpression({
+        pg: ['CAST(', param(value as any), 'AS JSONB)'],
+        sqlite: [param(value as any)],
+      }),
+    ];
+    let expression: Expression = [
+      'WITH lattice_input AS (SELECT',
+      ...json(document.search_doc),
+      'AS search_doc,',
+      ...json(document.types),
+      'AS types,',
+      param(document.url),
+      'AS url,',
+      param(document.file_alias ?? null),
+      'AS file_alias,',
+      param(document.type ?? 'instance'),
+      'AS type,',
+      param(document.last_modified ?? null),
+      'AS last_modified,',
+      param(document.resource_created_at ?? null),
+      'AS resource_created_at',
+      ')',
+      ...(compiledFilter ?? (await this.reverseCompileFilter(filter))),
+    ];
+    return (await this.#query(expression)).length > 0;
+  }
+
+  async reverseMatchingCandidates(
+    candidates: Array<{
+      ownerURL: string;
+      filter: Filter | undefined;
+      compiled?: Expression;
+    }>,
+    document: Parameters<IndexQueryEngine['reverseMatchesDocument']>[1],
+  ): Promise<string[]> {
+    if (!candidates.length) return [];
+    let matched: string[] = [];
+    let hasTableValuedFunctions = (expression: Expression): boolean =>
+      expression.some(
+        (element) =>
+          typeof element !== 'string' &&
+          (element.kind === 'table-valued-tree' ||
+            (element.kind === 'db-specific-expression' &&
+              [element.pg, element.sqlite].some(
+                (value) =>
+                  Array.isArray(value) && hasTableValuedFunctions(value),
+              ))),
+      );
+    let branches: Expression[] = [];
+    for (let candidate of candidates) {
+      assertLatticeFilter(candidate.filter);
+      let compiled =
+        candidate.compiled ??
+        (await this.reverseCompileFilter(candidate.filter));
+      // The shared SQL renderer has one table-valued-function scope. Keep
+      // plural-path predicates in separate queries so their joins cannot
+      // eliminate another watch's input row or leak aliases across branches.
+      if (hasTableValuedFunctions(compiled)) {
+        if (
+          await this.reverseMatchesDocument(
+            candidate.filter,
+            document,
+            compiled,
+          )
+        )
+          matched.push(candidate.ownerURL);
+        continue;
+      }
+      branches.push([
+        'SELECT',
+        param(candidate.ownerURL),
+        'AS owner_url WHERE EXISTS (',
+        ...compiled.filter(
+          (element) => element !== tableValuedFunctionsPlaceholder,
+        ),
+        ')',
+      ]);
+    }
+    if (!branches.length) return matched;
+    // Each predicate keeps its own SQL scope, sharing one literal input row.
+    // One round-trip per document replaces one per candidate watch.
+    let json = (value: unknown): Expression => [
+      dbExpression({
+        pg: ['CAST(', param(value as any), 'AS JSONB)'],
+        sqlite: [param(value as any)],
+      }),
+    ];
+    let expression: Expression = [
+      'WITH lattice_input AS (SELECT',
+      ...json(document.search_doc),
+      'AS search_doc,',
+      ...json(document.types),
+      'AS types,',
+      param(document.url),
+      'AS url,',
+      param(document.file_alias ?? null),
+      'AS file_alias,',
+      param(document.type ?? 'instance'),
+      'AS type,',
+      param(document.last_modified ?? null),
+      'AS last_modified,',
+      param(document.resource_created_at ?? null),
+      'AS resource_created_at)',
+    ];
+    for (let [index, branch] of branches.entries()) {
+      if (index) expression.push('UNION ALL');
+      expression.push(...branch);
+    }
+    return [
+      ...matched,
+      ...(await this.#query(expression)).map((row) => row.owner_url as string),
+    ];
+  }
+
+  // A deliberately narrow routing optimization: direct string fields have an
+  // identical query/index encoding. Otherwise an explicit positive type guard
+  // can route on indexed ancestry; only unanchored filters need a broad route.
+  async reverseRoutingTerms(
+    filter: Filter | undefined,
+  ): Promise<Array<{ path: string; value: string }> | undefined> {
+    assertLatticeFilter(filter);
+    let extract = async (
+      part: Filter | undefined,
+      inheritedOn: CodeRef,
+    ): Promise<Array<{ path: string; value: string }> | undefined> => {
+      if (!part) return undefined;
+      let on = 'on' in part && part.on ? part.on : inheritedOn;
+      if ('every' in part) {
+        for (let child of part.every) {
+          let terms = await extract(child, on);
+          if (terms) return terms;
+        }
+      } else if ('any' in part) {
+        let branches = await Promise.all(
+          part.any.map((child) => extract(child, on)),
+        );
+        if (branches.every((branch) => branch !== undefined))
+          return branches.flat() as Array<{ path: string; value: string }>;
+      } else if ('eq' in part || 'in' in part) {
+        let entries =
+          'eq' in part
+            ? Object.entries(part.eq).map(
+                ([path, value]) => [path, [value]] as const,
+              )
+            : Object.entries(part.in);
+        for (let [path, values] of entries) {
+          if (
+            path.includes('.') ||
+            isReferenceFilterField(path) ||
+            !Array.isArray(values) ||
+            values.length === 0 ||
+            path.length > 128 ||
+            !values.every(
+              (value) => typeof value === 'string' && value.length <= 256,
+            )
+          )
+            continue;
+          let definition = await this.getDefinition(on);
+          let field = await getField(definition, path, this.#definitionLookup);
+          let key = internalKeyFor(
+            field.fieldOrCard,
+            undefined,
+            this.#virtualNetwork,
+          );
+          if (
+            field.type === 'contains' &&
+            field.isPrimitive &&
+            !field.serializerName &&
+            [
+              `${baseRealmRRI}string/default`,
+              `${baseRealmRRI}card-api/StringField`,
+            ].includes(key)
+          )
+            return values.map((value) => ({ path, value: value as string }));
+        }
+      }
+      // An explicit on/type is a required positive guard in the forward
+      // compiler, even when the remaining predicate contains OR or NOT.
+      // Do not use inheritedOn here: a type inside NOT is not a safe anchor.
+      let requiredType =
+        'on' in part ? part.on : 'type' in part ? part.type : undefined;
+      if (requiredType) {
+        return (await this.typeKeysFor(requiredType)).map((value) => ({
+          path: '$lattice.type',
+          value,
+        }));
+      }
+      return undefined;
+    };
+    return extract(filter, baseCardRef);
+  }
+
+  async getLatticeStoredDocument(
+    url: URL,
+    realmURL: URL,
+    opts?: { have?: string; context: string },
+  ) {
+    if (this.#dbAdapter.kind !== 'pg') return undefined;
+    let [row] = await this.#query([
+      `SELECT CASE WHEN reuse.matches THEN la.resource ELSE i.pristine_doc - 'attributes' END AS pristine_doc,
+         CASE WHEN reuse.matches THEN NULL ELSE o.attributes_json END AS attributes_json,
+         lv.token, reuse.matches AS reuse, i.generation, i.indexed_at, ph.screenshots
+       FROM boxel_index i
+       JOIN lattice_owners o ON o.realm_url = i.realm_url AND o.owner_url = i.url
+       LEFT JOIN lattice_input_artifacts la ON la.realm_url = i.realm_url AND la.url = i.url AND la.type = i.type
+         AND ${latticeInputArtifactReceipt}
+       LEFT JOIN realm_generations lg ON lg.realm_url = i.realm_url
+       ${prerenderedJoin()}
+       CROSS JOIN LATERAL (SELECT CASE WHEN la.digest IS NULL THEN NULL ELSE`,
+      param(LATTICE_DISPLAY_TOKEN_PREFIX),
+      `|| encode(sha256(convert_to(jsonb_build_array(
+         i.realm_url, i.url, i.file_alias, la.digest, i.generation, i.indexed_at,
+         i.last_modified, i.resource_created_at, o.attributes_generation,
+         ph.screenshots, lg.loader_epoch,`,
+      param(opts?.context ?? ''),
+      `::text)::text, 'UTF8')), 'hex') END AS token OFFSET 0) lv
+       CROSS JOIN LATERAL (SELECT COALESCE(lv.token =`,
+      param(opts?.have ?? null),
+      `, FALSE) AS matches) reuse
+       WHERE i.realm_url =`,
+      param(realmURL.href),
+      'AND (i.url =',
+      param(url.href),
+      'OR i.file_alias =',
+      param(url.href),
+      `) AND i.type = 'instance' AND i.is_deleted IS NOT TRUE AND i.has_error IS NOT TRUE
+       AND NOT o.retired AND o.attributes_json IS NOT NULL
+       AND o.attributes_generation = o.published_generation
+       AND i.pristine_doc->'meta'->'publication'->>'state' = 'ready'
+       AND (i.pristine_doc->'meta'->'publication'->>'outputRevision')::bigint = o.published_generation`,
+    ]);
+    if (!row) return undefined;
+    return {
+      resource: row.pristine_doc as unknown as CardResource,
+      attributesJSON: row.attributes_json as string | null,
+      token: (row.token as string | null) ?? undefined,
+      reuse: row.reuse === true,
+      generation: Number(row.generation),
+      indexedAt: row.indexed_at as number | null,
+      screenshots: row.screenshots as ScreenshotManifest | null,
+    };
+  }
+
+  private instanceProjection(
+    opts?: GetEntryOptions,
+    pristineDoc = 'i.pristine_doc',
+  ): string {
+    let sourceErrors = opts?.latticeInput
+      ? 'TRUE'
+      : opts?.latticeData
+        ? "i.pristine_doc->'meta'->'publication' IS NOT NULL"
+        : 'FALSE';
+    let errors = `CASE WHEN ${sourceErrors} THEN i.has_error ELSE ${effectiveHasError()} END AS has_error,
+      CASE WHEN ${sourceErrors} THEN i.error_doc ELSE ${effectiveErrorDoc()} END AS error_doc`;
+    // Lattice's revision-pinned inputs consume the stored card JSON. They do
+    // not need rendered formats, diagnostics, search data or dependency
+    // arrays on successful rows. Preserve source-error presentation metadata.
+    let columns = opts?.latticeInput
+      ? `i.url, i.file_alias, i.realm_url, i.is_deleted, ${pristineDoc},
+         i.last_modified, i.resource_created_at, i.generation, i.indexed_at,
+         i.types, ph.screenshots,
+         CASE WHEN i.has_error THEN i.deps ELSE NULL END AS deps,
+         CASE WHEN i.has_error THEN i.search_doc ELSE NULL END AS search_doc,
+         CASE WHEN i.has_error THEN ph.isolated_html ELSE NULL END AS isolated_html,
+         NULL AS head_html, NULL AS embedded_html, NULL AS fitted_html,
+         NULL AS atom_html, NULL AS markdown`
+      : `i.*, ${PRERENDERED_HTML_SELECTS}`;
+    return `${columns}, ${errors}`;
+  }
+
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+      `SELECT ${this.instanceProjection(opts)}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -400,7 +769,167 @@ export class IndexQueryEngine {
     urls: URL[],
     opts?: GetEntryOptions,
   ): Promise<Map<string, InstanceOrError>> {
-    let resultMap = new Map<string, InstanceOrError>();
+    return this.#getInstances<IndexRowWithHtml, InstanceOrError>(
+      urls,
+      opts,
+      this.instanceProjection(opts),
+      (row) => this.#rowToInstanceOrError(row, undefined, opts),
+    );
+  }
+
+  // Exact identity-local input reuse. PostgreSQL compares a digest of the
+  // indexed resource digest and its serving metadata before projecting the
+  // JSONB body, so matching bodies never become pg-driver JS object trees.
+  // The body digest and freshness envelope are prepared at index publication;
+  // the serving query only hashes their small context. SQLite keeps the
+  // full-body path and does not depend on PostgreSQL's row-version receipts.
+  async getLatticeInputs(
+    urls: URL[],
+    have: Map<string, string>,
+    context: string,
+    retainLinks = false,
+  ): Promise<
+    Map<
+      string,
+      {
+        token?: string;
+        receipt?: import('./lattice-browser-inputs.ts').LatticeInputRowReceipt;
+        entry:
+          | InstanceOrError
+          | { type: 'lattice-reuse'; resource: LooseCardResource };
+      }
+    >
+  > {
+    let opts = { latticeInput: true };
+    if (this.#dbAdapter.kind !== 'pg') {
+      return new Map(
+        [...(await this.getInstances(urls, opts))].map(([url, entry]) => [
+          url,
+          { entry },
+        ]),
+      );
+    }
+    let reusable = `NOT COALESCE(i.has_error, FALSE)
+      AND la.digest IS NOT NULL AND lh.token = lv.token`;
+    return this.#getInstances<
+      IndexRowWithHtml & {
+        lattice_token: string | null;
+        lattice_reuse: boolean | null;
+        lattice_resource: LooseCardResource;
+        lattice_row_version?: string;
+        lattice_definition_seal?: string;
+      },
+      {
+        token?: string;
+        receipt?: import('./lattice-browser-inputs.ts').LatticeInputRowReceipt;
+        entry:
+          | InstanceOrError
+          | { type: 'lattice-reuse'; resource: LooseCardResource };
+      }
+    >(
+      urls,
+      opts,
+      `${this.instanceProjection(opts, `CASE WHEN ${reusable} THEN NULL ELSE i.pristine_doc END AS pristine_doc`)},
+       lv.token AS lattice_token, (${reusable}) AS lattice_reuse,
+       CASE WHEN ${reusable} THEN la.resource END AS lattice_resource${
+         retainLinks
+           ? `,
+       i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS lattice_row_version,
+       COALESCE(i.pristine_doc->'meta'->'publication'->>'definitionRevision',lg.loader_epoch) AS lattice_definition_seal`
+           : ''
+       }`,
+      (row) => {
+        let entry = row.lattice_reuse
+          ? { type: 'lattice-reuse' as const, resource: row.lattice_resource }
+          : this.#rowToInstanceOrError(row, undefined, opts);
+        return entry
+          ? {
+              ...(row.lattice_token ? { token: row.lattice_token } : {}),
+              ...(retainLinks && entry.type !== 'instance-error'
+                ? {
+                    receipt: {
+                      rowVersion: row.lattice_row_version!,
+                      indexGeneration: Number(row.generation),
+                      definitionSeal: row.lattice_definition_seal!,
+                    },
+                  }
+                : {}),
+              entry,
+            }
+          : undefined;
+      },
+      [
+        `LEFT JOIN realm_generations lg ON lg.realm_url = i.realm_url
+         LEFT JOIN lattice_input_artifacts la ON la.realm_url = i.realm_url
+           AND la.url = i.url AND la.type = i.type
+           AND ${latticeInputArtifactReceipt}
+         LEFT JOIN jsonb_to_recordset(`,
+        param(
+          JSON.stringify([...have].map(([url, token]) => ({ url, token }))),
+        ),
+        `::jsonb) AS lh(url text, token text)
+           ON lh.url = i.url OR lh.url = i.file_alias
+         CROSS JOIN LATERAL (SELECT CASE WHEN la.digest IS NULL THEN NULL ELSE`,
+        param(LATTICE_INPUT_TOKEN_PREFIX),
+        `|| encode(sha256(convert_to(jsonb_build_array(
+          i.realm_url, i.url, i.file_alias, la.digest,
+          i.last_modified, i.resource_created_at, i.generation,
+          ph.screenshots, lg.loader_epoch,`,
+        param(context),
+        // Keep the digest evaluation inside the lateral subquery. Without
+        // this boundary PostgreSQL can inline it at every token/reuse/body
+        // reference. The large body was hashed once at index publication.
+        `::text)::text, 'UTF8')), 'hex') END AS token OFFSET 0) lv`,
+      ],
+    );
+  }
+
+  async getInstancesForLinks(
+    urls: URL[],
+    opts?: GetEntryOptions,
+  ): Promise<Map<string, LatticeLinkedInstance>> {
+    return this.#getInstances<LatticeLinkedRow, LatticeLinkedInstance>(
+      urls,
+      opts,
+      `i.url, i.file_alias, i.is_deleted, i.pristine_doc,
+       i.last_modified, i.resource_created_at, ph.screenshots,
+       ${EFFECTIVE_ERROR_SELECTS}`,
+      (row) => {
+        if (row.is_deleted) return undefined;
+        if (row.has_error) {
+          return {
+            type: 'instance-error',
+            canonicalURL: row.url,
+            error: row.error_doc!,
+          };
+        }
+        assertIndexEntry(row);
+        if (!row.pristine_doc) {
+          throw new Error(
+            `bug: linked index entry for ${row.url} has neither an error_doc nor a pristine_doc`,
+          );
+        }
+        return {
+          type: 'instance',
+          instance: row.pristine_doc,
+          canonicalURL: row.url,
+          screenshots: (row.screenshots as ScreenshotManifest | null) ?? null,
+        };
+      },
+    );
+  }
+
+  async #getInstances<
+    Row extends Pick<IndexRowWithHtml, 'url' | 'file_alias'>,
+    Result,
+  >(
+    urls: URL[],
+    opts: GetEntryOptions | undefined,
+    columns: string,
+    mapRow: (row: Row) => Result | undefined,
+    joins: Expression = [],
+  ): Promise<Map<string, Result>> {
+    let resultMap = new Map<string, Result>();
     if (urls.length === 0) {
       return resultMap;
     }
@@ -415,9 +944,10 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
-        `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
-         WHERE`,
+        `SELECT ${columns}`,
+        `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}`,
+        ...joins,
+        'WHERE',
         ...every([
           any([
             ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
@@ -429,9 +959,9 @@ export class IndexQueryEngine {
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as Row[];
       for (let row of rows) {
-        let mapped = this.#rowToInstanceOrError(row, undefined, opts);
+        let mapped = mapRow(row);
         if (!mapped) {
           continue;
         }
@@ -852,7 +1382,9 @@ export class IndexQueryEngine {
       // "not errored" spans both error channels (index + current render error),
       // matching the single-kind branches below — so a file row with a current
       // render error is excluded from the mixed scope too.
-      let notErrored: CardExpression = [`NOT ${effectiveHasError()}`];
+      let notErrored: CardExpression = [
+        `NOT ${opts.latticeInput ? 'i.has_error' : effectiveHasError()}`,
+      ];
       if (entryType === 'all') {
         // Mixed scope. Instance rows follow `includeErrors` (their error
         // markup is rendered through the html branch); file rows are only
@@ -1063,11 +1595,17 @@ export class IndexQueryEngine {
       // assembly reads to synthesize each file's `file-meta` resource + type
       // descriptor. The effective error columns fold in current render errors
       // from the prerendered_html channel.
-      let dataOnly = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation`;
+      // Revision-pinned materialization consumes indexed data. A failed HTML
+      // render must not silently remove a matching input from its aggregates.
+      let hasError = opts.latticeInput ? 'i.has_error' : effectiveHasError();
+      let errorDoc = opts.latticeInput ? 'i.error_doc' : effectiveErrorDoc();
+      let dataOnly = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${hasError}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${errorDoc}) as error_doc, ANY_VALUE(i.generation) as generation`;
+      // HTML dependencies are consumed only when assembling renderings. They
+      // can dwarf the card data, so do not transfer or parse them for items.
       selectClauseExpression =
         entryType !== 'instance'
           ? [
-              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
+              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
             ]
           : [dataOnly];
     } else {
@@ -1118,6 +1656,52 @@ export class IndexQueryEngine {
       .filter(Boolean) as CardResource[];
 
     return { cards, meta };
+  }
+
+  // Membership for a data computation. Use the ordinary query compiler and
+  // ordering, but do not bring card bodies, HTML or module payloads into Node.
+  // The caller pins the index generation and separately bounds the data read.
+  async latticeQueryIdentities(realmURL: URL, input: Query) {
+    let size = input.page?.size;
+    let number = input.page?.number ?? 0;
+    if (
+      !Number.isSafeInteger(size) ||
+      size! < 1 ||
+      size! > 2000 ||
+      !Number.isSafeInteger(number) ||
+      number < 0 ||
+      !Number.isSafeInteger(number * size!)
+    ) {
+      throw new Error('Lattice membership requires a bounded page');
+    }
+    let { results, meta } = await this._search(
+      realmURL,
+      input,
+      { latticeInput: true, includeErrors: true },
+      ['SELECT i.url AS url'],
+    );
+    if (meta.incomplete || results.some((row) => !row.url)) {
+      throw new Error('Incomplete Lattice query membership');
+    }
+    return { urls: results.map((row) => row.url!), meta };
+  }
+
+  // A stale computed value can miss the full predicate. Readiness must consider
+  // the whole possible input type, not only the rows matching that old value.
+  // Positive type constraints compose with the query's AND/OR structure. A
+  // negated predicate cannot narrow the possible type: a stale value can move
+  // either into or out of it. Never use sort, page or mutable field values here.
+  async latticeQueryTypeScope(filter: Filter | undefined): Promise<Expression> {
+    const scope = (node: Filter | undefined): CardExpression => {
+      if (!node) return ['TRUE'];
+      const ref = 'on' in node ? node.on : undefined;
+      if (ref) return this.typeCondition(ref);
+      if ('type' in node) return this.typeCondition(node.type);
+      if ('every' in node) return every(node.every.map(scope));
+      if ('any' in node) return any(node.any.map(scope));
+      return ['TRUE'];
+    };
+    return this.makeExpression(scope(filter));
   }
 
   async searchFiles(
@@ -2248,7 +2832,7 @@ function seedSearchableRoutesFromDefinition(
 async function getField(
   definition: Definition,
   pathTraveled: string,
-  definitionLookup: DefinitionLookup,
+  definitionLookup: Pick<DefinitionLookup, 'lookupDefinition'>,
 ): Promise<FieldDefinition> {
   let cleansedPath = removeBrackets(pathTraveled);
   let field = await getFieldDef(definition, cleansedPath, async (codeRef) => {
@@ -2466,6 +3050,17 @@ function escapeSqliteLikePattern(value: string): string {
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
+}
+
+function assertLatticeFilter(filter: Filter | undefined): void {
+  if (!filter) return;
+  if ('matches' in filter)
+    throw new InvalidQueryError(
+      'Lattice materialization does not support full-text predicates',
+    );
+  if ('every' in filter) filter.every.forEach(assertLatticeFilter);
+  if ('any' in filter) filter.any.forEach(assertLatticeFilter);
+  if ('not' in filter) assertLatticeFilter(filter.not);
 }
 
 type FilterFieldHandler<T> = (

@@ -25,6 +25,7 @@ import {
   type SingleFileMetaDocument,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { currentLatticeInputSnapshot } from '@cardstack/runtime-common/lattice-materialization';
 
 import type {
   BaseDef,
@@ -67,6 +68,9 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 type StoredInstance = CardDef | FileDef;
 
 type StoreHooks = {
+  // Only the display Store supplies this; authored metadata is not admission.
+  publicationRealm?(instance: CardDef): string | undefined;
+  publicationAdded?(instance: CardDef, realm: string): void;
   // Whether a query-backed relationship resolves as soon as its owner
   // deserializes into this store, rather than waiting for something to read
   // the field. Absent means it does not — a store that renders deterministically
@@ -131,9 +135,14 @@ function currentRenderScope(): string | undefined {
   if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
     return undefined;
   }
-  return typeof g.__boxelRenderScope === 'string'
-    ? g.__boxelRenderScope
-    : g.__boxelJobId;
+  let scope =
+    typeof g.__boxelRenderScope === 'string'
+      ? g.__boxelRenderScope
+      : g.__boxelJobId;
+  let lattice = currentLatticeInputSnapshot();
+  return lattice
+    ? `${scope}:lattice:${lattice.realmURL}:${lattice.generation}`
+    : scope;
 }
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
@@ -218,6 +227,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #nonTrackedCardInstanceErrors = new Map<string, CardErrorJSONAPI>();
 
   #cardInstances = new TrackedMap<string, CardDef>();
+  // Index the existing identity map, not another set of strong card references.
+  #publicationIds = new Map<string, Set<LocalId>>();
+  #publicationRealms = new Map<LocalId, string>();
   #cardInstanceErrors = new TrackedMap<string, CardErrorJSONAPI>();
   #nonTrackedFileMetaInstances = new Map<string, FileDef>();
   #nonTrackedFileMetaInstanceErrors = new Map<string, CardErrorJSONAPI>();
@@ -315,6 +327,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     SingleCardDocument | SingleFileMetaDocument
   >();
   #jobScopedStateJobId: string | undefined;
+  #retainedInputScope = currentLatticeInputSnapshot();
   // Bumped on every clear (the scope-change clear and `reset()`). A load
   // captures this alongside its cache key and skips its populate when the
   // generation moved while the fetch was in flight — a document fetched
@@ -365,9 +378,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     if (scope === undefined) {
       return false;
     }
-    if (scope === this.#jobScopedStateJobId) {
+    let input = currentLatticeInputSnapshot();
+    if (
+      scope === this.#jobScopedStateJobId &&
+      (!input?.retainLinks || input === this.#retainedInputScope)
+    ) {
       return false;
     }
+    // Receipts belong to this render's input frame. A retry at the same realm
+    // generation must revalidate inputs, not reuse instances whose receipt
+    // scope ended with the failed publication. Module caches are unaffected.
+    this.#retainedInputScope = input;
     let held = this.#jobScopedStateJobId;
     let droppedInstances =
       this.#cardInstances.size + this.#fileMetaInstances.size;
@@ -414,6 +435,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // URL from the previous job's view of the realm, and the fix for it lands in
   // exactly the same way a value change does.
   #dropResidentInstancesForNewJob() {
+    this.#publicationIds.clear();
+    this.#publicationRealms.clear();
     this.#cardInstances.clear();
     this.#cardInstanceErrors.clear();
     this.#nonTrackedCardInstances.clear();
@@ -570,7 +593,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return await promise;
     }
-    promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
+    promise = loadCardDocument(
+      this.#fetch,
+      url,
+      this.#virtualNetwork,
+      currentLatticeInputSnapshot(),
+    );
     // Held locally as well as in the map: a scope boundary clears the map
     // mid-flight, so reading it back in the `finally` would time this load
     // against a newer load's start — or find nothing and drop the entry.
@@ -865,6 +893,55 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return [...result];
   }
 
+  // Bookkeeping must not rescue an otherwise unreferenced GC candidate.
+  hasCardInstance(instance: CardDef): boolean {
+    return this.#cardInstances.get(instance[localIdSymbol]) === instance;
+  }
+
+  *publicationInstances(realmURL?: string): IterableIterator<CardDef> {
+    let realms = realmURL
+      ? [this.#storeKey(realmURL)]
+      : this.#publicationIds.keys();
+    for (let realm of realms) {
+      for (let localId of this.#publicationIds.get(realm) ?? []) {
+        // Do not use getCard: it rescues a GC candidate. Event bookkeeping
+        // must not keep an otherwise unreferenced card alive.
+        let instance = this.#cardInstances.get(localId);
+        if (
+          !instance ||
+          this.#storeHooks?.publicationRealm?.(instance) !== realm
+        ) {
+          this.#removePublication(localId);
+          continue;
+        }
+        yield instance;
+      }
+    }
+  }
+
+  #registerPublication(instance: CardDef) {
+    let localId = instance[localIdSymbol];
+    let realm = this.#storeHooks?.publicationRealm?.(instance);
+    if (realm) realm = this.#storeKey(realm);
+    if (this.#publicationRealms.get(localId) === realm) return;
+    this.#removePublication(localId);
+    if (!realm) return;
+    let ids = this.#publicationIds.get(realm);
+    if (!ids) this.#publicationIds.set(realm, (ids = new Set()));
+    ids.add(localId);
+    this.#publicationRealms.set(localId, realm);
+    this.#storeHooks?.publicationAdded?.(instance, realm);
+  }
+
+  #removePublication(localId: LocalId) {
+    let realm = this.#publicationRealms.get(localId);
+    if (!realm) return;
+    let ids = this.#publicationIds.get(realm)!;
+    ids.delete(localId);
+    if (!ids.size) this.#publicationIds.delete(realm);
+    this.#publicationRealms.delete(localId);
+  }
+
   // The file-meta counterpart of `allCardInstances`, reading the tracked
   // `#fileMetaInstances` map so file-meta searches get the same client-side
   // candidate set as card searches. Deduped to a unique set for the same
@@ -957,6 +1034,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   reset() {
+    this.#publicationIds.clear();
+    this.#publicationRealms.clear();
     this.#cardInstances.clear();
     this.#clearEphemeralErrors(this.#cardInstanceErrors);
     this.#nonTrackedCardInstances.clear();
@@ -988,6 +1067,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     // in-flight load skip its populate on resolve.
     this.#jobScopedDocCache.clear();
     this.#jobScopedStateJobId = undefined;
+    this.#retainedInputScope = undefined;
     this.#jobScopedDocCacheGeneration++;
     this.#idResolver.reset();
   }
@@ -1166,6 +1246,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   private deleteFromAll(id: string) {
+    this.#removePublication(id);
     // `.json` deletes are routed to `deleteFileMeta` (a same-named card must
     // not be evicted), so `id` here never carries a `.json` extension — the
     // only ids that reach this are card ids/localIds and non-`.json` file urls
@@ -1358,6 +1439,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
           errorBucket.delete(remoteId);
         }
       }
+      // makeTracked reaches here after each root or included card finishes
+      // deserializing. Never classify the half-assembled non-tracked value.
+      if (!notTracked) this.#registerPublication(instance);
     }
 
     if (error) {

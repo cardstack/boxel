@@ -133,6 +133,7 @@ export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard 
 
 type CardAPI = typeof import('@cardstack/base/card-api');
 type ModuleHooks = {
+  beforeEach: (callback: () => void | Promise<void>) => void;
   after: (callback: () => void | Promise<void>) => void;
 };
 
@@ -216,6 +217,7 @@ export async function getDbAdapter() {
 }
 
 const realmCacheTeardownRegistrations = new WeakMap<ModuleHooks, Set<string>>();
+const MAX_CACHED_REALM_SNAPSHOTS = 8;
 
 export function setupRealmCacheTeardown(
   hooks: ModuleHooks,
@@ -232,9 +234,16 @@ export function setupRealmCacheTeardown(
     return;
   }
   registrations.add(snapshotPrefix);
+  let snapshotPrefixes = new Set([snapshotPrefix]);
+  hooks.beforeEach(() => {
+    // An inherited setup hook caches under the executing child's module name.
+    snapshotPrefixes.add(snapshotPrefixForModule(getCurrentModuleCacheKey()));
+  });
   hooks.after(async () => {
     let dbAdapter = await getDbAdapter();
-    await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+    for (let prefix of snapshotPrefixes) {
+      await dbAdapter.deleteSnapshotsByPrefix(prefix);
+    }
   });
 }
 
@@ -281,6 +290,17 @@ export async function withCachedRealmSetup<T>(
     return result;
   }
   let result = await setup();
+  // SQLite permits ten attached databases. Fixture variants can accumulate
+  // before a module finishes; an evicted snapshot is rebuilt on the next miss.
+  let snapshots = (await dbAdapter.execute('PRAGMA database_list')).filter(
+    (row) => String(row.name).startsWith('snapshot_'),
+  );
+  for (let snapshot of snapshots.slice(
+    0,
+    Math.max(0, snapshots.length - MAX_CACHED_REALM_SNAPSHOTS + 1),
+  )) {
+    await dbAdapter.deleteSnapshot(String(snapshot.name));
+  }
   await dbAdapter.exportSnapshot(snapshotName);
   return result;
 }

@@ -358,12 +358,16 @@ type DependencyOrigin = 'root' | 'derived' | 'unknown';
 interface DependencyScope {
   defs: Map<string, DefAst>;
   vars: Map<string, DependencyOrigin>;
+  // Helpers whose bodies are being walked right now, shared by every scope
+  // derived from one root so a recursive helper is expanded once.
+  expanding: Set<DefAst>;
 }
 
 function extendDependencyScope(scope: DependencyScope): DependencyScope {
   return {
     defs: new Map(scope.defs),
     vars: new Map(scope.vars),
+    expanding: scope.expanding,
   };
 }
 
@@ -529,10 +533,15 @@ function collectExpressionDeps(
       }
       collectExcelContribFilterDeps(node, deps, scope, currentOrigin);
       const localDef = scope.defs.get(node.name);
-      if (localDef) {
+      if (localDef && !scope.expanding.has(localDef)) {
         const defScope = extendDependencyScope(scope);
         bindDefArgs(defScope, localDef.args);
-        collectExpressionDeps(localDef.body, deps, defScope, currentOrigin);
+        scope.expanding.add(localDef);
+        try {
+          collectExpressionDeps(localDef.body, deps, defScope, currentOrigin);
+        } finally {
+          scope.expanding.delete(localDef);
+        }
       }
       return;
     }
@@ -649,6 +658,7 @@ function extractNativeJqDepsFromAst(ast: AstNode): string[] {
     {
       defs: new Map(),
       vars: new Map(),
+      expanding: new Set(),
     },
     'root',
   );

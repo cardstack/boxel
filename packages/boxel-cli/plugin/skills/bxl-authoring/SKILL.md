@@ -64,7 +64,7 @@ derivations.
 
 Refused: volatile calls (`TODAY`, `NOW`, `RAND`, `RANDBETWEEN`, and the two
 clock-reading validator helpers `isAfter` / `isBefore`) · request, actor and
-mutation context (`@User`, `@Env`, `$new`, `$old`) · user-defined `def` helpers ·
+mutation context (`@User`, `@Env`, `$new`, `$old`) ·
 jq `try` / `catch` · `error` · `label` / `break` · assignment (`=`, `|=`) ·
 recursive descent (`..`) · format filters (`@csv`) · control and side-effect
 calls (`debug`, `env`, `input`, `stderr`, `halt`) · runtime metadata
@@ -73,6 +73,7 @@ calls (`debug`, `env`, `input`, `stderr`, `halt`) · runtime metadata
 Allowed and useful: `IFERROR` / `IFNA` · optional access (`.a?`) · aggregates
 (`SUM`, `AVERAGE`, `COUNT`, `NPV`) · validator helpers (`isEmail`, `isDate`) ·
 `LET` · bindings (`. as $x | …`) · explicit folds (`reduce`, `foreach`) ·
+user-defined helpers (`def`) ·
 structural ops (`keys`, `to_entries`, `group_by`, `unique`, `tojson`).
 
 `isAfter` and `isBefore` are the surprise on that list: they sit among the

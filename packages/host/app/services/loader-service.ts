@@ -36,6 +36,7 @@ export default class LoaderService extends Service {
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
 
+  private captureModuleSources = false;
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
@@ -69,6 +70,23 @@ export default class LoaderService extends Service {
 
   public resetState() {
     this.clearSessionCaches();
+  }
+
+  // Starting capture requires a new loader: previously evaluated code has no
+  // source receipt. Stopping capture discards diagnostics without replacing
+  // valid code. Return true only when callers must discard old instances.
+  public setModuleSourceCapture(enabled: boolean): boolean {
+    if (this.captureModuleSources === enabled) return false;
+    this.captureModuleSources = enabled;
+    if (!enabled) {
+      this.loader.stopModuleSourceCapture();
+      return false;
+    }
+    this.resetLoader({
+      clearFetchCache: true,
+      reason: 'module source capture started',
+    });
+    return true;
   }
 
   public resetSessionBoundary(reason?: string) {
@@ -195,6 +213,9 @@ export default class LoaderService extends Service {
           scheduleNativeTimeout(() => resolve(), ms),
         ),
       virtualNetwork: this.network.virtualNetwork,
+      // Native computation can report the exact source text its loader used.
+      // This records metadata only; it does not authorize keeping stale code.
+      captureModuleSources: this.captureModuleSources,
     });
     return loader;
   }
