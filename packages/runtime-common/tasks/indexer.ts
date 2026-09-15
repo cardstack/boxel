@@ -58,6 +58,13 @@ export interface IncrementalArgs extends WorkerArgs {
 
 export interface IncrementalResult {
   invalidations: string[];
+  // The deduped adoption-chain keys this pass touched, in `internalKeyFor`
+  // form. Rides the invalidation broadcast so a client holding a type-anchored
+  // live query can tell that a write it has no interest in cannot have moved
+  // its membership. Optional so a result produced by an older worker
+  // mid-deploy still parses — its absence puts every client back on the
+  // unconditional re-run.
+  invalidatedTypes?: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
   // The realm generation this pass committed. Optional so a result produced
@@ -549,13 +556,19 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
-    let { stats, invalidations, ignoreData, generation, phaseTimings } =
-      await IndexRunner.incremental(currentRun, {
-        changes: changes.map(({ operation, url }) => ({
-          operation,
-          url: new URL(url),
-        })),
-      });
+    let {
+      stats,
+      invalidations,
+      invalidatedTypes,
+      ignoreData,
+      generation,
+      phaseTimings,
+    } = await IndexRunner.incremental(currentRun, {
+      changes: changes.map(({ operation, url }) => ({
+        operation,
+        url: new URL(url),
+      })),
+    });
 
     log.debug(
       `${jobIdentity(jobInfo)} completed incremental indexing for ${changes
@@ -566,6 +579,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     return {
       ignoreData: { ...ignoreData },
       invalidations,
+      ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
       stats,
       ...(generation !== undefined ? { generation } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
