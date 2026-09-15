@@ -23,6 +23,7 @@ import {
   type Query,
   type SearchShapeCacheOutcome,
   type SearchShapeDescriptor,
+  type SearchShapeLinkMode,
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
@@ -220,10 +221,21 @@ export default function handleSearch(opts: {
 
     // Built from the query the search will actually run — the item-leg page
     // ceiling above has already been applied — so the reported page size is
-    // the one the index saw, not the one the caller asked for.
+    // the one the index saw, not the one the caller asked for. The link mode
+    // travels with it because the same query costs differently in each, and no
+    // header on the request is a reliable stand-in: `x-boxel-during-prerender`
+    // is raised by the module, file-extract and command-runner routes too,
+    // while the job and consuming-realm headers ride only the render route's
+    // visit.
+    let linkMode: SearchShapeLinkMode = cacheOnlyDefinitions
+      ? 'prerender'
+      : resolveLinksOnly
+        ? 'links-only'
+        : 'full';
     shape = describeSearchShape({
       query: parsed,
       realms: realmList,
+      linkMode,
       correlationId: loggingCorrelationId,
       jobId: prerenderJobId,
       consumingRealm,
@@ -417,13 +429,14 @@ async function respondWithJobScopedSearchCache(
         return;
       }
     }
-    recordCacheOutcome('job');
     let body = await searchCache!.getOrPopulate({
       jobId: jobId!,
       realms,
       query,
       opts: keyOpts,
       populate: runSearch,
+      onOutcome: (decided) =>
+        recordCacheOutcome(decided === 'hit' ? 'job-hit' : 'job-miss'),
     });
     await setContextResponse(
       ctxt,

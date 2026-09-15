@@ -30,18 +30,29 @@
 // Always on, for every request, unsampled. The rate this path sustains makes
 // that a real log spend, but a sampler drops exactly the outlier a diagnosis
 // is looking for, and a flag that is off when an incident starts is worth
-// nothing during it. The line is small and bounded in exchange: one flat
-// record whose largest members are a canonical filter rendering and the realm
-// list. Should the spend ever outweigh that, it is a named channel like any
-// other — `LOG_LEVELS=boxel:search-shape=none` silences it — so the lever is
-// there without the default being the quiet one.
+// nothing during it. Should the spend ever outweigh that, it is a named
+// channel like any other — `LOG_LEVELS=boxel:search-shape=none` silences it —
+// so the lever is there without the default being the quiet one.
+//
+// What keeps that trade honest is `MAX_MEMBER_CHARS`. The rendered members are
+// caller-controlled text — a filter reports the field paths the request named,
+// and nothing upstream bounds how long or how many those are — so an uncapped
+// line is a caller's to size at will, once per request. Each rendered member
+// is capped; `truncated` says when one was. The cap is not only about spend: a
+// long enough line is what a log shipper drops, which would make the
+// pathological query the one that goes unrecorded.
 //
 // Grouping: `shapeHash` is a stable hash over the shape members alone (filter,
-// sort, htmlQuery, page size, fieldset, scope, and whether a `cardUrls` subset
-// applies), so "this render issued 40 searches of 6 shapes" is a count of
-// distinct hashes within one `correlationId`. It is derived from the shape
-// text and nothing else — no process state, no clock — so the same query
-// hashes the same on every realm-server and across restarts.
+// sort, htmlQuery, page size, fieldset, scope, link mode, and whether a
+// `cardUrls` subset applies), so "this render issued 40 searches of 6 shapes"
+// is a count of distinct hashes within one `correlationId`. It is derived from
+// the shape text and nothing else — no process state, no clock — so the same
+// query hashes the same on every realm-server and across restarts. The text it
+// hashes is the pre-cap text, so a capped line still groups with its own shape.
+//
+// The hash folds what the handler's cache key folds, for the same reason: a
+// member that changes the response body is a member two requests differ by.
+// Whatever a response's size and cost turn on belongs in both.
 //
 // Correlation: `correlationId` joins a line to the realm-server's
 // `realm:requests` lines and to the `realm:search-timing` stage breakdown for
@@ -52,7 +63,7 @@
 
 import { logger } from './log.ts';
 import type { CodeRef } from './code-ref.ts';
-import type { Filter, Query, Sort } from './query.ts';
+import type { Filter, Query, RangeOperator, Sort } from './query.ts';
 import type { HtmlQuery } from './resource-types.ts';
 import type {
   SearchEntryFieldset,
@@ -75,10 +86,22 @@ export type SearchShapeCacheOutcome =
   | 'join'
   // Live-search cache: served from the TTL window.
   | 'hit'
-  // Job-scoped (indexer) cache answered the request or populated through it.
-  | 'job'
+  // Job-scoped (indexer) cache: this request did the computing and the result
+  // was written to the job's slot.
+  | 'job-miss'
+  // Job-scoped cache: served from the job's slot.
+  | 'job-hit'
   // Job-scoped cache revalidated the caller's ETag — a 304 with no body.
   | 'not-modified';
+
+// How much of a result's link graph the response carries — the largest
+// per-result cost there is, and one the query itself does not show. A
+// prerender skips the `loadLinks` relationship-assembly pass outright; a live
+// search configured against side-loading runs the pass and drops the closure;
+// the default assembles the whole closure. The same query in two of these
+// modes is two different response bodies, which is why the handler's cache key
+// separates them and why the shape hash does too.
+export type SearchShapeLinkMode = 'prerender' | 'links-only' | 'full';
 
 // The members derivable from the request alone. Everything here is a function
 // of the query, so two identical requests produce identical descriptors.
@@ -96,6 +119,13 @@ export interface SearchShapeDescriptor {
   // The page the request asked for. `pageSize` is post-clamp: the ceiling the
   // server applies to a live item-leg search has already been imposed, so this
   // is the page the query actually ran with.
+  //
+  // Both are coerced to numbers here rather than passed through. The grammar
+  // admits a numeric string for `page.size` and validates `page.number` not at
+  // all, and the server-side clamp that would coerce the size runs only on the
+  // item leg — so without this a caller decides what type lands in the line,
+  // and a string or an object breaks the flat-scalar contract the channel
+  // rests on. A value that is not a finite number is reported as absent.
   pageSize: number | null;
   pageNumber: number | null;
   // Whether the request pinned an index generation — the consistency token
@@ -107,13 +137,27 @@ export interface SearchShapeDescriptor {
   html: boolean;
   item: 'none' | 'full' | 'sparse';
   itemFields: string | null;
+  // The default resolution policy, which a request selects by naming no
+  // fieldset at all: the `item` branch is emitted per result only where no
+  // rendering matched. An explicit fieldset pins its branches instead. The two
+  // spell the same `html` / `item` selection while producing different rows,
+  // so this separates them.
+  itemAsFallback: boolean;
+  linkMode: SearchShapeLinkMode;
   scope: SearchEntryScope;
   // How many card URLs the request narrowed results to. The URLs themselves
   // identify individual cards, so they are not logged.
   cardUrlCount: number;
   shapeHash: string;
-  // The realms searched, in request order — the authorized list the fan-out
-  // ran against, not whatever the payload named.
+  // Whether any rendered member hit `MAX_MEMBER_CHARS` and was cut. The hash is
+  // taken before the cap, so a cut line still groups correctly; this is what
+  // stops a reader reading the cut text as the whole of it.
+  truncated: boolean;
+  // The realms the request named, in payload order, every one of them
+  // authorized for the caller — an unauthorized realm fails the whole request
+  // rather than being dropped from this list. It is not the list the fan-out
+  // ultimately searched: a realm that cannot be mounted is dropped there, which
+  // is what `incomplete` reports against this same list.
   realms: string;
   realmCount: number;
   correlationId: string | null;
@@ -172,26 +216,33 @@ export function emitSearchShape(event: SearchShapeEvent): void {
 export function describeSearchShape(args: {
   query: SearchEntryQuery;
   realms: string[];
+  linkMode: SearchShapeLinkMode;
   correlationId: string | null;
   jobId: string | null;
   consumingRealm: string | null;
   jobPriority: number | null;
 }): SearchShapeDescriptor {
-  let { query, realms } = args;
+  let { query, realms, linkMode } = args;
   let itemQuery: Query = query.itemQuery;
   let filter = describeFilterShape(itemQuery.filter);
   let sort = describeSortShape(itemQuery.sort);
-  let { html, item, itemFields } = describeFieldset(query.fieldset);
+  let { html, item, itemFields, itemAsFallback } = describeFieldset(
+    query.fieldset,
+  );
   // Inert without the html branch — see `htmlQuery` on the descriptor.
   let htmlQuery = html ? describeHtmlQuery(query.htmlQuery) : null;
-  let pageSize = itemQuery.page?.size ?? null;
+  let pageSize = finiteNumber(itemQuery.page?.size);
   let scope = query.scope ?? 'all';
   let cardUrlCount = query.cardUrls?.length ?? 0;
+  let realmList = realms.join(',');
   // The members that decide which index paths a query exercises and how much
   // work each result costs. `pageNumber`, the pinned generation, the realm
   // list and the correlation/job identity are deliberately out: they vary
   // across requests that are the same query, and folding them in would leave
   // every request its own shape.
+  //
+  // Hashed before the members are capped, so two requests of one shape agree
+  // whether or not either line was cut.
   let shapeHash = hashShape(
     [
       `filter=${filter ?? '-'}`,
@@ -200,31 +251,63 @@ export function describeSearchShape(args: {
       `pageSize=${pageSize ?? '-'}`,
       `fieldset=${html ? 'html' : '-'}/${item}${
         itemFields ? `(${itemFields})` : ''
-      }`,
+      }${itemAsFallback ? '+fallback' : ''}`,
+      `linkMode=${linkMode}`,
       `scope=${scope}`,
       `cardUrls=${cardUrlCount > 0 ? 'y' : 'n'}`,
     ].join(' '),
   );
+  let truncated = [filter, sort, htmlQuery, itemFields, realmList].some(
+    (member) => member !== null && member.length > MAX_MEMBER_CHARS,
+  );
   return {
-    filter,
-    sort,
-    htmlQuery,
+    filter: capMember(filter),
+    sort: capMember(sort),
+    htmlQuery: capMember(htmlQuery),
     pageSize,
-    pageNumber: itemQuery.page?.number ?? null,
+    pageNumber: finiteNumber(itemQuery.page?.number),
     pageGeneration: itemQuery.page?.generation !== undefined,
     html,
     item,
-    itemFields,
+    itemFields: capMember(itemFields),
+    itemAsFallback,
+    linkMode,
     scope,
     cardUrlCount,
     shapeHash,
-    realms: realms.join(','),
+    truncated,
+    realms: capMember(realmList)!,
     realmCount: realms.length,
     correlationId: args.correlationId,
     jobId: args.jobId,
     consumingRealm: args.consumingRealm,
     jobPriority: args.jobPriority,
   };
+}
+
+// The per-member ceiling. Generous against any filter a card actually
+// authors — the realistic ones render in the low hundreds of characters — and
+// low enough that a request cannot make one line dominate a shard of log.
+export const MAX_MEMBER_CHARS = 1024;
+
+function capMember(value: string | null): string | null {
+  if (value === null || value.length <= MAX_MEMBER_CHARS) {
+    return value;
+  }
+  return `${value.slice(0, MAX_MEMBER_CHARS)}…[+${
+    value.length - MAX_MEMBER_CHARS
+  }]`;
+}
+
+// A member the channel promises as a flat number, or null. The grammar lets a
+// page size through as a numeric string and does not validate a page number at
+// all, so neither arrives already a number.
+function finiteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    return null;
+  }
+  let n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 // The filter tree with every value elided, rendered canonically: a node's
@@ -284,12 +367,40 @@ function describeBranches(branches: Filter[]): string {
   return branches.map(describeFilterNode).sort().join(',');
 }
 
+// The grammar's four range bound operators. A local list rather than a runtime
+// import of `RANGE_OPERATORS`: this module is reached from the request path and
+// holding its runtime imports to the logger keeps it clear of the barrel cycle
+// that `emitSearchShape` already works around. Typed as a total record over
+// `RangeOperator`, so an operator added to the grammar is a type error here
+// rather than a silently unreported bound.
+const RANGE_BOUND_OPERATORS: Record<RangeOperator, true> = {
+  gt: true,
+  gte: true,
+  lt: true,
+  lte: true,
+};
+
 // `field:gt+lte` — the bounds a range constrains, never what it bounds them by.
+//
+// Only the four known operators are reported. A bound object's keys are not
+// always validated before they reach here: the query grammar checks a node's
+// operators in an else-if chain, so a `range` sharing a node with an operator
+// earlier in that chain is never visited, and its keys are whatever the caller
+// wrote. Reporting them would publish caller-authored text through a member
+// documented as structure, so an unrecognized key is dropped and the count of
+// dropped keys reported as `+N?` — visible, without carrying the text.
 function describeRange(range: Record<string, unknown>): string {
   return Object.entries(range)
     .map(([field, bounds]) => {
-      let operators = isRecord(bounds) ? sortedKeys(bounds).join('+') : '?';
-      return `${field}:${operators}`;
+      if (!isRecord(bounds)) {
+        return `${field}:?`;
+      }
+      let keys = sortedKeys(bounds);
+      let known = keys.filter((key) =>
+        Object.prototype.hasOwnProperty.call(RANGE_BOUND_OPERATORS, key),
+      );
+      let unknown = keys.length - known.length;
+      return `${field}:${known.join('+')}${unknown > 0 ? `+${unknown}?` : ''}`;
     })
     .sort()
     .join(',');
@@ -336,6 +447,7 @@ function describeFieldset(fieldset: SearchEntryFieldset): {
   html: boolean;
   item: 'none' | 'full' | 'sparse';
   itemFields: string | null;
+  itemAsFallback: boolean;
 } {
   return {
     html: fieldset.html,
@@ -344,6 +456,7 @@ function describeFieldset(fieldset: SearchEntryFieldset): {
       fieldset.item.kind === 'sparse'
         ? [...fieldset.item.fields].sort().join(',')
         : null,
+    itemAsFallback: fieldset.itemAsFallback,
   };
 }
 

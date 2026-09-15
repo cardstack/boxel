@@ -73,5 +73,25 @@ module(basename(import.meta.filename), function () {
     test('the shape hash ignores what varies across requests of one query', async function (assert) {
       await runSharedTest(searchShapeTests, assert, {});
     });
+
+    test('range reports only the bound operators the grammar defines', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('each rendered member is capped, and the cap is reported', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('the hash is taken before the cap', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('the page members are reported as numbers or not at all', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('the link mode is reported and separates otherwise identical queries', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
   });
 });

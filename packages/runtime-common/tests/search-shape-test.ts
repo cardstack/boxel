@@ -2,11 +2,13 @@ import type { SharedTests } from '../helpers/index.ts';
 import type { Filter, Sort } from '../query.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { SearchEntryQuery } from '../search-entry.ts';
+import type { SearchShapeLinkMode } from '../search-shape.ts';
 import {
   describeFilterShape,
   describeHtmlQuery,
   describeSearchShape,
   describeSortShape,
+  MAX_MEMBER_CHARS,
 } from '../search-shape.ts';
 
 const personRef = {
@@ -27,10 +29,14 @@ function entryQuery(overrides: Partial<SearchEntryQuery>): SearchEntryQuery {
   };
 }
 
-function shapeOf(overrides: Partial<SearchEntryQuery>) {
+function shapeOf(
+  overrides: Partial<SearchEntryQuery>,
+  linkMode: SearchShapeLinkMode = 'full',
+) {
   return describeSearchShape({
     query: entryQuery(overrides),
     realms: ['http://localhost:4201/test/'],
+    linkMode,
     correlationId: null,
     jobId: null,
     consumingRealm: null,
@@ -188,6 +194,7 @@ const tests = Object.freeze({
     assert,
   ) => {
     let shape = describeSearchShape({
+      linkMode: 'full',
       query: entryQuery({
         itemQuery: {
           filter: { type: personRef },
@@ -284,6 +291,7 @@ const tests = Object.freeze({
         itemQuery: { filter, page: { number: 0, size: 20 } },
       }),
       realms: ['http://localhost:4201/test/'],
+      linkMode: 'full',
       correlationId: 'corr-1',
       jobId: '1.0',
       consumingRealm: 'http://localhost:4201/test/',
@@ -294,6 +302,7 @@ const tests = Object.freeze({
         itemQuery: { filter, page: { number: 3, size: 20, generation: 9 } },
       }),
       realms: ['http://localhost:4201/other/', 'http://localhost:4201/test/'],
+      linkMode: 'full',
       correlationId: 'corr-2',
       jobId: '2.0',
       consumingRealm: 'http://localhost:4201/other/',
@@ -303,6 +312,116 @@ const tests = Object.freeze({
       first.shapeHash,
       second.shapeHash,
       'page number, pinned generation, realms and request identity stay out',
+    );
+  },
+
+  'range reports only the bound operators the grammar defines': async (
+    assert,
+  ) => {
+    // A `range` sharing a node with an operator earlier in the validator's
+    // else-if chain is never visited, so its bound keys are whatever the
+    // caller wrote. They are counted, never rendered.
+    let shape = describeFilterShape({
+      eq: { a: 1 },
+      range: { b: { gt: 1, 'caller-authored-key': 2, 'another one': 3 } },
+    } as unknown as Filter);
+    assert.strictEqual(shape, 'eq(a):range(b:gt+2?)');
+    assert.false(
+      shape!.includes('caller-authored-key'),
+      'an unvalidated bound key is not published',
+    );
+  },
+
+  'each rendered member is capped, and the cap is reported': async (assert) => {
+    let longField = 'x'.repeat(MAX_MEMBER_CHARS * 2);
+    let shape = shapeOf({
+      itemQuery: { filter: { eq: { [longField]: 'value' } } as Filter },
+    });
+    assert.true(
+      shape.filter!.length < MAX_MEMBER_CHARS + 64,
+      `the filter member is capped (got ${shape.filter!.length} chars)`,
+    );
+    assert.true(shape.truncated, 'the cut is reported');
+    assert.false(
+      shapeOf({ itemQuery: { filter: { type: personRef } } }).truncated,
+      'a member within the cap is not reported as cut',
+    );
+  },
+
+  'the hash is taken before the cap': async (assert) => {
+    // Two filters that differ only past the cap must stay distinguishable:
+    // the hash reads the full text, so the clipped lines do not collapse.
+    let a = 'x'.repeat(MAX_MEMBER_CHARS * 2) + 'a';
+    let b = 'x'.repeat(MAX_MEMBER_CHARS * 2) + 'b';
+    let shapeA = shapeOf({
+      itemQuery: { filter: { eq: { [a]: 1 } } as Filter },
+    });
+    let shapeB = shapeOf({
+      itemQuery: { filter: { eq: { [b]: 1 } } as Filter },
+    });
+    assert.strictEqual(shapeA.filter, shapeB.filter, 'both cut to one text');
+    assert.notStrictEqual(
+      shapeA.shapeHash,
+      shapeB.shapeHash,
+      'the hash still separates them',
+    );
+  },
+
+  'the page members are reported as numbers or not at all': async (assert) => {
+    // The grammar admits a numeric string for `page.size` and validates
+    // `page.number` not at all, so neither arrives already a number.
+    let coerced = shapeOf({
+      itemQuery: {
+        page: { size: '10' },
+      } as unknown as SearchEntryQuery['itemQuery'],
+    });
+    assert.strictEqual(coerced.pageSize, 10, 'a numeric string is coerced');
+    let rejected = shapeOf({
+      itemQuery: {
+        page: { size: 10, number: { evil: 1 } },
+      } as unknown as SearchEntryQuery['itemQuery'],
+    });
+    assert.strictEqual(
+      rejected.pageNumber,
+      null,
+      'a non-scalar page number is reported as absent',
+    );
+    assert.strictEqual(rejected.pageSize, 10);
+  },
+
+  'the default fieldset is a different shape from its explicit spelling':
+    async (assert) => {
+      // Both select the html branch with no item branch; only the default emits
+      // an item serialization for a row no rendering matched.
+      let fallback = shapeOf({
+        fieldset: { html: true, item: { kind: 'none' }, itemAsFallback: true },
+      });
+      let pinned = shapeOf({
+        fieldset: { html: true, item: { kind: 'none' }, itemAsFallback: false },
+      });
+      assert.true(fallback.itemAsFallback);
+      assert.false(pinned.itemAsFallback);
+      assert.notStrictEqual(
+        fallback.shapeHash,
+        pinned.shapeHash,
+        'the two responses do not share a shape',
+      );
+    },
+
+  'the link mode is reported and separates otherwise identical queries': async (
+    assert,
+  ) => {
+    let query = { itemQuery: { filter: { type: personRef } } };
+    let full = shapeOf(query, 'full');
+    let prerender = shapeOf(query, 'prerender');
+    let linksOnly = shapeOf(query, 'links-only');
+    assert.strictEqual(full.linkMode, 'full');
+    assert.strictEqual(prerender.linkMode, 'prerender');
+    assert.strictEqual(linksOnly.linkMode, 'links-only');
+    assert.strictEqual(
+      new Set([full.shapeHash, prerender.shapeHash, linksOnly.shapeHash]).size,
+      3,
+      'each mode is its own shape',
     );
   },
 } as SharedTests<{}>);
