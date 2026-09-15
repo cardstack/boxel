@@ -29,6 +29,7 @@ import {
   Job,
   registerJobHeartbeat,
   unregisterJobHeartbeat,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
@@ -542,14 +543,34 @@ export class PgQueueRunner implements QueueRunner {
             // out of enqueue order.
             `WITH
               pending_jobs AS (
-                SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
+                SELECT * FROM jobs j WHERE j.status='unfulfilled'
+                  -- A held concurrency group's jobs stay pending rather than
+                  -- being claimed, so a burst of same-group publishes has a
+                  -- pending job to coalesce into (see the add-job-claim-holds
+                  -- migration). Normally there is nothing to match, and a
+                  -- lease its holder stops refreshing expires on its own.
+                  --
+                  -- A hold only ever delays background work. Anything at the
+                  -- user-initiated tier is on someone's critical path — a
+                  -- publish does not report its realm ready until the render
+                  -- it is waiting on lands, and that render is enqueued at
+                  -- this tier precisely to say so — so a hold must not be
+                  -- able to keep it waiting.
+                  AND (j.priority >=`,
+            param(userInitiatedPriority),
+            `OR NOT EXISTS (
+                    SELECT 1 FROM job_claim_holds h
+                     WHERE h.concurrency_group = j.concurrency_group
+                       AND h.expires_at > NOW()
+                  ))
+                  and j.priority >=`,
             param(this.#priority),
             // Only claim job types this runner has a handler for: a worker
             // that claims a type it can't run would finalize the job as
             // rejected, permanently discarding work a differently-configured
             // worker (e.g. a newer version mid rolling-deploy) could have
             // completed.
-            `AND job_type IN (`,
+            `AND j.job_type IN (`,
             ...[...this.#handlers.keys()].flatMap((jobType, i) =>
               i === 0 ? [param(jobType)] : [',', param(jobType)],
             ),

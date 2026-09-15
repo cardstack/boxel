@@ -11,6 +11,30 @@ import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
+// When two publishes carry the same URL, the merged job keeps 'update':
+// the render consults disk truth, so an update-tagged URL whose file is
+// gone still lands as a tombstone (the visit writes nothing over the
+// up-front tombstone), while a delete-tagged URL is never visited at all —
+// so a delete from one pass must not swallow a later pass's re-create, or
+// the re-created card's HTML would stay tombstoned at a generation the
+// index channel considers current.
+export function mergePrerenderHtmlChanges(
+  existing: IncrementalChange[],
+  incoming: IncrementalChange[],
+): IncrementalChange[] {
+  let byUrl = new Map<string, IncrementalChange>();
+  for (let change of [...existing, ...incoming]) {
+    let previous = byUrl.get(change.url);
+    if (
+      !previous ||
+      (previous.operation === 'delete' && change.operation === 'update')
+    ) {
+      byUrl.set(change.url, change);
+    }
+  }
+  return [...byUrl.values()];
+}
+
 // A prerender-html job normally floors one tier below the index pass that
 // spawned it — a user-initiated index (userInitiatedPriority) yields
 // userInitiatedPrerenderHtmlPriority, anything lower yields
