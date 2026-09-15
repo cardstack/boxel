@@ -72,6 +72,11 @@ type StoreHooks = {
   // the field. Absent means it does not — a store that renders deterministically
   // from the document it was handed must not start searches of its own.
   resolvesQueryFieldsEagerly?(): boolean;
+  // Whether the owner would be told that `id` was re-indexed, so that what
+  // this store holds for it gets reloaded rather than going quietly stale.
+  // Absent means it would not — an owner that watches nothing keeps every
+  // link edge loading for itself.
+  receivesIndexEventsFor?(id: string): boolean;
   getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
@@ -523,6 +528,35 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   getFileMeta(id: string): FileDef | undefined {
     return this.getFileMetaItem('instance', id) as FileDef | undefined;
+  }
+
+  // Whether the instance held for `id` can stand in for a fresh load on a link
+  // edge. Two unrelated mechanisms reach the same property, one per kind of
+  // store this class serves.
+  //
+  // Inside a render scope this store is scoped to the realm view being
+  // rendered: it drops every instance it holds when the scope moves
+  // (`observeIndexingJob`), so anything still resident was deserialized
+  // against THIS view of the realm's files. It is that drop which carries the
+  // guarantee, not the `clearCache` reset — that one is scheduled only when a
+  // pass invalidates an executable, and reaches only the single tab its visit
+  // lands on, so a pass that changed only instances schedules none at all.
+  //
+  // Outside one, currency comes from the realm's own index events: the owner
+  // reloads what this store holds when a realm announces it re-indexed a file,
+  // which makes a resident instance current rather than merely cached. That
+  // reaches only the realms the owner watches, and it takes a watch out per
+  // instance something references — so the realms a page is reading are
+  // covered, while a target reached only by following a link out of them is
+  // not, and is excluded rather than trusted. This is the same trust the
+  // owner's own read path already places in residency, which hands back a held
+  // instance instead of re-fetching it; the watch is the one condition this
+  // adds on top.
+  canReuseResidentInstance(id: string): boolean {
+    if (currentRenderScope() !== undefined) {
+      return true;
+    }
+    return this.#storeHooks?.receivesIndexEventsFor?.(id) ?? false;
   }
 
   getRemoteIds(localId: string) {

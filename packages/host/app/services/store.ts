@@ -2133,6 +2133,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.network.virtualNetwork,
       {
         resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
+        receivesIndexEventsFor: (id) => this.receivesIndexEventsFor(id),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
@@ -2159,6 +2160,30 @@ export default class StoreService extends Service implements StoreInterface {
       return false;
     }
     return !this.isRenderStore;
+  }
+
+  // Whether this store would hear that `id` was re-indexed — the signal
+  // `handleInvalidations` turns into a reload of what it is holding. It hears
+  // it only for the realms it subscribed to, and it subscribes per referenced
+  // instance (`addReference`), so the realms whatever is on screen was read
+  // from are covered while one reached only by following a link out of them is
+  // not. Host mode subscribes to nothing, so nothing there qualifies. A local
+  // id names an instance no realm has indexed, and a reference the realm
+  // mappings can't place names one this store could not be told about either
+  // way.
+  protected receivesIndexEventsFor(id: string): boolean {
+    // A render store is only ever asked this outside a render scope, where the
+    // scoping that makes its residency trustworthy is not in force. It renders
+    // as a pure function of the documents it was handed, so it claims nothing
+    // there.
+    if (this.isRenderStore) {
+      return false;
+    }
+    if (isLocalId(id)) {
+      return false;
+    }
+    let realmURL = this.realm.realmOf(rri(id));
+    return realmURL != null && this.subscriptions.has(realmURL);
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
