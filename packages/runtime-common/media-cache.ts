@@ -410,7 +410,11 @@ export const MEDIA_CACHE_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 // a declared screenshot, which never ages out.
 export const MEDIA_CACHE_ON_DEMAND_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type MediaCacheGcReason = 'tombstoned' | 'superseded' | 'expired';
+export type MediaCacheGcReason =
+  | 'tombstoned'
+  | 'superseded'
+  | 'unreferenced'
+  | 'expired';
 
 export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
   objectKey: string;
@@ -427,11 +431,27 @@ export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
 //   - 'superseded': a newer-generation row exists for the same capture
 //     identity, and has for at least the min-age (so a serve that resolved
 //     the old row just before the swap can still finish streaming).
+//   - 'unreferenced': a declared-lane row whose capture spec hash no live
+//     `prerendered_html` row's `screenshots` manifest names — the slot was
+//     renamed, deleted, or re-specced (any identity change mints a new
+//     hash), so nothing supersedes the old row and no serve can reach its
+//     object (`?name=` serving is pinned to the manifest). Two guards keep
+//     this arm honest: it requires a live prerendered row to exist (no
+//     evidence is not evidence of absence — a source mid-first-index has no
+//     row yet), and it requires every live row's `rendered_at` to be older
+//     than min-age, so a manifest published moments ago — an author mid-
+//     iteration, a transient capture failure the retry lane is still
+//     working — collects nothing until the state has held for a full
+//     window. Carry-forwards need no special case: a carried-forward entry
+//     keeps its spec hash in the current manifest, which is exactly what
+//     protects its older-generation row. Error renders keep the last-known-
+//     good manifest, so a failing source protects its captures the same
+//     way.
 //   - 'expired': an on-demand capture idle past the TTL.
 // Every arm additionally requires the row itself to be older than min-age.
-// The jsonb-free SQL here is still Postgres-shaped (row-value EXISTS,
-// bigint arithmetic); like the reconcile scans, the GC task runs solely
-// behind the Postgres queue.
+// The SQL here is Postgres-only (row-value EXISTS, bigint arithmetic,
+// `jsonb_each` over the manifest); like the reconcile scans, the GC task
+// runs solely behind the Postgres queue.
 
 // The tombstone arm, verbatim in both the reason CASE and the WHERE below —
 // one string so the two can't drift. `IN ('instance', 'file')` covers both
@@ -452,6 +472,46 @@ const GC_TOMBSTONED_PREDICATE = `
       AND i.type IN ('instance', 'file')
       AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
   )`;
+
+// A live prerendered row for the ledger row's source, in the row's own realm
+// — realm-copied captures are duplicated per realm along with their
+// prerendered rows, so each copy answers to its own realm's manifest. The
+// ledger spelling (`screenshotLedgerSourceURL`) matches the row's `url` for
+// files and its `file_alias` for instances, the same double match the
+// tombstone arm uses; a matching row of either type participates, so an
+// alias collision errs toward protecting bytes.
+const GC_LIVE_PRERENDERED_ROW = `
+  FROM prerendered_html p
+  WHERE (p.url = r.source_url OR p.file_alias = r.source_url)
+    AND p.realm_url = r.realm_url
+    AND p.type IN ('instance', 'file')
+    AND (p.is_deleted = FALSE OR p.is_deleted IS NULL)`;
+
+// The unreferenced arm, once in the reason CASE and once in the WHERE via
+// this helper so the two can't drift. Carries the min-age cutoff for the
+// manifest-stability guard, so unlike the tombstone arm it is an Expression
+// rather than a bare string. The `jsonb_typeof` guard keeps a malformed
+// manifest (anything but an object) from erroring the whole sweep —
+// `jsonb_each` refuses scalars — and a NULL manifest simply protects
+// nothing, which is the point: a live row with no manifest says the source
+// currently declares no captures at all.
+function gcUnreferencedPredicate(minAgeCutoff: number): Expression {
+  return [
+    `r.lane = 'declared'
+     AND EXISTS (SELECT 1 ${GC_LIVE_PRERENDERED_ROW})
+     AND NOT EXISTS (SELECT 1 ${GC_LIVE_PRERENDERED_ROW} AND p.rendered_at >=`,
+    param(minAgeCutoff),
+    `)
+     AND NOT EXISTS (
+       SELECT 1 ${GC_LIVE_PRERENDERED_ROW}
+         AND jsonb_typeof(p.screenshots) = 'object'
+         AND EXISTS (
+           SELECT 1 FROM jsonb_each(p.screenshots) AS slot
+           WHERE slot.value->>'specHash' = r.capture_spec_hash
+         )
+     )`,
+  ];
+}
 
 export async function findMediaCacheGcCandidates(
   dbAdapter: DBAdapter,
@@ -475,6 +535,9 @@ export async function findMediaCacheGcCandidates(
              AND n.created_at <`,
     param(minAgeCutoff),
     `) THEN 'superseded'
+         WHEN (`,
+    ...gcUnreferencedPredicate(minAgeCutoff),
+    `) THEN 'unreferenced'
          ELSE 'expired'
        END AS reason
      FROM media_cache_ledger r
@@ -489,6 +552,9 @@ export async function findMediaCacheGcCandidates(
            AND n.source_generation > r.source_generation
            AND n.created_at <`,
     param(minAgeCutoff),
+    `)
+       OR (`,
+    ...gcUnreferencedPredicate(minAgeCutoff),
     `)
        OR (r.lane = 'on-demand' AND r.last_accessed_at <`,
     param(idleCutoff),
