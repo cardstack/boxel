@@ -5,7 +5,10 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { Loader } from '@cardstack/runtime-common';
+import type {
+  Loader,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   Deferred,
@@ -160,17 +163,22 @@ module(`Integration | query field search throttle`, function (hooks) {
     fetchCalls = 0;
 
     try {
-      let { createFromSerialized } = cardApi;
-      let resource = {
-        attributes: { cardTitle: 'Anchor' },
-        meta: {
-          adoptsFrom: { module: testRRI('test-cards'), name: 'Parent' },
-        },
-      };
-      let parent: any = await createFromSerialized(
-        resource as any,
-        { data: resource } as any,
-        undefined,
+      // Deserialize through the store service, not `createFromSerialized`
+      // directly: an instance built without a store gets the fallback one,
+      // whose `getSearchResource` hands back a static empty resource that never
+      // searches at all.
+      let parent: any = await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Parent/one`,
+            attributes: { cardTitle: 'Anchor' },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Parent' },
+            },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
       );
       // Either path builds the field's search resource through the same call —
       // eager resolution as the card deserializes, or this read.
