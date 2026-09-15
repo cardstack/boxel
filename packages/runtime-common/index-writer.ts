@@ -522,15 +522,26 @@ export class Batch {
     // similarly excluded so the deletion intent flows through to
     // `applyBatchUpdates` instead of being skipped as resumed work.
     let rows = (await this.#query([
-      `SELECT url, last_modified FROM boxel_index_working WHERE`,
+      `SELECT url, last_modified, types FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['job_id =', param(this.jobInfo.jobId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'last_modified'>[];
-    for (let { url, last_modified } of rows) {
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'last_modified' | 'types'
+    >[];
+    for (let { url, last_modified, types } of rows) {
+      // The chain the previous attempt wrote is this row's post-pass state:
+      // the visit loop skips a resumed URL, so it never reaches the write
+      // path that would otherwise record it. Without this a card the crashed
+      // attempt created — which has no production row for the pre-pass read
+      // to find either — would be absent from the pass's reported types
+      // entirely, and a query anchored on its type would sit out the very
+      // pass that published it.
+      this.#recordTouchedTypes(types);
       this.#resumedRows.set(
         url,
         last_modified == null ? null : parseInt(last_modified),

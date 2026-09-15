@@ -32,6 +32,7 @@ import {
   resourceIdentity,
   ri,
   rri,
+  trimExecutableExtension,
   wireFilterHasMatches,
   wireFilterTypeAnchors,
   RealmPaths,
@@ -170,6 +171,15 @@ export class SearchEntriesResource extends Resource<Args> {
   // different one on the far side of that boundary — so keys are only good for
   // as long as the loader that produced them is the live one.
   #queryTypeKeysLoader: Loader | undefined;
+  // The modules the anchors resolved through — the ref's own and its
+  // canonical's. An index event naming one of them is a rewrite of the very
+  // module whose exports decided these keys, so the keys are dropped and
+  // re-resolved rather than trusted. The loader check above cannot stand in
+  // for this: the loader is replaced by the store's rebuild, which only
+  // subscribes to realms it holds a card reference in, while a live search
+  // subscribes to its realms itself — so an event can arrive here for a realm
+  // whose module rewrite replaces no loader at all.
+  #queryTypeKeyModules = new Set<string>();
   // Bumped whenever the query changes (and on teardown) so a resolution
   // in flight for the previous query can't install its keys over the new one.
   #queryTypeKeysEpoch = 0;
@@ -672,10 +682,12 @@ export class SearchEntriesResource extends Resource<Args> {
   // write must force the re-run even when the query also filters on a field
   // value, because the event carries no values to judge against.
   #indexEventCannotMatch(event: RealmEventContent): boolean {
-    let { invalidatedTypes } = event as IncrementalIndexEventContent;
+    let { invalidatedTypes, invalidations } =
+      event as IncrementalIndexEventContent;
     if (!Array.isArray(invalidatedTypes)) {
       return false;
     }
+    this.#forgetTypeKeysInvalidatedBy(invalidations);
     let keys = this.#typeKeysForQuery();
     if (!keys) {
       return false;
@@ -720,10 +732,24 @@ export class SearchEntriesResource extends Resource<Args> {
   ) {
     let token = typeKeysWaiter.beginAsync();
     try {
-      let keys = await this.#typeKeysFor(anchors, loader);
-      if (keys && epoch === this.#queryTypeKeysEpoch && !isDestroyed(this)) {
-        this.#queryTypeKeys = keys;
+      let resolved = await this.#typeKeysFor(anchors, loader);
+      if (
+        resolved &&
+        epoch === this.#queryTypeKeysEpoch &&
+        !isDestroyed(this)
+      ) {
+        this.#queryTypeKeys = resolved.keys;
+        this.#queryTypeKeyModules = resolved.modules;
       }
+    } catch (err) {
+      // Nothing awaits this resolution, so an escaping throw would be an
+      // unhandled rejection rather than a decision. A malformed `item.on` can
+      // produce one from the ref helpers themselves, not just from the module
+      // load — and every failure here means the same thing: no keys, so the
+      // query keeps re-running unconditionally.
+      this.#log.info(
+        `could not resolve the type anchors for this query; it stays on the unconditional refresh: ${String(err)}`,
+      );
     } finally {
       typeKeysWaiter.endAsync(token);
     }
@@ -732,9 +758,10 @@ export class SearchEntriesResource extends Resource<Args> {
   async #typeKeysFor(
     anchors: CodeRef[],
     loader: Loader,
-  ): Promise<Set<string> | undefined> {
+  ): Promise<{ keys: Set<string>; modules: Set<string> } | undefined> {
     let { virtualNetwork } = this.network;
     let keys = new Set<string>();
+    let modules = new Set<string>();
     for (let ref of anchors) {
       // A relative module spelling is resolved server-side against the
       // document that issued the query; the client has no basis to resolve it
@@ -743,6 +770,7 @@ export class SearchEntriesResource extends Resource<Args> {
         return undefined;
       }
       keys.add(internalKeyFor(ref, undefined, virtualNetwork));
+      modules.add(this.#moduleKey(moduleFrom(ref)));
       let canonical: CodeRef | undefined;
       try {
         canonical = identifyCard(await loadCardDef(ref, { loader }));
@@ -755,8 +783,46 @@ export class SearchEntriesResource extends Resource<Args> {
         return undefined;
       }
       keys.add(internalKeyFor(canonical, undefined, virtualNetwork));
+      modules.add(this.#moduleKey(moduleFrom(canonical)));
     }
-    return keys;
+    return { keys, modules };
+  }
+
+  // Drop the keys when an event rewrites a module they were resolved
+  // through. The keys name what that module's exports resolved to, so the
+  // event carrying the rewrite is the last one that may be judged by them —
+  // and it isn't: dropping them here, before the gate reads them, puts this
+  // event on the unconditional refresh too.
+  #forgetTypeKeysInvalidatedBy(invalidations: string[] | undefined): void {
+    if (!this.#queryTypeKeys || this.#queryTypeKeyModules.size === 0) {
+      return;
+    }
+    for (let invalidation of invalidations ?? []) {
+      if (this.#queryTypeKeyModules.has(this.#moduleKey(invalidation))) {
+        this.#forgetQueryTypeKeys();
+        return;
+      }
+    }
+  }
+
+  // A module URL reduced to the spelling the anchors are recorded under: the
+  // same normalization `internalKeyFor` applies to a ref's module half, so an
+  // invalidation and an anchor naming one module agree however each was
+  // spelled.
+  #moduleKey(moduleHref: string): string {
+    let { virtualNetwork } = this.network;
+    try {
+      return virtualNetwork.unresolveURL(
+        trimExecutableExtension(
+          rri(virtualNetwork.resolveURL(moduleHref, undefined).href),
+        ),
+      );
+    } catch (_e) {
+      // A URL this resource can't reduce can't match an anchor's module
+      // either — it is some other realm's spelling, not a rewrite of what
+      // these keys were resolved through.
+      return moduleHref;
+    }
   }
 
   // Drop the resolved keys and orphan any resolution still in flight for
@@ -765,6 +831,7 @@ export class SearchEntriesResource extends Resource<Args> {
     this.#queryTypeKeys = undefined;
     this.#queryTypeKeysResolved = false;
     this.#queryTypeKeysLoader = undefined;
+    this.#queryTypeKeyModules.clear();
     this.#queryTypeKeysEpoch++;
   }
 

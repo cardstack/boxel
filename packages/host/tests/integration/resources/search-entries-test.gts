@@ -10,7 +10,6 @@ import { module, test } from 'qunit';
 
 import {
   htmlResourceId,
-  internalKeyFor,
   CssResourceType,
   HtmlResourceType,
   EntryResourceType,
@@ -107,7 +106,12 @@ module('Integration | search-entries resource', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
+        // `book.gts` is shimmed first, so it owns the class's identity and is
+        // the module the index stamps rows under. `catalog.gts` re-exports
+        // the same class, giving a query a second, non-canonical spelling of
+        // the same type to name it by.
         'book.gts': { Book },
+        'catalog.gts': { Book },
         'books/1.json': new Book({ title: 'Mango', status: 'ready' }),
         'books/2.json': new Book({ title: 'Van Gogh', status: 'draft' }),
       },
@@ -592,14 +596,11 @@ module('Integration | search-entries resource', function (hooks) {
           'a write to a type the query is not anchored on is skipped',
         );
 
-        relayIndexEvent([
-          unrelatedType,
-          internalKeyFor(
-            bookRef,
-            undefined,
-            getService('network').virtualNetwork,
-          ),
-        ]);
+        // Spelled out rather than derived through `internalKeyFor`: the
+        // resource resolves its anchors with that same function, so deriving
+        // the expected key here would move both sides of the comparison
+        // together and assert nothing about the spelling.
+        relayIndexEvent([unrelatedType, `${testRealmURL}book/Book`]);
         await settled();
         assert.strictEqual(
           searchCount(),
@@ -613,6 +614,48 @@ module('Integration | search-entries resource', function (hooks) {
           searchCount(),
           baseline + 3,
           'an event carrying no type information re-runs the query',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('an anchor resolves through the module that defines the type, not only the one the query names', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: {
+                'item.on': { module: testRRI('catalog'), name: 'Book' },
+              },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        // The query names `catalog`, the rows are stamped under `book`. The
+        // anchor's own spelling shares no key with them, so only the
+        // canonical half of the resolution can bridge the two — without it
+        // this event reads as unrelated and the member is silently missed.
+        relayIndexEvent([`${testRealmURL}book/Book`]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an event naming the defining module re-runs a query anchored through the re-exporting one',
         );
       } finally {
         storeService.searchEntries = originalSearchEntries;

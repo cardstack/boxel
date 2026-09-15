@@ -556,13 +556,14 @@ function makeInvalidatedTypeAccumulator() {
   };
 }
 
-// The type set is bounded by the realm's type count rather than its row count,
-// so it stays small where `invalidations` does not. A realm with this many
-// characters of distinct types in one pass has stopped being selective enough
-// for the set to earn its place beside a URL list that is already the event's
-// bulk, so past the budget the field is dropped — which puts subscribers back
-// on the unconditional re-run rather than growing an event that still has to
-// fit in one message.
+// What this field may add to an event, encoded. It bounds this member's own
+// contribution and nothing else: `invalidations` carries no ceiling, so it is
+// what decides whether a large fan-out's event is deliverable at all, and a
+// budget here neither helps nor hurts that. What it buys is that a realm whose
+// pass touches a pathological number of distinct types — where the set has
+// stopped being selective enough to be worth carrying — drops the member
+// instead of adding to the bulk, and its subscribers take the unconditional
+// re-run they would have taken without it.
 const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
 
 function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
@@ -571,12 +572,13 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
   if (invalidatedTypes === undefined) {
     return {};
   }
-  let budget = MAX_BROADCAST_INVALIDATED_TYPES_BYTES;
-  for (let type of invalidatedTypes) {
-    budget -= type.length;
-    if (budget < 0) {
-      return {};
-    }
+  // Measure what goes on the wire — the JSON encoding, not the character
+  // count of the strings inside it.
+  let encodedLength = new TextEncoder().encode(
+    JSON.stringify(invalidatedTypes),
+  ).length;
+  if (encodedLength > MAX_BROADCAST_INVALIDATED_TYPES_BYTES) {
+    return {};
   }
   return { invalidatedTypes };
 }
