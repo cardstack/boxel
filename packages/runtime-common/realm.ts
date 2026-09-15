@@ -201,12 +201,14 @@ import { createResponse } from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
+  captureOutputContentType,
   captureSpecHash,
   captureSpecOverrides,
   isValidScreenshotName,
   parseCaptureSpecParams,
   screenshotLedgerSourceURL,
   screenshotsMetaFromManifest,
+  type CaptureContentType,
   type CaptureSpec,
   type ScreenshotManifest,
   type ScreenshotManifestEntry,
@@ -5146,6 +5148,7 @@ export class Realm {
         ),
         generationLookupMs: manifestLookupMs,
         ledgerLookupMs: Date.now() - ledgerLookupStart,
+        contentType: entry.contentType as CaptureContentType,
       };
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({
@@ -5208,6 +5211,7 @@ export class Realm {
       ),
       generationLookupMs,
       ledgerLookupMs: Date.now() - ledgerLookupStart,
+      contentType: captureOutputContentType(parsed.spec.type ?? 'png'),
     };
     if (entry) {
       // A hit costs zero Chrome work, so hits serve regardless of the
@@ -5310,6 +5314,7 @@ export class Realm {
       jobId: null,
       reservationId: null,
       hasTwin: null,
+      contentType: perf.contentType,
       generationLookupMs: perf.generationLookupMs,
       ledgerLookupMs: perf.ledgerLookupMs,
       totalMs: Date.now() - perf.requestStart,
@@ -10324,4 +10329,8 @@ interface ScreenshotServePerf {
   correlationId: string | null;
   generationLookupMs: number;
   ledgerLookupMs: number;
+  // The encoding this request concerns: spec-derived on the DSL path (known
+  // even when the capture never runs), the served row's own contentType on
+  // the named path.
+  contentType: CaptureContentType | null;
 }
