@@ -1938,6 +1938,17 @@ export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
   relativeTo?: RealmResourceIdentifier | URL | undefined;
+  // When `true`, the card write tells the realm not to block on the realm's
+  // in-flight incremental indexing before responding — it indexes the write
+  // deferred and answers from the serialized document instead of reading it
+  // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to false
+  // (wait), which is the synchronous-indexing contract every existing caller
+  // relies on. The writer's own next card read still waits on the deferred
+  // job (card reads drain the requester's own writes); what goes eventually-
+  // consistent is search — _search/_federated-search have no such drain —
+  // plus other users' sessions and anonymous readers. Only the save path
+  // (store.add → persistAndUpdate) honors this; create()/copy ignore it.
+  skipIndexWait?: boolean;
 }
 
 export interface AddOptions extends CreateOptions {

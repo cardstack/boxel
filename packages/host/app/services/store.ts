@@ -54,6 +54,7 @@ import {
   assertRealmsBound,
   isJsonContentType,
   SEARCH_CONCURRENCY_CAP,
+  SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
@@ -909,6 +910,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.persistAndUpdate(instance, {
         realm: opts?.realm,
         localDir: opts?.localDir,
+        skipIndexWait: opts?.skipIndexWait,
       });
     } else if (!opts?.doNotPersist) {
       // An existing card in a realm the user cannot write to is left alone:
@@ -940,6 +942,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.persistAndUpdate(instance, {
           realm: opts?.realm,
           localDir: opts?.localDir,
+          skipIndexWait: opts?.skipIndexWait,
         }),
       )) as T | CardErrorJSONAPI;
     }
@@ -3373,6 +3376,14 @@ export default class StoreService extends Service implements StoreInterface {
         // until it returns, and the index read the realm would otherwise do
         // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
         ...headlessCommandWriteHeaders(),
+        // Caller opted out of blocking this save on the realm's in-flight
+        // incremental indexing (see SKIP_INDEX_WAIT_HEADER). Same deferred-
+        // index + serialized-echo response the header above asks for, but
+        // driven by an explicit per-save option rather than the prerender
+        // context. Defaults to waiting when unset.
+        ...(opts?.skipIndexWait === true
+          ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
+          : {}),
       },
       clientRequestId: opts?.clientRequestId,
     });
@@ -3463,6 +3474,7 @@ export default class StoreService extends Service implements StoreInterface {
               realm: realmURL.href,
               localDir: opts?.localDir,
               clientRequestId: opts?.clientRequestId,
+              skipIndexWait: opts?.skipIndexWait,
             });
 
             let api = await this.cardService.getAPI();
