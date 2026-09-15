@@ -742,7 +742,7 @@ module(basename(import.meta.filename), function () {
           filter: {
             'item.on': personRef,
             every: [
-              { eq: { 'item.owner.id': { $ref: 'actor', key: 'id' } } },
+              { eq: { 'item.owner.id': { $ref: 'actor' } } },
               { eq: { 'item.status': { $ref: 'params', key: 'status' } } },
             ],
           },
@@ -795,24 +795,28 @@ module(basename(import.meta.filename), function () {
       definition.query!.filter = {
         'item.on': personRef,
         eq: {
-          'item.owner': { $ref: 'card', value: { $ref: 'actor', key: 'id' } },
+          'item.owner': { $ref: 'card', value: { $ref: 'params', key: 'who' } },
         },
       };
+      definition.params!.who = { kind: 'link', codeRef: personRef };
       let query = lowerQueryOperation(definition, {
         actor: '@test-actor:localhost',
-        params: { status: 'open' },
+        params: { status: 'open', who: 'http://127.0.0.1:4444/test/person-1' },
       });
       assert.deepEqual(query.filter, {
         'item.on': personRef,
-        eq: { 'item.owner': '@test-actor:localhost' },
+        eq: { 'item.owner': 'http://127.0.0.1:4444/test/person-1' },
       });
     });
 
-    test('a keyed actor reference needs the actor card, so it is refused', async function (assert) {
+    test('a card marker wrapping the caller is refused', async function (assert) {
+      // The wrapper says the value is a card, and a user id is not one. The
+      // comparison would match no stored row rather than fail, so a saved
+      // search built this way would quietly answer with nothing.
       let definition = savedSearch();
       definition.query!.filter = {
         'item.on': personRef,
-        eq: { 'item.ownerName': { $ref: 'actor', key: 'name' } },
+        eq: { 'item.owner': { $ref: 'card', value: { $ref: 'actor' } } },
       };
       let error = await refusalFrom(async () =>
         lowerQueryOperation(definition, {
@@ -822,9 +826,34 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.code, 'invalid-params');
       assert.ok(
-        error.detail.includes('identity'),
+        error.detail.includes('rather than a card'),
         `the refusal says why: ${error.detail}`,
       );
+    });
+
+    test('a keyed actor reference names a member the caller has not got, so it is refused', async function (assert) {
+      // Both spellings, because `"id"` is the one a stored definition is most
+      // likely to carry and the one whose value a query could answer anyway —
+      // resolving it would leave this path honoring a contract the other
+      // operation paths refuse.
+      for (let key of ['id', 'name']) {
+        let definition = savedSearch();
+        definition.query!.filter = {
+          'item.on': personRef,
+          eq: { 'item.ownerName': { $ref: 'actor', key } },
+        };
+        let error = await refusalFrom(async () =>
+          lowerQueryOperation(definition, {
+            actor: '@test-actor:localhost',
+            params: { status: 'open' },
+          }),
+        );
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.ok(
+          error.detail.includes('no members to read'),
+          `the refusal says why for actor("${key}"): ${error.detail}`,
+        );
+      }
     });
 
     test('a marker nothing knows how to resolve is refused', async function (assert) {

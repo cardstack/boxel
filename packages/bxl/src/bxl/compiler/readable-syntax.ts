@@ -478,8 +478,11 @@ const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
  * {@link dispatchReadableFunctionCall} stamps onto the dispatch record as
  * `keyNameArgument`. Matched case-insensitively so the decision tracks the
  * name however dispatch spells it.
+ *
+ * `actor` is absent because it has no keyed form: `actor()` is the caller's
+ * user id, so there is no key to hold literal.
  */
-const KEY_NAME_ARGUMENT_CALLS = new Set(['actor', 'instance', 'params']);
+const KEY_NAME_ARGUMENT_CALLS = new Set(['instance', 'params']);
 
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',

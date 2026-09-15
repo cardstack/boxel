@@ -4,6 +4,9 @@ const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
 } = require('../../eslint/erasable-syntax-selectors.cjs');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
+const {
+  AMBIENT_CLOCK_SELECTORS,
+} = require('../../eslint/ambient-clock-selectors.cjs');
 
 // Everything in this package is card code, compiled by the realm's transform
 // pipeline rather than run directly by Node, so decorators (`@field`,
@@ -19,11 +22,13 @@ const ERASABLE_MINUS_DECORATOR = NO_COMPILATION_REQUIRED_TS_SELECTORS.filter(
 // one would keep working in production — but it couples behavior to a hook
 // that exists for tests and may be deleted with them. Banned here as it is in
 // catalog contents; this package has no tests of its own to exempt.
-const CARD_CODE_RESTRICTED_SYNTAX = [
-  'error',
+const CARD_CODE_SELECTORS = [
   ...ERASABLE_MINUS_DECORATOR,
   ...DATA_TEST_SELECTORS,
+  ...AMBIENT_CLOCK_SELECTORS,
 ];
+
+const CARD_CODE_RESTRICTED_SYNTAX = ['error', ...CARD_CODE_SELECTORS];
 
 // Rules that apply to `.ts` and `.gts` alike.
 const CARD_CODE_RULES = {
@@ -126,6 +131,33 @@ module.exports = {
         'ember/no-runloop': 'off',
         'ember/no-empty-glimmer-component-classes': 'off',
         'ember/no-test-support-import': 'off',
+      },
+    },
+    {
+      // `executableExtensions` in runtime-common counts `.js` and `.gjs` as
+      // realm modules as well, so a card could be authored in either. The
+      // card-code rules above are deliberately scoped to the extensions this
+      // package uses today; the clock guard is not, because a renderer that
+      // reads the wall clock directly drifts wherever it lives.
+      files: ['**/*.js', '**/*.gjs'],
+      excludedFiles: ['./.template-lintrc.js', './scripts/**'],
+      rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
+    },
+    {
+      // The seam is the one place allowed to read the real clock, and that is
+      // the only exception it gets. Subtracting from the shared list rather
+      // than restating what is left means a group added to card code later
+      // reaches this file too — which matters most here, since a seam that
+      // quietly fell out of the card-code rules is the last file anyone would
+      // think to check.
+      files: ['helpers/clock.ts'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          ...CARD_CODE_SELECTORS.filter(
+            (selector) => !AMBIENT_CLOCK_SELECTORS.includes(selector),
+          ),
+        ],
       },
     },
     {

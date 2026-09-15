@@ -57,6 +57,9 @@ export interface HydratableEntryArgs {
   // Whether the row registers with the operator-mode overlay; `false` renders
   // it plainly (no chip / options menu / selection toggle).
   overlays: boolean;
+  // Whether the row renders its card container chrome (the boundary ring);
+  // `false` hides it, as `@displayContainer={{false}}` does on `@fields`.
+  displayContainer: boolean;
 }
 
 class _HydratableEntryComponent {
@@ -71,6 +74,7 @@ class _HydratableEntryComponent {
     readonly errorDoc: ErrorEntry | undefined,
     readonly mode: HydrationMode,
     readonly overlays: boolean,
+    readonly displayContainer: boolean,
   ) {}
 }
 
@@ -87,6 +91,7 @@ setComponentTemplate(
       @errorDoc={{this.errorDoc}}
       @mode={{this.mode}}
       @overlays={{this.overlays}}
+      @displayContainer={{this.displayContainer}}
       ...attributes
     />`,
     {
@@ -133,5 +138,6 @@ export function hydratableEntryComponent(
     args.errorDoc,
     args.mode,
     args.overlays,
+    args.displayContainer,
   ) as unknown as EntryComponent;
 }

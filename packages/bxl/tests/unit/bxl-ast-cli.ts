@@ -552,7 +552,7 @@ strictEqual(
 // so `mutation` is the only profile that admits them: a derivation is stored
 // and reused on later reads, and an authorization decision is not made from a
 // mutation payload.
-for (const call of ['params("body")', 'actor("id")', 'instance("id")']) {
+for (const call of ['params("body")', 'actor()', 'instance("id")']) {
   strictEqual(
     parseBxlAst(call, { profile: 'mutation', readableSyntax: false })
       .profileIssues.length,

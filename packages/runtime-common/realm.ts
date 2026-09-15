@@ -74,7 +74,13 @@ import {
   type HostRoutingRule,
 } from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
-import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
+import {
+  CAPTURE_SERVING_PREFIX,
+  RealmPaths,
+  ensureTrailingSlash,
+  isCaptureServingPath,
+  join,
+} from './paths.ts';
 import type ms from 'ms';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
@@ -163,6 +169,7 @@ import type {
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
+import type { BatchCore } from './card-operations/coordinator.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -253,7 +260,11 @@ import { AliasCache } from './cache/alias-cache.ts';
 import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
-import { RealmIndexUpdater } from './realm-index-updater.ts';
+import {
+  RealmIndexUpdater,
+  type IncrementalIndexMeta,
+  type IndexChange,
+} from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
 import {
   fileSizeLimitFor,
@@ -289,6 +300,8 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
+import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
@@ -544,6 +557,62 @@ export const REALM_FILE_CHANGES_WILDCARD = '*';
 // searchCards walk plus a stale RealmInfo on `_info` until the next swap
 // or write), not data corruption.
 export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
+
+// What an index pass reports back to the write paths that drive it.
+interface IndexPassResult extends IncrementalIndexMeta {
+  invalidations: string[];
+}
+
+// Accumulates the type sets of every index pass standing behind one
+// broadcast — a `writeMany` flushes modules ahead of the instances that depend
+// on them, so a single event can cover several passes. A pass that couldn't
+// report its types poisons the accumulation for good rather than being skipped
+// over: the event speaks for every pass behind it, and a set that quietly
+// omitted one would let a subscriber sit out a re-run it needed.
+function makeInvalidatedTypeAccumulator() {
+  let types: Set<string> | undefined = new Set();
+  return {
+    add(meta: IncrementalIndexMeta): void {
+      if (meta.invalidatedTypes === undefined) {
+        types = undefined;
+      } else if (types) {
+        for (let type of meta.invalidatedTypes) {
+          types.add(type);
+        }
+      }
+    },
+    get value(): string[] | undefined {
+      return types ? [...types] : undefined;
+    },
+  };
+}
+
+// What this field may add to an event, encoded. It bounds this member's own
+// contribution and nothing else: `invalidations` carries no ceiling, so it is
+// what decides whether a large fan-out's event is deliverable at all, and a
+// budget here neither helps nor hurts that. What it buys is that a realm whose
+// pass touches a pathological number of distinct types — where the set has
+// stopped being selective enough to be worth carrying — drops the member
+// instead of adding to the bulk, and its subscribers take the unconditional
+// re-run they would have taken without it.
+const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
+
+function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
+  invalidatedTypes?: string[];
+} {
+  if (invalidatedTypes === undefined) {
+    return {};
+  }
+  // Measure what goes on the wire — the JSON encoding, not the character
+  // count of the strings inside it.
+  let encodedLength = new TextEncoder().encode(
+    JSON.stringify(invalidatedTypes),
+  ).length;
+  if (encodedLength > MAX_BROADCAST_INVALIDATED_TYPES_BYTES) {
+    return {};
+  }
+  return { invalidatedTypes };
+}
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
 // post-update site inside Realm (Realm.update's onInvalidation, the
@@ -957,6 +1026,30 @@ export interface FileWriteResult extends AdapterWriteResult {
   path: string;
   lastModified: number;
   created: number | null;
+  // A fingerprint of the bytes now at this path, and the file's version: a
+  // caller holding one can tell whether the file has moved on since, and can
+  // name the base its next write is computed against. The same value is
+  // persisted on the file's `realm_file_meta` row.
+  contentHash: string;
+}
+
+// Everything one commit changes. Both members are optional so a caller that
+// only writes, or only removes, says exactly that.
+export interface CommitBatch {
+  writes?: Map<LocalPath, string | Uint8Array>;
+  deletes?: LocalPath[];
+}
+
+export interface CommitBatchResult {
+  // One result per staged write, in the order the caller staged them. A path
+  // whose bytes were already what the caller staged is still reported here,
+  // carrying the file's existing modification time and hash.
+  writes: FileWriteResult[];
+  // The index-data generation the commit's index pass landed on, for a caller
+  // that reports it alongside the versions above. Null when nothing was
+  // indexed — either because nothing changed on disk, or because the commit
+  // did not wait for indexing and the generation is not known yet.
+  generation: number | null;
 }
 
 export interface WriteOptions {
@@ -1130,6 +1223,7 @@ export class Realm {
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #operationCore: OperationCore | undefined;
+  #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
@@ -1920,9 +2014,8 @@ export class Realm {
   }
 
   private async updateIndexAndCollectInvalidations(
-    urls: URL[],
+    changes: IndexChange[],
     opts?: {
-      delete?: true;
       clientRequestId?: string | null;
       initiatedBy?: string | null;
       // Ask the pass not to enqueue its own prerender_html job; the returned
@@ -1932,20 +2025,20 @@ export class Realm {
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
     },
-  ): Promise<{
-    invalidations: string[];
-    generation?: number;
-    deferredPrerenderHtml?: DeferredPrerenderHtml;
-  }> {
-    if (urls.length === 0) {
-      return { invalidations: [] };
+  ): Promise<
+    IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
+  > {
+    if (changes.length === 0) {
+      // No pass ran, so nothing was touched — which the empty set states
+      // exactly, and more usefully than staying silent would.
+      return { invalidations: [], invalidatedTypes: [] };
     }
 
     let invalidations = new Set<string>();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
-    await this.#realmIndexUpdater.update(urls, {
-      ...(opts?.delete ? { delete: true } : {}),
+    await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
@@ -1968,6 +2061,7 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
     });
@@ -1975,6 +2069,7 @@ export class Realm {
     return {
       invalidations: [...invalidations],
       generation,
+      invalidatedTypes: invalidatedTypes.value,
       ...(deferredPrerenderHtml ? { deferredPrerenderHtml } : {}),
     };
   }
@@ -1994,9 +2089,8 @@ export class Realm {
   // waits for the broadcast, which is the only way an afterEach drain can
   // prevent the broadcast from racing with mock-matrix teardown.
   private async enqueueIndexUpdateAndCollectInvalidations(
-    urls: URL[],
+    changes: IndexChange[],
     opts: {
-      delete?: true;
       clientRequestId?: string | null;
       initiatedBy?: string | null;
       // Invalidation sets earlier passes of this same write deferred, folded
@@ -2004,21 +2098,21 @@ export class Realm {
       carriedPrerenderHtmlChanges?: IncrementalChange[];
       onSettled?: (
         invalidations: string[],
-        meta: { generation?: number },
+        meta: IncrementalIndexMeta,
       ) => Promise<void> | void;
     },
   ): Promise<{ settled: Promise<void> }> {
-    if (urls.length === 0) {
+    if (changes.length === 0) {
       if (opts.onSettled) {
-        await opts.onSettled([], {});
+        await opts.onSettled([], { invalidatedTypes: [] });
       }
       return { settled: Promise.resolve() };
     }
 
     let invalidations = new Set<string>();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
-    let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
-      ...(opts?.delete ? { delete: true } : {}),
+    let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -2031,11 +2125,15 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
       },
       onSettled: async () => {
         if (opts.onSettled) {
-          await opts.onSettled([...invalidations], { generation });
+          await opts.onSettled([...invalidations], {
+            generation,
+            invalidatedTypes: invalidatedTypes.value,
+          });
         }
       },
       onFailed: async () => {
@@ -2047,7 +2145,7 @@ export class Realm {
         // nothing landed: subscribers re-fetch and find the rows unchanged.
         await this.clearRealmIndexCachesAndBroadcast();
         this.broadcastIncrementalInvalidationEvent(
-          urls.map((url) => url.href.replace(/\.json$/, '')),
+          changes.map(({ url }) => url.href.replace(/\.json$/, '')),
           { clientRequestId: opts?.clientRequestId ?? null },
         );
       },
@@ -2058,7 +2156,11 @@ export class Realm {
 
   private broadcastIncrementalInvalidationEvent(
     invalidations: string[],
-    opts?: { clientRequestId?: string | null; generation?: number },
+    opts?: {
+      clientRequestId?: string | null;
+      generation?: number;
+      invalidatedTypes?: string[];
+    },
   ): void {
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -2070,6 +2172,7 @@ export class Realm {
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
+      ...boundedInvalidatedTypes(opts?.invalidatedTypes),
       realmURL: this.url,
     });
   }
@@ -2132,11 +2235,15 @@ export class Realm {
       }
     }
 
-    let { invalidations, generation } =
-      await this.updateIndexAndCollectInvalidations(urls, {
-        initiatedBy: requestContext.authenticatedUser ?? null,
-      });
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    let { invalidations, generation, invalidatedTypes } =
+      await this.updateIndexAndCollectInvalidations(
+        urls.map((url) => ({ url, operation: 'update' as const })),
+        { initiatedBy: requestContext.authenticatedUser ?? null },
+      );
+    this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+      invalidatedTypes,
+    });
 
     return createResponse({
       body: null,
@@ -2556,25 +2663,60 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    // A write large enough to outlast a render pass holds this realm's render
-    // lane for its duration. Coalescing can only merge into a job no worker
-    // has claimed, so on an idle cluster a bulk import gets none of it: each
-    // write's render pass is claimed and finished before the next write ends,
-    // and cards touched by more than one write are re-rendered once per write.
-    // Holding the lane leaves the earlier pass pending, so the next one merges
-    // into it and the union renders once. Nothing is skipped — the hold delays
-    // rendering, it never cancels it.
-    if (files.size < RENDER_HOLD_MIN_BATCH_SIZE) {
-      return await this.#batchWriteUnlockedInner(files, options);
+    let { writes } = await this._commitBatchUnlocked(
+      { writes: files },
+      options,
+    );
+    return writes;
+  }
+
+  // One commit covering every file a caller is changing — the bytes it writes
+  // and the paths it removes — under a single index job and a single index
+  // event. A caller staging several changes to several cards needs them to
+  // land together: two jobs would compute their invalidation fan-outs against
+  // different snapshots of the realm, and two events would let a subscriber
+  // observe the batch half-applied.
+  //
+  // Writes land before removals. The write leg carries a mid-loop index flush
+  // that a module followed by an instance depends on, so it has an ordering
+  // constraint of its own; a removal invalidates rows, touches no definition,
+  // and has nothing to contribute to that flush or to gain from running ahead
+  // of it.
+  //
+  // Assumes the realm's write lock is held — the caller reads the pre-state it
+  // stages from inside the same critical section. `write` and `writeMany` are
+  // the locked public entry points that reach this; `delete` and `deleteAll`
+  // have their own unlocked primitives and do not.
+  //
+  // Files are changed one at a time and there is no rollback: a file system
+  // failure partway through leaves the files handled before it changed, and
+  // this method rejects with the realm in that state. A caller offering its
+  // own callers an all-or-nothing batch is offering it over what it validates
+  // before calling here, not over the file system underneath.
+  private async _commitBatchUnlocked(
+    batch: CommitBatch,
+    options?: WriteOptions,
+  ): Promise<CommitBatchResult> {
+    // A commit large enough to outlast a render pass holds this realm's
+    // render lane for its duration. Coalescing can only merge into a job no
+    // worker has claimed, so on an idle cluster a bulk import gets none of
+    // it: each commit's render pass is claimed and finished before the next
+    // commit ends, and cards touched by more than one commit are re-rendered
+    // once per commit. Holding the lane leaves the earlier pass pending, so
+    // the next one merges into it and the union renders once. Nothing is
+    // skipped — the hold delays rendering, it never cancels it.
+    let changeCount = (batch.writes?.size ?? 0) + (batch.deletes?.length ?? 0);
+    if (changeCount < RENDER_HOLD_MIN_BATCH_SIZE) {
+      return await this.#commitBatchUnlockedInner(batch, options);
     }
     let hold = await JobClaimHold.acquire(
       this.#dbAdapter,
       prerenderHtmlConcurrencyGroup(this.url),
       RENDER_HOLD_LEASE_MS,
     );
-    // The cap spans the chain, not the batch. Each write acquires its own
+    // The cap spans the chain, not the batch. Each commit acquires its own
     // holder, and holds compose — so a per-call start would reset the cap on
-    // every batch, and a realm under back-to-back bulk writes could hold its
+    // every batch, and a realm under back-to-back bulk commits could hold its
     // render lane indefinitely while no single hold ever looked old. Anchoring
     // on the first hold in an unbroken run is what makes the cap mean what it
     // says.
@@ -2582,7 +2724,7 @@ export class Realm {
     this.#renderHoldDepth++;
     let chainStartedAt = this.#renderHoldChainStartedAt;
     let heartbeat = setInterval(() => {
-      // A realm under continuous bulk writes would otherwise never render.
+      // A realm under continuous bulk commits would otherwise never render.
       // Past the cap the lease simply stops being renewed, so the lane frees
       // itself within one lease and the import pays an extra render pass
       // rather than starving.
@@ -2590,7 +2732,7 @@ export class Realm {
         return;
       }
       hold.refresh(RENDER_HOLD_LEASE_MS).catch((e: any) => {
-        // The lease simply lapses and the lane frees early — the write is
+        // The lease simply lapses and the lane frees early — the commit is
         // unaffected, so this must not surface as a write failure.
         this.#log.warn(
           `failed to refresh render hold for ${this.url}: ${e?.message}`,
@@ -2600,7 +2742,7 @@ export class Realm {
     heartbeat.unref?.();
     let releaseHold = async () => {
       clearInterval(heartbeat);
-      // The chain ends when a hold is released with none behind it. A write
+      // The chain ends when a hold is released with none behind it. A commit
       // that starts before this one finishes keeps the anchor, which is the
       // case the cap exists for.
       this.#renderHoldDepth--;
@@ -2611,29 +2753,29 @@ export class Realm {
         await hold.release();
       } catch (e: any) {
         // Left alone the lease expires on its own, so a failed release costs
-        // one interval of delayed rendering rather than the write.
+        // one interval of delayed rendering rather than the commit.
         this.#log.warn(
           `failed to release render hold for ${this.url}: ${e?.message}`,
         );
       }
     };
-    let results: FileWriteResult[];
+    let result: CommitBatchResult;
     try {
-      results = await this.#batchWriteUnlockedInner(files, options);
+      result = await this.#commitBatchUnlockedInner(batch, options);
     } catch (e) {
       await releaseHold();
       throw e;
     }
-    // The write's own render job does not exist yet: the index pass this
-    // write just queued is what enqueues it, moments from now. Releasing at
-    // the end of the write would free the lane in that gap, so the previous
-    // write's pass — the one the hold was keeping available as a merge target
-    // — gets claimed just before the new job arrives, and the two render the
-    // same cards one after the other. Hold until the indexing settles
-    // instead, so both land on a held lane and merge into one pass.
+    // The commit's own render job does not exist yet: the index pass this
+    // commit just queued is what enqueues it, moments from now. Releasing at
+    // the end of the commit would free the lane in that gap, so the previous
+    // commit's pass — the one the hold was keeping available as a merge
+    // target — gets claimed just before the new job arrives, and the two
+    // render the same cards one after the other. Hold until the indexing
+    // settles instead, so both land on a held lane and merge into one pass.
     //
     // Deliberately not awaited: the caller's write is durable and its
-    // response must not wait on indexing. Consecutive bulk writes chain —
+    // response must not wait on indexing. Consecutive bulk commits chain —
     // each one's hold covers the next one's start — which is what collapses a
     // whole import into one render pass.
     let settled = this.incrementalIndexing();
@@ -2642,13 +2784,15 @@ export class Realm {
     } else {
       await releaseHold();
     }
-    return results;
+    return result;
   }
 
-  async #batchWriteUnlockedInner(
-    files: Map<LocalPath, string | Uint8Array>,
+  async #commitBatchUnlockedInner(
+    batch: CommitBatch,
     options?: WriteOptions,
-  ): Promise<FileWriteResult[]> {
+  ): Promise<CommitBatchResult> {
+    let files = batch.writes ?? new Map<LocalPath, string | Uint8Array>();
+    let deletes = batch.deletes ?? [];
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
     // its response from the index, so it has no reason to wait for
@@ -2665,7 +2809,11 @@ export class Realm {
     }
     let urls: URL[] = [];
     // Collect write results for all files we wrote
-    let results: { path: LocalPath; lastModified: number }[] = [];
+    let results: {
+      path: LocalPath;
+      lastModified: number;
+      contentHash: string;
+    }[] = [];
     let fileMetaRows: {
       path: LocalPath;
       contentHash?: string;
@@ -2679,7 +2827,9 @@ export class Realm {
     let mintedLoaderEpoch = false;
     let addedFiles: LocalPath[] = [];
     let updatedFiles: LocalPath[] = [];
+    let removedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
+    let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
@@ -2694,12 +2844,16 @@ export class Realm {
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     let carriedPrerenderHtmlChanges = () =>
       deferredPrerenderHtml?.changes ?? [];
-    let performIndex = async (opts?: { deferPrerenderHtml?: boolean }) => {
+    let performIndex = async (
+      changes: IndexChange[],
+      opts?: { deferPrerenderHtml?: boolean },
+    ) => {
       let {
         invalidations: workingInvalidations,
         generation,
+        invalidatedTypes: workingTypes,
         deferredPrerenderHtml: deferred,
-      } = await this.updateIndexAndCollectInvalidations(urls, {
+      } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
@@ -2715,6 +2869,7 @@ export class Realm {
       // spawned and the set is ours again.
       deferredPrerenderHtml = deferred;
       invalidations = new Set([...invalidations, ...workingInvalidations]);
+      invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
     };
 
@@ -2755,7 +2910,7 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        await performIndex({ deferPrerenderHtml: true });
+        await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
         urls = [];
       }
 
@@ -2791,8 +2946,31 @@ export class Realm {
           this.#adapter.openFile(p),
         );
         if (existingFile?.content === content) {
-          results.push({ path, lastModified: existingFile.lastModified });
-          fileMetaRows.push({ path });
+          // Identical bytes: the file is left alone, so its modification time
+          // stands and nothing is queued for indexing. The content hash is
+          // still the file's own — the bytes in hand are the bytes on disk —
+          // so a caller reading a version off this result gets the one the
+          // file already holds rather than nothing.
+          //
+          // Recorded on the row as well as returned. A file written before
+          // the realm began recording hashes carries none, and the row is
+          // what the file's metadata resource reports as its content hash —
+          // so a file the realm has never rewritten would answer without one
+          // until something changed its bytes. Writing the hash it already
+          // has is a no-op for every file that has one. This is not what
+          // makes `baseVersion` work: that is computed from the bytes read
+          // inside the write lock and never consults the row.
+          let unchangedHash = computeContentHash(content);
+          results.push({
+            path,
+            lastModified: existingFile.lastModified,
+            contentHash: unchangedHash,
+          });
+          fileMetaRows.push({
+            path,
+            contentHash: unchangedHash,
+            contentSize: computeContentSize(content),
+          });
           continue;
         }
         isNewFile = !existingFile;
@@ -2895,33 +3073,65 @@ export class Realm {
           );
         }
       }
-      results.push({ path, lastModified });
+      results.push({ path, lastModified, contentHash });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
     }
 
-    if (addedFiles.length > 0 || updatedFiles.length > 0) {
-      if ([...addedFiles, ...updatedFiles].some((f) => f === 'realm.json')) {
+    // The removal leg. Each path gets the same per-file treatment a write
+    // does — the initiation event, the own-write tracking that stops the file
+    // watcher from re-reporting this replica's own change, the byte-cache
+    // drop, and the peer notification — and then the whole batch's file
+    // changes are announced together below.
+    let deleteURLs: URL[] = [];
+    for (let path of deletes) {
+      let url = this.paths.fileURL(path);
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path, { isDelete: true });
+      await this.#adapter.remove(path);
+      this.invalidateCache(path);
+      await this.#notifyFileChange(path);
+      removedFiles.push(path);
+      deleteURLs.push(url);
+    }
+
+    if (
+      addedFiles.length > 0 ||
+      updatedFiles.length > 0 ||
+      removedFiles.length > 0
+    ) {
+      if (
+        [...addedFiles, ...updatedFiles, ...removedFiles].some(
+          (f) => f === 'realm.json',
+        )
+      ) {
         this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
         eventName: 'update',
         ...(addedFiles.length ? { added: addedFiles } : {}),
         ...(updatedFiles.length ? { updated: updatedFiles } : {}),
+        ...(removedFiles.length ? { removed: removedFiles } : {}),
         realmURL: this.url,
       } as UpdateRealmEventContent);
     }
 
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
+    await this.removeFileMeta(removedFiles);
     let waitForIndex = options?.waitForIndex !== false;
-    if (urls.length > 0) {
+    let changes: IndexChange[] = [
+      ...asUpdates(urls),
+      ...deleteURLs.map((url) => ({ url, operation: 'delete' as const })),
+    ];
+    if (changes.length > 0) {
       if (waitForIndex) {
-        await performIndex();
+        await performIndex(changes);
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
           generation: indexGeneration,
+          invalidatedTypes: invalidatedTypes.value,
         });
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
@@ -2942,11 +3152,12 @@ export class Realm {
         // never hit the intermediate path, so this snapshot is empty for
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
+        let priorTypes = invalidatedTypes.value;
         let carried = carriedPrerenderHtmlChanges();
         // Handed off: this pass's prerender job renders the deferred set too.
         deferredPrerenderHtml = undefined;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
-          urls,
+          changes,
           {
             clientRequestId,
             initiatedBy: initiatingUser,
@@ -2960,11 +3171,15 @@ export class Realm {
             // test teardown (mock-matrix already destroyed → broadcast
             // throws on serverState).
             onSettled: (deferredInvalidations, meta) => {
+              let types = makeInvalidatedTypeAccumulator();
+              types.add({ invalidatedTypes: priorTypes });
+              types.add(meta);
               this.broadcastIncrementalInvalidationEvent(
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
                   generation: meta.generation ?? indexGeneration,
+                  invalidatedTypes: types.value,
                 },
               );
             },
@@ -2974,30 +3189,36 @@ export class Realm {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Deferred indexing chain failed for ${this.url} (urls: ${urls
-              .map((u) => u.href)
+            `Deferred indexing chain failed for ${this.url} (urls: ${changes
+              .map(({ url }) => url.href)
               .join(', ')}): ${stringifyErrorForLog(err)}`,
           );
         });
       }
     } else {
-      // No urls actually written (e.g., content unchanged). Preserve the
-      // pre-existing always-broadcast behavior.
+      // Nothing changed on disk (e.g., every file's content was already what
+      // the caller staged). Preserve the pre-existing always-broadcast
+      // behavior.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
+        invalidatedTypes: invalidatedTypes.value,
       });
     }
     // A mixed batch whose instances all turned out to be byte-identical
     // leaves the flush's deferred set with no later pass to fold it into.
     // Those URLs are real dependents of a module that did change, so the
-    // write still owes them a render — enqueue the job the flush skipped.
+    // commit still owes them a render — enqueue the job the flush skipped.
     await this.enqueueDeferredPrerenderHtml(deferredPrerenderHtml);
-    return results.map(({ path, lastModified }) => ({
-      path,
-      lastModified,
-      created: createdMap.get(path)?.createdAt ?? null,
-    }));
+    return {
+      writes: results.map(({ path, lastModified, contentHash }) => ({
+        path,
+        lastModified,
+        contentHash,
+        created: createdMap.get(path)?.createdAt ?? null,
+      })),
+      generation: indexGeneration ?? null,
+    };
   }
 
   // Enqueue the prerender_html job an intermediate index pass deferred, for
@@ -3111,13 +3332,14 @@ export class Realm {
           return;
         }
 
-        // Same reservation `internalHandle` enforces for direct writes:
-        // the `_screenshot/` subtree is claimed by capture serving, so a
-        // file written there could never be read back.
-        if (localPath.startsWith('_screenshot/')) {
+        // Same reservation `internalHandle` enforces for direct writes,
+        // read from the one place it is stated.
+        if (isCaptureServingPath(localPath)) {
           errors.push({
             title: 'Reserved path',
-            detail: `Cannot write '${operation.href}': '_screenshot/' is reserved for serving captures`,
+            detail:
+              `Cannot write '${operation.href}': ` +
+              `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures`,
             status: 422,
           });
           return;
@@ -3492,12 +3714,15 @@ export class Realm {
     await this.removeFileMeta([path]);
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
-      let { invalidations, generation } =
-        await this.updateIndexAndCollectInvalidations([url], {
-          delete: true,
-          initiatedBy: options?.initiatingUser ?? null,
-        });
-      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+      let { invalidations, generation, invalidatedTypes } =
+        await this.updateIndexAndCollectInvalidations(
+          [{ url, operation: 'delete' }],
+          { initiatedBy: options?.initiatingUser ?? null },
+        );
+      this.broadcastIncrementalInvalidationEvent(invalidations, {
+        generation,
+        invalidatedTypes,
+      });
     } else {
       // Mirrors the write() waitForIndex:false path: await the durable
       // enqueue so DB-side failures still bubble out, but fire-and-forget
@@ -3506,13 +3731,13 @@ export class Realm {
       // doesn't resolve before the broadcast.
       let enqueueStart = Date.now();
       let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
-        [url],
+        [{ url, operation: 'delete' }],
         {
-          delete: true,
           initiatedBy: options?.initiatingUser ?? null,
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
+              invalidatedTypes: meta.invalidatedTypes,
             });
           },
         },
@@ -3562,11 +3787,14 @@ export class Realm {
     });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
-    let { invalidations, generation } =
-      await this.updateIndexAndCollectInvalidations(urls, {
-        delete: true,
-      });
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    let { invalidations, generation, invalidatedTypes } =
+      await this.updateIndexAndCollectInvalidations(
+        urls.map((url) => ({ url, operation: 'delete' as const })),
+      );
+    this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+      invalidatedTypes,
+    });
   }
 
   get realmIndexUpdater() {
@@ -3615,6 +3843,65 @@ export class Realm {
       };
     }
     return this.#operationCore;
+  }
+
+  // The batch coordinator's collaborators, built the same way and for the same
+  // reason as the operation core's: the write-side work an operation does is
+  // handed down as bound functions, so no executor resolves an identifier,
+  // opens a file, or reaches the network. The lock and the unlocked commit are
+  // among them, which is what puts the coordinator in charge of taking the lock
+  // once and keeps it out of the business of re-entering it.
+  get batchCore(): BatchCore {
+    if (!this.#batchCore) {
+      this.#batchCore = {
+        realmURL: this.url,
+        withWriteLock: (fn) => this.#dbAdapter.withWriteLock(this.url, fn),
+        fileExists: (localPath) => this.#adapter.exists(localPath),
+        readSourceFile: async (localPath) => {
+          let file = await this.readFileAsText(localPath);
+          return file
+            ? { content: file.content, lastModified: file.lastModified }
+            : undefined;
+        },
+        // Classified exactly as `_batchWriteUnlocked` classifies the same
+        // bytes when it writes them, so the ceiling a batch holds its staged
+        // bytes to is the ceiling the commit will apply rather than a second
+        // opinion about it.
+        assertWriteSize: (localPath, content) =>
+          this.assertWriteSize(
+            content,
+            localPath.endsWith('.json') && isCardDocumentString(content)
+              ? 'card'
+              : 'file',
+            localPath,
+          ),
+        drainIndexing: async () => {
+          await this.incrementalIndexing();
+        },
+        isIgnored: (url) => this.isIgnored(url),
+        commitUnlocked: (batch, options) =>
+          this._commitBatchUnlocked(batch, options),
+        serializeCard: (doc, relativeTo) =>
+          this.fileSerialization(doc, relativeTo),
+        codeRefKey: (codeRef, relativeTo) =>
+          internalKeyFor(codeRef, relativeTo, this.#virtualNetwork),
+        resolveModuleId: (moduleId, relativeTo) =>
+          this.#virtualNetwork.resolveRRI(moduleId, rri(relativeTo)),
+        lookupDefinition: async (codeRef, relativeTo) => {
+          let absolute = codeRefWithAbsoluteIdentifier(
+            codeRef,
+            relativeTo,
+            undefined,
+            this.#virtualNetwork,
+          );
+          if (!isResolvedCodeRef(absolute)) {
+            return undefined;
+          }
+          return await this.#definitionLookup.lookupDefinition(absolute);
+        },
+      };
+    }
+    return this.#batchCore;
   }
 
   async reindex() {
@@ -3879,11 +4166,11 @@ export class Realm {
       // hand unauthenticated callers an existence/size/content-hash oracle
       // over a private realm's captures; no consumer of this route (image
       // loads, crawlers) sends HEAD.
-      if (request.method === 'GET' && localPath.startsWith('_screenshot/')) {
+      if (request.method === 'GET' && isCaptureServingPath(localPath)) {
         return await this.serveScreenshot(
           request,
           requestContext,
-          localPath.slice('_screenshot/'.length),
+          localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
       // The GET dispatch above claims the whole `_screenshot/` subtree, so a
@@ -3895,10 +4182,12 @@ export class Realm {
       // anything already stored there.
       if (
         ['PUT', 'PATCH', 'POST'].includes(request.method) &&
-        localPath.startsWith('_screenshot/')
+        isCaptureServingPath(localPath)
       ) {
         return badRequest({
-          message: `'_screenshot/' is reserved for serving captures and cannot be written to`,
+          message:
+            `'${CAPTURE_SERVING_PREFIX}' is reserved for serving captures ` +
+            `and cannot be written to`,
           requestContext,
         });
       }
@@ -6625,6 +6914,14 @@ export class Realm {
       delete original.meta.lastModified;
       let originalClone = cloneDeep(original);
 
+      // The merge from here to the write is stated twice: `stageUpdate` in
+      // card-operations/executors.ts carries the same guard, the same
+      // realm-managed-key deletes, the same array-replacing customizer, the
+      // same relationship merge and the same no-op short circuit, so a batch
+      // update and a `PATCH` of one document land the same bytes. Anything
+      // learned here — a fifth server-stamped key that must not persist from
+      // a client echo, say — has to be learned there in the same change,
+      // until the two are one path.
       if (
         originalClone.meta?.adoptsFrom &&
         internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
@@ -8842,7 +9139,36 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
+    // Tell each affected user their accessible-realm set changed so a running
+    // session re-derives it from `_realm-auth` (which reads the permissions
+    // written just above) without a reload. Nothing else notifies a grantee:
+    // the index_updated broadcast above is server-to-server only.
+    await this.notifyRealmsListUpdated(Object.keys(patch));
     return await this.getRealmPermissions(request, requestContext);
+  }
+
+  // Notify each affected user that their set of accessible realms changed, so
+  // a running session re-derives it from `_realm-auth` without a reload.
+  // Delivered into the user's session DM room via the shared `sendEvent`
+  // helper, which no-ops when the user has no session room and self-heals a
+  // stale one. Best-effort per user: a delivery failure must never roll back
+  // the grant that already committed, so one user's error is logged and the
+  // rest still run.
+  private async notifyRealmsListUpdated(users: string[]): Promise<void> {
+    let sendEvent = createSendEvent({
+      matrixClient: this.#matrixClient,
+      dbAdapter: this.#dbAdapter,
+    });
+    for (let user of users) {
+      try {
+        await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (e) {
+        this.#log.error(
+          `failed to notify ${user} that their realms list changed`,
+          e,
+        );
+      }
+    }
   }
 
   private async getLastPublishedAt(): Promise<
@@ -9567,11 +9893,14 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      let { invalidations, generation } =
-        await this.updateIndexAndCollectInvalidations([url], {
-          ...(operation === 'removed' ? { delete: true } : {}),
-        });
-      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+      let { invalidations, generation, invalidatedTypes } =
+        await this.updateIndexAndCollectInvalidations([
+          { url, operation: operation === 'removed' ? 'delete' : 'update' },
+        ]);
+      this.broadcastIncrementalInvalidationEvent(invalidations, {
+        generation,
+        invalidatedTypes,
+      });
     }
     itemsDrained!();
   }
@@ -9802,6 +10131,11 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+// A change set whose every URL names a file that is there to be visited.
+function asUpdates(urls: URL[]): IndexChange[] {
+  return urls.map((url) => ({ url, operation: 'update' as const }));
 }
 
 function promoteLocalIdsToRemoteIds({

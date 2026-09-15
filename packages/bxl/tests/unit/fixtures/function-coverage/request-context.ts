@@ -6,6 +6,9 @@
  * one through `context` and asserts what the program read out of it. They
  * resolve only in the mutation library set, so every case names it.
  *
+ * `actor` is the exception to the key-name shape: it has only `actor/0`, and
+ * answers the caller's user id as a string.
+ *
  * The values here are deliberately unlike the document a program edits: a
  * case that read `.` instead of the context would produce the input rather
  * than these, and say so.
@@ -15,7 +18,7 @@ import { inMutationLibraries, jqCases, type CoverageCase } from './case.ts';
 
 const context = {
   params: { body: 'Looks good to me', mentions: ['user:grace'], count: 2 },
-  actor: { id: 'user:ada', displayName: 'Ada' },
+  actor: 'user:ada',
   instance: { id: 'https://example.test/Post/1', commentCount: 4 },
 };
 
@@ -69,7 +72,7 @@ const cases: CoverageCase[] = [
     input: editedDocument,
     context,
     check(outputs) {
-      deepStrictEqual(outputs, [{ id: 'user:ada', displayName: 'Ada' }]);
+      deepStrictEqual(outputs, ['user:ada']);
     },
   },
   {
@@ -79,19 +82,12 @@ const cases: CoverageCase[] = [
     throws: /needs the caller identity/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("id")',
-    input: editedDocument,
-    context,
-    expected: 'user:ada',
-  },
-  {
-    covers: 'actor/1',
-    source: 'actor("id")',
-    // An actor the host supplied as something other than an object is a host
-    // defect, and is reported as one instead of being indexed into.
-    context: { actor: 'user:ada' },
-    throws: /to be an object, but the host supplied string/,
+    covers: 'actor/0',
+    source: 'actor()',
+    // An actor the host supplied as anything but a user id is a host defect,
+    // and is reported as one instead of reaching the document.
+    context: { actor: { id: 'user:ada' } },
+    throws: /to be a string, but the host supplied object/,
   },
   {
     covers: 'instance/0',
@@ -114,23 +110,23 @@ const cases: CoverageCase[] = [
     throws: /needs the stored document being edited/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("displayName")',
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
     // A key held with an explicit `undefined` is absent, not a value:
     // `undefined` is not JSON, and yielding it would reach the planner as a
     // value and write an intent that unsets the field.
-    context: { actor: { id: 'user:ada', displayName: undefined } },
-    throws: /asks for "displayName".*it has "id"/,
+    context: { instance: { id: 'https://e.test/1', commentCount: undefined } },
+    throws: /asks for "commentCount".*it has "id"/,
   },
   {
-    covers: 'actor/1',
-    source: 'actor("displayName")',
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
     // A JSON `null`, by contrast, is a real value and passes through.
     //
     // `outputs` rather than `expected`, because `expected: null` normalizes
     // from an empty stream as well as from a single `null` — and emitting
     // one value rather than none is exactly what this case is for.
-    context: { actor: { id: 'user:ada', displayName: null } },
+    context: { instance: { id: 'https://e.test/1', commentCount: null } },
     outputs: [null],
   },
   {

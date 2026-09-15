@@ -39,17 +39,17 @@ import type {
 // trip to a trusted process that must not load the card's module. Lowering
 // translates it once, when the module's definition-cache entry is built:
 //
-//   append: { to: 'comments', value: { body: params('body'), author: actor() } }
-//     → append(.comments;{body:params("body"),author:card(actor("id"))});
+//   append: { to: 'comments', value: { body: params('body'), author: params('author') } }
+//     → append(.comments;{body:params("body"),author:card(params("author"))});
 //
 // Two things make that translation more than a syntax rewrite.
 //
-// **The target's shape decides how a value is written.** `author: actor()` in
-// the example lands in a `linksTo` field, so it lowers to a card identity —
-// `card(actor("id"))` — while the same marker in a scalar field lowers to
-// `actor()`. That is read off the declaring type's `fieldDefs` and, for a
-// nested value, off the definitions its fields point at, which is the one
-// thing here that does I/O: `lookupDefinition`.
+// **The target's shape decides how a value is written.** `author` in the
+// example lands in a `linksTo` field, so the param lowers to a card identity —
+// `card(params("author"))` — while the same marker in a scalar field lowers to
+// `params("author")`. That is read off the declaring type's `fieldDefs` and,
+// for a nested value, off the definitions its fields point at, which is the
+// one thing here that does I/O: `lookupDefinition`.
 //
 // **A declaration can be wrong in ways only the type's shape reveals** — a
 // field that does not exist, a write into a computed field or through a link,
@@ -515,10 +515,7 @@ async function lowerAssert(
   // `by` is therefore compared against a member, not against the item: on a
   // link collection it is the identity string that `.id` holds, so it lowers
   // in an identity slot rather than being wrapped in `card(…)` the way the
-  // same value would be on its way *into* the link. The slot is also what
-  // narrows a keyless `actor()` to `actor("id")` here — comparing a whole
-  // actor record against an id string is never equal, so the assertion would
-  // hold for every item and the precondition would guard nothing at all.
+  // same value would be on its way *into* the link.
   let linked = LINK_KINDS.includes(field.type);
   let keyed = linked ? '.id' : '.';
   let slot: ValueSlot = linked
@@ -766,9 +763,9 @@ async function slotForField(
 //
 // A typed reference lowers to the builtin of the same name, except in a link
 // slot: a link holds an identity, so the reference is wrapped in `card(…)`
-// and a whole-value reference is narrowed to the `id` that identifies it —
-// which is why `author: actor()` on a `linksTo` field becomes
-// `card(actor("id"))`.
+// and a whole-value `instance()` is narrowed to the `id` that identifies it —
+// which is why `report: instance()` on a `linksTo` field becomes
+// `card(instance("id"))`.
 //
 // The walk is async because it resolves the type of every contained value it
 // descends into, so a key is checked at whatever depth an author wrote it.
@@ -776,7 +773,7 @@ async function slotForField(
 // One emitted shape has no executable spelling yet. `card(…)` is a marker the
 // mutation planner recognizes structurally, and only as an entire value
 // expression, so a relationship *nested inside* a contained value —
-// `append(.comments;{body:"b",author:card(actor("id"))});` — parses, plans,
+// `append(.comments;{body:"b",author:card(params("author"))});` — parses, plans,
 // and then fails with `'card/1' is not defined`. That is every contained
 // write carrying a link, not one example. It is emitted unchanged all the
 // same: this is the lowered form the design calls for, and bending it here
@@ -805,7 +802,15 @@ async function lowerValue(
   // unwrapped spelling is the one the executor accepts and writes, so the
   // stored program for a refused operation would go from one the planner
   // rejects to one that quietly writes the wrong thing.
-  if (slot.kind === 'links' && !Array.isArray(value)) {
+  //
+  // An actor is the exception, and gets one finding rather than two: telling
+  // an author to write a list of callers answers a question they should not
+  // be asking, so the finding below says the one thing that is wrong.
+  if (
+    slot.kind === 'links' &&
+    !Array.isArray(value) &&
+    !(isMarker(value) && value.$ref === 'actor')
+  ) {
     sink.add('link-requires-identity', path, notAList(path));
   }
   if (isMarker(value)) {
@@ -969,7 +974,14 @@ function wantsIdentity(slot: ValueSlot): boolean {
 }
 
 function notAnIdentity(path: string, described: string): string {
-  return `${described} cannot stand for a card identity at \`${path}\` — write a card URL, a param declared with \`linkTo(…)\`, or \`actor()\` / \`instance()\` there`;
+  return `${described} cannot stand for a card identity at \`${path}\` — write a card URL, a param declared with \`linkTo(…)\`, or \`instance()\` there`;
+}
+
+// The caller is authenticated as a user id and no card represents a user, so
+// an `actor()` where a card identity belongs names a link that cannot
+// resolve. The person acting is expressible, just not from the actor.
+function actorIsNotACard(path: string): string {
+  return `\`${path}\` asks for a card identity, and \`actor()\` is the caller's user id rather than a card — declare the person as a \`params\` member typed \`linkTo(…)\` and write that there`;
 }
 
 function notAList(path: string): string {
@@ -1017,25 +1029,35 @@ async function lowerReference(
       let read = `params(${bxlLiteral(key)})`;
       return asLink ? `card(${read})` : read;
     }
-    case 'actor':
+    case 'actor': {
+      // `actor()` is the caller's user id, which is a value a text field
+      // stores and a filter compares — not a card. Where a card identity
+      // belongs there is nothing to narrow it to, so this is an authoring
+      // problem rather than a spelling one, and the message says what to
+      // declare instead.
+      if (identifies) {
+        sink.add('actor-not-a-card', path, actorIsNotACard(path));
+      }
+      return 'actor()';
+    }
     case 'instance': {
-      let builtin = String(marker.$ref);
-      // The identity of a whole actor or instance is its `id`.
+      // The identity of a whole instance is its `id`.
       let key = marker.key ?? (identifies ? 'id' : undefined);
       let read =
         key === undefined
-          ? `${builtin}()`
-          : `${builtin}(${bxlLiteral(String(key))})`;
+          ? 'instance()'
+          : `instance(${bxlLiteral(String(key))})`;
       return asLink ? `card(${read})` : read;
     }
     case 'card': {
       // Whatever `card(…)` wraps is an identity by definition, so the value
       // inside it lowers in an identity slot however the marker itself is
-      // being used. That is what narrows a keyless `actor()` to the `id` the
-      // constructor needs: `card(…)` takes exactly one identity string, so a
-      // whole actor record is refused at plan time. Lowering the inside
-      // against the outer slot instead would leave the explicit spelling
-      // broken while the bare `actor()` it is more precise than works.
+      // being used. That is what narrows a keyless `instance()` to the `id`
+      // the constructor needs: `card(…)` takes exactly one identity string,
+      // so a whole stored document is refused at plan time. Lowering the
+      // inside against the outer slot instead would leave the explicit
+      // spelling broken while the bare `instance()` it is more precise than
+      // works.
       let inner = await lowerValue(
         marker.value,
         { kind: 'identity' },
@@ -1193,8 +1215,8 @@ async function lowerCreate(
   let target = codeRef ? await context.lookupDefinition(codeRef) : undefined;
   let fill: Record<string, OperationTemplate> = {};
   for (let [key, value] of Object.entries(declaration.fill)) {
+    let fieldDef = target ? getImmediateFieldDef(target, key) : undefined;
     if (target) {
-      let fieldDef = getImmediateFieldDef(target, key);
       let unwritable = fieldDef && unwritableReason(key, fieldDef);
       if (!fieldDef) {
         sink.add(
@@ -1212,7 +1234,13 @@ async function lowerCreate(
         );
       }
     }
-    fill[key] = templateOf(value, `fill.${key}`, paramNames, sink);
+    fill[key] = templateOf(
+      value,
+      `fill.${key}`,
+      paramNames,
+      sink,
+      fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
+    );
   }
   operation.fill = fill;
 }
@@ -1226,13 +1254,22 @@ function templateOf(
   path: string,
   paramNames: Set<string>,
   sink: IssueSink,
+  // Whether the slot this fills is a link field, which is the one thing a
+  // template's shape does not say for itself: a marker is carried through as
+  // data, so what it stands for is decided by the field it lands in.
+  identifies = false,
 ): OperationTemplate {
   if (isMarker(value)) {
     if (value.$ref === 'params') {
       checkParamKey(String(value.key), paramNames, path, sink);
     }
+    if (value.$ref === 'actor' && identifies) {
+      sink.add('actor-not-a-card', path, actorIsNotACard(path));
+    }
     if (value.$ref === 'card' && isMarker(value.value)) {
-      templateOf(value.value, `${path}.value`, paramNames, sink);
+      // Inside `card(…)` every value is a card identity, whatever field the
+      // wrapper itself fills.
+      templateOf(value.value, `${path}.value`, paramNames, sink, true);
     }
     return value as OperationTemplate;
   }
@@ -1245,8 +1282,11 @@ function templateOf(
     return null;
   }
   if (Array.isArray(value)) {
+    // A link collection's members are each a card identity, so the slot's
+    // reading carries into every entry — a list is how a `linksToMany` is
+    // filled, not a place where the question changes.
     return value.map((entry, index) =>
-      templateOf(entry, `${path}[${index}]`, paramNames, sink),
+      templateOf(entry, `${path}[${index}]`, paramNames, sink, identifies),
     );
   }
   if (isPlainObject(value)) {

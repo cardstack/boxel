@@ -547,6 +547,9 @@ export function getBoxComponent(
 
         .field-component-card.atom-format.display-container-false {
           display: contents;
+          /* no box of its own to paint, so the text must follow the surface
+             it sits on rather than the container's --foreground */
+          color: inherit;
         }
         .field-component-card.atom-format.display-container-true {
           display: inline-block;

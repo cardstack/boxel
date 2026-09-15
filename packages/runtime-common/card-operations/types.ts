@@ -165,6 +165,11 @@ export type OperationLoweringIssueCode =
   // A class reference that no module exports under a name, so there is no
   // code ref to store.
   | 'unresolved-type'
+  // An `actor()` where a card identity belongs: a link field, a `by` on a link
+  // collection, or inside `card(…)`. The realm authenticates a caller as a
+  // user id and no card represents a user, so the link would name a card that
+  // does not exist.
+  | 'actor-not-a-card'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -356,6 +361,12 @@ export type OperationSourceBody =
 // nothing else.
 export interface OperationIdentityResult {
   id: string;
+  // Echoed by a create, so a caller can match the URL the realm minted back to
+  // the `lid` it named the card with. A `lid` is the caller's own id for a card
+  // that does not exist yet, so this is the only thing that ties the two
+  // together — nothing in the minted URL carries it once the realm has chosen
+  // one.
+  lid?: string;
   meta: {
     // The token a later request passes as `baseVersion`.
     version: string;
@@ -436,6 +447,11 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The bytes an operation would store are over the realm's ceiling for a
+  // card or a file of that kind. Separate from `invalid-params` because the
+  // payload is well formed and the remedy is to send less of it, and because
+  // it carries the realm's own 413.
+  | 'payload-too-large'
   // The operation is sound but is not carried out here. A `query` is the case:
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.

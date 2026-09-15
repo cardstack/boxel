@@ -1,4 +1,5 @@
 import { computeMediaCacheKey } from './media-cache.ts';
+import { CAPTURE_SERVING_PREFIX } from './paths.ts';
 
 import type {
   ScreenshotCaptureEntry,
@@ -1089,7 +1090,9 @@ export function screenshotURLFor({
   instanceLocalPath: string;
   spec: CaptureSpec;
 }): string {
-  return `${realmURL}_screenshot/${instanceLocalPath}${canonicalCaptureSpecQuery(spec)}`;
+  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}${canonicalCaptureSpecQuery(
+    spec,
+  )}`;
 }
 
 // The MediaCache ledger's source-URL spelling for one prerendered row's
@@ -1117,7 +1120,7 @@ export function screenshotNameURLFor({
   instanceLocalPath: string;
   name: string;
 }): string {
-  return `${realmURL}_screenshot/${instanceLocalPath}?name=${name}`;
+  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}?name=${name}`;
 }
 
 // One name's entry in a card+json document's `meta.screenshots` — the public
