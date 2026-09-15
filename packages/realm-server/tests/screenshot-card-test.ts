@@ -1864,5 +1864,29 @@ module(basename(import.meta.filename), function () {
         );
       }
     });
+
+    test('an element-target mismatch is never a twin', function (assert) {
+      // `target` is dropped from the persist hash (canonicalOverrides elides
+      // it), so two element-crop jobs on the same card share a ledger
+      // identity — the comparator is all that keeps one caller from being
+      // handed the other's element crop.
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec({
+          ...customSpecArgs(),
+          captureSpec: { target: '.header' },
+        }),
+        candidates: [
+          {
+            ...jobSpec({
+              ...customSpecArgs(),
+              captureSpec: { target: '.footer' },
+            }),
+            id: 7,
+          },
+        ],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'insert' });
+    });
   });
 });
