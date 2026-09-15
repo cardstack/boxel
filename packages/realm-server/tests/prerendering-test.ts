@@ -1020,7 +1020,10 @@ module(basename(import.meta.filename), function () {
               data: {
                 attributes: { name: 'Print Probe' },
                 meta: {
-                  adoptsFrom: { module: rri('./print-probe'), name: 'PrintProbe' },
+                  adoptsFrom: {
+                    module: rri('./print-probe'),
+                    name: 'PrintProbe',
+                  },
                 },
               },
             },
