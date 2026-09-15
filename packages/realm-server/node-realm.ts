@@ -14,6 +14,7 @@ import {
   type TokenClaims,
   clearSessionRoom,
   fetchRealmSessionRooms,
+  isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -66,40 +67,6 @@ function statIfExists(absolutePath: string): Stats | undefined {
     }
     throw err;
   }
-}
-
-function parseMatrixSendEventError(error: unknown): {
-  status?: number;
-  errcode?: string;
-  error?: string;
-} | null {
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  let match = error.message.match(/status (\d+) - (\{.*\})$/);
-  if (!match) {
-    return null;
-  }
-
-  let [, status, body] = match;
-  try {
-    return {
-      status: Number(status),
-      ...(JSON.parse(body) as { errcode?: string; error?: string }),
-    };
-  } catch (_err) {
-    return { status: Number(status) };
-  }
-}
-
-function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
-  let details = parseMatrixSendEventError(error);
-  return Boolean(
-    details?.status === 403 &&
-    details?.errcode === 'M_FORBIDDEN' &&
-    details?.error?.includes(`not in room ${roomId}`),
-  );
 }
 
 export class NodeAdapter implements RealmAdapter {

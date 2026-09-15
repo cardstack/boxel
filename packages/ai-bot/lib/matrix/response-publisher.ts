@@ -4,8 +4,10 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   READ_REALM_FILE_TOOL_NAME,
   readFilesLabel,
+  urlsFromReadRealmFileArguments,
 } from '../read-realm-file.ts';
 import {
+  maxOutputTokensDuringFileReadErrorMessage,
   maxOutputTokensErrorMessage,
   thinkingMessage,
 } from '../../constants.ts';
@@ -54,10 +56,26 @@ export function toCommandRequest(
     result.executedBy = AI_BOT_EXECUTOR;
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: readFilesLabel(result.arguments?.urls),
+      description: readFilesLabel(
+        f.arguments ? urlsFromReadRealmFileArguments(f.arguments) : undefined,
+      ),
     };
   }
   return result;
+}
+
+// True when the turn's tool calls include a readRealmFile call that names at
+// least one complete url — the call fulfillment will read, even if the
+// arguments were cut off before the list closed.
+function hasRecoverableReadRealmFileCall(
+  toolCalls: ReturnType<ResponseState['snapshot']>['toolCalls'],
+): boolean {
+  return toolCalls.some(
+    (toolCall) =>
+      toolCall?.function?.name === READ_REALM_FILE_TOOL_NAME &&
+      urlsFromReadRealmFileArguments(toolCall.function.arguments ?? '').length >
+        0,
+  );
 }
 
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
@@ -200,13 +218,19 @@ export default class MatrixResponsePublisher {
       // is incomplete, so tell the user. The error rides the final part of the
       // answer (like tools and usage) rather than replacing it — the partial
       // content is still worth keeping. A canceled turn is cut off on purpose
-      // and already labeled as such.
+      // and already labeled as such. A cut inside a readRealmFile call whose
+      // urls were recovered gets its own wording: the bot reads those files
+      // and continues by itself, so the user has nothing to do.
       if (
         responseStateSnapshot.isStreamingFinished &&
         !responseStateSnapshot.isCanceled &&
         responseStateSnapshot.finishReason === 'length'
       ) {
-        extraData.errorMessage = maxOutputTokensErrorMessage;
+        extraData.errorMessage = hasRecoverableReadRealmFileCall(
+          responseStateSnapshot.toolCalls,
+        )
+          ? maxOutputTokensDuringFileReadErrorMessage
+          : maxOutputTokensErrorMessage;
       }
       if (this.currentResponseEvent.needsContinuation) {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =

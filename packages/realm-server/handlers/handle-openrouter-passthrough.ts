@@ -4,7 +4,12 @@ import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import { handleStreamingRequest } from '../lib/proxy-forward.ts';
+import {
+  clientDisconnectSignal,
+  handleStreamingRequest,
+  isClientDisconnectError,
+  upstreamCallSignal,
+} from '../lib/proxy-forward.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -44,6 +49,11 @@ export default function handleOpenRouterPassthrough({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    // Shares the per-user cost lock with `_request-forward`, so an abandoned
+    // call here stalls that user's next call on either endpoint until the
+    // upstream one finishes. Cancelling it is what releases the lock.
+    let clientGone = clientDisconnectSignal(ctxt);
+
     try {
       const token = ctxt.state.token;
       if (!token) {
@@ -135,15 +145,22 @@ export default function handleOpenRouterPassthrough({
             destinationConfig,
             dbAdapter,
             matrixUserId,
+            clientGone,
           );
           return;
         }
 
+        // Released once the response exists: cancelling after that would
+        // discard the charge for tokens the provider has already generated
+        // and billed us for, rather than saving anything.
+        const upstreamCall = upstreamCallSignal(clientGone);
         const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
           method: 'POST',
           headers,
           body: finalBody,
+          signal: upstreamCall.signal,
         });
+        upstreamCall.release();
         const responseData = await externalResponse.json();
 
         await destinationConfig.creditStrategy.saveUsageCost(
@@ -160,6 +177,14 @@ export default function handleOpenRouterPassthrough({
         await setContextResponse(ctxt, response);
       });
     } catch (error) {
+      if (isClientDisconnectError(error, clientGone)) {
+        // Cancelling on purpose is not a fault: there is no one left to
+        // answer and nothing to page anyone about.
+        log.info(
+          'Client disconnected during openrouter passthrough; upstream call cancelled',
+        );
+        return;
+      }
       log.error('Error in openrouter-passthrough handler:', error);
       Sentry.captureException(error);
       await sendResponseForSystemError(

@@ -34,7 +34,7 @@ import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import type { LiveSearchCache } from './live-search-cache.ts';
-import { createSendEvent } from './handlers/send-event.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';

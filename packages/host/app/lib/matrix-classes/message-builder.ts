@@ -477,14 +477,16 @@ export default class MessageBuilder {
     }
 
     let actionVerb = 'Apply';
+    let neverAutoExecutes = false;
     if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
         skillTool?.codeRef,
         this.loaderService.loader,
-      )) as { actionVerb: string };
+      )) as { actionVerb?: string; neverAutoExecutes?: boolean };
       if (CommandKlass?.actionVerb) {
         actionVerb = CommandKlass.actionVerb;
       }
+      neverAutoExecutes = CommandKlass?.neverAutoExecutes === true;
     }
 
     let requiresApproval = skillTool?.requiresApproval ?? true;
@@ -506,6 +508,7 @@ export default class MessageBuilder {
         : undefined,
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
+      neverAutoExecutes,
     );
     return messageTool;
   }

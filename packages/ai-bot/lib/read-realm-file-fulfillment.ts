@@ -12,7 +12,8 @@ import type { ChatCompletionMessageToolCall } from 'openai/resources';
 import {
   executeReadRealmFile,
   fileLabelFromUrl,
-  type ReadRealmFileArgs,
+  READ_REALM_FILE_MAX_URLS,
+  selectReadRealmFileUrls,
   type ReadRealmFileTool,
 } from './read-realm-file.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
@@ -54,8 +55,9 @@ export interface ReadRealmFileFulfillmentDeps {
 export interface ReadRealmFileFulfillmentOutcome {
   commandRequestId: string;
   // True only when every requested file was read and attached; a partial read
-  // reports ok: false with `error` naming the files that failed, even though
-  // the successful ones were still attached.
+  // reports ok: false with `error` naming the files that failed or were
+  // dropped past the per-call cap, even though the successful ones were
+  // still attached.
   ok: boolean;
   error?: string;
 }
@@ -223,21 +225,12 @@ async function fulfillOne(
   deps: ReadRealmFileFulfillmentDeps,
   upload: (content: string, contentType: string) => Promise<string>,
 ): Promise<ReadRealmFileFulfillmentOutcome> {
-  let args: ReadRealmFileArgs | undefined;
-  try {
-    args = JSON.parse(call.function.arguments) as ReadRealmFileArgs;
-  } catch {
-    args = undefined;
-  }
-  // Dedupe within the call so a repeated URL doesn't attach (and inline into
-  // every later prompt) twice.
-  let urls = [
-    ...new Set(
-      (Array.isArray(args?.urls) ? args.urls : []).filter(
-        (url): url is string => typeof url === 'string' && url.length > 0,
-      ),
-    ),
-  ];
+  // Deduplicated within the call so a repeated URL doesn't attach (and inline
+  // into every later prompt) twice; capped so a call that ignores the
+  // schema's limit cannot fetch and inline an unbounded number of files;
+  // recovered from the raw text when the arguments were cut off before the
+  // JSON closed.
+  let { urls, dropped } = selectReadRealmFileUrls(call.function.arguments);
   if (urls.length === 0) {
     return await publishFailure(
       call.id,
@@ -278,8 +271,19 @@ async function fulfillOne(
   let degradedToolsNotes = successfulReads
     .map((read) => read.degradedToolsNote)
     .filter((note): note is string => Boolean(note));
+  // Urls past the cap were not read at all. Say so in the same channel, so
+  // the model learns it got the first files rather than believing it read
+  // them all and moving on without the rest.
+  let droppedNote =
+    dropped.length > 0
+      ? `${dropped.length} of the ${urls.length + dropped.length} urls in this call were not read: readRealmFile reads at most ${READ_REALM_FILE_MAX_URLS} files per call. Request these on a later turn if you still need them:\n${dropped.join('\n')}`
+      : undefined;
   let failureReason =
-    [...readFailures, ...degradedToolsNotes].join('\n') || undefined;
+    [
+      ...readFailures,
+      ...(droppedNote ? [droppedNote] : []),
+      ...degradedToolsNotes,
+    ].join('\n') || undefined;
 
   if (attachedFiles.length === 0) {
     return await publishFailure(call.id, failureReason!, deps);
@@ -300,10 +304,11 @@ async function fulfillOne(
       ...(discoveredTools.length ? { discoveredTools } : {}),
     },
   });
+  let errors = [...readFailures, ...(droppedNote ? [droppedNote] : [])];
   return {
     commandRequestId: call.id,
-    ok: readFailures.length === 0,
-    ...(readFailures.length ? { error: readFailures.join('\n') } : {}),
+    ok: errors.length === 0,
+    ...(errors.length ? { error: errors.join('\n') } : {}),
   };
 }
 
