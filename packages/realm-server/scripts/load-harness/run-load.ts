@@ -46,6 +46,12 @@ import {
   type RealmEvent,
 } from './lib/realm-events.ts';
 import {
+  describeConnectionSetup,
+  measureConnectionSetup,
+  yieldSocketToPool,
+  type ConnectionSetup,
+} from './lib/connection.ts';
+import {
   fetchCardTypeSummary,
   readOnlyReason,
   workloadFromCardTypeSummary,
@@ -230,37 +236,25 @@ async function primeConnections(count: number): Promise<void> {
         .catch(() => undefined),
     ),
   );
-  // A socket returns to the pool a tick after its response settles, so
-  // dispatching the batch in the same microtask leaves the last primed
-  // connection still checked out and one search opens a fresh one anyway.
-  await new Promise((resolve) => setImmediate(resolve));
+  // Without this the last primed connection is still checked out when the batch
+  // dispatches, and one search opens a fresh one anyway. See `connection.ts`.
+  await yieldSocketToPool();
 }
 
-// What a cold socket costs, measured rather than assumed. Called before
-// anything else touches this origin, so the first request pays a full handshake
-// and the second reuses its socket; the difference is what `headers` silently
-// contains for any unprimed sample. Reported so the operator can judge a run
-// from a distance instead of reading setup as server time.
-async function measureConnectionSetup(): Promise<number | undefined> {
-  let preflight = async () => {
-    let started = Date.now();
-    let response = await fetch(searchUrl, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'https://load-harness.invalid',
-        'Access-Control-Request-Method': 'QUERY',
-      },
-    });
-    await response.text();
-    return Date.now() - started;
-  };
-  try {
-    let cold = await preflight();
-    let warm = await preflight();
-    return Math.max(0, cold - warm);
-  } catch {
-    return undefined;
-  }
+// One preflight, timed. The sampling around it — which call is cold, how the
+// warm figure is chosen — lives in `connection.ts`, because getting it wrong is
+// silent.
+async function timedPreflight(): Promise<number> {
+  let started = Date.now();
+  let response = await fetch(searchUrl, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://load-harness.invalid',
+      'Access-Control-Request-Method': 'QUERY',
+    },
+  });
+  await response.text();
+  return Date.now() - started;
 }
 
 // Stamped on every search so a line here can be joined to the realm server's
@@ -602,19 +596,21 @@ if (creds.length < needed) {
 
 // Before anything else reaches this origin, so the first request is genuinely
 // cold.
-let connectionSetupMs = args.emitWorkload
-  ? undefined
-  : await measureConnectionSetup();
-if (connectionSetupMs !== undefined) {
-  console.log(
-    `Connection setup to ${new URL(searchUrl).host}: ~${connectionSetupMs}ms ` +
-      `(TCP + TLS).`,
-  );
-  if (!args.primeConnections) {
+let connectionSetup: ConnectionSetup | undefined;
+if (!args.emitWorkload) {
+  try {
+    connectionSetup = await measureConnectionSetup(timedPreflight);
     console.log(
-      `  --prime-connections=false: that cost lands inside "headers" on every\n` +
-        `  sample whose socket had gone cold.`,
+      describeConnectionSetup(new URL(searchUrl).host, connectionSetup),
     );
+    if (!args.primeConnections) {
+      console.log(
+        `  --prime-connections=false: that cost lands inside "headers" on every\n` +
+          `  sample whose socket had gone cold.`,
+      );
+    }
+  } catch {
+    // Not worth failing a run over; the summary simply says less.
   }
 }
 
@@ -770,22 +766,30 @@ function finish() {
   );
 
   // What `headers` does and does not contain, stated with this run's own
-  // number rather than left for the reader to infer.
-  if (connectionSetupMs !== undefined) {
+  // numbers rather than left for the reader to infer.
+  if (connectionSetup) {
+    let setup =
+      `${Math.round(connectionSetup.setupMs)}ms TCP+TLS setup ` +
+      `(cold ${Math.round(connectionSetup.coldMs)}ms vs warm ` +
+      `${Math.round(connectionSetup.warmMs)}ms)`;
     if (args.primeConnections) {
       console.log(
         `connections were opened before each timed batch, so "headers" excludes\n` +
-          `  the ~${connectionSetupMs}ms TCP+TLS setup this link costs. It is still one round\n` +
-          `  trip away from the server's own duration — compare runs from one place.`,
+          `  this link's ${setup}. It is still one round trip away from the\n` +
+          `  server's own duration — compare runs from one place.`,
       );
     } else {
       console.log(
-        `⚠  "headers" above INCLUDES the ~${connectionSetupMs}ms TCP+TLS setup on every sample\n` +
-          `   whose socket had gone cold, which on a quiet realm is most of them.\n` +
-          `   Drop --prime-connections=false to measure server work instead.`,
+        `⚠  "headers" above INCLUDES this link's ${setup}\n` +
+          `   on every sample whose socket had gone cold, which on a quiet realm is\n` +
+          `   most of them. Drop --prime-connections=false to measure server work.`,
       );
     }
   }
+  console.log(
+    `  "headers" also rises with --readers: more searches in flight is the\n` +
+      `  server under load, which is the thing being measured, not an artifact.`,
+  );
 
   console.log(`\nper query shape (end-to-end / headers / body, median):`);
   let shapes: { label: string; headersMs: number; bytes: number }[] = [];

@@ -266,9 +266,22 @@ At startup the driver measures what a cold socket costs on this link and prints
 it, so the correction is visible either way. `--prime-connections=false` turns
 priming off, and `headers` is then labelled as including setup, because it does.
 
+That measurement has the same trap in it. The first request after a process
+starts is cold, but so is the second — the socket has not returned to the pool
+yet — so a naive cold-minus-next subtraction compares two handshakes against
+each other and reports the jitter between them. Against a control server
+charging a known 295 ms handshake, that spelling reports **11 ms**; taking the
+warm figure as the cheapest of several samples, after a yield, reports
+**296 ms**. Both raw samples are printed alongside the difference so a wrong
+subtraction is visible rather than authoritative.
+
 Even primed, `headers` is still one round trip away from the server's own
 duration. **Compare runs from the same place**, and take the server's own timing
 when you need its absolute number.
+
+`headers` also rises with `--readers`. That is the server under concurrent load,
+which is the thing being measured — not an artifact to correct for. Hold the
+reader count fixed when comparing two runs.
 
 The driver is dependency-free — global `fetch` and `node:` built-ins only — so
 getting it into the region is a copy, not a build:

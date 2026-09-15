@@ -14,6 +14,10 @@ import {
 } from '../scripts/load-harness/lib/common.ts';
 import { eventCannotMatch } from '../scripts/load-harness/lib/realm-events.ts';
 import {
+  describeConnectionSetup,
+  measureConnectionSetup,
+} from '../scripts/load-harness/lib/connection.ts';
+import {
   readOnlyReason,
   workloadFromCardTypeSummary,
   type CardTypeSummaryEntry,
@@ -833,6 +837,102 @@ module(basename(import.meta.filename), function () {
         /No instance types found/,
         'an id with no module part names no type',
       );
+    });
+  });
+
+  module('connection setup measurement', function () {
+    // A probe that replays a recorded sequence of request durations.
+    function replay(samples: number[]) {
+      let i = 0;
+      return () => Promise.resolve(samples[Math.min(i++, samples.length - 1)]);
+    }
+    const noYield = () => Promise.resolve();
+
+    test('a cold second sample cannot be mistaken for a warm one', async function (assert) {
+      // Six back-to-back preflights over a real link. The first TWO are cold:
+      // a socket returns to undici's pool a tick after its response settles, so
+      // the second request opens its own connection. Subtracting sample 2 from
+      // sample 1 compares two handshakes against each other and reports the
+      // jitter between them as the cost of a handshake.
+      let setup = await measureConnectionSetup(
+        replay([427, 380, 122, 122, 121, 120]),
+        { yieldTick: noYield },
+      );
+      assert.strictEqual(setup.coldMs, 427);
+      assert.strictEqual(
+        setup.warmMs,
+        122,
+        'the cheapest warm sample, not the first',
+      );
+      assert.strictEqual(
+        setup.setupMs,
+        305,
+        'the real cost, not the 47ms two cold samples differ by',
+      );
+    });
+
+    test('a slow warm sample cannot shrink the reported cost', async function (assert) {
+      // Under-reporting is the damaging direction: this number exists to stop
+      // someone reading connection setup as server time.
+      let setup = await measureConnectionSetup(replay([400, 390, 300, 120]), {
+        yieldTick: noYield,
+      });
+      assert.strictEqual(setup.warmMs, 120);
+      assert.strictEqual(setup.setupMs, 280);
+    });
+
+    test('an in-region link reports the difference rather than clamping it', async function (assert) {
+      let setup = await measureConnectionSetup(replay([14, 12, 11, 11]), {
+        yieldTick: noYield,
+      });
+      assert.strictEqual(setup.setupMs, 3);
+      let flat = await measureConnectionSetup(replay([11, 12, 11, 13]), {
+        yieldTick: noYield,
+      });
+      assert.strictEqual(
+        flat.setupMs,
+        0,
+        'no clamp dressing jitter up as a measurement',
+      );
+    });
+
+    test('yields between samples so the warm ones are genuinely warm', async function (assert) {
+      let order: string[] = [];
+      let probe = () => {
+        order.push('probe');
+        return Promise.resolve(100);
+      };
+      await measureConnectionSetup(probe, {
+        warmSamples: 2,
+        yieldTick: () => {
+          order.push('yield');
+          return Promise.resolve();
+        },
+      });
+      assert.deepEqual(order, ['probe', 'yield', 'probe', 'yield', 'probe']);
+    });
+
+    test('the report shows what the subtraction was computed from', async function (assert) {
+      let line = describeConnectionSetup('realms.example.test', {
+        coldMs: 427,
+        warmMs: 122,
+        setupMs: 305,
+      });
+      assert.true(line.includes('~305ms'), 'the cost');
+      // Both raw samples, so a wrong subtraction is visible rather than
+      // authoritative.
+      assert.true(line.includes('cold 427ms'), 'the cold sample');
+      assert.true(line.includes('warm 122ms'), 'the warm sample');
+    });
+
+    test('a link with no measurable setup says so instead of reporting ~0ms', function (assert) {
+      let line = describeConnectionSetup('realms.example.test', {
+        coldMs: 12,
+        warmMs: 11,
+        setupMs: 1,
+      });
+      assert.true(line.includes('under 3ms'));
+      assert.true(line.includes('close to the server'));
     });
   });
 

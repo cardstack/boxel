@@ -158,14 +158,26 @@ The driver therefore opens each batch's connections before starting the clock,
 priming with the batch's own concurrency (N concurrent requests want N sockets,
 and undici prefers a free client to a new one, so a single primer would funnel
 the batch onto one socket and change what is being measured). It also measures
-what a cold socket costs on the current link and prints it at startup.
+what a cold socket costs on the current link and prints it at startup, with both
+raw samples beside the difference.
+
+The measurement carries the same trap as the primer: the first request after
+process start is cold, and so is the second, because the socket has not returned
+to the pool yet. Subtracting the second from the first compares two handshakes
+and reports the jitter between them — against a control charging a known 295 ms
+handshake, that spelling reads 11 ms. A yield plus the cheapest of several warm
+samples reads 296 ms. **If a run reports a setup cost in single-digit
+milliseconds from a laptop, distrust it**: on a laptop link this is hundreds of
+milliseconds, and only in-region should it be small.
 
 Two consequences when reading someone's numbers:
 
 - If the run used `--prime-connections=false`, `headers` **includes** setup and
   the summary says so. Do not quote it as server time.
 - Even primed, `headers` is a round trip away from the server's own duration.
-  **Compare runs from the same place.** The 521 ms in-region figure above sits
+  **Compare runs from the same place**, and hold `--readers` fixed: `headers`
+  rises with reader count because that is the server under concurrent load,
+  which is the thing being measured, not an artifact to correct for. The 521 ms in-region figure above sits
   about one handshake above the server's own 225 ms, which is exactly this
   effect — it is an end-to-end observation, not a server measurement.
 
