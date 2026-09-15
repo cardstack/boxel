@@ -19,6 +19,39 @@ import {
 } from '../utils/utils.ts';
 import type { NativeFilter } from './lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from './lib/nativeFilter.ts';
+
+const PATTERN_CACHE_LIMIT = 512;
+const patternCache = new Map<
+  string,
+  { r: RegExp; names: ReturnType<typeof captureGroupNames> }
+>();
+
+export function compiledPattern(
+  regex: string,
+  flags: string | null | undefined,
+): { r: RegExp; names: ReturnType<typeof captureGroupNames> } {
+  const key = `${flags ?? ''}\u0000${regex}`;
+  const cached = patternCache.get(key);
+  if (cached) return cached;
+  const entry = {
+    r: new RegExp(regex, (flags ?? '') + 'd'),
+    names: captureGroupNames(regex),
+  };
+  if (patternCache.size >= PATTERN_CACHE_LIMIT) {
+    patternCache.delete(patternCache.keys().next().value!);
+  }
+  patternCache.set(key, entry);
+  return entry;
+}
+
+// A bad format directive is the caller's format, not their input; say so
+// instead of blaming the datetime.
+function strftimeError(name: string, error: unknown): JqEvaluateError {
+  if (error instanceof JqArgumentError) {
+    return new JqEvaluateError(`${name}: ${error.message}`);
+  }
+  return new JqEvaluateError(`${name} requires parsed datetime inputs`);
+}
 import { notImplementedError } from '../evaluateErrors.ts';
 import { compare } from '../compare.ts';
 import { JqArgumentError, JqEvaluateError } from '../../errors.ts';
@@ -535,6 +568,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
 
       yield out;
     },
+    // `sub`/`gsub` are jq-defined over `match` and call it once per
+    // occurrence, so a fresh RegExp and capture-name scan per call made
+    // `gsub` several times slower than an explode/implode loop. Compiled
+    // patterns are shared by (pattern, flags); the global-flag state is not
+    // an issue because `match` and `matchAll` reset or clone it.
     *'_match_impl/3'(
       input: string,
       regex: string,
@@ -542,8 +580,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       returnOnlyBoolean: boolean,
     ) {
       const str = assertString(input);
-      const r = new RegExp(regex, (flags ?? '') + 'd');
-      const names = captureGroupNames(regex);
+      const { r, names } = compiledPattern(regex, flags);
 
       if (flags && flags.includes('g')) {
         const m = Array.from(str.matchAll(r));
@@ -1145,10 +1182,8 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       }
       try {
         yield strftimeValue(input, format as string, 'local');
-      } catch (_error) {
-        throw new JqEvaluateError(
-          'strflocaltime/1 requires parsed datetime inputs',
-        );
+      } catch (error) {
+        throw strftimeError('strflocaltime/1', error);
       }
     },
     *'strftime/1'(input: unknown, format: unknown) {
@@ -1160,8 +1195,8 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       }
       try {
         yield strftimeValue(input, format as string, 'utc');
-      } catch (_error) {
-        throw new JqEvaluateError('strftime/1 requires parsed datetime inputs');
+      } catch (error) {
+        throw strftimeError('strftime/1', error);
       }
     },
     *'strptime/1'(input: unknown, format: unknown) {

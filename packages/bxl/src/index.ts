@@ -21,7 +21,11 @@ import {
   tokenizeNativeJq,
 } from './bxl/bridge/native.ts';
 import { materializeCardInput, safeFieldMap } from './bxl/bridge/card-input.ts';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
+import type {
+  NativeRuntimeClock,
+  NativeRuntimeLimits,
+} from './jqtools/evaluate/runtimeState.ts';
+export { resolveRuntimeClock } from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -260,6 +264,7 @@ export type {
   BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
+  NativeRuntimeClock,
   NativeRuntimeLimits,
   ReadableSchema,
   ReadableSyntaxCompileResult,

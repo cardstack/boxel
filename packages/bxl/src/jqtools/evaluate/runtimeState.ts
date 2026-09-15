@@ -12,15 +12,48 @@ export interface NativeRuntimeSignal {
   readonly reason?: unknown;
 }
 
+// What `maxMillis` measures. 'wall' is elapsed time and makes a result
+// depend on host load: the same program passes on a quiet machine and fails
+// on a busy one. Derivations that store their value should bound work by
+// `maxSteps` and use 'cpu' (process CPU time where available) so a blocked
+// event loop or a loaded host cannot fail them; 'wall' then serves only as a
+// coarse safety net set well above any step-bounded run. A function is an
+// explicit clock in milliseconds, for tests and for hosts with a better one.
+export type NativeRuntimeClock = 'wall' | 'cpu' | (() => number);
+
 export interface NativeRuntimeLimits {
   maxSteps?: number;
   maxOutputs?: number;
   maxOutputBytes?: number;
   maxMillis?: number;
+  clock?: NativeRuntimeClock;
   signal?: NativeRuntimeSignal;
 }
 
-const DEFAULT_RUNTIME_LIMITS: Required<Omit<NativeRuntimeLimits, 'signal'>> = {
+export function resolveRuntimeClock(
+  clock: NativeRuntimeClock | undefined,
+): () => number {
+  if (typeof clock === 'function') return clock;
+  if (clock === 'cpu') {
+    const proc = (
+      globalThis as {
+        process?: { cpuUsage?: () => { user: number; system: number } };
+      }
+    ).process;
+    if (typeof proc?.cpuUsage === 'function') {
+      const cpuUsage = proc.cpuUsage.bind(proc);
+      return () => {
+        const usage = cpuUsage();
+        return (usage.user + usage.system) / 1000;
+      };
+    }
+  }
+  return Date.now;
+}
+
+const DEFAULT_RUNTIME_LIMITS: Required<
+  Omit<NativeRuntimeLimits, 'signal' | 'clock'>
+> = {
   maxSteps: 250_000,
   maxOutputs: 10_000,
   maxOutputBytes: 5_000_000,
@@ -28,9 +61,11 @@ const DEFAULT_RUNTIME_LIMITS: Required<Omit<NativeRuntimeLimits, 'signal'>> = {
 };
 
 interface RuntimeContext extends NativeRuntimeDiagnostics {
-  limits: Required<Omit<NativeRuntimeLimits, 'signal'>> & {
+  limits: Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>> & {
     signal?: NativeRuntimeSignal;
+    clock?: NativeRuntimeClock;
   };
+  clock: () => number;
   startMillis: number;
   steps: number;
   outputs: number;
@@ -55,11 +90,13 @@ export class HaltSignal extends Error {
 
 export class RuntimeLimitError extends JqEvaluateError {
   readonly limit:
-    | keyof Required<Omit<NativeRuntimeLimits, 'signal'>>
+    | keyof Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>>
     | 'signal';
 
   constructor(
-    limit: keyof Required<Omit<NativeRuntimeLimits, 'signal'>> | 'signal',
+    limit:
+      | keyof Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>>
+      | 'signal',
     message: string,
   ) {
     super(message);
@@ -97,11 +134,13 @@ export function withRuntimeDiagnostics<T>(
     debugMessages: [],
     stderr: [],
     limits: normalizeRuntimeLimits(limits),
-    startMillis: Date.now(),
+    clock: resolveRuntimeClock(limits?.clock),
+    startMillis: 0,
     steps: 0,
     outputs: 0,
     outputBytes: 0,
   };
+  context.startMillis = context.clock();
   runtimeStack.push(context);
 
   try {
@@ -289,7 +328,7 @@ export function checkRuntimeBudget(units = 1) {
   if (
     isFiniteLimit(context.limits.maxMillis) &&
     context.steps % 1024 === 0 &&
-    Date.now() - context.startMillis > context.limits.maxMillis
+    context.clock() - context.startMillis > context.limits.maxMillis
   ) {
     throw new RuntimeLimitError(
       'maxMillis',

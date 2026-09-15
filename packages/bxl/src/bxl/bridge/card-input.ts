@@ -409,7 +409,11 @@ function wrapCard(
         const desc = Reflect.getOwnPropertyDescriptor(target, prop);
         const isField =
           typeof prop === 'string' && !!resolveFieldKeys()?.includes(prop);
-        if (!desc && !isField) {
+        // Identity is a prototype getter on an instance, never an own
+        // property of the target, yet jq lookups are own-property lookups
+        // and `.id` must read.
+        const isIdentity = prop === 'id' && Reflect.has(target, 'id');
+        if (!desc && !isField && !isIdentity) {
           return undefined;
         }
         return {
