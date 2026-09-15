@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { settled, waitUntil } from '@ember/test-helpers';
@@ -835,6 +836,352 @@ module(`Integration | search resource`, function (hooks) {
     } finally {
       realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
     }
+  });
+
+  // A realm event names the adoption chains its pass touched, so a query whose
+  // type anchors are disjoint from them sits the event out instead of
+  // re-querying on every client holding it. One write announces itself twice —
+  // an index event, then the prerender_html event for the render pass it
+  // spawns — so both channels are gated or neither measurement moves.
+  module('realm event type gating', function () {
+    // Nothing in this realm adopts from it — the stand-in for "somebody else's
+    // unrelated write".
+    const unrelatedType = `${testRealmURL}observation/Observation`;
+    const unrelatedURL = `${testRealmURL}observations/1.json`;
+
+    // Spelled out rather than derived through `internalKeyFor`: the gate
+    // resolves its anchors with that same function, so deriving the expected
+    // key here would move both sides of the comparison together and assert
+    // nothing about the spelling.
+    const bookType = `${testRealmURL}book/Book`;
+    const postType = `${testRealmURL}post/Post`;
+    const blogPostType = `${testRealmURL}blog-post/BlogPost`;
+
+    function relayIndexEvent(
+      invalidatedTypes: string[] | undefined,
+      invalidations: string[] = [unrelatedURL],
+    ) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations,
+        ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+        realmURL: testRealmURL,
+      });
+    }
+
+    function relayPrerenderHtmlEvent(
+      invalidations: string[] = [unrelatedURL],
+      generation = 1,
+    ) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'prerender_html',
+        invalidations,
+        generation,
+        realmURL: testRealmURL,
+      });
+    }
+
+    // Counts the search fetches the resource issues, so a skipped event is
+    // visible as a count that didn't move.
+    function countingFetch(): { count: () => number; restore: () => void } {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let fetchCalls = 0;
+      let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+      realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+        fetchCalls++;
+        return await original(...args);
+      }) as RealmServerService['maybeAuthedFetchForRealms'];
+      return {
+        count: () => fetchCalls,
+        restore: () => {
+          realmServer.maybeAuthedFetchForRealms = original;
+        },
+      };
+    }
+
+    function liveSearch(owner: Owner, query: Query) {
+      return getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner,
+        },
+      }));
+    }
+
+    test('an index event that touched no anchored type does not re-run the query', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        // The anchors resolve off the first event that carries types, so that
+        // event takes the re-run it would have taken anyway.
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'a write to a type the query is not anchored on is skipped',
+        );
+
+        relayIndexEvent([unrelatedType, bookType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'an event naming the anchored type re-runs the query',
+        );
+
+        relayIndexEvent(undefined);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'an event carrying no type information re-runs the query',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a write to a subtype wakes a query anchored on its ancestor', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('post'), name: 'Post' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the anchors resolve and the second unrelated event is skipped',
+        );
+
+        // The comparison is "does the event's type set contain the query's
+        // anchor", never the reverse: a written BlogPost names its whole
+        // adoption chain, and `Post` is in it. Reading it the other way round
+        // would drop this member silently.
+        relayIndexEvent([blogPostType, postType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'a subtype write names the ancestor in its chain, so the query re-runs',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a prerender_html event over rows an index event judged unrelated is skipped', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the index channel is gated once the anchors resolve',
+        );
+
+        // The render pass covers the rows its spawning index pass invalidated,
+        // and that pass named their types. The event spells the underlying
+        // file; the index event spelled the same rows, so the two reach each
+        // other.
+        relayPrerenderHtmlEvent([unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the render of a row no index event tied to this query is skipped',
+        );
+
+        // A repair pass renders rows an earlier generation left stale, which
+        // no index event this subscription saw has a verdict for.
+        relayPrerenderHtmlEvent([`${testRealmURL}books/1.json`]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'a render this query holds no verdict for re-runs it',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('an index event that could move a member withdraws its rows from the render gate', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayPrerenderHtmlEvent([unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'both channels are gated for a row judged unrelated',
+        );
+
+        // The same row, re-indexed as something this query is anchored on. Its
+        // earlier verdict can't stand: which of the event's rows changed type
+        // isn't readable off the event, so all of them lose their verdict.
+        relayIndexEvent([bookType], [unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'the re-typed row re-runs the query on the index channel',
+        );
+
+        relayPrerenderHtmlEvent([unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'and its render is no longer skipped',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a query that admits a card of any type re-runs on every event', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { eq: { 'author.lastName': 'Abdel-Rahman' } },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'an unanchored filter can gain a member of any type, so nothing is skipped',
+        );
+
+        relayPrerenderHtmlEvent([unrelatedURL]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'and its renders are not skipped either',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
+    test('a query change re-resolves the anchors before they gate again', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let args = {
+          query: {
+            filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+          },
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        } satisfies SearchResourceArgs['named'];
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: args,
+        }));
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'the anchors resolve and the second event is skipped',
+        );
+
+        // The keys describe the anchors of the query they came from, so the
+        // new query cannot be gated against them.
+        search.modify([], {
+          ...args,
+          query: {
+            filter: { on: { module: testRRI('post'), name: 'Post' }, eq: {} },
+          },
+        });
+        await settled();
+        let afterChange = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 1,
+          'the first event after the change re-runs while the anchors re-resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 1,
+          'the re-resolved anchors gate again',
+        );
+
+        relayIndexEvent([postType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          afterChange + 2,
+          'and they gate against the new query, not the old one',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
   });
 
   test(`cards in search results live update`, async function (assert) {
