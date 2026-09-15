@@ -142,6 +142,50 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
           throw new Error('Network error: Failed to fetch');
         }
 
+        if (body.url.includes('/slow-error-body')) {
+          // Headers promptly, body slowly, status not ok — so the caller
+          // reads the body on the error path while a short budget is still
+          // counting. The server did answer; only the reading is slow.
+          const stream = new ReadableStream({
+            async start(controller) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              controller.enqueue(
+                new TextEncoder().encode('upstream refused the request'),
+              );
+              controller.close();
+            },
+          });
+          return new Response(stream, {
+            status: 502,
+            statusText: 'Bad Gateway',
+          });
+        }
+
+        if (body.url.includes('/slow')) {
+          // Stands in for a model call still running: it answers only when
+          // the caller's deadline cancels the request, which is what proves
+          // the deadline reached the request rather than only the wait. The
+          // late answer is the no-deadline outcome — a test that hangs
+          // reports nothing.
+          return new Promise<Response>((resolve, reject) => {
+            req.signal.addEventListener('abort', () =>
+              reject(
+                new DOMException('The operation was aborted.', 'AbortError'),
+              ),
+            );
+            setTimeout(
+              () =>
+                resolve(
+                  new Response(JSON.stringify({ answeredLate: true }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  }),
+                ),
+              2000,
+            );
+          });
+        }
+
         // Default JSON response
         return new Response(
           JSON.stringify({
@@ -500,5 +544,81 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
 
     assert.ok(result, 'Command should return a result');
     assert.strictEqual(result.response.status, 200);
+  });
+
+  test('timeoutMs cancels the request rather than only abandoning the wait', async function (assert) {
+    const toolService = getService('tool-service');
+    const requestForwardCommand = new SendRequestViaProxyTool(
+      toolService.toolContext,
+    );
+
+    const input = createMockSendRequestViaProxyInput({
+      url: 'https://api.example.com/slow',
+      timeoutMs: 50,
+    });
+    const result = await requestForwardCommand.execute(input);
+
+    assert.strictEqual(
+      result.response.status,
+      500,
+      'the caller gets an error rather than the late answer',
+    );
+    const responseData = await result.response.json();
+    assert.true(
+      String(responseData.error).includes('timed out after 50ms'),
+      'the error names the budget that was exceeded',
+    );
+  });
+
+  test('a budget that elapses while reading an answered response is not a timeout', async function (assert) {
+    // The budget covers time-to-response. Once the server has answered, a
+    // deadline landing during the body read must not be reported as a timeout:
+    // doing so discards the status and body that did arrive, and blames the
+    // clock for a request that was answered.
+    const toolService = getService('tool-service');
+    const requestForwardCommand = new SendRequestViaProxyTool(
+      toolService.toolContext,
+    );
+
+    const input = createMockSendRequestViaProxyInput({
+      url: 'https://api.example.com/slow-error-body',
+      timeoutMs: 150,
+    });
+    const result = await requestForwardCommand.execute(input);
+
+    const responseData = await result.response.json();
+    const message = String(responseData.error);
+    assert.false(
+      message.includes('timed out'),
+      `an answered request is not reported as a timeout (got: ${message})`,
+    );
+    assert.true(
+      message.includes('502'),
+      `the status the server actually returned survives (got: ${message})`,
+    );
+    assert.true(
+      message.includes('upstream refused the request'),
+      `the body the server actually returned survives (got: ${message})`,
+    );
+  });
+
+  test('a request without a timeoutMs waits as long as it takes', async function (assert) {
+    const toolService = getService('tool-service');
+    const requestForwardCommand = new SendRequestViaProxyTool(
+      toolService.toolContext,
+    );
+
+    const input = createMockSendRequestViaProxyInput({
+      url: 'https://api.example.com/slow',
+    });
+    const result = await requestForwardCommand.execute(input);
+
+    assert.strictEqual(
+      result.response.status,
+      200,
+      'no deadline means no cancellation',
+    );
+    const responseData = await result.response.json();
+    assert.true(responseData.answeredLate, 'the late answer is delivered');
   });
 });

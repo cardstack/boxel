@@ -642,6 +642,11 @@ export class SendRequestViaProxyInput extends CardDef {
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
   @field multipart = contains(BooleanField); // optional
+  // How long the caller is prepared to wait, in milliseconds. A tool input is
+  // a CardDef, so a deadline can only be expressed as serializable data — the
+  // host turns this into the abort signal on the request. Unset means wait
+  // indefinitely.
+  @field timeoutMs = contains(NumberField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {

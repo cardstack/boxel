@@ -1208,5 +1208,359 @@ module(basename(import.meta.filename), function () {
         'Should return multipart validation error message',
       );
     });
+
+    test('a forward whose client is still waiting is never cancelled', async function (assert) {
+      // The signal has to distinguish a client that left from one that is
+      // still there. Node closes the *request* stream as soon as its body has
+      // been read — on every request, served or abandoned — so watching that
+      // would cancel every forward the moment it started, which only the
+      // response stream's close-without-having-been-written tells apart.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let forwardSignal: AbortSignal | undefined;
+      let abortedDuringCall = false;
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+          forwardSignal = init?.signal ?? undefined;
+          abortedDuringCall = forwardSignal?.aborted === true;
+          return new Response(
+            JSON.stringify({
+              id: 'gen-uninterrupted',
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 10, cost: 0.002 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+            }),
+          });
+
+        assert.strictEqual(response.status, 200, 'the forward is served');
+        assert.false(
+          abortedDuringCall,
+          'the upstream call starts with a signal that has not fired',
+        );
+        assert.false(
+          forwardSignal?.aborted,
+          'a delivered forward is never cancelled',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that disconnects mid-forward cancels the upstream call and frees the cost lock', async function (assert) {
+      // The forward holds the per-user cost lock for the whole life of the
+      // upstream call, so a caller that walks away from a slow model call
+      // would otherwise leave its own next call queued behind an answer
+      // nobody is going to read.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // Upstream calls that never answer on their own — a generation still
+      // running when its reader leaves. Each settles only when the test
+      // releases it or its signal aborts, which is what a real fetch does
+      // with an aborted signal.
+      const upstreamCalls: Array<{
+        signal: AbortSignal | undefined;
+        release: () => void;
+      }> = [];
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+
+          const signal = init?.signal ?? undefined;
+          let releaseFn!: () => void;
+          const released = new Promise<void>((res) => (releaseFn = res));
+          upstreamCalls.push({ signal, release: releaseFn });
+
+          await new Promise<void>((resolve, reject) => {
+            released.then(resolve);
+            signal?.addEventListener('abort', () => {
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
+          });
+
+          return new Response(
+            JSON.stringify({
+              id: `gen-${upstreamCalls.length}`,
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 10, cost: 0.002 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const send = () =>
+        request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+            }),
+          });
+
+      const abandoned = send();
+      // supertest's Test is a thenable, not an eagerly-evaluating Promise —
+      // `.then` is what fires the request. Both outcomes are swallowed: this
+      // is the request the test walks away from.
+      const abandonedSettled = abandoned.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      try {
+        await waitUntil(async () => upstreamCalls.length >= 1, {
+          timeout: 15000,
+          timeoutMessage: 'first forward should reach the upstream stub',
+        });
+
+        abandoned.abort();
+
+        await waitUntil(async () => upstreamCalls[0].signal?.aborted === true, {
+          timeout: 15000,
+          timeoutMessage:
+            'the abandoned request should cancel its upstream call',
+        });
+        assert.true(
+          Boolean(upstreamCalls[0].signal?.aborted),
+          'the upstream call is cancelled when its client goes away',
+        );
+
+        // The lock is the thing the disconnect has to free: with the upstream
+        // call still running, this second forward never gets to start.
+        const second = send().then((r) => r);
+        await waitUntil(async () => upstreamCalls.length >= 2, {
+          timeout: 15000,
+          timeoutMessage:
+            'the next same-user forward should reach upstream once the abandoned one is cancelled',
+        });
+        upstreamCalls[1].release();
+        const response = await second;
+        assert.strictEqual(
+          response.status,
+          200,
+          'the next forward is served normally',
+        );
+
+        // Only the delivered call is billed (0.002 USD × 1000 = 2 credits).
+        // A cancelled call never produces a response to charge for, so 46
+        // here would mean the abandoned one was billed too.
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 48;
+          },
+          {
+            timeoutMessage:
+              'only the delivered forward should be debited (50 - 2 = 48)',
+          },
+        );
+      } finally {
+        // A failed assertion mid-flight would otherwise leave gated upstream
+        // calls hanging the test process.
+        for (const call of upstreamCalls) call.release();
+        await abandonedSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that disconnects mid-stream cancels the upstream stream and frees the cost lock', async function (assert) {
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // The first upstream stream emits a delta and then keeps generating —
+      // no `[DONE]`, so the cost-save the lock is held for never happens.
+      // Erroring the body when the signal aborts stands in for what fetch
+      // does to a response body once its request is cancelled.
+      const streamSignals: Array<AbortSignal | undefined> = [];
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (!url.includes('/chat/completions')) {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+
+          const signal = init?.signal ?? undefined;
+          streamSignals.push(signal);
+          const isFirstStream = streamSignals.length === 1;
+          const encoder = new TextEncoder();
+
+          const body = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: {"id":"gen-stream-${streamSignals.length}","choices":[{"delta":{"content":"Hello"}}]}\n\n`,
+                ),
+              );
+              if (isFirstStream) {
+                signal?.addEventListener('abort', () => {
+                  const abortError = new Error('The operation was aborted');
+                  abortError.name = 'AbortError';
+                  controller.error(abortError);
+                });
+                return;
+              }
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"choices":[{"delta":{"content":" world"}}],"usage":{"cost":0.002}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(body, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const send = () =>
+        request
+          .post('/_request-forward')
+          .set('Accept', 'text/event-stream')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hi' }],
+              stream: true,
+            }),
+            stream: true,
+          });
+
+      const abandoned = send();
+      const abandonedSettled = abandoned.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      try {
+        await waitUntil(async () => streamSignals.length >= 1, {
+          timeout: 15000,
+          timeoutMessage: 'first stream should reach the upstream stub',
+        });
+
+        abandoned.abort();
+
+        await waitUntil(async () => streamSignals[0]?.aborted === true, {
+          timeout: 15000,
+          timeoutMessage:
+            'the abandoned stream should cancel its upstream stream',
+        });
+        assert.true(
+          Boolean(streamSignals[0]?.aborted),
+          'the upstream stream is cancelled when its client goes away',
+        );
+
+        const response = await send();
+        assert.strictEqual(
+          response.status,
+          200,
+          'the next stream is served normally',
+        );
+        assert.true(
+          response.text.includes('data: [DONE]'),
+          'the next stream runs to completion',
+        );
+        assert.strictEqual(
+          streamSignals.length,
+          2,
+          'exactly one upstream stream per forward',
+        );
+
+        // The cancelled stream never reached `[DONE]`, so only the completed
+        // one is debited (0.002 USD × 1000 = 2 credits).
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 48;
+          },
+          {
+            timeoutMessage:
+              'only the completed stream should be debited (50 - 2 = 48)',
+          },
+        );
+      } finally {
+        await abandonedSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
   });
 });
