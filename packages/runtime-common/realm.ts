@@ -257,7 +257,10 @@ import {
   type IncrementalIndexMeta,
   type IndexChange,
 } from './realm-index-updater.ts';
-import serialize, { storedRelationshipLink } from './file-serializer.ts';
+import serialize, {
+  resolvedRelationshipLink,
+  storedRelationshipLink,
+} from './file-serializer.ts';
 import {
   fileSizeLimitFor,
   validateByteLength,
@@ -3845,6 +3848,20 @@ export class Realm {
           await this.incrementalIndexing();
         },
         isIgnored: (url) => this.isIgnored(url),
+        // Narrowed to the two documents a program reads values from, each
+        // handed over whole. An error row is reported as no row: it describes
+        // why the card could not be indexed rather than what it holds, so
+        // there is nothing in it for a program to read.
+        indexedCardValues: async (url) => {
+          let row = await this.#realmIndexQueryEngine.instance(url);
+          if (!row || row.type !== 'instance') {
+            return undefined;
+          }
+          return {
+            pristine: row.instance,
+            searchDoc: row.searchDoc ?? undefined,
+          };
+        },
         commitUnlocked: (batch, options) =>
           this._commitBatchUnlocked(batch, options),
         serializeCard: (doc, relativeTo) =>
@@ -3863,6 +3880,10 @@ export class Realm {
             new URL(this.url),
             this.#virtualNetwork,
           ),
+        // Its inverse, reached from the same place for the same reason: what a
+        // stored link resolves to is identifier resolution, not URL math.
+        resolvedLink: (selfLink, relativeTo) =>
+          resolvedRelationshipLink(selfLink, relativeTo, this.#virtualNetwork),
         lookupDefinition: async (codeRef, relativeTo) => {
           let absolute = codeRefWithAbsoluteIdentifier(
             codeRef,
