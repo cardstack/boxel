@@ -666,6 +666,9 @@ check('a card whose field bridge throws still reads its fields', () => {
     get amount() {
       return this.#amount;
     }
+    serialize() {
+      return { amount: this.#amount };
+    }
   }
   Object.defineProperty(BrokenBridgeStub.prototype, GET_FIELDS_BRIDGE, {
     value: () => {
@@ -677,9 +680,11 @@ check('a card whose field bridge throws still reads its fields', () => {
   strictEqual(run('.amount', card), 42);
   strictEqual(run('.id', card), 'broken-1');
   strictEqual(run('has("amount")', card), true);
-  // Object.prototype stays hidden even on the fallback path.
+  // Object.prototype and the class's own methods stay hidden on the
+  // fallback path.
   strictEqual(run('.toString', card), null);
   strictEqual(run('has("toString")', card), false);
+  strictEqual(run('.serialize | type', card), 'null');
 });
 
 check(

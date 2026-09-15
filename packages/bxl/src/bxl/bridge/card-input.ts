@@ -416,14 +416,16 @@ function wrapCard(
         // and `.id` must read.
         const isIdentity = prop === 'id' && Reflect.has(target, 'id');
         // With no field map (the bridge threw, or none resolved), fall back
-        // to what the instance actually has, minus Object.prototype. A field
-        // is a prototype getter, so the target carries no own descriptor for
-        // it; without this every field on such a card would read as null.
+        // to what the instance actually has, minus Object.prototype and
+        // minus methods. A field is a prototype getter, so the target
+        // carries no own descriptor for it; without this every field on
+        // such a card would read as null.
         const noFieldMap =
           keys === null &&
           typeof prop === 'string' &&
           prop in target &&
-          !Object.hasOwn(Object.prototype, prop);
+          !Object.hasOwn(Object.prototype, prop) &&
+          typeof (target as Record<string, unknown>)[prop] !== 'function';
         if (!desc && !isField && !isIdentity && !noFieldMap) {
           return undefined;
         }
