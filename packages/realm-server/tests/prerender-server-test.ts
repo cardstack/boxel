@@ -1417,12 +1417,12 @@ module(basename(import.meta.filename), function () {
       });
 
       // The gateway-failure verdict, on the same write-site contract as the
-      // stale-shell one but reached a different way: no shell reasoning, just
-      // the error's status. A gateway status never comes from a card render, so
-      // its presence is the whole conclusion — this is CS-12966, where a render
-      // fetched the card's document through the balancer, got a 502, and had
-      // that latched as the card's verdict.
-      test('a gateway-status card error marks the failure unattributable', async function (assert) {
+      // stale-shell one but reached a different way: it keys on the
+      // `gatewayFailure` marker the fetch boundary stamps, not on the error
+      // status. A render fetched the card's document through the balancer, got
+      // a 502, and had that latched as the card's verdict; the marker is what
+      // tells that transient network event apart from a genuinely broken card.
+      test('a gateway-marked card error marks the failure unattributable', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: () => 'b778fe76',
@@ -1435,7 +1435,11 @@ module(basename(import.meta.filename), function () {
           response: {
             card: {
               error: {
-                error: { message: 'Gateway or network failure', status: 502 },
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 502,
+                  gatewayFailure: true,
+                },
               },
             },
           },
@@ -1469,7 +1473,11 @@ module(basename(import.meta.filename), function () {
           response: {
             card: {
               error: {
-                error: { message: 'Gateway or network failure', status: 503 },
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 503,
+                  gatewayFailure: true,
+                },
               },
             },
             fileExtract: {
@@ -1494,7 +1502,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a genuine card error carrying no gateway status is not marked', async function (assert) {
+      test('a genuine card error carrying no gateway marker is not marked', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: () => 'b778fe76',
@@ -1523,6 +1531,55 @@ module(basename(import.meta.filename), function () {
         assert.notOk(
           res.body.data.attributes.meta.diagnostics.gatewayFailure,
           'a 500 is the card, not the network — the break stays visible',
+        );
+      });
+
+      // The status alone would misclassify this: a render timeout is a 504,
+      // carrying the same number a balancer idle-timeout does. It comes from the
+      // card render — a template or query fan-out too slow to finish — and never
+      // gets the `gatewayFailure` marker, so it must not be withheld. Withholding
+      // it would drop exactly the cards that most need to stay visible off every
+      // `has_error`-driven surface.
+      test('a render-timeout 504 is not marked as a gateway failure', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timeout',
+                  title: 'Render timeout',
+                  status: 504,
+                },
+              },
+            },
+            pageUnusableError: {
+              error: {
+                message: 'Render timeout',
+                title: 'Render timeout',
+                status: 504,
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}render-timeout`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 504 the card render produced stays visible — only a marked fetch failure is withheld',
         );
       });
 

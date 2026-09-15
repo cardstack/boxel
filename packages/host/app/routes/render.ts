@@ -780,12 +780,19 @@ export default class RenderRoute extends Route<Model> {
       : `the fetch failed at the network level (${
           (opts.networkError as Error)?.message ?? 'no error message'
         })`;
-    return new CardError(
+    let error = new CardError(
       `Gateway or network failure while fetching the card document for ${id}: ${detail}. ` +
         `The render's fetch of the card document went through the public balancer and did not ` +
         `return a card document, so this describes the network rather than the card.`,
       { status },
     );
+    // The positive marker the prerender classifier withholds on. Stamped here,
+    // where the fetch boundary knows the failure is the network's, so the
+    // classifier never has to infer that from the status — a card render can
+    // carry a gateway status too (a render timeout is a 504), and only this
+    // marker distinguishes the two.
+    error.gatewayFailure = true;
+    return error;
   }
 
   setupController(controller: Controller, model: Model) {
