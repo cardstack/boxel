@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { bxl } from '@cardstack/bxl';
 import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import type { LatticeBxlManifest } from '../lib/lattice-bxl-derivation.ts';
@@ -19,7 +20,7 @@ const manifest: LatticeBxlManifest = {
   output: 'number',
 };
 
-module('Lattice | BXL data-only worker', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let worker: LatticeBxlWorker;
   hooks.beforeEach(function () {
     worker = new LatticeBxlWorker();

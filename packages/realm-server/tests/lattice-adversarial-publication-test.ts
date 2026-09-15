@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
   Prerenderer as Renderer,
@@ -61,7 +62,7 @@ const { records: initial, ids } = generateAdversarial({
 // expects to stay withheld today sit under `Zz/` so the URL-ordered drain
 // meets the healthy owners first. Timing lines are logged as
 // LATTICE_ADVERSARIAL for the catalog.
-module('Lattice | adversarial publication acceptance', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let render: Prerenderer;
   let restore: ReturnType<

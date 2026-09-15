@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   rri,
@@ -110,7 +111,7 @@ for (const room of ['blue', 'green']) {
   fixtures[`RoomBriefing/${room}.json`] = card('RoomBriefing', { room });
 }
 
-module('Lattice | resilient linked consumers', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let browser: Prerenderer;

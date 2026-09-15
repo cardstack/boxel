@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   internalKeyFor,
@@ -53,7 +54,7 @@ const ref = (name: ClinicalType) => clinicalModuleRef(realmURL, name);
 // definitions and the actual PostgreSQL inputs. Every serialized attribute,
 // relationship, search document, type and display name must agree, and the
 // owners must also equal the raw-document oracle so parity is never vacuous.
-module('Lattice | clinical native and Chrome data parity', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let browser: Prerenderer;

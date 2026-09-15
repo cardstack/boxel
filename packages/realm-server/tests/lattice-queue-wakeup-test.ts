@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   PgAdapter,
@@ -43,7 +44,7 @@ class ClaimObservingAdapter extends PgAdapter {
   }
 }
 
-module('Lattice | queue completion wakeup', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     templateDatabase: process.env.LATTICE_TEST_TEMPLATE_DB,

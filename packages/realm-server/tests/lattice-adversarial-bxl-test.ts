@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { evaluateBxl, prepareBxl, type BxlOptions } from '@cardstack/bxl';
 import {
   LatticeBxlWorker,
@@ -36,7 +37,7 @@ function attrsOf(
 // database or browser. Wrong formulas must fail the same way every time;
 // expensive ones must either finish inside the budget or be refused by it;
 // nothing may leave the engine in a state that changes the next answer.
-module('Lattice | adversarial BXL execution', function () {
+module(basename(import.meta.filename), function () {
   const { records, ids } = generateAdversarial({ realmURL, statsEntries: 500 });
   const statsInput = {
     entries: ids.statsEntries.map((path) => attrsOf(records, path)),

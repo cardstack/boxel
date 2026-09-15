@@ -19,7 +19,7 @@ import {
 
 const { module, test } = QUnit;
 
-module('Lattice | portable work frontier', () => {
+module('lattice-work-frontier-test.ts | portable', function () {
   const node = (id: string, pendingInputs: string[] = [], runnable = true) => ({
     id,
     pendingInputs,
@@ -78,7 +78,7 @@ module('Lattice | portable work frontier', () => {
 });
 
 const realm = 'https://lattice-frontier.example/';
-module('Lattice | Postgres work frontier', (hooks) => {
+module('lattice-work-frontier-test.ts | postgres', function (hooks) {
   let db: PgAdapter;
   let registry: LatticeQueryRegistry;
   setupDB(hooks, {

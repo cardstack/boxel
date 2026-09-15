@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import type {
@@ -123,7 +124,7 @@ function source(attributes: object) {
 }
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
 
-module('Lattice | native card data assembly', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let worker: LatticeBxlWorker;
   hooks.beforeEach(function () {
     worker = new LatticeBxlWorker();

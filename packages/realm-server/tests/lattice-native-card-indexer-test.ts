@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import { createHash } from 'node:crypto';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
@@ -77,7 +78,7 @@ const root: LatticeDefinitionSnapshot = {
   },
 };
 
-module('Lattice | native card indexing and publication', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let worker: LatticeBxlWorker;

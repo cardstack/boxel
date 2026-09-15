@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { fork, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -31,7 +32,7 @@ type Message = {
   jobInfo?: { jobId: number; reservationId: number };
 };
 
-module('Lattice | competing materialization workers', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

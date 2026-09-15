@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
@@ -20,7 +21,7 @@ const { module, test } = QUnit;
 const realm = 'https://lattice-artifacts.example/enabled/';
 const ordinary = 'https://lattice-artifacts.example/ordinary/';
 
-module('Lattice | writer-owned input artifacts', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let engine: IndexQueryEngine;

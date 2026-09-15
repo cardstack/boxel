@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import {
   baseFileData,
@@ -7,7 +8,7 @@ import {
 
 const { module, test } = QUnit;
 
-module('Lattice | trusted file data in Node', function () {
+module(basename(import.meta.filename), function () {
   test('file identity uses decoded names and hashes the original UTF-8 bytes', async function (assert) {
     const url = 'https://example.com/%E9%9B%AA%20notes.json';
     const bytes = new TextEncoder().encode('{"note":"雪🙂"}\r\n');

@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import {
   type PgAdapter,
@@ -58,7 +59,7 @@ function document(count = 7, generation = 2): LooseSingleCardDocument {
   };
 }
 
-module('Lattice | native render jobs', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let jobId: number;

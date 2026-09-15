@@ -1,4 +1,5 @@
 import { LatticeRetainedSnapshots } from '@cardstack/runtime-common/lattice-retained-snapshots';
+import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import QUnit from 'qunit';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -43,7 +44,7 @@ const definition: Definition = {
   },
 };
 
-module('Lattice | published data inputs', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let lookups: number;

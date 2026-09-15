@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { dirSync, type DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -13,7 +14,7 @@ import { createRealm, setupDB } from './helpers/index.ts';
 const { module, test } = QUnit;
 const root = 'http://127.0.0.1:4447/clock/';
 
-module('Generation clock | index recovery', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let network: VirtualNetwork;

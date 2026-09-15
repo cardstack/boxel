@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
   Prerenderer as Renderer,
@@ -49,7 +50,7 @@ const { records: initial, ids } = generateClinical({ realmURL, scale });
 // Placement is the ordinary Chrome producer. Native Node placement has its
 // own admission and parity tests; this layer is about the kernel behaviours
 // (routing, invalidation, convergence, blast radius), not where code runs.
-module('Lattice | clinical publication acceptance', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let render: Prerenderer;

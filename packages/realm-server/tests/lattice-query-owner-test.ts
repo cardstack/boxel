@@ -1,4 +1,5 @@
 import { renderFileForIndexing } from '@cardstack/runtime-common/index-runner/visit-file';
+import { basename } from 'node:path';
 import { LatticeRetainedSnapshots } from '@cardstack/runtime-common/lattice-retained-snapshots';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import QUnit from 'qunit';
@@ -127,7 +128,7 @@ function definition(): Definition {
   };
 }
 
-module('Lattice | native query-owner publication', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter,
     writer: IndexWriter,
     network: VirtualNetwork,

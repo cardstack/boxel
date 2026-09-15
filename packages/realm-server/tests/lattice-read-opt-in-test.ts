@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { dirSync, type DirResult } from 'tmp';
 import { writeFileSync } from 'node:fs';
@@ -24,7 +25,7 @@ const { module, test } = QUnit;
 const ordinaryURL = 'http://lattice-read.localhost/ordinary/';
 const enabledURL = 'http://lattice-read.localhost/enabled/';
 
-module('Lattice | read opt-in', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let ordinary: Realm;
   let enabled: Realm;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import { PgAdapter } from '@cardstack/postgres';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
@@ -40,7 +41,7 @@ class ObservedAdapter extends PgAdapter {
   }
 }
 
-module('Lattice | publication delivery opt-in', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let observed: ObservedAdapter;
   let dispatchers: LatticePublicationDispatcher[];

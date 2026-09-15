@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import {
   baseCardTitle,
   baseCardDescription,
@@ -7,7 +8,7 @@ import {
 } from '@cardstack/runtime-common/base-card-computations';
 const { module, test } = QUnit;
 
-module('Lattice | trusted base computations in Node', function () {
+module(basename(import.meta.filename), function () {
   test('title and description retain base blank and whitespace semantics', function (assert) {
     assert.strictEqual(baseCardTitle({}, 'Student'), 'Untitled Student');
     assert.strictEqual(

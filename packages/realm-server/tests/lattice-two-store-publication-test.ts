@@ -13,7 +13,7 @@ import {
 } from '@cardstack/runtime-common/lattice-display';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   Deferred,
@@ -72,7 +72,7 @@ const source = latticeParitySource
      </template>`,
   );
 
-module('Lattice | two real stores and guarded publication', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let fixtureRealm: Realm;

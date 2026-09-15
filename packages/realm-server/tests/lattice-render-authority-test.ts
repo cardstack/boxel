@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { PgAdapter } from '@cardstack/postgres';
 import {
   Deferred,
@@ -44,7 +45,7 @@ function document(count = 7, generation = 2): LooseSingleCardDocument {
   };
 }
 
-module('Lattice | native render authority', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let jobId: number;
   setupDB(hooks, {

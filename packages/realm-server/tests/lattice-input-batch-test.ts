@@ -53,7 +53,7 @@ import { RealmServer } from '../server.ts';
 
 const { module, test } = QUnit;
 
-module('Lattice | computation input batches', function (hooks) {
+module('lattice-input-batch-test.ts | inputs', function (hooks) {
   let realm: Realm;
   let db: PgAdapter;
   let queue: QueuePublisher;
@@ -1562,7 +1562,7 @@ module('Lattice | computation input batches', function (hooks) {
   });
 });
 
-module('Lattice | bounded confirmed input residency', function () {
+module('lattice-input-batch-test.ts | residency', function () {
   function value(text = 'Mango'): LatticeResidentInput {
     return {
       token: 'lattice-input-v1:' + '0'.repeat(64),
@@ -1635,7 +1635,7 @@ module('Lattice | bounded confirmed input residency', function () {
   });
 });
 
-module('Lattice | exact display response coverage', function () {
+module('lattice-input-batch-test.ts | coverage', function () {
   test('accepts partial inventory, reordered results, explicit errors and canonical identity mapping', (assert) => {
     let root = 'http://display.example/realm/';
     let token = 'lattice-display-v1:' + 'a'.repeat(64);

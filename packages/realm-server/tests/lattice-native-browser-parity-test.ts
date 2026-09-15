@@ -2,6 +2,7 @@ import {
   latticeParitySource,
   latticeParityFixtures,
 } from './helpers/lattice-parity-fixture.ts';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -50,7 +51,7 @@ const expectedValues: Record<string, Record<string, unknown>> = {
   'Day/empty.json': { postedCount: 0, total: 0, submittedIds: [] },
 };
 
-module('Lattice | automatic Node and Chrome data parity', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let browser: Prerenderer;

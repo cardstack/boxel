@@ -1,10 +1,11 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { IndexWriter, VirtualNetwork } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
 const { module, test } = QUnit;
-module('Lattice | bulk invalidation', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     templateDatabase: process.env.LATTICE_TEST_TEMPLATE_DB,

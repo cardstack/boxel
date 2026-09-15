@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { analyzeLatticeGtsSource } from '@cardstack/runtime-common/lattice-gts-analysis';
 import {
   linkLatticeGtsDefinition,
@@ -70,7 +71,7 @@ function fixture(entries: Record<string, string>) {
   };
 }
 
-module('Lattice | linked GTS code receipts', function () {
+module(basename(import.meta.filename), function () {
   test('one source receipt is reusable by instances and unaffected by unrelated files', async function (assert) {
     const lab = fixture({
       'counter.gts': `${imports}

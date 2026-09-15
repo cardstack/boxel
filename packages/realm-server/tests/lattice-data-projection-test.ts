@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import type { LatticeDataProjection } from '@cardstack/runtime-common/definitions';
 import { LatticeDataProjector } from '../lib/lattice-data-projection.ts';
@@ -26,7 +27,7 @@ function card(
 const link = (self: string | null) => ({ links: { self } });
 const resolve = (ref: string, base: string) => new URL(ref, base).href;
 
-module('Lattice | published data projection', () => {
+module(basename(import.meta.filename), function () {
   test('only declared joins load data; identity references and unrelated links do not', async (assert) => {
     const root = card(
       'root',

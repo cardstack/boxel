@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
 import { dirSync, type DirResult } from 'tmp';
@@ -40,7 +41,7 @@ const enabledURL = origin + 'enabled/';
 const on = { module: rri(origin + 'record'), name: 'Record' };
 const lattice = new LatticeRealmConfig([enabledURL]);
 
-module('Lattice | search opt-in', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let ordinary: Realm;

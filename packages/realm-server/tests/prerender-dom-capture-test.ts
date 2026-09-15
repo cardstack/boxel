@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer';
 import {
   captureFileExtract,
@@ -9,7 +10,7 @@ import {
 
 const { module, test } = QUnit;
 
-module('Prerender | DOM readiness without animation frames', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let browser: Browser;
   hooks.before(async function () {
     browser = await puppeteer.launch({

@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   PgQueuePublisher,
@@ -44,7 +45,7 @@ async function aborted(scope: LatticeWorkScope) {
   return scope.signal.reason;
 }
 
-module('Lattice | native work supersession', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let scopes: LatticeWorkScope[];
   setupDB(hooks, {

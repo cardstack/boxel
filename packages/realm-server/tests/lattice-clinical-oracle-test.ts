@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import {
   CLINICAL_SCENARIOS,
   applyWrites,
@@ -21,7 +22,7 @@ const realmURL = 'https://clinical.example/';
 // hand-computed values, and every scenario's hand-stated blast radius equals
 // the set of owners whose oracle output actually changes. A catalog that lies
 // about its own expectations cannot prove anything about the system.
-module('Lattice | clinical use-case catalog', function () {
+module(basename(import.meta.filename), function () {
   const { records, ids } = generateClinical({ realmURL });
 
   test('the smoke workload is deterministic, bounded and link-complete', function (assert) {

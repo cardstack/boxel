@@ -57,7 +57,7 @@ function shell() {
   )}"><meta data-boxel-head-start><meta data-boxel-head-end></head><body><script id="boxel-isolated-start"></script><script id="boxel-isolated-end"></script></body></html>`;
 }
 
-module('Lattice | render and HTML read opt-in', (hooks) => {
+module('lattice-render-opt-in-test.ts | reads', function (hooks) {
   let db: PgAdapter;
   let statements: string[];
   let realms: Realm[];
@@ -329,7 +329,7 @@ module('Lattice | render and HTML read opt-in', (hooks) => {
   });
 });
 
-module('Lattice | ordinary render worker gate', (hooks) => {
+module('lattice-render-opt-in-test.ts | worker', function (hooks) {
   const root = new URL('http://127.0.0.1:4445/test/');
   let realm: Realm;
   let db: PgAdapter;

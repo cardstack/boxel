@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
@@ -34,7 +35,7 @@ const imports = `import {CardDef,field,contains,NumberField} from './api';`;
 const code = `${imports} export class Counter extends CardDef { @field amount = contains(NumberField); }`;
 const hash = (text: string) => createHash('md5').update(text).digest('hex');
 
-module('Lattice | code worker publication', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let policy: LatticeNativeRealmPolicy;

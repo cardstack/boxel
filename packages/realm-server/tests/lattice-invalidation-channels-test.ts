@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -13,7 +14,7 @@ import { setupDB } from './helpers/index.ts';
 const { module, test } = QUnit;
 const realm = 'https://lattice-channels.example/';
 
-module('Lattice | invalidation channels', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
@@ -40,7 +41,7 @@ const typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
 // feeder that flaps hundreds of times, cross-realm watches, and keys that
 // differ only in Unicode normalisation. Every claim is a routing set or a
 // refusal; timings are logged as LATTICE_ADVERSARIAL lines for the catalog.
-module('Lattice | adversarial reverse-query routing', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let engine: IndexQueryEngine;
   let registry: LatticeQueryRegistry;

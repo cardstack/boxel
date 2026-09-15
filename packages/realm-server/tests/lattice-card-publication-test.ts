@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import QUnit from 'qunit';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -21,7 +22,7 @@ const realm = 'https://lattice-card-publication.example/';
 const owner = new URL('day.json', realm);
 const codeRef = `${realm}day/Day`;
 
-module('Lattice | card publication', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let publication: ReturnType<IndexWriter['latticePublication']>;

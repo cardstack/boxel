@@ -42,7 +42,7 @@ import {
 
 const { module, test } = QUnit;
 const realmURL = 'https://lattice.example/';
-module('Lattice | bounded module prewarm', function () {
+module('lattice-query-registry-test.ts | prewarm', function () {
   test('a large invalidation set keeps complete module coverage with bounded dependency reads', async function (assert) {
     let invalidations = Array.from(
       { length: 751 },
@@ -183,7 +183,7 @@ const definition: Definition = {
   },
 };
 
-module('Lattice | Postgres query registry', function (hooks) {
+module('lattice-query-registry-test.ts | registry', function (hooks) {
   let db: PgAdapter;
   let engine: IndexQueryEngine;
   let registry: LatticeQueryRegistry;

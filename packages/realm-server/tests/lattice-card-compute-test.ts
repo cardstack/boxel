@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
@@ -77,7 +78,7 @@ function input(value: object, revision = 'input-1') {
   };
 }
 
-module('Lattice | complete card computations in Node', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let worker: LatticeBxlWorker;
   hooks.beforeEach(function () {
     worker = new LatticeBxlWorker();

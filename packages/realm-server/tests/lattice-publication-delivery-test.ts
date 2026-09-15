@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { createServer } from 'node:http';
 import { PgAdapter } from '@cardstack/postgres';
 import {
@@ -33,7 +34,7 @@ const authority = {
   definitionRevision: 'code-1',
 };
 
-module('Lattice | durable native publication delivery', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

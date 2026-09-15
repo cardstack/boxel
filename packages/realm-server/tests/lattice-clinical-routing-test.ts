@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
@@ -48,7 +49,7 @@ const typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
 // may exceed the changed set only by the owners the scenario declares as
 // cutoff cases. Routing precision is what keeps a ward write from refreshing
 // every board in the facility.
-module('Lattice | clinical reverse-query routing', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let engine: IndexQueryEngine;
   let registry: LatticeQueryRegistry;

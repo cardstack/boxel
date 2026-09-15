@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
   Prerenderer as Renderer,
@@ -42,7 +43,7 @@ const sessions = JSON.parse(
 // Real Chrome producers, with the census sorting before its pending inputs.
 // Exercise both initial stabilization and the same three-level chain after
 // an HTTP source edit. Never rename cards to make URL order imply readiness.
-module('Lattice | clinical drain ordering', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let current = records;
   const computed: string[] = [];

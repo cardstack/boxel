@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
@@ -36,7 +37,7 @@ function document(): LooseSingleCardDocument {
     },
   };
 }
-module('lattice-render-checkpoint', function () {
+module(basename(import.meta.filename), function () {
   test('only an explicit producer route opts in to the checkpoint', function (assert) {
     assert.deepEqual(
       parseRenderRouteOptions(

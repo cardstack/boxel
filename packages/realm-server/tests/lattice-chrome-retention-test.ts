@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexWriter,
@@ -62,7 +63,7 @@ const owner = card(
   { direct: { links: { self: '../Person/one' } } },
 );
 
-module('Lattice | Chrome retained input publication', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let browser: Prerenderer;

@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { IndexWriter, VirtualNetwork } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
@@ -8,7 +9,7 @@ const realm = 'https://index-resume.example/';
 const names = ['source.gts', 'bridge.gts', 'dependent.json'];
 const dependencies = [[], ['source'], ['bridge']];
 
-module('Index resume | dependency fan-out', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

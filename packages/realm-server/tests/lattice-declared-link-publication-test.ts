@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   rri,
@@ -103,7 +104,7 @@ const fixtures = {
   'Briefing/one.json': card('Briefing', { room: 'violet' }),
 };
 
-module('Lattice | direct declared-link publication', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let network: VirtualNetwork;
   let fixtureRealm: Realm;

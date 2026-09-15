@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexWriter,
@@ -27,7 +28,7 @@ const resource = {
   meta: { adoptsFrom: root },
 };
 
-module('Lattice | selected work admission', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let writer: IndexWriter;
   let network: VirtualNetwork;

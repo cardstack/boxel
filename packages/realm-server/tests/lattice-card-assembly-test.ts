@@ -1,4 +1,5 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { basename } from 'node:path';
 import { captureLatticeInputArtifacts } from '@cardstack/runtime-common/lattice-input-artifacts';
 import QUnit from 'qunit';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -85,7 +86,7 @@ function relationshipId(doc: SingleCardDocument, field: string) {
   return data && !Array.isArray(data) && 'id' in data ? data.id : undefined;
 }
 
-module('Lattice | card assembly definition scope', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let engine: RealmIndexQueryEngine;
   let indexEngine: IndexQueryEngine;

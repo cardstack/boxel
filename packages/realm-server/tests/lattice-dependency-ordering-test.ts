@@ -1,10 +1,11 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 import { IndexRunnerDependencyManager } from '@cardstack/runtime-common/index-runner/dependency-resolver';
 
 const { module, test } = QUnit;
 
-module('Lattice dependency ordering', function () {
+module(basename(import.meta.filename), function () {
   test('orders dependencies across batches without retaining a realm-sized row result', async function (assert) {
     let urls = Array.from(
       { length: 1001 },

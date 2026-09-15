@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
 import { analyzeLatticeGtsSource } from '@cardstack/runtime-common/lattice-gts-analysis';
 
@@ -13,7 +14,7 @@ export class Counter extends CardDef {
   static isolated = <template><div>{{@model.doubled}}</div></template>;
 }`;
 
-module('Lattice | GTS file source analysis', function () {
+module(basename(import.meta.filename), function () {
   test('captures official BXL data without treating templates or unresolved imports as Node authority', function (assert) {
     const result = analyzeLatticeGtsSource(fileId, source);
     assert.strictEqual(result.state, 'analyzed');

@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Querier } from '@cardstack/runtime-common';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
@@ -41,7 +42,7 @@ const capture = (
   document: document(),
 });
 
-module('Lattice | retained snapshots', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let snapshots: LatticeRetainedSnapshots;
   setupDB(hooks, {

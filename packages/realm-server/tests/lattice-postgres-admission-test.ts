@@ -2,7 +2,7 @@ import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import QUnit from 'qunit';
 import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sinon from 'sinon';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
@@ -91,7 +91,7 @@ const definition: Definition = {
   },
 };
 
-module('Lattice | PostgreSQL native admission', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let worker: LatticeBxlWorker;
   let network: VirtualNetwork;

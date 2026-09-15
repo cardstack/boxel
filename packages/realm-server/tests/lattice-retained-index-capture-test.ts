@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { param, type Querier } from '@cardstack/runtime-common';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
@@ -15,7 +16,7 @@ const realm = 'https://retained-index.example/';
 const ownerURL = realm + 'Dashboard/one';
 const config = new LatticeRealmConfig([realm]);
 
-module('Lattice | indexed retained capture', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let snapshots: LatticeRetainedSnapshots;
   setupDB(hooks, {

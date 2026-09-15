@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import {
   Deferred,
@@ -51,7 +52,7 @@ class ObservedAdapter extends PgAdapter {
   }
 }
 
-module('Lattice | queue opt-in', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let observed: ObservedAdapter;
   let runners: PgQueueRunner[];

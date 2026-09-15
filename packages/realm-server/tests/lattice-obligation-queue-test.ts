@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   PgAdapter,
@@ -19,7 +20,7 @@ const { module, test } = QUnit;
 const realm = 'https://lattice-obligation.example/';
 const actor = '@reader:example';
 
-module('Lattice | durable queue obligations', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

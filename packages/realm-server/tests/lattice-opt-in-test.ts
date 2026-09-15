@@ -19,7 +19,7 @@ const { module, test } = QUnit;
 const ordinaryRealm = 'https://lattice-opt-in.example/ordinary/';
 const enabledRealm = 'https://lattice-opt-in.example/enabled/';
 
-module('Lattice | explicit realm configuration', function () {
+module('lattice-opt-in-test.ts | config', function () {
   test('missing configuration is off and enablement matches exact roots', function (assert) {
     assert.false(LatticeRealmConfig.parse(undefined).isEnabled(enabledRealm));
     assert.false(LatticeRealmConfig.parse('').isEnabled(enabledRealm));
@@ -69,7 +69,7 @@ module('Lattice | explicit realm configuration', function () {
   });
 });
 
-module('Lattice | writer opt-in', function (hooks) {
+module('lattice-opt-in-test.ts | writer', function (hooks) {
   let db: PgAdapter;
   let publisher: QueuePublisher;
   let statements: string[];

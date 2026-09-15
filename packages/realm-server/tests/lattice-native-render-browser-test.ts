@@ -1,7 +1,7 @@
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import QUnit from 'qunit';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexWriter,
@@ -24,7 +24,7 @@ const { module, test } = QUnit;
 const fixturePath = process.env.LATTICE_NATIVE_RENDER_FIXTURE;
 const realmDirectory = process.env.LATTICE_NATIVE_REALM_DIR;
 
-module('Lattice | original classroom native render job', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {
