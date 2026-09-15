@@ -14,6 +14,7 @@ import {
 } from '../scripts/load-harness/lib/common.ts';
 import { eventCannotMatch } from '../scripts/load-harness/lib/realm-events.ts';
 import {
+  readOnlyReason,
   workloadFromCardTypeSummary,
   type CardTypeSummaryEntry,
 } from '../scripts/load-harness/lib/derive-workload.ts';
@@ -179,6 +180,48 @@ module(basename(import.meta.filename), function () {
       assert.false(args.subscribe);
     });
 
+    test('rejects an option the spec does not define', function (assert) {
+      // A flag that parses but is never read reports a number for a test nobody
+      // asked for, which is the failure this harness is careful about
+      // everywhere else.
+      assert.throws(
+        () => parseArgs(['--duration', '45'], { minutes: 10 }),
+        /Unknown option: --duration/,
+      );
+      assert.throws(
+        () => parseArgs(['--duration=45'], { minutes: 10 }),
+        /Unknown option: --duration/,
+        'the inline-value spelling is caught too',
+      );
+    });
+
+    test('a near-miss on a flag that changes what runs is caught', function (assert) {
+      // `--writer 0` silently leaving the default two writers would put writes
+      // on a realm the operator may only be able to read.
+      assert.throws(
+        () => parseArgs(['--writer', '0'], { writers: 2, readers: 12 }),
+        /Unknown option: --writer/,
+      );
+    });
+
+    test('names every unknown option at once, and what is valid', function (assert) {
+      try {
+        parseArgs(['--duration', '45', '--writer', '0'], {
+          minutes: 10,
+          writeEveryMs: 20000,
+        });
+        assert.true(false, 'should have thrown');
+      } catch (e) {
+        let message = (e as Error).message;
+        assert.true(message.includes('--duration'), 'first unknown');
+        assert.true(message.includes('--writer'), 'second unknown');
+        assert.true(
+          message.includes('--write-every-ms'),
+          'valid options are listed in the spelling they are typed in',
+        );
+      }
+    });
+
     test('a number flag given a non-number yields NaN rather than a string', function (assert) {
       let args = parseArgs(['--readers', 'lots'], { readers: 12 });
       assert.true(Number.isNaN(args.readers));
@@ -291,11 +334,11 @@ module(basename(import.meta.filename), function () {
           [`${realm}schema/widget/Widget`],
         );
         assert.strictEqual(
-          workload.write.path,
+          workload.write!.path,
           'Report',
           'the write path defaults to the type name',
         );
-        assert.deepEqual(workload.write.adoptsFrom, {
+        assert.deepEqual(workload.write!.adoptsFrom, {
           module: `${realm}schema/report`,
           name: 'Report',
         });
@@ -340,7 +383,7 @@ module(basename(import.meta.filename), function () {
         let workload = loadWorkload(path, realm);
         assert.deepEqual(workload.secondaryQueries, []);
         assert.deepEqual(workload.extraQueries, []);
-        assert.deepEqual(workload.write.attributes, {});
+        assert.deepEqual(workload.write!.attributes, {});
       });
     });
 
@@ -381,6 +424,32 @@ module(basename(import.meta.filename), function () {
             ),
           /needs a non-empty string "label"/,
         );
+      });
+    });
+
+    test('a workload may omit write, and that makes it read-only', function (assert) {
+      withTempDir((dir) => {
+        let workload = loadWorkload(
+          writeWorkload(dir, {
+            queries: [
+              {
+                label: 'W',
+                filter: { 'item.on': { module: '${realm}w', name: 'W' } },
+              },
+            ],
+          }),
+          realm,
+        );
+        assert.strictEqual(
+          workload.write,
+          undefined,
+          'run-load refuses to start writers against this',
+        );
+      });
+    });
+
+    test('a half-written write block is still rejected', function (assert) {
+      withTempDir((dir) => {
         assert.throws(
           () =>
             loadWorkload(
@@ -391,10 +460,12 @@ module(basename(import.meta.filename), function () {
                     filter: { 'item.on': { module: 'm', name: 'N' } },
                   },
                 ],
+                write: { adoptsFrom: { module: 'm' } },
               }),
               realm,
             ),
-          /"write" must be an object/,
+          /needs string "module" and "name"/,
+          'omitting write is a choice; a half-written one is a mistake',
         );
       });
     });
@@ -445,8 +516,8 @@ module(basename(import.meta.filename), function () {
         realm,
       );
       let written = typeKey(
-        workload.write.adoptsFrom.module,
-        workload.write.adoptsFrom.name,
+        workload.write!.adoptsFrom.module,
+        workload.write!.adoptsFrom.name,
       );
       assert.true(
         [...workload.queries, ...workload.secondaryQueries].some((q) =>
@@ -479,8 +550,9 @@ module(basename(import.meta.filename), function () {
           },
         });
         let { write } = loadWorkload(path, realm);
-        let first = writeAttributes(write, 1);
-        let second = writeAttributes(write, 2);
+        assert.ok(write, 'this workload declares a write block');
+        let first = writeAttributes(write!, 1);
+        let second = writeAttributes(write!, 2);
         assert.strictEqual(first.title, 'Load harness report 1');
         assert.strictEqual(second.title, 'Load harness report 2');
         assert.deepEqual(first.nested, { labels: ['run-1'] });
@@ -489,7 +561,7 @@ module(basename(import.meta.filename), function () {
           /^\d{4}-\d{2}-\d{2}$/.test(String(first.reportedOn)),
           '${date} expands to an ISO date',
         );
-        assert.strictEqual(write.path, 'Reports', 'an explicit path wins');
+        assert.strictEqual(write!.path, 'Reports', 'an explicit path wins');
       });
     });
   });
@@ -672,7 +744,7 @@ module(basename(import.meta.filename), function () {
       });
       let workload = parseWorkload(raw, realm, '_types');
       assert.deepEqual(
-        workload.write.adoptsFrom,
+        workload.write!.adoptsFrom,
         { module: `${realm}author`, name: 'Author' },
         'Spec outranks it but is not addressable relative to this realm',
       );
@@ -683,9 +755,38 @@ module(basename(import.meta.filename), function () {
         'so each write invalidates something a reader is querying',
       );
       assert.deepEqual(
-        workload.write.attributes,
+        workload.write!.attributes,
         {},
         'the summary reports counts, not field schemas, so nothing is guessed',
+      );
+    });
+
+    test('omits the write block when no selected type belongs to the realm', function (assert) {
+      let external = [
+        entry('@cardstack/base/spec/Spec', 117),
+        entry('@cardstack/catalog/catalog-app/listing/listing/CardListing', 26),
+      ];
+      let raw = workloadFromCardTypeSummary(external, {
+        realmUrl: realm,
+        top: 8,
+        pageSize: 20,
+      });
+      assert.strictEqual(
+        raw.write,
+        undefined,
+        'an external module is not addressable relative to this realm, and ' +
+          'guessing one would fail at write time',
+      );
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.strictEqual(workload.queries.length, 2, 'the reads still stand');
+      assert.strictEqual(workload.write, undefined);
+      assert.true(
+        readOnlyReason(raw, 8).includes('Spec'),
+        'the reason names the types that ranked, so the operator can judge it',
+      );
+      assert.true(
+        readOnlyReason(raw, 8).includes('--writers 0'),
+        'and says what to do about it',
       );
     });
 

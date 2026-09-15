@@ -61,7 +61,12 @@ export interface Workload {
   // to one of the unbounded shapes above, so a single run measures the same
   // question asked both ways.
   extraQueries: QuerySpec[];
-  write: WriteSpec;
+  // Absent on a read-only workload. A realm can be worth measuring and still
+  // offer no type this run may write — the shared realms on a deployment are
+  // granted read-only, and a derived workload omits the block rather than
+  // naming a type it cannot address. `--writers 0` is then the only valid run,
+  // and run-load refuses to start writers without it.
+  write?: WriteSpec;
 }
 
 // The on-disk / on-the-wire shape, before validation. `derive-workload.ts`
@@ -100,7 +105,8 @@ export function parseWorkload(
       realmUrl,
     ),
     extraQueries: parseQueries(raw.extraQueries, 'extraQueries', realmUrl),
-    write: parseWrite(raw.write, realmUrl),
+    write:
+      raw.write === undefined ? undefined : parseWrite(raw.write, realmUrl),
   };
   if (workload.queries.length === 0) {
     throw new Error(`${source}: "queries" must list at least one query`);

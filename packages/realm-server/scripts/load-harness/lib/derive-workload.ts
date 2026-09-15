@@ -162,10 +162,15 @@ export function workloadFromCardTypeSummary(
 
   // The writers post an instance of the realm's own highest-count type, so the
   // write invalidates something the readers are actually querying — a write
-  // nobody's query covers exercises the index but not the fan-out. A type
-  // defined outside the realm cannot be the target: its module is not
-  // addressable relative to this realm.
-  let writeTarget = selected.find((row) => row.realmLocal) ?? selected[0];
+  // nobody's query covers exercises the index but not the fan-out.
+  //
+  // A type defined outside the realm is not a candidate. Its module is not
+  // addressable relative to this realm, so the POST would be a guess made on
+  // the operator's behalf and discovered at write time. A realm whose top types
+  // are all external therefore derives a read-only workload: no write block,
+  // and `--writers 0` is the only run it supports. That is the common case on a
+  // deployment's shared realms, which are granted read-only anyway.
+  let writeTarget = selected.find((row) => row.realmLocal);
 
   return {
     queries,
@@ -173,12 +178,34 @@ export function workloadFromCardTypeSummary(
     // names and counts, not field schemas, so any attribute guessed here could
     // be rejected. A POST with no attributes still creates an instance, which
     // is all the invalidation needs. Fill them in if you commit this file.
-    write: {
-      path: writeTarget.anchor.name,
-      adoptsFrom: writeTarget.anchor,
-      attributes: {},
-    },
+    write: writeTarget
+      ? {
+          path: writeTarget.anchor.name,
+          adoptsFrom: writeTarget.anchor,
+          attributes: {},
+        }
+      : undefined,
   };
+}
+
+// Whether a derived workload came back without a write block, for the caller to
+// report. Kept as a helper so the reason is stated once.
+export function readOnlyReason(raw: RawWorkload, top: number): string {
+  return (
+    `None of the top ${top} types is defined in this realm, so the derived ` +
+    `workload has no write block:\n` +
+    `  ${describeQueries(raw)}\n` +
+    `  Their modules are not addressable relative to this realm, and guessing ` +
+    `one would\n` +
+    `  fail at write time. Run with --writers 0, or pass --workload with a ` +
+    `write block\n` +
+    `  naming a type you can create here.`
+  );
+}
+
+function describeQueries(raw: RawWorkload): string {
+  let queries = Array.isArray(raw.queries) ? raw.queries : [];
+  return queries.map((q) => (q as { label?: string })?.label ?? '?').join(', ');
 }
 
 // `<module>/<Name>`, split at the LAST separator. Both spellings in circulation

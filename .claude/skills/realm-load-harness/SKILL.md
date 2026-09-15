@@ -44,9 +44,20 @@ earlier run; a smaller shape on a repo clone is the realm differing, not a
 regression.
 
 The writers post an `Author`, which is in the read set, so each write
-invalidates a query the readers are running. Point it at a realm you are willing
-to dirty — a clone made by `setup-realm.ts` — or pass `--writers 0` for a
-read-only run.
+invalidates a query the readers are running.
+
+**On a deployment, `--writers 0` is usually the only run that works.** The shared
+realms an ordinary user can reach — `catalog`, `submissions`, `skills`,
+`software-factory` — are granted read-only, so writers against them fail at the
+first POST. Take a clone with `setup-realm.ts` if you want the write-driven load;
+otherwise run read-only and read the payload and latency columns.
+
+**Know the cost before a long run.** The realm sizes these queries, and it is not
+a realm you sized: bounded at 20 cards the six largest shapes on a deployed realm
+total roughly 2.2 MB per pass, and the standard workload is unbounded. Every
+reader fires the whole set per re-run, so multiply by `--readers` and the re-run
+rate. The summary prints the exact per-pass total — read it after a short run
+before committing to a long one from CloudShell.
 
 ### 2. `--derive-workload` — for the realm you actually care about
 
@@ -81,6 +92,14 @@ is in the file. Realm-local modules are emitted as `${realm}…` so the file
 travels between clones. The emitted `write` block has empty attributes — the
 summary endpoint reports counts, not field schemas — so fill it in before
 committing.
+
+**A derived workload can come back read-only.** The write target must be a type
+defined in the realm itself; an external module is not addressable relative to
+the realm, so naming one would be a guess discovered at write time. When no
+selected type is realm-local the `write` block is omitted, stderr says so and
+names the types that ranked, and the run needs `--writers 0`. On a deployment's
+`catalog` realm every top type is `@cardstack/…`, so this is the expected result
+there — and it lines up with those realms being read-only anyway.
 
 **`_types` needs the realm's own JWT.** A bare realm-server session token gets
 `401 User permissions in the JWT payload do not match the server's permissions`.

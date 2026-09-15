@@ -34,7 +34,7 @@ import {
   DEFAULTS,
   ensureTrailingSlash,
   exitIfProduction,
-  parseArgs,
+  parseArgsOrExit,
   readCredentials,
   summarize,
 } from './lib/common.ts';
@@ -47,6 +47,7 @@ import {
 } from './lib/realm-events.ts';
 import {
   fetchCardTypeSummary,
+  readOnlyReason,
   workloadFromCardTypeSummary,
 } from './lib/derive-workload.ts';
 import {
@@ -55,9 +56,10 @@ import {
   writeAttributes,
   type QuerySpec,
   type Workload,
+  type WriteSpec,
 } from './lib/workload.ts';
 
-let args = parseArgs(process.argv.slice(2), {
+let args = parseArgsOrExit(process.argv.slice(2), {
   csv: '',
   realm: '',
   workload: '',
@@ -233,28 +235,29 @@ async function search(session: Session, spec: QuerySpec): Promise<void> {
 
 // One card write. The payload is deliberately small: what the run is measuring
 // is the invalidation the write causes, not the cost of the bytes going up.
-async function writeCard(session: Session, n: number): Promise<boolean> {
+async function writeCard(
+  session: Session,
+  write: WriteSpec,
+  n: number,
+): Promise<boolean> {
   let started = Date.now();
   let body = {
     data: {
       type: 'card',
-      attributes: writeAttributes(workload.write, n),
-      meta: { adoptsFrom: workload.write.adoptsFrom },
+      attributes: writeAttributes(write, n),
+      meta: { adoptsFrom: write.adoptsFrom },
     },
   };
   try {
-    let response = await fetch(
-      `${realmUrl}${workload.write.path.replace(/^\//, '')}/`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+json',
-          'Content-Type': 'application/vnd.card+json',
-          Authorization: realmAuthHeader(session, realmUrl),
-        },
-        body: JSON.stringify(body),
+    let response = await fetch(`${realmUrl}${write.path.replace(/^\//, '')}/`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.card+json',
+        'Content-Type': 'application/vnd.card+json',
+        Authorization: realmAuthHeader(session, realmUrl),
       },
-    );
+      body: JSON.stringify(body),
+    });
     let text = await response.text();
     let ms = Date.now() - started;
     if (!response.ok) {
@@ -485,7 +488,11 @@ async function readerLoop(session: Session, index: number): Promise<void> {
   }
 }
 
-async function writerLoop(session: Session, index: number): Promise<void> {
+async function writerLoop(
+  session: Session,
+  write: WriteSpec,
+  index: number,
+): Promise<void> {
   let n = index * 1000;
   while (running) {
     await new Promise((r) => setTimeout(r, args.writeEveryMs));
@@ -497,7 +504,7 @@ async function writerLoop(session: Session, index: number): Promise<void> {
     if (args.modelCalls) {
       await modelCall(session);
     }
-    if (await writeCard(session, n++)) {
+    if (await writeCard(session, write, n++)) {
       announceInvalidation();
     }
   }
@@ -548,6 +555,9 @@ if (args.deriveWorkload) {
     top: args.deriveTop,
     pageSize: args.derivePageSize,
   });
+  if (!raw.write) {
+    console.error(`\n${readOnlyReason(raw, args.deriveTop)}\n`);
+  }
   if (args.emitWorkload) {
     let json = `${JSON.stringify(raw, null, 2)}\n`;
     if (args.emitWorkload === '-') {
@@ -577,6 +587,17 @@ if (args.deriveWorkload) {
 // A shortfall in authenticated sessions takes writers before readers: the
 // searches are what the run is about, and `--writers 0` is a legitimate
 // read-only run against a realm nobody wants dirtied.
+// A workload with no write block is read-only, and starting writers against it
+// would mean inventing a target. Say which workload, so the fix is obvious.
+if (args.writers > 0 && !workload.write) {
+  console.error(
+    `This workload has no "write" block, so it cannot drive writes.\n` +
+      `  Re-run with --writers 0, or use a workload whose "write" names a type\n` +
+      `  you can create in ${realmUrl}.`,
+  );
+  process.exit(1);
+}
+
 let writerCount = Math.min(args.writers, sessions.length);
 if (args.readers > 0 && writerCount >= sessions.length) {
   writerCount = sessions.length - 1;
@@ -761,4 +782,7 @@ process.on('SIGINT', finish);
 setTimeout(finish, args.minutes * 60000);
 
 readerSessions.forEach((s, i) => void readerLoop(s, i));
-writerSessions.forEach((s, i) => void writerLoop(s, i));
+let writeSpec = workload.write;
+if (writeSpec) {
+  writerSessions.forEach((s, i) => void writerLoop(s, writeSpec, i));
+}

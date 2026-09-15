@@ -18,11 +18,11 @@ import {
   DEFAULTS,
   ensureTrailingSlash,
   exitIfProduction,
-  parseArgs,
+  parseArgsOrExit,
   readCredentials,
 } from './lib/common.ts';
 
-let args = parseArgs(process.argv.slice(2), {
+let args = parseArgsOrExit(process.argv.slice(2), {
   csv: '',
   source: '',
   realmName: 'load-test',

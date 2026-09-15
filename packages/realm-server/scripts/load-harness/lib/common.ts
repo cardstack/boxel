@@ -133,30 +133,69 @@ export function parseArgs<T extends Record<string, ArgValue>>(
   spec: T,
 ): T {
   let out: Record<string, ArgValue> = { ...spec };
+  let unknown: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i];
-    if (!arg.startsWith('--')) {
+    if (arg === '--' || !arg.startsWith('--')) {
       continue;
     }
     let key = arg.slice(2);
-    let value: ArgValue;
     let eq = key.indexOf('=');
+    let inlineValue: string | undefined;
     if (eq >= 0) {
-      value = key.slice(eq + 1);
+      inlineValue = key.slice(eq + 1);
       key = key.slice(0, eq);
-    } else if (typeof spec[camel(key)] === 'boolean') {
+    }
+    let name = camel(key);
+    // A flag the spec does not define is a typo, and a typo that parses is the
+    // worst outcome available: the run proceeds on defaults and reports a
+    // number for a test nobody asked for. Collect them all so one run names
+    // every mistake rather than one per attempt.
+    if (!(name in spec)) {
+      unknown.push(`--${key}`);
+      continue;
+    }
+    let value: ArgValue;
+    if (inlineValue !== undefined) {
+      value = inlineValue;
+    } else if (typeof spec[name] === 'boolean') {
       value = true;
     } else {
       value = argv[++i];
     }
-    out[camel(key)] =
-      typeof spec[camel(key)] === 'number' ? Number(value) : value;
+    out[name] = typeof spec[name] === 'number' ? Number(value) : value;
+  }
+  if (unknown.length) {
+    throw new Error(
+      `Unknown option${unknown.length > 1 ? 's' : ''}: ${unknown.join(' ')}\n` +
+        `Valid options: ${Object.keys(spec)
+          .map((k) => `--${kebab(k)}`)
+          .join(' ')}`,
+    );
   }
   return out as T;
 }
 
+// What the entry points call, for the same reason as `exitIfProduction`: a
+// mistyped flag is a decision to stop, not a crash to print a stack for.
+export function parseArgsOrExit<T extends Record<string, ArgValue>>(
+  argv: string[],
+  spec: T,
+): T {
+  try {
+    return parseArgs(argv, spec);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return process.exit(1);
+  }
+}
+
 function camel(s: string): string {
   return s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+function kebab(s: string): string {
+  return s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 }
 
 export function percentile(sorted: number[], p: number): number {

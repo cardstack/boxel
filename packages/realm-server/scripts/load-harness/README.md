@@ -79,9 +79,21 @@ same instances, and nothing keeps them in step — the file records both counts
 side by side. Compare an environment against its own earlier run.
 
 The writers post an `Author`, which is in the read set, so each write
-invalidates a query the readers are running. Point it at a realm you are willing
-to dirty — a clone made by `setup-realm.ts` — or pass `--writers 0` for a
-read-only run.
+invalidates a query the readers are running.
+
+**On a deployment, `--writers 0` is usually the only run that works.** The shared
+realms an ordinary user can reach are granted read-only, so writers against them
+fail at the first POST. Take a clone with `setup-realm.ts` if you want the
+write-driven load; otherwise run read-only and read the payload and latency
+columns.
+
+**Know the cost before a long run.** The realm sizes these queries, and it is not
+a realm you sized. Bounded at 20 cards, the six largest shapes on a deployed
+realm total roughly 2.2 MB per pass; unbounded, as the standard workload has
+them, they are larger again. Every reader fires the whole set on each re-run, so
+multiply by `--readers` and the re-run rate. The summary prints the exact
+per-pass total for the run you did — read it after a short run before committing
+to a long one, particularly from CloudShell.
 
 ### 2. Derive one from the realm you care about
 
@@ -109,6 +121,14 @@ reproducibly the one in the file. Realm-local modules come out as `${realm}…`,
 so the file travels between clones. Check the `write` block before committing:
 its attributes are empty, because the type summary reports counts and not field
 schemas.
+
+**A derived workload can come back read-only.** The write target has to be a type
+defined in the realm itself — an external module is not addressable relative to
+the realm, so a POST naming one would be a guess discovered at write time. When
+none of the selected types is realm-local, the `write` block is omitted, the
+reason is printed on stderr naming the types that did rank, and the run needs
+`--writers 0`. That is the normal outcome on a deployment's shared realms, whose
+top types all come from `@cardstack/…`.
 
 `_types` needs the same per-realm JWT the searches use — a bare realm-server
 session token gets a 401. A failure here stops the run rather than falling back
@@ -150,7 +170,7 @@ node run-load.ts --csv ./accounts.csv \
 | Option               | Default | Meaning                                                                         |
 | -------------------- | ------: | ------------------------------------------------------------------------------- |
 | `--readers`          |      12 | Sessions that only search.                                                      |
-| `--writers`          |       2 | Sessions that write, and search not at all.                                     |
+| `--writers`          |       2 | Sessions that write, and search not at all. `0` is a read-only run.             |
 | `--minutes`          |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
 | `--write-every-ms`   |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
 | `--idle-re-run-ms`   |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
