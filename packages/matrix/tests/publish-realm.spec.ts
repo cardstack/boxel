@@ -310,6 +310,10 @@ test.describe('Publish realm', () => {
     const SETUP_BUDGET = 60_000;
     // Held back from each wait's budget for the tab assertions that follow it.
     const TAB_ASSERTION_RESERVE = 30_000;
+    // Also held back, for the two requests the timeout path makes before it
+    // throws. Both are bounded to half of it, so together they cannot outlive
+    // the test and swallow the message they exist to produce.
+    const DIAGNOSTIC_BUDGET = 10_000;
     test.setTimeout(SETUP_BUDGET + 2 * PUBLISH_READY_TIMEOUT);
     let testStartedAt = Date.now();
     // The regression net: a republish can report success server-side while
@@ -361,14 +365,18 @@ test.describe('Publish realm', () => {
           PUBLISH_READY_TIMEOUT,
           test.info().timeout -
             (startedAt - testStartedAt) -
-            TAB_ASSERTION_RESERVE,
+            TAB_ASSERTION_RESERVE -
+            DIAGNOSTIC_BUDGET,
         ),
       );
       try {
         await waitForPublishedMarker(page, publishedRealmURL, sentinel, budget);
       } catch (e) {
         let body = await page.request
-          .get(publishedRealmURL, { headers: { Accept: 'text/html' } })
+          .get(publishedRealmURL, {
+            headers: { Accept: 'text/html' },
+            timeout: DIAGNOSTIC_BUDGET / 2,
+          })
           .then((r) => r.text())
           .catch(() => '');
         let serving = !body
@@ -379,7 +387,7 @@ test.describe('Publish realm', () => {
         let readiness = await page.request
           .get(`${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`, {
             headers: { Accept: 'text/html' },
-            timeout: 30_000,
+            timeout: DIAGNOSTIC_BUDGET / 2,
           })
           .then((r) => `HTTP ${r.status()}`)
           .catch((readinessError) => `unreachable (${readinessError.message})`);
