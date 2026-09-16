@@ -5814,6 +5814,32 @@ export class Realm {
   // that every scoped-CSS choke point keys on — in particular the Node-side
   // loader answers such URLs with an empty module instead of fetching, so an
   // injector that touches `document` never evaluates where none exists.
+  //
+  // Two caching decisions are load-bearing here, because a card's module graph
+  // pulls hundreds of these URLs on one page load and each is its own request.
+  //
+  // `varyOnAccept: false` — the body is keyed entirely by the URL's content
+  // hash, so the route never content-negotiates and must not claim it does
+  // (see `createResponse`: a declared-but-unhonored `Vary` makes differing
+  // `Accept` spellings evict each other's stored entry). This holds only
+  // because the realm-server's index handler exempts these paths from the
+  // `text/html` branch that answers realm URLs with the host app shell —
+  // without that exemption the same URL would have two bodies, and the
+  // year-long entry a browser stores could be either.
+  //
+  // No `ETag` — deliberately, and it is not an oversight to correct. The
+  // consumer is the loader, whose `cachedFetch` layer conditionalizes any
+  // request it holds a validator for by sending `If-None-Match`, and a
+  // caller-supplied conditional header makes the browser skip its own cache
+  // and revalidate against the server. `cachedFetch`'s store is a
+  // module-scoped Map that starts empty in a fresh JS context, so the cost is
+  // not the first fetch of a URL but every later one: a loader reset re-imports
+  // the module graph in the same context, and each of those hundreds of URLs
+  // then carries a validator and reaches the server instead of the browser
+  // cache. An `immutable` year-long response with no validator stays silent
+  // across all of them; the content hash in the URL is what makes that safe,
+  // since changed bytes arrive under a different URL rather than needing this
+  // one re-checked.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
@@ -5843,6 +5869,7 @@ export class Realm {
         },
       },
       requestContext,
+      varyOnAccept: false,
     });
   }
 
