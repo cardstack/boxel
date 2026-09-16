@@ -187,6 +187,116 @@ export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
   0,
 );
 
+// ---------------------------------------------------------------------------
+// The link-shape policy's tuning (see runtime-common/link-shape-policy.ts).
+//
+// These bound the rung below admission control: how much of a result's link
+// graph a live read carries, chosen from prevailing load. Admission control
+// answers a saturated process by refusing work; this answers it one step
+// earlier by serving a cheaper representation, which costs the caller a
+// follow-up fetch rather than the whole request.
+//
+// Every number below was derived from the production realm-server's own
+// `inFlightSearch` record rather than chosen up front. The 7-day distribution
+// (37,644 health samples) is bimodal: 51.5% of samples sit at 0-1 in-flight
+// and 77% at or below 5, while 2.4% pile up at exactly the admission cap —
+// the shedding regime. Between those lies the band this policy acts in.
+//
+// The thresholds are absolute in-flight counts, not fractions of the cap,
+// because that is the unit they were measured in. They were derived against
+// the default cap of 30 and want re-deriving if the cap moves materially;
+// `normalizeThresholds` in the policy keeps them under whatever cap is in
+// force so a policy can never be configured to engage only after shedding has
+// already started.
+// ---------------------------------------------------------------------------
+
+// Half-life of the time-weighted mean of in-flight searches the policy decides
+// on. The measured episodes are hour-long plateaus, so the reading is
+// insensitive to this within the range tried (30s-300s moved its p90 by under
+// 12% on the saturation window). Chosen for stability rather than fit: two
+// minutes puts the reading ~90% of the way to a sustained change after about
+// seven, which is the "changes over minutes" the sticky decision needs, and it
+// flattens the bursts that reach the cap instantaneously without ever being
+// sustained — on a control window whose raw samples peaked at the cap of 30,
+// the smoothed reading peaked at 17.
+const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
+
+// The floor on how long a realm holds a level before it may leave it. The
+// hysteresis band below is what actually keeps production steady — this
+// changed nothing on either measured window, at either 60s or 120s. It earns
+// its place by bounding the adversarial case the band cannot: a reading driven
+// to swing the full band repeatedly can still only move a realm once per
+// interval, so the flap rate is bounded by construction rather than by how the
+// signal happens to behave.
+const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
+
+// Engage/release pairs for the two rungs, as sustained in-flight counts.
+//
+// The lower rung degrades only reads that may return more than one row; the
+// upper one degrades every live read. The gap between each engage and its
+// release is the hysteresis band.
+//
+// Measured against two 12-hour production windows — one containing a genuine
+// 2.5-hour saturation episode (30-minute means of 21-23 in-flight), one
+// containing only transient spikes (30-minute means of 1-5, raw samples
+// reaching the cap). At these values the policy spent 14.8% of the saturation
+// window fully degraded and 0.2% of the control window, changing level 0.93
+// times per replica-hour in the first and 0.25 in the second. Lowering the
+// upper rung's engage to 8 raised the control window's degraded time from
+// 0.3% to 3.8% — degrading a fleet whose half-hour means never left single
+// digits — which is what fixes the upper rung at 12 rather than lower.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE = 8;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE = 4;
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE = 12;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE = 6;
+
+// How often a process that is serving live reads records the decision it is
+// making, even when that decision is "no change". Without it, a policy that
+// never engages is indistinguishable from one that is not running.
+const DEFAULT_LINK_SHAPE_HEARTBEAT_MS = 60_000;
+
+export const LINK_SHAPE_LOAD_HALF_LIFE_MS = parsePositiveInt(
+  env.LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  1,
+);
+
+export const LINK_SHAPE_MIN_DWELL_MS = parsePositiveInt(
+  env.LINK_SHAPE_MIN_DWELL_MS,
+  DEFAULT_LINK_SHAPE_MIN_DWELL_MS,
+  0,
+);
+
+export const LINK_SHAPE_MULTI_ROW_ENGAGE = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_ENGAGE,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE,
+  1,
+);
+
+export const LINK_SHAPE_MULTI_ROW_RELEASE = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_RELEASE,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE,
+  0,
+);
+
+export const LINK_SHAPE_ALL_ENGAGE = parsePositiveInt(
+  env.LINK_SHAPE_ALL_ENGAGE,
+  DEFAULT_LINK_SHAPE_ALL_ENGAGE,
+  1,
+);
+
+export const LINK_SHAPE_ALL_RELEASE = parsePositiveInt(
+  env.LINK_SHAPE_ALL_RELEASE,
+  DEFAULT_LINK_SHAPE_ALL_RELEASE,
+  0,
+);
+
+export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
+  env.LINK_SHAPE_HEARTBEAT_MS,
+  DEFAULT_LINK_SHAPE_HEARTBEAT_MS,
+  1,
+);
+
 // The effective values the enforcement functions read. They default to the
 // exported consts (the ops-facing knobs); a test overrides them via
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
