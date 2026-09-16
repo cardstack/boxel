@@ -2240,7 +2240,7 @@ module('Integration | Store', function (hooks) {
     }
   });
 
-  test('withIncluded serialization inlines only unsaved (lid) links, not resident saved ones', async function (assert) {
+  test('withLocalResourcesIncluded serialization inlines only unsaved (lid) links, not resident saved ones', async function (assert) {
     let cardService = getService('card-service') as any;
 
     // A saved link the store has resident: the realm already holds it and
@@ -2259,7 +2259,7 @@ module('Integration | Store', function (hooks) {
 
     let doc = await cardService.serializeCard(instance, {
       useAbsoluteURL: true,
-      withIncluded: true,
+      withLocalResourcesIncluded: true,
     });
     let included = (doc.included ?? []) as any[];
 
