@@ -7593,6 +7593,28 @@ export class Realm {
     return !resolved.startsWith(this.url);
   }
 
+  // How a card+json read shapes its links. A prerender must not recurse into
+  // the search that resolves a query-backed field, and a read serving one is
+  // already asking for less than a live read, so the live-read link setting
+  // does not reach it.
+  //
+  // One decision for every verb that reads a card, rather than one apiece.
+  // Both values are folded into the validator, so two verbs deciding
+  // differently would hand out different validators for the same card — and a
+  // `HEAD`'s would then never match the conditional `GET` it was asked in aid
+  // of. Nothing here varies by verb, so there is nothing to keep in step.
+  #cardJsonLinkShape(request: Request): {
+    skipQueryBackedExpansion: boolean;
+    resolveLinksOnly: boolean;
+  } {
+    let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
+    return {
+      skipQueryBackedExpansion,
+      resolveLinksOnly:
+        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly,
+    };
+  }
+
   private cardJsonCacheControl(requestContext: RequestContext): string {
     // Mirrors the source/module convention for the public/private
     // visibility decision (world-readable realms get `public` so a
@@ -7773,12 +7795,8 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
-      // Both of these change the document a `GET` would serve, so both are
-      // folded into the validator. A `HEAD` computes them exactly as the `GET`
-      // does or the two would disagree about the same card.
-      let resolveLinksOnly =
-        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
+      let { skipQueryBackedExpansion, resolveLinksOnly } =
+        this.#cardJsonLinkShape(request);
       let result: OperationResult;
       try {
         result = await runOperation(
@@ -7944,15 +7962,12 @@ export class Realm {
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let ifNoneMatch = request.headers.get('if-none-match');
       let documentCache = this.#cardDocumentCache;
-      let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
-      // A prerender is already asking for less than a live read, and asks for
-      // it by the flag above, so the live-read setting reaches only the
-      // requests it is about. Computed here rather than at the assembly
-      // because the validator below has to describe the shape the assembly
-      // will produce, and the validator is what the conditional request and
-      // the response cache are both keyed on.
-      let resolveLinksOnly =
-        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
+      // Decided here rather than at the assembly because the validator below
+      // has to describe the shape the assembly will produce, and that
+      // validator is what the conditional request and the response cache are
+      // both keyed on.
+      let { skipQueryBackedExpansion, resolveLinksOnly } =
+        this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
