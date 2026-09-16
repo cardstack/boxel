@@ -42,6 +42,15 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # Read the clock here rather than in the assertion below, which runs
+      # after an upload that always burns both backoffs — from there the
+      # reading is never under one backoff, whatever this step did.
+      - name: Record how long the recoverable upload took
+        id: transient-clock
+        env:
+          STARTED: ${{ steps.clock.outputs.started }}
+        run: echo "elapsed=$(( $(date +%s) - STARTED ))" >> "$GITHUB_OUTPUT"
+
       # A path that never fills stays fatal. The call site tolerates the
       # failure only so this job can assert on it; every real call site does
       # not, which is what keeps a lost artifact a red job.
@@ -59,7 +68,7 @@ jobs:
         env:
           TRANSIENT_OUTCOME: ${{ steps.transient.outcome }}
           PERMANENT_OUTCOME: ${{ steps.permanent.outcome }}
-          STARTED: ${{ steps.clock.outputs.started }}
+          ELAPSED: ${{ steps.transient-clock.outputs.elapsed }}
         run: |
           set -euo pipefail
           failures=0
@@ -71,9 +80,8 @@ jobs:
 
           # Below one backoff means the first attempt succeeded, so the upload
           # proved nothing about retrying.
-          elapsed=$(( $(date +%s) - STARTED ))
-          if [ "$elapsed" -lt 10 ]; then
-            echo "::error::the recoverable upload finished in ${elapsed}s, too fast to have retried"
+          if [ "$ELAPSED" -lt 10 ]; then
+            echo "::error::the recoverable upload finished in ${ELAPSED}s, too fast to have retried"
             failures=$((failures + 1))
           fi
 
@@ -85,7 +93,7 @@ jobs:
           if [ "$failures" -ne 0 ]; then
             exit 1
           fi
-          echo "Recovered after retrying (${elapsed}s), and an unrecoverable upload still failed its step."
+          echo "Recovered after retrying (${ELAPSED}s), and an unrecoverable upload still failed its step."
 
   sparse-checkout:
     name: A job that checks out only the action can still resolve it
