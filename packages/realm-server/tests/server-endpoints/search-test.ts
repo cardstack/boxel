@@ -19,6 +19,8 @@ import {
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
   setSearchShapeSink,
+  LinkShapePolicy,
+  X_BOXEL_LINK_SHAPE_HEADER,
   type Expression,
   type SearchShapeEvent,
 } from '@cardstack/runtime-common';
@@ -122,11 +124,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       publisher,
       runner,
       liveSearchCache,
+      linkShapePolicy,
     }: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
       liveSearchCache?: LiveSearchCache;
+      linkShapePolicy?: LinkShapePolicy;
     }) {
       let virtualNetwork = createVirtualNetwork();
       let dir = dirSync();
@@ -158,6 +162,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         runner,
         matrixURL,
         liveSearchCache,
+        linkShapePolicy,
       });
 
       testRealmHttpServer = result.testRealmHttpServer;
@@ -1109,6 +1114,120 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       assert.strictEqual(event.cache, 'miss', 'this request did the computing');
       assert.true(event.totalMs >= 0, 'the request is timed');
       assert.true(event.shapeHash.length > 0, 'the shape is hashed');
+    });
+
+    // The link-shape policy decides how much of each result's link graph the
+    // response carries, and may overrule a caller. What these pin is the
+    // handler's reporting of that decision: `describeSearchShape`'s own
+    // behaviour is covered in `search-shape-test.ts`, but nothing there can
+    // catch the handler handing it the served mode where the requested one
+    // belongs — which would make every line read as "nobody was overruled".
+    test('a stated link-shape preference is reported beside the served mode', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-asked', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        }).set(X_BOXEL_LINK_SHAPE_HEADER, 'links-only');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-asked');
+      assert.strictEqual(event.linkMode, 'links-only', 'what was served');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'links-only',
+        'what the caller asked for',
+      );
+      assert.false(
+        event.linkModeDowngraded,
+        'a caller that got what it asked for was not overruled',
+      );
+      assert.strictEqual(
+        event.linkShapeRowClass,
+        'multi-row',
+        'a page of ten may return more than one row',
+      );
+      assert.strictEqual(
+        event.linkShapeLevel,
+        'full',
+        'the fleet is quiet, so the policy imposed nothing',
+      );
+    });
+
+    test('a downgraded search reports both modes and the load that decided it', async function (assert) {
+      // A policy over a reading this test sets, rather than real concurrency:
+      // the point is what the handler reports about an override, and driving a
+      // real one would make the test a race against the smoother.
+      let load = 20;
+      await stopSearchRealmServer();
+      await startSearchRealmServer({
+        dbAdapter,
+        publisher,
+        runner,
+        linkShapePolicy: new LinkShapePolicy({
+          readLoad: () => load,
+          limit: 30,
+          multiRowEngage: 8,
+          allEngage: 12,
+          minDwellMs: 0,
+          heartbeatMs: 60 * 60 * 1000,
+        }),
+      });
+      await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+      await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
+
+      let events = await captureSearchShapes(async () => {
+        // The ladder moves one rung per consult, so the first search puts the
+        // realm on the rung that degrades multi-row reads and is itself served
+        // degraded.
+        let response = await postSearchCorrelated('shape-downgraded', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-downgraded');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'full',
+        'a caller that stated nothing asked for the closure',
+      );
+      assert.strictEqual(event.linkMode, 'links-only', 'and did not get it');
+      assert.true(event.linkModeDowngraded, 'which is the override, recorded');
+      assert.strictEqual(
+        event.linkShapeLoad,
+        20,
+        'the reading the decision was taken on',
+      );
+      assert.strictEqual(event.linkShapeLevel, 'multi-row');
+      assert.strictEqual(event.linkShapeRowClass, 'multi-row');
+    });
+
+    test('a prerender search reports no policy inputs', async function (assert) {
+      let events = await captureSearchShapes(async () => {
+        let response = await postSearchCorrelated('shape-prerender-inputs', {
+          filter: personFilter(),
+          realms: [testRealm.url],
+          page: { size: 10 },
+        }).set('x-boxel-during-prerender', 'true');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+      let [event] = shapesFor(events, 'shape-prerender-inputs');
+      assert.strictEqual(event.linkMode, 'prerender');
+      assert.strictEqual(
+        event.requestedLinkMode,
+        'prerender',
+        'a path the policy never reaches reports no preference of its own',
+      );
+      assert.false(event.linkModeDowngraded);
+      assert.strictEqual(
+        event.linkShapeLoad,
+        null,
+        'and no inputs, because none were consulted',
+      );
+      assert.strictEqual(event.linkShapeLevel, null);
+      assert.strictEqual(event.linkShapeRowClass, null);
     });
 
     test('the query-shape line carries no filter value', async function (assert) {

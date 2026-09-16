@@ -1622,6 +1622,7 @@ export async function runTestRealmServerWithRealms({
   },
   prerenderer: providedPrerenderer,
   liveSearchCache,
+  linkShapePolicy,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1644,6 +1645,10 @@ export async function runTestRealmServerWithRealms({
   // Inject a cache configured for the test (e.g. `ttlMs: 0` to keep
   // coalescing but disable retention). Omit for the production default.
   liveSearchCache?: LiveSearchCache;
+  // Decides how much of each result's link graph the federated search carries.
+  // Omit and every live read keeps its closure, which is what a server with no
+  // admission gate to read a load from would do anyway.
+  linkShapePolicy?: LinkShapePolicy;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1733,6 +1738,7 @@ export async function runTestRealmServerWithRealms({
     definitionLookup,
     prerenderer,
     liveSearchCache,
+    linkShapePolicy,
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
