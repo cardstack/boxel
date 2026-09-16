@@ -1,6 +1,6 @@
 ---
 name: search-shape-diagnosis
-description: Read the per-request query-shape telemetry the federated search emits — one JSON log line per `_federated-search` request on the `boxel:search-shape` channel (the same `| json` convention as `boxel:client-perf` and `boxel:screenshot-perf`), carrying the query's *shape* with every caller-supplied value elided, plus which cache answered, the result counts, and the wall-clock. Use it to answer what a search load was actually made of, which the request rate alone cannot show: (1) what a burst of searches asked for — the filter trees, type anchors, page sizes and fieldsets behind a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2) which shapes dominate a window by volume, by latency, or by rows returned; (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's job-scoped cache — and therefore how much of it reached the index at all; (4) separating prerender search load from live browser load via `linkMode`, since a prerender skips the `loadLinks` relationship-assembly pass and so costs a different amount for the same query; (5) attributing live search load to a person or a tab session, by joining `correlationId` to the `server-request` event on `boxel:client-perf`; (6) attributing in-render search load to the indexing job that caused it via `jobId` and `consumingRealm`; and (7) authoring a replay that exercises the same index paths a real load did. Carries the traps that make naive aggregates silently wrong: a cache hit reports no counts, an incomplete merge reports no total, `correlationId` is minted per search so nothing on the line groups one render (`jobId` is a whole index pass), and a search the admission gate sheds emits no line at all — so under saturation this counts admitted searches rather than arriving ones. Joins to `realm:requests` and the `realm:search-timing` stage breakdown on `correlationId`. For staging/prod this layers on `aws-access` (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off to `indexing-diagnostics` when the cost is inside the indexer rather than in what was asked for, and to the `search` skill when the task is authoring a query rather than reading one. Use when someone asks what a search spike was made of, which queries a realm is issuing, why search load is high, what a representative query looks like, or wants to replay a real load.
+description: Read the per-request query-shape telemetry the federated search emits — one JSON log line per `_federated-search` request on the `boxel:search-shape` channel (the same `| json` convention as `boxel:client-perf` and `boxel:screenshot-perf`), carrying the query's *shape* with every caller-supplied value elided, plus which cache answered, the result counts, and the wall-clock. Use it to answer what a search load was actually made of, which the request rate alone cannot show: (1) what a burst of searches asked for — the filter trees, type anchors, page sizes and fieldsets behind a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2) which shapes dominate a window by volume, by latency, or by rows returned; (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's job-scoped cache — and therefore how much of it reached the index at all; (4) separating prerender search load from live browser load via `linkMode`, since a prerender skips the `loadLinks` relationship-assembly pass and so costs a different amount for the same query; (5) attributing live search load to a person or a tab session, by joining `correlationId` to the `server-request` event on `boxel:client-perf`; (6) attributing in-render search load to the indexing job that caused it via `jobId` and `consumingRealm`; and (7) authoring a replay that exercises the same index paths a real load did; and (8) auditing the link-shape policy, which picks how much of each result's link graph a live read carries from the load the process is under and may overrule a caller — answering "was this page served a degraded shape, and why" from `requestedLinkMode` / `linkModeDowngraded` / `linkShapeLoad` / `linkShapeLevel` beside the served `linkMode`, and "is the policy engaging more than it should" from the per-realm transition records and sampled no-change records on the `boxel:link-shape-policy` channel, whose `dwellMs` is the flapping signal. Carries the traps that make naive aggregates silently wrong: a cache hit reports no counts, an incomplete merge reports no total, `correlationId` is minted per search so nothing on the line groups one render (`jobId` is a whole index pass), `linkMode` is what was *served* rather than what was asked for, `linkShapeLoad` is a sustained mean that will not match a health line's instantaneous `inFlightSearch`, and a search the admission gate sheds emits no line at all — so under saturation this counts admitted searches rather than arriving ones. Joins to `realm:requests` and the `realm:search-timing` stage breakdown on `correlationId`. For staging/prod this layers on `aws-access` (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off to `indexing-diagnostics` when the cost is inside the indexer rather than in what was asked for, and to the `search` skill when the task is authoring a query rather than reading one. Use when someone asks what a search spike was made of, which queries a realm is issuing, why search load is high, what a representative query looks like, or wants to replay a real load.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -67,6 +67,22 @@ There is no per-render key. "Searches per page render" is not answerable from th
 `prerender` means the `loadLinks` relationship-assembly pass was skipped outright — the largest per-result cost there is. A panel that mixes modes averages two different amounts of work for identical queries, so split by `linkMode` before comparing anything.
 
 `prerender` is **not** a synonym for indexing. It derives from `x-boxel-during-prerender`, which the module, file-extract and command-runner routes raise alongside the indexing render route — so the bucket is all headless traffic. Indexing is the subset with a non-null `jobId`, which only the render route's visit carries.
+
+### 4a. `linkMode` is what was _served_, which is not always what was asked for
+
+Between `full` and `links-only` the choice is not the caller's alone. The link-shape policy picks the shape per read from the load the process is under, and may overrule a caller that asked for the closure. So `linkMode` alone cannot tell "the caller asked for links-only" from "the caller asked for the closure and was downgraded" — and those are different findings about a slow page.
+
+`requestedLinkMode` carries the preference and `linkModeDowngraded` carries the comparison. Read them together:
+
+| `requestedLinkMode` | `linkMode`   | what happened                                                       |
+| ------------------- | ------------ | ------------------------------------------------------------------- |
+| `full`              | `full`       | the quiet case — no policy engagement                               |
+| `full`              | `links-only` | **the policy degraded this read**; `linkShapeLevel` says which rung |
+| `links-only`        | `links-only` | the caller asked for it; the policy is not implicated               |
+
+`linkShapeLoad`, `linkShapeLevel` and `linkShapeRowClass` are the inputs the decision was taken on, stamped on the request that was decided. They are what separates "the policy did the right thing on bad inputs" from "the policy misjudged good inputs" — different fixes. All three are null on a `prerender` line, which never reaches the policy.
+
+The shape hash folds the **served** mode only: two requests that asked differently and were served the same body are one shape. So `shapeHash` keeps aggregating correctly across a policy change, and `requestedLinkMode` is a filter rather than a grouping key.
 
 ### 5. `shapeHash` groups across realms and pages on purpose
 
@@ -157,6 +173,68 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --regex 'boxel:search-shape.*<correlationId>' --since 6h --no-follow
 ```
+
+## The link-shape policy
+
+How much of each result's link graph a live read carries is decided per realm from the load the process is under, one rung below admission control: a saturated process degrades a response before it refuses a request. Two channels record it — the per-request fields above, and a low-volume transition channel, `boxel:link-shape-policy`, on the same `| json` convention.
+
+A policy that reacts to load is only debuggable if it records the conditions it reacted to, because by the time anyone asks "why was this page slow" the concurrency that caused the decision is gone. These are the two questions an operator actually arrives with.
+
+### "Was this page served a degraded shape, and why?"
+
+Start from the per-request fields. Given a `correlationId` from the browser (`x-boxel-logging-correlation-id`, carried on `boxel:client-perf` `server-request`):
+
+```logql
+<base> | correlationId="<id>"
+  | line_format "served={{.linkMode}} asked={{.requestedLinkMode}} downgraded={{.linkModeDowngraded}} load={{.linkShapeLoad}} level={{.linkShapeLevel}} rows={{.linkShapeRowClass}} ms={{.totalMs}}"
+```
+
+Without a correlation id, pivot on the realm and the window:
+
+```logql
+# how much of a realm's live traffic was degraded, over time
+sum by (linkModeDowngraded) (count_over_time(<base> | linkMode!="prerender" | realms=~".*<realm>.*" [5m]))
+```
+
+A downgraded line is only half an answer: `linkShapeLevel` says which rung was in force and `linkShapeLoad` says the reading that put it there. A `multi-row` level degrades only reads that may return more than one row, so a single-card read degraded at that level would be a bug, not a policy decision.
+
+### "Is the policy engaging more than it should?"
+
+The per-request fields cannot answer this cheaply — they tell you what happened to one page, not how often the policy engages or whether it is stable. That is the transition channel:
+
+```logql
+{service="realm-server", env="$env"} |= "boxel:link-shape-policy" | json
+  | line_format "{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}" | json
+  | channel="boxel:link-shape-policy"
+```
+
+Call that `<policy>`. Two record shapes share it, discriminated by `changed`:
+
+- `changed=true` — one realm's level moved. Carries `realm`, `previousLevel`, `level`, the `threshold` crossed and its `thresholdKind` (`engage` / `release`), the `load` at the decision, and **`dwellMs`, the time spent in the level being left**. Dwell is what distinguishes stable operation from flapping, and flapping is the specific failure this design risks: the mode is folded into both response validators and keys the card+json response cache, so every change costs a realm its cached entries.
+- `changed=false` — the sampled no-change record, one per process per cadence, carrying `load` and how many realms sit at each level (`realmsAtFull` / `realmsAtMultiRow` / `realmsAtAll`). It exists so that "the policy never engaged" is distinguishable from "the policy was not running" — without it the two look identical.
+
+```logql
+# transition rate — the flapping signal
+sum by (realm) (count_over_time(<policy> | changed="true" [30m]))
+
+# the short dwells, which are the ones that cost cache entries
+<policy> | changed="true" | unwrap dwellMs | __error__="" [30m]
+
+# how much of the fleet is degraded right now
+<policy> | changed="false" | line_format "load={{.load}} full={{.realmsAtFull}} multi={{.realmsAtMultiRow}} all={{.realmsAtAll}}"
+```
+
+A `dwellMs` of `null` is a realm's first move, not a zero-length dwell — it had no prior level to have dwelt in.
+
+### Traps specific to reading load alongside this
+
+Three of these cost real time on the investigation that produced the policy, and they apply directly here.
+
+- **`meanLag` is pinned at its own floor.** `realm:health` samples the event loop with `monitorEventLoopDelay({resolution: 20})`, so a `meanLag` of 20–22 ms means _unmeasurably low_, not "20 ms of lag". Only max and p99 carry signal. Reading a flat meanLag as "the loop was fine" and a degraded policy as "the policy over-reacted" is the same mistake twice.
+- **`busyMs(parallel-sum)` is not CPU.** It sums concurrently-awaited work, so it double-counts waiting — it has read 46× wall clock on a single-threaded loop. It cannot be used to argue the process was or was not saturated.
+- **The `realm:search-timing` stage lines carry no job marker.** A `loadLinks` share computed from them mixes worker traffic into live: in one 55-minute window 533 of 1,355 searches were `prerender`/job traffic. Separate them with this channel's `jobId` (via `correlationId`), not with the stage lines alone.
+
+One more, specific to the policy: the load it reads is the **sustained** in-flight count — a time-weighted mean with a multi-minute half-life — not the instantaneous `inFlightSearch` the health line prints. They differ by design and by a lot: on a production window whose raw samples repeatedly touched the admission cap of 30, the sustained reading peaked at 17. Comparing a `linkShapeLoad` against a health line's `inFlightSearch=` at the same timestamp will look like a contradiction and is not one.
 
 ## Authoring a replay
 
