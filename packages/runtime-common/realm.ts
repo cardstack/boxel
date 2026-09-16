@@ -460,10 +460,21 @@ const RENDER_HOLD_MIN_BATCH_SIZE = 10;
 // comfortably longer than the refresh interval.
 const RENDER_HOLD_LEASE_MS = 30_000;
 const RENDER_HOLD_REFRESH_MS = 10_000;
-// Longest any one write may keep the lane held. Holds chain across
-// consecutive writes on purpose, so without a cap a realm taking bulk writes
-// back to back could keep its HTML from ever being rendered.
-const RENDER_HOLD_MAX_MS = 5 * 60_000;
+// Longest an unbroken run of holds may keep the lane held. Holds chain across
+// consecutive commits on purpose, so without a cap a realm taking bulk commits
+// back to back could keep its HTML from ever being rendered. Read per call,
+// not once at import, so the ceiling can be tuned — or shortened to something
+// a test can reach — without a restart.
+const DEFAULT_RENDER_HOLD_MAX_MS = 5 * 60_000;
+function renderHoldMaxMs(): number {
+  let override = Number(
+    (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process?.env?.RENDER_HOLD_MAX_MS,
+  );
+  return Number.isFinite(override) && override > 0
+    ? override
+    : DEFAULT_RENDER_HOLD_MAX_MS;
+}
 // `localPath`s (no leading slash) exempt from the archived-realm seal: the
 // realm's public operational endpoints, which must keep working while a realm
 // is archived. `_readiness-check` is the health probe; `_session` is the
@@ -1333,8 +1344,8 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
-  // Anchors the render-hold cap across back-to-back bulk writes; see
-  // `_batchWriteUnlocked`. Undefined whenever no write holds the lane.
+  // Anchors the render-hold cap across back-to-back bulk commits; see
+  // `_commitBatchUnlocked`. Undefined whenever no commit holds the lane.
   #renderHoldChainStartedAt: number | undefined;
   #renderHoldDepth = 0;
   // One line per card read that arrives while incremental indexing is
@@ -2776,6 +2787,16 @@ export class Realm {
     return writes;
   }
 
+  // Whether the current unbroken run of render holds has outlived the cap.
+  // False when no chain is running, which is the common case and the one that
+  // lets a fresh chain start.
+  #renderHoldChainExpired(): boolean {
+    return (
+      this.#renderHoldChainStartedAt !== undefined &&
+      Date.now() - this.#renderHoldChainStartedAt > renderHoldMaxMs()
+    );
+  }
+
   // One commit covering every file a caller is changing — the bytes it writes
   // and the paths it removes — under a single index job and a single index
   // event. A caller staging several changes to several cards needs them to
@@ -2812,7 +2833,24 @@ export class Realm {
     // the next one merges into it and the union renders once. Nothing is
     // skipped — the hold delays rendering, it never cancels it.
     let changeCount = (batch.writes?.size ?? 0) + (batch.deletes?.length ?? 0);
-    if (changeCount < RENDER_HOLD_MIN_BATCH_SIZE) {
+    if (
+      changeCount < RENDER_HOLD_MIN_BATCH_SIZE ||
+      // A commit that waits for its own indexing has nothing to hold the lane
+      // for: it awaits the index pass inline, so the render job exists and the
+      // realm is quiet again before the commit returns, and the hold would be
+      // released in the same breath it was taken. The merge window a hold buys
+      // opens only on the deferred path, where the pass — and the job it
+      // spawns — outlive the commit.
+      options?.waitForIndex !== false ||
+      // Past the cap the chain stops holding, and it has to stop here rather
+      // than in the heartbeat below: a fresh `acquire` writes a full lease
+      // unconditionally, so a succession of new commits would keep the lane
+      // held by never-renewed-but-freshly-minted leases while no single hold
+      // ever looked old enough to stop. Skipping the acquire outright also
+      // leaves the depth counter alone, so the anchor still clears when the
+      // holds already in flight drain.
+      this.#renderHoldChainExpired()
+    ) {
       return await this.#commitBatchUnlockedInner(batch, options);
     }
     let hold = await JobClaimHold.acquire(
@@ -2830,11 +2868,11 @@ export class Realm {
     this.#renderHoldDepth++;
     let chainStartedAt = this.#renderHoldChainStartedAt;
     let heartbeat = setInterval(() => {
-      // A realm under continuous bulk commits would otherwise never render.
-      // Past the cap the lease simply stops being renewed, so the lane frees
-      // itself within one lease and the import pays an extra render pass
-      // rather than starving.
-      if (Date.now() - chainStartedAt > RENDER_HOLD_MAX_MS) {
+      // The other half of the cap, for a chain already under way: past it the
+      // lease stops being renewed, so the lane frees itself within one lease
+      // and the import pays an extra render pass rather than starving. The
+      // acquire-time check above is what stops the next commit re-holding it.
+      if (Date.now() - chainStartedAt > renderHoldMaxMs()) {
         return;
       }
       hold.refresh(RENDER_HOLD_LEASE_MS).catch((e: any) => {

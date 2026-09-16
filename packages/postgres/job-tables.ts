@@ -22,6 +22,10 @@ export interface JobsTable {
 // add-job-claim-holds migration for what it is for.
 export interface JobClaimHoldsTable {
   concurrency_group: string;
+  // Half the primary key, with the group. A group is held while any live lease
+  // names it, and a holder deletes only the row carrying its own id — a
+  // group-wide delete would free the lane out from under every other holder.
+  holder_id: string;
   expires_at: Date;
 }
 

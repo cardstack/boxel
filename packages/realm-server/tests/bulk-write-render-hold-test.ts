@@ -262,6 +262,84 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a chain of commits stops holding the lane once it outlives the cap', async function (assert) {
+    assert.timeout(300_000);
+
+    // The cap is minutes in production. Shortening it to something a test can
+    // cross is the only way to reach the branch: what matters is that a chain
+    // already older than the cap stops re-holding, not how long the cap is.
+    process.env.RENDER_HOLD_MAX_MS = '1';
+    let recorder = recordHoldStatements(testDbAdapter);
+    try {
+      // Opens the chain. Its release is deferred to this commit's indexing, so
+      // the chain is still anchored when the next commit arrives — which is the
+      // state the cap exists to bound.
+      await push(instanceOps(0, 12, 1));
+      assert.deepEqual(
+        recorder.statements,
+        ['acquire'],
+        'the first commit of the chain holds the lane',
+      );
+
+      // Same shape, same realm, arriving while the chain is anchored — and now
+      // past the cap. Holding here is what would starve the realm's rendering,
+      // so this commit must take no lease at all: a fresh `acquire` writes a
+      // full lease unconditionally, so declining to renew later is too late.
+      await push(instanceOps(0, 12, 2));
+      assert.deepEqual(
+        recorder.statements,
+        ['acquire'],
+        'a commit past the cap adds no second hold',
+      );
+    } finally {
+      delete process.env.RENDER_HOLD_MAX_MS;
+      recorder.restore();
+    }
+
+    await realm.incrementalIndexing();
+    await waitUntil(async () => (await liveHoldCount()) === 0, {
+      timeout: 60_000,
+      timeoutMessage: () => 'the chain never released the lane',
+    });
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      timeout: 240_000,
+    });
+  });
+
+  test('a commit that waits for its own indexing takes no hold', async function (assert) {
+    assert.timeout(300_000);
+
+    let recorder = recordHoldStatements(testDbAdapter);
+    try {
+      // `?waitForIndex=true` awaits the index pass inline, so the render job
+      // exists and the realm is quiet again before the commit returns. There is
+      // no window left for a later commit to merge into, so the hold would be
+      // three queries buying nothing.
+      let response = await request
+        .post('/_atomic?waitForIndex=true')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, 'user', ['read', 'write'])}`,
+        )
+        .send(JSON.stringify({ 'atomic:operations': instanceOps(0, 12, 3) }));
+      assert.strictEqual(response.status, 201, 'the synchronous push lands');
+    } finally {
+      recorder.restore();
+    }
+
+    assert.deepEqual(
+      recorder.statements,
+      [],
+      'a commit that indexes inline leaves the lane alone',
+    );
+
+    await realm.incrementalIndexing();
+    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+      timeout: 240_000,
+    });
+  });
+
   test('a single-file write takes no hold', async function (assert) {
     assert.timeout(300_000);
 
