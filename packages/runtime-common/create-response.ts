@@ -4,12 +4,18 @@ interface CreateResponseArgs {
   body?: BodyInit | null | undefined;
   init?: ResponseInit | undefined;
   requestContext: RequestContext;
+  // Request headers this response's body depends on, beyond `Accept`. A
+  // handler cannot set `vary` through `init` — the value below is written
+  // after the `init` headers are spread, so it would be silently discarded —
+  // and a caller that leaves this out gets the `Accept`-only default.
+  varyOn?: string[];
 }
 
 export function createResponse({
   body,
   init,
   requestContext,
+  varyOn,
 }: CreateResponseArgs): Response {
   return new Response(body, {
     ...init,
@@ -19,7 +25,14 @@ export function createResponse({
       ...(requestContext.permissions['*']?.includes('read') && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
-      vary: 'Accept',
+      // `Accept` always: these routes serve different representations of one
+      // URL by content type. Anything else a response's body turns on has to
+      // join it, because a shared cache keys on exactly this list — a
+      // validator that encodes the difference keeps a client from *being told*
+      // its stale copy is fresh, but it does not stop a cache from collapsing
+      // two requests that differ only on an unlisted header and answering one
+      // of them with the other's representation.
+      vary: ['Accept', ...(varyOn ?? [])].join(', '),
       // This list is the one that reaches the wire. The realm-server also
       // configures `@koa/cors` with its own Expose-Headers, but the middleware
       // copies a handler's Response headers onto the Koa context wholesale, so

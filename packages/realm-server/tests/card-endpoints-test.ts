@@ -923,7 +923,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(response.get('etag'), '200 response still carries an ETag');
         });
 
-        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+        test('a 200 answers as card+json and varies on what selects its representation', async function (assert) {
           let response = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -936,12 +936,12 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
-            'the response varies on Accept, so caches key on the negotiated type',
+            'Accept, x-boxel-link-shape',
+            'caches key on the negotiated type and on the link shape, which are the two request members that select which representation of this URL is returned',
           );
         });
 
-        test('a 304 answers with no body and still varies on Accept', async function (assert) {
+        test('a 304 answers with no body and still varies on what selects its representation', async function (assert) {
           let firstResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -960,8 +960,8 @@ module(basename(import.meta.filename), function () {
           assert.notOk(response.text, 'the 304 carries no body');
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
-            'the 304 varies on Accept',
+            'Accept, x-boxel-link-shape',
+            'a 304 has to carry the same key as the 200 it revalidates, or a cache stores the response under a narrower one',
           );
         });
 

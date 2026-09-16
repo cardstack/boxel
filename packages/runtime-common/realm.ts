@@ -31,6 +31,13 @@ import {
   type LinkShapeDecision,
   type LinkShapeRowClass,
 } from './link-shape-policy.ts';
+
+// The routes whose representation the link-shape preference selects declare it
+// alongside `Accept`, so a shared cache keys on it rather than treating the
+// two shapes as one resource and answering either caller with whichever it
+// stored. The responses that carry no shape — source, modules, media — leave
+// it off, since listing a header a route ignores only fragments its cache.
+const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -1597,12 +1604,17 @@ export class Realm {
   }
 
   // The one place a live read's link shape is decided, so every route that can
-  // serve the same card agrees on it. They have to: the mode is folded into
-  // the response validator, so two routes reaching different answers would
-  // hand out different validators for the same bytes — a `HEAD` reporting one
-  // its own conditional `GET` can never match. Nothing about either response
-  // would look wrong on its own, which is why this is a method rather than an
-  // expression repeated per route.
+  // serve the same card agrees on it within one request. They have to: the
+  // mode is folded into the response validator, so two routes reaching
+  // different answers would hand out different validators for the same bytes,
+  // and nothing about either response would look wrong on its own — which is
+  // why this is a method rather than an expression repeated per route.
+  //
+  // Across requests the agreement is the dwell floor's, not this method's: a
+  // `HEAD` and the conditional `GET` it is asked in aid of are two consults,
+  // and a consult can itself move a rung, so the probe is not neutral. The
+  // move pins the new level for the dwell interval, which covers the pair;
+  // two reads further apart than that can straddle a rung.
   //
   // Null during a prerender: that path already skips the link-assembly pass
   // outright, so it never reaches the policy and its output stays
@@ -7898,9 +7910,10 @@ export class Realm {
   //
   // One decision for every verb that reads a card, rather than one apiece.
   // Both values are folded into the validator, so two verbs deciding
-  // differently would hand out different validators for the same card — and a
-  // `HEAD`'s would then never match the conditional `GET` it was asked in aid
-  // of. Nothing here varies by verb, so there is nothing to keep in step.
+  // differently would hand out different validators for the same card. Nothing
+  // here varies by verb, so within one request there is nothing to keep in
+  // step; across the `HEAD` / `GET` pair it is the policy's dwell floor that
+  // holds them together, not this method (see `#decideLinkShape`).
   //
   // A card read returns one card, so it is the row class a closure is cheapest
   // for and the last one the policy degrades.
@@ -8157,6 +8170,7 @@ export class Realm {
         // it: the validator matched, so there is nothing to send.
         return createResponse({
           requestContext,
+          varyOn: LINK_SHAPE_VARY,
           body: null,
           init: {
             status: 304,
@@ -8169,6 +8183,7 @@ export class Realm {
       );
       return createResponse({
         requestContext,
+        varyOn: LINK_SHAPE_VARY,
         body: null,
         init: {
           headers: {
@@ -8331,6 +8346,7 @@ export class Realm {
         ) {
           return createResponse({
             requestContext,
+            varyOn: LINK_SHAPE_VARY,
             body: null,
             init: {
               status: 304,
@@ -8397,6 +8413,7 @@ export class Realm {
       }
       return createResponse({
         body: assembly.body,
+        varyOn: LINK_SHAPE_VARY,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
@@ -8725,6 +8742,7 @@ export class Realm {
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
       return createResponse({
         requestContext,
+        varyOn: LINK_SHAPE_VARY,
         body: null,
         init: {
           status: 304,
@@ -8737,6 +8755,7 @@ export class Realm {
       init: {
         headers: { 'content-type': mimeType, etag },
       },
+      varyOn: LINK_SHAPE_VARY,
       requestContext,
     });
   }
