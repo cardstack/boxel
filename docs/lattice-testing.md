@@ -155,6 +155,13 @@ worker either declines native admission or rejects obsolete work; inspect the
 reported reason before re-reviewing. A missing review does not make a native-only
 application safe for the Chrome path.
 
+During Chrome materialization, a computed JSON value that still contains live
+card instances refuses with `Lattice output contains a live card` and its field
+path. The owner stays pending; no empty-object output is published. Project the
+needed data explicitly, for example `{ rows: [.entries[] | { amount: .amount }] }`
+instead of `{ rows: .entries }`. Valid projections work without native review.
+The focused regression is `TEST_FILES=lattice-native-port-refusal-test`.
+
 Declare `static linkInputs` for every link read by a native computation, including
 nested reads. If an ordinary source card's native attempt rejects an undeclared
 input or unsupported computed output, indexing falls back to the existing Chrome

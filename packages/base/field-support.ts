@@ -1,4 +1,5 @@
 import {
+  currentLatticeInputSnapshot,
   getField,
   isBaseInstance,
   isCardInstance,
@@ -1177,7 +1178,36 @@ export function serializedGet<CardT extends BaseDefConstructor>(
       `tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`,
     );
   }
-  return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
+  let resource = field.serialize(
+    peekAtField(model, fieldName),
+    doc,
+    visited,
+    opts,
+  );
+  if (field.computeVia && currentLatticeInputSnapshot()) {
+    // Check after the field's serializer, before merging/stringifying can turn
+    // live instances in JSON-valued computations into apparently valid {}.
+    assertLatticeOutputData(resource.attributes, 'attributes', new WeakSet());
+  }
+  return resource;
+}
+
+function assertLatticeOutputData(
+  value: unknown,
+  path: string,
+  seen: WeakSet<object>,
+): void {
+  if (value === null || typeof value !== 'object') return;
+  if (isBaseInstance in value) {
+    throw new Error(
+      `Lattice output contains a live card at ${path}; use an explicit data projection`,
+    );
+  }
+  if (seen.has(value)) return;
+  seen.add(value);
+  for (let [key, child] of Object.entries(value)) {
+    assertLatticeOutputData(child, `${path}.${key}`, seen);
+  }
 }
 
 type Scalar =
