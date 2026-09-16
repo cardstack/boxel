@@ -52,12 +52,15 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // response. `deviceScaleFactor` is the effective scale: the engine-reported
 // factor when the capture just ran, else the spec's declared override on a
 // ledger serve (which has no engine report), else null at the default scale.
+// `pageCount` describes a paged (pdf) capture, which has no pixel extent —
+// its `width`/`height` are null — and is absent on a raster one.
 interface CaptureResult {
   name: string | null;
   url: string | null;
   width: number | null;
   height: number | null;
   deviceScaleFactor: number | null;
+  pageCount?: number;
   base64?: string;
 }
 
@@ -476,15 +479,22 @@ export default function handleScreenshotCard({
         // byte-only entries have no durable served URL. Normalize them into the
         // one captures[] shape callers build on — url: null marks "no durable
         // reference, embed the base64" — so captures[i].url is never a
-        // silently-undefined read. Honors the base64 opt-out here too.
-        attributes.captures = result.captures.map((c) => ({
-          name: c.name,
-          url: null,
-          width: c.width ?? null,
-          height: c.height ?? null,
-          deviceScaleFactor: c.deviceScaleFactor ?? null,
-          ...(withBase64 && c.base64 !== undefined ? { base64: c.base64 } : {}),
-        }));
+        // silently-undefined read. Honors the base64 opt-out here too. A paged
+        // capture carries its page count instead of the pixel extent it does
+        // not have — the same count the engine bounds the document against.
+        attributes.captures = result.captures.map(
+          (c): CaptureResult => ({
+            name: c.name,
+            url: null,
+            width: c.width ?? null,
+            height: c.height ?? null,
+            deviceScaleFactor: c.deviceScaleFactor ?? null,
+            ...(c.pageCount !== undefined ? { pageCount: c.pageCount } : {}),
+            ...(withBase64 && c.base64 !== undefined
+              ? { base64: c.base64 }
+              : {}),
+          }),
+        );
       }
       if (entryKey && spec && result.status === 'ready') {
         // A canonical capture persisted under its ledger identity: replace

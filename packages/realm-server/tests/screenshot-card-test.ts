@@ -1092,7 +1092,10 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    function makePersistQueue(behavior: 'ready' | 'never' | 'reject'): {
+    function makePersistQueue(
+      behavior: 'ready' | 'never' | 'reject',
+      ready: ScreenshotPrerenderResponse = READY,
+    ): {
       queue: QueuePublisher;
       published: Array<QueuePublishArgs<unknown>>;
     } {
@@ -1105,7 +1108,7 @@ module(basename(import.meta.filename), function () {
           published.push(args as QueuePublishArgs<unknown>);
           let notifier = new Deferred<TResult>();
           if (behavior === 'ready') {
-            notifier.fulfill(READY as unknown as TResult);
+            notifier.fulfill(ready as unknown as TResult);
           } else if (behavior === 'reject') {
             notifier.reject(new Error('job rejected'));
           }
@@ -1609,6 +1612,58 @@ module(basename(import.meta.filename), function () {
       );
       let attrs = response.body.data.attributes;
       assert.false('captures' in attrs, 'no served URL for a pdf capture');
+    });
+
+    test('a pdf capture reports its page count where a raster one reports dimensions', async function (assert) {
+      // A paged document has no single pixel extent, so the page count the
+      // engine bounds it against is the only extent the caller can read — and
+      // this surface is the only one pdf reaches.
+      await seedInstanceRow();
+      let pdfBase64 = Buffer.from('%PDF-1.4 fake-paged-bytes').toString(
+        'base64',
+      );
+      let { queue } = makePersistQueue('ready', {
+        status: 'ready',
+        base64: pdfBase64,
+        contentType: 'application/pdf',
+        captures: [
+          {
+            name: 'default',
+            base64: pdfBase64,
+            deviceScaleFactor: 1,
+            pageCount: 3,
+          },
+        ],
+      });
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { type: 'pdf' },
+      }).expect(201);
+
+      let attrs = response.body.data.attributes;
+      assert.strictEqual(
+        attrs.contentType,
+        'application/pdf',
+        'the response declares the paged encoding',
+      );
+      assert.deepEqual(
+        attrs.captures,
+        [
+          {
+            name: 'default',
+            url: null,
+            width: null,
+            height: null,
+            deviceScaleFactor: 1,
+            pageCount: 3,
+            base64: pdfBase64,
+          },
+        ],
+        'the page count rides out with the bytes, and no pixel extent is invented',
+      );
     });
 
     test('a target capture is capture-only: no persist identity, no served URL', async function (assert) {
