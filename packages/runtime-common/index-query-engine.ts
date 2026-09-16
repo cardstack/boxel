@@ -206,10 +206,11 @@ export interface IndexedFile {
 }
 
 // What link expansion reads off a side-loaded link target. Deliberately not
-// an `IndexedInstance`: that shape promises the prerendered formats and the
-// search doc, and a read that selects them on this path fetches bytes no
-// caller can have asked for. A narrower type is what keeps the next caller
-// from quietly depending on fields this read does not fetch.
+// an `IndexedInstance`: that shape promises the prerendered formats, the
+// search doc and both dependency graphs, and a read that selects them on
+// this path fetches bytes no caller can have asked for. A narrower type is
+// what keeps the next caller from quietly depending on fields this read does
+// not fetch.
 export interface LinkTargetInstance {
   // The row's own spelling of its URL — a lookup may have addressed it by
   // `file_alias`, and the resource's local path is derived from this.
@@ -419,9 +420,14 @@ export class IndexQueryEngine {
   // populated from the `item` full projection alone. The `html` fieldset is
   // served by the separate render-set projection, which joins
   // `prerendered_html` itself and never reaches this code. So on this path a
-  // caller cannot have asked for prerendered HTML — selecting the six format
-  // columns and the search doc fetches, on a realm of a few thousand
-  // instances, tens of KB per row to use about two.
+  // caller cannot have asked for prerendered HTML.
+  //
+  // A `SELECT i.*` costs more than those formats, though: it also drags
+  // `deps` and `last_known_good_deps`, which hold a few hundred dependency
+  // URLs apiece and dwarf everything else on the row. Measured over a realm
+  // of a couple of thousand instances, the wide shape moves roughly 660 KB
+  // per link target to use about 2 KB of it. Hence an explicit column list
+  // rather than a star — the cost is in what a star quietly includes.
   //
   // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
   // `i.file_alias`), matching rows on the same type/tombstone predicate
@@ -476,9 +482,25 @@ export class IndexQueryEngine {
         has_error: boolean | number | null;
       }[];
       for (let row of rows) {
-        // SQLite renders a boolean expression as 0/1, Postgres as a boolean.
-        if (!row.url || !row.pristine_doc || Boolean(row.has_error)) {
+        if (!row.url) {
           continue;
+        }
+        // Truthiness covers both adapters: SQLite renders a boolean
+        // expression as 0/1, Postgres as a boolean.
+        if (row.has_error) {
+          continue;
+        }
+        // An unerrored row is required to carry a document. Neither channel
+        // holding one leaves the row unrepresentable rather than merely
+        // unavailable, so it is reported instead of dropped — a dropped one
+        // is indistinguishable from a link whose target is legitimately gone,
+        // and would silently cost the document a relationship.
+        if (!row.pristine_doc) {
+          throw new Error(
+            `bug: index entry for ${row.url} with opts: ${stringify(
+              opts,
+            )} has neither an error_doc nor a pristine_doc`,
+          );
         }
         let target: LinkTargetInstance = {
           canonicalURL: row.url,

@@ -307,5 +307,120 @@ module(basename(import.meta.filename), function () {
         )}`,
       );
     });
+
+    // The narrow select is responsible for carrying the document itself, and
+    // a read that addressed the wrong row or dropped a column would still
+    // satisfy the count and SQL-shape assertions above. The singular read
+    // still fetches every column, so it stands in here as the reference.
+    test('a side-loaded target carries the document the singular read returns', async function (assert) {
+      let result = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: { module: rri(`${testRealm}source`), name: 'Source' },
+          },
+        },
+        { loadLinks: true },
+      );
+
+      let included = result.included ?? [];
+      assert.strictEqual(
+        included.length,
+        NUM_TARGETS,
+        `every target is side-loaded — ${NUM_TARGETS}`,
+      );
+
+      for (let resource of included) {
+        let reference = await realm.realmIndexQueryEngine.instance(
+          new URL(resource.id!),
+        );
+        assert.strictEqual(
+          reference?.type,
+          'instance',
+          `${resource.id} reads back as a live instance`,
+        );
+        let stored =
+          reference?.type === 'instance' ? reference.instance : undefined;
+        assert.deepEqual(
+          resource.attributes,
+          stored?.attributes,
+          `${resource.id} carries the stored attributes`,
+        );
+        assert.deepEqual(
+          (resource.meta as { adoptsFrom?: unknown }).adoptsFrom,
+          (stored?.meta as { adoptsFrom?: unknown } | undefined)?.adoptsFrom,
+          `${resource.id} carries the stored adoptsFrom`,
+        );
+      }
+    });
+
+    // Error state is the one thing the narrow read still derives from the
+    // prerendered_html join, which it keeps only for that. An errored target
+    // is left out of the closure, and the relationship naming it keeps the
+    // fallback form the document carries when a target cannot be resolved.
+    test('an errored link target is left out of the closure and its relationship falls back', async function (assert) {
+      let erroredURL = `${testRealm.href}target-1.json`;
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET has_error = TRUE, error_doc = $1 WHERE url = $2 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify({ status: 500, title: 'test-induced index error' }),
+            erroredURL,
+          ],
+        },
+      );
+
+      try {
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: { module: rri(`${testRealm}source`), name: 'Source' },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let included = result.included ?? [];
+        assert.strictEqual(
+          included.length,
+          NUM_TARGETS - 1,
+          `the errored target is the only one missing from the closure — ${
+            NUM_TARGETS - 1
+          } remain`,
+        );
+        assert.notOk(
+          included.some((r) => r.id?.endsWith('/target-1')),
+          'the errored target is absent from the closure',
+        );
+        assert.ok(
+          included.some((r) => r.id?.endsWith('/target-0')),
+          'its unerrored siblings are still assembled',
+        );
+
+        // The pointer survives even though the target does not: dropping it
+        // would cost the document a relationship it still declares.
+        let source = result.data.find((r) => r.id?.endsWith('/source-0'));
+        let fallback = (
+          source?.relationships as
+            | Record<string, { data?: { type?: string; id?: string } }>
+            | undefined
+        )?.link1?.data;
+        assert.strictEqual(
+          fallback?.type,
+          'card',
+          'the unresolved relationship still reports a card target',
+        );
+        assert.ok(
+          fallback?.id?.endsWith('/target-1'),
+          `and still names it, got ${fallback?.id}`,
+        );
+      } finally {
+        await testDbAdapter.execute(
+          `UPDATE boxel_index SET has_error = FALSE, error_doc = NULL WHERE url = $1 AND type = 'instance'`,
+          { bind: [erroredURL] },
+        );
+      }
+    });
   });
 });
