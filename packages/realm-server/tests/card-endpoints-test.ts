@@ -2607,10 +2607,90 @@ module(basename(import.meta.filename), function () {
               },
             });
 
-            // The ids the realm assigned to the side-loaded resources are read
-            // back below, from a GET of each one. The write response itself
-            // side-loads nothing — nothing consumes a write's link closure.
-            assert.notOk(json.included, 'the write side-loads nothing');
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-1`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    cardTitle: 'Jade',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-2`,
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-3`,
+                        type: 'card',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
           }
           {
             let response = await request
@@ -2671,10 +2751,53 @@ module(basename(import.meta.filename), function () {
               },
             });
 
-            // The ids the realm assigned to the side-loaded resources are read
-            // back below, from a GET of each one. The write response itself
-            // side-loads nothing — nothing consumes a write's link closure.
-            assert.notOk(json.included, 'the write side-loads nothing');
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
           }
           {
             let response = await request
@@ -3152,13 +3275,7 @@ module(basename(import.meta.filename), function () {
             line.includes('corr=write-timing-probe'),
             `line carries the caller's correlation id: ${line}`,
           );
-          for (let stage of [
-            'lock',
-            'drain',
-            'stage',
-            'write',
-            'readback',
-          ]) {
+          for (let stage of ['lock', 'drain', 'stage', 'write', 'readback']) {
             assert.ok(
               new RegExp(`\\b${stage}=\\d+`).test(line),
               `line attributes the ${stage} stage: ${line}`,
@@ -3501,9 +3618,15 @@ module(basename(import.meta.filename), function () {
 
         test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
           // Capture the pre-patch ETag, mutate the card, and verify the PATCH
-          // response advertises a *different* ETag for the new state — that's
-          // the contract that lets the caller cache the post-patch body
-          // without an extra round-trip GET.
+          // response advertises a different ETag for the new state.
+          //
+          // A write answers with the written card alone while a GET answers
+          // with its link closure, so the two are different representations of
+          // one card and take different validators. That is what the
+          // `write-echo` variant records, and it is why the ETag a PATCH
+          // returns does not short-circuit a later GET of the same URL: being
+          // 304'd on it would hand the caller a body with no `included[]` as
+          // though it were the GET representation.
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -3530,8 +3653,8 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${patchEtag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-write-echo"$/.test(patchEtag),
+            `PATCH ETag names the write-echo shape (got ${patchEtag})`,
           );
           assert.notStrictEqual(
             patchEtag,
@@ -3550,25 +3673,46 @@ module(basename(import.meta.filename), function () {
             200,
             'old ETag no longer matches → fresh 200',
           );
-          assert.strictEqual(
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(
+              staleResponse.get('etag') ?? '',
+            ),
+            `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
+          );
+          assert.notStrictEqual(
             staleResponse.get('etag'),
-            patchEtag,
-            'GET reports the new ETag',
+            originalEtag,
+            'and it advanced with the write',
           );
 
-          // And the new etag from the PATCH must short-circuit on next GET.
-          let cachedResponse = await request
+          // The PATCH's own validator describes the write echo, which carries
+          // no `included[]`, so it must not satisfy a GET — a 304 here would
+          // leave the caller holding the narrower body as the card's read
+          // representation.
+          let echoValidated = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json')
             .set('If-None-Match', patchEtag);
           assert.strictEqual(
+            echoValidated.status,
+            200,
+            'the write echo’s ETag does not short-circuit a GET',
+          );
+
+          // The GET's own validator still does.
+          let freshEtag = echoValidated.get('etag') ?? '';
+          let cachedResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', freshEtag);
+          assert.strictEqual(
             cachedResponse.status,
             304,
-            'new ETag from PATCH lets a follow-up GET short-circuit',
+            'the ETag a GET returns lets a follow-up GET short-circuit',
           );
         });
 
-        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+        test('no-op PATCH response carries the write-echo validator over the unchanged state', async function (assert) {
           // Prime once so the stored file is in canonical serialized form;
           // the no-op assertions below measure the steady state (see the
           // no-op lastModified test).
@@ -3608,10 +3752,20 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
+          // Nothing was rewritten, so `indexed_at` has not moved and the
+          // validator is built over the same state the GET described. It is
+          // still a different validator, because a no-op PATCH answers with
+          // the write-echo shape like any other write — which is what keeps a
+          // caller from treating the echo as the card's read representation.
           assert.strictEqual(
             patchResponse.get('etag'),
+            (initialEtag ?? '').replace(/:card-rri"$/, ':card-rri-write-echo"'),
+            'no-op PATCH validates the unchanged state under the write-echo shape',
+          );
+          assert.notStrictEqual(
+            patchResponse.get('etag'),
             initialEtag,
-            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
+            'and so does not collide with the validator a GET returns',
           );
         });
 
@@ -4090,10 +4244,90 @@ module(basename(import.meta.filename), function () {
               },
             });
 
-            // The ids the realm assigned to the side-loaded resources are read
-            // back below, from a GET of each one. The write response itself
-            // side-loads nothing — nothing consumes a write's link closure.
-            assert.notOk(json.included, 'the write side-loads nothing');
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-1`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    cardTitle: 'Jade',
+                    cardInfo,
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-2`,
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-3`,
+                        type: 'card',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    cardInfo,
+                    firstName: 'Germaine',
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    cardInfo,
+                    firstName: 'Boris',
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
           }
           {
             let response = await request
@@ -4154,10 +4388,53 @@ module(basename(import.meta.filename), function () {
               },
             });
 
-            // The ids the realm assigned to the side-loaded resources are read
-            // back below, from a GET of each one. The write response itself
-            // side-loads nothing — nothing consumes a write's link closure.
-            assert.notOk(json.included, 'the write side-loads nothing');
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
           }
           {
             let response = await request
@@ -4438,10 +4715,38 @@ module(basename(import.meta.filename), function () {
               },
             });
 
-            // The ids the realm assigned to the side-loaded resources are read
-            // back below, from a GET of each one. The write response itself
-            // side-loads nothing — nothing consumes a write's link closure.
-            assert.notOk(json.included, 'the write side-loads nothing');
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}FriendWithUsedLink/local-id-1`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    cardTitle: 'Jade',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
+                    cardInfo,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(
+                        'https://localhost:4202/node-test/friend-with-used-link',
+                      ),
+                      name: 'FriendWithUsedLink',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
           }
           {
             let response = await request
@@ -6196,7 +6501,7 @@ boxel:
         .send({
           data: {
             type: 'card',
-            attributes: { cardTitle: 'Renamed' },
+            attributes: { cardInfo: { name: 'Renamed' } },
             meta: {
               adoptsFrom: {
                 module: rri('./favorite-finder'),
@@ -6214,7 +6519,7 @@ boxel:
         'the write answers about the card it wrote',
       );
       assert.strictEqual(
-        write.body.data.attributes.cardTitle,
+        write.body.data.attributes.cardInfo.name,
         'Renamed',
         'and answers with the value it just stored',
       );

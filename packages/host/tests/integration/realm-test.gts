@@ -756,7 +756,6 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
     let id = json.data.id.split('/').pop()!;
-    let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
     let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
     assert.deepEqual(json, {
@@ -797,38 +796,6 @@ module('Integration | realm', function (hooks) {
           self: `${testRealmURL}Pet/${id}`,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/owner`,
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/owner.json`,
-            ),
-            resourceCreatedAt: ownerCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `./owner`,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile(`Pet/${id}.json`);
     if (!fileRef) {
@@ -1270,8 +1237,6 @@ module('Integration | realm', function (hooks) {
       },
     });
     let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
-    let friendCreatedAt = await getFileCreatedAt(realm, 'dir/friend.json');
-    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/van-gogh.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}jackie`, {
@@ -1344,63 +1309,6 @@ module('Integration | realm', function (hooks) {
           resourceCreatedAt: resourceCreatedAt!,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/friend`,
-          links: { self: `./friend` },
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/friend.json`,
-            ),
-            resourceCreatedAt: friendCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-        },
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `./van-gogh` },
-          attributes: {
-            firstName: 'Van Gogh',
-            cardTitle: 'Van Gogh',
-            cardDescription: null,
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/van-gogh.json`,
-            ),
-            resourceCreatedAt: vanGoghCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile('jackie.json');
     if (!fileRef) {
@@ -2271,7 +2179,6 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
-    let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2310,38 +2217,6 @@ module('Integration | realm', function (hooks) {
           self: `${testRealmURL}dir/mango`,
         },
       },
-      included: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Mariko Abdel-Rahman',
-            cardTitle: 'Mariko Abdel-Rahman',
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/mariko.json`,
-            ),
-            resourceCreatedAt: marikoCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `./mariko`,
-          },
-        },
-      ],
     });
     let fileRef = await adapter.openFile('dir/mango.json');
     if (!fileRef) {
