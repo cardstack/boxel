@@ -618,6 +618,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   virtualNetwork,
   queuePublisher,
   createPrerenderAuth,
+  skipPrerenderHtmlRealms,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, changes, realmURL } = args;
@@ -662,6 +663,13 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         generation,
         loaderEpoch,
       }) => {
+        if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
+          log.info(
+            `${jobIdentity(jobInfo)} not spawning prerender_html for ${realmURL}: ` +
+              `the realm is listed in --skipPrerenderHtmlRealm`,
+          );
+          return;
+        }
         let changes = htmlChanges.map(({ url, operation }) => ({
           url,
           operation,

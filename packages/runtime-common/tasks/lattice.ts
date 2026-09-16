@@ -1,4 +1,7 @@
-import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
+import {
+  enqueuePrerenderHtmlJob,
+  skipsPrerenderHtml,
+} from '../jobs/prerender-html.ts';
 import { enqueueLattice } from '../jobs/lattice.ts';
 import type { Task, WorkerArgs } from './index.ts';
 import { LatticeWorkFailed } from '../lattice-work.ts';
@@ -34,6 +37,7 @@ export const latticeMaterialize: Task<
     reportStatus,
     reportRealmEvent,
     log,
+    skipPrerenderHtmlRealms,
   }) =>
   async (args) => {
     let { realmURL, realmUsername, jobInfo } = args;
@@ -121,7 +125,16 @@ export const latticeMaterialize: Task<
         generation: result.generation,
       });
     }
-    if (result.invalidations.length) {
+    if (
+      result.invalidations.length &&
+      skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)
+    ) {
+      // Configured off for this realm, the same way the indexer treats it.
+      log.info(
+        `not spawning prerender_html for ${realmURL} after Lattice publication: ` +
+          `the realm is listed in --skipPrerenderHtmlRealm`,
+      );
+    } else if (result.invalidations.length) {
       await enqueuePrerenderHtmlJob(queuePublisher, {
         realmURL,
         realmUsername,

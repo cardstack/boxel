@@ -717,24 +717,23 @@ export class LatticeQueryRegistry
     // Retained concrete reads cover declared links and getters that consume an
     // input without declaring a query. Match card aliases as well as .json URLs;
     // module/CSS dependencies cannot become work nodes in this owner-only join.
+    // Set-based on the dependency list: each dirty owner's deps join the
+    // dirty owners by equality. The former dirty-owner × dirty-owner form
+    // (`i.deps ?| ARRAY[...]` per pair) took over two seconds per wave with
+    // 1,100 dirty owners, which every single-owner wave paid again.
     const edges = await query(this.db, [
-      `SELECT i.url AS owner_url, d.owner_url AS input_url FROM boxel_index i
-       JOIN lattice_owners o ON o.realm_url=i.realm_url AND o.owner_url=i.url
-       JOIN lattice_owners d ON d.realm_url=o.realm_url
+      `SELECT DISTINCT i.url AS owner_url, d.owner_url AS input_url FROM boxel_index i
+       JOIN lattice_owners o ON o.realm_url=i.realm_url AND o.owner_url=i.url`,
+      dbExpression({
+        pg: [`CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) dep`],
+        sqlite: [`CROSS JOIN json_each(i.deps) dep`],
+      }),
+      `JOIN lattice_owners d ON d.realm_url=o.realm_url
+         AND (d.owner_url=dep.value OR d.owner_url=dep.value||'.json')
        WHERE o.realm_url=`,
       param(realmURL),
       `AND i.type='instance' AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-       AND d.retired=FALSE AND d.dirty_generation IS NOT NULL AND (`,
-      dbExpression({
-        pg: [
-          `i.deps ?| ARRAY[d.owner_url,regexp_replace(d.owner_url,'\\.json$','')]`,
-        ],
-        sqlite: [
-          `EXISTS (SELECT 1 FROM json_each(i.deps) dep WHERE dep.value=d.owner_url
-           OR dep.value=substr(d.owner_url,1,length(d.owner_url)-5))`,
-        ],
-      }),
-      ')',
+       AND d.retired=FALSE AND d.dirty_generation IS NOT NULL`,
     ]);
     for (const edge of edges)
       inputs.get(String(edge.owner_url))?.add(String(edge.input_url));

@@ -591,6 +591,8 @@ export async function startIsolatedRealmStack({
   prerenderURL: explicitPrerenderURL,
   noCompatProxy,
   publicPortReservation: explicitPublicPortReservation,
+  skipPrerenderHtmlRealms,
+  workerLanes,
 }: {
   realms: RealmConfig[];
   realmServerURL: URL;
@@ -598,6 +600,18 @@ export async function startIsolatedRealmStack({
   context: FactorySupportContext;
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
+  /** Realm URLs whose workers skip the Chrome HTML prerender jobs (the
+   *  worker's `--skipPrerenderHtmlRealm`); the index visit still runs. */
+  skipPrerenderHtmlRealms?: string[];
+  /** Worker-manager lane sizes (`--allPriorityCount`, `--highPriorityCount`,
+   *  `--userIndexCount`, `--latticeCount`); omitted lanes keep the
+   *  worker-manager defaults. */
+  workerLanes?: {
+    allPriorityCount?: number;
+    highPriorityCount?: number;
+    userIndexCount?: number;
+    latticeCount?: number;
+  };
   /** When provided, the worker-manager will listen on this port instead of
    *  picking one dynamically. This lets callers know the port upfront (e.g.
    *  for progress monitoring via /_indexing-status). Pass a `PortReservation`
@@ -875,6 +889,12 @@ export async function startIsolatedRealmStack({
     }
     if (migrateDB) {
       workerArgs.splice(5, 0, '--migrateDB');
+    }
+    for (let realmURL of skipPrerenderHtmlRealms ?? []) {
+      workerArgs.push(`--skipPrerenderHtmlRealm=${realmURL}`);
+    }
+    for (let [lane, count] of Object.entries(workerLanes ?? {})) {
+      if (count !== undefined) workerArgs.push(`--${lane}=${count}`);
     }
 
     // Worker-manager spawn with one EADDRINUSE retry. The retry only
