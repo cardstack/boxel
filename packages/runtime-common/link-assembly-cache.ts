@@ -11,16 +11,16 @@ export const LINK_ASSEMBLY_CACHE_CHANNEL = 'boxel:link-assembly-cache';
 
 // The retention window has to cover the span over which one page load's
 // searches arrive, plus the gap to the next load that reaches the same cards.
-// The classroom dashboard's load settles to quiescence in ~12 s and issues its
-// searches throughout, and a person paging around a realm comes back to the
-// same staff / student / theme cards within seconds of that. A minute covers
-// both with room to spare, and costs nothing when it is longer than it needs
-// to be: the key is a freshness fingerprint, so an entry a write supersedes
-// becomes unreachable at that moment rather than at its expiry.
+// A dashboard-shaped load settles to quiescence in roughly twelve seconds and
+// issues its searches throughout, and a person moving around a realm comes
+// back to the same heavily-linked cards within seconds of that. A minute
+// covers both with room to spare, and costs nothing when it is longer than it
+// needs to be: the key is a freshness fingerprint, so an entry a write
+// supersedes becomes unreachable at that moment rather than at its expiry.
 const DEFAULT_TTL_MS = 60_000;
-// A single dashboard load assembles ~5 MB of link closure over its searches,
-// of which ~2 MB is the cards more than one search reaches. The cap is what
-// bounds heap under many realms at once, and is set to match the sibling
+// A single dashboard-shaped load assembles ~5 MB of link closure over its
+// searches, of which ~2 MB is cards more than one search reaches. The cap is
+// what bounds heap under many realms at once, and is set to match the sibling
 // caches (`CardDocumentCache`, `LiveSearchCache`) so one realm-server's three
 // response caches share one order of magnitude rather than three.
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
@@ -35,10 +35,10 @@ export type LinkAssemblyCacheSummary = ResponseCacheSummary;
 // `visited` set and the per-layer batched lookup see to that — and not at all
 // ACROSS invocations. One dashboard render issues many searches whose results
 // link heavily to the same cards, and each search reads, walks, clones and
-// absolutizes its own copy of every one of them. Measured on a Tessar-shaped
-// realm, eight searches at a page size of 100 produced 1,513 included
-// resources of which only 868 were distinct, and eight cards were assembled
-// eight times out of eight.
+// absolutizes its own copy of every one of them. On a measured dashboard
+// workload, eight searches at a page size of 100 produced 1,513 included
+// resources of which only 868 were distinct, and eight of those cards were
+// assembled once per search, eight times out of eight.
 //
 // **This shares assembly, never responses.** An entry is one resource, not one
 // document: every response still walks its own closure and still carries every

@@ -8,7 +8,7 @@ import {
   type ScreenshotManifest,
 } from '@cardstack/runtime-common';
 
-const target = 'http://localhost:4202/test/staff/dr-patel';
+const target = 'http://localhost:4202/test/staff/staff-1';
 
 function key(overrides?: Partial<LinkAssemblyKey>): LinkAssemblyKey {
   return {
@@ -51,11 +51,11 @@ module(basename(import.meta.filename), function () {
         undefined,
         'nothing is held before the first assembly',
       );
-      cache.set(key(), '{"id":"dr-patel"}');
+      cache.set(key(), '{"id":"staff-1"}');
 
       assert.strictEqual(
         cache.get(key()),
-        '{"id":"dr-patel"}',
+        '{"id":"staff-1"}',
         'the second search reads the first search’s bytes',
       );
       assert.strictEqual(cache.stats.hits, 1, 'one assembly was spared');
