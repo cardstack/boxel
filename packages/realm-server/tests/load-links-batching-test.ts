@@ -183,5 +183,129 @@ module(basename(import.meta.filename), function () {
         dbExecute.execute = originalExecute;
       }
     });
+
+    // The only place this is observable. The response is byte-identical either
+    // way, so nothing asserted on the body can tell a read that fetches every
+    // prerendered format from one that fetches none — the emitted SQL can.
+    test('the link-target read fetches the stored document and none of the rendered output', async function (assert) {
+      let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
+      let dbExecute = testDbAdapter as {
+        execute: typeof testDbAdapter.execute;
+      };
+      let targetPrefix = `${testRealm.href}target-`;
+      let linkTargetSelects: string[] = [];
+
+      try {
+        dbExecute.execute = async (sql, opts) => {
+          let bind = opts?.bind ?? [];
+          let normalized = sql.replace(/\s+/g, ' ');
+          if (
+            /FROM boxel_index\b/.test(normalized) &&
+            /\bi\.url\s+IN\s*\(/.test(normalized) &&
+            bind.some((v) => v === 'instance') &&
+            bind.some(
+              (v) => typeof v === 'string' && v.startsWith(targetPrefix),
+            )
+          ) {
+            linkTargetSelects.push(normalized.split(' FROM ')[0]);
+          }
+          return originalExecute(sql, opts);
+        };
+
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: { module: rri(`${testRealm}source`), name: 'Source' },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let includedCount = result.included?.length ?? 0;
+        assert.strictEqual(
+          includedCount,
+          NUM_TARGETS,
+          `the closure is still assembled in full — ${NUM_TARGETS} targets`,
+        );
+        assert.ok(
+          linkTargetSelects.length > 0,
+          `the link targets were read in a batch, got ${linkTargetSelects.length} such queries`,
+        );
+
+        // `loadLinks` expands only the `item` full projection; the `html`
+        // fieldset is served by the render-set projection, which never reaches
+        // this read. So a caller here cannot have asked for rendered output.
+        for (let select of linkTargetSelects) {
+          for (let column of [
+            'isolated_html',
+            'head_html',
+            'atom_html',
+            'embedded_html',
+            'fitted_html',
+            'markdown',
+            'search_doc',
+          ]) {
+            assert.notOk(
+              select.includes(column),
+              `the link-target read does not fetch ${column} — got: ${select}`,
+            );
+          }
+          assert.ok(
+            select.includes('pristine_doc'),
+            `the link-target read fetches the stored document — got: ${select}`,
+          );
+          assert.ok(
+            select.includes('screenshots'),
+            `and the declared-screenshot manifest it joins into meta — got: ${select}`,
+          );
+        }
+      } finally {
+        dbExecute.execute = originalExecute;
+      }
+    });
+
+    // The one prerendered_html column this read keeps. It travels on a channel
+    // the index row does not follow, so it is written here directly rather
+    // than captured, and read back through the side-loading path.
+    test('a side-loaded target still carries the declared-screenshot manifest joined into its meta', async function (assert) {
+      let targetURL = `${testRealm.href}target-0.json`;
+      let manifest = {
+        hero: {
+          specHash: 'spec-1',
+          objectKey: 'abc123',
+          contentType: 'image/png',
+          width: 100,
+          height: 100,
+          deviceScaleFactor: 1,
+        },
+      };
+      await testDbAdapter.execute(
+        `UPDATE prerendered_html SET screenshots = $1 WHERE url = $2 AND type = 'instance'`,
+        { bind: [JSON.stringify(manifest), targetURL] },
+      );
+
+      let result = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: { module: rri(`${testRealm}source`), name: 'Source' },
+          },
+        },
+        { loadLinks: true },
+      );
+
+      let target = result.included?.find((r) => r.id?.endsWith('/target-0'));
+      assert.ok(target, 'the target is side-loaded');
+      let screenshots = (
+        target?.meta as { screenshots?: Record<string, unknown> } | undefined
+      )?.screenshots;
+      assert.ok(
+        screenshots?.hero,
+        `the manifest reaches the side-loaded resource's meta, got ${JSON.stringify(
+          screenshots,
+        )}`,
+      );
+    });
   });
 });

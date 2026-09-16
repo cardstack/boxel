@@ -215,15 +215,17 @@ module('Unit | prerendered-html read path', function (hooks) {
       'getInstance serves markdown from prerendered_html',
     );
 
-    let batched = await indexQueryEngine.getInstances([
+    // The batched link-target read deliberately serves none of the format
+    // columns — link expansion cannot have been asked for them — so it is
+    // asserted on the side-loading path rather than here.
+    let batched = await indexQueryEngine.getLinkTargetInstances([
       new URL(`${testRealmURL}1`),
       new URL(`${testRealmURL}2`),
     ]);
-    let mango = batched.get(`${testRealmURL}2`) as IndexedInstance;
     assert.strictEqual(
-      mango.isolatedHtml,
-      `<div class="isolated">Mango</div>`,
-      'getInstances serves isolated_html from prerendered_html',
+      batched.get(`${testRealmURL}2`)?.canonicalURL,
+      `${testRealmURL}2`,
+      'getLinkTargetInstances addresses a row by the URL it was asked for',
     );
 
     let file = await indexQueryEngine.getFile(

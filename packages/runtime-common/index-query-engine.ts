@@ -205,6 +205,24 @@ export interface IndexedFile {
   indexedAt: number | null;
 }
 
+// What link expansion reads off a side-loaded link target. Deliberately not
+// an `IndexedInstance`: that shape promises the prerendered formats and the
+// search doc, and a read that selects them on this path fetches bytes no
+// caller can have asked for. A narrower type is what keeps the next caller
+// from quietly depending on fields this read does not fetch.
+export interface LinkTargetInstance {
+  // The row's own spelling of its URL — a lookup may have addressed it by
+  // `file_alias`, and the resource's local path is derived from this.
+  canonicalURL: string;
+  // The stored card resource, as `pristine_doc` holds it: relationships
+  // carrying relative `links.self` and no `data`, which link expansion
+  // resolves and rewrites.
+  resource: CardResource;
+  // Rides the prerendered_html channel and is joined into the side-loaded
+  // resource's `meta`, so it is read here even though the formats are not.
+  screenshots: ScreenshotManifest | null;
+}
+
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
@@ -393,14 +411,29 @@ export class IndexQueryEngine {
     return this.#rowToInstanceOrError(result[0], url, opts);
   }
 
-  // Batch variant of getInstance: one DB round-trip for many URLs.
-  // Returns a map keyed by the LOOKUP URL (matching either i.url or i.file_alias)
-  // so callers can address results by the URL they passed in.
-  async getInstances(
+  // Batch read of the link targets `loadLinks` side-loads, selecting what link
+  // expansion actually consumes and nothing else.
+  //
+  // The wide `getInstance` shape is the wrong one here, and not merely
+  // wasteful: `loadLinks` only ever expands `fullItemRoots`, which is
+  // populated from the `item` full projection alone. The `html` fieldset is
+  // served by the separate render-set projection, which joins
+  // `prerendered_html` itself and never reaches this code. So on this path a
+  // caller cannot have asked for prerendered HTML — selecting the six format
+  // columns and the search doc fetches, on a realm of a few thousand
+  // instances, tens of KB per row to use about two.
+  //
+  // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
+  // `i.file_alias`), matching rows on the same type/tombstone predicate
+  // `getInstance` uses. A row that is absent, deleted, or errored on either
+  // channel is simply not in the map — which is what link expansion does with
+  // one anyway: it leaves the relationship naming a target the document does
+  // not carry.
+  async getLinkTargetInstances(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, InstanceOrError>> {
-    let resultMap = new Map<string, InstanceOrError>();
+  ): Promise<Map<string, LinkTargetInstance>> {
+    let resultMap = new Map<string, LinkTargetInstance>();
     if (urls.length === 0) {
       return resultMap;
     }
@@ -415,7 +448,13 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // `screenshots` rides the prerendered_html channel and IS consumed —
+        // it is joined into the side-loaded resource's `meta`. The error
+        // expression reads `ph.error_doc` / `ph.generation`, so the join stays
+        // even though every format column is gone.
+        `SELECT i.url, i.file_alias, i.pristine_doc,
+                ph.screenshots AS screenshots,
+                ${effectiveHasError()} AS has_error`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -429,19 +468,30 @@ export class IndexQueryEngine {
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: CardResource | null;
+        screenshots: ScreenshotManifest | null;
+        has_error: boolean | number | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToInstanceOrError(row, undefined, opts);
-        if (!mapped) {
+        // SQLite renders a boolean expression as 0/1, Postgres as a boolean.
+        if (!row.url || !row.pristine_doc || Boolean(row.has_error)) {
           continue;
         }
+        let target: LinkTargetInstance = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc,
+          screenshots: row.screenshots ?? null,
+        };
         // A row may be addressable by its url or its file_alias.
         // Index the result under whichever lookup keys the caller asked about.
-        if (row.url && chunkSet.has(row.url)) {
-          resultMap.set(row.url, mapped);
+        if (chunkSet.has(row.url)) {
+          resultMap.set(row.url, target);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
-          resultMap.set(row.file_alias, mapped);
+          resultMap.set(row.file_alias, target);
         }
       }
     }
@@ -557,7 +607,7 @@ export class IndexQueryEngine {
     return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
   }
 
-  // Shared row → InstanceOrError mapping for getInstance / getInstances.
+  // Shared row → InstanceOrError mapping for getInstance.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(
     maybeResult: IndexRowWithHtml | undefined,
@@ -671,7 +721,7 @@ export class IndexQueryEngine {
       return resultMap;
     }
     let lookupHrefs = [...new Set(urls.map((u) => u.href))];
-    // Same chunking discipline as getInstances — keeps placeholder count
+    // Same chunking discipline as getLinkTargetInstances — keeps placeholder count
     // safely below the sqlite/pg parameter limits.
     let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
     for (let start = 0; start < lookupHrefs.length; start += chunkSize) {

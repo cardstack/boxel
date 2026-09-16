@@ -19,6 +19,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type InstanceOrError,
+  type LinkTargetInstance,
   type IndexedFile,
   type DefinitionLookup,
   type ResolvedCodeRef,
@@ -2031,17 +2032,17 @@ export class RealmIndexQueryEngine {
       // per kind (instances + file-meta); cross-realm links fan out one
       // fetch per unique URL via Promise.all alongside the DB round-trips.
       let batchStart = Date.now();
-      let instanceMap: Map<string, InstanceOrError>;
+      let instanceMap: Map<string, LinkTargetInstance>;
       let fileMap: Map<string, IndexedFile>;
       let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
-            ? this.#indexQueryEngine.getInstances(
+            ? this.#indexQueryEngine.getLinkTargetInstances(
                 [...inRealmCardURLs].map((u) => new URL(u)),
                 opts,
               )
-            : Promise.resolve(new Map<string, InstanceOrError>()),
+            : Promise.resolve(new Map<string, LinkTargetInstance>()),
           inRealmFileURLs.size > 0
             ? this.#indexQueryEngine.getFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
@@ -2113,9 +2114,12 @@ export class RealmIndexQueryEngine {
             entry.expectsCard ||
             (!entry.relationshipType && !entry.expectsFileMeta)
           ) {
+            // Absent means no live, unerrored row — the read leaves those out,
+            // which is the same outcome the wide shape reached by mapping them
+            // to an error entry this branch then skipped.
             let maybeResult = instanceMap.get(entry.linkURL.href);
-            if (maybeResult?.type === 'instance') {
-              linkResource = maybeResult.instance;
+            if (maybeResult) {
+              linkResource = maybeResult.resource;
               // Join the linked instance's declared-screenshot manifest into
               // its `meta`, mirroring what the serving realm's own card+json
               // GET stamps — a cross-realm link gets the same key from that
