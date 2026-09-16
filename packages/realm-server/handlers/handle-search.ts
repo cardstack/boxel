@@ -37,10 +37,18 @@ import {
 } from '../middleware/multi-realm-authorization.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
-import { fetchRealmGenerations } from '../job-scoped-search-cache.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import { LiveSearchCache } from '../live-search-cache.ts';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import {
+  resolveSearchGenerations,
+  warmSearchTypeWatermarkKeys,
+} from '../search-type-watermarks.ts';
+import type {
+  CodeRef,
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
@@ -70,6 +78,11 @@ export default function handleSearch(opts: {
   // Reads each searched realm's generation fingerprints (the freshness signal
   // the live-search cache keys on). Required — every route wiring passes it.
   dbAdapter: DBAdapter;
+  // Resolves a query's type anchors to the `realm_type_generations` keys the
+  // live-search cache key is scoped by. The process-wide network every realm
+  // is mounted on, so a module named by prefix, real URL or virtual alias
+  // normalizes to the one spelling the indexer stamps.
+  virtualNetwork: VirtualNetwork;
   // Injectable per test; when unset the handler builds one with production
   // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
   // off) to make two sequential callers each compute.
@@ -80,7 +93,7 @@ export default function handleSearch(opts: {
   // the fan-out builds its own opts rather than reading them off a realm.
   liveReadsResolveLinksOnly?: boolean;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let { reconciler, searchCache, dbAdapter } = opts;
+  let { reconciler, searchCache, dbAdapter, virtualNetwork } = opts;
   let liveReadsResolveLinksOnly = opts.liveReadsResolveLinksOnly ?? false;
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
@@ -324,7 +337,25 @@ export default function handleSearch(opts: {
         recordCacheOutcome: (outcome) => {
           cacheOutcome = outcome;
         },
-        liveSearch: { cache: liveSearchCache, dbAdapter },
+        liveSearch: {
+          cache: liveSearchCache,
+          dbAdapter,
+          virtualNetwork,
+          typeAnchors: parsed.typeAnchors,
+          // Only realms this process already holds. Resolving an anchor's
+          // canonical spelling must never be the thing that forces a mount —
+          // this request may well be a cache hit, which skips mounting
+          // entirely.
+          mountedRealm: () => {
+            for (let url of realmList) {
+              let realm = reconciler.mounted.get(url);
+              if (realm) {
+                return realm;
+              }
+            }
+            return undefined;
+          },
+        },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A bounded search
@@ -387,7 +418,13 @@ async function respondWithJobScopedSearchCache(
     // Which cache, if any, answered — reported before the response is sent so
     // the telemetry emitted alongside it carries the outcome.
     recordCacheOutcome?: (outcome: SearchShapeCacheOutcome) => void;
-    liveSearch?: { cache: LiveSearchCache; dbAdapter: DBAdapter };
+    liveSearch?: {
+      cache: LiveSearchCache;
+      dbAdapter: DBAdapter;
+      virtualNetwork: VirtualNetwork;
+      typeAnchors: CodeRef[] | undefined;
+      mountedRealm: () => Realm | undefined;
+    };
   },
 ): Promise<void> {
   let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
@@ -453,17 +490,32 @@ async function respondWithJobScopedSearchCache(
 
   // The live (non-indexer) path: coalesce identical concurrent requests and
   // serve a short-TTL cache. The key folds in each realm's generation
-  // fingerprints — the same freshness device the job-scoped key uses above —
-  // so any index or prerendered-HTML swap on a searched realm changes the key
-  // and the next request recomputes; the TTL only bounds retention.
+  // fingerprints, scoped to the types this query's filter is anchored on — so
+  // a swap on one of those types changes the key and the next request
+  // recomputes, while a swap on a type the query cannot match leaves the entry
+  // reachable. A query with no readable anchors, and one whose anchors have
+  // not been resolved to their index keys yet, take the realm-wide
+  // generation, which every index batch advances. See
+  // `resolveSearchGenerations` for what the scoped key does and does not
+  // cover; for a change outside the anchors the TTL is the staleness bound
+  // rather than merely a retention bound.
   // Authorization is realm-scoped and was validated for this exact realm list
   // by `multiRealmAuthorization` before the handler ran, so a body computed
   // for one caller is byte-identical to what any other authorized caller
   // would compute.
   if (args.liveSearch) {
-    let generations = await fetchRealmGenerations(
+    // Off the critical path: resolves the anchors whose keys are cold or aged
+    // out so a later request is scoped, and never blocks this one.
+    warmSearchTypeWatermarkKeys({
+      anchors: args.liveSearch.typeAnchors,
+      virtualNetwork: args.liveSearch.virtualNetwork,
+      mountedRealm: args.liveSearch.mountedRealm,
+    });
+    let generations = await resolveSearchGenerations(
       args.liveSearch.dbAdapter,
       realms,
+      args.liveSearch.typeAnchors,
+      args.liveSearch.virtualNetwork,
     );
     let { body, outcome } = await args.liveSearch.cache.getOrPopulate({
       realms,

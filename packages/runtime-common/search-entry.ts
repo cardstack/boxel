@@ -150,6 +150,12 @@ export interface SearchEntryQuery {
   realms?: string[];
   cardUrls?: string[];
   scope?: SearchEntryScope;
+  // The card types an entry must be one of to satisfy this query's filter, or
+  // `undefined` when the filter admits an entry of any type — see
+  // `wireFilterTypeAnchors`. Read off the wire filter, which carries the
+  // `item.on` anchors the translation to `itemQuery` spreads across `on` and
+  // `type`.
+  typeAnchors?: CodeRef[];
 }
 
 function invalidQuery(message: string): SearchRequestError {
@@ -684,6 +690,9 @@ export function parseSearchEntryQueryFromPayload(
     realms,
     cardUrls,
     scope,
+    typeAnchors: wireFilterTypeAnchors(
+      record.filter as SearchEntryWireFilter | undefined,
+    ),
   };
 }
 
