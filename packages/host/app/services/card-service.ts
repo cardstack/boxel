@@ -438,6 +438,14 @@ export default class CardService extends Service {
   // because of cards it merely links to, so validate each resource that will
   // actually become a file on its own — mirroring the realm's own per-file
   // `assertWriteSize` — rather than the whole request body.
+  //
+  // The client is deliberately the stricter of the two on one edge: the realm
+  // additionally skips (without error) any resource whose `meta.realmURL`
+  // names a different realm, so a foreign-realm `lid` side-load is measured
+  // here but silently dropped there. That shape is a request defect the realm
+  // currently swallows — a co-create the write will never perform — so
+  // refusing it client-side over size is acceptable, and matching the skip
+  // would mean reproducing a silent-drop behavior rather than a contract.
   private validateCardWriteSize(url: string, body: string) {
     let doc: LooseSingleCardDocument | undefined;
     try {

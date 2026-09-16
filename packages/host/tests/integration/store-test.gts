@@ -2240,6 +2240,37 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('an oversized unsaved link created alongside a card still fails the size check', async function (assert) {
+    // The counterpart that makes the per-resource filter load-bearing: a
+    // `lid`-bearing side-load becomes its own file on the realm, so it must
+    // keep being measured. If the check stopped measuring included members
+    // entirely, this save would sail through client-side and 413 on the
+    // realm instead.
+    let environmentService = getService('environment-service') as any;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    try {
+      environmentService.cardSizeLimitBytes = 2500;
+
+      let bigUnsaved = new PersonDef({ name: 'x'.repeat(6000) });
+      let instance = new PersonDef({ name: 'Small' });
+      (instance as any).bestFriend = bigUnsaved;
+
+      let result = await (storeService as any).persistAndUpdate(instance);
+      assert.false(
+        isCardInstance(result),
+        'the save is refused: the unsaved link is co-created as its own file and is over the ceiling',
+      );
+      assert.ok(
+        String((result as any)?.message).includes(
+          'exceeds maximum allowed size',
+        ),
+        `the error names the size limit (got: ${(result as any)?.message})`,
+      );
+    } finally {
+      environmentService.cardSizeLimitBytes = originalMaxSize;
+    }
+  });
+
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
     // Driven through `persistAndUpdate` rather than `save`, because the
     // autosave queue awaits the in-flight mutation before it saves at all —
