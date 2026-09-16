@@ -223,6 +223,20 @@ module(basename(import.meta.filename), function (hooks) {
     const first = await read(enabled);
     assert.strictEqual(first.status, 200);
     assert.strictEqual((await first.json()).included[0].attributes.value, 8);
+    const firstHead = (await enabled.handle(
+      new Request(enabledURL + 'root', {
+        method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardJson },
+      }),
+    ))!;
+    assert.strictEqual(firstHead.status, 200);
+    assert.strictEqual(firstHead.headers.get('cache-control'), 'no-store');
+    assert.strictEqual(
+      firstHead.headers.get('etag'),
+      null,
+      'HEAD does not issue a root-only validator either',
+    );
+    assert.strictEqual(await firstHead.text(), '');
     await publishChild(initialGeneration + 1, 9);
     const second = await read(enabled, 'root', {
       'If-None-Match': first.headers.get('etag') ?? '"previous-root-validator"',
@@ -235,6 +249,22 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await second.json()).included[0].attributes.value, 9);
     assert.strictEqual(second.headers.get('cache-control'), 'no-store');
     assert.strictEqual(second.headers.get('etag'), null);
+    const secondHead = (await enabled.handle(
+      new Request(enabledURL + 'root', {
+        method: 'HEAD',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'If-None-Match':
+            firstHead.headers.get('etag') ?? '"previous-root-validator"',
+        },
+      }),
+    ))!;
+    assert.strictEqual(
+      secondHead.status,
+      200,
+      'a changed child cannot receive a root-only HEAD 304',
+    );
+    assert.strictEqual(secondHead.headers.get('cache-control'), 'no-store');
     assert.deepEqual(
       await db.execute(
         'SELECT generation,indexed_at,pristine_doc FROM boxel_index WHERE file_alias=$1',
@@ -524,8 +554,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(latticeSQL(), []);
     assert.deepEqual(
       definitions,
-      [ordinaryURL + 'record'],
-      'main resolves the root definition while assembling ordinary links',
+      [ordinaryURL + 'record', ordinaryURL + 'record'],
+      'ordinary operation dispatch and link assembly still resolve the definition',
     );
   });
 
@@ -631,9 +661,9 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(doc.included[0].attributes, { value: 7 });
     assert.strictEqual(doc.included[0].meta.publication.state, 'ready');
     assert.deepEqual(
-      definitions,
-      [ordinaryURL + 'record'],
-      'the consumer does not recompute the remote publication',
+      [...new Set(definitions)],
+      [ordinaryURL + 'record', enabledURL + 'record'],
+      'operation dispatch and assembly read only the involved stored definitions',
     );
     assert.true(
       latticeSQL().length > 0,

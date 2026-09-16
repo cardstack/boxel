@@ -188,11 +188,22 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
+import { runOperation } from './card-operations/dispatch.ts';
 import type {
   OperationCore,
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
+import {
+  isDocumentResult,
+  isHeadResult,
+  isOperationFailure,
+  isSourceResult,
+  type OperationFailure,
+  type OperationResult,
+  type OperationSourceResult,
+} from './card-operations/types.ts';
+import { erroredTargetRow } from './card-operations/read.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
 import type {
   DeferredPrerenderHtml,
@@ -1895,14 +1906,41 @@ export class Realm {
       );
     }
 
+    // Realm discovery: a `HEAD` on any path, in any `Accept` bucket without a
+    // `HEAD` route of its own, answers with the realm-identity headers alone.
+    // It says nothing about whether the path names anything and asks nothing
+    // of the caller, which is what lets a client work out which realm serves a
+    // URL — and whether that realm is public — before it has credentials for
+    // it.
     Object.values(SupportedMimeType).forEach((mimeType) => {
-      if (mimeType !== SupportedMimeType.CardSource) {
+      if (
+        mimeType !== SupportedMimeType.CardSource &&
+        mimeType !== SupportedMimeType.CardJson
+      ) {
         this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
           let requestContext = await this.createRequestContext('read');
-          return createResponse({ init: { status: 200 }, requestContext });
+          return this.realmIdentityResponse(requestContext);
         });
       }
     });
+    // card+json is the one bucket where a `HEAD` is a read: a caller permitted
+    // to read gets the headers its `GET` would carry, and everyone else the
+    // discovery answer above.
+    //
+    // A `HEAD` is a read exactly where the `GET` is the card read, which is
+    // every card+json path but this one: `_search` answers a query rather than
+    // a card, so a `HEAD` of it keeps the discovery answer instead of
+    // reporting that the realm has no card there. Registered first, since the
+    // catch-all below would otherwise claim it.
+    this.#router.head('/_search', SupportedMimeType.CardJson, async () => {
+      let requestContext = await this.createRequestContext('read');
+      return this.realmIdentityResponse(requestContext);
+    });
+    this.#router.head(
+      '/.*',
+      SupportedMimeType.CardJson,
+      this.headCard.bind(this),
+    );
   }
 
   async logInToMatrix() {
@@ -4230,8 +4268,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, file) =>
-          this.#operationStoredFileMeta(localPath, file),
+        storedFileMeta: (localPath, file, opts) =>
+          this.#operationStoredFileMeta(localPath, file, opts),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -4250,6 +4288,22 @@ export class Realm {
       };
     }
     return this.#operationCore;
+  }
+
+  // Who an operation dispatched from an HTTP request is running for. The actor
+  // is the identity the realm authenticated, which is empty for an anonymous
+  // caller — an operation that reads it has to treat "nobody" as a value
+  // rather than assume one is always there. The client request id is the
+  // caller's own handle on this request, echoed on the index event a write
+  // produces so the client can tell its own event from anyone else's.
+  #callerOf(
+    request: Request,
+    requestContext: RequestContext,
+  ): { actor: string; clientRequestId: string } {
+    return {
+      actor: requestContext.authenticatedUser ?? '',
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+    };
   }
 
   // The batch coordinator's collaborators, built the same way and for the same
@@ -4936,13 +4990,48 @@ export class Realm {
     let fileRef = maybeFileRef;
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
     if (!hasExecutableExtension(fileRef.path)) {
+      // A path that holds bytes rather than a module: an image, a PDF, a
+      // markdown document. Its bytes are the `readSource` operation's, the
+      // same read the `card+source` route makes of the same file — which is
+      // what makes "every read of this path" one thing however a client asked
+      // for it.
+      //
+      // The module serve below reads its source too, and does not read it
+      // through the operation. It is a source read with a transpile and two
+      // caches wrapped around it, and moving it is its own change with its own
+      // suites; the derived-output caches in particular have to keep answering
+      // without reaching a file at all.
+      let source = await this.#readStoredSource(
+        request,
+        requestContext,
+        fileRef.path,
+        // Nothing here holds on to the bytes, so a `HEAD` asks only for what
+        // its headers are computed from.
+        { headersOnly: request.method === 'HEAD' ? true : undefined },
+      );
+      if (!source) {
+        return {
+          kind: 'not-found',
+          response: notFound(
+            request,
+            requestContext,
+            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+          ),
+        };
+      }
       return {
         kind: 'non-module',
-        response: await this.serveLocalFile(request, fileRef, requestContext, {
-          defaultHeaders: {
-            'content-type': inferContentType(fileRef.path),
+        response: await this.serveLocalFile(
+          request,
+          this.#servableSource(fileRef, source),
+          requestContext,
+          {
+            defaultHeaders: {
+              'content-type': source.contentType,
+            },
+            createdAt: source.created,
           },
-        }),
+        ),
       };
     }
 
@@ -6059,6 +6148,128 @@ export class Realm {
     return entry.instance.attributes?.allowArbitraryScreenshots === true;
   }
 
+  // The stored bytes at `localPath`, read as the `readSource` operation. Both
+  // byte routes — the `card+source` `GET`/`HEAD` and the raw file serve — get
+  // what they send from here, so there is one place a read of a path's bytes
+  // happens however a client asked for them.
+  //
+  // The caller has already resolved which file it means, including any
+  // extension fallback, and has a handle on it. The dispatch is given the
+  // resolved path rather than the requested one: a read answers for the bytes
+  // it returns, and a fallback would otherwise leave the content type
+  // describing one file and everything else another.
+  //
+  // A refusal here is a file that stopped existing between the caller's
+  // resolution and this read — a delete landing in that window — so it becomes
+  // the 404 the same request a moment later would have produced. Nothing else
+  // this operation can refuse is reachable: the path is resolved, so it is
+  // neither a directory nor a name the realm declines to serve.
+  async #readStoredSource(
+    request: Request,
+    requestContext: RequestContext,
+    localPath: LocalPath,
+    opts: { headersOnly?: true } = {},
+  ): Promise<OperationSourceResult | undefined> {
+    let result: OperationResult;
+    try {
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: {
+            kind: 'instance',
+            url: this.paths.fileURL(localPath).href,
+          },
+          name: 'readSource',
+          ...this.#callerOf(request, requestContext),
+        },
+        // Neither byte route validates on the read's `version` — each builds
+        // its own validator, from the bytes it caches or from the modification
+        // time — so neither should pay to have one read off disk for it.
+        { ...opts, skipContentFingerprint: true },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      if (e.error.code === 'target-not-found') {
+        return undefined;
+      }
+      // Any other refusal carries a status the operation chose, and what
+      // carries that status the rest of the way is a `CardError` — a bare
+      // refusal reaching the source route's router would answer 500 for
+      // something that named its own answer. Nothing a stored-bytes read can
+      // refuse reaches here today, the resolved path having ruled out the rest,
+      // so this is about the next refusal added to that executor rather than a
+      // live fault.
+      //
+      // It carries the status only as far as the source route. The byte serve
+      // is reached through the module fallback, whose own error handling
+      // answers every throw alike, so a refusal there arrives under that
+      // handler's status rather than this one — as every error on that path
+      // already does.
+      throw new CardError(e.error.detail, {
+        status: e.error.status,
+        title: e.error.title,
+        id: e.error.id,
+      });
+    }
+    if (!isSourceResult(result)) {
+      throw new Error(
+        `bug: readSource of ${localPath} in realm ${this.url} did not answer with stored bytes`,
+      );
+    }
+    return result;
+  }
+
+  // What a byte route hands `serveLocalFile`: the operation's answer, in the
+  // shape the response assembly reads.
+  //
+  // Two members come from the handle rather than from the result, and for the
+  // same reason. A `Range` is served by reading bounded slices of the file,
+  // which is a capability of the adapter's handle and not a value a result can
+  // carry; `size` decides whether a range can be offered at all, and the
+  // handle is what the caller measured when it resolved the path. Everything a
+  // client can see about the content — the bytes, when they changed, what type
+  // they are — is the operation's.
+  //
+  // `content` stays a getter so that resolving it remains the response
+  // assembly's decision. A 304 and a 206 both send bytes this never opens, and
+  // a headers-only read has none to open — which is sound for the same reason:
+  // the assembly reaches `content` only where it is about to send it, and a
+  // read is asked for headers only where the route will not.
+  #servableSource(handle: FileRef, source: OperationSourceResult): FileRef {
+    // `this` inside the getter below is the ref, not the realm.
+    let realmURL = this.url;
+    let ref: FileRef = {
+      path: handle.path,
+      get content() {
+        if (source.body === undefined) {
+          // A headers-only read has no bytes, and every route that asks for
+          // one is a route that will not send any. Nothing binds those two
+          // decisions together — they are separate tests of the request's
+          // method, in separate methods — so this says what went wrong at the
+          // point it went wrong rather than letting `undefined` travel on as a
+          // body and surface as an empty response.
+          throw new Error(
+            `bug: response for ${handle.path} in realm ${realmURL} reached for bytes a headers-only read did not fetch`,
+          );
+        }
+        return source.body as FileRef['content'];
+      },
+      lastModified: source.lastModified,
+      ...(source.size != null ? { size: source.size } : {}),
+      ...(handle.createRangeStream
+        ? { createRangeStream: handle.createRangeStream }
+        : {}),
+    };
+    // A shimmed module is not stored content at all, and the response says so
+    // in a header of its own; the marker rides on the handle.
+    for (let symbol of Object.getOwnPropertySymbols(handle)) {
+      (ref as any)[symbol] = (handle as any)[symbol];
+    }
+    return ref;
+  }
+
   private async serveLocalFile(
     request: Request,
     ref: FileRef,
@@ -6071,6 +6282,13 @@ export class Realm {
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
       etagBase?: string;
+      // When the realm first saw this path, for a caller that already read the
+      // file's stored metadata and so already has it. Supplying it is what
+      // keeps such a caller from reading the same row twice per request.
+      // Present and null means the realm holds no record of the path, which is
+      // an answer — so the key being there at all, rather than its value, is
+      // what decides whether this looks the value up itself.
+      createdAt?: number | null;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -6106,7 +6324,10 @@ export class Realm {
         requestContext,
       });
     }
-    let createdFromDb = await this.getCreatedTime(ref.path);
+    let createdFromDb =
+      options && 'createdAt' in options
+        ? options.createdAt
+        : await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
       'last-modified': lastModified,
@@ -6199,6 +6420,29 @@ export class Realm {
       }
     }
 
+    // A `HEAD` is answered by the headers above and nothing else, so the bytes
+    // are never reached for one. The protocol forbids a body here and the
+    // server drops one anyway, so this changes no response — what it changes is
+    // that `content` is not touched, and on a streaming adapter that property
+    // is what opens the stream. A caller that has the metadata without the
+    // bytes can therefore answer a `HEAD` with them.
+    //
+    // Only where the length is already known, though. `Content-Length` on a
+    // `HEAD` has to describe the body the `GET` would send, and where the size
+    // was not knowable without the bytes it is the body itself that is
+    // measured — by the HTTP layer, for a `HEAD` as much as for a `GET`. So a
+    // ref that could not report its size is served the way it always was, and
+    // the header keeps coming from the one thing that can produce it. Such a
+    // ref is materialized rather than streamed, so no stream is stranded by
+    // passing it along.
+    if (request.method === 'HEAD' && totalSize != null) {
+      return createResponse({
+        body: null,
+        init: { headers },
+        requestContext,
+      });
+    }
+
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -6226,16 +6470,31 @@ export class Realm {
     return response;
   }
 
+  // `probe` asks whether a caller is permitted rather than enforcing it, which
+  // changes two things. The realm-wide `HEAD` exemption does not apply — it
+  // exists so a discovery probe reaches an answer without credentials, and a
+  // caller taking it has not shown it may read anything. And a refusal is an
+  // ordinary answer the caller has a fallback for, so it is not logged as a
+  // failed request.
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
+    { probe = false }: { probe?: boolean } = {},
   ) {
     let realmPermissions = requestContext.permissions;
+    // A refusal the caller asked for rather than ran into is not a failed
+    // request, and logging every unauthenticated discovery probe as one buries
+    // the refusals that are.
+    let warnRefusal = (message: string) => {
+      if (!probe) {
+        this.#log.warn(message);
+      }
+    };
     if (
       requiredPermission !== 'realm-owner' &&
       (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
-        request.method === 'HEAD' ||
+        (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
           realmPermissions['*']?.includes('read')) ||
@@ -6274,7 +6533,7 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      this.#log.warn(
+      warnRefusal(
         `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
@@ -6292,7 +6551,7 @@ export class Realm {
       // and ahead of the delegated branch below, so revoking a user also kills
       // sessions delegated on their behalf.
       if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
         );
         throw new AuthenticationError(
@@ -6324,7 +6583,7 @@ export class Realm {
         if (
           ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
         ) {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
           );
           throw new AuthenticationError(
@@ -6332,13 +6591,13 @@ export class Realm {
           );
         }
         if (requiredPermission !== 'read') {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
           );
           throw new AuthorizationError('Delegated sessions are read-only');
         }
         if (!(await realmPermissionChecker.can(user, 'read'))) {
-          this.#log.warn(
+          warnRefusal(
             `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
           );
           throw new AuthenticationError(
@@ -6371,7 +6630,7 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
@@ -6380,7 +6639,7 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
-        this.#log.warn(
+        warnRefusal(
           `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
@@ -6390,13 +6649,13 @@ export class Realm {
       requestContext.authenticatedUser = user;
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
-        this.#log.warn(
+        warnRefusal(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
-        this.#log.warn(
+        warnRefusal(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
@@ -6642,21 +6901,45 @@ export class Realm {
         return response;
       }
 
-      let createdAt = await this.getCreatedTime(handle.path);
+      // The bytes and everything describing them are the `readSource`
+      // operation's from here down. What stays here is the response around
+      // them: which validator this route builds, the 304, the source cache,
+      // and the cache-status header — all of which are this route's own
+      // choices rather than facts about the file.
+      //
+      // A `HEAD` asks for the metadata alone, but only where this route has no
+      // use of its own for the bytes. Below, a cached read materializes them to
+      // fill the source cache, and it fills it for a `HEAD` exactly as for a
+      // `GET` — so the next `GET` of that path is served from cache either way,
+      // which is what a client observes. Asking for a body there and dropping
+      // it is the cost of leaving that alone.
+      let headersOnly =
+        request.method === 'HEAD' && bypassCache ? (true as const) : undefined;
+      let source = await this.#readStoredSource(
+        request,
+        requestContext,
+        handle.path,
+        { headersOnly },
+      );
+      if (!source) {
+        return notFound(request, requestContext, `${localName} not found`);
+      }
+      let served = this.#servableSource(handle, source);
       let defaultHeaders: Record<string, string> = {
-        'content-type': inferContentType(handle.path),
-        ...(createdAt != null
-          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+        'content-type': source.contentType,
+        ...(source.created != null
+          ? { 'x-created': formatRFC7231(source.created * 1000) }
           : {}),
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       if (bypassCache) {
-        return await this.serveLocalFile(request, handle, requestContext, {
+        return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          createdAt: source.created,
         });
       } else {
-        let cachedRef = await this.materializeFileRef(handle);
+        let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.
         if (this.#testOnlySourceCacheDelay) {
@@ -6665,6 +6948,17 @@ export class Realm {
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
         // post-materialization, so this is a single hash with no extra I/O.
+        //
+        // The read reports a `version` for the same bytes, and this does not
+        // use it. The two are the same fingerprint of the same content, but
+        // they are reached differently: `version` prefers the hash the realm
+        // recorded at write time, which describes the file only while nothing
+        // has overwritten it out of band at its exact length. This value is
+        // hashed from the bytes about to be cached and sent, so the validator
+        // always describes what it is attached to. Which identity this route
+        // validates on is the route's to choose, and choosing the recorded one
+        // is a change to what a conditional request compares rather than a
+        // consequence of where the bytes now come from.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&
@@ -6689,6 +6983,7 @@ export class Realm {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
           etagBase: contentHash,
+          createdAt: source.created,
         });
       }
     } finally {
@@ -7172,6 +7467,7 @@ export class Realm {
   async #operationStoredFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
@@ -7185,6 +7481,15 @@ export class Realm {
       persisted.contentSize === file.size
     ) {
       return { version: persisted.contentHash, createdAt };
+    }
+    if (opts?.skipContentFingerprint) {
+      // The row holds no hash this handle's size vouches for, and the caller
+      // validates on something other than `version` — so the read that would
+      // produce one buys nothing. It is the expensive half of this method:
+      // `persistFileMeta` records a hash only for a path written through the
+      // realm's own write API, so a deployed or seeded file reaches here every
+      // time, and the read is bounded per request rather than amortized.
+      return { createdAt };
     }
     return { version: await contentHashFromRanges(file), createdAt };
   }
@@ -7897,6 +8202,28 @@ export class Realm {
     return !resolved.startsWith(this.url);
   }
 
+  // How a card+json read shapes its links. A prerender must not recurse into
+  // the search that resolves a query-backed field, and a read serving one is
+  // already asking for less than a live read, so the live-read link setting
+  // does not reach it.
+  //
+  // One decision for every verb that reads a card, rather than one apiece.
+  // Both values are folded into the validator, so two verbs deciding
+  // differently would hand out different validators for the same card — and a
+  // `HEAD`'s would then never match the conditional `GET` it was asked in aid
+  // of. Nothing here varies by verb, so there is nothing to keep in step.
+  #cardJsonLinkShape(request: Request): {
+    skipQueryBackedExpansion: boolean;
+    resolveLinksOnly: boolean;
+  } {
+    let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
+    return {
+      skipQueryBackedExpansion,
+      resolveLinksOnly:
+        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly,
+    };
+  }
+
   private cardJsonCacheControl(requestContext: RequestContext): string {
     // Mirrors the source/module convention for the public/private
     // visibility decision (world-readable realms get `public` so a
@@ -8326,7 +8653,6 @@ export class Realm {
         request,
         requestContext,
         url,
-        localPath,
       );
     }
     let card = this.prepareCardRead(entry, url);
@@ -8364,6 +8690,182 @@ export class Realm {
     });
   }
 
+  // The card+json `HEAD`: the headers a `GET` of the same URL would send, and
+  // no body work to produce them. The read runs in its headers-only mode, so
+  // no card document is assembled and no link is expanded — which is the whole
+  // point of asking, since a caller that wanted the body would have sent a
+  // `GET`. `Content-Length` is left off for the same reason: knowing it means
+  // serializing the document.
+  //
+  // Realm discovery also arrives as a `HEAD`, on any path and without
+  // credentials, and reads only the realm-identity headers every response
+  // carries. So the read here is offered to a caller that may have it and the
+  // discovery answer to everyone else: permission is asked rather than
+  // enforced, and a caller who cannot read gets the realm-identity answer
+  // instead of a 401 that would tell them the realm exists and refuse them.
+  // Every other `Accept` bucket keeps that answer outright — this route is
+  // registered for card+json alone.
+  private async headCard(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!(await this.permittedToRead(request, requestContext))) {
+      return this.realmIdentityResponse(requestContext);
+    }
+    // Read-your-writes, as on the `GET`: a validator computed off an index the
+    // requester's own write has not reached yet would 304 their next `GET`
+    // against state they just superseded.
+    await this.drainRequestersOwnIndexing(request, requestContext);
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    if (requestedLocalPath.endsWith('.json')) {
+      // The canonical extension-less URL is the only one that ever carries a
+      // validator, so the `.json` spelling is redirected here as it is on the
+      // `GET` rather than answered with headers a client would file under the
+      // wrong cache key.
+      let canonicalPath = this.paths.local(
+        this.paths.fileURL(
+          requestedLocalPath.replace(/\.json$/, '') || 'index',
+        ),
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: { Location: this.redirectTarget(canonicalPath) },
+        },
+      });
+    }
+    let localPath = requestedLocalPath === '' ? 'index' : requestedLocalPath;
+    let url = this.paths.fileURL(localPath);
+    let start = Date.now();
+    try {
+      let { skipQueryBackedExpansion, resolveLinksOnly } =
+        this.#cardJsonLinkShape(request);
+      let result: OperationResult;
+      try {
+        result = await runOperation(
+          this.operationCore,
+          {
+            target: { kind: 'instance', url: url.href },
+            name: 'read',
+            ...this.#callerOf(request, requestContext),
+          },
+          { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
+        );
+      } catch (e) {
+        if (!isOperationFailure(e)) {
+          throw e;
+        }
+        return await this.#respondToCardJsonOutcome(
+          cardJsonAssemblyFromFailure(e),
+          request,
+          requestContext,
+          url,
+        );
+      }
+      if (!isHeadResult(result)) {
+        throw new Error(
+          `the headers-only read of ${url.href} answered with something other than headers`,
+        );
+      }
+      if (result.type === 'file-meta') {
+        // A `GET` of a path that holds bytes answers with the file's metadata
+        // document, which is derived from those bytes and has no index row
+        // behind it — so there is no validator and no cache directive to
+        // report, and a `HEAD` that invented one would describe a response the
+        // `GET` never sends.
+        return createResponse({
+          requestContext,
+          body: null,
+          init: { headers: { 'content-type': SupportedMimeType.CardJson } },
+        });
+      }
+      await this.getRealmInfo();
+      let foreignDeps = this.hasForeignRealmDeps(result.deps);
+      // Match GET: a linked publication can change without this root's row
+      // advancing, so enabled reads cannot issue a root-only validator.
+      let etag =
+        foreignDeps || this.latticeEnabled
+          ? undefined
+          : buildCardJsonEtag(
+              result.indexedAt,
+              this.getCachedRealmInfoHash(),
+              screenshotsEtagFingerprint(result.screenshots),
+              resolveLinksOnly,
+            );
+      let cacheControl = this.latticeEnabled
+        ? 'no-store'
+        : this.cardJsonCacheControl(requestContext);
+      let lastModified: Record<string, string> =
+        result.lastModified != null
+          ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
+          : {};
+      let ifNoneMatch = request.headers.get('if-none-match');
+      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+        // A conditional request is answered the same way whichever verb asked
+        // it: the validator matched, so there is nothing to send.
+        return createResponse({
+          requestContext,
+          body: null,
+          init: {
+            status: 304,
+            headers: { etag, 'cache-control': cacheControl, ...lastModified },
+          },
+        });
+      }
+      let created = await this.getCreatedTime(
+        (this.paths.local(url) + '.json') as LocalPath,
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            'cache-control': cacheControl,
+            ...(etag ? { etag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
+            ...lastModified,
+            ...(created != null
+              ? { 'x-created': formatRFC7231(created * 1000) }
+              : {}),
+          },
+        },
+      });
+    } finally {
+      this.#logRequestPerformance(request, start);
+    }
+  }
+
+  // The realm-identity answer: the headers `createResponse` stamps on every
+  // response and nothing else. It is what a discovery probe reads, and what a
+  // `HEAD` falls back to whenever it is not answering a read.
+  private realmIdentityResponse(requestContext: RequestContext): Response {
+    return createResponse({ init: { status: 200 }, requestContext });
+  }
+
+  // Whether this caller may read the realm — asked, not enforced. The
+  // realm-wide `HEAD` exemption is deliberately not taken: it exists so a
+  // discovery probe can be answered without credentials, and a caller riding
+  // it has shown nothing about what it may read. A `HEAD` that answers a card's
+  // real headers is a read, so it asks the question a `GET` would.
+  private async permittedToRead(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
+    try {
+      await this.checkPermission(request, requestContext, 'read', {
+        probe: true,
+      });
+      return true;
+    } catch (e) {
+      if (e instanceof AuthenticationError || e instanceof AuthorizationError) {
+        return false;
+      }
+      throw e;
+    }
+  }
   private async getCard(
     request: Request,
     requestContext: RequestContext,
@@ -8422,15 +8924,12 @@ export class Realm {
       let documentCache = this.latticeEnabled
         ? undefined
         : this.#cardDocumentCache;
-      let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
-      // A prerender is already asking for less than a live read, and asks for
-      // it by the flag above, so the live-read setting reaches only the
-      // requests it is about. Computed here rather than at the assembly
-      // because the validator below has to describe the shape the assembly
-      // will produce, and the validator is what the conditional request and
-      // the response cache are both keyed on.
-      let resolveLinksOnly =
-        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
+      // Decided here rather than at the assembly because the validator below
+      // has to describe the shape the assembly will produce, and that
+      // validator is what the conditional request and the response cache are
+      // both keyed on.
+      let { skipQueryBackedExpansion, resolveLinksOnly } =
+        this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -8525,6 +9024,7 @@ export class Realm {
           skipQueryBackedExpansion,
           resolveLinksOnly,
           peekEtag,
+          this.#callerOf(request, requestContext),
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -8551,7 +9051,6 @@ export class Realm {
           request,
           requestContext,
           url,
-          localPath,
         );
         for (let [name, value] of Object.entries(cacheOutcomeHeader)) {
           response.headers.set(name, value);
@@ -8599,61 +9098,59 @@ export class Realm {
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
     keyEtag: string | undefined,
+    caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
-    // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
-    // realm-info cache, so the hash read for the response ETag below
-    // reflects the post-assembly realm info.
-    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-      loadLinks: true,
-      skipQueryBackedExpansion,
-      resolveLinksOnly,
-    });
-    if (maybeError === undefined) {
-      return { kind: 'missing' };
-    }
-    if (maybeError.type === 'error') {
-      let { error } = maybeError;
-      return {
-        kind: 'error',
-        error: {
-          status: error.errorDetail.status,
-          title: error.errorDetail.title,
-          message: error.errorDetail.message,
-          stack: error.errorDetail.stack,
-          lastKnownGoodHtml: error.lastKnownGoodHtml,
-          cardTitle: error.cardTitle,
-          scopedCssUrls: error.scopedCssUrls,
+    // The document itself is the `read` operation's — link expansion, the
+    // `links.self` and prefix-form ids, the freshly joined `meta.generation`
+    // and `meta.screenshots`, the file-metadata answer for a path that holds
+    // bytes, and which absence a missing row is. What stays here is the
+    // response around it: the validator, the redirect, the creation time, and
+    // the mapping from a refusal to a status.
+    //
+    // The caller travels with the request although a plain read never consults
+    // it, so that the first read that does cannot silently read a stale one.
+    // That an assembly is shareable between callers rests on the same thing
+    // the response cache's sharing does: a plain read is the same document for
+    // everyone permitted to ask for it. A `read` an author has specialized is
+    // refused rather than served, so nothing actor-dependent reaches here.
+    let result: OperationResult;
+    try {
+      // The read runs `attachRealmInfo()`, which (re)populates the realm-info
+      // cache, so the hash the ETag below folds in reflects the post-assembly
+      // realm info.
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: { kind: 'instance', url: url.href },
+          name: 'read',
+          actor: caller.actor,
+          clientRequestId: caller.clientRequestId,
         },
-      };
+        { skipQueryBackedExpansion, resolveLinksOnly },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      return cardJsonAssemblyFromFailure(e);
     }
-    let { doc: card } = maybeError;
-    card.data.links = { self: url.href };
-    this.#serveInstanceIdsAsRRI(card);
-    // Surface the instance's index-data generation
-    // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
-    // card+json GET can tell fresh index data from stale, and join the
-    // instance's declared-screenshot manifest into `meta.screenshots` (the
-    // serve-time join — the manifest is never written back into
-    // `boxel_index` or the source file). A fresh `meta` object — never a
-    // mutation of the cached pristine doc's `meta`.
-    card.data.meta = {
-      ...card.data.meta,
-      generation: maybeError.generation,
-      ...(maybeError.screenshots
-        ? {
-            screenshots: screenshotsMetaFromManifest(maybeError.screenshots, {
-              realmURL: this.url,
-              instanceLocalPath: localPath,
-            }),
-          }
-        : {}),
-    };
+    if (!isDocumentResult(result)) {
+      throw new Error(
+        `the read of ${url.href} answered with something other than a document`,
+      );
+    }
+    let { document, headers, queryBacked } = result;
+    if (document.data.type === 'file-meta') {
+      // A file's metadata is derived from its bytes, so there is no index row
+      // to validate it against and nothing here to cache.
+      return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
+    }
+    let card = document;
 
-    // The 302 redirect for the `.json` form is now done up-front
-    // (see top of getCard). Here we only need to redirect for the
-    // legacy normalization case where `paths.fileURL(localPath)`
-    // produces a different `paths.local()` than what we started
-    // with — same as the prior implementation's behavior.
+    // The 302 redirect for the `.json` form is done up-front (see top of
+    // getCard). Here we only need to redirect for the normalization case where
+    // `paths.fileURL(localPath)` produces a different `paths.local()` than
+    // what we started with.
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
       return { kind: 'redirect', foundPath };
@@ -8662,23 +9159,23 @@ export class Realm {
     // Prefer created_at from DB for instance JSON
     let pathForDb = this.paths.local(url) + '.json';
     let createdAt = await this.getCreatedTime(pathForDb);
-    // Use deps + indexedAt from the just-loaded doc — `cardDocument()`
-    // saw a snapshot that may differ from the early peek if a write
-    // landed between the two reads. Suppress the ETag if the doc
-    // depends on foreign-realm cards: cross-realm invalidation
-    // doesn't cascade `indexed_at`, so a validator we emit here
-    // could 304 a follow-up request whose `included[]` should have
-    // been re-fetched from the foreign realm. A suppressed validator
-    // also makes this assembly unretainable — the response cache keys
-    // on the validator, so without one there is nothing that would make
-    // a superseded entry unreachable.
-    let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
+    // deps + indexedAt come off the assembly the read reports, not off the
+    // early peek: the two see different snapshots when a write lands between
+    // them, and a validator has to describe the bytes it is sent with.
+    // Suppress the ETag if the doc depends on foreign-realm cards: cross-realm
+    // invalidation doesn't cascade `indexed_at`, so a validator we emit here
+    // could 304 a follow-up request whose `included[]` should have been
+    // re-fetched from the foreign realm. A suppressed validator also makes
+    // this assembly unretainable — the response cache keys on the validator,
+    // so without one there is nothing that would make a superseded entry
+    // unreachable.
+    let foreignDeps = this.hasForeignRealmDeps(headers.deps);
     let responseEtag = foreignDeps
       ? undefined
       : buildCardJsonEtag(
-          maybeError.indexedAt,
+          headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(maybeError.screenshots),
+          screenshotsEtagFingerprint(headers.screenshots),
           resolveLinksOnly,
         );
     return {
@@ -8686,7 +9183,7 @@ export class Realm {
       body: JSON.stringify(card, null, 2),
       etag: responseEtag,
       etagSuppressed: foreignDeps,
-      queryBacked: maybeError.queryBacked,
+      queryBacked,
       keyEtag: keyEtag ?? '',
       lastModified: card.data.meta.lastModified,
       created: createdAt,
@@ -8701,27 +9198,28 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     url: URL,
-    localPath: LocalPath,
   ): Promise<Response> {
-    if (assembly.kind === 'missing') {
-      if (await this.nonJsonFileExists(localPath)) {
-        // A path that points to a non-JSON file (e.g. an uploaded binary)
-        // was asked for as card+json. Return a file-meta JSON document so
-        // the caller receives valid JSON it can discriminate via
-        // `data.type === 'file-meta'` — instead of raw binary bytes that
-        // crash a downstream `response.json()`.
-        let fileMeta = await this.fileMetaDocument(
-          requestContext,
-          localPath,
-          SupportedMimeType.CardJson,
-        );
-        return fileMeta ?? notFound(request, requestContext);
-      }
-      return await this.missingInstanceResponse(
-        request,
+    if (assembly.kind === 'file-meta') {
+      // A path that holds bytes rather than a card (an uploaded binary, say)
+      // was asked for as card+json, so the answer is the file's metadata
+      // document — valid JSON the caller discriminates via
+      // `data.type === 'file-meta'`, instead of raw bytes that crash a
+      // downstream `response.json()`.
+      return createResponse({
+        body: assembly.body,
+        init: { headers: { 'content-type': SupportedMimeType.CardJson } },
         requestContext,
-        localPath,
-      );
+      });
+    }
+    if (assembly.kind === 'not-found') {
+      return notFound(request, requestContext);
+    }
+    if (assembly.kind === 'not-indexed') {
+      // The card's source is on disk and the index has not caught up. A read
+      // served by the replica that took the write rarely gets here — that path
+      // drains its own in-flight indexing first — but a read served by any
+      // other replica has no such handle on the write.
+      return notIndexedYet(request, requestContext);
     }
     if (assembly.kind === 'redirect') {
       return createResponse({
@@ -11075,6 +11573,56 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     return true;
   }
   return baseRealm.inRealm(parsed);
+}
+
+// A read's refusal, as the card+json GET reports it. Three of the four codes
+// the read can raise name an outcome the handler already had a shape for; a
+// refusal it does not recognize is an error document rather than a guess, so a
+// behavior added to the read later surfaces as a 500 with its own detail
+// instead of a 404 that claims the card is gone.
+function cardJsonAssemblyFromFailure(
+  failure: OperationFailure,
+): Exclude<CardJsonAssembly, { kind: 'document' } | { kind: 'file-meta' }> {
+  let { error } = failure;
+  if (error.code === 'target-not-found') {
+    return { kind: 'not-found' };
+  }
+  if (error.code === 'target-not-indexed') {
+    return { kind: 'not-indexed' };
+  }
+  // The row's own account of what went wrong, so the response body carries the
+  // underlying title, message and salvage rather than the sentence the refusal
+  // renders from them.
+  let row = erroredTargetRow(failure);
+  if (!row) {
+    return {
+      kind: 'error',
+      error: {
+        status: error.status,
+        title: error.title,
+        message: error.detail,
+        stack: undefined,
+        lastKnownGoodHtml: null,
+        cardTitle: null,
+        scopedCssUrls: [],
+      },
+    };
+  }
+  // Read whole rather than member by member: a row that recorded no title is
+  // reporting that it has none, and coalescing that absence away would put the
+  // refusal's own default in a body the row is supposed to describe.
+  return {
+    kind: 'error',
+    error: {
+      status: row.status,
+      title: row.title,
+      message: row.message,
+      stack: row.stack,
+      lastKnownGoodHtml: row.lastKnownGoodHtml,
+      cardTitle: row.cardTitle,
+      scopedCssUrls: row.scopedCssUrls,
+    },
+  };
 }
 
 function lastModifiedHeader(

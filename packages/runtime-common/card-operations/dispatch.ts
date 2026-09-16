@@ -85,6 +85,7 @@ export interface OperationCore {
   storedFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -161,7 +162,11 @@ export interface OperationDefinitionLookup {
 export interface OperationIndexQueryEngine {
   cardDocument(
     url: URL,
-    opts?: { loadLinks?: boolean; skipQueryBackedExpansion?: boolean },
+    opts?: {
+      loadLinks?: boolean;
+      skipQueryBackedExpansion?: boolean;
+      resolveLinksOnly?: boolean;
+    },
   ): Promise<SearchResult | undefined>;
   instance(
     url: URL,
@@ -181,6 +186,23 @@ export interface RunOperationOptions {
   // serving that request says so here — the same control the card+json GET
   // applies from `isDuringPrerenderRequest`.
   skipQueryBackedExpansion?: boolean;
+  // Answer a card's links rather than side-loading them: the document names
+  // what it points at and `included` stays empty. A read serving a request
+  // that only needs the card's own fields says so here, and the validator the
+  // caller emits has to fold it in, since it distinguishes two documents
+  // assembled from the same index row.
+  resolveLinksOnly?: boolean;
+  // Report a stored-bytes read's `version` only where the realm already
+  // recorded one, rather than reading the file to fingerprint it.
+  //
+  // A recorded hash is free: it arrives on the same row the creation time does.
+  // Computing one is not — it reads up to the whole-content limit and hashes it
+  // synchronously — and the realm records a hash only for a path written
+  // through its own write API, so every file that reached disk another way
+  // (a deploy, a seeded realm) would pay that read on every request. A caller
+  // that does not validate on `version` says so here and gets null for the
+  // paths a hash would have had to be read for.
+  skipContentFingerprint?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
