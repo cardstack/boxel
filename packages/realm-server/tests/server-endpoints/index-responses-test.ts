@@ -1330,6 +1330,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           );
         });
 
+        test('a nested path that merely contains a _screenshot/ segment still opens the app', async function (assert) {
+          // The realm reserves `_screenshot/` at its root only; deeper in the
+          // tree it is an ordinary directory name, so the card URL beneath it
+          // keeps the app-shell answer every card URL gets.
+          let response = await request
+            .get('/test/folder/_screenshot/card')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'document');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.headers['content-type']?.includes('text/html'),
+            'content type is text/html',
+          );
+          assert.ok(
+            response.text.includes('<title>'),
+            'the app shell is served',
+          );
+        });
+
         test('an address-bar navigation to the same file URL still opens the app', async function (assert) {
           let response = await request
             .get('/test/report.pdf')
