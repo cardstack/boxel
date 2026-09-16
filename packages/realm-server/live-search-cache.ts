@@ -33,11 +33,22 @@ export type LiveSearchCacheSummary = ResponseCacheSummary;
 // scale heap linearly and have OOM'd the realm-server in production.
 //
 // The key is the same canonical `(realms, query, opts)` hash the job-scoped
-// cache uses. Freshness is structural, not temporal: the caller folds each
-// realm's generation fingerprint into `opts`, so any index or
-// prerendered-HTML swap on a searched realm changes the key and the next
-// request recomputes. The TTL exists to bound retention, not to bound
-// staleness.
+// cache uses. Freshness is structural rather than temporal: the caller folds
+// a generation fingerprint for each searched realm into `opts`, so a swap the
+// fingerprint covers changes the key and the next request recomputes.
+//
+// That fingerprint is scoped to the card types the query's filter is anchored
+// on (`search-type-watermarks.ts`), which is what stops one write from
+// unreaching every cached search in the realm.
+//
+// A side-loaded link target is covered by that key even though its own type
+// is not anchored: a `linksTo` / `linksToMany` target is a dependency edge, so
+// writing it invalidates every row that links to it, those rows are
+// re-indexed in the same pass, and the pass stamps their adoption chains.
+// What is not covered is a relationship backed by a query field, which the
+// dependency extractor deliberately leaves out of `deps`. For that one edge
+// the TTL is the staleness bound rather than a retention bound, so it has to
+// stay short — here and through `LIVE_SEARCH_CACHE_TTL_MS`.
 //
 // Sharing across users is safe: the body is a pure function of
 // `(realms, query, opts)` — permissions are realm-scoped and

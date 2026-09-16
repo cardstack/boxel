@@ -38,7 +38,8 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups, contact points, notification policies
+  alerting/            # alert rule groups (no contact points / notification
+                       # policies live here — routing uses Grafana's defaults)
   local-only/          # local-dev overrides — bind-mounted file-by-file over
                        # `datasources/`. apply-datasources.sh ignores this dir.
 collectors/

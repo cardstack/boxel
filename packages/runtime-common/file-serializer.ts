@@ -373,6 +373,29 @@ export function storedRelationshipLink(
   return relative;
 }
 
+// The card a stored relationship's `links.self` names.
+//
+// The inverse of `storedRelationshipLink`, and it has to be the realm's own
+// resolution rather than URL math for the same reasons that one is: a link
+// inside the writing realm is stored relative to the file that holds it, and a
+// scoped reference is stored exactly as sent. A reader that resolved either by
+// hand would get a URL inside the wrong realm.
+//
+// A reference that will not resolve comes back as it was stored, which is what
+// `storedRelationshipLink` does with the same input — one unresolvable link is
+// not a reason to refuse a read of every other one.
+export function resolvedRelationshipLink(
+  selfLink: string,
+  relativeTo: URL,
+  virtualNetwork: VirtualNetwork,
+): string {
+  try {
+    return virtualNetwork.resolveURL(selfLink, relativeTo).href;
+  } catch (e) {
+    return selfLink;
+  }
+}
+
 async function processRelationships({
   relationships,
   definition,

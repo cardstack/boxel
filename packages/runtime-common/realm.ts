@@ -129,6 +129,10 @@ import {
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  scopedCSSInjectorSource,
+  SCOPED_CSS_SERVING_PREFIX,
   authorizationMiddleware,
   internalKeyFor,
   unixTime,
@@ -208,12 +212,14 @@ import { createResponse } from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
+  captureOutputContentType,
   captureSpecHash,
   captureSpecOverrides,
   isValidScreenshotName,
   parseCaptureSpecParams,
   screenshotLedgerSourceURL,
   screenshotsMetaFromManifest,
+  type CaptureContentType,
   type CaptureSpec,
   type ScreenshotManifest,
   type ScreenshotManifestEntry,
@@ -268,7 +274,10 @@ import {
   type IncrementalIndexMeta,
   type IndexChange,
 } from './realm-index-updater.ts';
-import serialize, { storedRelationshipLink } from './file-serializer.ts';
+import serialize, {
+  resolvedRelationshipLink,
+  storedRelationshipLink,
+} from './file-serializer.ts';
 import {
   fileSizeLimitFor,
   validateByteLength,
@@ -412,6 +421,33 @@ export type RealmIndexCounts = {
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
+// Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
+// write on the realm's in-flight incremental indexing — index deferred and
+// answer me from the document I sent". This is the write-side half of what
+// DURING_PRERENDER_HEADER does, without the search-path changes (cacheOnly-
+// Definitions, skipQueryBackedExpansion) that header also triggers, so an
+// ordinary interactive save can take it safely.
+//
+// Motivation: the default synchronous-indexing contract makes a single-card
+// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
+// incremental/copy job for the realm settles — so an unrelated reindex
+// draining in the worker pool can stall (and time out) the save. A caller that
+// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
+// the freshly-indexed read-back and can opt out.
+//
+// The tradeoff is narrower than full read-your-write loss. The writer's own
+// next card read still waits: the deferred job is tagged with the writer
+// (`initiatedBy`), and card/file reads drain the requester's own indexing
+// (`drainRequestersOwnIndexing`, bounded by READ_INDEX_DRAIN_BUDGET_MS). What
+// goes eventually-consistent is search — `searchEntriesResponse` has no drain,
+// so _search/_federated-search can miss the write until the job lands — plus
+// anonymous readers, other users' sessions, and any read that exhausts the
+// drain budget.
+export const SKIP_INDEX_WAIT_HEADER = 'x-boxel-skip-index-wait';
+function isSkipIndexWaitRequest(request: Request): boolean {
+  return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
 }
 
 export interface FileRef {
@@ -1110,6 +1146,16 @@ export interface AdapterWriteResult {
   lastModified: number;
 }
 
+export interface AdapterAppendResult extends AdapterWriteResult {
+  // The file's byte length once the append has landed. Reported by the
+  // adapter because it is already holding the stat the modification time
+  // above comes from, and because the alternative — asking what the file's
+  // length is afterwards — is a second question about a file another writer
+  // may have moved on by then. It is what the appended file's fingerprint is
+  // computed against, so the two have to describe one state.
+  size: number;
+}
+
 export interface FileWriteResult extends AdapterWriteResult {
   path: string;
   lastModified: number;
@@ -1121,10 +1167,15 @@ export interface FileWriteResult extends AdapterWriteResult {
   contentHash: string;
 }
 
-// Everything one commit changes. Both members are optional so a caller that
+// Everything one commit changes. Every member is optional so a caller that
 // only writes, or only removes, says exactly that.
 export interface CommitBatch {
   writes?: Map<LocalPath, WriteContent>;
+  // Content to add to the end of a file, for a change that neither reads nor
+  // rewrites what is already stored there. One entry per path holding
+  // everything bound for it, so a caller adding two lines to one file adds
+  // them in one append rather than reaching the file twice.
+  appends?: Map<LocalPath, string | Uint8Array>;
   deletes?: LocalPath[];
 }
 
@@ -1208,6 +1259,23 @@ export interface RealmAdapter {
     path: LocalPath,
     content: SplicedSource,
   ): Promise<AdapterWriteResult>;
+
+  // Add `contents` to the end of the file at `path`, leaving everything
+  // already stored there untouched and unread.
+  //
+  // This is the primitive an append-only change is worth having: expressing
+  // one as a write means holding the file's whole content to produce the
+  // content it should hold next, so adding a line to a log costs the log.
+  // Here it costs the line, whatever the file's size — which is also why the
+  // result reports the new length rather than a caller measuring it.
+  //
+  // The file is created when nothing is stored at the path, which is what
+  // makes this primitive total; whether a missing target is an error is the
+  // caller's question, and the operation core answers it before it gets here.
+  append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult>;
 
   // Read `[start, end)` of a stored file. What a caller building a description
   // of a file's content reads to find the offsets it describes, and what a
@@ -2797,18 +2865,21 @@ export class Realm {
     );
   }
 
-  // One commit covering every file a caller is changing — the bytes it writes
-  // and the paths it removes — under a single index job and a single index
-  // event. A caller staging several changes to several cards needs them to
-  // land together: two jobs would compute their invalidation fan-outs against
-  // different snapshots of the realm, and two events would let a subscriber
-  // observe the batch half-applied.
+  // One commit covering every file a caller is changing — the bytes it writes,
+  // the content it adds to the end of a file, and the paths it removes — under
+  // a single index job and a single index event. A caller staging several
+  // changes to several cards needs them to land together: two jobs would
+  // compute their invalidation fan-outs against different snapshots of the
+  // realm, and two events would let a subscriber observe the batch
+  // half-applied.
   //
-  // Writes land before removals. The write leg carries a mid-loop index flush
-  // that a module followed by an instance depends on, so it has an ordering
-  // constraint of its own; a removal invalidates rows, touches no definition,
-  // and has nothing to contribute to that flush or to gain from running ahead
-  // of it.
+  // Writes land first, then appends, then removals. The write leg carries a
+  // mid-loop index flush that a module followed by an instance depends on, so
+  // it has an ordering constraint of its own; an append and a removal each
+  // touch no definition and have nothing to contribute to that flush or to
+  // gain from running ahead of it. Writing before appending is what makes a
+  // caller's own ordering hold when it both replaces a file's content and adds
+  // to the end of it: the append lands on the content the write left.
   //
   // Assumes the realm's write lock is held — the caller reads the pre-state it
   // stages from inside the same critical section. `write` and `writeMany` are
@@ -2936,6 +3007,7 @@ export class Realm {
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
     let files = batch.writes ?? new Map<LocalPath, WriteContent>();
+    let appends = batch.appends ?? new Map<LocalPath, string | Uint8Array>();
     let deletes = batch.deletes ?? [];
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
@@ -3098,9 +3170,22 @@ export class Realm {
       this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
-        let existingFile = await readFileAsText(path, (p) =>
-          this.#adapter.openFile(p),
-        );
+        // The stored file is opened before it is read, so its length can rule
+        // the comparison out without any of it being held. Only a file of
+        // exactly the staged content's length can be the staged content, and
+        // a replacement almost never is — so this is what keeps replacing a
+        // file that is large from costing its size. `openFile` reports the
+        // length from a stat it already performs, and reading the body stays
+        // a separate step because the body is a lazy, single-use stream on
+        // every streaming adapter.
+        let stored = await this.#adapter.openFile(path);
+        let couldMatch =
+          stored !== undefined &&
+          (stored.size === undefined ||
+            stored.size === computeContentSize(content));
+        let existingFile = couldMatch
+          ? await readFileAsText(path, (p) => this.#adapter.openFile(p))
+          : undefined;
         if (existingFile?.content === content) {
           // Identical bytes: the file is left alone, so its modification time
           // stands and nothing is queued for indexing. The content hash is
@@ -3129,7 +3214,9 @@ export class Realm {
           });
           continue;
         }
-        isNewFile = !existingFile;
+        // From the open above rather than from the read, which a file whose
+        // length already settled the comparison never had.
+        isNewFile = stored === undefined;
       } else {
         isNewFile = !(await this.#adapter.exists(path));
       }
@@ -3233,6 +3320,74 @@ export class Realm {
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
+    }
+
+    // The append leg. Each path gets the same per-file treatment a write does
+    // — the ceiling, the initiation event, the own-write tracking, the
+    // byte-cache drop, the peer notification, and a `realm_file_meta` row —
+    // with two differences, both of which follow from never holding the file.
+    //
+    // The ceiling is applied to what is being added rather than to what the
+    // file will hold, and it is the file ceiling whatever the path's
+    // extension: the limit is over the bytes a caller hands the realm, and a
+    // file that grew past it one line at a time is what an append-only file
+    // is. Nothing here classifies the content as a card, because appending to
+    // a card's stored JSON is not something the operation core permits —
+    // bytes added after a document's closing brace are no longer a document.
+    //
+    // And the fingerprint is assembled from bounded reads of the file once the
+    // append has landed, rather than computed from bytes in hand. That is the
+    // same value hashing the whole content would produce, and its cost has a
+    // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
+    // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
+    // adding a line to a file of any size costs the line plus a bounded read.
+    for (let [path, content] of appends) {
+      let url = this.paths.fileURL(path);
+      this.assertWriteSize(content, 'file', path);
+      let existed = await this.#adapter.exists(path);
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path);
+      let { lastModified, size } = await this.#adapter.append(path, content);
+      this.invalidateCache(path);
+      await this.#notifyFileChange(path);
+      let contentHash = await computeContentHashFromRanges(
+        size,
+        async (start, length) =>
+          await readRangeBytes(this.#adapter, path, start, length),
+      );
+      // The write leg may have reached this file already, which is one file
+      // changing twice rather than two files changing — a caller that replaces
+      // a log and then adds a line to it. Everything the write recorded
+      // describes bytes the file no longer holds, so the readings here replace
+      // them rather than joining them: one result, one `realm_file_meta` row
+      // (two rows for one path in the same statement is an error Postgres
+      // raises outright), one entry in the announcement, and one index change.
+      let written = results.findIndex((result) => result.path === path);
+      if (written === -1) {
+        results.push({ path, lastModified, contentHash });
+        fileMetaRows.push({ path, contentHash, contentSize: size });
+      } else {
+        results[written] = { path, lastModified, contentHash };
+        let row = fileMetaRows.findIndex((meta) => meta.path === path);
+        fileMetaRows[row] = { path, contentHash, contentSize: size };
+      }
+      // Asked separately from the readings above, because recording a result
+      // and announcing a change are not the same question. A write that found
+      // the file already holding the bytes it staged records a result and
+      // announces nothing — it left the file alone. This leg did not: the
+      // append changed the file whatever the write before it did, so the
+      // announcement is made here unless one of the earlier legs already made
+      // it. Without this, a batch that replaces a file with its own content
+      // and then appends to it broadcasts no file change at all.
+      if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
+        (existed ? updatedFiles : addedFiles).push(path);
+      }
+      // Pushed unless it is already pending, which is a different question
+      // from whether the write leg handled it: a mid-loop flush empties this,
+      // and a file indexed from its pre-append state needs indexing again.
+      if (!urls.some((pending) => pending.href === url.href)) {
+        urls.push(url);
+      }
     }
 
     // The removal leg. Each path gets the same per-file treatment a write
@@ -4102,6 +4257,20 @@ export class Realm {
           await this.incrementalIndexing();
         },
         isIgnored: (url) => this.isIgnored(url),
+        // Narrowed to the two documents a program reads values from, each
+        // handed over whole. An error row is reported as no row: it describes
+        // why the card could not be indexed rather than what it holds, so
+        // there is nothing in it for a program to read.
+        indexedCardValues: async (url) => {
+          let row = await this.#realmIndexQueryEngine.instance(url);
+          if (!row || row.type !== 'instance') {
+            return undefined;
+          }
+          return {
+            pristine: row.instance,
+            searchDoc: row.searchDoc ?? undefined,
+          };
+        },
         commitUnlocked: (batch, options) =>
           this._commitBatchUnlocked(batch, options),
         serializeCard: (doc, relativeTo) =>
@@ -4120,6 +4289,10 @@ export class Realm {
             new URL(this.url),
             this.#virtualNetwork,
           ),
+        // Its inverse, reached from the same place for the same reason: what a
+        // stored link resolves to is identifier resolution, not URL math.
+        resolvedLink: (selfLink, relativeTo) =>
+          resolvedRelationshipLink(selfLink, relativeTo, this.#virtualNetwork),
         lookupDefinition: async (codeRef, relativeTo) => {
           let absolute = codeRefWithAbsoluteIdentifier(
             codeRef,
@@ -4405,6 +4578,25 @@ export class Realm {
           requestContext,
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
+      }
+      // Hashed scoped-CSS serving also dispatches on the path rather than
+      // the router table: the request is a module load (`loader.import` of a
+      // `css` resource's href from search results), whose Accept header
+      // matches no supported mime type. The URL carries only a content hash —
+      // the stylesheet bytes live in the `scoped_css` table — so unlike the
+      // inline form (which `maybeHandleScopedCSSRequest` answers locally with
+      // no network hop) this form must be answered here. Gated on the
+      // `_scoped-css/` prefix, not just the filename shape, so a realm file
+      // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
+      // is the only producer of these hrefs and always roots them under the
+      // prefix. Placed after checkPermission so it inherits realm-read auth;
+      // GET only for the same HEAD-oracle reason as screenshot serving above.
+      if (
+        request.method === 'GET' &&
+        localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+        isHashedScopedCSSRequest(localPath)
+      ) {
+        return await this.serveHashedScopedCSS(request, requestContext);
       }
       // A file the realm is part-way through assembling, or one a write that
       // died left behind. It is never indexed, so serving it would hand back
@@ -5353,6 +5545,7 @@ export class Realm {
         ),
         generationLookupMs: manifestLookupMs,
         ledgerLookupMs: Date.now() - ledgerLookupStart,
+        contentType: entry.contentType as CaptureContentType,
       };
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({
@@ -5415,6 +5608,7 @@ export class Realm {
       ),
       generationLookupMs,
       ledgerLookupMs: Date.now() - ledgerLookupStart,
+      contentType: captureOutputContentType(parsed.spec.type ?? 'png'),
     };
     if (entry) {
       // A hit costs zero Chrome work, so hits serve regardless of the
@@ -5443,6 +5637,57 @@ export class Realm {
     );
   }
 
+  // Serve a hashed scoped-CSS module request (the `_scoped-css/` serving
+  // space `scopedCSSServingHref` roots under this realm): look the stylesheet
+  // up by content hash among THIS realm's interned rows and answer with the
+  // same style-injecting JS module the inline form produces locally. The
+  // realm-scoped lookup is always satisfiable — indexing interned every
+  // stylesheet this realm's rows reference under this realm's own
+  // `realm_url` — and it keeps a caller from probing whether some other
+  // realm's stylesheet bytes exist by guessing hashes. The body is a pure
+  // function of the URL, so it caches as immutable; visibility follows realm
+  // readability like the sibling capture-serving route.
+  //
+  // A `.css` URL served as `text/javascript` is deliberate, not a mixup: the
+  // consumer is `loader.import`, so like any bundler's CSS import the URL
+  // must resolve to a JS module whose evaluation injects the `<style>` tag,
+  // and the content-type describes that body truthfully. The
+  // `.glimmer-scoped.css` suffix is the upstream `glimmer-scoped-css` naming
+  // that every scoped-CSS choke point keys on — in particular the Node-side
+  // loader answers such URLs with an empty module instead of fetching, so an
+  // injector that touches `document` never evaluates where none exists.
+  private async serveHashedScopedCSS(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<ResponseWithNodeStream> {
+    let pathname = new URL(request.url).pathname;
+    let parsed = parseScopedCSSRequest(pathname);
+    if (parsed.form !== 'hashed') {
+      return notFound(request, requestContext);
+    }
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT css FROM scoped_css WHERE hash =`,
+      param(parsed.cssHash),
+      `AND realm_url =`,
+      param(this.url),
+      `LIMIT 1`,
+    ])) as { css: string }[];
+    if (rows.length === 0 || typeof rows[0].css !== 'string') {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: scopedCSSInjectorSource(pathname, rows[0].css),
+      init: {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=31536000, immutable`,
+        },
+      },
+      requestContext,
+    });
+  }
+
   // The stage clocks `serveScreenshot` accumulates before the hit/miss
   // fork, threaded into the miss path so its terminal emit covers the whole
   // request.
@@ -5466,6 +5711,7 @@ export class Realm {
       jobId: null,
       reservationId: null,
       hasTwin: null,
+      contentType: perf.contentType,
       generationLookupMs: perf.generationLookupMs,
       ledgerLookupMs: perf.ledgerLookupMs,
       totalMs: Date.now() - perf.requestStart,
@@ -6896,25 +7142,34 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
+    // write-side treatment as a prerender write: index deferred, answer from
+    // the serialized echo. `answerFromEcho` gates exactly those two decisions
+    // (the pre-write drain, and reading the card back out of the index vs.
+    // echoing it) and nothing prerender-specific beyond them.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
-    // card. fileSerialization runs lookupDefinition on the card's
-    // adoptsFrom module, and with CS-11003's deferred +source POST a
-    // module that was just uploaded may not be indexed yet —
-    // serialization would then throw FilterRefersToNonexistentTypeError
-    // and the +json POST would fail. Draining here makes the JSON-API
-    // path tolerant of an immediately-preceding +source POST without
-    // disturbing the +json POST's own synchronous-indexing contract.
+    // card, so the JSON-API path tolerates an immediately-preceding deferred
+    // +source POST without disturbing the +json POST's own
+    // synchronous-indexing contract.
     //
-    // A prerender-originated write skips the drain: the job it would wait on
-    // needs the render slot (and, on the queued-command path, the worker) the
-    // caller is holding, so waiting deadlocks. Serialization still resolves a
-    // definition it has never seen — `lookupDefinition` reads through to
-    // `prerenderModule`, which serves the module off disk rather than out of
-    // the index. A module the same caller just rewrote reads through for the
-    // same reason: `_batchWriteUnlocked` drops that module's cached
-    // definition as it writes the bytes, so no indexing-dependent step
-    // stands between a module rewrite and the serialization that follows it.
-    if (!duringPrerender) {
+    // Why any caller may skip it: serialization's only cross-file dependency
+    // is `fileSerialization` → `lookupDefinition`, and that lookup is
+    // caller-agnostic — the definition service never sees this request, and a
+    // cache miss reads the module through `prerenderModule`, off disk rather
+    // than out of the index. A module the caller just rewrote reads through
+    // the same way: `_batchWriteUnlocked` drops the module's cached
+    // definition and mints a loader epoch as it writes the bytes. So no
+    // indexing-dependent step stands between a module write and the
+    // serialization that follows it, for prerender and skip-index-wait
+    // callers alike — which likely makes this drain vestigial for the default
+    // path too; removing it is a separate change that must re-prove the
+    // module-POST-then-card-POST race it guards.
+    //
+    // A prerender-originated write additionally MUST skip it: the job it
+    // would wait on needs the render slot (and, on the queued-command path,
+    // the worker) the caller is holding, so waiting deadlocks.
+    if (!answerFromEcho) {
       let pending = this.incrementalIndexing();
       if (pending) {
         await pending;
@@ -7018,12 +7273,12 @@ export class Realm {
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(duringPrerender ? { waitForIndex: false } : {}),
+      ...(answerFromEcho ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
-    if (duringPrerender) {
+    if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet.
       doc = await this.serializedInstanceEcho(
@@ -7090,6 +7345,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
+    // write-side path as a prerender write — index deferred, answer from the
+    // serialized echo — without the prerender-only serialization tweaks
+    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -7358,10 +7618,10 @@ export class Realm {
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(duringPrerender ? { waitForIndex: false } : {}),
+        ...(answerFromEcho ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
-      if (duringPrerender) {
+      if (answerFromEcho) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
         // nothing to read back yet.
         doc = await this.serializedInstanceEcho(
@@ -10466,4 +10726,8 @@ interface ScreenshotServePerf {
   correlationId: string | null;
   generationLookupMs: number;
   ledgerLookupMs: number;
+  // The encoding this request concerns: spec-derived on the DSL path (known
+  // even when the capture never runs), the served row's own contentType on
+  // the named path.
+  contentType: CaptureContentType | null;
 }

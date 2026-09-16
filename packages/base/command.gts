@@ -43,6 +43,22 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
+  // When true, the save does not block on the realm's in-flight incremental
+  // indexing: the realm indexes the write deferred and responds from the
+  // serialized document. The writer's own next card read still waits on that
+  // deferred job (the realm drains the requester's own writes on card reads),
+  // so what goes eventually-consistent is search — _search/_federated-search
+  // have no such drain — plus other users' sessions and anonymous readers.
+  // Defaults to false — an unset BooleanField reads as false — which preserves
+  // the synchronous-indexing behavior every caller relies on. The polarity is
+  // opt-in precisely so the safe default survives the field being unset.
+  //
+  // Deliberately exposed in the generated tool schema (it is not in
+  // ignoreInputFields): the description below is what the model sees.
+  @field skipIndexWait = contains(BooleanField, {
+    description:
+      'Leave unset for a normal save. Set true only to make the save return without waiting for the realm to index it — the saved card may briefly not appear in searches. Do not set this when a search for the saved card follows the save.',
+  });
 }
 
 export class CopyCardToRealmInput extends CardDef {

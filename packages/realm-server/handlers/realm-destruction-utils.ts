@@ -120,8 +120,15 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM prerendered_html WHERE realm_url =`, param(realmURL)]);
+  // A deleted realm never reindexes, so its interned stylesheets would
+  // otherwise never be swept.
+  await q([`DELETE FROM scoped_css WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_meta WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_generations WHERE realm_url =`, param(realmURL)]);
+  await q([
+    `DELETE FROM realm_type_generations WHERE realm_url =`,
+    param(realmURL),
+  ]);
   await q([`DELETE FROM realm_file_meta WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_metadata WHERE url =`, param(realmURL)]);
 }

@@ -107,6 +107,36 @@ export interface RealmGenerationsTable {
   loader_epoch: string;
 }
 
+// The catch-all `realm_type_generations.type_key`. A lookup always folds this
+// row in alongside the keys it asked for, so a pass that cannot name the types
+// it touched — and a from-scratch rebuild, where a type whose last row
+// vanished is named by nothing else — can move every type-scoped key at once
+// by moving this one row.
+export const ALL_TYPES_KEY = '*';
+
+// A realm's per-card-type freshness watermarks: the newest generation seen on
+// each channel among the rows carrying `type_key` in their adoption chain.
+// `realm_generations` says when anything in the realm last moved; this says
+// when a particular type last moved, which is what lets a cached search
+// anchored on unrelated types stay reachable across a write.
+//
+// `type_key` is the `internalKeyFor` spelling `boxel_index.types` stores, so a
+// query's type anchors address these rows directly. A realm with no row for a
+// key reads as generation 0 on both channels: a type nothing has written yet
+// cannot have moved, and the first write that touches it creates the row.
+export interface RealmTypeGenerationsTable {
+  realm_url: string;
+  type_key: string;
+  // The newest `realm_generations.current_generation` an index pass that
+  // touched this type committed.
+  index_generation: number;
+  // The newest generation a prerendered-HTML swap covering a row of this type
+  // published. Advances on its own once prerendering is split off the indexing
+  // pass, which is why it is a separate column rather than a second reading of
+  // the index leg.
+  html_generation: number;
+}
+
 export interface CardTypeSummary {
   code_ref: string;
   display_name: string;

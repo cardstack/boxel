@@ -11,6 +11,9 @@ import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
+  CaptureContentType,
+  CaptureMedia,
+  CaptureOutputType,
   ScreenshotFormat,
   ScreenshotImageType,
   ScreenshotManifest,
@@ -410,6 +413,12 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // reindex, so the reconcile sweep re-drives these instead — and this bounds
   // that retrying, for the case where the shells never do agree.
   staleShellFailureRenders?: number;
+  // The gateway-failure twin of `staleShellFailureRenders`: consecutive
+  // renders that withheld a gateway/network failure for this row. Withholding
+  // clears the `has_error` that would have asked for a reindex, so the
+  // reconcile sweep re-drives these — and this bounds that, for a gateway
+  // failure that keeps recurring rather than clearing on the next render.
+  gatewayFailureRenders?: number;
   // Per-slot wall-clock of the declared-screenshot captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
@@ -1025,6 +1034,22 @@ export interface Diagnostics
   // An empty array is not written: absence means no verdict, and a reader must
   // find its own row type listed before withholding anything.
   staleShellFailure?: ('instance' | 'file')[];
+  // Set only when the prerender server has concluded that a render failed
+  // because a fetch it made returned a gateway or network failure — a
+  // balancer 502/503/504, a connection reset, or a body that is not the
+  // content type the request asked for — rather than because the card is
+  // broken. The document-loading path parses the balancer's HTML error page
+  // as the card document and the resulting failure would otherwise be latched
+  // as the card's verdict, serving 500 to every reader until an invalidation;
+  // a network event that lasted milliseconds must not become a durable
+  // statement about the card.
+  //
+  // Structurally identical to `staleShellFailure`, and read the same way: the
+  // list of row types whose *own* failure was the gateway error (a visit
+  // produces the instance and file rows independently and they fail for their
+  // own reasons), an empty array is never written, and absence means no
+  // verdict — a reader must find its own row type listed before withholding.
+  gatewayFailure?: ('instance' | 'file')[];
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1381,6 +1406,17 @@ export type ScreenshotCaptureOverrides = {
   // envelope, so a batch of differing envelopes yields differently-sized PNGs
   // off one render.
   envelope?: { width: number; height: number };
+  // Output encoding of the capture. `png` (the default, elided from the
+  // canonical form) and `pdf` are the values the engine honors; the roster
+  // reserves `jpeg`/`webp` for the encode legs the capture engine grows next,
+  // and the shared parse refuses those values by name until it does. Part of
+  // the ledger identity — two encodings of one render are two cache entries.
+  type?: CaptureOutputType;
+  // CSS media the render settles under before capture. `screen` (the
+  // default, elided) is the rendering every screenshot has always captured;
+  // `print` — refused by the shared parse until the engine emulates it —
+  // engages the card's print CSS. Part of the ledger identity.
+  media?: CaptureMedia;
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -1427,15 +1463,19 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
-// One captured image in a screenshot response. `deviceScaleFactor` is the
-// effective scale used for this capture, so a consumer can reconstruct physical
-// vs CSS pixel dimensions.
+// One captured artifact in a screenshot response. `deviceScaleFactor` is the
+// scale the render ran at, so a consumer can reconstruct physical vs CSS
+// pixel dimensions for raster output.
 export type ScreenshotCaptureResult = {
   name: string;
   base64: string;
-  width: number;
-  height: number;
+  // CSS dimensions of a raster capture; absent for pdf output, which has no
+  // single pixel extent — `pageCount` describes it instead.
+  width?: number;
+  height?: number;
   deviceScaleFactor: number;
+  // Page count of a pdf capture; absent for raster output.
+  pageCount?: number;
 };
 
 export type ScreenshotPrerenderResponse = {
@@ -1449,7 +1489,11 @@ export type ScreenshotPrerenderResponse = {
   base64?: string;
   width?: number;
   height?: number;
-  contentType?: 'image/png';
+  // The encoding of `base64` (and every entry in `captures` — a response is
+  // one encoding throughout). The engine produces `image/png` and
+  // `application/pdf`; the type is the full output union so the persist and
+  // serving paths discriminate on it rather than assuming an image.
+  contentType?: CaptureContentType;
   error?: string | null;
   meta?: PrerenderResponseMeta;
 };
@@ -1625,6 +1669,7 @@ export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
 export * from './scoped-css.ts';
+export * from './scoped-css-gc.ts';
 export * from './html-utils.ts';
 export * from './utils.ts';
 export * from './authorization-middleware.ts';
@@ -1635,6 +1680,7 @@ export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
@@ -1938,6 +1984,17 @@ export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
   relativeTo?: RealmResourceIdentifier | URL | undefined;
+  // When `true`, the card write tells the realm not to block on the realm's
+  // in-flight incremental indexing before responding — it indexes the write
+  // deferred and answers from the serialized document instead of reading it
+  // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to false
+  // (wait), which is the synchronous-indexing contract every existing caller
+  // relies on. The writer's own next card read still waits on the deferred
+  // job (card reads drain the requester's own writes); what goes eventually-
+  // consistent is search — _search/_federated-search have no such drain —
+  // plus other users' sessions and anonymous readers. Only the save path
+  // (store.add → persistAndUpdate) honors this; create()/copy ignore it.
+  skipIndexWait?: boolean;
 }
 
 export interface AddOptions extends CreateOptions {

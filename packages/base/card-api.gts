@@ -116,7 +116,6 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
-  peekQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
@@ -598,6 +597,12 @@ export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
 
 export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
+  // Queue this search behind the concurrency ceiling of the store it runs
+  // against, instead of putting it on the wire the moment the resource is
+  // created. Independent of the caps applied to card `@context` searches (page
+  // size, realms fan-out): this changes when a search runs, never what it
+  // returns.
+  throttled?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
   seed?: StoreSearchSeed<T>;
@@ -634,6 +639,15 @@ export interface CardStore {
   realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
+  // Whether an instance this store is already holding for `url` is current
+  // enough to hand to a link edge in place of a fresh load. The property a
+  // store has to make good on is that what it holds still reflects the realm:
+  // either it drops what it holds when its view of the realm moves, or it
+  // reloads what it holds when the realm says a file changed. A store that
+  // offers neither — or one asked about a target whose changes it would never
+  // hear about — answers false, and the edge loads for itself. Absent means
+  // false, so a store with no opinion never serves a held instance to a link.
+  canReuseResidentInstance?(url: string): boolean;
   setCard(url: string, instance: CardDef): void;
   setFileMeta(url: string, instance: FileDef): void;
   setCardNonTracked(id: string, instance: CardDef): void;
@@ -4364,48 +4378,50 @@ function lazilyLoadLink(
   });
   void (async () => {
     let isFileLink = isFileDef(field.card);
+    // A field getter is what calls this, and the getter runs inside a render.
+    // Everything below writes the field and notifies card tracking, which a
+    // render that has already read that field treats as a backtracking
+    // re-render and rejects. Yielding here puts every one of those writes in a
+    // later microtask, whichever branch produced the value: a branch that
+    // loads yields on its own fetch, and a branch that hands over an instance
+    // the store already holds has nothing of its own to wait for.
+    await Promise.resolve();
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is scoped to the realm view being
-      // rendered: it drops every instance it holds when the render scope moves
-      // (the host store's `observeIndexingJob`, called before a render
-      // hydrates its card and from the load path — not a member of the
-      // `CardStore` interface in this file), so every instance in it was
-      // deserialized
-      // against THIS view of the realm's files. Note it is that drop which
-      // carries the guarantee, not the `clearCache` reset — that one is
-      // scheduled only when a pass invalidates an executable, and reaches only
-      // the single tab its visit lands on, so a pass that changed only
-      // instances schedules none at all.
-      // So an instance already in the store is current — reuse it directly
-      // instead of re-fetching its card+source and re-running the full field
+      // Hand over an instance the store is already holding instead of
+      // re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
-      // redundancy is what makes a densely cross-linked render quadratic (the
-      // same target reached through many parents is rebuilt once per parent).
-      // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
-      // gate the store scopes itself on: outside a render (the live app) a link
-      // may be stale after invalidation and must reload, and a render carrying
-      // no job id is one whose store never scoped itself, so it offers no
-      // guarantee to reuse on.
-      let inIndexingRender =
-        typeof globalThis !== 'undefined' &&
-        Boolean((globalThis as any).__boxelRenderContext) &&
-        Boolean((globalThis as any).__boxelJobId);
-      let reusable = inIndexingRender
+      // redundancy is what makes a densely cross-linked render quadratic — the
+      // same target reached through many parents is rebuilt once per parent —
+      // and it costs the most on a search, whose results routinely share
+      // targets. The per-consumer dependency is still recorded either way, so
+      // invalidation tracks this edge.
+      //
+      // Whether what the store holds is current enough to stand in for a load
+      // is the store's own question, so the store answers it rather than this
+      // module inferring it from render globals. What this adds is reuse
+      // across time — an edge asking after an earlier one has already settled.
+      // Edges asking at the same moment are collapsed by the loads still in
+      // flight, both the per-instance map above and the store's own per-URL
+      // one, and this leaves both of those doing their job.
+      let reusable = store.canReuseResidentInstance?.(reference)
         ? isFileLink
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      // Only reuse an instance that finished deserializing. The job-scoped
-      // store also holds partially-built, non-tracked instances: a failed
-      // `_updateFromSerialized` leaves its half-built instance behind (the
-      // store keeps it so cyclic deserialization can resolve), with
-      // `isSavedInstance` still false — it flips true only at the end of a
-      // successful deserialize. Reusing such a partial would skip the
-      // load/error path that plants the broken-link sentinel and index an
-      // incomplete target; falling through re-attempts the load and re-plants
-      // the sentinel.
+      // Whether the held instance finished deserializing is part of what the
+      // store answers above, and it has to be: a deserialize plants its
+      // instance before it builds any field and leaves a failed one in place
+      // so cyclic deserialization can still resolve it, and nothing on the
+      // instance records which of those it is. `isSavedInstance` reads like
+      // that record and is not one — a `FileDef` carries it true from its
+      // class body and never has it cleared, and the link deserializers stamp
+      // it true on any resident instance they hand back without checking. It
+      // stays here as a narrowing on the card branch, not as the answer.
+      //
+      // Reusing a partial would skip the load/error path that plants the
+      // broken-link sentinel and hand the reader an incomplete target;
+      // falling through re-attempts the load and re-plants the sentinel.
       if (
         reusable &&
         reusable[isSavedInstance] === true &&
@@ -4627,14 +4643,37 @@ function hasInflightLoadForField(
 
 // Supply `getRelationshipMembershipState` with the loading status and query-field membership
 // that live above field-support: in-flight link loads (here) and per-field
-// search resources (in query-field-support). Observe-only — this never starts a
-// load or a search; the template's field getter does that.
+// search resources (in query-field-support). In-flight link loads are observed
+// rather than started; a query field is resolved, for the reason below.
 registerRelationshipProbe((instance, field) => {
   // Entangle the reading render with the field's loading signal so a deferred
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
-    let resource = peekQueryFieldSearchResource(instance, field.name);
+    // Asking a query field for its state is a demand for the field. A card that
+    // renders a pending state while `isLoaded` is false, and reaches its rows
+    // only once loaded, would otherwise wait forever on a search nothing had
+    // started. Creation is idempotent — an existing resource comes back as-is
+    // without re-arming anything — so repeated reads observe rather than
+    // restart, and a field whose query is not yet resolvable still reports as
+    // unresolved until it is.
+    //
+    // This resolves on the same terms as the field getter, including how the
+    // resource's liveness is decided, because a status read and a value read
+    // are the same demand arriving by different routes. That is deliberately
+    // unlike the pass that runs at deserialization, which defers inside a
+    // render context rather than deciding liveness for a card it was not asked
+    // about: here the caller is the render that wants the field.
+    let resource = ensureQueryFieldSearchResource(
+      getStore(instance),
+      instance,
+      field,
+      runtimeQueryDependencyContext({
+        queryField: field.name,
+        consumer: (instance as CardDef).id,
+        source: 'card-api:relationship-probe',
+      }),
+    );
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
@@ -5483,11 +5522,24 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // computed once and every card without one skips the walk entirely.
     if (hasQueryFields(instance)) {
       let store = getStore(instance);
+      // A document's `data` is what it is about; its `included` carries the
+      // cards its links name. `resourceFrom` hands a link's target on by
+      // identity, so comparing against `data` separates the two exactly, and a
+      // link followed on its own reaches here as the `data` of the document its
+      // own read returned.
+      //
+      // Every caller deserializes from a single-resource document — a search
+      // result is re-wrapped as its own — so the collection form is answered
+      // only because the document type admits one, not because a caller sends
+      // one. Membership of `data` is the same question either way.
+      let isDocumentSubject = Array.isArray(doc.data)
+        ? (doc.data as LooseCardResource[]).includes(resource)
+        : doc.data === resource;
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
         if (field?.queryDefinition) {
-          resolveQueryFieldEagerly(store, instance, field);
+          resolveQueryFieldEagerly(store, instance, field, isDocumentSubject);
         }
       }
     }

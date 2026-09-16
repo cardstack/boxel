@@ -434,11 +434,19 @@ function graft(
  * Which layer answers a read, and with what.
  *
  * A read reports `unavailable` when the value it returns is missing something
- * the host said it could not supply — a marker at the path, or one nested
- * under it, since the returned subtree would be incomplete. A marker *above*
- * the path only applies where the stored document has nothing of its own
- * there: a host that could not supply a linked Card's Fields has said nothing
- * about the stored edge pointing at it.
+ * the host said it could not supply. A marker *at* the path always applies.
+ *
+ * A marker *below* the path applies only where the stored document holds
+ * nothing of its own there. Where it does, what comes back is the Card's own
+ * value and the marker speaks for what sits beneath it rather than for this
+ * read: a host that could not supply a linked Card's Fields has said nothing
+ * about the stored edge pointing at it, and refusing the edge would take away
+ * a value the Card has. The root is excluded from that relief — every Card
+ * with any content at all "answers" there, so the test cannot discriminate,
+ * and a read of the whole Card is precisely the read an overlay completes.
+ *
+ * A marker *above* the path applies on the same condition, for the same
+ * reason.
  *
  * Otherwise an overlay answers whenever one participates in the value: it
  * supplied the path, the read sits inside a value it supplied, or the value
@@ -456,8 +464,13 @@ export function classifyOverlayRead(
   const key = overlayPathKey(path);
   if (index.empty) return { event: read(key, 'source', value) };
 
-  const nested = index.unavailable.get(key) ?? index.unavailableUnder.get(key);
-  if (nested) return unavailableRead(key, nested);
+  const exact = index.unavailable.get(key);
+  if (exact) return unavailableRead(key, exact);
+
+  const beneath = index.unavailableUnder.get(key);
+  if (beneath && (path.length === 0 || !storedAnswers(index.stored, path))) {
+    return unavailableRead(key, beneath);
+  }
 
   const covered =
     index.coverage.get(key) ??
