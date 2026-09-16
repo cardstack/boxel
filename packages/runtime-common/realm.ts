@@ -169,7 +169,9 @@ import type {
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
+import { commitBatch } from './card-operations/coordinator.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
+import { isOperationFailure } from './card-operations/types.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import { merge } from 'lodash-es';
@@ -6066,52 +6068,98 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Source-content-type callers, by definition, don't depend on indexed
-    // state — if they did they would use application/vnd.card+json. Return
-    // as soon as the source bytes are durable; indexing happens async and
-    // surfaces errors via error_doc as before. Subscribers to indexing
-    // events still see the broadcast once the worker settles.
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      await request.text(),
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
-    );
-    return createResponse({
-      body: null,
-      init: {
-        status: 204,
-        headers: {
-          'last-modified': formatRFC7231(lastModified * 1000),
-          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
-        },
-      },
+    return await this.replaceFileContent(
+      request,
       requestContext,
-    });
+      await request.text(),
+    );
   }
 
   private async upsertBinaryFile(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Binary files have no indexable card representation, so awaiting the
-    // index update would be even more wasteful than for card source. Return
-    // as soon as the bytes are durable.
-    let bytes = new Uint8Array(await request.arrayBuffer());
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      bytes,
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
+    return await this.replaceFileContent(
+      request,
+      requestContext,
+      new Uint8Array(await request.arrayBuffer()),
     );
+  }
+
+  // The write behind both file-content routes: one `update` entry naming the
+  // request's own path, committed as a batch of one.
+  //
+  // Both routes put whatever bytes they are given at whatever path they are
+  // given, which is what `rawSource` means — so both set it, and only they
+  // do. It is what lets them keep reaching the three things an update on a
+  // file otherwise refuses: a module's source, a card instance's stored
+  // `.json`, and a path with nothing at it yet, since these are the routes
+  // that create the files they write. Through the operations envelope an
+  // update on a card is instead the JSON:API merge its document describes and
+  // one on a module is refused, because a caller able to ask for a verbatim
+  // replacement of a card's source could write bytes that are no longer a
+  // card and leave the realm to discover it at index time.
+  //
+  // Neither caller depends on indexed state — a caller that did would be
+  // asking for `application/vnd.card+json` — so both return as soon as the
+  // bytes are durable. Indexing follows on the queue, reports its errors
+  // through `error_doc` as it does for any write, and broadcasts to
+  // subscribers once the worker settles. The operations envelope has no such
+  // opt-out: it reports a generation per entry, which only exists once the
+  // index job has landed.
+  private async replaceFileContent(
+    request: Request,
+    requestContext: RequestContext,
+    content: string | Uint8Array,
+  ): Promise<Response> {
+    let url = new URL(request.url);
+    let localPath = this.paths.local(url);
+    let result: Awaited<ReturnType<typeof commitBatch>>[number];
+    try {
+      [result] = await commitBatch(
+        this.batchCore,
+        [{ op: 'update', href: url.href, content, rawSource: true }],
+        {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          actor: requestContext.authenticatedUser ?? undefined,
+          waitForIndex: false,
+        },
+      );
+    } catch (err: unknown) {
+      if (isOperationFailure(err)) {
+        // A batch reports a refusal as an operations error, which is the
+        // envelope's currency. This route answers in statuses, and the status
+        // is what a caller acts on — an oversized payload has to keep reading
+        // as "send less" rather than as "the realm is broken, try again". So
+        // the refusal is carried back across as the error this route has
+        // always thrown, keeping the status the batch chose.
+        throw new CardError(err.error.detail ?? err.message, {
+          status: err.error.status,
+          title: err.error.title,
+        });
+      }
+      throw err;
+    }
+    let lastModified = result?.meta.lastModified;
+    if (lastModified == null) {
+      // The commit reports a modification time for every file it writes, so
+      // reaching here means the write did not land as one. Said out loud
+      // rather than defaulted, since a default would answer 204 with a date
+      // that describes no file.
+      throw new CardError(
+        `write of ${url.href} reported no modification time`,
+        {
+          status: 500,
+          title: 'Internal Server Error',
+        },
+      );
+    }
+    // A file is created once and every later write reports that same moment,
+    // so this is the file's age rather than the age of the bytes now in it.
+    // It is read here rather than carried out of the commit because it is a
+    // response header of this facade, sourced the same way every read route
+    // on this realm sources it.
+    let created = await this.getCreatedTime(localPath);
     return createResponse({
       body: null,
       init: {
