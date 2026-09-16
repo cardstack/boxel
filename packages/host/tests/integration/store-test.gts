@@ -2201,6 +2201,45 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a small new card saves even when its resident linked graph would overflow the size limit if inlined', async function (assert) {
+    // Regression: the client size check used to measure the whole POST body,
+    // `included[]` and all. A new card that links to already-saved cards the
+    // tab has loaded serialises those cards into `included` — which the realm
+    // discards on write — so a tiny card could fail "Card size exceeds maximum"
+    // purely because of how much of the realm the tab happened to have resident.
+    let environmentService = getService('environment-service') as any;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    try {
+      // A saved, resident linked card large enough that inlining it into
+      // `included` would blow the limit, while the new card's own document is
+      // tiny. Saved under the realm's default ceiling before the client limit
+      // is lowered; the realm keeps its own (unchanged) ceiling throughout.
+      let bigFriend = new PersonDef({ name: 'x'.repeat(6000) });
+      let savedFriend = await (storeService as any).persistAndUpdate(bigFriend);
+      assert.true(isCardInstance(savedFriend), 'the large linked card saved');
+
+      environmentService.cardSizeLimitBytes = 2500;
+
+      let instance = new PersonDef({ name: 'Small' });
+      (instance as any).bestFriend = bigFriend;
+
+      let result = await (storeService as any).persistAndUpdate(instance);
+      assert.true(
+        isCardInstance(result),
+        "a new card whose own document is under the limit saves regardless of how large a graph it links to — the check measures what the realm stores, not the tab's loaded `included`",
+      );
+      let cardPath = `${(instance as any).id.substring(
+        testRealmURL.length,
+      )}.json`;
+      assert.ok(
+        await testRealmAdapter.openFile(cardPath),
+        'the realm holds the created card',
+      );
+    } finally {
+      environmentService.cardSizeLimitBytes = originalMaxSize;
+    }
+  });
+
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
     // Driven through `persistAndUpdate` rather than `save`, because the
     // autosave queue awaits the in-flight mutation before it saves at all —

@@ -185,7 +185,7 @@ export default class CardService extends Service {
         typeof requestInit.body === 'string'
           ? requestInit.body
           : JSON.stringify(requestInit.body, null, 2);
-      this.validateSizeLimit(urlString, jsonString, 'card');
+      this.validateCardWriteSize(urlString, jsonString);
     }
 
     let response = await this.network.authedFetch(url, requestInit);
@@ -427,6 +427,44 @@ export default class CardService extends Service {
       body: JSON.stringify(doc),
     });
     return response.json();
+  }
+
+  // The 512 KB ceiling is a per-card-*file* limit, but a card write POSTs a
+  // document whose `included[]` inlines every linked card the tab happens to
+  // have resident — and the realm discards every included member that has no
+  // `lid` (it keeps only the primary card plus any brand-new, unsaved links it
+  // is being asked to create in the same request; see the realm's card POST
+  // handler). Measuring the concatenated body would therefore fail a tiny card
+  // because of cards it merely links to, so validate each resource that will
+  // actually become a file on its own — mirroring the realm's own per-file
+  // `assertWriteSize` — rather than the whole request body.
+  private validateCardWriteSize(url: string, body: string) {
+    let doc: LooseSingleCardDocument | undefined;
+    try {
+      doc = JSON.parse(body);
+    } catch {
+      // Not a JSON document we can split into resources; fall back to holding
+      // the whole body to the limit rather than letting an unmeasured write by.
+    }
+    if (!doc || typeof doc !== 'object' || !doc.data) {
+      this.validateSizeLimit(url, body, 'card');
+      return;
+    }
+    // The primary card is always written; an included member is written only
+    // when it carries a `lid` (an unsaved link created alongside this card).
+    let resources = [
+      doc.data,
+      ...(doc.included ?? []).filter(
+        (resource) => typeof (resource as { lid?: unknown }).lid === 'string',
+      ),
+    ];
+    for (let resource of resources) {
+      this.validateSizeLimit(
+        url,
+        JSON.stringify({ data: resource }, null, 2),
+        'card',
+      );
+    }
   }
 
   private validateSizeLimit(
