@@ -965,6 +965,20 @@ module(basename(import.meta.filename), function () {
           ],
           excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
         });
+        // A removal does not read `X-Boxel-Client-Request-Id`, so there is no
+        // id for a client to recognize its own delete by — the field is
+        // asserted as carrying none rather than compared, so it stays a true
+        // statement about that path whichever way it is spelled.
+        let carriesNoClientRequestId =
+          content.clientRequestId === null ||
+          content.clientRequestId === undefined;
+        assert.true(
+          carriesNoClientRequestId,
+          `the event carries no client request id (got ${JSON.stringify(
+            content.clientRequestId,
+          )})`,
+        );
+        delete content.clientRequestId;
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',

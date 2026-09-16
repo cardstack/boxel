@@ -53,17 +53,8 @@ import {
   type EntryCollectionDocument,
   type EntrySingleDocument,
 } from './document-types.ts';
-import type {
-  CardResource,
-  HtmlQuery,
-  HtmlResource,
-  Relationship,
-} from './resource-types.ts';
-import {
-  clearReplacedArrayFieldMeta,
-  HtmlResourceType,
-} from './resource-types.ts';
-import { normalizeRelationships } from './relationship-utils.ts';
+import type { HtmlQuery, HtmlResource } from './resource-types.ts';
+import { HtmlResourceType } from './resource-types.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
   findRedirectCycles,
@@ -112,7 +103,6 @@ import {
   unsupportedMediaType,
   type SerializedError,
 } from './error.ts';
-import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
   isCardResource,
@@ -176,17 +166,19 @@ import type {
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
-import type { BatchCore } from './card-operations/coordinator.ts';
+import { commitBatch } from './card-operations/coordinator.ts';
+import type {
+  BatchCore,
+  BatchEntryResult,
+} from './card-operations/coordinator.ts';
+import { isOperationFailure } from './card-operations/types.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
   IncrementalChange,
 } from './tasks/indexer.ts';
-import { isCodeRef, visitModuleDeps } from './code-ref.ts';
+import { isCodeRef } from './code-ref.ts';
 import { merge } from 'lodash-es';
-import { mergeWith } from 'lodash-es';
-import { cloneDeep } from 'lodash-es';
-import { isEqual } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -249,8 +241,6 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
-import { mergeRelationships } from './merge-relationships.ts';
-import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
@@ -7145,36 +7135,10 @@ export class Realm {
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
     // write-side treatment as a prerender write: index deferred, answer from
     // the serialized echo. `answerFromEcho` gates exactly those two decisions
-    // (the pre-write drain, and reading the card back out of the index vs.
-    // echoing it) and nothing prerender-specific beyond them.
+    // (whether the batch waits for indexing, and whether the new card is read
+    // back out of the index or echoed) and nothing prerender-specific beyond
+    // them.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
-    // Drain any in-flight incremental indexing before serializing the new
-    // card, so the JSON-API path tolerates an immediately-preceding deferred
-    // +source POST without disturbing the +json POST's own
-    // synchronous-indexing contract.
-    //
-    // Why any caller may skip it: serialization's only cross-file dependency
-    // is `fileSerialization` → `lookupDefinition`, and that lookup is
-    // caller-agnostic — the definition service never sees this request, and a
-    // cache miss reads the module through `prerenderModule`, off disk rather
-    // than out of the index. A module the caller just rewrote reads through
-    // the same way: `_batchWriteUnlocked` drops the module's cached
-    // definition and mints a loader epoch as it writes the bytes. So no
-    // indexing-dependent step stands between a module write and the
-    // serialization that follows it, for prerender and skip-index-wait
-    // callers alike — which likely makes this drain vestigial for the default
-    // path too; removing it is a separate change that must re-prove the
-    // module-POST-then-card-POST race it guards.
-    //
-    // A prerender-originated write additionally MUST skip it: the job it
-    // would wait on needs the render slot (and, on the queued-command path,
-    // the worker) the caller is holding, so waiting deadlocks.
-    if (!answerFromEcho) {
-      let pending = this.incrementalIndexing();
-      if (pending) {
-        await pending;
-      }
-    }
     let body = await request.text();
     let json;
     try {
@@ -7208,84 +7172,90 @@ export class Realm {
         }
       }
     }
-    let files = new Map<LocalPath, string>();
-    let included = (maybeIncluded ?? []) as CardResource[];
-    let resources = [primaryResource, ...included];
-    let primaryResourceURL: URL | undefined;
-    let primarySerialization: LooseSingleCardDocument | undefined;
-    for (let [i, resource] of resources.entries()) {
-      if (
-        (i > 0 && typeof resource.lid !== 'string') ||
-        (resource.meta.realmURL &&
-          ensureTrailingSlash(resource.meta.realmURL) !== this.url)
-      ) {
-        continue;
-      }
-      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-
-      let fileURL = this.paths.fileURL(
-        `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-      );
-      if (i === 0) {
-        primaryResourceURL = fileURL;
-      }
-
-      promoteLocalIdsToRemoteIds({
-        resource,
-        included,
-        realmURL: new URL(this.url),
-      });
-      let fileSerialization: LooseSingleCardDocument | undefined;
-      try {
-        fileSerialization = await this.fileSerialization(
-          { data: merge(resource, { meta: { realmURL: request.url } }) },
-          fileURL,
-        );
-      } catch (err: any) {
-        if (err.message.startsWith('field validation error')) {
-          return badRequest({
-            message: err.message,
-            requestContext,
-            lid: resource.lid,
-          });
-        } else {
-          return systemError({
-            requestContext,
-            message: err.message,
-            additionalError: err,
-            lid: resource.lid,
-          });
-        }
-      }
-      let localPath = this.paths.local(fileURL);
-      files.set(localPath, JSON.stringify(fileSerialization, null, 2));
-      if (i === 0) {
-        primarySerialization = fileSerialization;
-      }
+    let lid =
+      typeof primaryResource.lid === 'string' ? primaryResource.lid : undefined;
+    let result: BatchEntryResult;
+    try {
+      result = (
+        await commitBatch(
+          this.batchCore,
+          [
+            {
+              // One entry, carrying its side-loads. A `POST` with `included`
+              // is already a multi-card write, and a create stages the primary
+              // together with every side-load that named itself with a `lid`,
+              // under the one index job and the one index event this request
+              // has always produced.
+              op: 'create',
+              document: {
+                data: primaryResource,
+                ...(maybeIncluded ? { included: maybeIncluded } : {}),
+              },
+              // Where the `POST` was aimed — the realm root, or a directory
+              // under it. The card's type directory is named beneath that, and
+              // the file beneath that.
+              directory: this.paths.local(new URL(request.url)),
+            },
+          ],
+          {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            ...(requestContext.authenticatedUser
+              ? { actor: requestContext.authenticatedUser }
+              : {}),
+            // Waiting decides two things and an echoing caller wants neither:
+            // the batch drains indexing already in flight before it stages,
+            // and it returns only once its own index job has landed. A
+            // prerender-originated write MUST NOT wait — the job it would wait
+            // on needs the render slot, and on the queued-command path the
+            // worker, that this caller is holding, so waiting deadlocks — and
+            // it has nothing to read back either, since it answers from what
+            // it wrote. Skipping the drain costs the write nothing: serializing
+            // a card resolves its type through `lookupDefinition`, which reads
+            // the module off disk rather than out of the index, and the commit
+            // drops a rewritten module's cached definition as it writes the
+            // bytes.
+            ...(answerFromEcho ? { waitForIndex: false } : {}),
+            reportStoredContent: answerFromEcho,
+            // A side-load claiming another realm is not this realm's to
+            // create, and a `POST` carrying one has always stored the card
+            // with that edge empty rather than refusing the write.
+            foreignSideLoadLink: 'leave',
+          },
+        )
+      )[0];
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, { lid });
     }
-    if (!primaryResourceURL) {
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it writes, so
+      // reaching here means the card did not land as one. Said out loud rather
+      // than defaulted, since a default would answer 201 for a card the realm
+      // may not be holding.
       return systemError({
         requestContext,
-        message: `unable to determine URL of the primary resource from request payload`,
-        lid: primaryResource.lid,
+        message: `unable to determine the card created from the request payload`,
+        lid,
       });
     }
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(answerFromEcho ? { waitForIndex: false } : {}),
-    });
-
-    let newURL = primaryResourceURL.href.replace(/\.json$/, '');
+    let created = result.meta.created;
+    let newURL = result.id;
     let doc: SingleCardDocument;
     if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
-      // nothing to read back yet.
-      doc = await this.serializedInstanceEcho(
-        primarySerialization!,
-        newURL,
-        lastModified,
-      );
+      // nothing to read back yet. The document is the one the commit stored,
+      // reported by the batch rather than read back off the file — which has
+      // been open to every other writer since the commit released the lock.
+      let stored = storedCardDocument(result);
+      if (!stored) {
+        return systemError({
+          requestContext,
+          message: `Unable to report newly created card: ${newURL}, the commit reported no stored document`,
+          id: newURL,
+          lid,
+        });
+      }
+      doc = await this.serializedInstanceEcho(stored, newURL, lastModified);
     } else {
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(newURL),
@@ -7346,9 +7316,8 @@ export class Realm {
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
-    // write-side path as a prerender write — index deferred, answer from the
-    // serialized echo — without the prerender-only serialization tweaks
-    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    // write-side path as a prerender write: index deferred, answer from the
+    // serialized echo.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
@@ -7375,347 +7344,91 @@ export class Realm {
       }
     }
 
-    // Serialize concurrent PATCHes against the same realm so the
-    // existing-file read, merge, and write are all inside one critical
-    // section. Without the lock, two replicas could both read the same
-    // `original`, compute independent merges, and the second writer's
-    // merge would silently lose the first's changes.
+    // The merge belongs to the update this stages: arrays replacing rather
+    // than merging into what is there, the realm-managed `meta` keys a client
+    // echo must never persist, a type that cannot change, the relationship
+    // merge, and leaving an unchanged card's file exactly as it is. It runs
+    // under the realm's write lock, which spans the read of the stored file
+    // and the write of the merged one, so two patches of one card cannot both
+    // compute a merge over the same pre-state and have the second silently
+    // lose the first. The merge base is that stored file rather than the
+    // index, which is downstream of it and can lag.
     //
-    // Inside the lock we invoke `_batchWriteUnlocked` rather than the
-    // public `writeMany` — re-entering the lock through the public method
-    // would block on a different pinned pool connection.
-    return await this.#dbAdapter.withWriteLock(this.url, async () => {
-      let primarySerialization: LooseSingleCardDocument | undefined;
-      // The merge base is the stored source file, not the index. The
-      // index is downstream of the file and can lag it — a backlogged or
-      // in-flight index job would hand us a stale `pristine_doc`, and
-      // merging the patch over stale state silently reverts every field
-      // the index hasn't caught up on. The file is written inside this
-      // same write lock, so it is always current.
-      let existingFile = await this.readFileAsText(`${localPath}.json`);
-      if (!existingFile) {
-        return notFound(request, requestContext);
-      }
-      let original: CardResource;
-      try {
-        let existingDoc = JSON.parse(existingFile.content);
-        if (!isCardResource(existingDoc?.data)) {
-          throw new Error('stored file is not a card document');
-        }
-        original = cloneDeep(existingDoc.data) as CardResource;
-      } catch (err: any) {
+    // Side-loaded resources ride along as the document's `included`, each
+    // created under the `lid` the caller named it with, in the same batch as
+    // the patch that links to them.
+    let commit = async (reserialize?: true) =>
+      (
+        await commitBatch(
+          this.batchCore,
+          [
+            {
+              op: 'update',
+              href: instanceURL,
+              document: {
+                data: patch,
+                ...(maybeIncluded ? { included: maybeIncluded } : {}),
+              },
+              ...(reserialize ? { reserialize } : {}),
+            },
+          ],
+          {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            ...(requestContext.authenticatedUser
+              ? { actor: requestContext.authenticatedUser }
+              : {}),
+            // The same trade a create makes, for the same two reasons — see
+            // `createCard`, where the deadlock this avoids is spelled out.
+            ...(answerFromEcho ? { waitForIndex: false } : {}),
+            // Read by both answers a patch can give that do not come from the
+            // index: the deferred write's echo, and the browser-test fallback
+            // below.
+            reportStoredContent: true,
+            // The same reading a create takes of a side-load claiming another
+            // realm: the edge is stored empty and the patch succeeds.
+            foreignSideLoadLink: 'leave',
+          },
+        )
+      )[0];
+    let result: BatchEntryResult;
+    try {
+      result = await commit();
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, {
+        id: instanceURL,
+      });
+    }
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it leaves
+      // behind, whether it rewrote it or found it already holding these bytes,
+      // so reaching here means the patch did not land as a write at all.
+      return systemError({
+        requestContext,
+        message: `the patch of ${instanceURL} reported no modification time`,
+        id: instanceURL,
+      });
+    }
+    let created = result.meta.created;
+    let doc: SingleCardDocument;
+    if (answerFromEcho) {
+      // See serializedInstanceEcho: the write indexed deferred, so there is
+      // nothing to read back yet. The document is the one the commit stored,
+      // reported by the batch rather than read back off the file — which has
+      // been open to every other writer since the commit released the lock.
+      let stored = storedCardDocument(result);
+      if (!stored) {
         return systemError({
           requestContext,
-          message: `cannot apply patch, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
-          additionalError: err,
+          message: `Unable to report patched card: ${instanceURL}, the commit reported no stored document`,
           id: instanceURL,
         });
       }
-      delete original.meta.lastModified;
-      let originalClone = cloneDeep(original);
-
-      // The merge from here to the write is stated twice: `stageUpdate` in
-      // card-operations/executors.ts carries the same guard, the same
-      // realm-managed-key deletes, the same array-replacing customizer, the
-      // same relationship merge and the same no-op short circuit, so a batch
-      // update and a `PATCH` of one document land the same bytes. Anything
-      // learned here — a fifth server-stamped key that must not persist from
-      // a client echo, say — has to be learned there in the same change,
-      // until the two are one path.
-      if (
-        originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
-          internalKeyFor(
-            originalClone.meta.adoptsFrom,
-            url,
-            this.#virtualNetwork,
-          )
-      ) {
-        return badRequest({
-          message: `Cannot change card instance type to ${JSON.stringify(
-            patch.meta.adoptsFrom,
-          )}`,
-          requestContext,
-          id: instanceURL,
-        });
-      }
-      let included = (maybeIncluded ?? []) as CardResource[];
-
-      delete (patch as any).type;
-      delete (patch as any).meta.realmInfo;
-      delete (patch as any).meta.realmURL;
-      // Server-stamped at serve time (the `meta.screenshots` join); an echo
-      // from a client must never persist into the source file.
-      delete (patch as any).meta.screenshots;
-
-      promoteLocalIdsToRemoteIds({
-        resource: patch,
-        included,
-        realmURL: new URL(this.url),
-      });
-
-      // When a patch fully replaces an array attribute, its per-index field
-      // metadata (e.g. the polymorphic type recorded at `meta.fields['items.1']`,
-      // or the array-valued `meta.fields['items']` for a composite containsMany)
-      // is stale. `mergeWith` overwrites arrays in attributes but deep-merges the
-      // `meta.fields` object, so without clearing these first the removed
-      // element's metadata survives and can be re-applied to a new entry when the
-      // array grows again. Drop the matching entries from the original before the
-      // merge so the patch's own metadata (if any) wins cleanly.
-      clearReplacedArrayFieldMeta(originalClone.meta, patch.attributes);
-
-      let primaryResource = mergeWith(
-        originalClone,
-        patch,
-        (_objectValue: any, sourceValue: any) => {
-          // a patched array should overwrite the original array instead of merging
-          // into an original array, otherwise we won't be able to remove items in
-          // the original array
-          return Array.isArray(sourceValue) ? sourceValue : undefined;
-        },
+      doc = await this.serializedInstanceEcho(
+        stored,
+        instanceURL,
+        lastModified,
       );
-
-      if (primaryResource.relationships || patch.relationships) {
-        let merged = mergeRelationships(
-          primaryResource.relationships,
-          patch.relationships,
-        );
-
-        if (merged && Object.keys(merged).length !== 0) {
-          primaryResource.relationships = merged;
-        }
-      }
-
-      // If the patch makes no semantic changes and doesn't include side-loaded
-      // resources, short-circuit to avoid touching the file (and changing mtime).
-      if (included.length === 0 && isEqual(primaryResource, original)) {
-        let entry = await this.#realmIndexQueryEngine.cardDocument(
-          new URL(instanceURL),
-          {
-            loadLinks: true,
-            skipQueryBackedExpansion: duringPrerender,
-          },
-        );
-        if (entry && entry.type !== 'error') {
-          let existingDoc = merge({}, entry.doc, {
-            data: {
-              links: { self: instanceURL },
-              meta: { lastModified: entry.doc.data.meta.lastModified },
-            },
-          });
-          let createdAt = await this.getCreatedTime(
-            this.paths.local(url) + '.json',
-          );
-          // The PATCH echo is the same served representation as a GET —
-          // including the joined `meta.screenshots` (the store replaces an
-          // instance's meta wholesale from a save response, so an echo
-          // without it would wipe the key client-side until the next GET)
-          // and the same validator components.
-          if (entry.screenshots) {
-            existingDoc.data.meta = {
-              ...existingDoc.data.meta,
-              screenshots: screenshotsMetaFromManifest(entry.screenshots, {
-                realmURL: this.url,
-                instanceLocalPath: this.paths.local(url),
-              }),
-            };
-          }
-          // entry.doc came from cardDocument(), which already called
-          // attachRealmInfo() and (re)populated the realm-info cache —
-          // so the cached hash is current as of this response.
-          await this.getRealmInfo();
-          let foreignDeps = this.hasForeignRealmDeps(entry.deps);
-          let etag = foreignDeps
-            ? undefined
-            : buildCardJsonEtag(
-                entry.indexedAt,
-                this.getCachedRealmInfoHash(),
-                screenshotsEtagFingerprint(entry.screenshots),
-              );
-          this.#serveInstanceIdsAsRRI(existingDoc);
-          return createResponse({
-            body: JSON.stringify(existingDoc, null, 2),
-            init: {
-              headers: {
-                'content-type': SupportedMimeType.CardJson,
-                'cache-control': this.cardJsonCacheControl(requestContext),
-                ...(etag ? { etag } : {}),
-                ...etagSuppressedHeader(foreignDeps),
-                ...lastModifiedHeader(existingDoc),
-                ...(createdAt != null
-                  ? { 'x-created': formatRFC7231(createdAt * 1000) }
-                  : {}),
-              },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      delete (primaryResource as any).id; // don't write the ID to the file
-      let files = new Map<LocalPath, string>();
-      let resources = [primaryResource, ...included];
-      for (let [i, resource] of resources.entries()) {
-        if (
-          (i > 0 && typeof resource.lid !== 'string') ||
-          (resource.meta.realmURL && resource.meta.realmURL !== this.url)
-        ) {
-          continue;
-        }
-        let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-        let fileURL =
-          i === 0
-            ? new URL(`${url}.json`)
-            : this.paths.fileURL(
-                `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-              );
-        // we already did this one
-        if (i !== 0) {
-          promoteLocalIdsToRemoteIds({
-            resource,
-            included,
-            realmURL: new URL(this.url),
-          });
-          visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-            setModuleURL(
-              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
-            );
-          });
-        }
-        let fileSerialization: LooseSingleCardDocument | undefined;
-        try {
-          fileSerialization = await this.fileSerialization(
-            {
-              data: merge(resource, { meta: { realmURL: this.url } }),
-            },
-            fileURL,
-          );
-        } catch (err: any) {
-          if (err.message.startsWith('field validation error')) {
-            return badRequest({
-              message: err.message,
-              requestContext,
-              id: instanceURL,
-            });
-          } else {
-            return systemError({
-              requestContext,
-              message: err.message,
-              additionalError: err,
-              id: instanceURL,
-            });
-          }
-        }
-        let path = this.paths.local(fileURL);
-        files.set(path, JSON.stringify(fileSerialization, null, 2));
-        if (i === 0) {
-          primarySerialization = fileSerialization;
-        }
-      }
-      // Use the unlocked inner write so we don't re-enter
-      // withWriteLock (which would block on a different pinned pool
-      // connection).
-      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(answerFromEcho ? { waitForIndex: false } : {}),
-      });
-      let doc: SingleCardDocument;
-      if (answerFromEcho) {
-        // See serializedInstanceEcho: the write indexed deferred, so there is
-        // nothing to read back yet.
-        doc = await this.serializedInstanceEcho(
-          primarySerialization!,
-          instanceURL,
-          lastModified,
-        );
-        this.#serveInstanceIdsAsRRI(doc);
-        return createResponse({
-          body: JSON.stringify(doc, null, 2),
-          init: {
-            headers: {
-              'content-type': SupportedMimeType.CardJson,
-              'cache-control': this.cardJsonCacheControl(requestContext),
-              ...lastModifiedHeader(doc),
-              ...(created
-                ? { 'x-created': formatRFC7231(created * 1000) }
-                : {}),
-            },
-          },
-          requestContext,
-        });
-      }
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(instanceURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
-      );
-      if (!entry || entry?.type === 'error') {
-        if (
-          primarySerialization &&
-          isBrowserTestEnv() &&
-          !(globalThis as any).__emulateServerPatchFailure
-        ) {
-          doc = merge({}, primarySerialization, {
-            data: {
-              id: instanceURL,
-              links: { self: instanceURL },
-              meta: {
-                ...(primarySerialization.data.meta ?? {}),
-                lastModified,
-              },
-            },
-          }) as SingleCardDocument;
-        } else {
-          return systemError({
-            requestContext,
-            message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-            id: instanceURL,
-            additionalError: entry
-              ? CardError.fromSerializableError(entry.error)
-              : undefined,
-          });
-        }
-      } else {
-        doc = merge({}, entry.doc, {
-          data: {
-            links: { self: instanceURL },
-            meta: { lastModified },
-          },
-        });
-        // The PATCH echo carries the joined `meta.screenshots` like a GET
-        // does — the store replaces an instance's meta wholesale from a
-        // save response, so an echo without it would wipe the key
-        // client-side until the next GET.
-        if (entry.screenshots) {
-          doc.data.meta = {
-            ...doc.data.meta,
-            screenshots: screenshotsMetaFromManifest(entry.screenshots, {
-              realmURL: this.url,
-              instanceLocalPath: this.paths.local(url),
-            }),
-          };
-        }
-      }
-      // Same rationale as the no-op short-circuit branch above:
-      // cardDocument() above primed the realm-info cache via
-      // attachRealmInfo(), but only when entry was a non-error doc.
-      // On the error fallback we may still need to populate it.
-      await this.getRealmInfo();
-      let foreignDeps =
-        entry && entry.type !== 'error'
-          ? this.hasForeignRealmDeps(entry.deps)
-          : false;
-      let etag =
-        entry && entry.type !== 'error' && !foreignDeps
-          ? buildCardJsonEtag(
-              entry.indexedAt,
-              this.getCachedRealmInfoHash(),
-              screenshotsEtagFingerprint(entry.screenshots),
-            )
-          : undefined;
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -7723,15 +7436,157 @@ export class Realm {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...(etag ? { etag } : {}),
-            ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },
         requestContext,
       });
+    }
+    let readEntry = async () =>
+      await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
+        loadLinks: true,
+        skipQueryBackedExpansion: false,
+      });
+    let entry = await readEntry();
+    if (!entry || entry.type === 'error') {
+      // The index holds no document for the card this request just patched —
+      // it has never been indexed, or its row records why it could not be.
+      // Either way a patch that changed nothing left the file untouched, so
+      // nothing has been put in front of the indexer; rewriting the card in
+      // canonical serialized form is what does that, and it is how an empty
+      // patch stores and indexes a card the realm was holding but had not
+      // read. A patch that did change something has already been written, so
+      // this stages the same bytes, the commit finds them unchanged, and the
+      // second read answers what the first one did.
+      try {
+        result = await commit(true);
+      } catch (err: unknown) {
+        return this.#cardWriteRefusal(err, request, requestContext, {
+          id: instanceURL,
+        });
+      }
+      lastModified = result?.meta.lastModified ?? lastModified;
+      created = result?.meta.created ?? created;
+      entry = await readEntry();
+    }
+    if (!entry || entry.type === 'error') {
+      let stored = storedCardDocument(result);
+      if (
+        stored &&
+        isBrowserTestEnv() &&
+        !(globalThis as any).__emulateServerPatchFailure
+      ) {
+        doc = merge({}, stored, {
+          data: {
+            id: instanceURL,
+            links: { self: instanceURL },
+            meta: {
+              ...(stored.data.meta ?? {}),
+              lastModified,
+            },
+          },
+        }) as SingleCardDocument;
+      } else {
+        return systemError({
+          requestContext,
+          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+          id: instanceURL,
+          additionalError: entry
+            ? CardError.fromSerializableError(entry.error)
+            : undefined,
+        });
+      }
+    } else {
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: instanceURL },
+          meta: { lastModified },
+        },
+      });
+      // The PATCH echo carries the joined `meta.screenshots` like a GET
+      // does — the store replaces an instance's meta wholesale from a
+      // save response, so an echo without it would wipe the key
+      // client-side until the next GET.
+      if (entry.screenshots) {
+        doc.data.meta = {
+          ...doc.data.meta,
+          screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+            realmURL: this.url,
+            instanceLocalPath: this.paths.local(url),
+          }),
+        };
+      }
+    }
+    // cardDocument() above primed the realm-info cache via attachRealmInfo(),
+    // but only when entry was a non-error doc. On the error fallback we may
+    // still need to populate it.
+    await this.getRealmInfo();
+    let foreignDeps =
+      entry && entry.type !== 'error'
+        ? this.hasForeignRealmDeps(entry.deps)
+        : false;
+    let etag =
+      entry && entry.type !== 'error' && !foreignDeps
+        ? buildCardJsonEtag(
+            entry.indexedAt,
+            this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(entry.screenshots),
+          )
+        : undefined;
+    this.#serveInstanceIdsAsRRI(doc);
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': this.cardJsonCacheControl(requestContext),
+          ...(etag ? { etag } : {}),
+          ...etagSuppressedHeader(foreignDeps),
+          ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
+      },
+      requestContext,
     });
+  }
+
+  // A batch reports a refusal as an operations error, which is the envelope's
+  // currency. The card verbs answer in statuses and bodies clients have always
+  // read, so a refusal is carried back across into the response the handler
+  // would have produced itself, keeping the status the batch chose.
+  //
+  // A 404 is spelled here rather than by the batch: the batch names the card
+  // it resolved, where these routes name the URL the caller asked for.
+  // Anything above 4xx that is not one of these two is a refusal the endpoint
+  // has always thrown — a payload over the realm's ceiling, say — and it
+  // travels the same way, so the status and sentence a client acts on do not
+  // move.
+  #cardWriteRefusal(
+    err: unknown,
+    request: Request,
+    requestContext: RequestContext,
+    identity: { id?: string; lid?: string } = {},
+  ): Response {
+    if (!isOperationFailure(err)) {
+      throw err;
+    }
+    let { status, title, detail } = err.error;
+    if (status === 404) {
+      return notFound(request, requestContext);
+    }
+    if (status === 400) {
+      return badRequest({ message: detail, requestContext, ...identity });
+    }
+    if (status >= 500) {
+      return systemError({
+        requestContext,
+        message: detail,
+        status,
+        ...identity,
+      });
+    }
+    throw new CardError(detail, { status, title });
   }
 
   // Card+JSON ETags are unsafe when the card has dependencies that live
@@ -8527,14 +8382,22 @@ export class Realm {
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
-    let result = await this.#realmIndexQueryEngine.cardDocument(url);
-    if (!result) {
-      return notFound(request, requestContext);
+    try {
+      // Whether there is a card here is settled by the stored file, read
+      // inside the same lock the removal happens under. That is what makes a
+      // card removable the moment it is written rather than once indexing has
+      // caught up with it, and it is also what tells a card's `.json` from a
+      // JSON file the realm merely holds — which has no card to remove.
+      await commitBatch(this.batchCore, [{ op: 'delete', href: url.href }], {
+        ...(requestContext.authenticatedUser
+          ? { actor: requestContext.authenticatedUser }
+          : {}),
+      });
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, {
+        id: url.href,
+      });
     }
-    let path = this.paths.local(url) + '.json';
-    await this.delete(path, {
-      initiatingUser: requestContext.authenticatedUser ?? null,
-    });
     return createResponse({
       body: null,
       init: { status: 204 },
@@ -10585,6 +10448,21 @@ function lastModifiedHeader(
   ) as {} | { 'last-modified': string };
 }
 
+// The document a write's own commit stored, for an answer that does not come
+// out of the index — a write whose indexing is deferred, and the browser-test
+// fallback for a card the index cannot yet speak for. These are the bytes the
+// commit wrote, as the batch reported them, so nothing can have moved
+// underneath them between the write and the answer. Undefined when the batch
+// was not asked for them (`reportStoredContent`).
+function storedCardDocument(
+  result: BatchEntryResult,
+): LooseSingleCardDocument | undefined {
+  let content = result?.meta.storedContent;
+  return content == null
+    ? undefined
+    : (JSON.parse(content) as LooseSingleCardDocument);
+}
+
 // Visibility hook for the foreign-realm-deps ETag suppression — when
 // a card+json response declines to emit an ETag because it has
 // dependencies in another realm, this header surfaces the reason so
@@ -10636,63 +10514,6 @@ export interface CardDefinitionResource {
 // A change set whose every URL names a file that is there to be visited.
 function asUpdates(urls: URL[]): IndexChange[] {
   return urls.map((url) => ({ url, operation: 'update' as const }));
-}
-
-function promoteLocalIdsToRemoteIds({
-  resource,
-  realmURL,
-  included,
-}: {
-  resource: CardResource;
-  included: CardResource[];
-  realmURL: URL;
-}) {
-  if (!resource.relationships) {
-    return;
-  }
-  let normalizedRelationships = normalizeRelationships(resource.relationships);
-
-  function setSelfLink(relationship: Relationship, lid: string) {
-    let sideLoadedResource = included.find((i) => i.lid === lid);
-    if (!sideLoadedResource) {
-      throw new Error(`Could not find local id ${lid} in "included" resources`);
-    }
-    if (
-      sideLoadedResource.meta.realmURL &&
-      sideLoadedResource.meta.realmURL !== realmURL.href
-    ) {
-      return;
-    }
-    let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
-    relationship.links = {
-      self: paths.fileURL(`${name}/${lid}`).href,
-    };
-  }
-
-  let paths = new RealmPaths(realmURL);
-  for (let [fieldName, relationship] of Object.entries(
-    normalizedRelationships,
-  )) {
-    if (relationship.data && Array.isArray(relationship.data)) {
-      for (let [index, item] of relationship.data.entries()) {
-        if ('lid' in item) {
-          let indexedRelationship =
-            normalizedRelationships[`${fieldName}.${index}`];
-          if (indexedRelationship) {
-            setSelfLink(indexedRelationship, item.lid);
-          }
-        }
-      }
-      continue;
-    }
-    if (
-      relationship.data &&
-      !Array.isArray(relationship.data) &&
-      'lid' in relationship.data
-    ) {
-      setSelfLink(relationship, relationship.data.lid);
-    }
-  }
 }
 
 function assertRealmPermissions(
