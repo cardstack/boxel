@@ -186,16 +186,18 @@ export interface CommitBatchOptions {
   // needs the generation, and a caller reading the cards back needs the rows.
   //
   // It decides a second thing, and a caller reaching for an early response is
-  // choosing both. Waiting also drains indexing already in flight *before*
-  // staging, which is what lets an entry serialize against a definition from a
-  // module written moments earlier; not waiting skips that drain, so staging
-  // runs against whatever the definition cache already holds. The two travel
-  // together because they are the same trade — a caller that will not wait for
-  // its own indexing gains nothing by waiting for someone else's, and paying
-  // that drain per write is what makes a run of writes serialize behind each
-  // other. Do not reach for this on a batch whose entries resolve a
-  // definition: an entry that replaces bytes verbatim resolves none, which is
-  // why the file-write routes can take it.
+  // choosing both: waiting also drains indexing already in flight *before*
+  // staging. The two travel together because they are the same trade — a
+  // caller that will not wait for its own indexing gains nothing by waiting
+  // for someone else's, and paying that drain per write is what makes a run of
+  // writes serialize behind each other.
+  //
+  // It is not a choice about definition freshness, which is the tempting
+  // reading: a definition resolves off disk rather than out of the index, so
+  // an entry still serializes against a module written moments earlier
+  // whichever way this is set. See the drain in `commitBatch` for what the
+  // wait actually buys, and the realm's own card-write gate for the case
+  // stated at length.
   waitForIndex?: boolean;
 }
 
@@ -223,17 +225,26 @@ export async function commitBatch(
     // module upload fails to resolve a type the realm already has on disk.
     //
     // A batch that does not wait for its own indexing does not wait for
-    // anyone else's either — the same trade the realm's own commit makes for
-    // the same option, and for the same reason: draining would make each such
+    // anyone else's either — the same trade the realm's own commit makes at
+    // the same gate, and for the same reason: draining would make each such
     // write queue behind whatever indexing is still in flight, so a caller
     // writing a run of files, like a realm push or an editor saving
     // repeatedly, would pay the previous write's indexing on every one of
-    // them. What it gives up is the definition freshness above, so it belongs
-    // only to a caller whose entries resolve no definition — today the pair of
-    // file-write routes, whose entries replace bytes verbatim and serialize
-    // nothing. That is a rule for whoever dispatches envelope writes through
-    // here, not a guard already standing: the envelope answers 501 for every
-    // write today, so there is nothing yet that could ask for it.
+    // them.
+    //
+    // Skipping it does not cost an entry its definitions. Serialization's one
+    // cross-file dependency resolves a definition off disk rather than out of
+    // the index, and a module written in the same commit has its cached
+    // definition dropped as the bytes land — so no indexing-dependent step
+    // stands between a module write and a serialization that follows it. What
+    // the drain guards is narrower than the whole of definition freshness; the
+    // realm states the case at its own card-write gate, which is the place to
+    // read before widening or removing either copy.
+    //
+    // So this is not reserved for entries that serialize nothing. A caller
+    // whose response does not read indexed state can take it, and a
+    // prerender-originated write *must*: the job it would wait on needs the
+    // render slot that caller is holding, so waiting deadlocks.
     if (opts.waitForIndex !== false) {
       await core.drainIndexing();
     }
