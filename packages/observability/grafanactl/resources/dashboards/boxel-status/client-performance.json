@@ -778,12 +778,403 @@
         "interval": "1m"
       },
       {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        },
+        "id": 199,
+        "panels": [],
+        "title": "Release health \u2014 is a build better or worse than the one before it?",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "How many query re-runs one incoming index event costs a tab, split by build. A write should only re-run queries whose types it could have moved, so this falls when the type gate tightens. Chosen because it is a ratio of two quantities that scale together: measured day-to-day drift with no deploy is +5% for the total and -1% for the external split, against +37-79% for the per-session rates, so a real change is legible here and buried elsewhere. The external series is the one to watch \u2014 it is churn caused by other people's writes rather than a tab reacting to its own save.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "re-runs",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "none",
+            "decimals": 2
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 25
+        },
+        "id": 200,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (app_version) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"realm-event\" | unwrap reloads_triggered [$__interval])) / sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"realm-event\" [$__interval]))",
+            "legendFormat": "{{app_version}} \u2014 all",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (app_version) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"realm-event\" | own_write=\"false\" | unwrap reloads_triggered [$__interval])) / sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"realm-event\" | own_write=\"false\" [$__interval]))",
+            "legendFormat": "{{app_version}} \u2014 someone else's write",
+            "queryType": "range",
+            "refId": "B"
+          }
+        ],
+        "title": "Live-search re-runs per index event",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Requests a tab issues per card it loads, split by build. An N+1 in link or card loading shows here as a step up; removing one shows as a step down. Expressed per card load rather than per session because session length and what people do in one vary far more than the code does.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "requests",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "none",
+            "decimals": 1
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 25
+        },
+        "id": 201,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"server-request\" [$__interval])) / sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" [$__interval]))",
+            "legendFormat": "{{app_version}}",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Server requests per card load",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Median time from a card starting to load to it settling \u2014 the 'Loading card\u2026' window as a user experiences it. p50 and not p95: roughly a tenth of loads sit at a 30-second ceiling (see the panel beside this one), which pins every upper percentile to that wall and leaves it unable to move.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "ms",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        },
+        "id": 202,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | unwrap settle_ms [$__interval]) by (app_version)",
+            "legendFormat": "{{app_version}}",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Card settle p50",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Share of card loads settling within a second of 30,000ms. This is a wall, not a tail: over one production day 317 of 3,309 loads landed in that one-second band and only 26 went past it. A percentile hides this entirely, which is why it has its own panel. Any movement here is worth a look regardless of what shipped.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "% of loads",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "percent",
+            "decimals": 1
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "id": 203,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "100 * sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | settle_ms >= 29500 | settle_ms <= 30500 [$__interval])) / sum by (app_version) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" [$__interval]))",
+            "legendFormat": "{{app_version}}",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Card loads stuck at the 30s ceiling",
+        "type": "timeseries"
+      },
+      {
         "collapsed": true,
         "gridPos": {
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 25
+          "y": 40
         },
         "id": 13,
         "panels": [
@@ -844,7 +1235,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 26
+              "y": 41
             },
             "id": 9,
             "options": {
@@ -958,7 +1349,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 26
+              "y": 41
             },
             "id": 10,
             "options": {
@@ -1054,7 +1445,7 @@
               "h": 9,
               "w": 12,
               "x": 0,
-              "y": 34
+              "y": 49
             },
             "id": 11,
             "options": {
@@ -1169,7 +1560,7 @@
               "h": 9,
               "w": 12,
               "x": 12,
-              "y": 34
+              "y": 49
             },
             "id": 12,
             "options": {
@@ -1225,7 +1616,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 35
+          "y": 50
         },
         "id": 19,
         "panels": [
@@ -1286,7 +1677,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 36
+              "y": 51
             },
             "id": 14,
             "options": {
@@ -1378,7 +1769,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 36
+              "y": 51
             },
             "id": 15,
             "options": {
@@ -1492,7 +1883,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 44
+              "y": 59
             },
             "id": 16,
             "options": {
@@ -1566,7 +1957,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 44
+              "y": 59
             },
             "id": 17,
             "options": {
@@ -1642,7 +2033,7 @@
               "h": 10,
               "w": 24,
               "x": 0,
-              "y": 52
+              "y": 67
             },
             "id": 18,
             "options": {
@@ -1680,7 +2071,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 53
+          "y": 68
         },
         "id": 22,
         "panels": [
@@ -1741,7 +2132,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 54
+              "y": 69
             },
             "id": 20,
             "options": {
@@ -1815,7 +2206,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 54
+              "y": 69
             },
             "id": 21,
             "options": {
@@ -1902,7 +2293,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 55
+          "y": 70
         },
         "id": 25,
         "panels": [
@@ -1980,7 +2371,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 56
+              "y": 71
             },
             "id": 23,
             "options": {
@@ -2036,7 +2427,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 64
+              "y": 79
             },
             "id": 24,
             "options": {
@@ -2103,7 +2494,7 @@
               "h": 9,
               "w": 24,
               "x": 0,
-              "y": 76
+              "y": 91
             },
             "id": 38,
             "options": {
@@ -2170,7 +2561,7 @@
               "h": 10,
               "w": 24,
               "x": 0,
-              "y": 131
+              "y": 146
             },
             "id": 39,
             "options": {
@@ -2210,7 +2601,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 57
+          "y": 72
         },
         "id": 94,
         "panels": [
@@ -2294,7 +2685,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 58
+              "y": 73
             },
             "id": 95,
             "options": {
@@ -2379,7 +2770,7 @@
               "h": 9,
               "w": 12,
               "x": 0,
-              "y": 66
+              "y": 81
             },
             "id": 96,
             "options": {
@@ -2501,7 +2892,7 @@
               "h": 9,
               "w": 12,
               "x": 12,
-              "y": 66
+              "y": 81
             },
             "id": 97,
             "options": {
@@ -2592,7 +2983,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 75
+              "y": 90
             },
             "id": 98,
             "options": {
@@ -2630,7 +3021,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 59
+          "y": 74
         },
         "id": 28,
         "panels": [
@@ -2708,7 +3099,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 60
+              "y": 75
             },
             "id": 26,
             "options": {
@@ -2793,7 +3184,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 60
+              "y": 75
             },
             "id": 27,
             "options": {
@@ -2880,7 +3271,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 61
+          "y": 76
         },
         "id": 32,
         "panels": [
@@ -2941,7 +3332,7 @@
               "h": 8,
               "w": 8,
               "x": 0,
-              "y": 62
+              "y": 77
             },
             "id": 29,
             "options": {
@@ -3044,7 +3435,7 @@
               "h": 8,
               "w": 8,
               "x": 8,
-              "y": 62
+              "y": 77
             },
             "id": 30,
             "options": {
@@ -3136,7 +3527,7 @@
               "h": 8,
               "w": 8,
               "x": 16,
-              "y": 62
+              "y": 77
             },
             "id": 31,
             "options": {
@@ -3192,7 +3583,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 63
+          "y": 78
         },
         "id": 34,
         "panels": [
@@ -3253,7 +3644,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 64
+              "y": 79
             },
             "id": 33,
             "options": {
@@ -3309,7 +3700,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 65
+          "y": 80
         },
         "id": 37,
         "panels": [
@@ -3323,7 +3714,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 66
+              "y": 81
             },
             "id": 35,
             "options": {
@@ -3361,7 +3752,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 78
+              "y": 93
             },
             "id": 36,
             "options": {
@@ -3399,7 +3790,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 67
+          "y": 82
         },
         "id": 40,
         "title": "By user \u2014 who is hitting issues",
@@ -3444,7 +3835,7 @@
               "h": 9,
               "w": 8,
               "x": 0,
-              "y": 68
+              "y": 83
             },
             "id": 41,
             "options": {
@@ -3564,7 +3955,7 @@
               "h": 9,
               "w": 8,
               "x": 8,
-              "y": 68
+              "y": 83
             },
             "id": 42,
             "options": {
@@ -3672,7 +4063,7 @@
               "h": 9,
               "w": 8,
               "x": 16,
-              "y": 68
+              "y": 83
             },
             "id": 43,
             "options": {
