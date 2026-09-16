@@ -1944,6 +1944,10 @@ module(basename(import.meta.filename), function () {
               `the POST line carries a total (${postLine})`,
             );
             assert.ok(
+              /\blockWait=\d+\b/.test(postLine!),
+              `the POST line carries the lockWait stage (${postLine})`,
+            );
+            assert.ok(
               /\bwrite=\d+\b/.test(postLine!),
               `the POST line carries the write stage (${postLine})`,
             );

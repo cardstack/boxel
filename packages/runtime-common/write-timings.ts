@@ -3,7 +3,7 @@ import { logger } from './log.ts';
 // One `realm:write-timing` line per instrumented card write (POST create /
 // PATCH update), the write-path twin of `realm:search-timing`. A card write
 // holds the realm-wide write lock and reads the card back out of the index,
-// but until now had no stage breakdown at all — so a slow write could not be
+// with no other stage breakdown — so a slow write cannot otherwise be
 // attributed to the lock wait, the file write, the index wait, or the
 // readback. Each handler stamps its sequential stages on a `RequestTimings`
 // and emits one line here, keyed by the request's `x-boxel-logging-correlation-id`

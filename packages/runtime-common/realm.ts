@@ -7754,14 +7754,27 @@ export class Realm {
       });
     }
     mark('serialize');
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(answerFromEcho ? { waitForIndex: false } : {}),
-    });
-    // On the default path `writeMany` also awaits the card's synchronous
-    // index; the echo path passes `waitForIndex: false`, so this stage is the
-    // durable file write alone.
+    // Take the write lock explicitly (rather than through `writeMany`, which
+    // is exactly `withWriteLock(() => _batchWriteUnlocked(...))`) so the wait
+    // for it is its own `lockWait` stage, as on the PATCH path. `writeMany`
+    // folds the lock acquisition into the write, and under contention that
+    // wait — not the file write or index — is what dominates; leaving it
+    // inside `write` would make a POST's lock contention as invisible as it
+    // was before this instrumentation.
+    let [{ lastModified, created }] = await this.#dbAdapter.withWriteLock(
+      this.url,
+      async () => {
+        mark('lockWait');
+        return this._batchWriteUnlocked(files, {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          initiatingUser: requestContext.authenticatedUser ?? null,
+          ...(answerFromEcho ? { waitForIndex: false } : {}),
+        });
+      },
+    );
+    // On the default path `_batchWriteUnlocked` also awaits the card's
+    // synchronous index; the echo path passes `waitForIndex: false`, so this
+    // stage is the durable file write alone.
     mark('write');
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
@@ -7791,6 +7804,8 @@ export class Realm {
         let err = entry
           ? CardError.fromSerializableError(entry.error)
           : undefined;
+        mark('readback');
+        emit('error');
         return systemError({
           requestContext,
           message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
@@ -8022,8 +8037,12 @@ export class Realm {
         let entry = await this.#realmIndexQueryEngine.cardDocument(
           new URL(instanceURL),
         );
-        mark('readback');
+        // Marked inside the guard, not before it: on the rare fall-through
+        // (a no-op patch against an errored index row) the normal write path
+        // below marks its own `readback`, and `RequestTimings.add` sums
+        // repeated keys — so an unconditional mark here would double-count.
         if (entry && entry.type !== 'error') {
+          mark('readback');
           let existingDoc = merge({}, entry.doc, {
             data: {
               links: { self: instanceURL },
@@ -8197,6 +8216,7 @@ export class Realm {
             },
           }) as SingleCardDocument;
         } else {
+          emit('error');
           return systemError({
             requestContext,
             message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
