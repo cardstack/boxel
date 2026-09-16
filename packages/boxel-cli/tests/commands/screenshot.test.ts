@@ -184,6 +184,42 @@ describe('boxel screenshot: single capture', () => {
     expect((post.body as any).data.attributes.captureSpec).toEqual(spec);
   });
 
+  it('writes a pdf capture to a .pdf file', async () => {
+    let pdfBytes = Buffer.from('%PDF-1.4 fake-paged-document');
+    let pdfBase64 = pdfBytes.toString('base64');
+    let { authenticator } = makeFake({
+      postResponses: [
+        () =>
+          readyResponse({
+            status: 'ready',
+            base64: pdfBase64,
+            contentType: 'application/pdf',
+            captures: [
+              {
+                name: null,
+                url: null,
+                deviceScaleFactor: 1,
+                pageCount: 2,
+                base64: pdfBase64,
+              },
+            ],
+          }),
+      ],
+    });
+    let out = tempDir();
+    let result = await screenshot(`${CARD_URL}.json`, {
+      authenticator,
+      out,
+      captureSpec: { type: 'pdf' },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.ok).toBe(true);
+    let entry = result.captures[0];
+    expect(entry.status).toBe('ok');
+    expect(entry.file).toBe(join(out, 'Person-fadhlan.pdf'));
+    expect(readFileSync(entry.file!)).toEqual(pdfBytes);
+  });
+
   it('skips discovery when --realm is given and rejects a card outside it', async () => {
     let { authenticator, requests } = makeFake({
       postResponses: [

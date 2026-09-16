@@ -45,6 +45,10 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+  // A `--spec` file can request `captureSpec: { type: 'pdf' }`, and the
+  // server answers with `contentType: application/pdf` — the paged document
+  // belongs in a .pdf file, not the .png fallback.
+  'application/pdf': 'pdf',
 };
 
 export interface CaptureManifestEntry {
