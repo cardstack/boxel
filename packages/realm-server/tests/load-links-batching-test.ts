@@ -346,10 +346,17 @@ module(basename(import.meta.filename), function () {
           stored?.attributes,
           `${resource.id} carries the stored attributes`,
         );
-        assert.deepEqual(
-          (resource.meta as { adoptsFrom?: unknown }).adoptsFrom,
-          (stored?.meta as { adoptsFrom?: unknown } | undefined)?.adoptsFrom,
-          `${resource.id} carries the stored adoptsFrom`,
+        // Only the name, not the whole ref: expansion absolutizes a
+        // side-loaded resource's `adoptsFrom` module against the realm, so
+        // the module it carries is deliberately spelled differently from the
+        // relative form the row stores. The name survives that rewrite, and
+        // it is what says the row resolved to the type it should have.
+        assert.strictEqual(
+          (resource.meta as { adoptsFrom?: { name?: string } }).adoptsFrom
+            ?.name,
+          (stored?.meta as { adoptsFrom?: { name?: string } } | undefined)
+            ?.adoptsFrom?.name,
+          `${resource.id} adopts from the stored type`,
         );
       }
     });
