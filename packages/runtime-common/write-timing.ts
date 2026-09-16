@@ -1,24 +1,31 @@
 import { logger } from './log.ts';
 
 // The write-path counterpart of `realm:search-timing`: one line per card+json
-// POST / PATCH attributing the request's server-side wall-clock across the
+// POST / PATCH, attributing the request's server-side wall-clock across the
 // stages a write runs through.
 //
-// A read has had a stage breakdown for a while; a write has had none, so a
-// slow write could only ever be compared against the duration of the indexing
-// job it waited on. When those two disagree — a PATCH far slower than its own
-// incremental-index job — nothing said where the remainder went, because the
-// candidates (waiting for the realm write lock, draining in-flight indexing,
-// reading the card back out of the index) were not separately observable.
-// These stages exist to tell those apart.
+// Each stage can be the whole of a slow write, and they are not
+// distinguishable from outside:
 //
-// Unlike search timing, this is not gated on the caller sending a correlation
-// id. Writes are a small fraction of a realm's requests — on the order of
-// hundreds an hour against tens of thousands of reads — so emitting for every
-// write costs little, and the slow writes worth explaining are exactly the
-// ones nobody thought to instrument beforehand. A correlation id, when the
-// caller does send one, is stamped on the line so it joins to that request's
-// `realm:requests` entry.
+//   lock      waiting for the realm's write lock, i.e. queueing behind the
+//             realm's other writers
+//   drain     waiting for indexing already in flight
+//   stage     reading the pre-state and running the entries' executors
+//   write     committing the bytes, plus this write's own indexing unless
+//             the caller opted out
+//   readback  reading the written card back out of the index
+//   stringify serializing the response document
+//
+// A write whose duration exceeds its own indexing job's is explained by
+// which of these it spent the difference in; without them the remainder is
+// unattributable.
+//
+// Unlike search timing this is not gated on the caller sending a correlation
+// id. Writes are a small fraction of a realm's requests — hundreds an hour
+// against tens of thousands of reads — so emitting for every write costs
+// little, and a slow write is rarely one that was instrumented in advance. A
+// correlation id, when the caller sends one, is stamped on the line so it
+// joins that request's `realm:requests` entry.
 //
 // Indirection so a test can deterministically capture the emitted line:
 // loglevel rebinds a logger's methods on every `setLevel`, so a test that

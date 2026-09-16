@@ -346,11 +346,14 @@ module(
             if (consumerSaveCount === 1) {
               // the first time we save the consumer we set the relationship to null
               // as we are still waiting for the other realm to assign an ID to the new linked card
-              assert.strictEqual(doc.included!.length, 1);
-              assert.strictEqual(
-                doc.included![0].id,
-                `${testRealmURL}Pet/mango`,
-                "the side loaded resources don't include the newly created card yet",
+              let newFriendLink = (
+                doc.data?.relationships?.['friends.1'] as
+                  | { links?: { self?: string | null } }
+                  | undefined
+              )?.links?.self;
+              assert.notOk(
+                newFriendLink,
+                'the "friends.1" relationship names nothing while the new card is unsaved',
               );
             }
             if (consumerSaveCount === 2) {

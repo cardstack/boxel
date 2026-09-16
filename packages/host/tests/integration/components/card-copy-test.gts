@@ -1036,15 +1036,9 @@ module('Integration | card-copy', function (hooks) {
           },
         },
       });
-      assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-      let included = json.included?.[0]!;
-      assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
-      assert.deepEqual(included.meta.adoptsFrom, {
-        module: rri('../pet'),
-        name: 'Pet',
-      });
-      assert.deepEqual(included.meta.realmURL, testRealmURL);
+      // A write answers with the written card alone, so the linked pet is
+      // named by the relationship above and not carried as a resource.
+      assert.strictEqual(json.included, undefined);
     });
 
     await click(
@@ -1170,15 +1164,9 @@ module('Integration | card-copy', function (hooks) {
           },
         },
       });
-      assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-      let included = json.included?.[0]!;
-      assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
-      assert.deepEqual(included.meta.adoptsFrom, {
-        module: testRRI('pet'),
-        name: 'Pet',
-      });
-      assert.deepEqual(included.meta.realmURL, testRealm2URL);
+      // A write answers with the written card alone, so the linked pet is
+      // named by the relationship above and not carried as a resource.
+      assert.strictEqual(json.included, undefined);
     });
 
     let realmEventTimestampStart = Date.now();

@@ -1734,6 +1734,57 @@ module(basename(import.meta.filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+        // The create path reads the new card back through its own call, so the
+        // shape it answers with is asserted separately from the patch path's.
+        // The read of the card the create just made is the control: it is what
+        // the create would have assembled had it asked.
+        test('a create side-loads none of the new card’s links', async function (assert) {
+          let write = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}hassan` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri(`${testRealmHref}friend.gts`),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+          assert.strictEqual(
+            write.body.data.relationships?.friend?.data?.id,
+            `${testRealmHref}hassan`,
+            'the create names the card its link points at',
+          );
+          assert.notOk(
+            write.body.included,
+            'but carries no side-loaded resources',
+          );
+
+          let localPath = new URL(write.body.data.id).pathname.replace(
+            new URL(testRealmHref).pathname,
+            '',
+          );
+          let read = await request
+            .get(`/${localPath}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (resource: any) => resource.id === `${testRealmHref}hassan`,
+            ),
+            'the read of the created card does side-load that link',
+          );
+        });
+
         test('serves the request', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -3231,10 +3282,9 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        // A slow write could previously only be compared against the duration
-        // of the indexing job it waited on, which left the difference between
-        // the two unattributable. These stages are what makes it attributable,
-        // so the line has to carry the ones that can each be the whole cost.
+        // Each of these stages can be the whole of a slow write, and none is
+        // distinguishable from outside the handler, so the line has to carry
+        // every one of them for a write's duration to be attributable.
         test('a write reports where its time went', async function (assert) {
           let lines: string[] = [];
           setWriteTimingSinkForTests((line) => lines.push(line));
@@ -3275,7 +3325,14 @@ module(basename(import.meta.filename), function () {
             line.includes('corr=write-timing-probe'),
             `line carries the caller's correlation id: ${line}`,
           );
-          for (let stage of ['lock', 'drain', 'stage', 'write', 'readback']) {
+          for (let stage of [
+            'lock',
+            'drain',
+            'stage',
+            'write',
+            'readback',
+            'stringify',
+          ]) {
             assert.ok(
               new RegExp(`\\b${stage}=\\d+`).test(line),
               `line attributes the ${stage} stage: ${line}`,

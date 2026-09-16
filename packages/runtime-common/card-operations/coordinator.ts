@@ -300,59 +300,65 @@ export async function commitBatch(
     if (opts.waitForIndex !== false && entries.some(stagesContent)) {
       await timed('drain', () => core.drainIndexing());
     }
-    let stageStart = Date.now();
-    // Every `lid` in the batch resolves to a URL before any executor runs. A
-    // created card's file is named after its `lid`, so its URL is path math
-    // over the type it adopts — no read and no write — which is what lets an
-    // entry link to a card a later entry mints.
-    let { lids, foreignLids } = indexLids(entries, paths);
-    let { stored, storedMeta } = await readPreState(core, entries, paths);
-    // What an append stages for a file it never read whole. Kept beside
-    // `stored` rather than in it: the two describe the same file in different
-    // terms, and an executor that needs one cannot work from the other.
-    let splices = new Map<LocalPath, SplicedSource>();
     let staged: StagedChange[] = [];
     // The version each entry's merge was computed over, captured as it stages
     // rather than read back at the end: `stored` moves underneath the batch
     // as entries compose, so by the commit it no longer holds what the first
     // entry to touch a file merged over.
     let baseHashes: (string | undefined)[] = [];
-    for (let [index, entry] of entries.entries()) {
-      let change = await stageEntry(entry, index, {
-        realmURL: core.realmURL,
-        paths,
-        lids,
-        foreignLids,
-        foreignSideLoadLink: opts.foreignSideLoadLink,
-        stored,
-        storedMeta,
-        splices,
-        openSourceBytes: core.openSourceBytes,
-        fileExists: core.fileExists,
-        indexedCardValues: core.indexedCardValues,
-        actor: opts.actor ?? '',
-        serializeCard: core.serializeCard,
-        codeRefKey: core.codeRefKey,
-        resolveModuleId: core.resolveModuleId,
-        storedLink: core.storedLink,
-        resolvedLink: core.resolvedLink,
-        lookupDefinition: core.lookupDefinition,
-      });
-      baseHashes.push(
-        change.primaryPath
-          ? (stored.get(change.primaryPath)?.contentHash ??
-              storedMeta.get(change.primaryPath)?.contentHash)
-          : undefined,
-      );
-      compose(stored, storedMeta, splices, entry, change);
-      staged.push(change);
+    // Stamped from a `finally`: an entry that cannot be carried out throws
+    // from the staging work, and a write that failed is exactly the one whose
+    // time someone is trying to account for.
+    let stageStart = Date.now();
+    try {
+      // Every `lid` in the batch resolves to a URL before any executor runs. A
+      // created card's file is named after its `lid`, so its URL is path math
+      // over the type it adopts — no read and no write — which is what lets an
+      // entry link to a card a later entry mints.
+      let { lids, foreignLids } = indexLids(entries, paths);
+      let { stored, storedMeta } = await readPreState(core, entries, paths);
+      // What an append stages for a file it never read whole. Kept beside
+      // `stored` rather than in it: the two describe the same file in different
+      // terms, and an executor that needs one cannot work from the other.
+      let splices = new Map<LocalPath, SplicedSource>();
+      for (let [index, entry] of entries.entries()) {
+        let change = await stageEntry(entry, index, {
+          realmURL: core.realmURL,
+          paths,
+          lids,
+          foreignLids,
+          foreignSideLoadLink: opts.foreignSideLoadLink,
+          stored,
+          storedMeta,
+          splices,
+          openSourceBytes: core.openSourceBytes,
+          fileExists: core.fileExists,
+          indexedCardValues: core.indexedCardValues,
+          actor: opts.actor ?? '',
+          serializeCard: core.serializeCard,
+          codeRefKey: core.codeRefKey,
+          resolveModuleId: core.resolveModuleId,
+          storedLink: core.storedLink,
+          resolvedLink: core.resolvedLink,
+          lookupDefinition: core.lookupDefinition,
+        });
+        baseHashes.push(
+          change.primaryPath
+            ? (stored.get(change.primaryPath)?.contentHash ??
+                storedMeta.get(change.primaryPath)?.contentHash)
+            : undefined,
+        );
+        compose(stored, storedMeta, splices, entry, change);
+        staged.push(change);
+      }
+      assertWritesAllowed(staged);
+      assertLinkedCardsSurvive(staged, paths);
+      assertWritesFit(core, staged);
+      await assertRemovalsAllowed(core, paths, staged);
+      await assertDestinationsFree(core, staged);
+    } finally {
+      timings?.add('stage', Date.now() - stageStart);
     }
-    assertWritesAllowed(staged);
-    assertLinkedCardsSurvive(staged, paths);
-    assertWritesFit(core, staged);
-    await assertRemovalsAllowed(core, paths, staged);
-    await assertDestinationsFree(core, staged);
-    timings?.add('stage', Date.now() - stageStart);
     // Everything above either produced bytes for every entry or threw, and a
     // throw leaves the realm as it was.
     return await timed('write', () =>
