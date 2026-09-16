@@ -5656,6 +5656,25 @@ export class Realm {
   // that every scoped-CSS choke point keys on — in particular the Node-side
   // loader answers such URLs with an empty module instead of fetching, so an
   // injector that touches `document` never evaluates where none exists.
+  //
+  // Two caching decisions are load-bearing here, because a card's module graph
+  // pulls hundreds of these URLs on one page load and each is its own request.
+  //
+  // `varyOnAccept: false` — the body is keyed entirely by the URL's content
+  // hash, so the route never content-negotiates and must not claim it does
+  // (see `createResponse`: a declared-but-unhonored `Vary` makes differing
+  // `Accept` spellings evict each other's stored entry).
+  //
+  // No `ETag` — deliberately, and it is not an oversight to correct. The
+  // consumer is the loader, whose `cachedFetch` layer conditionalizes any
+  // request it holds a validator for by sending `If-None-Match`. A
+  // caller-supplied conditional header makes the browser skip its own cache
+  // and revalidate against the server, so emitting an ETag here would turn a
+  // response the browser answers for free into one network round-trip per URL
+  // per page load — the shape the ETag'd module routes already have. An
+  // `immutable` year-long response with no validator is the one that stays
+  // silent; the content hash in the URL is what makes that safe, since new
+  // bytes arrive under a new URL rather than needing this one re-checked.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
@@ -5685,6 +5704,7 @@ export class Realm {
         },
       },
       requestContext,
+      varyOnAccept: false,
     });
   }
 

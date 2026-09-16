@@ -14,6 +14,7 @@ import {
   baseRealmRRI,
   baseRRI,
   CachingDefinitionLookup,
+  scopedCSSInjectorSource,
   SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
@@ -216,6 +217,96 @@ module(basename(import.meta.filename), function () {
         'cache control header is set correctly',
       );
       assert.ok(response.headers['etag'], 'ETag header is present');
+    });
+
+    // A card's module graph pulls one hashed scoped-CSS request per styled
+    // module — hundreds on a single page load — so this response's headers
+    // decide whether that population costs a page load nothing or one round
+    // trip per URL. Both assertions below are about staying out of the
+    // network: the URL carries the content hash, so the bytes can never go
+    // stale under it, and neither a revalidation nor a cache-variant miss
+    // has anything to discover.
+    test('hashed scoped-CSS is served with headers that let a browser answer it from cache', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash, css FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string; css: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let { hash, css } = interned[0];
+
+      let response = await request
+        .get(`/_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['content-type'],
+        'text/javascript',
+        'served as the JS module `loader.import` evaluates',
+      );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=31536000, immutable',
+        'cache control header is set correctly',
+      );
+      assert.strictEqual(
+        response.text,
+        scopedCSSInjectorSource(
+          `${testRealmURL.pathname}_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`,
+          css,
+        ),
+        'the body is the injector for the interned stylesheet',
+      );
+
+      // No validator: `cachedFetch` conditionalizes any request it holds an
+      // ETag for, and a caller-supplied `If-None-Match` makes the browser
+      // skip its own cache and ask the server. An ETag here would buy a 304
+      // where otherwise there is no request at all.
+      assert.strictEqual(
+        response.headers['etag'],
+        undefined,
+        'no ETag, so nothing conditionalizes the request',
+      );
+      // The body is keyed by the URL's content hash alone, so the response
+      // must not claim to vary on `Accept`: a browser cache stores one
+      // variant per URL, and a `Vary` the route does not honor lets two
+      // `Accept` spellings evict each other's copy. What remains is
+      // `@koa/cors`'s own `Vary: Origin`, which the realm's hardcoded
+      // `Vary: Accept` had been overwriting — that one is honored (the
+      // response's CORS headers really do depend on `Origin`) and is
+      // constant for a given app, so it costs this population nothing.
+      assert.notOk(
+        response.headers['vary']?.includes('Accept'),
+        'does not vary on Accept, so no Accept spelling can evict the stored entry',
+      );
+    });
+
+    // Positive control for the two absence assertions above: the same realm,
+    // reached through a route that really does content-negotiate, still
+    // declares `Vary: Accept`. Without this, dropping the header everywhere
+    // would leave that test green.
+    test('a content-negotiating route still declares Vary: Accept', async function (assert) {
+      let response = await request
+        .get(`/person`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['vary'],
+        'Accept',
+        'module serving negotiates on Accept and says so',
+      );
     });
 
     test('serves file meta with dedicated accept header', async function (assert) {
