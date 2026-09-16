@@ -2808,13 +2808,13 @@ export class Realm {
   // advisory lock. The lock spans the FS write + index update so two
   // replicas can't both commit on top of the same pre-state.
   //
-  // HTTP route handlers in this file that need their READ to be inside the
-  // same critical section as the write (the `/_atomic` precheck and
-  // `patchCardInstance`'s existing-file read) take the lock themselves at the
-  // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
-  // through the public methods would deadlock (a second
-  // `pg_advisory_xact_lock` on the same key would block on its own pinned
-  // pool connection).
+  // A caller that needs its READ inside the same critical section as the write
+  // — the `/_atomic` precheck — takes the lock at its own boundary and invokes
+  // `_batchWriteUnlocked` directly, because re-entering through the public
+  // methods would deadlock: a second `pg_advisory_xact_lock` on the same key
+  // blocks on its own pinned pool connection. A batch does the same thing one
+  // level up, holding the lock across every read it stages from and the commit
+  // it hands them to.
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
