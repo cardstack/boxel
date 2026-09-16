@@ -67,6 +67,7 @@ import {
 import {
   loadWorkload,
   parseWorkload,
+  queryForPass,
   writeAttributes,
   type QuerySpec,
   type Workload,
@@ -170,8 +171,30 @@ let creds = readCredentials(args.csv);
 let workload!: Workload;
 // Resolved once the workload is known, since a committed file can pin it.
 let fieldset!: FieldsetName;
+
+// An explicit flag beats a workload's own member, which beats the default.
+function resolveFieldset(pinned: FieldsetName | undefined): FieldsetName {
+  return isFieldsetName(args.fieldset)
+    ? args.fieldset
+    : (pinned ?? DEFAULT_FIELDSET);
+}
+
 if (!args.deriveWorkload) {
   workload = loadWorkload(args.workload, realmUrl);
+  // A workload file is a deliberate artifact, and the path its queries ask for
+  // decides what the run measures — the same filter costs several times as much
+  // on the entries path as on the item path. So a file has to say which, rather
+  // than inheriting a default nothing in the file records. `--fieldset` states
+  // it just as well, which is what keeps a one-off run cheap.
+  if (workload.fieldset === undefined && !isFieldsetName(args.fieldset)) {
+    console.error(
+      `${args.workload} pins no "fieldset", so the path its numbers would\n` +
+        `describe is not stated anywhere. Add a "fieldset" member to the file,\n` +
+        `or pass --fieldset (${fieldsetOptionsHelp()}) for this run.`,
+    );
+    process.exit(1);
+  }
+  fieldset = resolveFieldset(workload.fieldset);
 }
 
 let stats = {
@@ -290,7 +313,13 @@ function correlationId(): string {
 // One `_federated-search`. The verb is QUERY with the query in the body, which
 // is why this load leaves no query string in ALB access logs and has to be read
 // off the cards instead.
-async function search(session: Session, spec: QuerySpec): Promise<void> {
+async function search(
+  session: Session,
+  spec: QuerySpec,
+  readerIndex: number,
+  pass: number,
+): Promise<void> {
+  let query = queryForPass(spec, readerIndex, pass);
   let started = Date.now();
   try {
     let response = await fetch(searchUrl, {
@@ -305,7 +334,7 @@ async function search(session: Session, spec: QuerySpec): Promise<void> {
       // escape hatch for a shape neither named value covers — wins for itself.
       body: JSON.stringify({
         ...fieldsetWireMembers(fieldset),
-        ...spec.query,
+        ...query,
         realms: [realmUrl],
       }),
     });
@@ -541,9 +570,13 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       })
     : undefined;
 
+  // Which re-run this is, so a shape with variants walks through them rather
+  // than asking its first one every time.
+  let pass = 0;
+
   // First render: the screen fires its whole set at once.
   await primeConnections(specs.length);
-  await Promise.all(specs.map((spec) => search(session, spec)));
+  await Promise.all(specs.map((spec) => search(session, spec, index, pass)));
 
   if (!args.subscribe) {
     // Modelled invalidation: re-run everything on any write this driver made.
@@ -552,8 +585,11 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       if (!running) {
         break;
       }
+      pass++;
       await primeConnections(specs.length);
-      await Promise.all(specs.map((spec) => search(session, spec)));
+      await Promise.all(
+        specs.map((spec) => search(session, spec, index, pass)),
+      );
     }
     return;
   }
@@ -583,7 +619,10 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       stats.eventsMatched += batch.length * due.length;
       if (due.length) {
         await primeConnections(due.length);
-        await Promise.all(due.map((spec) => search(session, spec)));
+        pass++;
+        await Promise.all(
+          due.map((spec) => search(session, spec, index, pass)),
+        );
       }
     }
   } finally {
@@ -681,8 +720,17 @@ if (args.deriveWorkload) {
   if (!raw.write) {
     console.error(`\n${readOnlyReason(raw, args.deriveTop)}\n`);
   }
+  // A derived workload pins nothing of its own, so the default still applies
+  // here — the flag, else `entries`. Resolved before the emit below, which
+  // writes the answer into the file so a re-run of it is the same run.
+  fieldset = resolveFieldset(undefined);
   if (args.emitWorkload) {
-    let json = `${JSON.stringify(raw, null, 2)}\n`;
+    // Carry the path this run resolved into the file. Without it the emitted
+    // workload pins nothing, and re-running it would silently fall back to the
+    // default — a different document, several times the bytes, and not the path
+    // it was derived under. `--workload` refuses a file that pins none, so an
+    // emitted file has to state it to be loadable at all.
+    let json = `${JSON.stringify({ fieldset, ...raw }, null, 2)}\n`;
     if (args.emitWorkload === '-') {
       process.stdout.write(json);
     } else {
@@ -703,10 +751,6 @@ if (args.deriveWorkload) {
   );
 }
 
-// An explicit flag beats a committed workload, which beats the default.
-fieldset = isFieldsetName(args.fieldset)
-  ? args.fieldset
-  : (workload.fieldset ?? DEFAULT_FIELDSET);
 console.log(`Modelling the ${describeFieldset(fieldset)}.`);
 
 // Each simulated user authenticates as itself. Searches authorize per realm and
@@ -747,6 +791,34 @@ let reportTimer = setInterval(() => {
   );
 }, 30000);
 
+// The distinct questions a run asked: shapes that name variants multiply the
+// set, shapes that do not contribute one apiece. Reported so a reader can tell
+// a run that exercised a realm's answering from one that mostly re-read a
+// cached answer.
+function describeSpread(): string {
+  let specs = [
+    ...workload.queries,
+    ...workload.secondaryQueries,
+    ...(args.extraQueries ? workload.extraQueries : []),
+  ];
+  let withVariants = specs.filter((s) => s.variants);
+  let distinct = specs.reduce(
+    (total, s) => total + (s.variants ? s.variants.length : 1),
+    0,
+  );
+  if (withVariants.length === 0) {
+    return (
+      `${specs.length} shapes, no variants — each asks one question every ` +
+      `re-run, which the realm's live-search cache answers after the first`
+    );
+  }
+  return (
+    `${specs.length} shapes across ${distinct} distinct questions ` +
+    `(${withVariants.length} carry variants), cycled per re-run and offset ` +
+    `per reader`
+  );
+}
+
 function finish() {
   if (!running) {
     return;
@@ -760,6 +832,11 @@ function finish() {
   // much on the entries path as on the item path, so a figure quoted without
   // its path is not interpretable.
   console.log(`path:     ${describeFieldset(fieldset)}`);
+  // How many distinct questions the run asked, for the same reason the path is
+  // printed: a realm answers a repeated query from its live-search cache, so a
+  // run whose shapes carry no variants reports what a cache hit costs for most
+  // of its searches rather than what answering costs.
+  console.log(`spread:   ${describeSpread()}`);
   console.log(`searches: ${stats.searches} (${stats.searchErrors} errors)`);
   console.log(`writes:   ${stats.writes} (${stats.writeErrors} errors)`);
   console.log(summarize('end-to-end ', stats.search));

@@ -31,6 +31,7 @@ import {
 import {
   loadWorkload,
   parseWorkload,
+  queryForPass,
   typeKey,
   writeAttributes,
 } from '../scripts/load-harness/lib/workload.ts';
@@ -630,6 +631,109 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('query variants — the spread a run asks over', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function oneShape(variants?: unknown) {
+      return parseWorkload(
+        {
+          queries: [
+            {
+              label: 'Day scoped',
+              filter: {
+                'item.on': { module: '${realm}schema/widget', name: 'Widget' },
+              },
+              page: { size: 100 },
+              fields: { entry: ['item'] },
+              ...(variants === undefined ? {} : { variants }),
+            },
+          ],
+        },
+        realm,
+        'inline',
+      ).queries[0]!;
+    }
+
+    test('a shape cycles its variants by pass and offsets them by reader', function (assert) {
+      let spec = oneShape([
+        { eq: { 'item.day': 'a' } },
+        { eq: { 'item.day': 'b' } },
+        { eq: { 'item.day': 'c' } },
+      ]);
+      let day = (readerIndex: number, pass: number) =>
+        (
+          (queryForPass(spec, readerIndex, pass).filter as any).eq as {
+            'item.day': string;
+          }
+        )['item.day'];
+
+      assert.strictEqual(day(0, 0), 'a', 'first reader opens on the first');
+      assert.strictEqual(day(0, 1), 'b', 'its next re-run advances');
+      assert.strictEqual(day(0, 3), 'a', 'and wraps');
+      // Offset by reader as well, so readers running concurrently ask
+      // different questions. In step they would issue one identical query and
+      // the first answer would serve the rest from cache.
+      assert.strictEqual(day(1, 0), 'b', 'a second reader starts elsewhere');
+      assert.strictEqual(day(2, 0), 'c', 'and a third elsewhere again');
+    });
+
+    test('a variant merges over the filter without displacing the type anchor or the rest of the query', function (assert) {
+      let spec = oneShape([{ eq: { 'item.day': 'a' } }]);
+      let query = queryForPass(spec, 0, 0);
+      assert.deepEqual(
+        (query.filter as any)['item.on'],
+        { module: `${realm}schema/widget`, name: 'Widget' },
+        'the anchor survives the merge',
+      );
+      assert.deepEqual(
+        query.fields,
+        { entry: ['item'] },
+        'a per-query fieldset survives too',
+      );
+      assert.deepEqual(query.page, { size: 100 }, 'as does the page');
+      assert.notOk(
+        'variants' in query,
+        'and variants never reach the wire body',
+      );
+    });
+
+    test('${realm} expands inside a variant', function (assert) {
+      let spec = oneShape([{ eq: { 'item.owner': '${realm}Person/1' } }]);
+      assert.strictEqual(
+        ((queryForPass(spec, 0, 0).filter as any).eq as any)['item.owner'],
+        `${realm}Person/1`,
+        'so a variant-bearing workload stays portable across clones',
+      );
+    });
+
+    test('a shape with no variants hands back its own query, so its wire body is unchanged', function (assert) {
+      let spec = oneShape();
+      assert.strictEqual(
+        queryForPass(spec, 3, 7),
+        spec.query,
+        'the same object, whatever the reader and pass',
+      );
+    });
+
+    test('an unusable variants member is rejected at load rather than on some later pass', function (assert) {
+      assert.throws(
+        () => oneShape([]),
+        /"variants" must be a non-empty array/,
+        'an empty list would silently mean "no spread"',
+      );
+      assert.throws(
+        () => oneShape({ eq: { 'item.day': 'a' } }),
+        /"variants" must be a non-empty array/,
+        'one fragment still has to be a list of them',
+      );
+      assert.throws(
+        () => oneShape([{ eq: { 'item.day': 'a' } }, 'b']),
+        /variants\[1\] must be an object/,
+        'and every entry has to be a filter fragment',
+      );
+    });
+  });
+
   module('summary statistics', function () {
     test('percentile indexes a sorted sample and clamps at the end', function (assert) {
       let sorted = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -943,6 +1047,33 @@ module(basename(import.meta.filename), function () {
           /"fieldset" must be "entries", "item", or "item-html"/,
         );
       });
+    });
+
+    test('a workload that pins no fieldset leaves the path unstated, which the loader surfaces as a member to add', function (assert) {
+      // The run refuses such a file rather than defaulting, because a default
+      // is recorded nowhere: the figure it produces cannot be read back to a
+      // path. The refusal lives in run-load, which a test cannot execute, so
+      // what is pinned here is the condition it tests — that a parsed workload
+      // reports the member as absent rather than filling it in.
+      let workload = parseWorkload(
+        {
+          queries: [
+            {
+              label: 'Widget',
+              filter: {
+                'item.on': { module: '${realm}schema/widget', name: 'Widget' },
+              },
+            },
+          ],
+        },
+        'https://example.test/owner/load-test/',
+        'inline',
+      );
+      assert.strictEqual(
+        workload.fieldset,
+        undefined,
+        'absent stays absent, so the caller decides what to do about it',
+      );
     });
 
     test('both committed workloads pin a fieldset rather than leaving it implicit', function (assert) {

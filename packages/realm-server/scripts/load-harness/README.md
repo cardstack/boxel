@@ -74,9 +74,16 @@ workload modelling query-backed fields has to pin `item`. The default measures a
 grid instead, whatever the workload's queries say.
 
 A workload file pins it with a `"fieldset"` member; `--fieldset` overrides the
-file. Both committed workloads pin one rather than leaving it implicit, and every
-run states the path it modelled in its header and its summary — a figure quoted
-without its path is not interpretable.
+file. Both committed workloads pin one, and every run states the path it
+modelled in its header and its summary — a figure quoted without its path is not
+interpretable.
+
+A file that pins none is **refused**. A default is recorded nowhere, so a figure
+produced under one cannot be read back to the document it describes; the refusal
+names the member to add and the flag that states it for a one-off run instead.
+An emitted workload carries the path the deriving run resolved, so re-running
+that file is the same run rather than a different one at four to six times the
+bytes.
 
 ## Choosing a workload
 
@@ -196,6 +203,52 @@ an `item.` prefix. The card spelling gets a 400 back. Everything alongside
 clones of the same realm. Write attributes additionally expand `${n}` (a
 per-writer counter, so successive writes differ and each has something to
 invalidate) and `${date}`.
+
+### Asking more than one question per shape
+
+A shape with a fixed filter asks the same question on every re-run, and the
+realm answers a repeated query from its live-search cache. Measured against a
+deployed realm, the same query six times reads miss, miss, miss, miss, **hit
+48 ms**, **hit 50 ms** — so past the first pass such a run reports what a cache
+hit costs, not what answering costs. The signature is latency _falling_ as the
+rate rises.
+
+`variants` is the spread a shape asks over: filter fragments merged over its own
+filter, one per re-run.
+
+```json
+{
+  "label": "Observation(by day)",
+  "filter": {
+    "item.on": { "module": "${realm}schema/observation", "name": "Observation" }
+  },
+  "page": { "size": 100 },
+  "fields": { "entry": ["item"] },
+  "variants": [
+    { "eq": { "item.obsDate": "2026-09-14" } },
+    { "eq": { "item.obsDate": "2026-09-15" } },
+    { "eq": { "item.obsDate": "2026-09-16" } }
+  ]
+}
+```
+
+The index advances per re-run and is offset per reader, so readers running
+concurrently ask different questions. In step they would issue one identical
+query and the first answer would serve the rest from cache, which is the
+behaviour variants exist to avoid.
+
+Two things to get right:
+
+- **Pick values that match rows.** A fragment selecting nothing is a cheap
+  search, and a set of them reports a realm answering instantly while measuring
+  none of the work the shape does when it has an answer.
+- **Model the spread the screen has**, not an arbitrary one. A dashboard whose
+  day-scoped queries walk a term has one variant per day; a list filtered by
+  status has one per status. The `spread:` line in the summary reports how many
+  distinct questions the run asked, alongside the path it measured.
+
+A shape that names no variants is sent exactly as before, so adding the member
+to one query changes nothing about the others.
 
 ## Running
 

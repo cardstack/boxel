@@ -39,6 +39,18 @@ export interface QuerySpec {
   // The wire query body, minus `realms`. Everything the workload file put
   // alongside `label` lands here untouched.
   query: Record<string, unknown>;
+  // Filter fragments this shape cycles through, one per re-run, each merged
+  // over `query.filter`. A shape with none asks the same question every time,
+  // which the realm answers from its live-search cache after the first miss —
+  // so the run measures the cache rather than what answering costs. Variants
+  // are how a workload states the spread a screen actually has: one entry per
+  // date a dashboard's day-scoped queries walk through, per status a filter
+  // selects, per cohort a list pages over.
+  //
+  // They also have to be values that match rows. A fragment selecting nothing
+  // is a cheap search, and a set of them reports a realm answering instantly
+  // while measuring none of the work the shape does when it has an answer.
+  variants?: Record<string, unknown>[];
   // The `module/name` keys this query could match, for the skip test in
   // `realm-events.ts`. `undefined` when the query has no nameable type anchor.
   typeKeys?: Set<string>;
@@ -154,7 +166,7 @@ function parseQueries(
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new Error(`${field}[${i}] must be an object`);
     }
-    let { label, ...query } = expand(entry, realmUrl) as Record<
+    let { label, variants, ...query } = expand(entry, realmUrl) as Record<
       string,
       unknown
     >;
@@ -164,8 +176,55 @@ function parseQueries(
     if (!query.filter || typeof query.filter !== 'object') {
       throw new Error(`${field}[${i}] (${label}) needs a "filter" object`);
     }
-    return { label, query, typeKeys: typeKeysOf(query) };
+    return {
+      label,
+      query,
+      ...(variants === undefined
+        ? {}
+        : { variants: parseVariants(variants, `${field}[${i}] (${label})`) }),
+      typeKeys: typeKeysOf(query),
+    };
   });
+}
+
+// `variants` is validated rather than passed through, because it is the one
+// member that never reaches the wire: it is merged into `filter` per re-run, so
+// a malformed entry would otherwise surface as a filter the endpoint rejects on
+// some later pass rather than at load.
+function parseVariants(
+  value: unknown,
+  where: string,
+): Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${where}: "variants" must be a non-empty array`);
+  }
+  return value.map((entry, i) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`${where}: variants[${i}] must be an object`);
+    }
+    return entry as Record<string, unknown>;
+  });
+}
+
+// The filter this shape asks on a given pass. Offset by the reader as well as
+// the pass, so readers running concurrently ask different variants: in step
+// they would issue one identical query, and the first answer would serve the
+// rest from cache — the shape this exists to avoid. A shape with no variants
+// returns its own query untouched, so the wire body is byte-identical to what
+// it was before a workload named any.
+export function queryForPass(
+  spec: QuerySpec,
+  readerIndex: number,
+  pass: number,
+): Record<string, unknown> {
+  if (!spec.variants) {
+    return spec.query;
+  }
+  let variant = spec.variants[(pass + readerIndex) % spec.variants.length]!;
+  return {
+    ...spec.query,
+    filter: { ...(spec.query.filter as Record<string, unknown>), ...variant },
+  };
 }
 
 // The `module/name` keys a query could match. `item.on` is the entry grammar's

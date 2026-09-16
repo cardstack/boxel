@@ -15,7 +15,16 @@
     "`fieldset` selects which document the searches ask for, and so which code",
     "path the run measures: `item` is card data only, the path a query-backed",
     "field takes; `entries` (the default) is the prerendered renderings a grid",
-    "fetches, and costs several times as much for the same filter."
+    "fetches, and costs several times as much for the same filter. A single",
+    "query can carry its own `fields` member instead, which wins for itself —",
+    "that is how one workload models a screen whose surfaces differ.",
+    "",
+    "`variants` are the filter fragments a shape cycles through, one per",
+    "re-run, merged over its own filter. Without them a shape asks the same",
+    "question every time and the realm answers it from its live-search cache",
+    "after the first, so the run reports what a cache hit costs rather than",
+    "what answering costs. Pick values that match rows: a fragment selecting",
+    "nothing is a cheap search that measures none of the shape's work."
   ],
 
   "fieldset": "item",
@@ -28,16 +37,26 @@
       }
     },
     {
-      "label": "Gadget",
+      "label": "Gadget(by day)",
       "filter": {
         "item.on": { "module": "${realm}schema/gadget", "name": "Gadget" }
-      }
+      },
+      "page": { "size": 100 },
+      "variants": [
+        { "eq": { "item.day": "2026-01-05" } },
+        { "eq": { "item.day": "2026-01-06" } },
+        { "eq": { "item.day": "2026-01-07" } },
+        { "eq": { "item.day": "2026-01-08" } },
+        { "eq": { "item.day": "2026-01-09" } }
+      ]
     },
     {
-      "label": "Sprocket",
+      "label": "Sprocket(rendered)",
       "filter": {
-        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" }
-      }
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" },
+        "eq": { "htmlQuery": { "eq": { "format": "fitted" } } }
+      },
+      "fields": { "entry": ["html"] }
     }
   ],
 
