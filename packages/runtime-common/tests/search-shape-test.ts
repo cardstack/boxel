@@ -424,6 +424,89 @@ const tests = Object.freeze({
       'each mode is its own shape',
     );
   },
+
+  'a caller that stated nothing reports no override': async (assert) => {
+    let shape = shapeOf({ itemQuery: { filter: { type: personRef } } }, 'full');
+    assert.strictEqual(shape.requestedLinkMode, 'full');
+    assert.false(shape.linkModeDowngraded);
+    assert.strictEqual(shape.linkShapeLoad, null, 'no policy was consulted');
+    assert.strictEqual(shape.linkShapeLevel, null);
+    assert.strictEqual(shape.linkShapeRowClass, null);
+  },
+
+  'a downgraded response reports both modes and the inputs that decided it':
+    async (assert) => {
+      let shape = describeSearchShape({
+        query: entryQuery({ itemQuery: { filter: { type: personRef } } }),
+        realms: ['http://localhost:4201/test/'],
+        linkMode: 'links-only',
+        requestedLinkMode: 'full',
+        linkShapeLoad: 17.5,
+        linkShapeLevel: 'all',
+        linkShapeRowClass: 'multi-row',
+        correlationId: null,
+        jobId: null,
+        consumingRealm: null,
+        jobPriority: null,
+      });
+      assert.strictEqual(shape.linkMode, 'links-only', 'what was served');
+      assert.strictEqual(shape.requestedLinkMode, 'full', 'what was asked for');
+      assert.true(shape.linkModeDowngraded);
+      assert.strictEqual(shape.linkShapeLoad, 17.5);
+      assert.strictEqual(shape.linkShapeLevel, 'all');
+      assert.strictEqual(shape.linkShapeRowClass, 'multi-row');
+    },
+
+  'a caller that asked for links-only and got it is not a downgrade': async (
+    assert,
+  ) => {
+    let shape = describeSearchShape({
+      query: entryQuery({ itemQuery: { filter: { type: personRef } } }),
+      realms: ['http://localhost:4201/test/'],
+      linkMode: 'links-only',
+      requestedLinkMode: 'links-only',
+      linkShapeLoad: 0,
+      linkShapeLevel: 'full',
+      linkShapeRowClass: 'multi-row',
+      correlationId: null,
+      jobId: null,
+      consumingRealm: null,
+      jobPriority: null,
+    });
+    assert.false(
+      shape.linkModeDowngraded,
+      'which is the distinction one served-mode field cannot make',
+    );
+  },
+
+  'the shape hash folds the served mode and not the requested one': async (
+    assert,
+  ) => {
+    let query = entryQuery({ itemQuery: { filter: { type: personRef } } });
+    let base = {
+      query,
+      realms: ['http://localhost:4201/test/'],
+      correlationId: null,
+      jobId: null,
+      consumingRealm: null,
+      jobPriority: null,
+    } as const;
+    let asked = describeSearchShape({
+      ...base,
+      linkMode: 'links-only',
+      requestedLinkMode: 'links-only',
+    });
+    let downgraded = describeSearchShape({
+      ...base,
+      linkMode: 'links-only',
+      requestedLinkMode: 'full',
+    });
+    assert.strictEqual(
+      asked.shapeHash,
+      downgraded.shapeHash,
+      'two requests served the same body are one shape, however they got there',
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;
