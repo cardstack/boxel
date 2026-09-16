@@ -2240,6 +2240,39 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('withIncluded serialization inlines only unsaved (lid) links, not resident saved ones', async function (assert) {
+    let cardService = getService('card-service') as any;
+
+    // A saved link the store has resident: the realm already holds it and
+    // discards it from `included` on write, so it should not be inlined.
+    let saved = new PersonDef({ name: 'Saved' });
+    await (storeService as any).persistAndUpdate(saved);
+    assert.ok((saved as any).id, 'the linked card is saved');
+
+    // An unsaved link created alongside this card: the realm creates it from
+    // its `lid` in the same request, so it must ride along in `included`.
+    let unsaved = new PersonDef({ name: 'Unsaved' });
+
+    let instance = new PersonDef({ name: 'Consumer' });
+    (instance as any).bestFriend = saved;
+    (instance as any).friends = [unsaved];
+
+    let doc = await cardService.serializeCard(instance, {
+      useAbsoluteURL: true,
+      withIncluded: true,
+    });
+    let included = (doc.included ?? []) as any[];
+
+    assert.notOk(
+      included.find((resource) => resource.id === (saved as any).id),
+      'a resident saved link is not inlined into included',
+    );
+    assert.ok(
+      included.find((resource) => resource.lid === (unsaved as any)[localId]),
+      'an unsaved link is inlined into included by lid so the realm can co-create it',
+    );
+  });
+
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
     // Driven through `persistAndUpdate` rather than `save`, because the
     // autosave queue awaits the in-flight mutation before it saves at all —

@@ -246,6 +246,21 @@ export default class CardService extends Service {
     });
     if (!opts?.withIncluded) {
       delete serialized.included;
+    } else if (serialized.included) {
+      // The realm writes only the primary card and any brand-new, unsaved
+      // links it is being asked to create in the same request — identified by
+      // `lid` — and discards every already-saved link it finds in `included`.
+      // The serializer, though, inlines every linked card the store has
+      // resident, saved or not. Drop the saved ones here so the document we
+      // send equals what the realm keeps rather than inflating the payload
+      // (and its serialisation) with cards the tab merely happens to have
+      // loaded.
+      serialized.included = serialized.included.filter(
+        (resource) => typeof (resource as { lid?: unknown }).lid === 'string',
+      );
+      if (serialized.included.length === 0) {
+        delete serialized.included;
+      }
     }
     return serialized;
   }
