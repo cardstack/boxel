@@ -262,6 +262,8 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
+import { RequestTimings } from './request-timings.ts';
+import { emitWriteTiming } from './write-timing.ts';
 import { mergeRelationships } from './merge-relationships.ts';
 import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
@@ -836,6 +838,16 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
+// The shapes a card+json body can take at one `indexed_at`. `full` side-loads
+// the card's whole link closure; `links-only` answers the relationships
+// without side-loading their targets; `write-echo` is what a POST / PATCH
+// returns — the written card alone, neither its links resolved nor its
+// query-backed fields expanded, because nothing reads either off a write
+// response. Each takes its own validator: a client holding one shape's
+// validator must not be 304'd to another's body, and the response cache must
+// not reach two shapes under one key.
+type CardJsonShape = 'full' | 'links-only' | 'write-echo';
+
 // Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<screenshotsFingerprint>]:card"`.
 // The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
@@ -850,7 +862,7 @@ function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
-  resolveLinksOnly = false,
+  shape: CardJsonShape = 'full',
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -858,17 +870,17 @@ function buildCardJsonEtag(
   let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
     .filter(Boolean)
     .join('-');
-  // A read that answers relationships without side-loading their targets
+  // A response that carries less of the card's link graph than a full read
   // serves a different representation of the same card at the same
   // `indexed_at`, so it takes its own variant — the same job the constant
-  // does for a serialization change, on a value that varies per server
-  // rather than per revision. Without it, turning the setting on or off
-  // would leave every client that holds a validator being 304'd to the
-  // shape it cached, and the two shapes reachable under one key in the
-  // response cache.
-  let variant = resolveLinksOnly
-    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
-    : CARD_JSON_ETAG_VARIANT;
+  // does for a serialization change, on a value that varies per response
+  // rather than per revision. Without it, a client that cached the narrower
+  // shape would be 304'd to it when it later asks for the full one, and the
+  // two shapes would be reachable under one key in the response cache.
+  let variant =
+    shape === 'full'
+      ? CARD_JSON_ETAG_VARIANT
+      : `${CARD_JSON_ETAG_VARIANT}-${shape}`;
   return `"${base}:${variant}"`;
 }
 
@@ -7593,9 +7605,43 @@ export class Realm {
     return notFound(request, requestContext);
   }
 
+  // One `realm:write-timing` line per card write, emitted from a `finally` so
+  // a write that ends in an error is attributed too — a write slow enough to
+  // be worth explaining is as likely to have timed out as to have succeeded.
+  #emitWriteTiming(
+    method: string,
+    request: Request,
+    startedAt: number,
+    timings: RequestTimings,
+  ): void {
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    emitWriteTiming(
+      `${method} ${request.url}` +
+        (correlationId ? ` corr=${correlationId}` : '') +
+        ` handler=${Date.now() - startedAt}ms ` +
+        timings.toLogFragment(),
+    );
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#createCard(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('POST', request, startedAt, timings);
+    }
+  }
+
+  async #createCard(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
@@ -7628,7 +7674,7 @@ export class Realm {
     if (!answerFromEcho) {
       let pending = this.incrementalIndexing();
       if (pending) {
-        await pending;
+        await timings.time('drain', () => pending);
       }
     }
     let body = await request.text();
@@ -7693,9 +7739,11 @@ export class Realm {
       });
       let fileSerialization: LooseSingleCardDocument | undefined;
       try {
-        fileSerialization = await this.fileSerialization(
-          { data: merge(resource, { meta: { realmURL: request.url } }) },
-          fileURL,
+        fileSerialization = await timings.time('serialize', () =>
+          this.fileSerialization(
+            { data: merge(resource, { meta: { realmURL: request.url } }) },
+            fileURL,
+          ),
         );
       } catch (err: any) {
         if (err.message.startsWith('field validation error')) {
@@ -7726,11 +7774,16 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(answerFromEcho ? { waitForIndex: false } : {}),
-    });
+    // Covers taking the realm write lock and, unless the caller opted out,
+    // waiting for the write to index — `writeMany` owns the lock here, so the
+    // two are not separable from this side the way they are on PATCH.
+    let [{ lastModified, created }] = await timings.time('write', () =>
+      this.writeMany(files, {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        initiatingUser: requestContext.authenticatedUser ?? null,
+        ...(answerFromEcho ? { waitForIndex: false } : {}),
+      }),
+    );
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
@@ -7743,12 +7796,23 @@ export class Realm {
         lastModified,
       );
     } else {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(newURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
+      // The readback asks for the written card and nothing around it: no
+      // `loadLinks`, so neither the transitive closure of the card's links nor
+      // the query a query-backed field would run to name its targets.
+      //
+      // Nothing consumes either. The host takes a write response for the
+      // identity the realm assigned and for realm metadata, and drops
+      // `data.attributes` and `data.relationships` before merging it — which
+      // leaves `included[]` with nothing that references it. A card created by
+      // `lid` under this write is reconciled to its assigned id from the realm
+      // invalidation event, which correlates the last segment of the assigned
+      // URL with the local id (`tryFindingCardItem` in the host's card store
+      // names that as the reconciliation point, alongside `api.setId`); the
+      // response document is not part of that path. Writes that answer from
+      // the serialized echo — prerender and skip-index-wait callers — already
+      // return no `included` at all and always have.
+      let entry = await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
       if (!entry || entry?.type === 'error') {
         let err = entry
@@ -7786,6 +7850,20 @@ export class Realm {
   private async patchCardInstance(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#patchCardInstance(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+    }
+  }
+
+  async #patchCardInstance(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
@@ -7840,7 +7918,12 @@ export class Realm {
     // Inside the lock we invoke `_batchWriteUnlocked` rather than the
     // public `writeMany` — re-entering the lock through the public method
     // would block on a different pinned pool connection.
+    // Timed separately from the work inside it: a PATCH queued behind other
+    // writers on the same realm spends its wall-clock here, and that is
+    // indistinguishable from slow indexing unless the two are split.
+    let lockRequestedAt = Date.now();
     return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      timings.add('lock', Date.now() - lockRequestedAt);
       let primarySerialization: LooseSingleCardDocument | undefined;
       // The merge base is the stored source file, not the index. The
       // index is downstream of the file and can lag it — a backlogged or
@@ -7848,7 +7931,9 @@ export class Realm {
       // merging the patch over stale state silently reverts every field
       // the index hasn't caught up on. The file is written inside this
       // same write lock, so it is always current.
-      let existingFile = await this.readFileAsText(`${localPath}.json`);
+      let existingFile = await timings.time('read', () =>
+        this.readFileAsText(`${localPath}.json`),
+      );
       if (!existingFile) {
         return notFound(request, requestContext);
       }
@@ -7945,12 +8030,11 @@ export class Realm {
       // If the patch makes no semantic changes and doesn't include side-loaded
       // resources, short-circuit to avoid touching the file (and changing mtime).
       if (included.length === 0 && isEqual(primaryResource, original)) {
-        let entry = await this.#realmIndexQueryEngine.cardDocument(
-          new URL(instanceURL),
-          {
-            loadLinks: true,
-            skipQueryBackedExpansion: duringPrerender,
-          },
+        // The same write-echo shape the patched response below returns — a
+        // PATCH that changed nothing is still answering a writer, and it holds
+        // the write lock while it does.
+        let entry = await timings.time('readback', () =>
+          this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
         );
         if (entry && entry.type !== 'error') {
           let existingDoc = merge({}, entry.doc, {
@@ -7962,11 +8046,11 @@ export class Realm {
           let createdAt = await this.getCreatedTime(
             this.paths.local(url) + '.json',
           );
-          // The PATCH echo is the same served representation as a GET —
-          // including the joined `meta.screenshots` (the store replaces an
-          // instance's meta wholesale from a save response, so an echo
-          // without it would wipe the key client-side until the next GET)
-          // and the same validator components.
+          // The echo carries the joined `meta.screenshots` a GET does: the
+          // store replaces an instance's meta wholesale from a save response,
+          // so an echo without it would wipe the key client-side until the
+          // next GET. The two representations part company on the link graph
+          // only, which is what the `write-echo` validator variant records.
           if (entry.screenshots) {
             existingDoc.data.meta = {
               ...existingDoc.data.meta,
@@ -7987,6 +8071,7 @@ export class Realm {
                 entry.indexedAt,
                 this.getCachedRealmInfoHash(),
                 screenshotsEtagFingerprint(entry.screenshots),
+                'write-echo',
               );
           this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
@@ -8040,11 +8125,13 @@ export class Realm {
         }
         let fileSerialization: LooseSingleCardDocument | undefined;
         try {
-          fileSerialization = await this.fileSerialization(
-            {
-              data: merge(resource, { meta: { realmURL: this.url } }),
-            },
-            fileURL,
+          fileSerialization = await timings.time('serialize', () =>
+            this.fileSerialization(
+              {
+                data: merge(resource, { meta: { realmURL: this.url } }),
+              },
+              fileURL,
+            ),
           );
         } catch (err: any) {
           if (err.message.startsWith('field validation error')) {
@@ -8071,11 +8158,17 @@ export class Realm {
       // Use the unlocked inner write so we don't re-enter
       // withWriteLock (which would block on a different pinned pool
       // connection).
-      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(answerFromEcho ? { waitForIndex: false } : {}),
-      });
+      // The lock is already held, so this stage is the write itself plus —
+      // unless the caller opted out — the wait for it to index. Separating it
+      // from `lock` above is what lets a slow PATCH be attributed to queueing
+      // behind other writers rather than to its own indexing, or the reverse.
+      let [{ lastModified, created }] = await timings.time('write', () =>
+        this._batchWriteUnlocked(files, {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          initiatingUser: requestContext.authenticatedUser ?? null,
+          ...(answerFromEcho ? { waitForIndex: false } : {}),
+        }),
+      );
       let doc: SingleCardDocument;
       if (answerFromEcho) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
@@ -8101,12 +8194,13 @@ export class Realm {
           requestContext,
         });
       }
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(instanceURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
+      // No link closure and no query-backed expansion, for the reasons the
+      // create path's readback states. Here the saving is compounded: this
+      // runs inside the realm-wide write lock, so a closure assembled for this
+      // response is time every other writer on the realm queues behind, not
+      // just latency this request pays for itself.
+      let entry = await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
       );
       if (!entry || entry?.type === 'error') {
         if (
@@ -8170,6 +8264,7 @@ export class Realm {
               entry.indexedAt,
               this.getCachedRealmInfoHash(),
               screenshotsEtagFingerprint(entry.screenshots),
+              'write-echo',
             )
           : undefined;
       this.#serveInstanceIdsAsRRI(doc);
@@ -8495,7 +8590,7 @@ export class Realm {
             result.indexedAt,
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
@@ -8672,7 +8767,7 @@ export class Realm {
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
           );
         }
         if (
@@ -8863,7 +8958,7 @@ export class Realm {
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly,
+          resolveLinksOnly ? 'links-only' : 'full',
         );
     return {
       kind: 'document',
