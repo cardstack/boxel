@@ -113,6 +113,13 @@ module(basename(import.meta.filename), function () {
         kind === 'background',
         kind,
       );
+      if (kind === 'materialization') {
+        assert.deepEqual(
+          registered,
+          ['lattice-materialize'],
+          'background HTML cannot occupy the dedicated materialization worker',
+        );
+      }
     }
   });
 });

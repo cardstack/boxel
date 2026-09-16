@@ -1,4 +1,3 @@
-import { param, query } from '../expression.ts';
 import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index.ts';
 import {
@@ -261,29 +260,15 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     let auth = createPrerenderAuth(userId, prerenderPermissions);
 
-    // Pending owners lower background renderer admission priority. The pass
-    // below records their durable render obligations rather than dropping them.
     let latticeEnabled = indexWriter.isLatticeEnabled(realmURL);
-    let deferred = new Set(
-      (latticeEnabled
-        ? await query(dbAdapter, [
-            'SELECT owner_url FROM lattice_owners WHERE realm_url =',
-            param(realmURL),
-            `AND retired = FALSE AND (dirty_generation IS NOT NULL
-        OR EXISTS (SELECT 1 FROM lattice_pending_generations g WHERE g.realm_url = lattice_owners.realm_url)
-        OR EXISTS (SELECT 1 FROM jobs j WHERE j.concurrency_group =`,
-            param(`indexing:${realmURL}`),
-            `AND j.status = 'unfulfilled' AND j.job_type <> 'lattice-materialize'))`,
-          ])
-        : []
-      ).map((row) => row.owner_url as string),
-    );
     // The pass retains pending owners as durable retry jobs. Do not filter
     // them away: a later data publication may not change this owner's value.
     // Background HTML shares renderer capacity with materialization. Keep it
-    // below pending data work; explicit publish-awaited renders retain priority.
+    // below data work even when owners are clean at job start: new source
+    // changes can arrive throughout a realm-wide pass. Explicit publish-awaited
+    // renders retain priority.
     let renderPriority = jobInfo?.priority ?? 0;
-    if (deferred.size && renderPriority < userInitiatedPriority) {
+    if (latticeEnabled && renderPriority < userInitiatedPriority) {
       renderPriority = Math.min(renderPriority, LATTICE_PRIORITY - 1);
     }
     let _fetch = await getAuthedFetch(args);

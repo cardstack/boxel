@@ -10,6 +10,7 @@ import {
   Deferred,
   IndexWriter,
   VirtualNetwork,
+  logger,
   param,
   query,
   rri,
@@ -28,6 +29,9 @@ import {
   latticeRenderRetryReadySQL,
 } from '@cardstack/runtime-common/jobs/lattice-render';
 import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerender-html';
+import { prerenderHtml } from '@cardstack/runtime-common/tasks/prerender-html';
+import { LATTICE_PRIORITY } from '@cardstack/runtime-common/jobs/lattice';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 import { setupDB } from './helpers/index.ts';
 
 const { module, test } = QUnit;
@@ -294,6 +298,154 @@ module(basename(import.meta.filename), function (hooks) {
       "SELECT id, args, status FROM jobs WHERE args->>'latticeRenderRetryOwner' =",
       param(ownerURL),
     ]);
+  }
+
+  for (const [label, enabled, priority, expectedFirst] of [
+    ['enabled', true, 9, 'owner'],
+    ['ordinary', false, 9, 'background'],
+    ['publish-awaited', true, 10, 'background'],
+  ] as const) {
+    test(`background HTML admission: ${label} preserves the required order when an owner becomes dirty later`, async function (assert) {
+      assert.timeout(20_000);
+      const semaphore = new AsyncSemaphore(1);
+      const releaseActive = await semaphore.acquire();
+      const queued = new Deferred<void>();
+      const order: string[] = [];
+      const backgroundURL = realmURL + 'Note/background.json';
+      const publisher = new PgQueuePublisher(db);
+      const backgroundWriter = new IndexWriter(db, {
+        lattice: new LatticeRealmConfig(enabled ? [realmURL] : []),
+      });
+      const background = prerenderHtml({
+        dbAdapter: db,
+        queuePublisher: publisher,
+        indexWriter: backgroundWriter,
+        definitionLookup: {
+          async populateDefinitionCacheEntry() {},
+        } as unknown as DefinitionLookup,
+        virtualNetwork: new VirtualNetwork(),
+        log: logger('lattice-html-admission-test'),
+        matrixURL: 'http://localhost:8008',
+        getAuthedFetch: async () => async (input) => {
+          assert.strictEqual(String(input), realmURL + '_info');
+          return Response.json({
+            data: { attributes: { visibility: 'public' } },
+          });
+        },
+        getReader: () => ({
+          async readFile() {
+            return {
+              content: JSON.stringify(document()),
+              lastModified: 1,
+              path: backgroundURL,
+            };
+          },
+          async readStream() {
+            return undefined;
+          },
+          async mtimes() {
+            return {};
+          },
+        }),
+        createPrerenderAuth: () => 'synthetic',
+        reportStatus: () => {},
+        prerenderer: {
+          async prerenderVisit(visit) {
+            const admission = semaphore.acquire(undefined, visit.priority);
+            queued.fulfill();
+            const release = await admission;
+            try {
+              order.push('background');
+              return {
+                card: {
+                  isolatedHTML: '<p>Background</p>',
+                  embeddedHTML: {},
+                  fittedHTML: {},
+                  headHTML: '',
+                  atomHTML: '',
+                  iconHTML: null,
+                  markdown: '',
+                  serialized: null,
+                  searchDoc: null,
+                  displayNames: null,
+                  deps: [],
+                  types: null,
+                },
+              };
+            } finally {
+              release();
+            }
+          },
+          async prerenderModule() {
+            throw new Error('Unexpected module visit');
+          },
+          async runCommand() {
+            throw new Error('Unexpected command');
+          },
+        },
+      })({
+        ...args(),
+        changes: [{ url: backgroundURL, operation: 'update' }],
+        preWarm: true,
+        jobInfo: { jobId, reservationId: -1, priority, queueWaitMs: null },
+      });
+      let owner: Promise<void> | undefined;
+      let released = false;
+      try {
+        await Promise.race([
+          queued.promise,
+          background.then(() => {
+            throw new Error('Background finished without requesting a render');
+          }),
+        ]);
+        await db.execute(
+          'UPDATE lattice_owners SET dirty_generation=3 WHERE owner_url=$1',
+          {
+            bind: [ownerURL],
+          },
+        );
+        owner = semaphore
+          .acquire(undefined, LATTICE_PRIORITY)
+          .then(async (release) => {
+            try {
+              order.push('owner');
+              await advance();
+              await pass();
+            } finally {
+              release();
+            }
+          });
+        assert.strictEqual(
+          semaphore.pendingCount,
+          2,
+          'both requests are waiting behind the active visit',
+        );
+        releaseActive();
+        released = true;
+        await Promise.all([background, owner]);
+        assert.strictEqual(order[0], expectedFirst);
+        assert.strictEqual(
+          (await html()).isolated_html,
+          '<p>8</p>',
+          'owner HTML uses the current publication',
+        );
+        const [row] = await db.execute(
+          "SELECT isolated_html FROM prerendered_html WHERE url=$1 AND type='instance'",
+          {
+            bind: [backgroundURL],
+          },
+        );
+        assert.strictEqual(
+          row.isolated_html,
+          '<p>Background</p>',
+          'background work eventually completes',
+        );
+      } finally {
+        if (!released) releaseActive();
+        await Promise.allSettled([background, ...(owner ? [owner] : [])]);
+        await publisher.destroy();
+      }
+    });
   }
 
   test('native pass consumes published input and publishes all native formats', async function (assert) {

@@ -73,6 +73,16 @@ normal indexing operation for the realm after installing an owner definition.
 Allow the initial index and publication to finish before evaluating the example;
 opening before initial indexing completes is outside this draft's acceptance.
 
+For a worker-manager deployment, include `--userIndexCount 1 --latticeCount 1
+--allPriorityCount 1` alongside its existing connection and URL-mapping options.
+These existing pool settings reserve separate source-index and materialization
+workers while background HTML continues on the all-priority worker. A single
+shared worker can still be occupied by a realm-wide HTML job. Enabled background
+renders stay below owner computation in Chrome admission even if a source edit
+arrives after the HTML job starts; an active render finishes before a queued
+owner can take its slot. Renders explicitly awaited by a realm publish retain
+their existing priority. This is not a latency guarantee.
+
 Declare `static materialized = true` on the owner. The [author guide's example](lattice-authoring.md#query-and-computation-declarations)
 shows `static queryInputs` and the equivalent direct-link `static linkInputs`
 contract. Unsupported JavaScript or projections do not acquire native permission
