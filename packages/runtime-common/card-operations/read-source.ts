@@ -132,7 +132,9 @@ export async function readSourceOperation(
   // The handle goes with the request, not just its path: the realm checks its
   // recorded hash against this handle's size, and reads bounded ranges of this
   // handle where it has to fingerprint the file itself.
-  let meta = await core.storedFileMeta(servedPath, file);
+  let meta = await core.storedFileMeta(servedPath, file, {
+    skipContentFingerprint: opts.skipContentFingerprint,
+  });
   let result: OperationSourceResult = {
     contentType: inferContentType(servedPath),
     lastModified: file.lastModified,

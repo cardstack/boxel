@@ -749,6 +749,11 @@ module(basename(import.meta.filename), function () {
             'etag',
             'last-modified',
             'cache-control',
+            // A HEAD's Content-Length describes the body its GET would send,
+            // so it belongs to parity as much as the rest. Source is served
+            // from memory rather than measured on the way past, which is a
+            // different route to the same header and worth holding here.
+            'content-length',
           ]) {
             assert.strictEqual(
               head.headers[header],

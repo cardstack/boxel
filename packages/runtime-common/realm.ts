@@ -3963,8 +3963,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, file) =>
-          this.#operationStoredFileMeta(localPath, file),
+        storedFileMeta: (localPath, file, opts) =>
+          this.#operationStoredFileMeta(localPath, file, opts),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -5839,7 +5839,10 @@ export class Realm {
           name: 'readSource',
           ...this.#callerOf(request, requestContext),
         },
-        opts,
+        // Neither byte route validates on the read's `version` — each builds
+        // its own validator, from the bytes it caches or from the modification
+        // time — so neither should pay to have one read off disk for it.
+        { ...opts, skipContentFingerprint: true },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -5848,12 +5851,19 @@ export class Realm {
       if (e.error.code === 'target-not-found') {
         return undefined;
       }
-      // Any other refusal carries a status the operation chose, and the router
-      // only reads one off a `CardError` — so letting it through as it is would
-      // answer 500 for a refusal that named its own answer. Nothing a stored
-      // bytes read can refuse reaches here today, the resolved path having
-      // ruled out the rest, so this is what keeps the next refusal added to
-      // that executor from arriving as a server fault.
+      // Any other refusal carries a status the operation chose, and what
+      // carries that status the rest of the way is a `CardError` — a bare
+      // refusal reaching the source route's router would answer 500 for
+      // something that named its own answer. Nothing a stored-bytes read can
+      // refuse reaches here today, the resolved path having ruled out the rest,
+      // so this is about the next refusal added to that executor rather than a
+      // live fault.
+      //
+      // It carries the status only as far as the source route. The byte serve
+      // is reached through the module fallback, whose own error handling
+      // answers every throw alike, so a refusal there arrives under that
+      // handler's status rather than this one — as every error on that path
+      // already does.
       throw new CardError(e.error.detail, {
         status: e.error.status,
         title: e.error.title,
@@ -5885,9 +5895,22 @@ export class Realm {
   // the assembly reaches `content` only where it is about to send it, and a
   // read is asked for headers only where the route will not.
   #servableSource(handle: FileRef, source: OperationSourceResult): FileRef {
+    // `this` inside the getter below is the ref, not the realm.
+    let realmURL = this.url;
     let ref: FileRef = {
       path: handle.path,
       get content() {
+        if (source.body === undefined) {
+          // A headers-only read has no bytes, and every route that asks for
+          // one is a route that will not send any. Nothing binds those two
+          // decisions together — they are separate tests of the request's
+          // method, in separate methods — so this says what went wrong at the
+          // point it went wrong rather than letting `undefined` travel on as a
+          // body and surface as an empty response.
+          throw new Error(
+            `bug: response for ${handle.path} in realm ${realmURL} reached for bytes a headers-only read did not fetch`,
+          );
+        }
         return source.body as FileRef['content'];
       },
       lastModified: source.lastModified,
@@ -6060,7 +6083,16 @@ export class Realm {
     // that `content` is not touched, and on a streaming adapter that property
     // is what opens the stream. A caller that has the metadata without the
     // bytes can therefore answer a `HEAD` with them.
-    if (request.method === 'HEAD') {
+    //
+    // Only where the length is already known, though. `Content-Length` on a
+    // `HEAD` has to describe the body the `GET` would send, and where the size
+    // was not knowable without the bytes it is the body itself that is
+    // measured — by the HTTP layer, for a `HEAD` as much as for a `GET`. So a
+    // ref that could not report its size is served the way it always was, and
+    // the header keeps coming from the one thing that can produce it. Such a
+    // ref is materialized rather than streamed, so no stream is stranded by
+    // passing it along.
+    if (request.method === 'HEAD' && totalSize != null) {
       return createResponse({
         body: null,
         init: { headers },
@@ -7092,6 +7124,7 @@ export class Realm {
   async #operationStoredFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
@@ -7105,6 +7138,15 @@ export class Realm {
       persisted.contentSize === file.size
     ) {
       return { version: persisted.contentHash, createdAt };
+    }
+    if (opts?.skipContentFingerprint) {
+      // The row holds no hash this handle's size vouches for, and the caller
+      // validates on something other than `version` — so the read that would
+      // produce one buys nothing. It is the expensive half of this method:
+      // `persistFileMeta` records a hash only for a path written through the
+      // realm's own write API, so a deployed or seeded file reaches here every
+      // time, and the read is bounded per request rather than amortized.
+      return { createdAt };
     }
     return { version: await contentHashFromRanges(file), createdAt };
   }
