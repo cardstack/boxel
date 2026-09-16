@@ -760,6 +760,14 @@ export class RealmIndexQueryEngine {
     return fileMatch && !instanceMatch;
   }
 
+  // Every `boxel_index.types` membership key this ref can legitimately match:
+  // its own spelling plus its canonical defining-module spelling. The
+  // live-search cache key is scoped by these, so it addresses exactly the
+  // rows a filter anchored on this ref selects.
+  async typeKeysFor(ref: CodeRef): Promise<string[]> {
+    return await this.#indexQueryEngine.typeKeysFor(ref);
+  }
+
   async fetchCardTypeSummary() {
     let results = await this.#indexQueryEngine.fetchCardTypeSummary(
       new URL(this.#realm.url),

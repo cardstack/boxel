@@ -125,6 +125,10 @@ export async function removeRealmDatabaseArtifacts(args: {
   await q([`DELETE FROM scoped_css WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_meta WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_generations WHERE realm_url =`, param(realmURL)]);
+  await q([
+    `DELETE FROM realm_type_generations WHERE realm_url =`,
+    param(realmURL),
+  ]);
   await q([`DELETE FROM realm_file_meta WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_metadata WHERE url =`, param(realmURL)]);
 }

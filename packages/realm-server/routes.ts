@@ -251,6 +251,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       reconciler: args.reconciler,
       searchCache,
       dbAdapter: args.dbAdapter,
+      virtualNetwork: args.virtualNetwork,
       liveSearchCache: args.liveSearchCache,
       liveReadsResolveLinksOnly: args.liveReadsResolveLinksOnly,
     }),
