@@ -364,6 +364,36 @@ export async function withSlowSave(
   }
 }
 
+// Holds every save the callback triggers until the callback returns, then
+// releases them and waits for them to land. The callback therefore runs inside a
+// window where a mutation has been applied locally and no save can have reached
+// the realm, and the caller has the persisted result the moment this helper
+// resolves — neither side times a realm write against a wall clock.
+export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = (instance: CardDef, opts?: unknown) => {
+    let heldSave = released.then(() =>
+      originalPersist.call(store, instance, opts),
+    );
+    heldSaves.push(heldSave);
+    return heldSave;
+  };
+  try {
+    await cb();
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
+  }
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
