@@ -400,6 +400,14 @@ export interface OperationIdentityResult {
     version: string;
     generation: number | null;
     lastModified: number | null;
+    // When the file behind this entry was first written, as the realm
+    // recorded it. Reported for the same reason as `lastModified` beside it:
+    // both are facts about the stored file that the commit already holds, and
+    // reading either back afterwards would be a second query against a row a
+    // concurrent removal may have taken away. A file is created once, so this
+    // does not move when the file is rewritten. Null where the realm has no
+    // record of one.
+    created: number | null;
     // Present only on a conditional write: whether the target was still at
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.

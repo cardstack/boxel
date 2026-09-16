@@ -23,7 +23,6 @@ import {
   createJWT,
   cardInfo,
   fixtureDir,
-  findRealmEvent,
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
@@ -913,8 +912,24 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+source')
             .send('first');
           assert.strictEqual(first.status, 204, 'first write returns 204');
-          let created = first.headers['x-created'];
-          assert.ok(created, 'x-created is set on the write that creates it');
+          assert.ok(
+            first.headers['x-created'],
+            'x-created is set on the write that creates it',
+          );
+
+          // Backdated so the second write has something to be wrong about.
+          // `created_at` has one-second resolution and two requests land in
+          // the same second, so without this the two headers compare equal
+          // whether the stored value is kept or restamped.
+          let backdated = 1600000000;
+          await query(dbAdapter, [
+            'UPDATE realm_file_meta SET created_at =',
+            param(backdated),
+            'WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param('rewritten.txt'),
+          ]);
 
           let second = await request
             .post('/rewritten.txt')
@@ -926,7 +941,7 @@ module(basename(import.meta.filename), function () {
           // of the bytes currently in it.
           assert.strictEqual(
             second.headers['x-created'],
-            created,
+            formatRFC7231(backdated * 1000),
             'x-created still reports when the file was first written',
           );
 
@@ -1017,8 +1032,9 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('returns once the bytes are durable, ahead of the index event', async function (assert) {
+        test('returns once the bytes are durable, with indexing still queued', async function (assert) {
           let since = Date.now();
+          let baseline = await maxIncrementalIndexJobId();
 
           let response = await request
             .post('/durable-before-indexed.gts')
@@ -1041,16 +1057,27 @@ module(basename(import.meta.filename), function () {
             `//TEST UPDATE\n${cardSrc}`,
             'the posted bytes are on disk when the response lands',
           );
-          // Indexing has not run yet. It happens on the queue, out of band,
-          // which is what lets the response land this early.
-          let messages = await getMessagesSince(since);
-          assert.notOk(
-            findRealmEvent(messages, 'index', 'incremental'),
-            'no incremental index event has been broadcast yet',
+          // The write queued its indexing rather than performing it: the job
+          // exists and has not finished. Read from the queue rather than from
+          // the absence of a broadcast, because "no event yet" is a race
+          // against a live worker that would fail this test on the run where
+          // indexing happens to win, and would match any event in the realm
+          // rather than this file's.
+          let queued = await incrementalIndexJobsSince(baseline);
+          assert.strictEqual(
+            queued.length,
+            1,
+            `the write queued one index job (ids: ${queued
+              .map((job) => job.id)
+              .join(', ')})`,
+          );
+          assert.notStrictEqual(
+            queued[0].status,
+            'resolved',
+            `indexing had not finished when the response landed (status: ${queued[0].status})`,
           );
 
-          // It still arrives; the route defers the work rather than skipping
-          // it.
+          // It still runs; the route defers the work rather than skipping it.
           await expectIncrementalIndexEvent(
             `${testRealmURL}durable-before-indexed.gts`,
             since,
@@ -1809,8 +1836,23 @@ module(basename(import.meta.filename), function () {
             .set('Content-Type', 'application/octet-stream')
             .send(Buffer.from(new Uint8Array([0x01])));
           assert.strictEqual(first.status, 204, 'first upload returns 204');
-          let created = first.headers['x-created'];
-          assert.ok(created, 'x-created is set on the upload that creates it');
+          assert.ok(
+            first.headers['x-created'],
+            'x-created is set on the upload that creates it',
+          );
+
+          // Backdated for the same reason as the source-route twin: two
+          // uploads land in one second, so an unmoved header proves nothing
+          // until the stored value differs from now.
+          let backdated = 1600000000;
+          await query(dbAdapter, [
+            'UPDATE realm_file_meta SET created_at =',
+            param(backdated),
+            'WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param('rewritten.bin'),
+          ]);
 
           let second = await request
             .post('/rewritten.bin')
@@ -1819,7 +1861,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(second.status, 204, 'second upload returns 204');
           assert.strictEqual(
             second.headers['x-created'],
-            created,
+            formatRFC7231(backdated * 1000),
             'x-created still reports when the file was first written',
           );
         });

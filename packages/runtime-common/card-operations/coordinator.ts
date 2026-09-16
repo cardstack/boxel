@@ -107,7 +107,9 @@ export interface BatchCore {
   // Waits for indexing already in flight. A card's serialization resolves the
   // definitions its type is built from, and a module written moments earlier
   // may still be indexing, so a batch drains before it stages rather than
-  // failing to resolve a type the realm already holds.
+  // failing to resolve a type the realm already holds. A batch that opts out
+  // of waiting for its own indexing skips this too — see
+  // `CommitBatchOptions.waitForIndex`, which owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -141,7 +143,15 @@ export interface BatchCore {
       initiatingUser?: string | null;
     },
   ): Promise<{
-    writes: { path: string; lastModified: number; contentHash: string }[];
+    writes: {
+      path: string;
+      lastModified: number;
+      // When the realm first recorded this file. Read by the commit as it
+      // writes, inside the lock, so a caller reporting it never has to ask
+      // again afterwards.
+      created: number | null;
+      contentHash: string;
+    }[];
     generation: number | null;
   }>;
   serializeCard(
@@ -174,6 +184,18 @@ export interface CommitBatchOptions {
   // Whether to return only once the batch's index job has landed. Waiting is
   // the default: a caller that reports a version and a generation per entry
   // needs the generation, and a caller reading the cards back needs the rows.
+  //
+  // It decides a second thing, and a caller reaching for an early response is
+  // choosing both. Waiting also drains indexing already in flight *before*
+  // staging, which is what lets an entry serialize against a definition from a
+  // module written moments earlier; not waiting skips that drain, so staging
+  // runs against whatever the definition cache already holds. The two travel
+  // together because they are the same trade — a caller that will not wait for
+  // its own indexing gains nothing by waiting for someone else's, and paying
+  // that drain per write is what makes a run of writes serialize behind each
+  // other. Do not reach for this on a batch whose entries resolve a
+  // definition: an entry that replaces bytes verbatim resolves none, which is
+  // why the file-write routes can take it.
   waitForIndex?: boolean;
 }
 
@@ -206,10 +228,12 @@ export async function commitBatch(
     // write queue behind whatever indexing is still in flight, so a caller
     // writing a run of files, like a realm push or an editor saving
     // repeatedly, would pay the previous write's indexing on every one of
-    // them. What it gives up is the definition freshness above, which is why
-    // the option is not offered on the envelope: it is for a caller whose
-    // entries resolve no definition, and today that is the pair of file-write
-    // routes, whose entries replace bytes verbatim and serialize nothing.
+    // them. What it gives up is the definition freshness above, so it belongs
+    // only to a caller whose entries resolve no definition — today the pair of
+    // file-write routes, whose entries replace bytes verbatim and serialize
+    // nothing. That is a rule for whoever dispatches envelope writes through
+    // here, not a guard already standing: the envelope answers 501 for every
+    // write today, so there is nothing yet that could ask for it.
     if (opts.waitForIndex !== false) {
       await core.drainIndexing();
     }
@@ -1116,6 +1140,7 @@ async function commitStaged(
         version: written.contentHash,
         generation: committed.generation,
         lastModified: written.lastModified,
+        created: written.created,
         ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write

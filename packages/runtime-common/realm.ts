@@ -6113,7 +6113,6 @@ export class Realm {
     content: string | Uint8Array,
   ): Promise<Response> {
     let url = new URL(request.url);
-    let localPath = this.paths.local(url);
     let result: Awaited<ReturnType<typeof commitBatch>>[number];
     try {
       [result] = await commitBatch(
@@ -6141,7 +6140,7 @@ export class Realm {
       throw err;
     }
     let lastModified = result?.meta.lastModified;
-    if (lastModified == null) {
+    if (result == null || lastModified == null) {
       // The commit reports a modification time for every file it writes, so
       // reaching here means the write did not land as one. Said out loud
       // rather than defaulted, since a default would answer 204 with a date
@@ -6156,10 +6155,12 @@ export class Realm {
     }
     // A file is created once and every later write reports that same moment,
     // so this is the file's age rather than the age of the bytes now in it.
-    // It is read here rather than carried out of the commit because it is a
-    // response header of this facade, sourced the same way every read route
-    // on this realm sources it.
-    let created = await this.getCreatedTime(localPath);
+    // Taken from the commit, which read it inside the write lock: asking the
+    // realm again afterwards would be a second query for a value the lock
+    // holder already had, against a row a concurrent removal of the same path
+    // may by then have taken away — answering 204 with no `x-created` where
+    // this route has always carried one.
+    let created = result.meta.created;
     return createResponse({
       body: null,
       init: {
