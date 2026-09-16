@@ -259,6 +259,7 @@ import { AliasCache } from './cache/alias-cache.ts';
 import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
   RealmIndexUpdater,
   type IncrementalIndexMeta,
@@ -7410,7 +7411,46 @@ export class Realm {
       });
     }
     let created = result.meta.created;
+    let readEntry = async (skipQueryBackedExpansion: boolean) =>
+      await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
+        loadLinks: true,
+        skipQueryBackedExpansion,
+      });
     let doc: SingleCardDocument;
+    if (!result.meta.changed) {
+      // The patch left the card exactly as it was, so the answer is the card
+      // as the realm already holds it — read before anything else is decided,
+      // because a request that changed nothing is answered from the index
+      // whether or not it asked for its own indexing to be deferred. Only a
+      // render's own read narrows what it resolves.
+      let unchanged = await readEntry(duringPrerender);
+      if (unchanged && unchanged.type !== 'error') {
+        return await this.#patchedCardResponse(unchanged, {
+          instanceURL,
+          localPath,
+          // The file was not rewritten, so the modification time it carries is
+          // the one the index recorded for it.
+          lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
+          created,
+          requestContext,
+        });
+      }
+      // The index holds no document for this card — it has never been indexed,
+      // or its row records why it could not be. Nothing was written, so
+      // nothing has been put in front of the indexer; rewriting the card in
+      // canonical serialized form is what does that, and it is how an empty
+      // patch stores and indexes a card the realm was holding but had not
+      // read.
+      try {
+        result = await commit(true);
+      } catch (err: unknown) {
+        return this.#cardWriteRefusal(err, request, requestContext, {
+          id: instanceURL,
+        });
+      }
+      lastModified = result?.meta.lastModified ?? lastModified;
+      created = result?.meta.created ?? created;
+    }
     if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet. The document is the one the commit stored,
@@ -7443,97 +7483,112 @@ export class Realm {
         requestContext,
       });
     }
-    let readEntry = async () =>
-      await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
-        loadLinks: true,
-        skipQueryBackedExpansion: false,
+    let entry = await readEntry(false);
+    if (entry && entry.type !== 'error') {
+      return await this.#patchedCardResponse(entry, {
+        instanceURL,
+        localPath,
+        lastModified,
+        created,
+        requestContext,
       });
-    let entry = await readEntry();
-    if (!entry || entry.type === 'error') {
-      // The index holds no document for the card this request just patched —
-      // it has never been indexed, or its row records why it could not be.
-      // Either way a patch that changed nothing left the file untouched, so
-      // nothing has been put in front of the indexer; rewriting the card in
-      // canonical serialized form is what does that, and it is how an empty
-      // patch stores and indexes a card the realm was holding but had not
-      // read. A patch that did change something has already been written, so
-      // this stages the same bytes, the commit finds them unchanged, and the
-      // second read answers what the first one did.
-      try {
-        result = await commit(true);
-      } catch (err: unknown) {
-        return this.#cardWriteRefusal(err, request, requestContext, {
-          id: instanceURL,
-        });
-      }
-      lastModified = result?.meta.lastModified ?? lastModified;
-      created = result?.meta.created ?? created;
-      entry = await readEntry();
     }
-    if (!entry || entry.type === 'error') {
-      let stored = storedCardDocument(result);
-      if (
-        stored &&
-        isBrowserTestEnv() &&
-        !(globalThis as any).__emulateServerPatchFailure
-      ) {
-        doc = merge({}, stored, {
-          data: {
-            id: instanceURL,
-            links: { self: instanceURL },
-            meta: {
-              ...(stored.data.meta ?? {}),
-              lastModified,
-            },
-          },
-        }) as SingleCardDocument;
-      } else {
-        return systemError({
-          requestContext,
-          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-          id: instanceURL,
-          additionalError: entry
-            ? CardError.fromSerializableError(entry.error)
-            : undefined,
-        });
-      }
-    } else {
-      doc = merge({}, entry.doc, {
-        data: {
-          links: { self: instanceURL },
-          meta: { lastModified },
+    let stored = storedCardDocument(result);
+    if (
+      !stored ||
+      !isBrowserTestEnv() ||
+      (globalThis as any).__emulateServerPatchFailure
+    ) {
+      return systemError({
+        requestContext,
+        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+        id: instanceURL,
+        additionalError: entry
+          ? CardError.fromSerializableError(entry.error)
+          : undefined,
+      });
+    }
+    doc = merge({}, stored, {
+      data: {
+        id: instanceURL,
+        links: { self: instanceURL },
+        meta: {
+          ...(stored.data.meta ?? {}),
+          lastModified,
         },
-      });
-      // The PATCH echo carries the joined `meta.screenshots` like a GET
-      // does — the store replaces an instance's meta wholesale from a
-      // save response, so an echo without it would wipe the key
-      // client-side until the next GET.
-      if (entry.screenshots) {
-        doc.data.meta = {
-          ...doc.data.meta,
-          screenshots: screenshotsMetaFromManifest(entry.screenshots, {
-            realmURL: this.url,
-            instanceLocalPath: this.paths.local(url),
-          }),
-        };
-      }
-    }
-    // cardDocument() above primed the realm-info cache via attachRealmInfo(),
-    // but only when entry was a non-error doc. On the error fallback we may
-    // still need to populate it.
+      },
+    }) as SingleCardDocument;
+    // The index could not answer, so nothing primed the realm-info cache the
+    // way a read does.
     await this.getRealmInfo();
-    let foreignDeps =
-      entry && entry.type !== 'error'
-        ? this.hasForeignRealmDeps(entry.deps)
-        : false;
-    let etag =
-      entry && entry.type !== 'error' && !foreignDeps
-        ? buildCardJsonEtag(
-            entry.indexedAt,
-            this.getCachedRealmInfoHash(),
-            screenshotsEtagFingerprint(entry.screenshots),
-          )
-        : undefined;
+    this.#serveInstanceIdsAsRRI(doc);
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': this.cardJsonCacheControl(requestContext),
+          ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // The 200 a `PATCH` answers with when the index can speak for the card: the
+  // card as it is indexed, validated by the same ETag a `GET` of it would
+  // carry, and stamped with the stored file's own timestamps rather than the
+  // index's reading of them.
+  //
+  // One builder for both answers a patch can give from the index — the card it
+  // just wrote, and the card it left alone — because the two are the same
+  // response and only differ in whether a write preceded them.
+  async #patchedCardResponse(
+    entry: SearchResultDoc,
+    {
+      instanceURL,
+      localPath,
+      lastModified,
+      created,
+      requestContext,
+    }: {
+      instanceURL: string;
+      localPath: LocalPath;
+      lastModified: number | null;
+      created: number | null;
+      requestContext: RequestContext;
+    },
+  ): Promise<Response> {
+    let doc: SingleCardDocument = merge({}, entry.doc, {
+      data: {
+        links: { self: instanceURL },
+        meta: { lastModified },
+      },
+    });
+    // The PATCH echo carries the joined `meta.screenshots` like a GET does —
+    // the store replaces an instance's meta wholesale from a save response, so
+    // an echo without it would wipe the key client-side until the next GET.
+    if (entry.screenshots) {
+      doc.data.meta = {
+        ...doc.data.meta,
+        screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+          realmURL: this.url,
+          instanceLocalPath: localPath,
+        }),
+      };
+    }
+    // The read above primed the realm-info cache via attachRealmInfo(), so the
+    // hash the ETag is built from is current as of this response.
+    await this.getRealmInfo();
+    let foreignDeps = this.hasForeignRealmDeps(entry.deps);
+    let etag = foreignDeps
+      ? undefined
+      : buildCardJsonEtag(
+          entry.indexedAt,
+          this.getCachedRealmInfoHash(),
+          screenshotsEtagFingerprint(entry.screenshots),
+        );
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),

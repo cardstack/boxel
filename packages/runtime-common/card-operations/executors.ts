@@ -696,11 +696,10 @@ export async function stageUpdate(
     });
   }
   let included = includedResources(entry.document);
-  // What follows — down to the bytes this stages — is the merge
-  // `patchCardInstance` applies, stated here so an entry merges the way the
-  // endpoint does, and pinned byte for byte by a test that patches one
-  // document through both. The two move together until the endpoint
-  // dispatches through this.
+  // What follows — down to the bytes this stages — is the merge a card's
+  // `PATCH` applies. It is the only copy of it: the endpoint dispatches
+  // through here, so a patch sent over HTTP and one sent as a batch entry
+  // land the same bytes because they are the same code.
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
@@ -2036,13 +2035,10 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
         // serialization. A local id written inside a single `data` array has
         // no key of its own to carry a link, so it is refused: staging it
         // would store the collection with the edge missing and say nothing,
-        // which is the one outcome worse than a refusal for the mechanism
-        // the whole batch exists to provide. `promoteLocalIdsToRemoteIds`,
-        // which the `POST` and `PATCH` handlers link through, takes the
-        // second course for the same payload — it finds no per-member key,
-        // records nothing, and reports success — so a document written this
-        // way is answered differently depending on which surface it arrives
-        // at until those handlers dispatch through here.
+        // which is the one outcome worse than a refusal for the mechanism the
+        // whole batch exists to provide. The card endpoints answer this
+        // payload the same way, since they dispatch through here — where they
+        // once recorded nothing and reported success.
         let indexed = normalized[`${fieldName}.${index}`];
         if (!indexed) {
           throw new OperationFailure({

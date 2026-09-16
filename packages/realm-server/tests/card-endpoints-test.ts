@@ -19,6 +19,7 @@ import {
   ri,
   baseRRI,
   rri,
+  SKIP_INDEX_WAIT_HEADER,
   searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type SingleCardDocument,
@@ -1855,6 +1856,79 @@ module(basename(import.meta.filename), function () {
             response.status,
             201,
             `the create route still runs: ${response.text}`,
+          );
+        });
+
+        test('a local id written inside a relationship data array is refused', async function (assert) {
+          // A collection's edges are stored one key per member —
+          // `friends.0`, `friends.1` — and that is the only spelling whose
+          // links survive serialization. A local id written inside the
+          // `data` array has no key of its own to carry one, so the card
+          // would be stored with the edge missing and the write would report
+          // success.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friends: { data: [{ type: 'card', lid: 'local-id-7' }] },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-7',
+                  type: 'card',
+                  attributes: { firstName: 'Boris' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `HTTP 400 status: ${response.text}`,
+          );
+        });
+
+        test('a local id no resource in the payload creates is refused', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'nobody-sent-this' } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `a local id naming nothing is the payload's fault: ${response.text}`,
           );
         });
 
@@ -4722,6 +4796,52 @@ module(basename(import.meta.filename), function () {
             response.get('vary'),
             'Accept',
             'the no-op response varies on Accept',
+          );
+        });
+
+        test('a no-op patch that defers its indexing still answers from the index', async function (assert) {
+          // Deferring indexing decides what happens after a write, and a
+          // patch that changes nothing makes no write to defer. So this
+          // request is answered the way every other unchanged patch is —
+          // from the card as the index holds it, computed fields and all —
+          // rather than from the bytes on disk, which carry neither.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture rewrites it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json')
+            .set(SKIP_INDEX_WAIT_HEADER, 'true');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Mango',
+            'the computed field only the indexed document carries is present',
+          );
+          assert.ok(
+            response.get('etag'),
+            'the response carries the validator an indexed answer has',
           );
         });
 
