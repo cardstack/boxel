@@ -85,6 +85,7 @@ export interface OperationCore {
   storedFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -191,6 +192,28 @@ export interface RunOperationOptions {
   // caller emits has to fold it in, since it distinguishes two documents
   // assembled from the same index row.
   resolveLinksOnly?: boolean;
+  // Report a stored-bytes read's `version` only where the realm already
+  // recorded one, rather than reading the file to fingerprint it.
+  //
+  // A recorded hash is free: it arrives on the same row the creation time does.
+  // Computing one is not — it reads up to the whole-content limit and hashes it
+  // synchronously — and the realm records a hash only for a path written
+  // through its own write API, so every file that reached disk another way
+  // (a deploy, a seeded realm) would pay that read on every request. A caller
+  // that does not validate on `version` says so here and gets null for the
+  // paths a hash would have had to be read for.
+  skipContentFingerprint?: boolean;
+  // Answer without the realm's record of the path at all: `created` and
+  // `version` both null, and the row they come from left unread. That row is
+  // the only database work a stored-bytes read does, so a caller that reads
+  // neither value pays for neither.
+  //
+  // It is not only a saving. A caller may be holding a pinned pool connection
+  // for the whole of the work the read sits inside — the coordinated module
+  // compile does — and there a second checkout is what the coordination is
+  // built to avoid, not merely a cost. Such a caller has to be able to say
+  // that this read touches no connection.
+  skipStoredFileMeta?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to

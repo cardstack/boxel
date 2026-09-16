@@ -192,12 +192,16 @@ import type {
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
+import { commitBatch } from './card-operations/coordinator.ts';
 import {
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
+  isSourceResult,
   type OperationFailure,
+  type OperationRequest,
   type OperationResult,
+  type OperationSourceResult,
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
@@ -773,6 +777,11 @@ type TranspiledModuleEntry = {
   headers: Record<string, string>;
   dependencyKeys: Set<string>;
 };
+
+// Who a dispatched operation runs for, as `#callerOf` derives it from a
+// request. It travels on its own wherever an operation is reached from work
+// that outlives the request that started it.
+type OperationCaller = Pick<OperationRequest, 'actor' | 'clientRequestId'>;
 
 type ModuleLoadResult =
   | { kind: 'not-found'; response: ResponseWithNodeStream }
@@ -4268,8 +4277,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, file) =>
-          this.#operationStoredFileMeta(localPath, file),
+        storedFileMeta: (localPath, file, opts) =>
+          this.#operationStoredFileMeta(localPath, file, opts),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -4805,6 +4814,11 @@ export class Realm {
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
 
     if (!moduleCachingDisabled) {
+      // Answered from memory: these bytes were compiled from a read that
+      // already happened, so nothing here reaches a file and no `readSource`
+      // is dispatched for this request. Worth knowing wherever something is
+      // hung on that dispatch — this return point sits in front of it, not
+      // behind it.
       let cached = this.#transpiledModuleCache.get(localPath);
       if (cached) {
         try {
@@ -4955,13 +4969,46 @@ export class Realm {
     let fileRef = maybeFileRef;
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
     if (!hasExecutableExtension(fileRef.path)) {
+      // A path that holds bytes rather than a module: an image, a PDF, a
+      // markdown document. Its bytes are the `readSource` operation's, the
+      // same read the `card+source` route makes of the same file — which is
+      // what makes "every read of this path" one thing however a client asked
+      // for it.
+      //
+      // The module serve below reads its source the same way and compiles
+      // what comes back. What the two paths do not share is the caches around
+      // that compile: a module answered from one of them is answered without
+      // any read at all.
+      let source = await this.#readStoredSource(
+        this.#callerOf(request, requestContext),
+        fileRef.path,
+        // Nothing here holds on to the bytes, so a `HEAD` asks only for what
+        // its headers are computed from.
+        { headersOnly: request.method === 'HEAD' ? true : undefined },
+      );
+      if (!source) {
+        return {
+          kind: 'not-found',
+          response: notFound(
+            request,
+            requestContext,
+            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+          ),
+        };
+      }
       return {
         kind: 'non-module',
-        response: await this.serveLocalFile(request, fileRef, requestContext, {
-          defaultHeaders: {
-            'content-type': inferContentType(fileRef.path),
+        response: await this.serveLocalFile(
+          request,
+          this.#servableSource(fileRef, source),
+          requestContext,
+          {
+            defaultHeaders: {
+              'content-type': source.contentType,
+            },
+            createdAt: source.created,
           },
-        }),
+        ),
       };
     }
 
@@ -4996,7 +5043,12 @@ export class Realm {
       };
     }
 
-    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+    return this.#transpileModuleDeduped(
+      localPath,
+      fileRef,
+      etag,
+      this.#callerOf(request, requestContext),
+    );
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
@@ -5007,10 +5059,22 @@ export class Realm {
   // CachingDefinitionLookup.#inFlight — a newer pending entry installed
   // after invalidateCache drops the slot is preserved when the older
   // promise eventually settles.
+  //
+  // The source read those bytes are compiled from is dispatched for the
+  // caller that started the work, so a joiner is served bytes read on someone
+  // else's behalf. That is what one compile per path means once the read
+  // inside it is an operation with a caller attached.
+  //
+  // The cross-process coalesce below shares work the same way where it can —
+  // the winner reads, the losers take its row — but a loser that wakes to no
+  // row compiles for itself, under its own caller. So a path's read is one
+  // read per compile, not one per path: whichever callers end up compiling
+  // each read as themselves.
   async #transpileModuleDeduped(
     localPath: LocalPath,
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let existing = this.#inFlightTranspiles.get(localPath);
     if (existing) {
@@ -5025,7 +5089,7 @@ export class Realm {
     // unhandled rejection in Node's host hook. Same shape as
     // CachingDefinitionLookup.#inFlight.
     let pending: Promise<ModuleTranspileResult>;
-    let core = this.#transpileWithLayers(fileRef, etag);
+    let core = this.#transpileWithLayers(fileRef, etag, caller);
     pending = core.finally(() => {
       if (this.#inFlightTranspiles.get(localPath) === pending) {
         this.#inFlightTranspiles.delete(localPath);
@@ -5059,11 +5123,16 @@ export class Realm {
   async #transpileWithLayers(
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let coordinator = this.#transpileCoordinator;
 
     // L2 read first — cheap query (UNLOGGED, indexed PK), saves babel.
+    // Answered from the shared cache: like the in-memory one, this return
+    // point serves bytes some earlier compile read, so no `readSource` is
+    // dispatched for the request that reaches it. The same holds for the two
+    // other returns of a cached row below.
     let cached = await this.#readTranspileCacheRow(canonicalPath);
     if (cached?.result) {
       return cached.result;
@@ -5077,7 +5146,7 @@ export class Realm {
     let capturedGeneration = cached?.generation ?? 0;
 
     if (!coordinator) {
-      let result = await this.#materializeAndTranspile(fileRef, etag);
+      let result = await this.#materializeAndTranspile(fileRef, etag, caller);
       await this.#writeTranspileCacheRow(
         canonicalPath,
         result,
@@ -5101,7 +5170,7 @@ export class Realm {
         if (recheck?.result) {
           return recheck.result;
         }
-        let result = await this.#materializeAndTranspile(fileRef, etag);
+        let result = await this.#materializeAndTranspile(fileRef, etag, caller);
         await this.#writeTranspileCacheRow(
           canonicalPath,
           result,
@@ -5128,7 +5197,7 @@ export class Realm {
     // a generation discard upstream). Fall through to a local transpile;
     // we still persist so the NEXT reader sees a cached row. Use the
     // freshest generation we've observed for the OCC token.
-    let result = await this.#materializeAndTranspile(fileRef, etag);
+    let result = await this.#materializeAndTranspile(fileRef, etag, caller);
     await this.#writeTranspileCacheRow(
       canonicalPath,
       result,
@@ -5424,10 +5493,47 @@ export class Realm {
   async #materializeAndTranspile(
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
-    let fileWithContent = await this.materializeFileRef(fileRef);
-    let source = await fileContentToText(fileWithContent);
+    // The module's stored text, read as the `readSource` operation — the same
+    // read the `card+source` route makes of the same path. What is compiled
+    // below is what that read returned, so a module's bytes reach a client
+    // through one read of them however they were asked for.
+    //
+    // The path handed to the read is the resolved one, extension fallback
+    // included; the handle the caller resolved with is not read from. Its stat
+    // is what the `ETag` was built from and what the `Last-Modified` below
+    // reports, and the bytes are this read's — the same pairing of a stat with
+    // bytes read after it that a byte route reading one handle has.
+    //
+    // Nothing below reads the realm's own record of the path — the validator
+    // is the modification time's — so the read is told to leave that row
+    // alone. Here that is a requirement and not a saving: a coordinated
+    // compile runs this inside a window where it holds one pool connection
+    // pinned, and a second checkout from inside that window is what the
+    // coordination exists to prevent.
+    let stored = await this.#readStoredSource(caller, fileRef.path, {
+      skipStoredFileMeta: true,
+    });
+    if (!stored) {
+      // The path resolved to a file and that file is gone: a delete landing
+      // between the two. This route answers every failure to produce a module
+      // as a 406 whose body repeats that status, so the refusal is reported
+      // the way one raised deeper in the compile is, rather than under a
+      // status of its own that would leave the body and the response
+      // disagreeing.
+      throw new CardError(
+        `${canonicalPath} was deleted before it could be compiled`,
+        { status: 406, title: 'Module transpilation failed' },
+      );
+    }
+    // The one touch of `body`, which is where a streaming adapter opens its
+    // stream. It is present because this read asked for the bytes — the mode
+    // is chosen by the call above, which passes no headers-only option.
+    let source = await fileContentToText({
+      content: stored.body as FileRef['content'],
+    });
     let transpiled: string;
     try {
       // Force an absolute path so babel's internal path.resolve doesn't depend
@@ -5435,9 +5541,9 @@ export class Realm {
       // observed to drop the leading slash on vite builds — producing a
       // moduleName of "dir/person.gts" instead of "/dir/person.gts" in
       // compiled templates.
-      let debugFilename = fileWithContent.path.startsWith('/')
-        ? fileWithContent.path
-        : `/${fileWithContent.path}`;
+      let debugFilename = fileRef.path.startsWith('/')
+        ? fileRef.path
+        : `/${fileRef.path}`;
       if (this.#testOnlyTranspileDelay) {
         await this.#testOnlyTranspileDelay();
       }
@@ -5756,6 +5862,32 @@ export class Realm {
   // that every scoped-CSS choke point keys on — in particular the Node-side
   // loader answers such URLs with an empty module instead of fetching, so an
   // injector that touches `document` never evaluates where none exists.
+  //
+  // Two caching decisions are load-bearing here, because a card's module graph
+  // pulls hundreds of these URLs on one page load and each is its own request.
+  //
+  // `varyOnAccept: false` — the body is keyed entirely by the URL's content
+  // hash, so the route never content-negotiates and must not claim it does
+  // (see `createResponse`: a declared-but-unhonored `Vary` makes differing
+  // `Accept` spellings evict each other's stored entry). This holds only
+  // because the realm-server's index handler exempts these paths from the
+  // `text/html` branch that answers realm URLs with the host app shell —
+  // without that exemption the same URL would have two bodies, and the
+  // year-long entry a browser stores could be either.
+  //
+  // No `ETag` — deliberately, and it is not an oversight to correct. The
+  // consumer is the loader, whose `cachedFetch` layer conditionalizes any
+  // request it holds a validator for by sending `If-None-Match`, and a
+  // caller-supplied conditional header makes the browser skip its own cache
+  // and revalidate against the server. `cachedFetch`'s store is a
+  // module-scoped Map that starts empty in a fresh JS context, so the cost is
+  // not the first fetch of a URL but every later one: a loader reset re-imports
+  // the module graph in the same context, and each of those hundreds of URLs
+  // then carries a validator and reaches the server instead of the browser
+  // cache. An `immutable` year-long response with no validator stays silent
+  // across all of them; the content hash in the URL is what makes that safe,
+  // since changed bytes arrive under a different URL rather than needing this
+  // one re-checked.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
@@ -5785,6 +5917,7 @@ export class Realm {
         },
       },
       requestContext,
+      varyOnAccept: false,
     });
   }
 
@@ -6078,6 +6211,137 @@ export class Realm {
     return entry.instance.attributes?.allowArbitraryScreenshots === true;
   }
 
+  // The stored bytes at `localPath`, read as the `readSource` operation. Every
+  // route that serves a path's stored bytes gets what it sends from here — the
+  // `card+source` `GET`/`HEAD`, the raw file serve, and the module serve,
+  // which compiles what comes back rather than sending it — so there is one
+  // place that read happens however a client asked for those bytes.
+  //
+  // Reads that produce something other than the bytes are their own: the
+  // file-meta route opens the file to hash and measure it, and the
+  // not-indexed-yet check reads a `.json` to decide whether the index will
+  // ever have a row for it. Neither serves what it read.
+  //
+  // The caller has already resolved which file it means, including any
+  // extension fallback, and has a handle on it. The dispatch is given the
+  // resolved path rather than the requested one: a read answers for the bytes
+  // it returns, and a fallback would otherwise leave the content type
+  // describing one file and everything else another.
+  //
+  // A refusal here is a file that stopped existing between the caller's
+  // resolution and this read — a delete landing in that window — so it becomes
+  // the 404 the same request a moment later would have produced. Nothing else
+  // this operation can refuse is reachable: the path is resolved, so it is
+  // neither a directory nor a name the realm declines to serve.
+  // The caller is passed rather than the request it came from: the module
+  // serve's read happens inside work shared between concurrent requests, where
+  // there is no one request to take it from.
+  async #readStoredSource(
+    caller: OperationCaller,
+    localPath: LocalPath,
+    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
+  ): Promise<OperationSourceResult | undefined> {
+    let result: OperationResult;
+    try {
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: {
+            kind: 'instance',
+            url: this.paths.fileURL(localPath).href,
+          },
+          name: 'readSource',
+          ...caller,
+        },
+        // No route reaching here validates on the read's `version` — each
+        // builds its own validator, from the bytes it caches or from the
+        // modification time — so none should pay to have one read off disk
+        // for it.
+        { ...opts, skipContentFingerprint: true },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      if (e.error.code === 'target-not-found') {
+        return undefined;
+      }
+      // Any other refusal carries a status the operation chose, and what
+      // carries that status the rest of the way is a `CardError` — a bare
+      // refusal reaching the source route's router would answer 500 for
+      // something that named its own answer. Nothing a stored-bytes read can
+      // refuse reaches here today, the resolved path having ruled out the rest,
+      // so this is about the next refusal added to that executor rather than a
+      // live fault.
+      //
+      // It carries the status only as far as the source route. The byte serve
+      // is reached through the module fallback, whose own error handling
+      // answers every throw alike, so a refusal there arrives under that
+      // handler's status rather than this one — as every error on that path
+      // already does.
+      throw new CardError(e.error.detail, {
+        status: e.error.status,
+        title: e.error.title,
+        id: e.error.id,
+      });
+    }
+    if (!isSourceResult(result)) {
+      throw new Error(
+        `bug: readSource of ${localPath} in realm ${this.url} did not answer with stored bytes`,
+      );
+    }
+    return result;
+  }
+
+  // What a byte route hands `serveLocalFile`: the operation's answer, in the
+  // shape the response assembly reads.
+  //
+  // Two members come from the handle rather than from the result, and for the
+  // same reason. A `Range` is served by reading bounded slices of the file,
+  // which is a capability of the adapter's handle and not a value a result can
+  // carry; `size` decides whether a range can be offered at all, and the
+  // handle is what the caller measured when it resolved the path. Everything a
+  // client can see about the content — the bytes, when they changed, what type
+  // they are — is the operation's.
+  //
+  // `content` stays a getter so that resolving it remains the response
+  // assembly's decision. A 304 and a 206 both send bytes this never opens, and
+  // a headers-only read has none to open — which is sound for the same reason:
+  // the assembly reaches `content` only where it is about to send it, and a
+  // read is asked for headers only where the route will not.
+  #servableSource(handle: FileRef, source: OperationSourceResult): FileRef {
+    // `this` inside the getter below is the ref, not the realm.
+    let realmURL = this.url;
+    let ref: FileRef = {
+      path: handle.path,
+      get content() {
+        if (source.body === undefined) {
+          // A headers-only read has no bytes, and every route that asks for
+          // one is a route that will not send any. Nothing binds those two
+          // decisions together — they are separate tests of the request's
+          // method, in separate methods — so this says what went wrong at the
+          // point it went wrong rather than letting `undefined` travel on as a
+          // body and surface as an empty response.
+          throw new Error(
+            `bug: response for ${handle.path} in realm ${realmURL} reached for bytes a headers-only read did not fetch`,
+          );
+        }
+        return source.body as FileRef['content'];
+      },
+      lastModified: source.lastModified,
+      ...(source.size != null ? { size: source.size } : {}),
+      ...(handle.createRangeStream
+        ? { createRangeStream: handle.createRangeStream }
+        : {}),
+    };
+    // A shimmed module is not stored content at all, and the response says so
+    // in a header of its own; the marker rides on the handle.
+    for (let symbol of Object.getOwnPropertySymbols(handle)) {
+      (ref as any)[symbol] = (handle as any)[symbol];
+    }
+    return ref;
+  }
+
   private async serveLocalFile(
     request: Request,
     ref: FileRef,
@@ -6090,6 +6354,13 @@ export class Realm {
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
       etagBase?: string;
+      // When the realm first saw this path, for a caller that already read the
+      // file's stored metadata and so already has it. Supplying it is what
+      // keeps such a caller from reading the same row twice per request.
+      // Present and null means the realm holds no record of the path, which is
+      // an answer — so the key being there at all, rather than its value, is
+      // what decides whether this looks the value up itself.
+      createdAt?: number | null;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -6125,7 +6396,10 @@ export class Realm {
         requestContext,
       });
     }
-    let createdFromDb = await this.getCreatedTime(ref.path);
+    let createdFromDb =
+      options && 'createdAt' in options
+        ? options.createdAt
+        : await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
       'last-modified': lastModified,
@@ -6216,6 +6490,29 @@ export class Realm {
           return response;
         }
       }
+    }
+
+    // A `HEAD` is answered by the headers above and nothing else, so the bytes
+    // are never reached for one. The protocol forbids a body here and the
+    // server drops one anyway, so this changes no response — what it changes is
+    // that `content` is not touched, and on a streaming adapter that property
+    // is what opens the stream. A caller that has the metadata without the
+    // bytes can therefore answer a `HEAD` with them.
+    //
+    // Only where the length is already known, though. `Content-Length` on a
+    // `HEAD` has to describe the body the `GET` would send, and where the size
+    // was not knowable without the bytes it is the body itself that is
+    // measured — by the HTTP layer, for a `HEAD` as much as for a `GET`. So a
+    // ref that could not report its size is served the way it always was, and
+    // the header keeps coming from the one thing that can produce it. Such a
+    // ref is materialized rather than streamed, so no stream is stranded by
+    // passing it along.
+    if (request.method === 'HEAD' && totalSize != null) {
+      return createResponse({
+        body: null,
+        init: { headers },
+        requestContext,
+      });
     }
 
     if (
@@ -6443,52 +6740,99 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Source-content-type callers, by definition, don't depend on indexed
-    // state — if they did they would use application/vnd.card+json. Return
-    // as soon as the source bytes are durable; indexing happens async and
-    // surfaces errors via error_doc as before. Subscribers to indexing
-    // events still see the broadcast once the worker settles.
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      await request.text(),
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
-    );
-    return createResponse({
-      body: null,
-      init: {
-        status: 204,
-        headers: {
-          'last-modified': formatRFC7231(lastModified * 1000),
-          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
-        },
-      },
+    return await this.replaceFileContent(
+      request,
       requestContext,
-    });
+      await request.text(),
+    );
   }
 
   private async upsertBinaryFile(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Binary files have no indexable card representation, so awaiting the
-    // index update would be even more wasteful than for card source. Return
-    // as soon as the bytes are durable.
-    let bytes = new Uint8Array(await request.arrayBuffer());
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      bytes,
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
+    return await this.replaceFileContent(
+      request,
+      requestContext,
+      new Uint8Array(await request.arrayBuffer()),
     );
+  }
+
+  // The write behind both file-content routes: one `update` entry naming the
+  // request's own path, committed as a batch of one.
+  //
+  // Both routes put whatever bytes they are given at whatever path they are
+  // given, which is what `rawSource` means — so both set it, and only they
+  // do. It is what lets them keep reaching the three things an update on a
+  // file otherwise refuses: a module's source, a card instance's stored
+  // `.json`, and a path with nothing at it yet, since these are the routes
+  // that create the files they write. Through the operations envelope an
+  // update on a card is instead the JSON:API merge its document describes and
+  // one on a module is refused, because a caller able to ask for a verbatim
+  // replacement of a card's source could write bytes that are no longer a
+  // card and leave the realm to discover it at index time.
+  //
+  // Neither caller depends on indexed state — a caller that did would be
+  // asking for `application/vnd.card+json` — so both return as soon as the
+  // bytes are durable. Indexing follows on the queue, reports its errors
+  // through `error_doc` as it does for any write, and broadcasts to
+  // subscribers once the worker settles. The operations envelope has no such
+  // opt-out: it reports a generation per entry, which only exists once the
+  // index job has landed.
+  private async replaceFileContent(
+    request: Request,
+    requestContext: RequestContext,
+    content: string | Uint8Array,
+  ): Promise<Response> {
+    let url = new URL(request.url);
+    let result: Awaited<ReturnType<typeof commitBatch>>[number];
+    try {
+      [result] = await commitBatch(
+        this.batchCore,
+        [{ op: 'update', href: url.href, content, rawSource: true }],
+        {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          actor: requestContext.authenticatedUser ?? undefined,
+          waitForIndex: false,
+        },
+      );
+    } catch (err: unknown) {
+      if (isOperationFailure(err)) {
+        // A batch reports a refusal as an operations error, which is the
+        // envelope's currency. This route answers in statuses, and the status
+        // is what a caller acts on — an oversized payload has to keep reading
+        // as "send less" rather than as "the realm is broken, try again". So
+        // the refusal is carried back across as the error this route has
+        // always thrown, keeping the status the batch chose.
+        throw new CardError(err.error.detail ?? err.message, {
+          status: err.error.status,
+          title: err.error.title,
+        });
+      }
+      throw err;
+    }
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it writes, so
+      // reaching here means the write did not land as one. Said out loud
+      // rather than defaulted, since a default would answer 204 with a date
+      // that describes no file.
+      throw new CardError(
+        `write of ${url.href} reported no modification time`,
+        {
+          status: 500,
+          title: 'Internal Server Error',
+        },
+      );
+    }
+    // A file is created once and every later write reports that same moment,
+    // so this is the file's age rather than the age of the bytes now in it.
+    // Taken from the commit, which read it inside the write lock: asking the
+    // realm again afterwards would be a second query for a value the lock
+    // holder already had, against a row a concurrent removal of the same path
+    // may by then have taken away — answering 204 with no `x-created` where
+    // this route has always carried one.
+    let created = result.meta.created;
     return createResponse({
       body: null,
       init: {
@@ -6676,21 +7020,44 @@ export class Realm {
         return response;
       }
 
-      let createdAt = await this.getCreatedTime(handle.path);
+      // The bytes and everything describing them are the `readSource`
+      // operation's from here down. What stays here is the response around
+      // them: which validator this route builds, the 304, the source cache,
+      // and the cache-status header — all of which are this route's own
+      // choices rather than facts about the file.
+      //
+      // A `HEAD` asks for the metadata alone, but only where this route has no
+      // use of its own for the bytes. Below, a cached read materializes them to
+      // fill the source cache, and it fills it for a `HEAD` exactly as for a
+      // `GET` — so the next `GET` of that path is served from cache either way,
+      // which is what a client observes. Asking for a body there and dropping
+      // it is the cost of leaving that alone.
+      let headersOnly =
+        request.method === 'HEAD' && bypassCache ? (true as const) : undefined;
+      let source = await this.#readStoredSource(
+        this.#callerOf(request, requestContext),
+        handle.path,
+        { headersOnly },
+      );
+      if (!source) {
+        return notFound(request, requestContext, `${localName} not found`);
+      }
+      let served = this.#servableSource(handle, source);
       let defaultHeaders: Record<string, string> = {
-        'content-type': inferContentType(handle.path),
-        ...(createdAt != null
-          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+        'content-type': source.contentType,
+        ...(source.created != null
+          ? { 'x-created': formatRFC7231(source.created * 1000) }
           : {}),
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       if (bypassCache) {
-        return await this.serveLocalFile(request, handle, requestContext, {
+        return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          createdAt: source.created,
         });
       } else {
-        let cachedRef = await this.materializeFileRef(handle);
+        let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.
         if (this.#testOnlySourceCacheDelay) {
@@ -6699,6 +7066,17 @@ export class Realm {
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
         // post-materialization, so this is a single hash with no extra I/O.
+        //
+        // The read reports a `version` for the same bytes, and this does not
+        // use it. The two are the same fingerprint of the same content, but
+        // they are reached differently: `version` prefers the hash the realm
+        // recorded at write time, which describes the file only while nothing
+        // has overwritten it out of band at its exact length. This value is
+        // hashed from the bytes about to be cached and sent, so the validator
+        // always describes what it is attached to. Which identity this route
+        // validates on is the route's to choose, and choosing the recorded one
+        // is a change to what a conditional request compares rather than a
+        // consequence of where the bytes now come from.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&
@@ -6723,6 +7101,7 @@ export class Realm {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
           etagBase: contentHash,
+          createdAt: source.created,
         });
       }
     } finally {
@@ -7206,6 +7585,7 @@ export class Realm {
   async #operationStoredFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
@@ -7219,6 +7599,15 @@ export class Realm {
       persisted.contentSize === file.size
     ) {
       return { version: persisted.contentHash, createdAt };
+    }
+    if (opts?.skipContentFingerprint) {
+      // The row holds no hash this handle's size vouches for, and the caller
+      // validates on something other than `version` — so the read that would
+      // produce one buys nothing. It is the expensive half of this method:
+      // `persistFileMeta` records a hash only for a path written through the
+      // realm's own write API, so a deployed or seeded file reaches here every
+      // time, and the read is bounded per request rather than amortized.
+      return { createdAt };
     }
     return { version: await contentHashFromRanges(file), createdAt };
   }

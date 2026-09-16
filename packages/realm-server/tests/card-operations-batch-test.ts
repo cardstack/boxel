@@ -198,6 +198,7 @@ function stub(opts: StubOptions = {}): Stub {
         writes: Object.entries(writes).map(([path, content]) => ({
           path,
           lastModified: 2000,
+          created: 1000,
           contentHash: `hash-${content.length}`,
         })),
         generation: 9,
@@ -2030,6 +2031,39 @@ module(basename(import.meta.filename), function () {
         1,
         'a card is serialized against a definition the realm has finished ' +
           'indexing',
+      );
+    });
+    test('a batch that does not wait for indexing does not drain it either', async function (assert) {
+      let { core, commits, drainCount } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'one',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'One' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { waitForIndex: false },
+      );
+      // The option decides both halves. A caller that will not wait for its
+      // own indexing gains nothing by waiting for anyone else's, and paying
+      // the drain per write is what would make a run of writes queue behind
+      // each other.
+      assert.strictEqual(
+        drainCount(),
+        0,
+        'staging is not held behind indexing already in flight',
+      );
+      assert.false(
+        commits[0].waitForIndex,
+        'and the commit is still told not to wait for its own',
       );
     });
     test('an update rewrites a side-loaded card that is already stored', async function (assert) {

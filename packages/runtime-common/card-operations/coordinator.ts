@@ -107,7 +107,9 @@ export interface BatchCore {
   // Waits for indexing already in flight. A card's serialization resolves the
   // definitions its type is built from, and a module written moments earlier
   // may still be indexing, so a batch drains before it stages rather than
-  // failing to resolve a type the realm already holds.
+  // failing to resolve a type the realm already holds. A batch that opts out
+  // of waiting for its own indexing skips this too — see
+  // `CommitBatchOptions.waitForIndex`, which owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -141,7 +143,15 @@ export interface BatchCore {
       initiatingUser?: string | null;
     },
   ): Promise<{
-    writes: { path: string; lastModified: number; contentHash: string }[];
+    writes: {
+      path: string;
+      lastModified: number;
+      // When the realm first recorded this file. Read by the commit as it
+      // writes, inside the lock, so a caller reporting it never has to ask
+      // again afterwards.
+      created: number | null;
+      contentHash: string;
+    }[];
     generation: number | null;
   }>;
   serializeCard(
@@ -174,6 +184,20 @@ export interface CommitBatchOptions {
   // Whether to return only once the batch's index job has landed. Waiting is
   // the default: a caller that reports a version and a generation per entry
   // needs the generation, and a caller reading the cards back needs the rows.
+  //
+  // It decides a second thing, and a caller reaching for an early response is
+  // choosing both: waiting also drains indexing already in flight *before*
+  // staging. The two travel together because they are the same trade — a
+  // caller that will not wait for its own indexing gains nothing by waiting
+  // for someone else's, and paying that drain per write is what makes a run of
+  // writes serialize behind each other.
+  //
+  // It is not a choice about definition freshness, which is the tempting
+  // reading: a definition resolves off disk rather than out of the index, so
+  // an entry still serializes against a module written moments earlier
+  // whichever way this is set. See the drain in `commitBatch` for what the
+  // wait actually buys, and the realm's own card-write gate for the case
+  // stated at length.
   waitForIndex?: boolean;
 }
 
@@ -199,7 +223,31 @@ export async function commitBatch(
     // each card against its type's definition, and a module written moments
     // earlier may still be indexing; without this a batch that follows a
     // module upload fails to resolve a type the realm already has on disk.
-    await core.drainIndexing();
+    //
+    // A batch that does not wait for its own indexing does not wait for
+    // anyone else's either — the same trade the realm's own commit makes at
+    // the same gate, and for the same reason: draining would make each such
+    // write queue behind whatever indexing is still in flight, so a caller
+    // writing a run of files, like a realm push or an editor saving
+    // repeatedly, would pay the previous write's indexing on every one of
+    // them.
+    //
+    // Skipping it does not cost an entry its definitions. Serialization's one
+    // cross-file dependency resolves a definition off disk rather than out of
+    // the index, and a module written in the same commit has its cached
+    // definition dropped as the bytes land — so no indexing-dependent step
+    // stands between a module write and a serialization that follows it. What
+    // the drain guards is narrower than the whole of definition freshness; the
+    // realm states the case at its own card-write gate, which is the place to
+    // read before widening or removing either copy.
+    //
+    // So this is not reserved for entries that serialize nothing. A caller
+    // whose response does not read indexed state can take it, and a
+    // prerender-originated write *must*: the job it would wait on needs the
+    // render slot that caller is holding, so waiting deadlocks.
+    if (opts.waitForIndex !== false) {
+      await core.drainIndexing();
+    }
     // Every `lid` in the batch resolves to a URL before any executor runs. A
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
@@ -653,6 +701,20 @@ function targetRead(
   if (entry.op !== 'update' || entry.content === undefined) {
     return { path: cardSourcePath(localPath), form: 'text' };
   }
+  if (entry.rawSource) {
+    // A verbatim replacement never asks what is already at the path: it
+    // replaces a card's stored source, a module and a data file the same way,
+    // and it writes a path that holds nothing at all. So the distinction the
+    // whole-file read below exists to draw is one it does not need drawn, and
+    // reading a card's `.json` to draw it would mean holding a file this
+    // entry never looks at — on the route an editor saves through, for every
+    // save. What is left is reporting whether the caller's base still holds,
+    // which only a caller that named one is owed, and which the bounded form
+    // answers without the file.
+    return entry.baseVersion === undefined
+      ? undefined
+      : { path: localPath, form: 'meta' };
+  }
   // A `.json` at a file's own path is either a card's stored source or a data
   // file the realm merely holds, and only the bytes tell them apart — so this
   // is the one file target whose content the batch reads, and it reads it to
@@ -1089,6 +1151,7 @@ async function commitStaged(
         version: written.contentHash,
         generation: committed.generation,
         lastModified: written.lastModified,
+        created: written.created,
         ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write

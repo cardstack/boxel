@@ -1099,15 +1099,32 @@ module(basename(import.meta.filename), function () {
       let { core, calls } = stub({
         stored: { 'person.gts': 'export class Person {}' },
       });
-      await runOperation(
+      let result = await runOperation(
         core,
         invoke({ kind: 'instance', url: `${REALM}person.gts` }, 'readSource'),
       );
       assert.deepEqual(
         calls,
+        ['openStoredFile', 'storedFileMeta'],
+        'one file open and one file-meta row — and no definition lookup and ' +
+          'no index read at all',
+      );
+      // Resolving the bytes is the caller's, and what it costs is the other
+      // half of the same claim: a read that is going to send the body pays for
+      // it exactly once, and one that is not — a 304, a range served from the
+      // handle — pays nothing, which is what the assertion above records.
+      assert.true(isSourceResult(result), 'the bytes mode answers with a body');
+      if (isSourceResult(result)) {
+        assert.strictEqual(
+          result.body,
+          'export class Person {}',
+          'and the body is the stored text',
+        );
+      }
+      assert.deepEqual(
+        calls,
         ['openStoredFile', 'storedFileMeta', 'storedContent'],
-        'one file open, one file-meta row, one touch of the bytes — and no ' +
-          'definition lookup and no index read at all',
+        'sending the bytes touches them exactly once',
       );
     });
     test('the headers-only mode reports the metadata without touching the bytes', async function (assert) {
