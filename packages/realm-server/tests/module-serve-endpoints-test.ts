@@ -442,12 +442,59 @@ module(basename(import.meta.filename), function () {
         // registered on the client, so letting one pick would test which
         // parser it picked rather than what the realm sent.
         let payload = JSON.parse(response.text) as {
-          errors?: { status?: number }[];
+          errors?: { status?: number; title?: string; message?: string }[];
         };
+        let error = payload.errors?.[0];
         assert.strictEqual(payload.errors?.length, 1, 'one error is reported');
+        assert.strictEqual(
+          error?.status,
+          406,
+          'whose status is the one the response carries',
+        );
+        // The compiler's own complaint, not the request's URL: the URL is in
+        // `errors[0].id` for every refusal on this path, so reading it back
+        // would pass for a refusal that never reached the compiler.
         assert.true(
-          response.text.includes('uncompilable.gts'),
-          'and it names the module that could not be compiled',
+          (error?.message ?? '').includes('uncompilable.gts'),
+          'and whose message is the compiler naming the module it could not parse',
+        );
+      });
+
+      test('a module that stops existing between resolution and the read is refused as the route refuses everything', async function (assert) {
+        await testRealm.write('vanishing.gts', cardSource('Vanishing'));
+        // The realm answers `undefined` for a path that holds no file, which
+        // is what the operation sees when a delete lands in the window between
+        // the name being resolved and its bytes being read. Nothing else can
+        // open that window from outside: the resolution and the read are two
+        // statements of one method.
+        let core = testRealm.operationCore;
+        let original = core.openStoredFile;
+        core.openStoredFile = (localPath) =>
+          localPath === 'vanishing.gts'
+            ? Promise.resolve(undefined)
+            : original(localPath);
+        let response;
+        try {
+          response = await request
+            .get('/vanishing.gts')
+            .set('Accept', SupportedMimeType.All);
+        } finally {
+          core.openStoredFile = original;
+        }
+
+        assert.strictEqual(response.status, 406, 'HTTP 406 status');
+        let payload = JSON.parse(response.text) as {
+          errors?: { status?: number; title?: string }[];
+        };
+        assert.strictEqual(
+          payload.errors?.[0]?.status,
+          406,
+          'and a body reporting the same status as the response',
+        );
+        assert.strictEqual(
+          payload.errors?.[0]?.title,
+          'Module transpilation failed',
+          'under the title this route gives every module it cannot produce',
         );
       });
 
@@ -521,13 +568,13 @@ module(basename(import.meta.filename), function () {
         );
         assert.true(
           after.text.includes('RecompiledAfter'),
-          'and the next response compiled the new text',
+          'and the next response compiled the text written over it',
         );
-        assert.notStrictEqual(
-          after.headers['etag'],
-          before.headers['etag'],
-          'under a validator that no longer matches the one a client holds',
-        );
+        // What the two responses' validators say about each other is left
+        // alone here. A module's validator is built from the file's
+        // modification time in whole seconds, so whether a rewrite produces a
+        // different one depends on which second the two writes land in —
+        // pinning it would pin the clock.
       });
     });
 

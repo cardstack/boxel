@@ -4754,10 +4754,14 @@ export class Realm {
   //
   // The source read those bytes are compiled from is dispatched for the
   // caller that started the work, so a joiner is served bytes read on someone
-  // else's behalf. The cross-process coalesce below shares work the same way,
-  // the winner reading and the losers taking its row. That is what one compile
-  // per path means once the read inside it is an operation with a caller
-  // attached.
+  // else's behalf. That is what one compile per path means once the read
+  // inside it is an operation with a caller attached.
+  //
+  // The cross-process coalesce below shares work the same way where it can —
+  // the winner reads, the losers take its row — but a loser that wakes to no
+  // row compiles for itself, under its own caller. So a path's read is one
+  // read per compile, not one per path: whichever callers end up compiling
+  // each read as themselves.
   async #transpileModuleDeduped(
     localPath: LocalPath,
     fileRef: FileRef,
@@ -5194,16 +5198,27 @@ export class Realm {
     // is what the `ETag` was built from and what the `Last-Modified` below
     // reports, and the bytes are this read's — the same pairing of a stat with
     // bytes read after it that a byte route reading one handle has.
-    let stored = await this.#readStoredSource(caller, fileRef.path);
+    //
+    // Nothing below reads the realm's own record of the path — the validator
+    // is the modification time's — so the read is told to leave that row
+    // alone. Here that is a requirement and not a saving: a coordinated
+    // compile runs this inside a window where it holds one pool connection
+    // pinned, and a second checkout from inside that window is what the
+    // coordination exists to prevent.
+    let stored = await this.#readStoredSource(caller, fileRef.path, {
+      skipStoredFileMeta: true,
+    });
     if (!stored) {
       // The path resolved to a file and that file is gone: a delete landing
-      // between the two. Every throw from here is answered by
-      // `moduleErrorResponse`, which serves 406 whatever status it is handed,
-      // so this says what happened rather than choosing a status of its own.
-      throw new CardError(`${canonicalPath} was deleted while being compiled`, {
-        status: 404,
-        title: 'Not found',
-      });
+      // between the two. This route answers every failure to produce a module
+      // as a 406 whose body repeats that status, so the refusal is reported
+      // the way one raised deeper in the compile is, rather than under a
+      // status of its own that would leave the body and the response
+      // disagreeing.
+      throw new CardError(
+        `${canonicalPath} was deleted before it could be compiled`,
+        { status: 406, title: 'Module transpilation failed' },
+      );
     }
     // The one touch of `body`, which is where a streaming adapter opens its
     // stream. It is present because this read asked for the bytes — the mode
@@ -5859,10 +5874,15 @@ export class Realm {
   }
 
   // The stored bytes at `localPath`, read as the `readSource` operation. Every
-  // route that reads a path's stored bytes gets them from here — the
+  // route that serves a path's stored bytes gets what it sends from here — the
   // `card+source` `GET`/`HEAD`, the raw file serve, and the module serve,
   // which compiles what comes back rather than sending it — so there is one
-  // place that read happens however a client asked for it.
+  // place that read happens however a client asked for those bytes.
+  //
+  // Reads that produce something other than the bytes are their own: the
+  // file-meta route opens the file to hash and measure it, and the
+  // not-indexed-yet check reads a `.json` to decide whether the index will
+  // ever have a row for it. Neither serves what it read.
   //
   // The caller has already resolved which file it means, including any
   // extension fallback, and has a handle on it. The dispatch is given the
@@ -5881,7 +5901,7 @@ export class Realm {
   async #readStoredSource(
     caller: OperationCaller,
     localPath: LocalPath,
-    opts: { headersOnly?: true } = {},
+    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
     try {
