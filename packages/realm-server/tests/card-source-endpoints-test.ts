@@ -529,6 +529,108 @@ module(basename(import.meta.filename), function () {
             'dotted filename resolves: GET /hello.test finds hello.test.gts',
           );
         });
+
+        test('a module source GET carries a content type, a validator and a cache directive', async function (assert) {
+          let response = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'text/typescript+glimmer',
+            'the content type is inferred from the file name, not from the Accept',
+          );
+          assert.ok(response.headers['etag'], 'a validator is present');
+          assert.ok(
+            response.headers['last-modified'],
+            'the modification time is present',
+          );
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'public, max-age=0',
+            'source is revalidated every time on a world-readable realm',
+          );
+        });
+
+        test('a source GET reports when the realm first saw the file', async function (assert) {
+          await testRealm.write('created-at.gts', '// created-at\n');
+
+          let response = await request
+            .get('/created-at.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.ok(
+            response.headers['x-created'],
+            'a path the realm wrote carries its creation time',
+          );
+        });
+
+        test('a matching If-None-Match answers 304 with no body', async function (assert) {
+          let first = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+          let etag = first.headers['etag'];
+          assert.ok(etag, 'the first response carries a validator');
+
+          let second = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(second.status, 304, 'HTTP 304 status');
+          assert.strictEqual(
+            second.headers['etag'],
+            etag,
+            'the 304 echoes the validator it matched',
+          );
+          assert.ok(
+            second.headers['last-modified'],
+            'the 304 still carries the modification time',
+          );
+          assert.notOk(second.text, 'a 304 carries no body');
+        });
+
+        test('the validator follows the content, not the modification time', async function (assert) {
+          let path = 'validator-follows-content.gts';
+          let original = '// one\n';
+          let changed = '// two, which is longer\n';
+
+          await testRealm.write(path, original);
+          let first = await request
+            .get(`/${path}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          await testRealm.write(path, changed);
+          let afterChange = await request
+            .get(`/${path}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          await testRealm.write(path, original);
+          let afterRestore = await request
+            .get(`/${path}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.notStrictEqual(
+            afterChange.headers['etag'],
+            first.headers['etag'],
+            'different content is a different validator',
+          );
+          assert.strictEqual(
+            afterRestore.headers['etag'],
+            first.headers['etag'],
+            'the original content is the original validator again, though it was written later',
+          );
+        });
+
+        test('a source GET of a path nothing is stored under is a 404', async function (assert) {
+          let response = await request
+            .get('/nothing-is-here.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        });
       });
 
       module('permissioned realm', function (hooks) {
@@ -660,6 +762,122 @@ module(basename(import.meta.filename), function () {
             'realm is public readable',
           );
           assert.notOk(response.headers['location'], 'no redirect location');
+        });
+
+        test('a HEAD answers the headers its GET would carry, without the bytes', async function (assert) {
+          let get = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+          let head = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(head.status, get.status, 'the same status');
+          for (let header of [
+            'content-type',
+            'etag',
+            'last-modified',
+            'cache-control',
+            // A HEAD's Content-Length describes the body its GET would send,
+            // so it belongs to parity as much as the rest. Source is served
+            // from memory rather than measured on the way past, which is a
+            // different route to the same header and worth holding here.
+            'content-length',
+          ]) {
+            // Pin the GET's value before comparing. A comparison on its own is
+            // satisfied by a header both responses omit, so parity would read
+            // as green for a response carrying none of these.
+            assert.ok(
+              get.headers[header],
+              `the GET carries ${header} for the HEAD to match`,
+            );
+            assert.strictEqual(
+              head.headers[header],
+              get.headers[header],
+              `${header} matches the GET`,
+            );
+          }
+          assert.notOk(head.text, 'no body in a HEAD response');
+        });
+
+        test('a HEAD honors a matching If-None-Match', async function (assert) {
+          let first = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+          let etag = first.headers['etag'];
+          assert.ok(etag, 'the first response carries a validator');
+
+          let second = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(second.status, 304, 'HTTP 304 status');
+          assert.strictEqual(
+            second.headers['etag'],
+            etag,
+            'the 304 echoes the validator it matched',
+          );
+        });
+
+        test('a HEAD of a path nothing is stored under is a 404', async function (assert) {
+          let response = await request
+            .head('/nothing-is-here.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        });
+      });
+
+      module('permissioned realm', function (hooks) {
+        // Read-only module (auth checks on HEAD /person.gts): shared boot is
+        // safe since no test mutates realm state.
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          mode: 'before',
+          permissions: {
+            john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        // A `HEAD` reaches this route without credentials where the matching
+        // `GET` would be refused: the realm exempts the method so a client can
+        // discover which realm serves a URL before it has a token for it. What
+        // the exemption admits here is the source read itself, headers and
+        // all, since this route answers a `HEAD` the same way it answers a
+        // `GET`. Pinned because it is the shape a read that is gated on the
+        // caller has to keep or deliberately change.
+        test('a HEAD is admitted without a JWT where the GET is refused', async function (assert) {
+          let get = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(get.status, 401, 'the GET is refused');
+
+          let head = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(head.status, 200, 'the HEAD is answered');
+          assert.ok(head.headers['etag'], 'and answers with a real validator');
+        });
+
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'private, max-age=0',
+            'a realm that is not world-readable is never stored by a shared cache',
+          );
         });
       });
     });

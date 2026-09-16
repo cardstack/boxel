@@ -177,7 +177,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(cache.stats.entryCount, 3, 'three entries retained');
     });
 
-    // A redirect / missing row / error document is shared with whoever joined
+    // A redirect / absent row / error document is shared with whoever joined
     // the computation that produced it and then dropped, so the next request
     // consults the index again instead of a remembered failure.
     test('a non-document outcome is never retained', async function (assert) {
@@ -185,7 +185,7 @@ module(basename(import.meta.filename), function () {
       let assembled = 0;
       let populate = async (): Promise<CardJsonAssembly> => {
         assembled++;
-        return { kind: 'missing' };
+        return { kind: 'not-found' };
       };
       let args = {
         url: card,
