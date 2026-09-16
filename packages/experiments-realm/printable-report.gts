@@ -34,11 +34,7 @@ class Isolated extends Component<typeof PrintableReport> {
   <template>
     <div class='report'>
       <div class='pr-tools' role='toolbar' aria-label='Report actions'>
-        <CaptureDownloadButton
-          @url={{this.pdfURL}}
-          @kind='primary'
-          @size='small'
-        >
+        <CaptureDownloadButton @url={{this.pdfURL}} @size='small'>
           Save PDF
         </CaptureDownloadButton>
         {{#if this.pdfURL}}

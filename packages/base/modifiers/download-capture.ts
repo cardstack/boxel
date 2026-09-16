@@ -19,7 +19,10 @@
 // likes.
 import { modifier } from 'ember-modifier';
 
-import { downloadCapture as fetchAndSave } from '../components/capture-download-button';
+import {
+  downloadCapture as fetchAndSave,
+  isPlainLeftClick,
+} from '../components/capture-download-button';
 
 interface Named {
   filename?: string;
@@ -30,16 +33,6 @@ interface Named {
 interface Signature {
   Element: HTMLAnchorElement;
   Args: { Positional: []; Named: Named };
-}
-
-function isPlainLeftClick(event: MouseEvent): boolean {
-  return (
-    event.button === 0 &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    !event.shiftKey &&
-    !event.altKey
-  );
 }
 
 const downloadCapture = modifier<Signature>((element, _positional, named) => {

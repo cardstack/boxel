@@ -12,11 +12,12 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { not, or } from '@cardstack/boxel-ui/helpers';
-import { Button } from '@cardstack/boxel-ui/components';
-
-type ButtonKind = 'default' | 'primary' | 'secondary' | 'muted' | 'text-only';
-type ButtonSize = 'extra-small' | 'small' | 'base' | 'tall' | 'touch';
+import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  Button,
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from '@cardstack/boxel-ui/components';
 
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -113,6 +114,19 @@ async function messageFor(response: Response): Promise<string> {
   return `Could not download the document (HTTP ${response.status}).`;
 }
 
+// A left click with no modifier key. Anything else — a middle click, a
+// Cmd/Ctrl-click, Shift-click — is the user asking the browser for a new tab
+// or window, which a download control leaves alone.
+export function isPlainLeftClick(event: MouseEvent): boolean {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
+
 export interface DownloadCaptureOptions {
   filename?: string;
   fetch?: typeof globalThis.fetch;
@@ -148,8 +162,8 @@ interface Signature {
   Args: {
     url?: string;
     filename?: string;
-    kind?: ButtonKind;
-    size?: ButtonSize;
+    kind?: BoxelButtonKind;
+    size?: BoxelButtonSize;
   };
   Blocks: { default: [] };
 }
@@ -158,15 +172,20 @@ interface Signature {
 //
 //   <CaptureDownloadButton @url={{this.pdfUrl}}>Save PDF</CaptureDownloadButton>
 //
-// Renders disabled until `@url` resolves, shows the button's loading state
-// while the capture is fetched (a first request renders on demand and can
-// take seconds), and reports a failure inline.
+// Renders as a button-styled link to the capture: a plain click fetches and
+// saves it (marked `aria-busy` while the capture renders on demand, which
+// can take seconds), a modified click opens the URL like any link, and a
+// failure is reported inline. The link is disabled until `@url` resolves.
 export class CaptureDownloadButton extends GlimmerComponent<Signature> {
   @tracked isPending = false;
   @tracked errorMessage: string | undefined;
 
   @action
-  async save() {
+  async save(event: Event) {
+    if (!(event instanceof MouseEvent) || !isPlainLeftClick(event)) {
+      return;
+    }
+    event.preventDefault();
     if (!this.args.url || this.isPending) {
       return;
     }
@@ -187,10 +206,12 @@ export class CaptureDownloadButton extends GlimmerComponent<Signature> {
   <template>
     <span class='capture-download' ...attributes>
       <Button
-        @kind={{if @kind @kind 'secondary'}}
+        @as='anchor'
+        @href={{@url}}
+        @kind={{if @kind @kind 'link-primary'}}
         @size={{@size}}
-        @loading={{this.isPending}}
-        @disabled={{or this.isPending (not @url)}}
+        @disabled={{not @url}}
+        aria-busy={{if this.isPending 'true'}}
         {{on 'click' this.save}}
         data-test-capture-download
       >

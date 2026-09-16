@@ -187,8 +187,12 @@ module('Integration | capture download button', function (hooks) {
           scope: () => ({ CaptureDownloadButton }),
         }),
       );
-      assert.dom('[data-test-capture-download]').isDisabled();
-      assert.dom('[data-test-capture-download]').hasText('Save');
+      assert
+        .dom('[data-test-capture-download]')
+        .hasTagName('a')
+        .hasAttribute('aria-disabled', 'true')
+        .doesNotHaveAttribute('href')
+        .hasText('Save');
     });
 
     test('a click fetches the capture and saves it through a blob download link', async function (assert) {
@@ -201,10 +205,17 @@ module('Integration | capture download button', function (hooks) {
       );
       assert
         .dom('[data-test-capture-download]')
-        .isEnabled()
+        .hasTagName('a')
+        .hasAttribute('href', PDF_URL)
+        .doesNotHaveAttribute('aria-disabled')
         .hasText('Save PDF');
       await click('[data-test-capture-download]');
       await waitUntil(() => downloads.length > 0);
+      assert.deepEqual(
+        linkClicks,
+        [{ prevented: true }],
+        'the click did not navigate',
+      );
       assert.deepEqual(requests, [PDF_URL]);
       assert.deepEqual(downloads, [
         {
@@ -213,7 +224,22 @@ module('Integration | capture download button', function (hooks) {
         },
       ]);
       assert.dom('[data-test-capture-download-error]').doesNotExist();
-      assert.dom('[data-test-capture-download]').isEnabled();
+      assert
+        .dom('[data-test-capture-download]')
+        .doesNotHaveAttribute('aria-busy');
+    });
+
+    test('a modified click on the button is left to the browser', async function (assert) {
+      let url = PDF_URL;
+      await render(
+        precompileTemplate(`<CaptureDownloadButton @url={{url}} />`, {
+          strictMode: true,
+          scope: () => ({ CaptureDownloadButton, url }),
+        }),
+      );
+      await click('[data-test-capture-download]', { metaKey: true });
+      assert.deepEqual(linkClicks, [{ prevented: false }]);
+      assert.deepEqual(requests, [], 'nothing was fetched');
     });
 
     test('a refused capture is reported inline and the button recovers', async function (assert) {
@@ -235,7 +261,9 @@ module('Integration | capture download button', function (hooks) {
         .dom('[data-test-capture-download-error]')
         .hasAttribute('role', 'alert')
         .hasText('Missing Authorization header');
-      assert.dom('[data-test-capture-download]').isEnabled();
+      assert
+        .dom('[data-test-capture-download]')
+        .doesNotHaveAttribute('aria-busy');
     });
   });
 

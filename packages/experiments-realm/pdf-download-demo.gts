@@ -49,7 +49,7 @@ class Isolated extends Component<typeof PdfDownloadDemo> {
       </section>
 
       <section class='actions'>
-        <CaptureDownloadButton @url={{this.pdfUrl}} @kind='primary'>
+        <CaptureDownloadButton @url={{this.pdfUrl}}>
           Save PDF
         </CaptureDownloadButton>
         {{#if this.pdfUrl}}
