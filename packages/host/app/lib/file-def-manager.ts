@@ -320,6 +320,8 @@ export default class FileDefManagerImpl
   }
 
   async uploadCards(cards: CardDef[]): Promise<FileDef[]> {
+    // TEMPORARY (CS-12937): see the send-stage markers in matrix-service.
+    console.warn(`[send-stage] uploadCards in=${cards.length}`);
     if (!cards.length) {
       return [];
     }
@@ -362,6 +364,7 @@ export default class FileDefManagerImpl
           content,
           fileDef.contentType,
         );
+        console.warn(`[send-stage] uploadCards produced ${fileDef.url}`);
         return fileDef;
       }),
     );
