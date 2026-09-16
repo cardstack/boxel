@@ -20,6 +20,8 @@ import {
   baseRRI,
   rri,
   searchEntryWireQueryFromQuery,
+  setWriteTimingSinkForTests,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -1887,6 +1889,122 @@ module(basename(import.meta.filename), function () {
             ),
             'the GET response still inlines the linked card into included[]',
           );
+        });
+
+        test('a write carrying a correlation id emits one realm:write-timing line per write, with a stage breakdown', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let corr = 'test-write-corr-1';
+
+            let create = await request
+              .post('/')
+              .set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, corr)
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Timed' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              } as LooseSingleCardDocument)
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(create.status, 201, `HTTP 201: ${create.text}`);
+
+            let cardPath = (create.body as SingleCardDocument).data.id!.slice(
+              testRealmHref.length,
+            );
+            let patch = await request
+              .patch(`/${cardPath}`)
+              .set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, corr)
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Retimed' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              } as LooseSingleCardDocument)
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(patch.status, 200, `HTTP 200: ${patch.text}`);
+
+            let postLine = lines.find(
+              (l) => l.includes(`corr=${corr}`) && l.includes('op=POST'),
+            );
+            assert.ok(
+              postLine,
+              `a POST write-timing line was emitted (lines: ${JSON.stringify(
+                lines,
+              )})`,
+            );
+            assert.ok(
+              /\btotal=\d+ms\b/.test(postLine!),
+              `the POST line carries a total (${postLine})`,
+            );
+            assert.ok(
+              /\bwrite=\d+\b/.test(postLine!),
+              `the POST line carries the write stage (${postLine})`,
+            );
+            assert.ok(
+              /\breadback=\d+\b/.test(postLine!),
+              `the POST line carries the readback stage (${postLine})`,
+            );
+
+            let patchLine = lines.find(
+              (l) => l.includes(`corr=${corr}`) && l.includes('op=PATCH'),
+            );
+            assert.ok(
+              patchLine,
+              `a PATCH write-timing line was emitted (lines: ${JSON.stringify(
+                lines,
+              )})`,
+            );
+            assert.ok(
+              /\blockWait=\d+\b/.test(patchLine!),
+              `the PATCH line carries the lockWait stage (${patchLine})`,
+            );
+            assert.ok(
+              /\breadback=\d+\b/.test(patchLine!),
+              `the PATCH line carries the readback stage (${patchLine})`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
+        });
+
+        test('a write without a correlation id emits no realm:write-timing line', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let response = await request
+              .post('/')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Untimed' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              } as LooseSingleCardDocument)
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(
+              response.status,
+              201,
+              `HTTP 201: ${response.text}`,
+            );
+            assert.strictEqual(
+              lines.length,
+              0,
+              `no write-timing line without a correlation id (lines: ${JSON.stringify(
+                lines,
+              )})`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
         });
 
         test('an echoed serve-time meta.screenshots never persists into the source file', async function (assert) {

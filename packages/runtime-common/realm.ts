@@ -262,6 +262,8 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
+import { RequestTimings } from './request-timings.ts';
+import { emitWriteTiming } from './write-timings.ts';
 import { mergeRelationships } from './merge-relationships.ts';
 import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
@@ -7604,6 +7606,30 @@ export class Realm {
     // (the pre-write drain, and reading the card back out of the index vs.
     // echoing it) and nothing prerender-specific beyond them.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
+    // Per-write stage timing, emitted as one `realm:write-timing` line when the
+    // request carries a correlation id (see write-timings.ts). `mark(stage)`
+    // stamps the wall-clock elapsed since the previous mark; `emit(outcome)`
+    // renders the line. Both are no-ops for an uninstrumented write.
+    let handlerStart = Date.now();
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    let timings = correlationId ? new RequestTimings() : undefined;
+    let lastMark = handlerStart;
+    let mark = (stage: string) => {
+      let now = Date.now();
+      timings?.add(stage, now - lastMark);
+      lastMark = now;
+    };
+    let emit = (outcome: string) => {
+      if (timings && correlationId) {
+        emitWriteTiming(
+          `corr=${correlationId} op=POST outcome=${outcome} total=${
+            Date.now() - handlerStart
+          }ms ${timings.toLogFragment()}`,
+        );
+      }
+    };
     // Drain any in-flight incremental indexing before serializing the new
     // card, so the JSON-API path tolerates an immediately-preceding deferred
     // +source POST without disturbing the +json POST's own
@@ -7631,6 +7657,7 @@ export class Realm {
         await pending;
       }
     }
+    mark('drain');
     let body = await request.text();
     let json;
     try {
@@ -7726,11 +7753,16 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
+    mark('serialize');
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
       ...(answerFromEcho ? { waitForIndex: false } : {}),
     });
+    // On the default path `writeMany` also awaits the card's synchronous
+    // index; the echo path passes `waitForIndex: false`, so this stage is the
+    // durable file write alone.
+    mark('write');
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
@@ -7742,6 +7774,8 @@ export class Realm {
         newURL,
         lastModified,
       );
+      mark('echo');
+      emit('echo');
     } else {
       // The write response is read only for the primary card's assigned id
       // and realm-info; the client discards its attributes, relationships and
@@ -7770,6 +7804,8 @@ export class Realm {
           meta: { lastModified },
         },
       });
+      mark('readback');
+      emit('indexed');
     }
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
@@ -7809,6 +7845,32 @@ export class Realm {
     // serialized echo rather than a readback.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
+    // Per-write stage timing, emitted as one `realm:write-timing` line when the
+    // request carries a correlation id (see write-timings.ts). Unlike the POST
+    // path, a PATCH also waits on the realm-wide write lock — `lockWait` is
+    // stamped when the critical section opens, so contention is attributable.
+    // `mark`/`emit` are no-ops for an uninstrumented write.
+    let handlerStart = Date.now();
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    let timings = correlationId ? new RequestTimings() : undefined;
+    let lastMark = handlerStart;
+    let mark = (stage: string) => {
+      let now = Date.now();
+      timings?.add(stage, now - lastMark);
+      lastMark = now;
+    };
+    let emit = (outcome: string) => {
+      if (timings && correlationId) {
+        emitWriteTiming(
+          `corr=${correlationId} op=PATCH outcome=${outcome} total=${
+            Date.now() - handlerStart
+          }ms ${timings.toLogFragment()}`,
+        );
+      }
+    };
+
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
       return badRequest({
@@ -7843,6 +7905,9 @@ export class Realm {
     // public `writeMany` — re-entering the lock through the public method
     // would block on a different pinned pool connection.
     return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      // Time from the handler start (before validation) to the lock opening.
+      // Under contention this is the term that dominates a slow PATCH.
+      mark('lockWait');
       let primarySerialization: LooseSingleCardDocument | undefined;
       // The merge base is the stored source file, not the index. The
       // index is downstream of the file and can lag it — a backlogged or
@@ -7944,6 +8009,9 @@ export class Realm {
         }
       }
 
+      // The existing-file read plus the merge above are the prepare stage;
+      // the write and readback below are timed separately.
+      mark('prepare');
       // If the patch makes no semantic changes and doesn't include side-loaded
       // resources, short-circuit to avoid touching the file (and changing mtime).
       if (included.length === 0 && isEqual(primaryResource, original)) {
@@ -7954,6 +8022,7 @@ export class Realm {
         let entry = await this.#realmIndexQueryEngine.cardDocument(
           new URL(instanceURL),
         );
+        mark('readback');
         if (entry && entry.type !== 'error') {
           let existingDoc = merge({}, entry.doc, {
             data: {
@@ -7983,6 +8052,7 @@ export class Realm {
           // conditional GET 304 onto this closure-less body. The client
           // discards the echo body anyway, so it has no validator to gain.
           this.#serveInstanceIdsAsRRI(existingDoc);
+          emit('noop');
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
             init: {
@@ -8060,6 +8130,7 @@ export class Realm {
           primarySerialization = fileSerialization;
         }
       }
+      mark('serialize');
       // Use the unlocked inner write so we don't re-enter
       // withWriteLock (which would block on a different pinned pool
       // connection).
@@ -8068,6 +8139,9 @@ export class Realm {
         initiatingUser: requestContext.authenticatedUser ?? null,
         ...(answerFromEcho ? { waitForIndex: false } : {}),
       });
+      // On the default path `_batchWriteUnlocked` also awaits the card's
+      // synchronous index; the echo path passes `waitForIndex: false`.
+      mark('write');
       let doc: SingleCardDocument;
       if (answerFromEcho) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
@@ -8078,6 +8152,8 @@ export class Realm {
           lastModified,
         );
         this.#serveInstanceIdsAsRRI(doc);
+        mark('echo');
+        emit('echo');
         return createResponse({
           body: JSON.stringify(doc, null, 2),
           init: {
@@ -8103,6 +8179,7 @@ export class Realm {
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(instanceURL),
       );
+      mark('readback');
       if (!entry || entry?.type === 'error') {
         if (
           primarySerialization &&
@@ -8156,6 +8233,7 @@ export class Realm {
       // emitting one would let a conditional GET 304 onto this closure-less
       // body. The client discards the echo body anyway.
       this.#serveInstanceIdsAsRRI(doc);
+      emit('indexed');
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
