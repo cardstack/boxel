@@ -121,7 +121,8 @@ module('Acceptance | prerender | module', function (hooks) {
   // covers both the captured `operations` and the recorded findings.
   const OPERATIONS_MODULE = `
     import { CardDef, field, contains, containsMany, StringField } from '@cardstack/base/card-api';
-    import { operation, params } from '@cardstack/base/operations';
+    import { FileDef } from '@cardstack/base/file-api';
+    import { operation, params, realmConfig } from '@cardstack/base/operations';
 
     export class Note extends CardDef {
       static displayName = 'Note';
@@ -138,6 +139,27 @@ module('Acceptance | prerender | module', function (hooks) {
         base: 'transform',
         params: { text: StringField },
         set: { bdy: params('text') },
+      };
+
+      @operation static logTag = {
+        base: 'appendContainsMany',
+        params: { tag: StringField },
+        field: 'tags',
+        item: params('tag'),
+      };
+    }
+
+    export class NoteLog extends FileDef {
+      static displayName = 'NoteLog';
+
+      @operation static record = {
+        base: 'appendLine',
+        params: { line: StringField },
+      };
+
+      @operation static readRedacted = {
+        base: 'read',
+        output: { name: true, at: realmConfig('timezone') },
       };
     }
   `;
@@ -555,8 +577,8 @@ module('Acceptance | prerender | module', function (hooks) {
       entry?.type === 'definition' ? entry.definition.operations : undefined;
     assert.deepEqual(
       Object.keys(operations ?? {}).sort(),
-      ['addNote', 'addTag'],
-      'both declarations are captured — a declaration with findings is stored too, so invoking it reports them rather than reading as unknown',
+      ['addNote', 'addTag', 'logTag'],
+      'every declaration is captured — a declaration with findings is stored too, so invoking it reports them rather than reading as unknown',
     );
     assert.deepEqual(
       operations?.addTag.program,
@@ -564,6 +586,57 @@ module('Acceptance | prerender | module', function (hooks) {
       'the convenience clause reaches the entry as canonical BXL',
     );
     assert.true(operations?.addNote.invalid, 'the bad declaration is flagged');
+    assert.deepEqual(
+      operations?.logTag.items,
+      { tags: { $ref: 'params', key: 'tag' } },
+      'an append to a containsMany reaches the entry as the item template it substitutes, and no program',
+    );
+  });
+
+  test("captures a file def's declarations, including the writes on its bytes", async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let logKey = `${trimExecutableExtension(rri(moduleURL))}/NoteLog`;
+    let entry = model.definitions[logKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    assert.strictEqual(
+      entry?.type === 'definition' ? entry.definition.type : undefined,
+      'file-def',
+      'and is recorded as the family whose declarations these were checked against',
+    );
+    let operations =
+      entry?.type === 'definition' ? entry.definition.operations : undefined;
+    assert.deepEqual(
+      Object.keys(operations ?? {}).sort(),
+      ['readRedacted', 'record'],
+      'a file def declares the reads and the writes that work on its bytes',
+    );
+    assert.strictEqual(
+      operations?.record.program,
+      undefined,
+      'an appendLine carries no program: the line is the payload',
+    );
+    assert.deepEqual(
+      Object.keys(operations?.record.params ?? {}),
+      ['line'],
+      'which the schema names',
+    );
+    assert.deepEqual(
+      operations?.readRedacted.output,
+      {
+        source: '{name:true, at:realmConfig("timezone")}',
+        syntax: 'solidified',
+      },
+      'a realm setting lowers to the builtin of the same name',
+    );
+    assert.notOk(operations?.record.invalid, 'the appendLine has no findings');
+    assert.notOk(
+      operations?.readRedacted.invalid,
+      'and neither does the read that reads a realm setting',
+    );
   });
 
   test('records operation-lowering findings on meta.diagnostics, tagged with the owning def', async function (assert) {

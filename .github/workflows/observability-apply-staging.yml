@@ -63,6 +63,19 @@ jobs:
       # AWS_ROLE_ARN need to update together.
       WORKER_LOG_GROUP_NAME: ecs-boxel-worker-staging
       WORKER_LOG_GROUP_ACCOUNT_ID: "680542703984"
+      # Realm-server availability alerts (realm-server-availability-group.json):
+      # the log group follows the deterministic `ecs-boxel-realm-server-<env>`
+      # convention; the ALB and target-group dimension values carry generated
+      # hash suffixes, so they can't be derived from a naming convention —
+      # read them from:
+      #   ALB:          aws elbv2 describe-load-balancers --names boxel-realm-server-staging
+      #                 (LoadBalancerArn's trailing `app/<name>/<hash>` segment)
+      #   Target group: aws elbv2 describe-target-groups --load-balancer-arn <that ALB arn>
+      #                 (TargetGroupArn's trailing `targetgroup/<name>/<hash>` segment)
+      REALM_SERVER_LOG_GROUP_NAME: ecs-boxel-realm-server-staging
+      REALM_SERVER_LOG_GROUP_ACCOUNT_ID: "680542703984"
+      REALM_SERVER_ALB_FULL_NAME: app/boxel-realm-server-staging/f63ab9f02a6fba2a
+      REALM_SERVER_TARGET_GROUP_FULL_NAME: targetgroup/boxel-realm-server-staging/35ffa258763f010c
 
     steps:
       - name: Checkout

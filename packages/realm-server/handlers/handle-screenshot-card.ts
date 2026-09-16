@@ -87,11 +87,11 @@ interface CaptureResult {
  * byte-compatibility with current-shape callers, plus `captures:
  * [{name, url, width, height, deviceScaleFactor, base64?}]` on every ready
  * response. `url` is the durable served URL when the capture persisted under
- * its ledger identity — any singular spec on a capture format, custom
- * geometry included — and null when nothing persists (a batch, a pdf
- * capture, a non-capture format such as fitted, a card the index doesn't
- * know, a server without a MediaCache store, or a caller without realm
- * read) — embed the `base64` in that case.
+ * its ledger identity — any singular geometry spec on a capture format,
+ * custom geometry included — and null when nothing persists (a batch, a
+ * `target` capture, a pdf capture, a non-capture format such as fitted, a
+ * card the index doesn't know, a server without a MediaCache store, or a
+ * caller without realm read) — embed the `base64` in that case.
  *
  * Request body (JSON:API):
  * ```json
@@ -248,13 +248,18 @@ export default function handleScreenshotCard({
     // geometry overrides. Its hash keys the ledger, so a custom singular
     // capture persists and serves under its own durable URL exactly like a
     // format-only one. A batch has no identity (the identity names one
-    // capture, not a set), fitted sits outside the canonical (ledger/GET-DSL)
-    // serving contract, and pdf output is capture-only until the serving
-    // surfaces persist and serve paged documents — all three leave the
-    // identity undefined and return their bytes without a served URL.
+    // capture, not a set), fitted sits outside the canonical
+    // (ledger/GET-DSL) serving contract, a `target` capture crops to one
+    // element while sitting outside the identity pick — hashing it would
+    // alias element-cropped bytes onto the geometry-only key, so the
+    // whole-viewport URL would serve the crop — and pdf output is
+    // capture-only until the serving surfaces persist and serve paged
+    // documents. All four leave the identity undefined and return their
+    // bytes without a served URL.
     let spec: CaptureSpec | undefined =
       isCaptureFormat(format) &&
       !captureSpec?.captures &&
+      !captureSpec?.target &&
       captureSpec?.type !== 'pdf'
         ? { format, ...(captureSpec ?? {}) }
         : undefined;
