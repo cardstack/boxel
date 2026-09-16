@@ -148,7 +148,8 @@ export interface BatchCore {
       lastModified: number;
       // When the realm first recorded this file. Read by the commit as it
       // writes, inside the lock, so a caller reporting it never has to ask
-      // again afterwards.
+      // again afterwards — and a concurrent removal of the same path cannot
+      // take the row away between the commit and the answer.
       created: number | null;
       contentHash: string;
     }[];
@@ -198,7 +199,34 @@ export interface CommitBatchOptions {
   // whichever way this is set. See the drain in `commitBatch` for what the
   // wait actually buys, and the realm's own card-write gate for the case
   // stated at length.
+  //
+  // A write made from inside a render must skip both, and there it is a
+  // requirement rather than a preference: the job it would wait on needs the
+  // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // Report the bytes each entry's primary file now holds, on the entry's
+  // `meta.storedContent`. Off by default: a batch's results say what a card
+  // is and what version it holds, and a caller wanting its document reads it
+  // back, so carrying every entry's document would make a batch of many
+  // entries answer with the realm's contents. It is here for a caller that
+  // has no read to make — one whose write indexes deferred and answers from
+  // what it wrote — which would otherwise have to go back to the file the
+  // commit just closed.
+  reportStoredContent?: boolean;
+  // What a link to a side-loaded resource the batch will not write means. Such
+  // a resource is one claiming another realm, which is not this batch's to
+  // create, so the link resolves to nothing either way — the question is
+  // whether that is the caller's mistake or its intent.
+  //
+  // `refuse` is the default and the answer a caller composing a batch wants:
+  // it sent the resource, so silently writing a card with that edge empty
+  // would describe a payload it did not send, and the remedy — name the card
+  // by URL, or stop claiming a realm for it — is one only the caller can
+  // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
+  // carrying such a payload has always stored the card with the edge empty
+  // and answered success: serialization records a link it cannot resolve as
+  // an explicit null.
+  foreignSideLoadLink?: 'refuse' | 'leave';
 }
 
 // One entry's answer, in the order the entries were sent. A write reports the
@@ -245,7 +273,15 @@ export async function commitBatch(
     // whose response does not read indexed state can take it, and a
     // prerender-originated write *must*: the job it would wait on needs the
     // render slot that caller is holding, so waiting deadlocks.
-    if (opts.waitForIndex !== false) {
+    //
+    // All of that is about the opt-out. The drain is skipped on its own terms
+    // as well, for a batch that stages nothing: a removal names a file and
+    // reads the bytes already there, resolving no definition, so a batch of
+    // removals would wait for indexing it has no use for. That matters
+    // because this wait happens with the realm's write lock held — a removal
+    // issued while a bulk import drains would park here holding it, with
+    // every other writer queued behind.
+    if (opts.waitForIndex !== false && entries.some(stagesContent)) {
       await core.drainIndexing();
     }
     // Every `lid` in the batch resolves to a URL before any executor runs. A
@@ -270,6 +306,7 @@ export async function commitBatch(
         paths,
         lids,
         foreignLids,
+        foreignSideLoadLink: opts.foreignSideLoadLink,
         stored,
         storedMeta,
         splices,
@@ -1152,6 +1189,21 @@ async function commitStaged(
         generation: committed.generation,
         lastModified: written.lastModified,
         created: written.created,
+        // Whether this entry left the file holding something other than what
+        // it held when the entry staged. Read off the two hashes the commit
+        // already produced — the version the entry's work was computed over,
+        // and the version the file now carries — so it costs nothing and
+        // cannot disagree with what was written. A patch that changes nothing
+        // reports `false` here, which is how a caller tells "the realm agreed
+        // to this" from "the realm did something".
+        //
+        // Per entry rather than per file: where two entries name one card the
+        // second composes over what the first staged, so it reports whether
+        // *it* changed the answer, not whether the commit did.
+        changed: baseHashes[index] !== written.contentHash,
+        ...(opts.reportStoredContent
+          ? { storedContent: primaryContent(change) }
+          : {}),
         ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write
@@ -1162,4 +1214,25 @@ async function commitStaged(
       },
     };
   });
+}
+
+// Whether an entry produces content the realm has to make sense of, which is
+// what the pre-staging drain is for: serializing a card resolves the
+// definitions its type is built from, and a module written moments earlier may
+// still be indexing. A removal produces none — it names a file and reads the
+// bytes already there — so a batch of removals resolves nothing and has
+// nothing to wait for.
+function stagesContent(entry: BatchEntry): boolean {
+  return entry.op !== 'delete';
+}
+
+// The content an entry staged for the file its result reports. Taken from the
+// staged change rather than read back afterwards: these are the bytes the
+// commit wrote, whereas the file has been open to every other writer since the
+// lock was released. Undefined where the entry described its file instead of
+// materializing it — an append names an addition, not the file's next content
+// — and where the content is raw bytes, which no caller reads a document from.
+function primaryContent(change: StagedChange): string | undefined {
+  let write = change.writes.find((write) => write.path === change.primaryPath);
+  return typeof write?.content === 'string' ? write.content : undefined;
 }
