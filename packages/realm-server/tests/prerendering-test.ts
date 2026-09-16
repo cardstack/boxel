@@ -5567,11 +5567,14 @@ module(basename(import.meta.filename), function () {
             result.deps?.includes(`${realmURL2}cat`),
             `${realmURL2}cat is a dep`,
           );
-          // A base module served from the host bundle contributes itself as a
-          // dep — asserted above — but not the files it would have pulled in
-          // over the network, its glimmer-scoped CSS among them. Nothing is
-          // lost for invalidation: a bundled module cannot change without a
-          // host rebuild, so nothing inside it can invalidate this entry.
+          assert.ok(
+            result.deps?.find((d) =>
+              d.match(
+                /^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+              ),
+            ),
+            `glimmer scoped css from ${baseCardRef.module} is a dep`,
+          );
         });
 
         test('types', function (assert) {
