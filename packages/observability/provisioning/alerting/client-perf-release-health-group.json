@@ -1,0 +1,267 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "client-perf-release-health",
+      "folder": "defd2d156sav4d",
+      "interval": "300s",
+      "rules": [
+        {
+          "uid": "clientperf-reruns01",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "client-perf-release-health",
+          "title": "Live-search re-run fan-out",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "range",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"${CLIENT_PERF_ENV}\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | own_write=\"false\" | unwrap reloads_triggered [6h])) / sum(count_over_time({service=\"realm-server\", env=\"${CLIENT_PERF_ENV}\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | own_write=\"false\" [6h]))",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "range",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": ["C"]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "C",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [1.5, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "1h",
+          "annotations": {
+            "summary": "A tab is re-running more queries per index event than it should",
+            "description": "Query re-runs a tab performs for each index event caused by someone ELSE's write. A write should only re-run queries whose types it could have moved, so this rises when that type gate stops being effective \u2014 which is how a classroom of users turns a handful of writes into hundreds of searches a minute. Measured baseline is 0.51-0.52 with day-to-day drift under 1%, so the 1.5 threshold is roughly triple normal and should not fire on noise. RETUNE THIS once a build that tightens the gate has a settled baseline: a threshold set against the old normal will not notice the improvement being lost again. Only external writes are counted; a tab reacting to its own save is expected work."
+          },
+          "labels": {
+            "area": "client-perf"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "clientperf-stuck001",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "client-perf-release-health",
+          "title": "Card loads stuck at the 30s ceiling",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "range",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "100 * sum(count_over_time({service=\"realm-server\", env=\"${CLIENT_PERF_ENV}\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | settle_ms >= 29500 | settle_ms <= 30500 [6h])) / sum(count_over_time({service=\"realm-server\", env=\"${CLIENT_PERF_ENV}\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" [6h]))",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "range",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": ["C"]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "C",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 21600,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [20.0, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "1h",
+          "annotations": {
+            "summary": "More card loads than usual are hitting the 30-second ceiling",
+            "description": "Share of card loads settling within a second of 30,000ms \u2014 a wall rather than a latency tail: in one measured production day 317 of 3,309 loads landed in that one-second band and only 26 went past it. THE STANDING LEVEL IS ALREADY 9-13%, which is a known unexplained problem and not something this rule is asserting is acceptable. The 20% threshold exists to catch a clear worsening without paging nightly on the status quo; fixing the ceiling itself is separate work, and this threshold should come down once it is fixed."
+          },
+          "labels": {
+            "area": "client-perf"
+          },
+          "isPaused": false
+        }
+      ]
+    }
+  ]
+}
