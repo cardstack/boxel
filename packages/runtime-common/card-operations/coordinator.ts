@@ -666,6 +666,20 @@ function targetRead(
   if (entry.op !== 'update' || entry.content === undefined) {
     return { path: cardSourcePath(localPath), form: 'text' };
   }
+  if (entry.rawSource) {
+    // A verbatim replacement never asks what is already at the path: it
+    // replaces a card's stored source, a module and a data file the same way,
+    // and it writes a path that holds nothing at all. So the distinction the
+    // whole-file read below exists to draw is one it does not need drawn, and
+    // reading a card's `.json` to draw it would mean holding a file this
+    // entry never looks at — on the route an editor saves through, for every
+    // save. What is left is reporting whether the caller's base still holds,
+    // which only a caller that named one is owed, and which the bounded form
+    // answers without the file.
+    return entry.baseVersion === undefined
+      ? undefined
+      : { path: localPath, form: 'meta' };
+  }
   // A `.json` at a file's own path is either a card's stored source or a data
   // file the realm merely holds, and only the bytes tell them apart — so this
   // is the one file target whose content the batch reads, and it reads it to
