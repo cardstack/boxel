@@ -1,8 +1,10 @@
 // A capture URL (`{realm}_screenshot/…?type=pdf`) cannot be saved through a
 // plain download link: `download` is ignored cross-origin and a navigation
-// carries no realm token. The component fetches the bytes (the auth service
+// carries no realm token. The helper fetches the bytes (the auth service
 // worker supplies the header) and saves them through a same-origin blob URL,
-// so the tests pin the filename the save uses and how a refusal is reported.
+// and the modifier wires that onto an existing link; the tests pin the
+// filename the save uses, how a refusal is reported, and which clicks the
+// modifier leaves to the browser.
 
 // @ts-ignore no public types for `precompileTemplate`
 import { precompileTemplate } from '@ember/template-compilation';
@@ -13,22 +15,24 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
-import { setupRenderingTest } from '../../helpers/setup';
+import { setupBaseRealm } from '../helpers/base-realm';
+import { setupRenderingTest } from '../helpers/setup';
 
-import type * as CaptureDownloadModule from '@cardstack/base/components/capture-download-button';
+import type * as DownloadCaptureModule from '@cardstack/base/helpers/download-capture';
 import type * as DownloadCaptureModifierModule from '@cardstack/base/modifiers/download-capture';
 
 const PDF_URL = 'https://my.realm/_screenshot/Invoice/2026-0042?type=pdf';
 
-module('Integration | capture download button', function (hooks) {
+module('Integration | download capture', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
   let loader: Loader;
-  let CaptureDownloadButton: typeof CaptureDownloadModule.CaptureDownloadButton;
-  let downloadCapture: typeof CaptureDownloadModule.downloadCapture;
-  let captureFilenameFor: typeof CaptureDownloadModule.captureFilenameFor;
+  let downloadCapture: typeof DownloadCaptureModule.downloadCapture;
+  let openCapture: typeof DownloadCaptureModule.openCapture;
+  let originalOpen: typeof window.open;
+  let openedTabs: { href: string; closed: boolean }[];
+  let captureFilenameFor: typeof DownloadCaptureModule.captureFilenameFor;
   let downloadCaptureModifier: typeof DownloadCaptureModifierModule.default;
   let linkClicks: { prevented: boolean }[];
   let originalFetch: typeof globalThis.fetch;
@@ -60,10 +64,25 @@ module('Integration | capture download button', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    ({ CaptureDownloadButton, downloadCapture, captureFilenameFor } =
-      await loader.import<typeof CaptureDownloadModule>(
-        '@cardstack/base/components/capture-download-button',
-      ));
+    ({ downloadCapture, openCapture, captureFilenameFor } = await loader.import<
+      typeof DownloadCaptureModule
+    >('@cardstack/base/helpers/download-capture'));
+    openedTabs = [];
+    originalOpen = window.open;
+    window.open = () => {
+      let tab = { href: '', closed: false };
+      openedTabs.push(tab);
+      return {
+        location: {
+          set href(value: string) {
+            tab.href = value;
+          },
+        },
+        close: () => {
+          tab.closed = true;
+        },
+      } as unknown as Window;
+    };
     downloadCaptureModifier = (
       await loader.import<typeof DownloadCaptureModifierModule>(
         '@cardstack/base/modifiers/download-capture',
@@ -90,6 +109,7 @@ module('Integration | capture download button', function (hooks) {
 
   hooks.afterEach(function () {
     globalThis.fetch = originalFetch;
+    window.open = originalOpen;
     URL.createObjectURL = originalCreateObjectURL;
     document.removeEventListener('click', captureAnchorClick, true);
     document.removeEventListener('click', recordLinkClick);
@@ -179,91 +199,48 @@ module('Integration | capture download button', function (hooks) {
     });
   });
 
-  module('CaptureDownloadButton', function () {
-    test('is disabled until a URL is available', async function (assert) {
-      await render(
-        precompileTemplate(`<CaptureDownloadButton @url={{undefined}} />`, {
-          strictMode: true,
-          scope: () => ({ CaptureDownloadButton }),
-        }),
-      );
-      assert
-        .dom('[data-test-capture-download]')
-        .hasTagName('a')
-        .hasAttribute('aria-disabled', 'true')
-        .doesNotHaveAttribute('href')
-        .hasText('Save');
-    });
-
-    test('a click fetches the capture and saves it through a blob download link', async function (assert) {
-      let url = PDF_URL;
-      await render(
-        precompileTemplate(
-          `<CaptureDownloadButton @url={{url}}>Save PDF</CaptureDownloadButton>`,
-          { strictMode: true, scope: () => ({ CaptureDownloadButton, url }) },
-        ),
-      );
-      assert
-        .dom('[data-test-capture-download]')
-        .hasTagName('a')
-        .hasAttribute('href', PDF_URL)
-        .doesNotHaveAttribute('aria-disabled')
-        .hasText('Save PDF');
-      await click('[data-test-capture-download]');
-      await waitUntil(() => downloads.length > 0);
-      assert.deepEqual(
-        linkClicks,
-        [{ prevented: true }],
-        'the click did not navigate',
-      );
-      assert.deepEqual(requests, [PDF_URL]);
-      assert.deepEqual(downloads, [
-        {
-          href: 'blob:https://app.test/fake-object-url',
-          download: '2026-0042.pdf',
+  module('openCapture', function () {
+    test('opens the tab before fetching and points it at the blob', async function (assert) {
+      let order: string[] = [];
+      let filename = await openCapture(PDF_URL, {
+        fetch: async (input) => {
+          order.push('fetch');
+          requests.push(input.toString());
+          return respondWith();
         },
+        open: () => {
+          order.push('open');
+          return window.open('', '_blank');
+        },
+      });
+      assert.deepEqual(order, ['open', 'fetch']);
+      assert.strictEqual(filename, '2026-0042.pdf');
+      assert.deepEqual(openedTabs, [
+        { href: 'blob:https://app.test/fake-object-url', closed: false },
       ]);
-      assert.dom('[data-test-capture-download-error]').doesNotExist();
-      assert
-        .dom('[data-test-capture-download]')
-        .doesNotHaveAttribute('aria-busy');
     });
 
-    test('a modified click on the button is left to the browser', async function (assert) {
-      let url = PDF_URL;
-      await render(
-        precompileTemplate(`<CaptureDownloadButton @url={{url}} />`, {
-          strictMode: true,
-          scope: () => ({ CaptureDownloadButton, url }),
-        }),
-      );
-      await click('[data-test-capture-download]', { metaKey: true });
-      assert.deepEqual(linkClicks, [{ prevented: false }]);
-      assert.deepEqual(requests, [], 'nothing was fetched');
-    });
-
-    test('a refused capture is reported inline and the button recovers', async function (assert) {
+    test('a refusal closes the tab it opened', async function (assert) {
       respondWith = () =>
         new Response('Missing Authorization header', { status: 401 });
-      let url = PDF_URL;
-      await render(
-        precompileTemplate(`<CaptureDownloadButton @url={{url}} />`, {
-          strictMode: true,
-          scope: () => ({ CaptureDownloadButton, url }),
-        }),
-      );
-      await click('[data-test-capture-download]');
-      await waitUntil(() =>
-        document.querySelector('[data-test-capture-download-error]'),
-      );
-      assert.deepEqual(downloads, [], 'nothing was saved');
-      assert
-        .dom('[data-test-capture-download-error]')
-        .hasAttribute('role', 'alert')
-        .hasText('Missing Authorization header');
-      assert
-        .dom('[data-test-capture-download]')
-        .doesNotHaveAttribute('aria-busy');
+      try {
+        await openCapture(PDF_URL);
+        assert.ok(false, 'expected a throw');
+      } catch (e: any) {
+        assert.strictEqual(e.message, 'Missing Authorization header');
+      }
+      assert.deepEqual(openedTabs, [{ href: '', closed: true }]);
+    });
+
+    test('a blocked pop-up is reported without fetching', async function (assert) {
+      window.open = () => null;
+      try {
+        await openCapture(PDF_URL);
+        assert.ok(false, 'expected a throw');
+      } catch (e: any) {
+        assert.true(e.message.startsWith('The browser blocked the new tab'));
+      }
+      assert.deepEqual(requests, []);
     });
   });
 
@@ -291,6 +268,25 @@ module('Integration | capture download button', function (hooks) {
         .dom('[data-test-pdf-link]')
         .doesNotHaveAttribute('aria-busy')
         .doesNotHaveAttribute('data-download-state');
+    });
+
+    test('a target=_blank link opens the capture in a tab instead of saving', async function (assert) {
+      let url = PDF_URL;
+      let downloadCapture = downloadCaptureModifier;
+      await render(
+        precompileTemplate(
+          `<a href={{url}} target="_blank" {{downloadCapture}} data-test-pdf-link>Open PDF</a>`,
+          { strictMode: true, scope: () => ({ url, downloadCapture }) },
+        ),
+      );
+      await click('[data-test-pdf-link]');
+      await waitUntil(() => openedTabs[0]?.href);
+      assert.deepEqual(linkClicks, [{ prevented: true }]);
+      assert.deepEqual(requests, [PDF_URL]);
+      assert.deepEqual(openedTabs, [
+        { href: 'blob:https://app.test/fake-object-url', closed: false },
+      ]);
+      assert.deepEqual(downloads, [], 'nothing was saved to disk');
     });
 
     test('a modified click is left to the browser', async function (assert) {

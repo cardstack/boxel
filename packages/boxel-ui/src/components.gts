@@ -11,10 +11,7 @@ import BrokenLink, {
   type BrokenLinkTemplateArgs,
   type BrokenLinkViewFn,
 } from './components/broken-link/index.gts';
-import BoxelButton, {
-  type BoxelButtonKind,
-  type BoxelButtonSize,
-} from './components/button/index.gts';
+import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
@@ -110,8 +107,6 @@ import ViewSelector, {
 } from './components/view-selector/index.gts';
 
 export {
-  type BoxelButtonKind,
-  type BoxelButtonSize,
   type BrokenLinkErrorDoc,
   type BrokenLinkFormat,
   type BrokenLinkItemType,

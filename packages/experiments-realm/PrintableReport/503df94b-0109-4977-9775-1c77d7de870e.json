@@ -16,7 +16,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../parent-report",
+        "module": "../printable-report",
         "name": "PrintableReport"
       }
     }

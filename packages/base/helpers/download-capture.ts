@@ -8,16 +8,10 @@
 // auth service worker (which injects the realm token and waits out a 503
 // while a capture is still rendering), so the bytes arrive authenticated;
 // they are then saved through a same-origin blob URL, where `download` works.
-import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { not } from '@cardstack/boxel-ui/helpers';
-import {
-  Button,
-  type BoxelButtonKind,
-  type BoxelButtonSize,
-} from '@cardstack/boxel-ui/components';
+//
+// `downloadCapture` is the imperative entry point; the `downloadCapture`
+// modifier in `../modifiers/download-capture` wires it onto an existing
+// `<a href>`.
 
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -133,10 +127,12 @@ export interface DownloadCaptureOptions {
   save?: (blob: Blob, filename: string) => void;
 }
 
-export async function downloadCapture(
+// Fetches the capture with the realm session and returns its bytes plus the
+// filename it should be known by.
+export async function fetchCapture(
   url: string,
-  options: DownloadCaptureOptions = {},
-): Promise<string> {
+  options: Pick<DownloadCaptureOptions, 'filename' | 'fetch'> = {},
+): Promise<{ blob: Blob; filename: string }> {
   let fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   // `same-origin` rather than `include`: the realm server answers with
   // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
@@ -153,91 +149,50 @@ export async function downloadCapture(
       response.headers.get('content-type'),
       response.headers.get('content-disposition'),
     );
+  return { blob, filename };
+}
+
+export async function downloadCapture(
+  url: string,
+  options: DownloadCaptureOptions = {},
+): Promise<string> {
+  let { blob, filename } = await fetchCapture(url, options);
   (options.save ?? saveBlob)(blob, filename);
   return filename;
 }
 
-interface Signature {
-  Element: HTMLElement;
-  Args: {
-    url?: string;
-    filename?: string;
-    kind?: BoxelButtonKind;
-    size?: BoxelButtonSize;
-  };
-  Blocks: { default: [] };
+export interface OpenCaptureOptions {
+  filename?: string;
+  fetch?: typeof globalThis.fetch;
+  // Opens the blank tab a click is allowed to open. Called synchronously,
+  // before the fetch, so it still counts as the user's own click.
+  open?: () => Window | null;
 }
 
-// Usage in a card template:
-//
-//   <CaptureDownloadButton @url={{this.pdfUrl}}>Save PDF</CaptureDownloadButton>
-//
-// Renders as a button-styled link to the capture: a plain click fetches and
-// saves it (marked `aria-busy` while the capture renders on demand, which
-// can take seconds), a modified click opens the URL like any link, and a
-// failure is reported inline. The link is disabled until `@url` resolves.
-export class CaptureDownloadButton extends GlimmerComponent<Signature> {
-  @tracked isPending = false;
-  @tracked errorMessage: string | undefined;
-
-  @action
-  async save(event: Event) {
-    if (!(event instanceof MouseEvent) || !isPlainLeftClick(event)) {
-      return;
-    }
-    event.preventDefault();
-    if (!this.args.url || this.isPending) {
-      return;
-    }
-    this.isPending = true;
-    this.errorMessage = undefined;
-    try {
-      await downloadCapture(this.args.url, { filename: this.args.filename });
-    } catch (e) {
-      this.errorMessage =
-        e instanceof CaptureDownloadError
-          ? e.message
-          : 'Could not download the document.';
-    } finally {
-      this.isPending = false;
-    }
+// Shows the capture in a new tab instead of saving it. The tab is opened
+// synchronously, while the click is still the user's own gesture, then
+// navigated to a same-origin blob URL once the bytes arrive. The browser's
+// PDF viewer serves its own download button from that blob, so the save that
+// fails on the realm URL (the viewer re-requests it outside the service
+// worker and gets the 401) works here. The blob URL is kept alive for the
+// life of this page; the viewing tab may hold it open for as long as it likes.
+export async function openCapture(
+  url: string,
+  options: OpenCaptureOptions = {},
+): Promise<string> {
+  let tab = (options.open ?? (() => window.open('', '_blank')))();
+  if (!tab) {
+    throw new CaptureDownloadError(
+      'The browser blocked the new tab. Allow pop-ups for this site and try again.',
+      0,
+    );
   }
-
-  <template>
-    <span class='capture-download' ...attributes>
-      <Button
-        @as='anchor'
-        @href={{@url}}
-        @kind={{if @kind @kind 'link-primary'}}
-        @size={{@size}}
-        @disabled={{not @url}}
-        aria-busy={{if this.isPending 'true'}}
-        {{on 'click' this.save}}
-        data-test-capture-download
-      >
-        {{#if (has-block)}}{{yield}}{{else}}Save{{/if}}
-      </Button>
-      {{#if this.errorMessage}}
-        <span
-          class='capture-download-error'
-          role='alert'
-          data-test-capture-download-error
-        >{{this.errorMessage}}</span>
-      {{/if}}
-    </span>
-    <style scoped>
-      .capture-download {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .capture-download-error {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--destructive);
-      }
-    </style>
-  </template>
+  try {
+    let { blob, filename } = await fetchCapture(url, options);
+    tab.location.href = URL.createObjectURL(blob);
+    return filename;
+  } catch (e) {
+    tab.close();
+    throw e;
+  }
 }
-
-export default CaptureDownloadButton;

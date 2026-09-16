@@ -1,16 +1,17 @@
-// Turns a plain capture link into a fetch-and-save download:
+// Makes a plain capture link work on a private realm:
 //
 //   <a href={{this.pdfURL}} {{downloadCapture}}>Download PDF</a>
+//   <a href={{this.pdfURL}} target='_blank' {{downloadCapture}}>Open PDF</a>
 //
-// A left click is intercepted, the `href` is fetched through the auth
-// service worker (which supplies the realm token), and the bytes are saved
-// from memory through a blob URL. That sidesteps both failures of a bare
-// link on a private realm: a tab navigation from another origin carries no
-// token, and the PDF viewer's own download button re-requests the URL
-// outside the worker, so it receives the realm's 401 text and offers to save
-// it as `.txt`. Modified clicks (a new tab or window, a context menu) are left
-// to the browser, so "open in a new tab" still works where the worker
-// controls the new tab.
+// A left click is intercepted and the `href` is fetched through the auth
+// service worker (which supplies the realm token). Without `target='_blank'`
+// the bytes are saved straight to disk through a blob URL; with it, a new
+// tab opens on that blob URL, so the browser's PDF viewer shows the document
+// and its own download button works. That sidesteps both failures of a bare
+// link: a tab navigation from another origin carries no token, and the
+// viewer's download re-requests the realm URL outside the worker, receiving
+// the 401 text it then offers to save as `.txt`. Modified clicks (a
+// Cmd-click, a middle click) are left to the browser.
 //
 // While a save is in flight the element carries `aria-busy` and
 // `data-download-state="pending"`; a failure leaves
@@ -22,7 +23,8 @@ import { modifier } from 'ember-modifier';
 import {
   downloadCapture as fetchAndSave,
   isPlainLeftClick,
-} from '../components/capture-download-button';
+  openCapture,
+} from '../helpers/download-capture';
 
 interface Named {
   filename?: string;
@@ -54,9 +56,11 @@ const downloadCapture = modifier<Signature>((element, _positional, named) => {
     element.dataset.downloadState = 'pending';
     delete element.dataset.downloadError;
     try {
-      let filename = await fetchAndSave(url, {
-        filename: named.filename || element.download || undefined,
-      });
+      let filename = named.filename || element.download || undefined;
+      let opensTab = element.target === '_blank';
+      filename = opensTab
+        ? await openCapture(url, { filename })
+        : await fetchAndSave(url, { filename });
       delete element.dataset.downloadState;
       named.onSaved?.(filename);
     } catch (e) {

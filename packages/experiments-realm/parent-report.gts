@@ -8,14 +8,13 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import MarkdownField from '@cardstack/base/markdown';
-import { CaptureDownloadButton } from '@cardstack/base/components/capture-download-button';
 
 // A printable report in the shape a customer's "parent report" card takes
 // once it follows the PDF-export migration notes: the page setup and print
 // rules live in the card's own styles, the toolbar hides under print media,
-// and the print action is the card's own durable PDF URL. Renders both the
-// notes' plain link and the download button so the two can be compared.
-class Isolated extends Component<typeof PrintableReport> {
+// and the print action is a plain link to the card's durable PDF URL, opened
+// in a new tab, exactly as the notes describe it.
+class Isolated extends Component<typeof ParentReport> {
   get pdfURL(): string | undefined {
     let realm = this.args.model[realmURL]?.href;
     let id = this.args.model.id;
@@ -32,20 +31,13 @@ class Isolated extends Component<typeof PrintableReport> {
   <template>
     <div class='report'>
       <div class='pr-tools' role='toolbar' aria-label='Report actions'>
-        <CaptureDownloadButton
-          @url={{this.pdfURL}}
-          @kind='primary'
-          @size='small'
-        >
-          Save PDF
-        </CaptureDownloadButton>
         {{#if this.pdfURL}}
           <a
             class='pr-btn'
             href={{this.pdfURL}}
             target='_blank'
             rel='noopener noreferrer'
-          >Download PDF (plain link)</a>
+          >Download PDF</a>
           <a
             class='pr-btn'
             href={{this.previewURL}}
@@ -182,8 +174,8 @@ class Isolated extends Component<typeof PrintableReport> {
   </template>
 }
 
-export class PrintableReport extends CardDef {
-  static displayName = 'Printable Report';
+export class ParentReport extends CardDef {
+  static displayName = 'Parent Report';
 
   @field school = contains(StringField);
   @field student = contains(StringField);
