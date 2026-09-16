@@ -83,18 +83,23 @@ export class CaptureDownloadError extends Error {
   }
 }
 
-// A refusal's error doc names the real reason (a realm that has not opted
-// into on-demand captures, an over-bounds document); surface that before
+// A refusal names its real reason in the body — a JSON error doc (an
+// over-bounds document) or a short plain-text line (a realm that has not
+// opted into on-demand captures, a missing token). Surface that before
 // falling back to what the status alone can say.
 async function messageFor(response: Response): Promise<string> {
+  let body = await response.clone().text();
   try {
-    let doc = await response.clone().json();
+    let doc = JSON.parse(body);
     let detail = doc?.errors?.[0]?.message ?? doc?.errors?.[0]?.title;
     if (typeof detail === 'string' && detail) {
       return detail;
     }
   } catch {
-    // Not a JSON error doc.
+    let text = body.trim();
+    if (text && text.length <= 300 && !text.startsWith('<')) {
+      return text;
+    }
   }
   switch (response.status) {
     case 401:

@@ -9,12 +9,14 @@ import {
 import StringField from '@cardstack/base/string';
 import MarkdownField from '@cardstack/base/markdown';
 import { CaptureDownloadButton } from '@cardstack/base/components/capture-download-button';
+import downloadCapture from '@cardstack/base/modifiers/download-capture';
 
 // A printable report in the shape a customer's "parent report" card takes
 // once it follows the PDF-export migration notes: the page setup and print
 // rules live in the card's own styles, the toolbar hides under print media,
-// and the print action is the card's own durable PDF URL. Renders both the
-// notes' plain link and the download button so the two can be compared.
+// and the print action is the card's own durable PDF URL. Renders the
+// notes' plain link, the same link with the download modifier, and the
+// download button so the three can be compared.
 class Isolated extends Component<typeof PrintableReport> {
   get pdfURL(): string | undefined {
     let realm = this.args.model[realmURL]?.href;
@@ -46,6 +48,8 @@ class Isolated extends Component<typeof PrintableReport> {
             target='_blank'
             rel='noopener noreferrer'
           >Download PDF (plain link)</a>
+          <a class='pr-btn' href={{this.pdfURL}} {{downloadCapture}}>Download
+            PDF (link + modifier)</a>
           <a
             class='pr-btn'
             href={{this.previewURL}}

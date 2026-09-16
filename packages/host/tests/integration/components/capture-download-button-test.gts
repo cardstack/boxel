@@ -17,6 +17,7 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CaptureDownloadModule from '@cardstack/base/components/capture-download-button';
+import type * as DownloadCaptureModifierModule from '@cardstack/base/modifiers/download-capture';
 
 const PDF_URL = 'https://my.realm/_screenshot/Invoice/2026-0042?type=pdf';
 
@@ -28,6 +29,8 @@ module('Integration | capture download button', function (hooks) {
   let CaptureDownloadButton: typeof CaptureDownloadModule.CaptureDownloadButton;
   let downloadCapture: typeof CaptureDownloadModule.downloadCapture;
   let captureFilenameFor: typeof CaptureDownloadModule.captureFilenameFor;
+  let downloadCaptureModifier: typeof DownloadCaptureModifierModule.default;
+  let linkClicks: { prevented: boolean }[];
   let originalFetch: typeof globalThis.fetch;
   let originalCreateObjectURL: typeof URL.createObjectURL;
   let requests: string[];
@@ -44,14 +47,31 @@ module('Integration | capture download button', function (hooks) {
     }
   }
 
+  // A modified link's click bubbles here after the modifier has decided
+  // whether to intercept it; record that, then stop the navigation the test
+  // browser would otherwise perform.
+  function recordLinkClick(event: Event) {
+    let target = event.target;
+    if (target instanceof HTMLAnchorElement && !target.download) {
+      linkClicks.push({ prevented: event.defaultPrevented });
+      event.preventDefault();
+    }
+  }
+
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     ({ CaptureDownloadButton, downloadCapture, captureFilenameFor } =
       await loader.import<typeof CaptureDownloadModule>(
         '@cardstack/base/components/capture-download-button',
       ));
+    downloadCaptureModifier = (
+      await loader.import<typeof DownloadCaptureModifierModule>(
+        '@cardstack/base/modifiers/download-capture',
+      )
+    ).default;
     requests = [];
     downloads = [];
+    linkClicks = [];
     respondWith = () =>
       new Response(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), {
         status: 200,
@@ -65,12 +85,14 @@ module('Integration | capture download button', function (hooks) {
     originalCreateObjectURL = URL.createObjectURL;
     URL.createObjectURL = () => 'blob:https://app.test/fake-object-url';
     document.addEventListener('click', captureAnchorClick, true);
+    document.addEventListener('click', recordLinkClick);
   });
 
   hooks.afterEach(function () {
     globalThis.fetch = originalFetch;
     URL.createObjectURL = originalCreateObjectURL;
     document.removeEventListener('click', captureAnchorClick, true);
+    document.removeEventListener('click', recordLinkClick);
   });
 
   module('captureFilenameFor', function () {
@@ -195,7 +217,8 @@ module('Integration | capture download button', function (hooks) {
     });
 
     test('a refused capture is reported inline and the button recovers', async function (assert) {
-      respondWith = () => new Response('', { status: 401 });
+      respondWith = () =>
+        new Response('Missing Authorization header', { status: 401 });
       let url = PDF_URL;
       await render(
         precompileTemplate(`<CaptureDownloadButton @url={{url}} />`, {
@@ -211,8 +234,75 @@ module('Integration | capture download button', function (hooks) {
       assert
         .dom('[data-test-capture-download-error]')
         .hasAttribute('role', 'alert')
-        .hasText('You do not have access to this document.');
+        .hasText('Missing Authorization header');
       assert.dom('[data-test-capture-download]').isEnabled();
+    });
+  });
+
+  module('downloadCapture modifier', function () {
+    test('a plain click on the link fetches and saves instead of navigating', async function (assert) {
+      let url = PDF_URL;
+      let downloadCapture = downloadCaptureModifier;
+      await render(
+        precompileTemplate(
+          `<a href={{url}} {{downloadCapture}} data-test-pdf-link>Download PDF</a>`,
+          { strictMode: true, scope: () => ({ url, downloadCapture }) },
+        ),
+      );
+      await click('[data-test-pdf-link]');
+      await waitUntil(() => downloads.length > 0);
+      assert.deepEqual(linkClicks, [{ prevented: true }]);
+      assert.deepEqual(requests, [PDF_URL]);
+      assert.deepEqual(downloads, [
+        {
+          href: 'blob:https://app.test/fake-object-url',
+          download: '2026-0042.pdf',
+        },
+      ]);
+      assert
+        .dom('[data-test-pdf-link]')
+        .doesNotHaveAttribute('aria-busy')
+        .doesNotHaveAttribute('data-download-state');
+    });
+
+    test('a modified click is left to the browser', async function (assert) {
+      let url = PDF_URL;
+      let downloadCapture = downloadCaptureModifier;
+      await render(
+        precompileTemplate(
+          `<a href={{url}} {{downloadCapture}} data-test-pdf-link>Download PDF</a>`,
+          { strictMode: true, scope: () => ({ url, downloadCapture }) },
+        ),
+      );
+      await click('[data-test-pdf-link]', { metaKey: true });
+      assert.deepEqual(linkClicks, [{ prevented: false }]);
+      assert.deepEqual(requests, [], 'nothing was fetched');
+    });
+
+    test('a refusal is recorded on the link and reported to onError', async function (assert) {
+      respondWith = () =>
+        new Response('Missing Authorization header', { status: 401 });
+      let url = PDF_URL;
+      let downloadCapture = downloadCaptureModifier;
+      let reported: string[] = [];
+      let onError = (message: string) => reported.push(message);
+      await render(
+        precompileTemplate(
+          `<a href={{url}} {{downloadCapture onError=onError}} data-test-pdf-link>Download PDF</a>`,
+          {
+            strictMode: true,
+            scope: () => ({ url, downloadCapture, onError }),
+          },
+        ),
+      );
+      await click('[data-test-pdf-link]');
+      await waitUntil(() => reported.length > 0);
+      assert.deepEqual(reported, ['Missing Authorization header']);
+      assert.deepEqual(downloads, [], 'nothing was saved');
+      assert
+        .dom('[data-test-pdf-link]')
+        .hasAttribute('data-download-state', 'error')
+        .hasAttribute('data-download-error', 'Missing Authorization header');
     });
   });
 });
