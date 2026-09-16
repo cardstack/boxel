@@ -5,6 +5,7 @@ import { resolve, join } from 'path';
 import { createHmac } from 'crypto';
 import yaml from 'yaml';
 import { existsSync } from 'fs';
+import { sanitizeSlug } from '../../scripts/env-slug.js';
 import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
@@ -12,11 +13,12 @@ import {
 
 function homeserverFile(): string {
   if (process.env.BOXEL_ENVIRONMENT) {
-    let slug = process.env.BOXEL_ENVIRONMENT.toLowerCase()
-      .replace(/\//g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
+    // Through the shared helper, which caps the slug at the 63 characters a
+    // DNS label allows — the same cap the stack applies when it names this
+    // directory. Recomputing it here without the cap silently misses the
+    // directory for any branch longer than that, and an empty registration
+    // secret is what the realm server reports instead.
+    let slug = sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
     let branchFile = resolve(
       join(
         import.meta.dirname,
