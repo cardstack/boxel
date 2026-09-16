@@ -29,6 +29,7 @@ import {
   type CardDocumentCacheOutcome,
   type CardJsonAssembly,
 } from './card-document-cache.ts';
+import type { LinkAssemblyCache } from './link-assembly-cache.ts';
 import {
   fieldsetFromParam,
   htmlQueryFromParams,
@@ -289,6 +290,7 @@ import {
   computeContentHashFromRanges,
   isSampledContentHash,
 } from './content-hash.ts';
+import { hasForeignRealmDeps as depsReachAnotherRealm } from './foreign-realm-deps.ts';
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -1609,6 +1611,7 @@ export class Realm {
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      linkAssemblyCache,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -1638,6 +1641,10 @@ export class Realm {
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
+      // TTL cache for individual side-loaded resources, shared across every
+      // realm in the process. Optional — without one, every `loadLinks` pass
+      // assembles its own copy of every link target it reaches.
+      linkAssemblyCache?: LinkAssemblyCache;
     },
     opts?: Options,
   ) {
@@ -1725,6 +1732,7 @@ export class Realm {
       dbAdapter,
       fetch: _fetch,
       definitionLookup: this.#definitionLookup,
+      ...(linkAssemblyCache ? { linkAssemblyCache } : {}),
     });
 
     this.#router = new Router(new URL(url))
@@ -7734,58 +7742,13 @@ export class Realm {
     });
   }
 
-  // Card+JSON ETags are unsafe when the card has dependencies that live
-  // in OTHER realms — `index-writer.calculateInvalidations` filters
-  // dependents by `realm_url = $thisRealm` (see the comment there:
-  // "probably need to reevaluate this condition when we get to cross
-  // realm invalidation"), so a foreign card change propagates to the
-  // foreign realm's `indexed_at` but never to ours. With cross-realm
-  // invalidation off, a stable local `indexed_at` does NOT mean the
-  // assembled `included[]` is current — `loadLinks` will re-fetch the
-  // foreign card via HTTP and may surface new content. To avoid
-  // serving stale 304s, suppress ETag emission entirely when any dep
-  // points outside this realm.
+  // Card+JSON ETags are unsafe when the card has dependencies that live in
+  // OTHER realms: cross-realm invalidation does not cascade `indexed_at`, so
+  // a stable local validator does not mean the assembled `included[]` is
+  // current. Suppress ETag emission entirely in that case — see
+  // `hasForeignRealmDeps` for the mechanism.
   private hasForeignRealmDeps(deps: string[] | null | undefined): boolean {
-    if (!deps?.length) {
-      return false;
-    }
-    for (let dep of deps) {
-      if (this.isForeignRealmDep(dep)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private isForeignRealmDep(dep: string): boolean {
-    // Resolve registered prefixes back to absolute URLs first.
-    // Production deployments register every realm via
-    // `addRealmMapping`, so deps in `boxel_index.deps` are typically
-    // stored in prefix form (`@cardstack/foreign-realm/foo.json`) —
-    // comparing them as raw strings against `this.url` would always
-    // say "not foreign" and the guard would silently fail to fire.
-    let resolved: string;
-    try {
-      resolved = this.#virtualNetwork.toURL(dep).href;
-    } catch {
-      // Bare specifier with no matching prefix mapping. `loadLinks`
-      // can't fetch it, so it's not a request-time mutation source —
-      // not a foreign-instance dep for our purposes.
-      return false;
-    }
-    // Only foreign card *instance* deps put us at risk of stale 304s.
-    // Module deps (`.gts`/`.ts`/`.js`) and scoped CSS don't load
-    // through `loadLinks` and don't contribute to the assembled
-    // `included[]`. Cards universally adopt from base modules
-    // (`https://cardstack.com/base/card-api.gts`) — treating those
-    // as foreign would blanket-suppress every card's ETag. The
-    // relationship-dependency extractor normalizes instance deps to
-    // `.json` (see `dependency-normalization.ts`), so checking that
-    // suffix isolates the deps we actually care about.
-    if (!resolved.endsWith('.json')) {
-      return false;
-    }
-    return !resolved.startsWith(this.url);
+    return depsReachAnotherRealm(deps, this.url, this.#virtualNetwork);
   }
 
   private cardJsonCacheControl(requestContext: RequestContext): string {

@@ -59,6 +59,11 @@ import {
 import { resourceIdentity } from './resource-identity.ts';
 import { relationshipEntries } from './relationship-utils.ts';
 import type {
+  LinkAssemblyCache,
+  LinkAssemblyKey,
+} from './link-assembly-cache.ts';
+import { hasForeignRealmDeps } from './foreign-realm-deps.ts';
+import type {
   CardResource,
   CssResource,
   FileMetaResource,
@@ -269,6 +274,7 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
+  #linkAssemblyCache: LinkAssemblyCache | undefined;
   #log = logger('realm:index-query-engine');
 
   constructor({
@@ -276,11 +282,17 @@ export class RealmIndexQueryEngine {
     dbAdapter,
     fetch,
     definitionLookup,
+    linkAssemblyCache,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
     definitionLookup: DefinitionLookup;
+    // Shares one assembly of a side-loaded resource across the searches that
+    // reach it, so a link target several searches of a render have in common
+    // is read, walked, cloned and absolutized once. Optional — without one,
+    // every `loadLinks` invocation assembles its own copy of every target.
+    linkAssemblyCache?: LinkAssemblyCache;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -295,6 +307,7 @@ export class RealmIndexQueryEngine {
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;
+    this.#linkAssemblyCache = linkAssemblyCache;
   }
 
   private get realmURL() {
@@ -1674,6 +1687,13 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
+    // Sharing an assembly across invocations rests on the resource being a
+    // function of its own index row, which a work-in-progress read is not:
+    // those rows belong to a pass that has not swapped yet and share a URL
+    // with the live row that is still being served.
+    let assemblyCache = opts?.useWorkInProgressIndex
+      ? undefined
+      : this.#linkAssemblyCache;
     let vnForIdentity = this.#realm.virtualNetwork;
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
     // `omit`/root ids may arrive in either resolved-URL or registered-alias
@@ -1711,6 +1731,18 @@ export class RealmIndexQueryEngine {
       // recursive caller cloned a resource only after the recursive call
       // had already mutated its relationship.data fields).
       isRoot: boolean;
+      // Set when `resource` came back from the link-assembly cache: it is
+      // already the finished `included[]` shape — relationships rewritten,
+      // instance and module URLs absolutized, `links.self` set — so step 5
+      // files it as it stands instead of cloning and rewriting it again. It
+      // is this request's own parse of the cached bytes, so the layer may
+      // still write to it; nothing is shared with another response.
+      preassembled?: true;
+      // The row fingerprint this resource assembles under, carried from the
+      // index read that produced it so step 5 can file the finished bytes
+      // without reading the row again. Absent when the row is one the cache
+      // must not retain.
+      assemblyKey?: LinkAssemblyKey;
     };
     let layer: LayerItem[] = [];
     for (let resource of rootResources) {
@@ -1897,6 +1929,14 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
+      // In-realm card URLs this layer must not answer from, or file in, the
+      // assembly cache: a target that will sit past the expansion depth keeps
+      // its relationships exactly as the index row carries them, while every
+      // shallower reach of the same card rewrites them. The two are different
+      // bytes for one row, so neither may stand in for the other. Collected
+      // per entry and applied per URL, since one layer can reach a card from
+      // parents at different depths.
+      let depthExcludedURLs = new Set<string>();
       // Maps each cross-realm URL to the field that produced it, so a
       // non-card link can name the offending field in its error.
       let crossRealmFieldNames = new Map<string, { fieldName: string }>();
@@ -1909,6 +1949,12 @@ export class RealmIndexQueryEngine {
             ? { ...opts, linkFields: undefined }
             : opts;
         let processed = new Set<string>();
+        // The stack length this item's link targets will carry, which is what
+        // decides whether they in turn expand theirs (step 4's depth gate,
+        // read there against the target's own stack).
+        let targetStackLength =
+          resource.id != null ? item.stack.length + 1 : item.stack.length;
+        let targetExpands = targetStackLength <= maxLinkDepth;
 
         for (let entry of relationshipEntries(resource.relationships)) {
           let { relationship, key, fieldName } = entry;
@@ -1997,6 +2043,9 @@ export class RealmIndexQueryEngine {
           if (inRealm) {
             if (expectsCard || (!relationshipType && !expectsFileMeta)) {
               inRealmCardURLs.add(linkURL.href);
+              if (!targetExpands) {
+                depthExcludedURLs.add(linkURL.href);
+              }
             }
             if (expectsFileMeta) {
               inRealmFileURLs.add(linkURL.href);
@@ -2030,18 +2079,37 @@ export class RealmIndexQueryEngine {
       // fetches concurrently. In-realm links collapse to one batched query
       // per kind (instances + file-meta); cross-realm links fan out one
       // fetch per unique URL via Promise.all alongside the DB round-trips.
+      //
+      // With an assembly cache configured, the in-realm card lookup splits in
+      // two: a narrow read of each row's freshness fingerprint runs alongside
+      // the other fetches, and only the URLs it does not answer from the cache
+      // go on to the wide `getInstances` read. That is one extra round-trip
+      // per layer for a closure with nothing held, against skipping the row
+      // hydration — pristine doc, search doc and every prerendered format —
+      // plus the walk, clone and absolutize for every target a sibling search
+      // already assembled.
       let batchStart = Date.now();
       let instanceMap: Map<string, InstanceOrError>;
       let fileMap: Map<string, IndexedFile>;
       let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
+      // The finished resources this layer answered from the cache, by the URL
+      // the entry looked up, alongside the fingerprint each was filed under so
+      // a resource assembled fresh here can be filed in step 5.
+      let preassembled = new Map<string, CardResource<Saved>>();
+      let assemblyKeys = new Map<string, LinkAssemblyKey>();
+      let cacheableCardURLs = assemblyCache
+        ? [...inRealmCardURLs].filter((u) => !depthExcludedURLs.has(u))
+        : [];
       try {
-        [instanceMap, fileMap, crossRealmMap] = await Promise.all([
-          inRealmCardURLs.size > 0
-            ? this.#indexQueryEngine.getInstances(
-                [...inRealmCardURLs].map((u) => new URL(u)),
+        let validatorsPromise =
+          assemblyCache && cacheableCardURLs.length > 0
+            ? this.#indexQueryEngine.getInstanceValidators(
+                cacheableCardURLs.map((u) => new URL(u)),
                 opts,
               )
-            : Promise.resolve(new Map<string, InstanceOrError>()),
+            : undefined;
+        let [validators, files, crossRealm] = await Promise.all([
+          validatorsPromise,
           inRealmFileURLs.size > 0
             ? this.#indexQueryEngine.getFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
@@ -2059,6 +2127,44 @@ export class RealmIndexQueryEngine {
                 new Map<string, CardResource<Saved> | FileMetaResource>(),
               ),
         ]);
+        fileMap = files;
+        crossRealmMap = crossRealm;
+
+        let urlsToHydrate = inRealmCardURLs;
+        if (assemblyCache && validators) {
+          urlsToHydrate = new Set<string>(depthExcludedURLs);
+          for (let href of cacheableCardURLs) {
+            let validator = validators.get(href);
+            // An errored row has no servable instance, and a row this read
+            // did not find has nothing to be current against; both take the
+            // wide read, which is what decides how they are handled.
+            if (!validator || validator.hasError) {
+              urlsToHydrate.add(href);
+              continue;
+            }
+            let key: LinkAssemblyKey = {
+              canonicalURL: validator.canonicalURL,
+              indexedAt: validator.indexedAt,
+              generation: validator.generation,
+              screenshots: validator.screenshots,
+              skipQueryBackedExpansion: !!opts?.skipQueryBackedExpansion,
+            };
+            let held = assemblyCache.get(key);
+            if (held === undefined) {
+              assemblyKeys.set(href, key);
+              urlsToHydrate.add(href);
+              continue;
+            }
+            preassembled.set(href, JSON.parse(held) as CardResource<Saved>);
+          }
+        }
+        instanceMap =
+          urlsToHydrate.size > 0
+            ? await this.#indexQueryEngine.getInstances(
+                [...urlsToHydrate].map((u) => new URL(u)),
+                opts,
+              )
+            : new Map<string, InstanceOrError>();
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');
@@ -2068,7 +2174,7 @@ export class RealmIndexQueryEngine {
         throw err;
       }
       this.#log.debug(
-        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} preassembled=${preassembled.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
       );
 
       // A cross-realm link is served by its own realm, where it is that
@@ -2107,13 +2213,26 @@ export class RealmIndexQueryEngine {
       let nextLayer: LayerItem[] = [];
       for (let entry of entries) {
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
+        // Whether `linkResource` arrived finished from the cache, so the
+        // layer item it seeds can skip step 5's clone and absolutize.
+        let linkPreassembled = false;
+        // The fingerprint `linkResource` should be filed under once this
+        // layer has finished rewriting it.
+        let linkAssemblyKey: LinkAssemblyKey | undefined;
 
         if (entry.inRealm) {
           if (
             entry.expectsCard ||
             (!entry.relationshipType && !entry.expectsFileMeta)
           ) {
-            let maybeResult = instanceMap.get(entry.linkURL.href);
+            let held = preassembled.get(entry.linkURL.href);
+            if (held) {
+              linkResource = held;
+              linkPreassembled = true;
+            }
+            let maybeResult = linkResource
+              ? undefined
+              : instanceMap.get(entry.linkURL.href);
             if (maybeResult?.type === 'instance') {
               linkResource = maybeResult.instance;
               // Join the linked instance's declared-screenshot manifest into
@@ -2134,6 +2253,31 @@ export class RealmIndexQueryEngine {
                         .replace(/\.json$/, ''),
                     },
                   ),
+                };
+              }
+              // File the finished resource under the fingerprint of the row
+              // this hydration read, not the one the pre-read saw: a write
+              // that landed between the two reads would otherwise file these
+              // bytes under a validator that no longer describes them. A row
+              // whose dependencies reach another realm is not a function of
+              // its own `indexed_at` at all and is left unfiled — the same
+              // condition, and the same test, that suppresses its card+json
+              // ETag.
+              let key = assemblyKeys.get(entry.linkURL.href);
+              if (
+                key &&
+                !hasForeignRealmDeps(
+                  maybeResult.deps,
+                  realmURL.href,
+                  vnForIdentity,
+                )
+              ) {
+                linkAssemblyKey = {
+                  ...key,
+                  canonicalURL: maybeResult.canonicalURL,
+                  indexedAt: maybeResult.indexedAt,
+                  generation: maybeResult.generation,
+                  screenshots: maybeResult.screenshots,
                 };
               }
             }
@@ -2182,6 +2326,8 @@ export class RealmIndexQueryEngine {
               stack: descendStack,
               applyLinkFields: false,
               isRoot: false,
+              ...(linkPreassembled ? { preassembled: true as const } : {}),
+              ...(linkAssemblyKey ? { assemblyKey: linkAssemblyKey } : {}),
             });
             foundLinks = true;
           } else if (linkResource.id != null) {
@@ -2247,6 +2393,16 @@ export class RealmIndexQueryEngine {
         if (includedIds.has(resource.id)) {
           continue;
         }
+        // A resource that came back from the cache is already in this shape —
+        // it IS a previous pass's `rewritten` — and it is this request's own
+        // parse of those bytes, so it goes straight into `included[]`.
+        // Re-cloning and re-absolutizing it would reproduce it exactly, at
+        // the cost the cache exists to avoid.
+        if (item.preassembled) {
+          included.push(resource);
+          includedIds.add(resource.id);
+          continue;
+        }
         let rewritten = cloneDeep({
           ...resource,
           ...{ links: { self: resource.id } },
@@ -2269,6 +2425,13 @@ export class RealmIndexQueryEngine {
         );
         included.push(rewritten);
         includedIds.add(resource.id);
+        // Hand the finished resource to the next search that reaches it. This
+        // is the point at which it is finished and at which it is known to be
+        // one: its own layer has rewritten its relationships, and its
+        // fingerprint came from the read that produced it.
+        if (assemblyCache && item.assemblyKey) {
+          assemblyCache.set(item.assemblyKey, JSON.stringify(rewritten));
+        }
       }
 
       layer = nextLayer;

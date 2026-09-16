@@ -205,6 +205,22 @@ export interface IndexedFile {
   indexedAt: number | null;
 }
 
+// What `getInstanceValidators` reads: enough of an instance row to say whether
+// an already-assembled copy of it is still current, and nothing that would
+// make that read cost what hydrating the row costs.
+export interface IndexedInstanceValidator {
+  // The row's own spelling of its URL. A lookup may have addressed it by
+  // `file_alias`, so this — not the lookup key — is what identifies the row.
+  canonicalURL: string;
+  indexedAt: number | null;
+  generation: number;
+  screenshots: ScreenshotManifest | null;
+  // The effective error state across both channels (`effectiveHasError`). An
+  // errored row has no servable instance, so it is never a row a caller can
+  // answer from a held copy.
+  hasError: boolean;
+}
+
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
@@ -442,6 +458,90 @@ export class IndexQueryEngine {
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
           resultMap.set(row.file_alias, mapped);
+        }
+      }
+    }
+    return resultMap;
+  }
+
+  // The freshness fingerprint of each instance row, without hydrating it.
+  // `getInstances` selects `i.*` plus every prerendered format — the pristine
+  // and search docs, the isolated / head / atom / embedded / fitted HTML and
+  // the markdown — which is what a caller holding an already-assembled copy
+  // of the row is trying not to pay for. This selects only what says whether
+  // that copy is still current: `indexed_at` and `generation` (which move on a
+  // direct write and on a dependency-cascaded one alike), the declared
+  // screenshot manifest that travels on the separate prerendered_html channel,
+  // and the effective error state, which decides whether the row has a servable
+  // instance at all.
+  //
+  // Keyed by the LOOKUP URL like `getInstances`, and matching rows on the same
+  // url/file_alias/type/tombstone predicate, so the two address exactly the
+  // same set of rows.
+  async getInstanceValidators(
+    urls: URL[],
+    opts?: GetEntryOptions,
+  ): Promise<Map<string, IndexedInstanceValidator>> {
+    let resultMap = new Map<string, IndexedInstanceValidator>();
+    if (urls.length === 0) {
+      return resultMap;
+    }
+    let lookupHrefs = [...new Set(urls.map((u) => u.href))];
+    // Same placeholder arithmetic as `getInstances`, so the two batch at the
+    // same width and a layer never splits differently between them.
+    let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
+    for (let start = 0; start < lookupHrefs.length; start += chunkSize) {
+      let chunk = lookupHrefs.slice(start, start + chunkSize);
+      let chunkSet = new Set(chunk);
+      let chunkParams = chunk.map((href) => [param(href)]);
+      let rows = (await this.#query([
+        `SELECT i.url, i.file_alias, i.indexed_at, i.generation,
+                ph.screenshots AS screenshots,
+                ${effectiveHasError()} AS has_error`,
+        `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
+         WHERE`,
+        ...every([
+          any([
+            ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
+            [
+              'i.file_alias IN',
+              ...addExplicitParens(separatedByCommas(chunkParams)),
+            ],
+          ]),
+          ['i.type =', param('instance')],
+          any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        ]),
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        indexed_at: number | string | null;
+        generation: number | string | null;
+        screenshots: ScreenshotManifest | null;
+        has_error: boolean | number | null;
+      }[];
+      for (let row of rows) {
+        if (!row.url) {
+          continue;
+        }
+        let validator: IndexedInstanceValidator = {
+          canonicalURL: row.url,
+          indexedAt:
+            typeof row.indexed_at === 'string'
+              ? parseInt(row.indexed_at)
+              : (row.indexed_at ?? null),
+          generation:
+            typeof row.generation === 'string'
+              ? parseInt(row.generation)
+              : (row.generation ?? 0),
+          screenshots: row.screenshots ?? null,
+          // SQLite renders a boolean expression as 0/1, Postgres as a boolean.
+          hasError: Boolean(row.has_error),
+        };
+        if (chunkSet.has(row.url)) {
+          resultMap.set(row.url, validator);
+        }
+        if (row.file_alias && chunkSet.has(row.file_alias)) {
+          resultMap.set(row.file_alias, validator);
         }
       }
     }

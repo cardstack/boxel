@@ -52,6 +52,7 @@ import {
   type PopulateCoordinator,
   CachingDefinitionLookup,
   CardDocumentCache,
+  LinkAssemblyCache,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -1269,6 +1270,7 @@ export async function createRealm({
   readIndexDrainBudgetMs,
   liveReadsResolveLinksOnly,
   cardDocumentCache = new CardDocumentCache(),
+  linkAssemblyCache = new LinkAssemblyCache(),
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1320,6 +1322,11 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The side-loaded-resource assembly cache. Defaults to one per created
+  // realm, for the same reason the card+json cache does: the suite exercises
+  // the read path production runs. Pass a configured instance to read its
+  // stats, or `ttlMs: 0` to disable retention.
+  linkAssemblyCache?: LinkAssemblyCache;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1399,6 +1406,7 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      linkAssemblyCache,
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1461,6 +1469,7 @@ export async function runTestRealmServer({
   readIndexDrainBudgetMs,
   liveReadsResolveLinksOnly,
   cardDocumentCache,
+  linkAssemblyCache,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1491,6 +1500,8 @@ export async function runTestRealmServer({
   liveReadsResolveLinksOnly?: true;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
+  // Same, for the side-loaded-resource assembly cache.
+  linkAssemblyCache?: LinkAssemblyCache;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1535,6 +1546,7 @@ export async function runTestRealmServer({
     readIndexDrainBudgetMs,
     ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
+    ...(linkAssemblyCache ? { linkAssemblyCache } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2205,6 +2217,7 @@ type InternalPermissionedRealmSetupOptions = {
   readIndexDrainBudgetMs?: number;
   liveReadsResolveLinksOnly?: true;
   cardDocumentCache?: CardDocumentCache;
+  linkAssemblyCache?: LinkAssemblyCache;
 };
 
 async function startPermissionedRealmFixture(
@@ -2227,6 +2240,7 @@ async function startPermissionedRealmFixture(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    linkAssemblyCache,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2300,6 +2314,7 @@ async function startPermissionedRealmFixture(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    linkAssemblyCache,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2372,6 +2387,7 @@ export function setupPermissionedRealm(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    linkAssemblyCache,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2409,6 +2425,9 @@ export function setupPermissionedRealm(
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
     cardDocumentCache?: CardDocumentCache;
+    // Inject an assembly cache configured for the test — one whose stats the
+    // test reads, or one with retention off. Omit for the production default.
+    linkAssemblyCache?: LinkAssemblyCache;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2442,6 +2461,7 @@ export function setupPermissionedRealm(
         readIndexDrainBudgetMs,
         liveReadsResolveLinksOnly,
         cardDocumentCache,
+        linkAssemblyCache,
       });
       testRealmServer = server;
 

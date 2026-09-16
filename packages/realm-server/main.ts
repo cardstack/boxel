@@ -4,6 +4,7 @@ import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
+  LinkAssemblyCache,
   Realm,
   VirtualNetwork,
   isUrlLike,
@@ -541,6 +542,12 @@ const reportHostShellToManager = async () => {
   // of it.
   let cardDocumentCache = new CardDocumentCache();
 
+  // One link-assembly cache for the whole process, on the same terms: a
+  // side-loaded resource is keyed on its own row fingerprint, so the entries
+  // of every mounted realm can share one byte cap without a realm component
+  // in the key.
+  let linkAssemblyCache = new LinkAssemblyCache();
+
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -654,6 +661,7 @@ const reportHostShellToManager = async () => {
           ),
           mediaCacheAdapter,
           cardDocumentCache,
+          linkAssemblyCache,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

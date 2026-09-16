@@ -105,6 +105,7 @@ module(basename(import.meta.filename), function () {
       let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
       let perLinkLookupCount = 0;
       let batchedLinkLookupCount = 0;
+      let validatorLookupCount = 0;
       let dbExecute = testDbAdapter as {
         execute: typeof testDbAdapter.execute;
       };
@@ -135,7 +136,18 @@ module(basename(import.meta.filename), function () {
             // Old per-link path: WHERE i.url = $1 OR i.file_alias = $1
             // New batched path:  WHERE i.url IN ($1, ..., $N) OR i.file_alias IN (...)
             if (/\bi\.url\s+IN\s*\(/.test(normalized)) {
-              batchedLinkLookupCount++;
+              // Two batched shapes reach the same rows. The hydration read
+              // selects the whole row (`SELECT i.*` plus every prerendered
+              // format); the assembly cache's freshness pre-read selects only
+              // the few columns that say whether a held copy is current, and
+              // runs once per layer alongside it. Counted apart so the
+              // batching property below is asserted against the read it is
+              // about.
+              if (/SELECT i\.\*/.test(normalized)) {
+                batchedLinkLookupCount++;
+              } else {
+                validatorLookupCount++;
+              }
             } else if (/\bi\.url\s*=\s*\$/.test(normalized)) {
               perLinkLookupCount++;
             }
@@ -178,6 +190,10 @@ module(basename(import.meta.filename), function () {
         assert.ok(
           batchedLinkLookupCount <= 2,
           `expected ≤ 2 batched-link DB queries (1 per recursion depth), got ${batchedLinkLookupCount}`,
+        );
+        assert.ok(
+          validatorLookupCount <= 2,
+          `expected ≤ 2 batched freshness pre-reads (1 per recursion depth), got ${validatorLookupCount}`,
         );
       } finally {
         dbExecute.execute = originalExecute;

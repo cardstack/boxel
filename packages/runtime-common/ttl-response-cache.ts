@@ -294,6 +294,57 @@ export class TtlResponseCache<T> {
     }
   }
 
+  // The non-coalescing mode: look a key up now, store its value later. For a
+  // caller whose population is BATCHED rather than per-key — it decides what
+  // to compute from the set of keys that missed, so there is no per-key
+  // `populate` thunk to hand `getOrPopulate` and no single computation for a
+  // concurrent caller to join. Retention, recency, expiry, the byte cap and
+  // the counters are the same machinery either way; the only thing this mode
+  // gives up is in-flight coalescing, so two callers that miss the same key at
+  // once each compute it, exactly as they would with no cache at all.
+  //
+  // Never mix the two modes on one key: `getOrPopulate` assumes `#store` is
+  // only ever reached for a key that was absent or already deleted.
+  get(key: string): T | undefined {
+    try {
+      let entryAtLookup = this.#entries.get(key);
+      let keyWasExpired =
+        entryAtLookup !== undefined
+          ? entryAtLookup.expiresAt <= Date.now()
+          : this.#recentlyExpired.has(key);
+      this.#reapExpiredHead();
+      let entry = this.#entries.get(key);
+      if (entry && entry.expiresAt > Date.now()) {
+        // Refresh recency, the same way a `getOrPopulate` hit does.
+        this.#entries.delete(key);
+        this.#entries.set(key, entry);
+        this.#counters.hits += 1;
+        this.#counters.hitBytes += entry.bytes;
+        return entry.value;
+      }
+      if (entry) {
+        this.#delete(key, entry);
+        this.#counters.expired += 1;
+        this.#rememberExpired(key);
+      }
+      this.#counters.misses += 1;
+      this.#counters[keyWasExpired ? 'missesKeyExpired' : 'missesKeyAbsent'] +=
+        1;
+      return undefined;
+    } finally {
+      this.#maybeEmitTelemetry();
+    }
+  }
+
+  // File a value the caller computed itself. Subject to the same `retain`
+  // predicate, byte cap and TTL as a `getOrPopulate` miss; `missBytes` is
+  // charged here rather than at lookup time, since the lookup that missed did
+  // not yet know what it was going to cost.
+  set(key: string, value: T): void {
+    this.#counters.missBytes += this.#sizeOf(value);
+    this.#store(key, value);
+  }
+
   // Observability for tests and debugging. `sizeBytes` is the sum of
   // `sizeOf` over the retained entries.
   get stats(): ResponseCacheCounters & {
@@ -321,12 +372,14 @@ export class TtlResponseCache<T> {
       return;
     }
     // Subtract any entry already filed under this key before overwriting it.
-    // No current path reaches `#store` on a live key — a miss only runs when
+    // `getOrPopulate` never reaches here on a live key — a miss only runs when
     // the key was absent or expired-and-deleted, and `#inFlight` is
     // registered in the same synchronous turn as `populate()` is called — but
-    // the failure mode if one ever did would be silent and permanent:
-    // `#totalBytes` would ratchet up, eviction would fire on every store, and
-    // the cache would decay to a zero hit rate with no counter saying why.
+    // `set` has no such guarantee: its caller computed the value without
+    // holding a slot, so a concurrent caller may have filed one meanwhile. The
+    // failure mode without this is silent and permanent: `#totalBytes` would
+    // ratchet up, eviction would fire on every store, and the cache would
+    // decay to a zero hit rate with no counter saying why.
     let prior = this.#entries.get(key);
     if (prior) {
       this.#totalBytes -= prior.bytes;
