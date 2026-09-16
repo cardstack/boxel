@@ -1,4 +1,5 @@
 import { query, param, type DBAdapter, type Expression } from './index.ts';
+import { now as clockNow } from './clock.ts';
 
 // Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(
@@ -136,7 +137,14 @@ export async function ensureFileCreatedAt(
   if (existing !== undefined) return existing;
 
   // Insert and re-read
-  let now = Math.floor(Date.now() / 1000);
+  // Through the seam, so a suite that pins the clock stamps a file's creation
+  // from the same instant it measures ages against. Minting here on the real
+  // clock while a renderer measures from a pinned one puts the two on
+  // different timelines: a file created during a test reads `today` until real
+  // time passes the pin and an absolute date after it, and the activity feed's
+  // created-vs-updated window flips once they are two minutes apart. Unpinned
+  // this is `Date.now()`, so production is unchanged.
+  let now = Math.floor(clockNow() / 1000);
   await query(db, [
     'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
     '(',
@@ -171,7 +179,14 @@ export async function persistFileMeta(
   let expr: Expression = [
     'INSERT INTO realm_file_meta (realm_url, file_path, created_at, content_hash, content_size) VALUES',
   ];
-  let now = Math.floor(Date.now() / 1000);
+  // Through the seam, so a suite that pins the clock stamps a file's creation
+  // from the same instant it measures ages against. Minting here on the real
+  // clock while a renderer measures from a pinned one puts the two on
+  // different timelines: a file created during a test reads `today` until real
+  // time passes the pin and an absolute date after it, and the activity feed's
+  // created-vs-updated window flips once they are two minutes apart. Unpinned
+  // this is `Date.now()`, so production is unchanged.
+  let now = Math.floor(clockNow() / 1000);
   rows.forEach((row, idx) => {
     if (idx > 0) expr.push(',');
     expr.push(

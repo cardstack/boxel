@@ -33,6 +33,7 @@
 // `prerenderRequestId` joins the capture to the prerender server's and
 // manager's own request logs — three processes, one story.
 
+import type { CaptureContentType } from './capture-spec.ts';
 import { logger } from './log.ts';
 import type { MediaCacheLane } from './media-cache.ts';
 
@@ -82,6 +83,12 @@ interface ScreenshotPerfBase {
   correlationId: string | null;
   jobId: number | null;
   reservationId: number | null;
+  // The output encoding this event concerns — `image/png` and friends for
+  // raster captures, `application/pdf` for paged output — so the dashboard
+  // can split volume and latency by encoding. `request` events derive it from
+  // the spec (or the served ledger row); `capture` events report what the
+  // render actually produced, null when the render never got that far.
+  contentType: CaptureContentType | null;
   // Wall-clock of the whole event: request receipt → response for `request`
   // events, job claim → job return for `capture` events. The stage fields
   // measured inside that window sum to at most this, with the remainder

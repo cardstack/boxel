@@ -44,11 +44,19 @@
 //
 // Grouping: `shapeHash` is a stable hash over the shape members alone (filter,
 // sort, htmlQuery, page size, fieldset, scope, link mode, and whether a
-// `cardUrls` subset applies), so "this render issued 40 searches of 6 shapes"
-// is a count of distinct hashes within one `correlationId`. It is derived from
-// the shape text and nothing else — no process state, no clock — so the same
-// query hashes the same on every realm-server and across restarts. The text it
-// hashes is the pre-cap text, so a capped line still groups with its own shape.
+// `cardUrls` subset applies). It is derived from the shape text and nothing
+// else — no process state, no clock — so the same query hashes the same on
+// every realm-server and across restarts. The text it hashes is the pre-cap
+// text, so a capped line still groups with its own shape.
+//
+// Counting distinct hashes answers "how many shapes is this load made of", but
+// no member of this line groups one render. `correlationId` is minted per
+// search, so every line carrying one carries its own — and a live request whose
+// client-telemetry instrument is dormant carries none at all. `jobId` is the
+// indexing job the search ran under (queue job + reservation), held across the
+// whole file sweep, so it groups an entire index pass rather than one visit.
+// Live browser traffic reaches a tab session only by joining `correlationId` to
+// the `server-request` event on `boxel:client-perf`.
 //
 // The hash folds what the handler's cache key folds, for the same reason: a
 // member that changes the response body is a member two requests differ by.

@@ -128,6 +128,9 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       runAs,
       format,
       prerenderRequestId: null,
+      // What the render actually produced; the completion emit overrides
+      // this, so null means the render never got that far.
+      contentType: null,
       ...(jobInfo?.queueWaitMs != null
         ? { queueWaitMs: jobInfo.queueWaitMs }
         : {}),
@@ -301,6 +304,10 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       status: response.status,
       persistOutcome,
       prerenderRequestId: response.meta?.requestId ?? null,
+      contentType:
+        response.status === 'ready'
+          ? (response.contentType ?? 'image/png')
+          : null,
       permissionsMs,
       prerenderMs,
       ...(diagnostics.launchMs != null

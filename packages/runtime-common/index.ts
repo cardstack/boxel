@@ -24,6 +24,7 @@ import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { FileDef } from '@cardstack/base/file-api';
 
+export { now, nowDate } from './clock.ts';
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
   included?: LooseLinkableResource<LinkableResource>[];
@@ -1407,11 +1408,10 @@ export type ScreenshotCaptureOverrides = {
   // off one render.
   envelope?: { width: number; height: number };
   // Output encoding of the capture. `png` (the default, elided from the
-  // canonical form) is the only value the engine honors today: the roster
-  // reserves `jpeg`/`webp`/`pdf` for the encode legs the capture engine grows
-  // next, and the shared parse refuses those values by name until it does.
-  // Part of the ledger identity — two encodings of one render are two cache
-  // entries.
+  // canonical form) and `pdf` are the values the engine honors; the roster
+  // reserves `jpeg`/`webp` for the encode legs the capture engine grows next,
+  // and the shared parse refuses those values by name until it does. Part of
+  // the ledger identity — two encodings of one render are two cache entries.
   type?: CaptureOutputType;
   // CSS media the render settles under before capture. `screen` (the
   // default, elided) is the rendering every screenshot has always captured;
@@ -1464,15 +1464,19 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
-// One captured image in a screenshot response. `deviceScaleFactor` is the
-// effective scale used for this capture, so a consumer can reconstruct physical
-// vs CSS pixel dimensions.
+// One captured artifact in a screenshot response. `deviceScaleFactor` is the
+// scale the render ran at, so a consumer can reconstruct physical vs CSS
+// pixel dimensions for raster output.
 export type ScreenshotCaptureResult = {
   name: string;
   base64: string;
-  width: number;
-  height: number;
+  // CSS dimensions of a raster capture; absent for pdf output, which has no
+  // single pixel extent — `pageCount` describes it instead.
+  width?: number;
+  height?: number;
   deviceScaleFactor: number;
+  // Page count of a pdf capture; absent for raster output.
+  pageCount?: number;
 };
 
 export type ScreenshotPrerenderResponse = {
@@ -1487,9 +1491,9 @@ export type ScreenshotPrerenderResponse = {
   width?: number;
   height?: number;
   // The encoding of `base64` (and every entry in `captures` — a response is
-  // one encoding throughout). The engine produces only `image/png` today; the
-  // type is the full output union so the persist and serving paths
-  // discriminate on it rather than assuming an image.
+  // one encoding throughout). The engine produces `image/png` and
+  // `application/pdf`; the type is the full output union so the persist and
+  // serving paths discriminate on it rather than assuming an image.
   contentType?: CaptureContentType;
   error?: string | null;
   meta?: PrerenderResponseMeta;

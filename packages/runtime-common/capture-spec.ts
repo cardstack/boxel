@@ -83,8 +83,9 @@ export function isCaptureFormat(value: unknown): value is CaptureFormat {
 
 // Output encodings. The image types are the roster declared screenshots
 // (`static screenshots` entries) choose from; the wire spec's roster adds
-// `pdf` — a paged document of the same settled render rather than a raster
-// of it.
+// `pdf` — a paged document of the settled render, laid out at the paper's
+// content width (the card's own `@page { size }` rule, or Chrome's default
+// paper) rather than at a capture viewport.
 export const SCREENSHOT_IMAGE_TYPES = ['png', 'jpeg', 'webp'] as const;
 export type ScreenshotImageType = (typeof SCREENSHOT_IMAGE_TYPES)[number];
 export const SCREENSHOT_DEFAULT_IMAGE_TYPE: ScreenshotImageType = 'png';
@@ -148,11 +149,58 @@ export function isCaptureMedia(value: unknown): value is CaptureMedia {
 // honor yet — refused by name at parse (never ignored, per the module
 // contract), so no request can reach the engine asking for an output it
 // cannot produce. Unlocking a value here means teaching the engine the
-// corresponding leg: a pdf/jpeg/webp encode on the on-demand path, or
-// print-media emulation.
+// corresponding leg: a jpeg/webp encode on the on-demand path. Both
+// `CaptureMedia` values are supported — the engine emulates the spec's media
+// across the settle — so only output types are gated here.
 const UNSUPPORTED_CAPTURE_OUTPUT_TYPES: ReadonlySet<CaptureOutputType> =
-  new Set(['jpeg', 'webp', 'pdf']);
-const UNSUPPORTED_CAPTURE_MEDIA: ReadonlySet<CaptureMedia> = new Set(['print']);
+  new Set(['jpeg', 'webp']);
+
+// Bounds for pdf output. Neither is knowable at parse time — page count and
+// byte size exist only once Chrome has paginated the settled render — so the
+// capture path enforces both post-render, the same late-check pattern as a
+// fullPage capture's document extent. Over-bounds is a capture error naming
+// the cap, never a truncation.
+export const SCREENSHOT_PDF_MAX_PAGES = 20;
+export const SCREENSHOT_PDF_MAX_BYTES = 10 * 1024 * 1024;
+
+// Count a PDF's pages by scanning for its page-object dictionaries.
+// Chromium's PDF writer (Skia) emits each page's `/Type /Page` dictionary
+// uncompressed, so a byte scan is reliable for the engine's own output; the
+// page-tree `/Count` entries back it up in case some rewriter folds the page
+// objects into compressed streams. The capture path uses this to enforce
+// SCREENSHOT_PDF_MAX_PAGES post-render.
+export function countPdfPages(bytes: Uint8Array): number {
+  let text = new TextDecoder('latin1').decode(bytes);
+  let pageObjects = text.match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0;
+  let maxTreeCount = 0;
+  for (let m of text.matchAll(/\/Count\s+(\d+)/g)) {
+    maxTreeCount = Math.max(maxTreeCount, Number(m[1]));
+  }
+  return Math.max(pageObjects, maxTreeCount);
+}
+
+// Post-render enforcement of the pdf caps: byte size first (the cheaper
+// read), then page count. Returns the capture-error message naming the
+// exceeded cap, or the page count when the document is within bounds.
+export function checkPdfCaptureBounds(
+  name: string,
+  bytes: Uint8Array,
+):
+  | { error: string; pageCount?: undefined }
+  | { error?: undefined; pageCount: number } {
+  if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
+    return {
+      error: `pdf capture "${name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+    };
+  }
+  let pageCount = countPdfPages(bytes);
+  if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
+    return {
+      error: `pdf capture "${name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+    };
+  }
+  return { pageCount };
+}
 
 // The engine's default capture geometry — Puppeteer's launch viewport (no
 // `defaultViewport` override), the size every canonical capture renders at.
@@ -496,11 +544,6 @@ function parseOverrideFields(
         error: `${path}.media must be one of ${CAPTURE_MEDIA.join('/')}`,
       };
     }
-    if (UNSUPPORTED_CAPTURE_MEDIA.has(raw.media)) {
-      return {
-        error: `${path}.media "${raw.media}" is not supported by this capture engine`,
-      };
-    }
     overrides.media = raw.media;
   }
 
@@ -525,6 +568,35 @@ function checkMergedOverrides(
   }
   if (spec.target && spec.fullPage) {
     return `${path} cannot set both target and fullPage`;
+  }
+
+  // A pdf capture paginates the settled document onto paper; a region clip,
+  // an element crop, and Chromium's fullPage screenshot mode are raster
+  // concepts it cannot honor — contradictions, not compositions.
+  if (spec.type === 'pdf') {
+    if (spec.fullPage) {
+      return `${path} cannot set both type "pdf" and fullPage`;
+    }
+    if (spec.clip) {
+      return `${path} cannot set both type "pdf" and clip`;
+    }
+    if (spec.target) {
+      return `${path} cannot set both type "pdf" and target`;
+    }
+    // Pagination lays the document out at the paper's content width, so a
+    // viewport is inert for pdf output — refused rather than ignored, per the
+    // module contract (ignoring it would mint distinct ledger identities over
+    // byte-identical documents). A viewport spelling the engine default is
+    // admitted: it elides to the same canonical form as omitting it.
+    if (
+      spec.viewport &&
+      !(
+        spec.viewport.width === DEFAULT_CAPTURE_VIEWPORT.width &&
+        spec.viewport.height === DEFAULT_CAPTURE_VIEWPORT.height
+      )
+    ) {
+      return `${path} cannot set both type "pdf" and viewport`;
+    }
   }
 
   // Envelope formats lay out in a parent-owned box, so an envelope is
@@ -787,11 +859,32 @@ export function parseScreenshotCaptureSpec(
       return { error: parsed.error };
     }
     let merged = mergeOverrides(singular.overrides, parsed.overrides);
+    // The response carries one contentType across all its captures, so a
+    // paged document cannot ride a batch beside raster entries.
+    if (merged.type === 'pdf') {
+      return {
+        error: `${path}.type "pdf" is only valid on a singular capture`,
+      };
+    }
     let crossError = checkMergedOverrides(merged, path, format);
     if (crossError !== undefined) {
       return { error: crossError };
     }
     entries.push({ name, ...elideDefaults(merged) });
+  }
+
+  // Media emulation is page-level and a batch shares one settled render, so
+  // every entry paginates/rasterizes under the same CSS media. A batch that
+  // mixed media would settle its later entries under the wrong one — refused
+  // rather than silently rendered wrong, per the module contract. (An
+  // all-default batch is uniform under `screen` and passes.)
+  let mediaValues = new Set(
+    entries.map((entry) => entry.media ?? DEFAULT_CAPTURE_MEDIA),
+  );
+  if (mediaValues.size > 1) {
+    return {
+      error: 'captureSpec.captures may not mix media values',
+    };
   }
 
   return { captureSpec: { captures: entries } };

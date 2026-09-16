@@ -10,7 +10,10 @@ import {
   SCREENSHOT_DEFAULT_IMAGE_TYPE,
   SCREENSHOT_MAX_CAPTURES,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  captureOutputContentType,
+  checkPdfCaptureBounds,
   screenshotContentType,
+  type CaptureContentType,
   type DeclaredScreenshotCaptureResult,
   type DeclaredScreenshotError,
   type DeclaredScreenshotFormat,
@@ -1235,6 +1238,10 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // The encoding of every capture in this render: pdf output is singular-only
+  // (the shared parse refuses it in batch entries), so a batch is always
+  // raster and the response-level contentType stays single-valued.
+  contentType: CaptureContentType;
   // Per-step wall-clock across the shared render, for stage telemetry:
   // navigation (route transition + path settle), the prerender settle wait
   // (including any envelope-box wait), the image/font paint wait, and the
@@ -1361,8 +1368,16 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip, target, envelope } =
-    captureSpec ?? {};
+  let {
+    viewport,
+    deviceScaleFactor,
+    fullPage,
+    clip,
+    target,
+    envelope,
+    type,
+    media,
+  } = captureSpec ?? {};
   return [
     {
       name: 'default',
@@ -1372,6 +1387,8 @@ function normalizeCaptureEntries(
       clip,
       target,
       envelope,
+      type,
+      media,
     },
   ];
 }
@@ -1552,6 +1569,70 @@ async function captureOneEntry(
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A pdf capture paginates the settled render onto paper instead of
+  // rasterizing the viewport: same settle sequence and emulated media as a
+  // raster capture, but `page.pdf()` lays the document out at the paper's
+  // content width (the card's own `@page { size }` rule, or Chrome's default
+  // paper), not at a capture viewport — which is why the shared parse refuses
+  // a viewport on a pdf spec. The bounds (page count, byte size) exist only
+  // once Chrome has paginated, so they are enforced here, the fullPage
+  // late-check pattern.
+  if (entry.type === 'pdf') {
+    // Defensive: every wire surface (the realm-server request bodies and the
+    // prerender server's /prerender-screenshot route) refuses these
+    // combinations through the shared parse; this guards the in-process
+    // callers that assemble capture entries directly.
+    if (entry.target || entry.clip || entry.fullPage || entry.viewport) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot combine pdf output with target, clip, fullPage, or viewport`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    // The render already settled under the spec's media (emulated in
+    // `captureScreenshot` so the layout and image-paint wait ran under it).
+    // `page.pdf()`, though, forces `print` media for the print job whatever
+    // the page currently emulates — so a `media=screen` pdf would still
+    // paginate the print layout unless screen is emulated first. Pin the
+    // emulated media to the spec's own value: `print` re-asserts what the
+    // settle already used, `screen` overrides `page.pdf()`'s print default so
+    // the paged document matches the raster path's render. Cleared in
+    // `finally` so a reused pooled page carries no media override into the
+    // next capture (the outer `captureScreenshot` restore is idempotent with
+    // this one).
+    let media = entry.media ?? 'screen';
+    await page.emulateMediaType(media);
+    try {
+      let bytes = await page.pdf({
+        printBackground: true,
+        // The author's own `@page { size: … }` rule wins; Chrome's default
+        // paper applies when the card declares none.
+        preferCSSPageSize: true,
+      });
+      let bounds = checkPdfCaptureBounds(entry.name, bytes);
+      if (bounds.error !== undefined) {
+        return buildInvalidRenderResponseError(page, bounds.error, {
+          title: 'PDF capture too large',
+        });
+      }
+      return {
+        name: entry.name,
+        base64: Buffer.from(bytes).toString('base64'),
+        // Pagination has no single pixel extent; the scale is the render's,
+        // reported for parity with raster captures.
+        deviceScaleFactor,
+        pageCount: bounds.pageCount,
+      };
+    } finally {
+      // Restore the default (screen) media so the next capture on this pooled
+      // page renders exactly as an un-emulated one would.
+      try {
+        await page.emulateMediaType();
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+  }
   // A `target` is an element-handle screenshot, a capture call distinct from
   // the page-level one below: it crops to the first match's box and honors no
   // clip/fullPage (rejected above). `page.$` runs the selector through
@@ -1716,9 +1797,11 @@ export async function captureScreenshot(
 
   // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
   // fullPage capture ignores a clip, and an element (`target`) screenshot
-  // honors neither. The shared capture-spec parse already 400s these on both
-  // request surfaces, but a direct prerender-server caller could still send one
-  // — fail cleanly rather than return a silently-wrong screenshot.
+  // honors neither. Every wire surface (the realm-server request bodies and
+  // the prerender server's /prerender-screenshot route) already 400s these
+  // through the shared capture-spec parse; this guards the in-process callers
+  // that assemble capture options directly — fail cleanly rather than return
+  // a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
@@ -1738,6 +1821,31 @@ export async function captureScreenshot(
       return buildInvalidRenderResponseError(
         page,
         `capture "${entry.name}" cannot set both target and fullPage`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    // pdf output is singular-only (one contentType per response); every wire
+    // surface refuses a pdf batch through the shared parse, so this guards
+    // the in-process callers that assemble capture options directly.
+    if (entry.type === 'pdf' && entries.length > 1) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" requests pdf output, which is only valid on a singular capture`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+  }
+
+  // A batch settles once and every entry captures that one render, so a
+  // batch's entries must all render under the same CSS media — media emulation
+  // is page-level and the settle can't be replayed per-entry. The shared parse
+  // refuses a mixed-media batch; this guards direct prerender-server callers.
+  let firstMedia = entries[0].media ?? 'screen';
+  for (let entry of entries) {
+    if ((entry.media ?? 'screen') !== firstMedia) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture batch mixes media values (${firstMedia} and ${entry.media ?? 'screen'}); a batch renders under one media`,
         { title: 'Invalid screenshot capture spec' },
       );
     }
@@ -1779,6 +1887,19 @@ export async function captureScreenshot(
   let viewportOverridden = false;
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
+
+  // The CSS media the whole render settles under. A batch is uniform (guarded
+  // above), so the first entry's media is the render's. `print` engages the
+  // card's print CSS — `@page`, `@media print`, `break-*` — across the settle
+  // and the image-paint wait, so the capture (a paged pdf or a raster of the
+  // print layout) is of the print render, not a print veneer over a screen
+  // one. `screen`, the default, needs no emulation: it is the media every
+  // capture and the indexing HTML path have always rendered under, so the
+  // common path never touches the pooled page's media state. Emulation is
+  // sticky per-page, so a non-default media is restored in `finally`, the same
+  // save/restore discipline the viewport gets.
+  let renderMedia = firstMedia;
+  let mediaEmulated = false;
 
   // Per-stage wall-clock accumulators for the capture's stepTimings.
   // `renderFor` can run more than once per batch (once per distinct
@@ -1858,6 +1979,14 @@ export async function captureScreenshot(
       viewportOverridden = true;
       currentViewport = firstViewport;
     }
+    // Emulate the render's media BEFORE the transition so the card settles —
+    // and the image-paint wait probes resources — under it, not after. Only a
+    // non-default media touches the pooled page's state; `screen` renders as
+    // it always has.
+    if (renderMedia !== 'screen') {
+      await page.emulateMediaType(renderMedia);
+      mediaEmulated = true;
+    }
     currentEnvelope = entries[0].envelope;
 
     let firstError = await renderFor(currentEnvelope);
@@ -1915,11 +2044,19 @@ export async function captureScreenshot(
     }
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
-        .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
+        .map(
+          (c) =>
+            `${c.name}:${c.width ?? '-'}x${c.height ?? '-'}@${c.deviceScaleFactor}`,
+        )
         .join(',')}`,
     );
     return {
       captures,
+      // pdf is singular-only, so a batch is always raster; declared entries
+      // carry their own per-slot contentType and never read this field.
+      contentType: captureOutputContentType(
+        entries.length === 1 ? (entries[0].type ?? 'png') : 'png',
+      ),
       stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
     };
   } finally {
@@ -1928,6 +2065,16 @@ export async function captureScreenshot(
       // HTML-capture path) sees the original viewport, not the caller's.
       try {
         await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+    if (mediaEmulated) {
+      // Clear the media override so the next reuse of this pooled page (the
+      // indexing HTML-capture path, a screen-media screenshot) renders under
+      // screen media, not this capture's print emulation.
+      try {
+        await page.emulateMediaType();
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }
@@ -2154,8 +2301,10 @@ export async function captureDeclaredScreenshots(
     entries.push({
       name: resolved.name,
       specHash: resolved.specHash,
-      width: item.width,
-      height: item.height,
+      // Declared captures are always raster (their payload type is an image
+      // type), so the item always carries pixel dimensions.
+      width: item.width!,
+      height: item.height!,
       deviceScaleFactor: item.deviceScaleFactor,
       contentType: screenshotContentType(resolved.imageType),
       imageType: resolved.imageType,

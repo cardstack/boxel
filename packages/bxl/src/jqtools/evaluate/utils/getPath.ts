@@ -26,7 +26,7 @@ export function getPath(input: any, path: Path): any {
     if (isSliceAccessor(accessor)) {
       return input.slice(accessor.start, accessor.end);
     } else {
-      return input[accessor] ?? null;
+      return access(input, accessor);
     }
   } else {
     if (isSliceAccessor(accessor)) {
@@ -34,6 +34,6 @@ export function getPath(input: any, path: Path): any {
         'getPath: Leading slice accessors are not normalized',
       );
     }
-    return getPath(input[accessor], normalizedPath.slice(1));
+    return getPath(access(input, accessor), normalizedPath.slice(1));
   }
 }

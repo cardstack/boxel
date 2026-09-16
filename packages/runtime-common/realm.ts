@@ -3,9 +3,16 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  prerenderSpawnedPriority,
   unbuiltIndexFailure,
 } from './jobs/indexing.ts';
-import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
+import {
+  awaitPublishedHtmlReady,
+  enqueuePrerenderHtmlJob,
+  prerenderHtmlConcurrencyGroup,
+} from './jobs/prerender-html.ts';
+import { JobClaimHold } from './jobs/claim-hold.ts';
 import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -172,7 +179,11 @@ import type {
 import { commitBatch } from './card-operations/coordinator.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
 import { isOperationFailure } from './card-operations/types.ts';
-import type { FromScratchResult } from './tasks/indexer.ts';
+import type {
+  DeferredPrerenderHtml,
+  FromScratchResult,
+  IncrementalChange,
+} from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
 import { merge } from 'lodash-es';
 import { mergeWith } from 'lodash-es';
@@ -203,12 +214,14 @@ import { createResponse } from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
+  captureOutputContentType,
   captureSpecHash,
   captureSpecOverrides,
   isValidScreenshotName,
   parseCaptureSpecParams,
   screenshotLedgerSourceURL,
   screenshotsMetaFromManifest,
+  type CaptureContentType,
   type CaptureSpec,
   type ScreenshotManifest,
   type ScreenshotManifestEntry,
@@ -471,6 +484,35 @@ const CACHE_MISS_VALUE = 'miss';
 // a second transpile before the winner finishes.
 const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
 const COALESCE_NOTIFY_WAIT_MS = 180_000;
+
+// Smallest batch write that takes a hold on its realm's render lane. Below
+// this the write is over in well under the time a render pass takes to start,
+// so a hold could not collect anything to merge and would only add two
+// queries to the path a card save takes. Editing writes a card and sometimes
+// its module; an import writes hundreds at once, so the two are far apart and
+// the exact line between them does not matter much.
+const RENDER_HOLD_MIN_BATCH_SIZE = 10;
+// How long a hold survives without a refresh. A holder that dies mid-write
+// costs the lane this much idleness, so it wants to be short; a refresh that
+// loses a race with a slow query must not drop the hold, so it wants to be
+// comfortably longer than the refresh interval.
+const RENDER_HOLD_LEASE_MS = 30_000;
+const RENDER_HOLD_REFRESH_MS = 10_000;
+// Longest an unbroken run of holds may keep the lane held. Holds chain across
+// consecutive commits on purpose, so without a cap a realm taking bulk commits
+// back to back could keep its HTML from ever being rendered. Read per call,
+// not once at import, so the ceiling can be tuned — or shortened to something
+// a test can reach — without a restart.
+const DEFAULT_RENDER_HOLD_MAX_MS = 5 * 60_000;
+function renderHoldMaxMs(): number {
+  let override = Number(
+    (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process?.env?.RENDER_HOLD_MAX_MS,
+  );
+  return Number.isFinite(override) && override > 0
+    ? override
+    : DEFAULT_RENDER_HOLD_MAX_MS;
+}
 // `localPath`s (no leading slash) exempt from the archived-realm seal: the
 // realm's public operational endpoints, which must keep working while a realm
 // is archived. `_readiness-check` is the health probe; `_session` is the
@@ -1372,6 +1414,10 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
+  // Anchors the render-hold cap across back-to-back bulk commits; see
+  // `_commitBatchUnlocked`. Undefined whenever no commit holds the lane.
+  #renderHoldChainStartedAt: number | undefined;
+  #renderHoldDepth = 0;
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -2159,8 +2205,16 @@ export class Realm {
     opts?: {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      // Ask the pass not to enqueue its own prerender_html job; the returned
+      // `deferredPrerenderHtml` then carries the set it would have rendered.
+      deferPrerenderHtml?: boolean;
+      // Invalidation sets earlier passes of this same write deferred, folded
+      // into the prerender_html job this pass spawns.
+      carriedPrerenderHtmlChanges?: IncrementalChange[];
     },
-  ): Promise<IndexPassResult> {
+  ): Promise<
+    IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
+  > {
     if (changes.length === 0) {
       // No pass ran, so nothing was touched — which the empty set states
       // exactly, and more usefully than staying silent would.
@@ -2170,9 +2224,17 @@ export class Realm {
     let invalidations = new Set<string>();
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
+    let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+      ...(opts?.carriedPrerenderHtmlChanges?.length
+        ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+        : {}),
+      onDeferredPrerenderHtml: (deferred) => {
+        deferredPrerenderHtml = deferred;
+      },
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -2195,6 +2257,7 @@ export class Realm {
       invalidations: [...invalidations],
       generation,
       invalidatedTypes: invalidatedTypes.value,
+      ...(deferredPrerenderHtml ? { deferredPrerenderHtml } : {}),
     };
   }
 
@@ -2217,6 +2280,9 @@ export class Realm {
     opts: {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      // Invalidation sets earlier passes of this same write deferred, folded
+      // into the prerender_html job this pass spawns.
+      carriedPrerenderHtmlChanges?: IncrementalChange[];
       onSettled?: (
         invalidations: string[],
         meta: IncrementalIndexMeta,
@@ -2236,6 +2302,9 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.carriedPrerenderHtmlChanges?.length
+        ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+        : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -2788,6 +2857,16 @@ export class Realm {
     return writes;
   }
 
+  // Whether the current unbroken run of render holds has outlived the cap.
+  // False when no chain is running, which is the common case and the one that
+  // lets a fresh chain start.
+  #renderHoldChainExpired(): boolean {
+    return (
+      this.#renderHoldChainStartedAt !== undefined &&
+      Date.now() - this.#renderHoldChainStartedAt > renderHoldMaxMs()
+    );
+  }
+
   // One commit covering every file a caller is changing — the bytes it writes,
   // the content it adds to the end of a file, and the paths it removes — under
   // a single index job and a single index event. A caller staging several
@@ -2815,6 +2894,117 @@ export class Realm {
   // own callers an all-or-nothing batch is offering it over what it validates
   // before calling here, not over the file system underneath.
   private async _commitBatchUnlocked(
+    batch: CommitBatch,
+    options?: WriteOptions,
+  ): Promise<CommitBatchResult> {
+    // A commit large enough to outlast a render pass holds this realm's
+    // render lane for its duration. Coalescing can only merge into a job no
+    // worker has claimed, so on an idle cluster a bulk import gets none of
+    // it: each commit's render pass is claimed and finished before the next
+    // commit ends, and cards touched by more than one commit are re-rendered
+    // once per commit. Holding the lane leaves the earlier pass pending, so
+    // the next one merges into it and the union renders once. Nothing is
+    // skipped — the hold delays rendering, it never cancels it.
+    let changeCount = (batch.writes?.size ?? 0) + (batch.deletes?.length ?? 0);
+    if (
+      changeCount < RENDER_HOLD_MIN_BATCH_SIZE ||
+      // A commit that waits for its own indexing has nothing to hold the lane
+      // for: it awaits the index pass inline, so the render job exists and the
+      // realm is quiet again before the commit returns, and the hold would be
+      // released in the same breath it was taken. The merge window a hold buys
+      // opens only on the deferred path, where the pass — and the job it
+      // spawns — outlive the commit.
+      options?.waitForIndex !== false ||
+      // Past the cap the chain stops holding, and it has to stop here rather
+      // than in the heartbeat below: a fresh `acquire` writes a full lease
+      // unconditionally, so a succession of new commits would keep the lane
+      // held by never-renewed-but-freshly-minted leases while no single hold
+      // ever looked old enough to stop. Skipping the acquire outright also
+      // leaves the depth counter alone, so the anchor still clears when the
+      // holds already in flight drain.
+      this.#renderHoldChainExpired()
+    ) {
+      return await this.#commitBatchUnlockedInner(batch, options);
+    }
+    let hold = await JobClaimHold.acquire(
+      this.#dbAdapter,
+      prerenderHtmlConcurrencyGroup(this.url),
+      RENDER_HOLD_LEASE_MS,
+    );
+    // The cap spans the chain, not the batch. Each commit acquires its own
+    // holder, and holds compose — so a per-call start would reset the cap on
+    // every batch, and a realm under back-to-back bulk commits could hold its
+    // render lane indefinitely while no single hold ever looked old. Anchoring
+    // on the first hold in an unbroken run is what makes the cap mean what it
+    // says.
+    this.#renderHoldChainStartedAt ??= Date.now();
+    this.#renderHoldDepth++;
+    let chainStartedAt = this.#renderHoldChainStartedAt;
+    let heartbeat = setInterval(() => {
+      // The other half of the cap, for a chain already under way: past it the
+      // lease stops being renewed, so the lane frees itself within one lease
+      // and the import pays an extra render pass rather than starving. The
+      // acquire-time check above is what stops the next commit re-holding it.
+      if (Date.now() - chainStartedAt > renderHoldMaxMs()) {
+        return;
+      }
+      hold.refresh(RENDER_HOLD_LEASE_MS).catch((e: any) => {
+        // The lease simply lapses and the lane frees early — the commit is
+        // unaffected, so this must not surface as a write failure.
+        this.#log.warn(
+          `failed to refresh render hold for ${this.url}: ${e?.message}`,
+        );
+      });
+    }, RENDER_HOLD_REFRESH_MS);
+    heartbeat.unref?.();
+    let releaseHold = async () => {
+      clearInterval(heartbeat);
+      // The chain ends when a hold is released with none behind it. A commit
+      // that starts before this one finishes keeps the anchor, which is the
+      // case the cap exists for.
+      this.#renderHoldDepth--;
+      if (this.#renderHoldDepth === 0) {
+        this.#renderHoldChainStartedAt = undefined;
+      }
+      try {
+        await hold.release();
+      } catch (e: any) {
+        // Left alone the lease expires on its own, so a failed release costs
+        // one interval of delayed rendering rather than the commit.
+        this.#log.warn(
+          `failed to release render hold for ${this.url}: ${e?.message}`,
+        );
+      }
+    };
+    let result: CommitBatchResult;
+    try {
+      result = await this.#commitBatchUnlockedInner(batch, options);
+    } catch (e) {
+      await releaseHold();
+      throw e;
+    }
+    // The commit's own render job does not exist yet: the index pass this
+    // commit just queued is what enqueues it, moments from now. Releasing at
+    // the end of the commit would free the lane in that gap, so the previous
+    // commit's pass — the one the hold was keeping available as a merge
+    // target — gets claimed just before the new job arrives, and the two
+    // render the same cards one after the other. Hold until the indexing
+    // settles instead, so both land on a held lane and merge into one pass.
+    //
+    // Deliberately not awaited: the caller's write is durable and its
+    // response must not wait on indexing. Consecutive bulk commits chain —
+    // each one's hold covers the next one's start — which is what collapses a
+    // whole import into one render pass.
+    let settled = this.incrementalIndexing();
+    if (settled) {
+      settled.then(releaseHold, releaseHold);
+    } else {
+      await releaseHold();
+    }
+    return result;
+  }
+
+  async #commitBatchUnlockedInner(
     batch: CommitBatch,
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
@@ -2861,15 +3051,41 @@ export class Realm {
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
-    let performIndex = async (changes: IndexChange[]) => {
+    // The module→instance flush below runs an index pass whose invalidation
+    // set is every dependent of the modules written so far — including the
+    // instances this very batch is about to write, whose on-disk content at
+    // flush time is still the pre-write version. Rendering that set now would
+    // render content the same write supersedes moments later, and the write's
+    // own pass would render it a second time. So the flush defers its
+    // prerender and parks the set here; whichever pass closes the write folds
+    // it into the one prerender_html job the write pays for.
+    let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+    let carriedPrerenderHtmlChanges = () =>
+      deferredPrerenderHtml?.changes ?? [];
+    let performIndex = async (
+      changes: IndexChange[],
+      opts?: { deferPrerenderHtml?: boolean },
+    ) => {
       let {
         invalidations: workingInvalidations,
         generation,
         invalidatedTypes: workingTypes,
+        deferredPrerenderHtml: deferred,
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+        // Handed over either way: a pass that renders folds this into the job
+        // it spawns, and a pass that defers folds it into the set it returns.
+        carriedPrerenderHtmlChanges: carriedPrerenderHtmlChanges(),
       });
+      // A deferring pass returns the set it declined to render, already
+      // unioned with whatever it was handed. A non-deferring pass normally
+      // returns nothing, having folded the carried set into the job it
+      // spawned — but it can still return a set if it coalesced onto a
+      // running pass that was itself deferring, in which case no job was
+      // spawned and the set is ours again.
+      deferredPrerenderHtml = deferred;
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
@@ -2924,7 +3140,7 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        await performIndex(asUpdates(urls));
+        await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
         urls = [];
       }
 
@@ -3250,11 +3466,15 @@ export class Realm {
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
         let priorTypes = invalidatedTypes.value;
+        let carried = carriedPrerenderHtmlChanges();
+        // Handed off: this pass's prerender job renders the deferred set too.
+        deferredPrerenderHtml = undefined;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           changes,
           {
             clientRequestId,
             initiatedBy: initiatingUser,
+            ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -3298,6 +3518,11 @@ export class Realm {
         invalidatedTypes: invalidatedTypes.value,
       });
     }
+    // A mixed batch whose instances all turned out to be byte-identical
+    // leaves the flush's deferred set with no later pass to fold it into.
+    // Those URLs are real dependents of a module that did change, so the
+    // commit still owes them a render — enqueue the job the flush skipped.
+    await this.enqueueDeferredPrerenderHtml(deferredPrerenderHtml);
     return {
       writes: results.map(({ path, lastModified, contentHash }) => ({
         path,
@@ -3307,6 +3532,40 @@ export class Realm {
       })),
       generation: indexGeneration ?? null,
     };
+  }
+
+  // Enqueue the prerender_html job an intermediate index pass deferred, for
+  // the case where no later pass in the same write picked the set up. Uses
+  // the deferring pass's own generation and loader epoch — the stamp those
+  // URLs were invalidated under. Fire-and-forget, and best-effort, for the
+  // same reason the in-worker enqueue is: an index pass must never fail on
+  // its prerender enqueue, and a missed one self-heals on the next pass.
+  private async enqueueDeferredPrerenderHtml(
+    deferred: DeferredPrerenderHtml | undefined,
+  ): Promise<void> {
+    if (!deferred || deferred.changes.length === 0) {
+      return;
+    }
+    try {
+      await enqueuePrerenderHtmlJob(this.#queue, {
+        realmURL: this.url,
+        realmUsername: await this.getRealmOwnerUsername(),
+        changes: deferred.changes,
+        generation: deferred.generation,
+        loaderEpoch: deferred.loaderEpoch,
+        spawningJobId: null,
+        spawningPriority: prerenderSpawnedPriority({
+          realmURL: this.url,
+          indexPriority: userInitiatedPriority,
+        }),
+        timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        preWarm: false,
+      });
+    } catch (e: any) {
+      this.#log.warn(
+        `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
+      );
+    }
   }
 
   // persist created_at into realm_file_meta table using db adapter
@@ -5288,6 +5547,7 @@ export class Realm {
         ),
         generationLookupMs: manifestLookupMs,
         ledgerLookupMs: Date.now() - ledgerLookupStart,
+        contentType: entry.contentType as CaptureContentType,
       };
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({
@@ -5350,6 +5610,7 @@ export class Realm {
       ),
       generationLookupMs,
       ledgerLookupMs: Date.now() - ledgerLookupStart,
+      contentType: captureOutputContentType(parsed.spec.type ?? 'png'),
     };
     if (entry) {
       // A hit costs zero Chrome work, so hits serve regardless of the
@@ -5452,6 +5713,7 @@ export class Realm {
       jobId: null,
       reservationId: null,
       hasTwin: null,
+      contentType: perf.contentType,
       generationLookupMs: perf.generationLookupMs,
       ledgerLookupMs: perf.ledgerLookupMs,
       totalMs: Date.now() - perf.requestStart,
@@ -10513,4 +10775,8 @@ interface ScreenshotServePerf {
   correlationId: string | null;
   generationLookupMs: number;
   ledgerLookupMs: number;
+  // The encoding this request concerns: spec-derived on the DSL path (known
+  // even when the capture never runs), the served row's own contentType on
+  // the named path.
+  contentType: CaptureContentType | null;
 }
