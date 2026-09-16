@@ -9,6 +9,7 @@ import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
 } from '../search-entry.ts';
+import type { OperationDiagnostics } from './telemetry.ts';
 import type { BaseOperationName } from '@cardstack/base/operations';
 
 // ============================================================================
@@ -403,6 +404,11 @@ export interface OperationIdentityResult {
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.
     baseMatched?: boolean;
+    // What running the operation read, for the operations that run a program.
+    // A program reads from three layers and only one of them is the card's own
+    // stored document, so this is how a caller tells a value that was stale
+    // from one that was never there.
+    diagnostics?: OperationDiagnostics;
   };
 }
 
