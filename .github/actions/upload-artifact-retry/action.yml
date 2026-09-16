@@ -13,6 +13,12 @@ description: >-
   artifact still arrives; an upload that fails every attempt still fails the
   job.
 
+  What this does not cover is absence. `if-no-files-found` defaults to `warn`
+  here as it does in upload-artifact, so a path that matches nothing uploads
+  nothing and leaves the step green. Retrying answers a failed upload, not a
+  report the run never wrote; a caller that wants absence to be fatal has to
+  ask for `error`.
+
   Forwards only the inputs this repo passes to upload-artifact. Adding another
   one at a call site means adding it here too, or the wrapper silently drops
   it.
