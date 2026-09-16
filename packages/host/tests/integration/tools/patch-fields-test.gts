@@ -156,6 +156,47 @@ module('Integration | Command | patch-fields', function (hooks) {
   });
 
   module('Optimistic persistence behavior', function () {
+    test<TestContextWithSave>('the patch hands the save to the background', async function (assert) {
+      assert.expect(1);
+
+      let patchFieldsCommand = new PatchFieldsTool(toolService.toolContext, {
+        cardType: AuthorDef,
+      });
+      let cardId = `${testRealmURL}Author/john`;
+      let store = getService('store');
+
+      let patchOptions: Parameters<StoreService['patch']>[2];
+      let originalPatch = store.patch;
+      store.patch = async function (
+        this: StoreService,
+        id,
+        patch,
+        opts: { doNotWaitForPersist?: true },
+      ) {
+        patchOptions = opts;
+        return await originalPatch.call(this, id, patch, opts);
+      };
+
+      try {
+        await patchFieldsCommand.execute({
+          cardId,
+          fieldUpdates: { firstName: 'Jane Background' },
+        });
+      } finally {
+        store.patch = originalPatch;
+      }
+
+      // Asserted against a save that runs normally, so a patch that starts
+      // awaiting persistence again reports it here as this one failed
+      // assertion. The held-save test below shares the guarantee but cannot
+      // report on it: holding the save that such a patch awaits deadlocks it,
+      // and it surfaces as a stalled test naming nothing in particular.
+      assert.true(
+        patchOptions?.doNotWaitForPersist,
+        'store.patch receives doNotWaitForPersist option',
+      );
+    });
+
     test<TestContextWithSave>('patches do not await persistence', async function (assert) {
       assert.expect(7);
 
