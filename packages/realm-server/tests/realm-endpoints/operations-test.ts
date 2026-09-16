@@ -142,7 +142,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         @operation static restate = {
           base: 'transform',
           params: { headline: StringField },
-          input: bxl`{headline: params("headline")}`,
+          input: bxl\`{headline: params("headline")}\`,
           set: { headline: params('headline') },
         };
 
@@ -333,32 +333,36 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('every spelling of the operations media type reaches the endpoint', async function (assert) {
-      // The router matches a media type by its type and its parameters, so the
-      // extension is named the same operation whichever way a client writes
-      // it. Sent as the content type alone in each case — a `fetch` that sets
-      // one and leaves `Accept` to its default is the shape that has no other
-      // header to fall back on.
-      for (let spelling of [
-        `application/vnd.api+json;ext="${BOXEL_OPERATIONS_EXT}"`,
-        `application/vnd.api+json; ext="${BOXEL_OPERATIONS_EXT}"`,
-        `application/vnd.api+json;ext=${BOXEL_OPERATIONS_EXT}`,
-        `application/vnd.api+json;ext="https://jsonapi.org/ext/atomic ${BOXEL_OPERATIONS_EXT}"`,
-        `application/vnd.api+json;charset=utf-8;ext="${BOXEL_OPERATIONS_EXT}"`,
-      ]) {
-        let response = await request
-          .post('/_operations')
-          .set('Content-Type', spelling)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
-          )
-          .send(envelope(invoke('read', { href: '/report-kept' })));
+        // The router matches a media type by its type and its parameters, so the
+        // extension is named the same operation whichever way a client writes
+        // it. Sent as the content type alone in each case — a `fetch` that sets
+        // one and leaves `Accept` to its default is the shape that has no other
+        // header to fall back on.
+        for (let spelling of [
+          `application/vnd.api+json;ext="${BOXEL_OPERATIONS_EXT}"`,
+          `application/vnd.api+json; ext="${BOXEL_OPERATIONS_EXT}"`,
+          `application/vnd.api+json;ext=${BOXEL_OPERATIONS_EXT}`,
+          `application/vnd.api+json;ext="https://jsonapi.org/ext/atomic ${BOXEL_OPERATIONS_EXT}"`,
+          `application/vnd.api+json;charset=utf-8;ext="${BOXEL_OPERATIONS_EXT}"`,
+        ]) {
+          let response = await request
+            .post('/_operations')
+            .set('Content-Type', spelling)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+            )
+            .send(envelope(invoke('read', { href: '/report-kept' })));
 
-        assert.strictEqual(response.status, 200, `${spelling} is carried out`);
-      }
-    });
+          assert.strictEqual(
+            response.status,
+            200,
+            `${spelling} is carried out`,
+          );
+        }
+      });
 
-    test('a body sent without the operations extension is told what it is missing', async function (assert) {
+      test('a body sent without the operations extension is told what it is missing', async function (assert) {
         let response = await request
           .post('/_operations')
           .set('Accept', SupportedMimeType.JSONAPI)
@@ -449,49 +453,51 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('a type reference that is not one is refused rather than thrown out of', async function (assert) {
-      let response = await post(
-        envelope(
-          invoke('create', {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Mango' },
-              meta: { adoptsFrom: { type: 'fieldOf', card: null, field: 'x' } },
-            },
-          }),
-        ),
-      );
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: {
+                  adoptsFrom: { type: 'fieldOf', card: null, field: 'x' },
+                },
+              },
+            }),
+          ),
+        );
 
-      assert.strictEqual(
-        response.status,
-        400,
-        'a malformed reference is the caller\'s to fix, not a fault to report',
-      );
-      assert.strictEqual(response.body.errors[0].meta.entry, 0);
-    });
+        assert.strictEqual(
+          response.status,
+          400,
+          "a malformed reference is the caller's to fix, not a fault to report",
+        );
+        assert.strictEqual(response.body.errors[0].meta.entry, 0);
+      });
 
-    test('an operation whose declaration carries a stage a batch does not run is refused', async function (assert) {
-      let response = await post(
-        envelope(
-          invoke('restate', {
-            href: '/report-unserved',
-            data: { headline: 'Revised' },
-          }),
-        ),
-      );
+      test('an operation whose declaration carries a stage a batch does not run is refused', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('restate', {
+              href: '/report-unserved',
+              data: { headline: 'Revised' },
+            }),
+          ),
+        );
 
-      assert.strictEqual(response.status, 501, 'HTTP 501 status');
-      assert.true(
-        response.body.errors[0].detail.includes('input'),
-        `the refusal names the stage: ${response.body.errors[0].detail}`,
-      );
-      assert.strictEqual(
-        storedCard('report-unserved.json').data.attributes?.headline,
-        'Quarterly Review',
-        'and nothing was written under a declaration half carried out',
-      );
-    });
+        assert.strictEqual(response.status, 501, 'HTTP 501 status');
+        assert.true(
+          response.body.errors[0].detail.includes('input'),
+          `the refusal names the stage: ${response.body.errors[0].detail}`,
+        );
+        assert.strictEqual(
+          storedCard('report-unserved.json').data.attributes?.headline,
+          'Quarterly Review',
+          'and nothing was written under a declaration half carried out',
+        );
+      });
 
-    test('two entries claiming one local id are refused', async function (assert) {
+      test('two entries claiming one local id are refused', async function (assert) {
         let response = await post(
           envelope(
             invoke('create', {
@@ -642,32 +648,32 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('an equivalent spelling of an href names the same card', async function (assert) {
-      // The index is read by exact URL, so a declared operation resolves only
-      // once the spelling has been folded to the one the realm addresses the
-      // card by — and the identity the entry answers with is that one too.
-      for (let [spelling, what] of [
-        ['/report-canonical?view=full', 'a query string'],
-        ['/report-canonical#section', 'a fragment'],
-      ]) {
-        let response = await post(
-          envelope(invoke('escalate', { href: spelling })),
-        );
+        // The index is read by exact URL, so a declared operation resolves only
+        // once the spelling has been folded to the one the realm addresses the
+        // card by — and the identity the entry answers with is that one too.
+        for (let [spelling, what] of [
+          ['/report-canonical?view=full', 'a query string'],
+          ['/report-canonical#section', 'a fragment'],
+        ]) {
+          let response = await post(
+            envelope(invoke('escalate', { href: spelling })),
+          );
 
-        assert.strictEqual(response.status, 200, `${what} is carried out`);
+          assert.strictEqual(response.status, 200, `${what} is carried out`);
+          assert.strictEqual(
+            response.body['atomic:results'][0].data.id,
+            `${testRealmHref}report-canonical`,
+            `${what} answers with the id the realm serves the card under`,
+          );
+        }
         assert.strictEqual(
-          response.body['atomic:results'][0].data.id,
-          `${testRealmHref}report-canonical`,
-          `${what} answers with the id the realm serves the card under`,
+          storedCard('report-canonical.json').data.attributes?.status,
+          'escalated',
+          'and the card the spellings name is the one that changed',
         );
-      }
-      assert.strictEqual(
-        storedCard('report-canonical.json').data.attributes?.status,
-        'escalated',
-        'and the card the spellings name is the one that changed',
-      );
-    });
+      });
 
-    test('a delete answers with no state and removes the file', async function (assert) {
+      test('a delete answers with no state and removes the file', async function (assert) {
         let response = await post(
           envelope(invoke('delete', { href: '/report-deleted' })),
         );
@@ -775,43 +781,47 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('a refusal names the entry the caller sent, in its key and in its prose', async function (assert) {
-      // The coordinator is handed only the entries that write, so its own
-      // numbering runs 0,1 where the caller sent 1,2. Both the keys and the
-      // sentence have to speak the caller's.
-      let response = await post(
-        envelope(
-          invoke('read', { href: '/report-kept' }),
-          invoke('appendLine', {
-            href: '/positions.log',
-            data: { line: 'deployed' },
-          }),
-          invoke('update', {
-            href: '/positions.log',
-            data: { content: 'replaced\n' },
-          }),
-        ),
-      );
+        // The coordinator is handed only the entries that write, so its own
+        // numbering runs 0,1 where the caller sent 1,2. Both the keys and the
+        // sentence have to speak the caller's.
+        let response = await post(
+          envelope(
+            invoke('read', { href: '/report-kept' }),
+            invoke('appendLine', {
+              href: '/positions.log',
+              data: { line: 'deployed' },
+            }),
+            invoke('update', {
+              href: '/positions.log',
+              data: { content: 'replaced\n' },
+            }),
+          ),
+        );
 
-      assert.strictEqual(response.status, 400, 'HTTP 400 status');
-      let [error] = response.body.errors;
-      assert.strictEqual(error.meta.entry, 2, 'the entry that collides');
-      assert.strictEqual(
-        error.meta.conflictsWith,
-        1,
-        'and the entry it collides with',
-      );
-      assert.true(
-        error.detail.includes('entry 2') && error.detail.includes('entry 1'),
-        `the prose names the same two entries: ${error.detail}`,
-      );
-      assert.strictEqual(
-        readFileSync(realmFile('positions.log'), 'utf8'),
-        'boot\n',
-        'and nothing was written',
-      );
-    });
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 2, 'the entry that collides');
+        assert.strictEqual(
+          error.meta.conflictsWith,
+          1,
+          'and the entry it collides with',
+        );
+        assert.true(
+          error.detail.includes('entry 2'),
+          `the prose names the entry that collides: ${error.detail}`,
+        );
+        assert.true(
+          error.detail.includes('entry 1'),
+          `and the entry it collides with: ${error.detail}`,
+        );
+        assert.strictEqual(
+          readFileSync(realmFile('positions.log'), 'utf8'),
+          'boot\n',
+          'and nothing was written',
+        );
+      });
 
-    test('a read in a mixed batch answers with the pre-batch document', async function (assert) {
+      test('a read in a mixed batch answers with the pre-batch document', async function (assert) {
         let response = await post(
           envelope(
             invoke('read', { href: '/report-mixed' }),
