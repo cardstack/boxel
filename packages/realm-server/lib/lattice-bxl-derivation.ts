@@ -29,6 +29,9 @@ export interface LatticeBxlManifest {
   definition: { module: string; name: string; revision: string };
   field: string;
   expression: string;
+  // Builtin libraries the program resolves against; `['core']` when absent.
+  // The worker admits only `LATTICE_NATIVE_BXL_LIBRARIES`.
+  libraries?: string[];
   input: { object: Record<string, LatticeBxlShape> };
   output: LatticeBxlShape;
 }
@@ -57,12 +60,66 @@ export interface LatticeBxlResult {
   };
 }
 
-// One job at a time per worker. The queue owns priority and publication. Keeping
-// this executor separate also permits a hard deadline when cooperative BXL
-// limits cannot interrupt a single operation. This is not an OS sandbox.
+// A small pool of worker threads, one job at a time per thread. The queue owns
+// priority and publication. Keeping this executor separate also permits a hard
+// deadline when cooperative BXL limits cannot interrupt a single operation.
+// This is not an OS sandbox.
+//
+// LATTICE_BXL_WORKERS sets the thread count (default 1). A caller whose job
+// finds every thread busy waits for the next free one in arrival order; a
+// materialization wave that renders several owners at once
+// (LATTICE_WAVE_CONCURRENCY) is what fills the pool.
+export const LATTICE_BXL_WORKERS = Math.max(
+  1,
+  Math.min(16, Number(process.env.LATTICE_BXL_WORKERS) || 1),
+);
+
+interface LatticeBxlThread {
+  worker: Worker | undefined;
+  busy: boolean;
+}
+
 export class LatticeBxlWorker {
-  #worker: Worker | undefined;
-  #busy = false;
+  #threads: LatticeBxlThread[];
+  #waiters: Array<(thread: LatticeBxlThread) => void> = [];
+
+  constructor(size = LATTICE_BXL_WORKERS) {
+    this.#threads = Array.from({ length: Math.max(1, size) }, () => ({
+      worker: undefined,
+      busy: false,
+    }));
+  }
+
+  get size(): number {
+    return this.#threads.length;
+  }
+
+  async #acquire(signal?: AbortSignal): Promise<LatticeBxlThread> {
+    const free = this.#threads.find((thread) => !thread.busy);
+    if (free) {
+      free.busy = true;
+      return free;
+    }
+    return new Promise<LatticeBxlThread>((resolve, reject) => {
+      const waiter = (thread: LatticeBxlThread) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(thread);
+      };
+      const onAbort = () => {
+        const index = this.#waiters.indexOf(waiter);
+        if (index >= 0) this.#waiters.splice(index, 1);
+        reject(signal?.reason ?? new Error('BXL work aborted'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      this.#waiters.push(waiter);
+    });
+  }
+
+  #release(thread: LatticeBxlThread) {
+    const waiter = this.#waiters.shift();
+    if (waiter) waiter(thread);
+    else thread.busy = false;
+  }
 
   async evaluate(
     manifest: LatticeBxlManifest,
@@ -102,7 +159,6 @@ export class LatticeBxlWorker {
     signal?: AbortSignal,
   ): Promise<T> {
     signal?.throwIfAborted();
-    if (this.#busy) throw new Error('BXL worker is already busy');
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error('Invalid BXL deadline');
     }
@@ -131,8 +187,8 @@ export class LatticeBxlWorker {
     ) {
       throw new Error('BXL input batch exceeds 64 MiB');
     }
-    this.#busy = true;
-    let worker = (this.#worker ??= new Worker(
+    const thread = await this.#acquire(signal);
+    let worker = (thread.worker ??= new Worker(
       new URL('./lattice-bxl-worker.ts', import.meta.url),
       { resourceLimits: { maxOldGenerationSizeMb: 128, stackSizeMb: 4 } },
     ));
@@ -148,7 +204,7 @@ export class LatticeBxlWorker {
           worker.off('error', onError);
           worker.off('exit', onExit);
           if (error !== undefined) {
-            this.#worker = undefined;
+            thread.worker = undefined;
             // Do not release the slot until the old worker has actually
             // stopped. A rejected Promise alone does not stop CPU work.
             void worker.terminate().then(
@@ -183,13 +239,16 @@ export class LatticeBxlWorker {
         else worker.postMessage({ kind, manifest, inputs });
       });
     } finally {
-      this.#busy = false;
+      this.#release(thread);
     }
   }
 
   async close(): Promise<void> {
-    let worker = this.#worker;
-    this.#worker = undefined;
-    await worker?.terminate();
+    const workers = this.#threads.map((thread) => {
+      const worker = thread.worker;
+      thread.worker = undefined;
+      return worker;
+    });
+    await Promise.all(workers.map((worker) => worker?.terminate()));
   }
 }

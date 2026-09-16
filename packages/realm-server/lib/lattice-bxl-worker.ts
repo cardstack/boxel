@@ -4,6 +4,7 @@ import type { PreparedBxl } from '@cardstack/bxl';
 import {
   prepareLatticeCardCompute,
   assertLatticeShape as assertShape,
+  assertNativeBxlLibraries,
   latticeBxlOutputLimit,
   latticeNativeRuntimeLimits,
 } from './lattice-card-compute.ts';
@@ -38,17 +39,18 @@ function prepare(manifest: LatticeBxlManifest): PreparedBxl {
   let key = JSON.stringify(manifest);
   let program = programs.get(key);
   if (program) return program;
+  const libraries = assertNativeBxlLibraries(manifest.libraries ?? ['core']);
   let ast = compileBxl(manifest.expression, {
     target: 'ast',
     readableSyntax: false,
-    libraries: ['core'],
+    libraries,
     profile: 'derive',
     attachment: 'formula',
   });
   assertValidBxlProfile(ast, { profile: 'derive', attachment: 'formula' });
   program = prepareBxl(manifest.expression, {
     readableSyntax: false,
-    libraries: ['core'],
+    libraries,
   });
   if (programs.size >= 16) programs.delete(programs.keys().next().value!);
   programs.set(key, program);

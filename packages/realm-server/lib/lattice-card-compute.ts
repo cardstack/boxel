@@ -1,5 +1,5 @@
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
-import type { BxlComputeFunction } from '@cardstack/bxl';
+import type { BuiltinLibraryName, BxlComputeFunction } from '@cardstack/bxl';
 import type {
   BaseCardComputeName,
   BxlComputeDefinition,
@@ -237,16 +237,43 @@ function assertRootInputs(
   }
 }
 
+// The builtin libraries a native program may resolve against. `formula` is
+// the spreadsheet function set (AVERAGE, STDEV, CORREL, SLOPE, FORECAST, ...);
+// the `derive` profile the worker re-checks already bans its volatile members
+// (NOW, RAND, ...) for every library, so admitting it keeps outputs a pure
+// function of the inputs. The lazily chunked families (formula-statistical
+// and friends) stay out until the worker loads their chunk.
+export const LATTICE_NATIVE_BXL_LIBRARIES: readonly BuiltinLibraryName[] = [
+  'core',
+  'formula',
+];
+
+export function assertNativeBxlLibraries(
+  libraries: readonly string[] | undefined,
+): BuiltinLibraryName[] {
+  if (
+    !Array.isArray(libraries) ||
+    !libraries.length ||
+    !libraries.includes('core') ||
+    libraries.some(
+      (name) =>
+        !LATTICE_NATIVE_BXL_LIBRARIES.includes(name as BuiltinLibraryName),
+    )
+  ) {
+    throw new Error('Unsupported native BXL program libraries');
+  }
+  return [...new Set(libraries)] as BuiltinLibraryName[];
+}
+
 function assertSupportedProgram(program: BxlComputeDefinition) {
   if (
     program.version !== 1 ||
     program.materializesClass ||
-    program.customRuntimeLimits ||
-    program.libraries.length !== 1 ||
-    program.libraries[0] !== 'core'
+    program.customRuntimeLimits
   ) {
     throw new Error('Unsupported native BXL program options');
   }
+  assertNativeBxlLibraries(program.libraries);
 }
 
 function artifactValue(
@@ -368,9 +395,10 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
     }
     if (field.bxl) {
       assertSupportedProgram(field.bxl);
+      const libraries = assertNativeBxlLibraries(field.bxl.libraries);
       const compute = bxl(field.bxl.expression, {
         readableSyntax: false,
-        libraries: ['core'],
+        libraries,
         memoize: false,
         runtimeLimits: {
           ...latticeNativeRuntimeLimits(),
@@ -389,7 +417,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
         // were folded into the field's dependencies by the factory.
         const grain = bxl(field.bxl.validUntil, {
           readableSyntax: false,
-          libraries: ['core'],
+          libraries,
           memoize: false,
           runtimeLimits: {
             maxSteps: 1_000_000,
