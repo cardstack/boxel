@@ -86,3 +86,30 @@ jobs:
             exit 1
           fi
           echo "Recovered after retrying (${elapsed}s), and an unrecoverable upload still failed its step."
+
+  sparse-checkout:
+    name: A job that checks out only the action can still resolve it
+    runs-on: ubuntu-latest
+    steps:
+      # The preview-comment workflow's job has no working tree of its own, so
+      # it fetches just this action rather than the whole repo. Its callers
+      # are gated on paths that do not include this action, so that
+      # arrangement would otherwise only ever be exercised by an unrelated PR.
+      - name: Check out the artifact upload action
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/upload-artifact-retry
+
+      - name: Write something to upload
+        run: |
+          set -euo pipefail
+          mkdir -p slot
+          date > slot/slot.md
+
+      - name: Upload it through the action
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: retry-selftest-sparse-${{ github.run_id }}-${{ github.run_attempt }}
+          path: slot/
+          retention-days: 1
+          if-no-files-found: error
