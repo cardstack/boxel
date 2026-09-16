@@ -222,10 +222,22 @@ module('Unit | prerendered-html read path', function (hooks) {
       new URL(`${testRealmURL}1`),
       new URL(`${testRealmURL}2`),
     ]);
+    // Keyed by the URL the caller asked about, which reached the row through
+    // its `file_alias`; `canonicalURL` is the row's own `url`, and expansion
+    // strips the extension off it to build the resource's local path.
     assert.strictEqual(
       batched.get(`${testRealmURL}2`)?.canonicalURL,
-      `${testRealmURL}2`,
+      `${testRealmURL}2.json`,
       'getLinkTargetInstances addresses a row by the URL it was asked for',
+    );
+    // This is the only place the narrow SELECT runs on SQLite. Its result
+    // columns have to come back under the names `coerceTypes` is keyed on, or
+    // the adapter hands back raw JSON text where the type promises a parsed
+    // document — which the read's own cast cannot catch.
+    assert.deepEqual(
+      batched.get(`${testRealmURL}2`)?.resource?.attributes,
+      { name: 'Mango' },
+      'getLinkTargetInstances parses the stored document',
     );
 
     let file = await indexQueryEngine.getFile(

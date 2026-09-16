@@ -2114,9 +2114,8 @@ export class RealmIndexQueryEngine {
             entry.expectsCard ||
             (!entry.relationshipType && !entry.expectsFileMeta)
           ) {
-            // Absent means no live, unerrored row — the read leaves those out,
-            // which is the same outcome the wide shape reached by mapping them
-            // to an error entry this branch then skipped.
+            // Absent means no live, unerrored row; the relationship is left
+            // in its fallback form below.
             let maybeResult = instanceMap.get(entry.linkURL.href);
             if (maybeResult) {
               linkResource = maybeResult.resource;

@@ -233,9 +233,13 @@ module(basename(import.meta.filename), function () {
           `the link targets were read in a batch, got ${linkTargetSelects.length} such queries`,
         );
 
-        // `loadLinks` expands only the `item` full projection; the `html`
-        // fieldset is served by the render-set projection, which never reaches
-        // this read. So a caller here cannot have asked for rendered output.
+        // Expansion puts only the resource into `included[]`; rendered output
+        // is served by the render-set projection, which never reaches this
+        // read. So a caller here cannot have asked for it. The two dependency
+        // graphs are named for the same reason the formats are — nothing here
+        // reads them — and they are the widest columns on the row, so a guard
+        // that omitted them would stay green through the costliest regression
+        // available.
         for (let select of linkTargetSelects) {
           for (let column of [
             'isolated_html',
@@ -245,12 +249,20 @@ module(basename(import.meta.filename), function () {
             'fitted_html',
             'markdown',
             'search_doc',
+            'last_known_good_deps',
+            'deps',
           ]) {
             assert.notOk(
               select.includes(column),
               `the link-target read does not fetch ${column} — got: ${select}`,
             );
           }
+          // Naming columns is what keeps the list above meaningful: a star
+          // would satisfy every assertion here by fetching all of them.
+          assert.notOk(
+            select.includes('i.*'),
+            `the link-target read names its columns — got: ${select}`,
+          );
           assert.ok(
             select.includes('pristine_doc'),
             `the link-target read fetches the stored document — got: ${select}`,
@@ -361,10 +373,11 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    // Error state is the one thing the narrow read still derives from the
-    // prerendered_html join, which it keeps only for that. An errored target
-    // is left out of the closure, and the relationship naming it keeps the
-    // fallback form the document carries when a target cannot be resolved.
+    // Error state is one of the two things the narrow read still takes from
+    // the prerendered_html join — the screenshot manifest asserted above is
+    // the other — so the join answers to both. An errored target is left out
+    // of the closure, and the relationship naming it keeps the fallback form
+    // the document carries when a target cannot be resolved.
     test('an errored link target is left out of the closure and its relationship falls back', async function (assert) {
       let erroredURL = `${testRealm.href}target-1.json`;
       await testDbAdapter.execute(

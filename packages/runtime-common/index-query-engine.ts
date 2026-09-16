@@ -416,11 +416,12 @@ export class IndexQueryEngine {
   // expansion actually consumes and nothing else.
   //
   // The wide `getInstance` shape is the wrong one here, and not merely
-  // wasteful: `loadLinks` only ever expands `fullItemRoots`, which is
-  // populated from the `item` full projection alone. The `html` fieldset is
-  // served by the separate render-set projection, which joins
-  // `prerendered_html` itself and never reaches this code. So on this path a
-  // caller cannot have asked for prerendered HTML.
+  // wasteful. Whichever entry point reaches link expansion — a search's
+  // projected roots or a single card+json document's own — expansion puts
+  // only the resource into `included[]`. Rendered output for any of these
+  // URLs is served by the render-set projection, which joins
+  // `prerendered_html` itself and never reaches this code. So no caller of
+  // this read can have asked for prerendered HTML.
   //
   // A `SELECT i.*` costs more than those formats, though: it also drags
   // `deps` and `last_known_good_deps`, each holding a few hundred dependency
@@ -458,13 +459,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        // `screenshots` rides the prerendered_html channel and IS consumed —
-        // it is joined into the side-loaded resource's `meta`. The error
-        // expression reads `ph.error_doc` / `ph.generation`, so the join stays
-        // even though every format column is gone.
+        // The join carries two consumers: `ph.screenshots`, which is joined
+        // into the side-loaded resource's `meta`, and the effective-error
+        // expression below, which reads `ph.error_doc` / `ph.generation`. It
+        // stays for both even though every format column is gone.
         `SELECT i.url, i.file_alias, i.pristine_doc,
-                ph.screenshots AS screenshots,
-                ${effectiveHasError()} AS has_error`,
+                ph.screenshots AS screenshots`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -477,33 +477,33 @@ export class IndexQueryEngine {
           ]),
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+          // Errored on either channel is excluded here rather than after the
+          // fact, as the file leg of this same batch does: it keeps an
+          // errored target's document off the wire too, which is this read's
+          // own argument.
+          [`NOT ${effectiveHasError()}`],
         ]),
       ] as Expression)) as unknown as {
         url: string | null;
         file_alias: string | null;
         pristine_doc: CardResource | null;
         screenshots: ScreenshotManifest | null;
-        has_error: boolean | number | null;
       }[];
       for (let row of rows) {
         if (!row.url) {
           continue;
         }
-        // Truthiness covers both adapters: SQLite renders a boolean
-        // expression as 0/1, Postgres as a boolean.
-        if (row.has_error) {
-          continue;
-        }
-        // An unerrored row is required to carry a document. Neither channel
-        // holding one leaves the row unrepresentable rather than merely
-        // unavailable, so it is reported instead of dropped — a dropped one
-        // is indistinguishable from a link whose target is legitimately gone,
-        // and would silently cost the document a relationship.
+        // Every row here is live and unerrored, and such a row is required to
+        // carry a document. One that does not is unrepresentable rather than
+        // merely unavailable, so it is reported instead of dropped — a
+        // dropped one is indistinguishable from a link whose target is
+        // legitimately gone, and would silently cost the document a
+        // relationship. This rejects the whole read, as the singular one does.
         if (!row.pristine_doc) {
           throw new Error(
-            `bug: index entry for ${row.url} with opts: ${stringify(
+            `bug: live index entry for ${row.url} with opts: ${stringify(
               opts,
-            )} has neither an error_doc nor a pristine_doc`,
+            )} has no pristine_doc`,
           );
         }
         let target: LinkTargetInstance = {
