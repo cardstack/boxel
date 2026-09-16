@@ -63,6 +63,28 @@ module(basename(import.meta.filename), function () {
       `;
     }
 
+    // Records every stored-bytes read the realm's operation core is asked to
+    // make. `openStoredFile` is the one call a `readSource` makes of the core,
+    // and the router reaches the core only by dispatching, so a request that
+    // dispatches nothing leaves this empty. Resolving a name is not a read
+    // through the core and does not appear here.
+    function recordSourceReads() {
+      let core = testRealm.operationCore;
+      let original = core.openStoredFile;
+      let paths: string[] = [];
+      core.openStoredFile = (localPath) => {
+        paths.push(localPath);
+        return original(localPath);
+      };
+      return {
+        countFor: (localPath: string) =>
+          paths.filter((path) => path === localPath).length,
+        restore: () => {
+          core.openStoredFile = original;
+        },
+      };
+    }
+
     module('public readable realm', function (hooks) {
       // Every test writes to a path of its own, so one boot is shared across
       // the module and no test can observe another's cache state.
@@ -295,6 +317,81 @@ module(basename(import.meta.filename), function () {
           first.headers['etag'],
           'under the same validator',
         );
+      });
+
+      test('compiling a module reads it through the source operation, and a cached answer reads nothing', async function (assert) {
+        await testRealm.write(
+          'operation-read.gts',
+          cardSource('OperationRead'),
+        );
+        let reads = recordSourceReads();
+        try {
+          let compiled = await request
+            .get('/operation-read.gts')
+            .set('Accept', SupportedMimeType.All);
+
+          assert.strictEqual(compiled.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            reads.countFor('operation-read.gts'),
+            1,
+            'compiling the module read its stored bytes through the operation, once',
+          );
+
+          let inMemory = await request
+            .get('/operation-read.gts')
+            .set('Accept', SupportedMimeType.All);
+
+          assert.strictEqual(
+            inMemory.headers['x-boxel-cache'],
+            'hit',
+            'the in-memory cache answered the second request',
+          );
+          assert.strictEqual(
+            reads.countFor('operation-read.gts'),
+            1,
+            'which cost no read of the file',
+          );
+
+          let shared = await request
+            .get('/operation-read.gts')
+            .set('Accept', SupportedMimeType.All)
+            .set('X-Boxel-Disable-Module-Cache', 'true');
+
+          assert.strictEqual(
+            shared.headers['x-boxel-cache'],
+            'miss',
+            'opting out of the in-memory cache reaches the shared one',
+          );
+          assert.strictEqual(
+            shared.text,
+            compiled.text,
+            'which answers with the bytes the compile produced',
+          );
+          assert.strictEqual(
+            reads.countFor('operation-read.gts'),
+            1,
+            'and costs no read of the file either',
+          );
+
+          let conditional = await request
+            .get('/operation-read.gts')
+            .set('Accept', SupportedMimeType.All)
+            .set('X-Boxel-Disable-Module-Cache', 'true')
+            .set('If-None-Match', compiled.headers['etag']);
+
+          assert.strictEqual(
+            conditional.status,
+            304,
+            'a validator that still matches answers 304',
+          );
+          assert.strictEqual(
+            reads.countFor('operation-read.gts'),
+            1,
+            'without reading the bytes that validator describes',
+          );
+        } finally {
+          reads.restore();
+        }
       });
 
       test('an extension-less request resolves to the module and names what it resolved to', async function (assert) {
